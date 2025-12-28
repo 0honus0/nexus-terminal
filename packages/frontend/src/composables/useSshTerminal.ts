@@ -302,13 +302,18 @@ export function createSshTerminalManager(
           ? outputData.length
           : 0;
 
-    // 小数据包（通常是用户输入回显）立即写入，不经过缓冲
-    if (dataSize > 0 && dataSize <= SMALL_DATA_THRESHOLD && terminalInstance.value) {
+    // 小数据包（通常是用户输入回显）仅在缓冲队列为空时立即写入，否则进入队列保持顺序
+    if (
+      dataSize > 0 &&
+      dataSize <= SMALL_DATA_THRESHOLD &&
+      terminalOutputBuffer.value.length === 0 &&
+      terminalInstance.value
+    ) {
       terminalInstance.value.write(outputData);
       return;
     }
 
-    // 大数据包（服务器输出）使用批量缓冲策略
+    // 大数据包或缓冲队列非空时，数据进入队列使用批量缓冲策略
     terminalOutputBuffer.value.push(outputData);
 
     if (terminalInstance.value) {

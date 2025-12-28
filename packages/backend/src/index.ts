@@ -11,7 +11,7 @@ import crypto from 'crypto';
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import cors from 'cors';
 import { settingsService } from './settings/settings.service';
 import {
@@ -260,7 +260,9 @@ const parsePositiveIntEnv = (raw: string | undefined, fallback: number): number 
 const getRateLimitKey = (req: Request) => {
   // 优先按登录用户限流，避免在 Cloudflare/Nginx 等代理场景下多个用户共享同一出口 IP 造成误伤。
   if (req.session?.userId) return `uid:${req.session.userId}`;
-  return req.ip || req.socket?.remoteAddress || 'unknown';
+  // 使用 express-rate-limit 内置的 IP key 生成器，自动处理 IPv6 归一化，避免绕过限流。
+  // 注意：ipKeyGenerator 的入参是 IP 字符串（推荐传 req.ip）。
+  return ipKeyGenerator(req.ip || 'unknown');
 };
 
 // 一般 API 宽松限流

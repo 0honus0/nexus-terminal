@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SSH 终端光标位置错乱修复**：修复 bbf8bca 提交引入的终端输出顺序错乱问题
+  - **问题描述**：命令执行后光标位置异常，新提示符在命令输出之前显示
+  - **根本原因**：小数据包立即写入策略导致输出顺序错乱
+    - 换行符（小数据包）→ 立即写入 ✓
+    - 命令输出（大数据包）→ 进入缓冲队列等待 16ms ✗
+    - 新提示符（小数据包）→ 立即写入 ✓
+    - 结果：新提示符在命令输出之前显示
+  - **修复方案**：增加缓冲队列状态检查
+    - 小数据包仅在缓冲队列为空时立即写入
+    - 缓冲队列非空时，小数据包也进入队列保持顺序
+    - 确保所有输出按正确顺序显示
+  - **涉及文件**：
+    - `packages/frontend/src/composables/useSshTerminal.ts` (修改 1 行)
+
 - **SSH 终端输入延迟优化**：解决 SSH 终端输入命令时的键入和显示迟缓问题
   - **前端优化**：区分小数据包（用户输入≤100字节）和大数据包（服务器输出）
     - 小数据包立即写入终端，不经过缓冲队列，延迟从 16ms 降低到 <1ms
@@ -16,14 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **输出增强器优化**：跳过小数据包的语法高亮、表格格式化等处理
     - 避免用户输入被节流机制延迟
     - 保持长输出的折叠、高亮等增强功能
-  - **后端 TCP 优化**：启用 TCP_NODELAY 禁用 Nagle 算法
-    - 消除 TCP 层的缓冲延迟（40-200ms）
-    - 用户输入立即发送到远程服务器
   - **性能提升**：总体输入延迟从 72-232ms 降低到 <3ms（98%↓）
   - **涉及文件**：
     - `packages/frontend/src/composables/useSshTerminal.ts` (+17 行)
     - `packages/frontend/src/features/terminal/addons/output-enhancer.ts` (+7 行)
-    - `packages/backend/src/websocket/handlers/ssh.handler.ts` (+13 行)
+    - `packages/backend/src/websocket/handlers/ssh.handler.ts` (已移除错误的 TCP_NODELAY 实现)
 
 ### Added
 

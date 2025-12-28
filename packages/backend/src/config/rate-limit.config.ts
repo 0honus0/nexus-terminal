@@ -2,7 +2,9 @@
  * 速率限制配置
  * 为不同类型的 API 端点提供差异化的限流策略
  */
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+
+const getRateLimitIpKey = (req: { ip?: string }) => ipKeyGenerator(req.ip || 'unknown');
 
 /**
  * 严格限流器 - 用于登录相关端点（防暴力破解）
@@ -15,7 +17,7 @@ export const strictAuthLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // 使用 IP 地址作为限流键
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req) => getRateLimitIpKey(req),
 });
 
 /**
@@ -28,7 +30,7 @@ export const moderateAuthLimiter = rateLimit({
   message: { message: '请求过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req) => getRateLimitIpKey(req),
 });
 
 /**
@@ -41,7 +43,7 @@ export const apiLimiter = rateLimit({
   message: { message: '请求过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req) => getRateLimitIpKey(req),
 });
 
 /**
@@ -54,5 +56,5 @@ export const aiLimiter = rateLimit({
   message: { success: false, error: 'AI 请求过于频繁，请稍后再试（每分钟限制 10 次）' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
+  keyGenerator: (req) => getRateLimitIpKey(req),
 });
