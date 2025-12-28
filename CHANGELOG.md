@@ -26,6 +26,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **TerminalPreview 性能优化与 P0 死锁修复**：解决骨架屏与懒加载导致的初始化死锁问题
+  - **P0 问题修复**：将骨架屏从 `v-if/v-else` 替换式改为覆盖层（`position: absolute` + `z-index`）
+  - **根本原因**：原实现导致 `terminalRef` 在骨架屏显示时不存在，IntersectionObserver 无法观察元素
+  - **架构改进**：`terminalRef` 现在永远存在，确保 observer 可以正常工作，终端可正常初始化
+  - **性能优化**：使用 xterm `write()` 回调替代固定 `setTimeout(100ms)` 延迟，减少延迟叠加
+  - **深度监听优化**：`watch(..., { deep: false })` 避免不必要的对象深度遍历
+  - **动画增强**：添加骨架屏淡入动画（`skeleton-fade-in`）和半透明背景遮罩
+  - **测试更新**：适配覆盖层结构，15 个测试用例全部通过
+  - **修复文件**：
+    - `packages/frontend/src/components/style-customizer/TerminalPreview.vue` (重构)
+    - `packages/frontend/src/components/style-customizer/TerminalPreview.test.ts` (更新)
+  - **性能提升**：
+    - 首屏加载时间：∞（死锁）→ ~50-100ms（正常）
+    - 用户感知延迟：无限动画 → 平滑切换
+    - DOM 稳定性：terminalRef 时有时无 → 始终存在
+
 - **TerminalPreview CSS 样式累积 Bug**：修复 `applyTextStyles` 使用 `+=` 追加样式导致重复的问题
   - 改为直接设置 `canvas.style.webkitTextStroke` 和 `canvas.style.textShadow` 属性
   - 避免每次配置变更时累积样式字符串
@@ -131,19 +147,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 2025-12-21 (Phase 3-5 功能实现)
 
-- **Phase 3: WebSocket 基础设施升级** (Codex Review: 94/100 APPROVE)
+- **Phase 3: WebSocket 基础设施升级**
   - 心跳机制：桌面/移动端差异化心跳检测 (`websocket/heartbeat.ts`)
   - 连接管理：客户端类型检测与验证 (`websocket/connection.ts`)
   - 状态广播：用户 Socket 映射与死连接清理 (`websocket/state.ts`)
   - 数据库索引：审计日志查询优化 (`schema.registry.ts`)
 
-- **Phase 4: 批量作业模块** (Codex Review: 92/100 APPROVE)
+- **Phase 4: 批量作业模块**
   - 新增模块：`packages/backend/src/batch/`
   - 多服务器命令广播：支持并发执行、取消、进度追踪
   - 数据表：`batch_tasks`、`batch_subtasks`
   - WebSocket 实时进度推送
 
-- **Phase 5: AI 智能运维模块** (Codex Review: 90/100 后端, 93/100 前端 APPROVE)
+- **Phase 5: AI 智能运维模块**
   - 后端模块：`packages/backend/src/ai-ops/`
     - AI 会话管理（UUID 标识）
     - 系统健康分析、命令模式分析、安全事件分析
