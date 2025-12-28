@@ -82,11 +82,6 @@ describe('TerminalPreview.vue', () => {
       expect(wrapper.find('.terminal-preview-wrapper').exists()).toBe(true);
     });
 
-    it('应该显示预览标题', () => {
-      const title = wrapper.find('.terminal-preview-title');
-      expect(title.exists()).toBe(true);
-    });
-
     it('应该显示三个控制点按钮', () => {
       const dots = wrapper.findAll('.terminal-preview-dot');
       expect(dots).toHaveLength(3);

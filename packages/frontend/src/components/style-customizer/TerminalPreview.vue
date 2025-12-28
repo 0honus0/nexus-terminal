@@ -232,7 +232,6 @@ const previewModeButtons = computed(() => [
 <template>
   <div class="terminal-preview-wrapper" :style="containerStyle">
     <div class="terminal-preview-header">
-      <span class="terminal-preview-title">{{ $t('styleCustomizer.preview') || '预览' }}</span>
       <div class="terminal-preview-controls">
         <span class="terminal-preview-dot terminal-preview-dot-red"></span>
         <span class="terminal-preview-dot terminal-preview-dot-yellow"></span>
@@ -268,16 +267,10 @@ const previewModeButtons = computed(() => [
 .terminal-preview-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 8px 12px;
   background-color: var(--terminal-header-bg, #2d2e33);
   border-bottom: 1px solid var(--terminal-border-color, #374151);
-}
-
-.terminal-preview-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--terminal-header-text, #e5e7eb);
 }
 
 .terminal-preview-controls {
