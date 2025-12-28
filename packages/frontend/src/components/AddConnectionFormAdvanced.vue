@@ -17,6 +17,7 @@ const props = defineProps({
       proxy_type?: 'proxy' | 'jump' | null;
       tag_ids: number[];
       notes: string;
+      force_keyboard_interactive: boolean;
     }>,
     required: true,
   },
@@ -104,6 +105,31 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
           {{ t('connections.form.connectionModeJumpHost', '跳板机') }}
         </button>
       </div>
+    </div>
+
+    <!-- Force Keyboard Interactive Authentication (Only for SSH) -->
+    <div v-if="props.formData.type === 'SSH'" class="flex items-center justify-between">
+      <div class="flex flex-col">
+        <label class="block text-sm font-medium text-text-secondary mb-1">{{
+          t('connections.form.forceKeyboardInteractive', '强制键盘交互式认证')
+        }}</label>
+        <span class="text-xs text-text-secondary">{{
+          t(
+            'connections.form.forceKeyboardInteractiveDesc',
+            '强制使用键盘交互式认证。这通常是使用双因素认证(TOTP/2FA) 的服务器所必需的。'
+          )
+        }}</span>
+      </div>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          v-model="props.formData.force_keyboard_interactive"
+          class="sr-only peer"
+        />
+        <div
+          class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"
+        ></div>
+      </label>
     </div>
 
     <!-- Proxy Select - Show only for SSH and if 'proxy' mode is selected -->

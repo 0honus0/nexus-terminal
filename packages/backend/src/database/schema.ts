@@ -99,15 +99,16 @@ CREATE TABLE IF NOT EXISTS connections (
     encrypted_private_key TEXT NULL,
     encrypted_passphrase TEXT NULL,
     proxy_id INTEGER NULL,
-    ssh_key_id INTEGER NULL, 
-notes TEXT NULL,
-jump_chain TEXT NULL,
-proxy_type TEXT NULL, 
-created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    ssh_key_id INTEGER NULL,
+    notes TEXT NULL,
+    jump_chain TEXT NULL,
+    proxy_type TEXT NULL,
+    force_keyboard_interactive BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     last_connected_at INTEGER NULL,
     FOREIGN KEY (proxy_id) REFERENCES proxies(id) ON DELETE SET NULL,
-    FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id) ON DELETE SET NULL 
+    FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id) ON DELETE SET NULL
 );
 `;
 

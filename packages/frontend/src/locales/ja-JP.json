@@ -253,7 +253,9 @@
       "selectJumpHost": "ジャンプホストを選択してください",
       "removeJumpHostTitle": "このジャンプホストを削除",
       "addJumpHost": "ジャンプホストを追加",
-      "noAvailableSshConnectionsForJump": "ジャンプホストとして使用できるSSH接続がありません。先にSSH接続を作成してください。"
+      "noAvailableSshConnectionsForJump": "ジャンプホストとして使用できるSSH接続がありません。先にSSH接続を作成してください。",
+      "forceKeyboardInteractive": "強制キーボードインタラクティブ認証",
+      "forceKeyboardInteractiveDesc": "キーボードインタラクティブ認証の使用を強制します。これは通常、2要素認証（TOTP/2FA）を使用するサーバーに必要です。"
     },
     "noConnections": "接続がありません。'新しい接続を追加'をクリックして作成してください。",
     "noUntaggedConnections": "タグなしの接続はありません。",

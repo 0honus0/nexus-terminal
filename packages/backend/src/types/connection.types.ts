@@ -35,6 +35,7 @@ export interface CreateConnectionInput {
   tag_ids?: number[];
   notes?: string | null;
   jump_chain?: number[] | null;
+  force_keyboard_interactive?: boolean;
 }
 
 export interface UpdateConnectionInput {
@@ -53,6 +54,7 @@ export interface UpdateConnectionInput {
   notes?: string | null;
   tag_ids?: number[];
   jump_chain?: number[] | null;
+  force_keyboard_interactive?: boolean;
 }
 
 export interface FullConnectionData {
@@ -74,6 +76,7 @@ export interface FullConnectionData {
   updated_at: number;
   last_connected_at: number | null;
   jump_chain: number[] | null;
+  force_keyboard_interactive: boolean;
 }
 
 export interface DecryptedConnectionCredentials {

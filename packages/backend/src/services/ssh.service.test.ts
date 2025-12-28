@@ -274,6 +274,177 @@ describe('SSH Service', () => {
 
       await expect(getConnectionDetails(1)).rejects.toThrow('处理凭证或配置失败');
     });
+
+    it('应正确读取 force_keyboard_interactive 字段', async () => {
+      const keyboardInteractiveConnection = {
+        ...baseRawConnection,
+        force_keyboard_interactive: true,
+      };
+      (ConnectionRepository.findFullConnectionById as any).mockResolvedValue(
+        keyboardInteractiveConnection
+      );
+
+      const result = await getConnectionDetails(1);
+
+      expect(result.force_keyboard_interactive).toBe(true);
+    });
+
+    it('force_keyboard_interactive 为 false 时应正确读取', async () => {
+      const normalConnection = {
+        ...baseRawConnection,
+        force_keyboard_interactive: false,
+      };
+      (ConnectionRepository.findFullConnectionById as any).mockResolvedValue(normalConnection);
+
+      const result = await getConnectionDetails(1);
+
+      expect(result.force_keyboard_interactive).toBe(false);
+    });
+  });
+
+  describe('establishSshConnection - Keyboard Interactive Auth', () => {
+    const baseConnDetails: DecryptedConnectionDetails = {
+      id: 1,
+      name: '测试服务器',
+      host: '192.168.1.1',
+      port: 22,
+      username: 'testuser',
+      auth_method: 'password',
+      password: 'testpass',
+      proxy: null,
+      connection_proxy_setting: null,
+      force_keyboard_interactive: false,
+    };
+
+    it('force_keyboard_interactive 为 true 时应使用 keyboard-interactive 认证方式', async () => {
+      const keyboardInteractiveConnDetails: DecryptedConnectionDetails = {
+        ...baseConnDetails,
+        force_keyboard_interactive: true,
+      };
+
+      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+        setTimeout(() => this.emit('ready'), 10);
+      });
+      (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
+
+      await establishSshConnection(keyboardInteractiveConnDetails);
+
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authMethod: 'keyboard-interactive',
+          keyboardInteractive: expect.any(Function),
+        })
+      );
+    });
+
+    it('keyboardInteractive 回调应使用密码作为响应', async () => {
+      const keyboardInteractiveConnDetails: DecryptedConnectionDetails = {
+        ...baseConnDetails,
+        force_keyboard_interactive: true,
+      };
+
+      let capturedCallback: ((responses: string[]) => void) | null = null;
+      mockClient.connect.mockImplementation(function (this: MockSshClient, config: any) {
+        // 保存回调函数以便后续测试
+        if (config.keyboardInteractive) {
+          setTimeout(() => {
+            config.keyboardInteractive({}, ['Password:'], (responses: string[]) => {
+              capturedCallback = responses;
+            });
+          }, 5);
+        }
+        setTimeout(() => this.emit('ready'), 10);
+      });
+      (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
+
+      await establishSshConnection(keyboardInteractiveConnDetails);
+
+      // 等待异步回调执行
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(capturedCallback).not.toBeNull();
+      expect(capturedCallback).toEqual(['testpass']);
+    });
+
+    it('force_keyboard_interactive 为 false 时应使用密码认证', async () => {
+      const normalConnDetails: DecryptedConnectionDetails = {
+        ...baseConnDetails,
+        force_keyboard_interactive: false,
+      };
+
+      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+        setTimeout(() => this.emit('ready'), 10);
+      });
+      (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
+
+      await establishSshConnection(normalConnDetails);
+
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          password: 'testpass',
+        })
+      );
+      expect(mockClient.connect).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          authMethod: 'keyboard-interactive',
+        })
+      );
+    });
+
+    it('跳板机链的最终目标连接应正确应用 keyboardInteractive', async () => {
+      const jumpConnDetails: DecryptedConnectionDetails = {
+        ...baseConnDetails,
+        connection_proxy_setting: 'jump',
+        force_keyboard_interactive: true,
+        jump_chain: [
+          {
+            id: 'hop-1',
+            name: '跳板机1',
+            host: '10.0.0.50',
+            port: 22,
+            username: 'jumpuser',
+            auth_method: 'password',
+            password: 'jumppass',
+            force_keyboard_interactive: false,
+          },
+        ],
+      };
+
+      const mockStream = new EventEmitter();
+      let clientCount = 0;
+      let finalClientKeyboardInteractive: any = null;
+
+      (Client as any).mockImplementation(() => {
+        clientCount++;
+        const client = new MockSshClient();
+
+        if (clientCount === 1) {
+          // 跳板机客户端
+          client.connect.mockImplementation(function (this: MockSshClient) {
+            setTimeout(() => this.emit('ready'), 10);
+          });
+          client.forwardOut.mockImplementation((srcHost, srcPort, dstHost, dstPort, callback) => {
+            setTimeout(() => callback(null, mockStream), 10);
+          });
+        } else {
+          // 最终目标客户端 - 检查 keyboardInteractive 配置
+          client.connect.mockImplementation(function (this: MockSshClient, config: any) {
+            finalClientKeyboardInteractive = config.keyboardInteractive;
+            setTimeout(() => this.emit('ready'), 10);
+          });
+        }
+
+        return client;
+      });
+
+      (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
+
+      await establishSshConnection(jumpConnDetails);
+
+      // 验证最终目标客户端使用了 keyboardInteractive
+      expect(finalClientKeyboardInteractive).not.toBeNull();
+      expect(finalClientKeyboardInteractive).toEqual(expect.any(Function));
+    });
   });
 
   describe('establishSshConnection', () => {

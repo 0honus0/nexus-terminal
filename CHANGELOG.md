@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **强制键盘交互式认证功能**：新增 SSH 连接选项，支持 TOTP/2FA 服务器认证
+  - 数据库层：`connections` 表添加 `force_keyboard_interactive` 字段
+  - 后端 Service：SSH `establishSshConnection` 支持 `keyboard-interactive` 认证方式
+  - 前端组件：`AddConnectionFormAdvanced.vue` 添加仅 SSH 显示的开关
+  - 国际化支持：zh-CN、en-US、ja-JP 三种语言
+  - 测试覆盖：后端 45 个测试、前端 36 个测试全部通过
+
 ## 2025-12-27 (自然语言生成命令模块优化)
 
 - **nl2cmd 优化**：DRY 重构，提取共享常量模块

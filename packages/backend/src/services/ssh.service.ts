@@ -56,6 +56,7 @@ export interface DecryptedConnectionDetails {
   } | null;
   jump_chain?: JumpHostDetail[];
   connection_proxy_setting?: 'proxy' | 'jump' | null;
+  force_keyboard_interactive?: boolean;
 }
 
 /**
@@ -114,6 +115,7 @@ export const getConnectionDetails = async (
       proxy: null,
       jump_chain: undefined,
       connection_proxy_setting: typedRawConnInfo.proxy_type ?? null,
+      force_keyboard_interactive: (typedRawConnInfo as any).force_keyboard_interactive ?? false,
     };
 
     if (fullConnInfo.auth_method === 'password' && rawConnInfo.encrypted_password) {
@@ -335,6 +337,30 @@ const _establishDirectSshConnection = (
     keepaliveCountMax: 10,
   };
 
+  // 如果强制使用键盘交互式认证，添加 keyboardInteractive 配置
+  if (connDetails.force_keyboard_interactive) {
+    connectConfig.authMethod = 'keyboard-interactive';
+    connectConfig.keyboardInteractive = (
+      ctx,
+      messages: string[],
+      finish: (responses: string[]) => void
+    ) => {
+      console.log(
+        `SshService: Keyboard interactive authentication requested for ${connDetails.name}. Messages: ${JSON.stringify(messages)}`
+      );
+      // 对于 TOTP/2FA，通常只有一个提示信息
+      // 我们需要通过 WebSocket 将认证请求发送给前端，让用户输入
+      // 这里先尝试使用密码作为响应（某些服务器接受密码作为 TOTP 响应）
+      // 如果用户没有提供密码，则无法自动完成认证
+      if (connDetails.password) {
+        finish([connDetails.password]);
+      } else {
+        // 没有密码可用，调用失败回调
+        finish([]);
+      }
+    };
+  }
+
   return _setupSshClientListenersAndConnect(
     sshClient,
     connectConfig,
@@ -490,7 +516,8 @@ const _establishProxyConnection = async (
 function _prepareConnectConfigForHop(
   hopDetail: JumpHostDetail,
   previousStream: ClientChannel | null,
-  timeout: number
+  timeout: number,
+  forceKeyboardInteractive?: boolean
 ): ConnectConfig {
   const config: ConnectConfig = {
     username: hopDetail.username,
@@ -503,6 +530,25 @@ function _prepareConnectConfigForHop(
   } else {
     config.privateKey = hopDetail.privateKey;
     config.passphrase = hopDetail.passphrase;
+  }
+
+  // 如果强制使用键盘交互式认证，添加到跳板机配置
+  if (forceKeyboardInteractive && hopDetail.auth_method === 'password') {
+    config.authMethod = 'keyboard-interactive';
+    config.keyboardInteractive = (
+      ctx,
+      messages: string[],
+      finish: (responses: string[]) => void
+    ) => {
+      console.log(
+        `SshService: Keyboard interactive auth for jump host ${hopDetail.name}. Messages: ${JSON.stringify(messages)}`
+      );
+      if (hopDetail.password) {
+        finish([hopDetail.password]);
+      } else {
+        finish([]);
+      }
+    };
   }
 
   if (previousStream) {
@@ -578,6 +624,25 @@ async function _establishConnectionViaJumpChainRecursive(
         keepaliveCountMax: 10,
       };
 
+      // 如果强制使用键盘交互式认证，添加到最终目标配置
+      if (finalTargetDetails.force_keyboard_interactive) {
+        finalConnectConfig.authMethod = 'keyboard-interactive';
+        finalConnectConfig.keyboardInteractive = (
+          ctx,
+          messages: string[],
+          finish: (responses: string[]) => void
+        ) => {
+          console.log(
+            `SshService: Keyboard interactive auth for final target ${finalTargetDetails.name}. Messages: ${JSON.stringify(messages)}`
+          );
+          if (finalTargetDetails.password) {
+            finish([finalTargetDetails.password]);
+          } else {
+            finish([]);
+          }
+        };
+      }
+
       _setupSshClientListenersAndConnect(
         finalClient,
         finalConnectConfig,
@@ -610,7 +675,8 @@ async function _establishConnectionViaJumpChainRecursive(
     const connectConfigForThisHop = _prepareConnectConfigForHop(
       currentJumpHostDetails,
       previousStream,
-      timeoutPerHop
+      timeoutPerHop,
+      finalTargetDetails.force_keyboard_interactive
     );
     console.log(
       `${currentHopLogPrefix}Prepared connect config for this hop: Host=${connectConfigForThisHop.host}, Port=${connectConfigForThisHop.port}, SockPresent=${!!connectConfigForThisHop.sock}`

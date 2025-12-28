@@ -325,6 +325,21 @@ const definedMigrations: Migration[] = [
             ALTER TABLE quick_commands ADD COLUMN variables TEXT NULL;
         `,
   },
+  {
+    id: 11,
+    name: 'Add force_keyboard_interactive column to connections table',
+    check: async (db: Database): Promise<boolean> => {
+      const columnAlreadyExists = await columnExists(
+        db,
+        'connections',
+        'force_keyboard_interactive'
+      );
+      return !columnAlreadyExists;
+    },
+    sql: `
+            ALTER TABLE connections ADD COLUMN force_keyboard_interactive BOOLEAN NOT NULL DEFAULT FALSE;
+        `,
+  },
 ];
 
 /**

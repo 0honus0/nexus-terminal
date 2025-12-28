@@ -27,12 +27,14 @@ interface ConnectionWithTagsRow extends ConnectionBase {
   // This will no longer cause error if ConnectionBase has no jump_chain
   tag_ids_str: string | null;
   jump_chain: string | null; // Stored as JSON string in DB
+  force_keyboard_interactive: number | 0 | 1; // BOOLEAN in SQLite is stored as 0/1
 }
 
 // ConnectionWithTags implicitly includes 'type' and 'ssh_key_id' via ConnectionBase
 export interface ConnectionWithTags extends ConnectionBase {
   tag_ids: number[];
   jump_chain: number[] | null; // Explicitly add for service layer type
+  force_keyboard_interactive: boolean;
 }
 
 // 包含加密字段的完整类型，用于插入/更新
@@ -69,7 +71,7 @@ interface FullConnectionDbRow extends Omit<FullConnectionData, 'jump_chain' | 't
 export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]> => {
   const sql = `
         SELECT
-            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, -- +++ Select ssh_key_id, notes, jump_chain AND proxy_type +++
+            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, c.force_keyboard_interactive, -- +++ Select force_keyboard_interactive +++
             c.created_at, c.updated_at, c.last_connected_at,
             GROUP_CONCAT(ct.tag_id) as tag_ids_str
          FROM connections c
@@ -80,7 +82,7 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
     const db = await getDbInstance();
     const rows = await allDb<ConnectionWithTagsRow>(db, sql);
     return rows.map((row) => {
-      const { jump_chain: jumpChainStr, ...restOfRow } = row;
+      const { jump_chain: jumpChainStr, force_keyboard_interactive, ...restOfRow } = row;
       return {
         ...restOfRow,
         tag_ids: row.tag_ids_str
@@ -90,6 +92,7 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
               .filter((id) => !Number.isNaN(id))
           : [],
         jump_chain: jumpChainStr ? (JSON.parse(jumpChainStr) as number[]) : null,
+        force_keyboard_interactive: Boolean(force_keyboard_interactive),
       } as ConnectionWithTags;
     });
   } catch (err: any) {
@@ -106,7 +109,7 @@ export const findConnectionByIdWithTags = async (
 ): Promise<ConnectionWithTags | null> => {
   const sql = `
         SELECT
-            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, -- +++ Select ssh_key_id, notes, jump_chain AND proxy_type +++
+            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, c.force_keyboard_interactive,
             c.created_at, c.updated_at, c.last_connected_at,
             GROUP_CONCAT(ct.tag_id) as tag_ids_str
          FROM connections c
@@ -117,7 +120,7 @@ export const findConnectionByIdWithTags = async (
     const db = await getDbInstance();
     const row = await getDbRow<ConnectionWithTagsRow>(db, sql, [id]);
     if (row && typeof row.id !== 'undefined') {
-      const { jump_chain: jumpChainStr, ...restOfRow } = row;
+      const { jump_chain: jumpChainStr, force_keyboard_interactive, ...restOfRow } = row;
       return {
         ...restOfRow,
         tag_ids: row.tag_ids_str
@@ -127,6 +130,7 @@ export const findConnectionByIdWithTags = async (
               .filter((id) => !Number.isNaN(id))
           : [],
         jump_chain: jumpChainStr ? (JSON.parse(jumpChainStr) as number[]) : null,
+        force_keyboard_interactive: Boolean(force_keyboard_interactive),
       } as ConnectionWithTags;
     }
     return null;
@@ -204,8 +208,8 @@ export const createConnection = async (
   console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
   const now = Math.floor(Date.now() / 1000);
   const sql = `
-        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, created_at, updated_at) -- +++ Add ssh_key_id, notes, jump_chain AND proxy_type columns +++
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`; // +++ Add placeholders for ssh_key_id, notes, jump_chain AND proxy_type +++
+        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, force_keyboard_interactive, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
   const jumpChainStringified =
     data.jump_chain && data.jump_chain.length > 0 ? JSON.stringify(data.jump_chain) : null;
@@ -215,7 +219,7 @@ export const createConnection = async (
 
   const params = [
     data.name ?? null,
-    data.type, // Add type parameter
+    data.type,
     data.host,
     data.port,
     data.username,
@@ -224,10 +228,11 @@ export const createConnection = async (
     data.encrypted_private_key ?? null,
     data.encrypted_passphrase ?? null,
     data.proxy_id ?? null,
-    data.proxy_type ?? null, // Add proxy_type parameter
-    data.ssh_key_id ?? null, // +++ Add ssh_key_id parameter +++
-    data.notes ?? null, // Add notes parameter
-    jumpChainStringified, // Use the stringified jump_chain
+    data.proxy_type ?? null,
+    data.ssh_key_id ?? null,
+    data.notes ?? null,
+    jumpChainStringified,
+    data.force_keyboard_interactive ? 1 : 0,
     now,
     now,
   ];
@@ -283,6 +288,9 @@ export const updateConnection = async (
         `[Repository:updateConnection] jump_chain input for ID ${id}: ${JSON.stringify(jumpChainValue)}, stringified to: ${jumpChainStringified}`
       );
       params.push(jumpChainStringified);
+    } else if (K === 'force_keyboard_interactive') {
+      // 布尔值转换为整数存储
+      params.push(value ? 1 : 0);
     } else {
       params.push(value ?? null);
     }

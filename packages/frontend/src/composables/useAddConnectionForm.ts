@@ -66,6 +66,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     tag_ids: [] as number[],
     notes: '',
     vncPassword: '',
+    force_keyboard_interactive: false,
   };
   const formData = reactive({ ...initialFormData });
 
@@ -178,6 +179,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         formData.vncPassword = '';
         formData.jump_chain = null;
         formData.proxy_type = null;
+        formData.force_keyboard_interactive = false;
         console.log('[Debug] watch connectionToEdit - formData.jump_chain reset');
         advancedConnectionMode.value = 'proxy';
       }
@@ -1006,6 +1008,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       proxy_type: formData.proxy_type,
       tag_ids: currentSelectedValidTagIds,
       jump_chain: formData.jump_chain ? JSON.parse(JSON.stringify(formData.jump_chain)) : null,
+      force_keyboard_interactive: formData.force_keyboard_interactive,
     };
 
     if (formData.type === 'SSH') {
@@ -1020,9 +1023,11 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     } else if (formData.type === 'RDP') {
       if (formData.password) dataToSend.password = formData.password;
       delete dataToSend.auth_method;
+      delete dataToSend.force_keyboard_interactive;
     } else if (formData.type === 'VNC') {
       if (formData.vncPassword) dataToSend.password = formData.vncPassword;
       delete dataToSend.auth_method;
+      delete dataToSend.force_keyboard_interactive;
     }
 
     if (dataToSend.type !== 'SSH' || dataToSend.auth_method !== 'key') delete dataToSend.ssh_key_id;
