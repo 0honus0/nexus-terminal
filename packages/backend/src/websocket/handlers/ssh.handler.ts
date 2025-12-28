@@ -54,10 +54,7 @@ export async function handleSshConnect(
       ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
     const sshClient = await SshService.establishSshConnection(connInfo);
 
-    // +++ 启用 TCP_NODELAY：在底层 socket 上禁用 Nagle 算法，减少输入延迟 +++
-    if (sshClient._sock && typeof sshClient._sock.setNoDelay === 'function') {
-      sshClient._sock.setNoDelay(true);
-    }
+    // SSH 连接已建立，TCP_NODELAY 将通过连接配置自动应用
 
     const newSessionId = uuidv4();
     ws.sessionId = newSessionId; // Assign new sessionId to the WebSocket
