@@ -54,6 +54,11 @@ export async function handleSshConnect(
       ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
     const sshClient = await SshService.establishSshConnection(connInfo);
 
+    // +++ 启用 TCP_NODELAY：在底层 socket 上禁用 Nagle 算法，减少输入延迟 +++
+    if (sshClient._sock && typeof sshClient._sock.setNoDelay === 'function') {
+      sshClient._sock.setNoDelay(true);
+    }
+
     const newSessionId = uuidv4();
     ws.sessionId = newSessionId; // Assign new sessionId to the WebSocket
 
@@ -89,7 +94,11 @@ export async function handleSshConnect(
       const defaultCols = payload?.cols || 80; // Use provided cols or default
       const defaultRows = payload?.rows || 24; // Use provided rows or default
       sshClient.shell(
-        { term: payload?.term || 'xterm-256color', cols: defaultCols, rows: defaultRows },
+        {
+          term: payload?.term || 'xterm-256color',
+          cols: defaultCols,
+          rows: defaultRows,
+        },
         (err, stream) => {
           if (err) {
             console.error(`SSH: 会话 ${newSessionId} 打开 Shell 失败:`, err);

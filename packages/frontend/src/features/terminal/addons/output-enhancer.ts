@@ -54,6 +54,7 @@ export class OutputEnhancerAddon implements ITerminalAddon {
   private readonly maxFoldedBlocks = 24;
   private readonly maxFoldBlockSize = 1024 * 1024; // 单个折叠块最大 1MB
   private readonly throttleMs = 16; // 约 60fps，避免高频输出卡顿
+  private readonly smallDataThreshold = 100; // 小数据包阈值（字节），跳过处理以减少延迟
   private lastProcessTime = 0;
 
   constructor(options: OutputEnhancerOptions = {}) {
@@ -82,6 +83,12 @@ export class OutputEnhancerAddon implements ITerminalAddon {
       if (!this.originalWrite) return;
 
       if (!this.enabled || typeof data !== 'string' || this.shouldBypass(data)) {
+        this.originalWrite(data, callback);
+        return;
+      }
+
+      // +++ 优化：小数据包（用户输入回显）跳过处理，直接写入 +++
+      if (data.length <= this.smallDataThreshold) {
         this.originalWrite(data, callback);
         return;
       }

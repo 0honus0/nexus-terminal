@@ -46,6 +46,7 @@ export function createSshTerminalManager(
   let lastFlushTime = 0;
   const FLUSH_INTERVAL_MS = 16; // 约 60fps，减少写入频率
   const IDLE_CALLBACK_TIMEOUT_MS = 50; // requestIdleCallback 超时
+  const SMALL_DATA_THRESHOLD = 100; // 小数据包阈值（字节），用于识别用户输入
 
   // 合并 Uint8Array 数组为单个 Uint8Array
   const mergeUint8Arrays = (arrays: Uint8Array[]): Uint8Array => {
@@ -293,7 +294,21 @@ export function createSshTerminalManager(
     // console.log(`[会话 ${sessionId}][SSH前端] 解码后的数据 (尝试写入):`, outputData);
     // --------------------
 
-    // +++ Push to buffer and trigger flush +++
+    // +++ 优化：区分小数据包（用户输入回显）和大数据包（服务器输出） +++
+    const dataSize =
+      typeof outputData === 'string'
+        ? outputData.length
+        : outputData instanceof Uint8Array
+          ? outputData.length
+          : 0;
+
+    // 小数据包（通常是用户输入回显）立即写入，不经过缓冲
+    if (dataSize > 0 && dataSize <= SMALL_DATA_THRESHOLD && terminalInstance.value) {
+      terminalInstance.value.write(outputData);
+      return;
+    }
+
+    // 大数据包（服务器输出）使用批量缓冲策略
     terminalOutputBuffer.value.push(outputData);
 
     if (terminalInstance.value) {
