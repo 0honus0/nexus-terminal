@@ -339,9 +339,11 @@ const _establishDirectSshConnection = (
 
   // 如果强制使用键盘交互式认证，添加 keyboardInteractive 配置
   if (connDetails.force_keyboard_interactive) {
-    connectConfig.authMethod = 'keyboard-interactive';
-    connectConfig.keyboardInteractive = (
-      ctx,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (connectConfig as any).authMethod = 'keyboard-interactive';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (connectConfig as any).keyboardInteractive = (
+      _ctx: any,
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
@@ -534,9 +536,11 @@ function _prepareConnectConfigForHop(
 
   // 如果强制使用键盘交互式认证，添加到跳板机配置
   if (forceKeyboardInteractive && hopDetail.auth_method === 'password') {
-    config.authMethod = 'keyboard-interactive';
-    config.keyboardInteractive = (
-      ctx,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (config as any).authMethod = 'keyboard-interactive';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (config as any).keyboardInteractive = (
+      _ctx: any,
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
@@ -626,9 +630,11 @@ async function _establishConnectionViaJumpChainRecursive(
 
       // 如果强制使用键盘交互式认证，添加到最终目标配置
       if (finalTargetDetails.force_keyboard_interactive) {
-        finalConnectConfig.authMethod = 'keyboard-interactive';
-        finalConnectConfig.keyboardInteractive = (
-          ctx,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (finalConnectConfig as any).authMethod = 'keyboard-interactive';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (finalConnectConfig as any).keyboardInteractive = (
+          _ctx: any,
           messages: string[],
           finish: (responses: string[]) => void
         ) => {

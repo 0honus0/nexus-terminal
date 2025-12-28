@@ -206,6 +206,7 @@ export const createConnection = async (
     proxy_id: input.proxy_id ?? null, // 直接使用输入的 proxy_id
     proxy_type: input.proxy_type ?? null, // 新增 proxy_type
     jump_chain: processedJumpChain,
+    force_keyboard_interactive: input.force_keyboard_interactive ?? false,
   };
   // Remove ssh_key_id property if it's null before logging/saving if repository expects exact type match without optional nulls
   const finalConnectionData = { ...connectionData };
@@ -545,6 +546,7 @@ export const getConnectionWithDecryptedCredentials = async (
     encrypted_private_key: fullConnectionDbRow.encrypted_private_key ?? null, // May be null if using ssh_key_id
     encrypted_passphrase: fullConnectionDbRow.encrypted_passphrase ?? null, // May be null if using ssh_key_id
     ssh_key_id: fullConnectionDbRow.ssh_key_id ?? null, // +++ Include ssh_key_id +++
+    force_keyboard_interactive: fullConnectionDbRow.force_keyboard_interactive ?? false,
     // Ensure other fields match FullConnectionData if necessary
   } as FullConnectionData & { ssh_key_id: number | null }; // Type assertion
 

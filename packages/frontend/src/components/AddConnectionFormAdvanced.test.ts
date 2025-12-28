@@ -48,19 +48,68 @@ const createMockFormData = (overrides = {}) => ({
 });
 
 const createMockProxies = () => [
-  { id: 1, name: 'Proxy 1', type: 'SOCKS5', host: '10.0.0.1', port: 1080 },
-  { id: 2, name: 'Proxy 2', type: 'HTTP', host: '10.0.0.2', port: 8080 },
+  {
+    id: 1,
+    name: 'Proxy 1',
+    type: 'SOCKS5' as const,
+    host: '10.0.0.1',
+    port: 1080,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  },
+  {
+    id: 2,
+    name: 'Proxy 2',
+    type: 'HTTP' as const,
+    host: '10.0.0.2',
+    port: 8080,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  },
 ];
 
 const createMockConnections = () => [
-  { id: 1, name: 'SSH Server 1', type: 'SSH' as const, host: '192.168.1.1', port: 22 },
-  { id: 2, name: 'SSH Server 2', type: 'SSH' as const, host: '192.168.1.2', port: 22 },
-  { id: 3, name: 'RDP Server', type: 'RDP' as const, host: '192.168.1.3', port: 3389 },
+  {
+    id: 1,
+    name: 'SSH Server 1',
+    type: 'SSH' as const,
+    host: '192.168.1.1',
+    port: 22,
+    username: 'user',
+    auth_method: 'password' as const,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    last_connected_at: null,
+  },
+  {
+    id: 2,
+    name: 'SSH Server 2',
+    type: 'SSH' as const,
+    host: '192.168.1.2',
+    port: 22,
+    username: 'user',
+    auth_method: 'password' as const,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    last_connected_at: null,
+  },
+  {
+    id: 3,
+    name: 'RDP Server',
+    type: 'RDP' as const,
+    host: '192.168.1.3',
+    port: 3389,
+    username: 'user',
+    auth_method: 'password' as const,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    last_connected_at: null,
+  },
 ];
 
 const createMockTags = () => [
-  { id: 1, name: 'Tag 1' },
-  { id: 2, name: 'Tag 2' },
+  { id: 1, name: 'Tag 1', created_at: Date.now(), updated_at: Date.now() },
+  { id: 2, name: 'Tag 2', created_at: Date.now(), updated_at: Date.now() },
 ];
 
 describe('AddConnectionFormAdvanced.vue', () => {
@@ -156,7 +205,7 @@ describe('AddConnectionFormAdvanced.vue', () => {
       wrapper = createComponent(formData);
 
       const checkbox = wrapper.find('input[type="checkbox"]');
-      expect(checkbox.element.checked).toBe(false);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false);
     });
 
     it('点击开关应更新 formData.force_keyboard_interactive', async () => {
@@ -164,7 +213,7 @@ describe('AddConnectionFormAdvanced.vue', () => {
       wrapper = createComponent(formData);
 
       const checkbox = wrapper.find('input[type="checkbox"]');
-      await checkbox.setChecked(true);
+      await (checkbox as any).setChecked(true);
 
       expect(formData.force_keyboard_interactive).toBe(true);
     });
@@ -178,7 +227,7 @@ describe('AddConnectionFormAdvanced.vue', () => {
       wrapper = createComponent(formData, { isEditMode: true });
 
       const checkbox = wrapper.find('input[type="checkbox"]');
-      expect(checkbox.element.checked).toBe(true);
+      expect((checkbox.element as HTMLInputElement).checked).toBe(true);
     });
 
     it('应仅对 SSH 类型渲染开关', () => {

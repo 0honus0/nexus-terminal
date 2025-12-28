@@ -47,6 +47,7 @@ export interface FullConnectionData extends ConnectionBase {
   tag_ids?: number[];
   jump_chain: number[] | null; // Explicitly add for service layer input type
   proxy_type?: 'proxy' | 'jump' | null; // 新增连接本身的 proxy_type
+  force_keyboard_interactive?: boolean;
 }
 
 interface FullConnectionDbRow extends Omit<FullConnectionData, 'jump_chain' | 'tag_ids'> {
