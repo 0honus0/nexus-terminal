@@ -19,6 +19,6 @@
     },
     "types": ["vite/client", "pinia-plugin-persistedstate", "node"] // 重新添加 "node" 类型
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"], // 需要进行类型检查的文件
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "src/**/*.test.ts"], // 需要进行类型检查的文件（包括测试）
   "exclude": ["node_modules"] // 排除检查的目录
 }

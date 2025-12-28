@@ -372,6 +372,79 @@ npm run preview
 - 组件特定样式使用 `<style scoped>`
 - 全局样式放在 `src/style.css`
 
+### TypeScript 类型检查
+
+本项目使用 `vue-tsc` 进行严格的类型检查，构建流程中强制执行。
+
+#### 类型检查命令
+
+```bash
+# 运行类型检查（构建流程中自动执行）
+npx vue-tsc --noEmit
+
+# 或通过 npm 脚本
+npm run typecheck
+```
+
+#### 类型检查规范
+
+1. **所有文件必须通过类型检查**，包括：
+   - `*.ts` 源文件
+   - `*.vue` 组件（含 `<script setup lang="ts">`）
+   - `*.test.ts` 测试文件（由 Vitest 运行，但同样需要通过类型检查）
+
+2. **Mock 数据必须完整匹配类型定义**：
+
+   ```typescript
+   // 错误示例：缺少必填字段
+   const mockProxies = () => [
+     { id: 1, name: 'Proxy 1', type: 'SOCKS5', host: '10.0.0.1', port: 1080 },
+     // 缺少 created_at, updated_at
+   ];
+
+   // 正确示例：完整类型匹配
+   const mockProxies = () => [
+     {
+       id: 1,
+       name: 'Proxy 1',
+       type: 'SOCKS5' as const,
+       host: '10.0.0.1',
+       port: 1080,
+       created_at: Date.now(),
+       updated_at: Date.now(),
+     },
+   ];
+   ```
+
+3. **Vue Test Utils 类型处理**：
+
+   ```typescript
+   // 使用类型断言处理 DOM 元素属性
+   const checkbox = wrapper.find('input[type="checkbox"]');
+   expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+
+   // 使用 any 断言处理私有方法
+   await (checkbox as any).setChecked(true);
+   ```
+
+4. **类型定义缺失的处理顺序**：
+   - 优先在对应模块的 `types/*.ts` 中添加类型定义
+   - 测试文件的 Mock 数据可直接内联完整类型
+   - 必要时使用 `// eslint-disable-next-line @typescript-eslint/no-explicit-any` + `as any` 临时处理
+
+#### 构建脚本
+
+`package.json` 中的构建命令：
+
+```json
+{
+  "scripts": {
+    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit"
+  }
+}
+```
+
 ---
 
 ## 常见问题 (FAQ)

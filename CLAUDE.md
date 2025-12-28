@@ -223,24 +223,34 @@ npm run build
 ### 测试命令
 
 ```bash
+# 类型检查（前端强制执行，包含测试文件）
+npm run typecheck                   # 前端类型检查（vue-tsc --noEmit）
+
 # 单元测试
-npm test                          # 运行所有单元测试
-npm run test:backend              # 运行后端测试
-npm run test:remote-gateway       # 运行远程网关测试
-npm run test:frontend             # 运行前端测试
-npm run test:watch:backend        # 后端监视模式
-npm run test:watch:remote-gateway # 远程网关监视模式
-npm run test:watch:frontend       # 前端监视模式
-npm run test:coverage             # 生成覆盖率报告
+npm test                            # 运行所有单元测试
+npm run test:backend                # 运行后端测试
+npm run test:remote-gateway         # 运行远程网关测试
+npm run test:frontend               # 运行前端测试
+npm run test:watch:backend          # 后端监视模式
+npm run test:watch:remote-gateway   # 远程网关监视模式
+npm run test:watch:frontend         # 前端监视模式
+npm run test:coverage               # 生成覆盖率报告
 
 # E2E 测试
-npm run test:e2e                  # 运行 E2E 测试（无头模式）
-npm run test:e2e:ui               # Playwright UI 模式（交互式调试）
-npm run test:e2e:headed           # 有头模式（可见浏览器）
+npm run test:e2e                    # 运行 E2E 测试（无头模式）
+npm run test:e2e:ui                 # Playwright UI 模式（交互式调试）
+npm run test:e2e:headed             # 有头模式（可见浏览器）
 
 # 首次运行 E2E 测试前需安装浏览器
 npx playwright install
 ```
+
+### 类型检查要求
+
+- **前端项目**：使用 `vue-tsc --noEmit` 进行严格类型检查，构建流程中强制执行
+- **后端项目**：使用 `tsc --noEmit` 进行类型检查
+- **测试文件**：同样需要通过类型检查，Mock 数据必须完整匹配类型定义
+- **类型断言**：Vue Test Utils 中使用 `as HTMLInputElement` 处理 DOM 属性，`as any` 处理私有方法
 
 ### 测试目录结构
 
