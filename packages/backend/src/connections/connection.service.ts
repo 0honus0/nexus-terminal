@@ -331,6 +331,11 @@ export const updateConnection = async (
   // Handle ssh_key_id update (can be set to null or a new ID)
   if (input.ssh_key_id !== undefined) dataToUpdate.ssh_key_id = input.ssh_key_id;
 
+  // Handle force_keyboard_interactive update (only for SSH)
+  if (input.force_keyboard_interactive !== undefined) {
+    dataToUpdate.force_keyboard_interactive = !!input.force_keyboard_interactive;
+  }
+
   // 处理认证方法更改或凭证更新 (根据 targetType)
   // Use the validated targetType for logic
   if (targetType === 'SSH') {
