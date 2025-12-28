@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import type { ITheme } from 'xterm';
 import type { TerminalTheme } from '../../types/terminal-theme.types';
 import { defaultXtermTheme } from '../../features/appearance/config/default-themes';
+import TerminalPreview from './TerminalPreview.vue';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -558,354 +559,386 @@ watch(
 </script>
 
 <template>
-  <section v-if="!isEditingTheme">
-    <h3 class="mt-0 border-b border-border pb-2 mb-4 text-lg font-semibold text-foreground">
-      {{ t('styleCustomizer.terminalStyles') }}
-    </h3>
+  <div v-if="!isEditingTheme" class="terminal-tab-container">
+    <div class="terminal-tab-grid">
+      <!-- 左侧配置区域 -->
+      <div class="terminal-tab-config">
+        <section>
+          <h3 class="mt-0 border-b border-border pb-2 mb-4 text-lg font-semibold text-foreground">
+            {{ t('styleCustomizer.terminalStyles') }}
+          </h3>
 
-    <div
-      class="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-start md:items-center gap-2 md:gap-3 mb-3"
-    >
-      <label
-        for="terminalFontFamily"
-        class="text-left text-foreground text-sm font-medium overflow-hidden text-ellipsis block w-full mb-1 md:mb-0"
-        >{{ t('styleCustomizer.terminalFontFamily') }}:</label
-      >
-      <input
-        type="text"
-        id="terminalFontFamily"
-        v-model="editableTerminalFontFamily"
-        class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-        :placeholder="t('styleCustomizer.terminalFontPlaceholder')"
-      />
-      <button
-        @click="handleSaveTerminalFont"
-        class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap justify-self-start mt-1 md:mt-0"
-      >
-        {{ t('common.save') }}
-      </button>
-    </div>
-    <p class="text-xs text-text-secondary -mt-1 mb-2">
-      {{ t('styleCustomizer.terminalFontDescription') }}
-    </p>
-
-    <div
-      class="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-start md:items-center gap-2 md:gap-3 mb-3"
-    >
-      <label
-        for="terminalFontSize"
-        class="text-left text-foreground text-sm font-medium overflow-hidden text-ellipsis block w-full mb-1 md:mb-0"
-        >{{ t('styleCustomizer.terminalFontSize') }}:</label
-      >
-      <input
-        type="number"
-        id="terminalFontSize"
-        v-model.number="editableTerminalFontSize"
-        class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-        min="1"
-      />
-      <button
-        @click="handleSaveTerminalFontSize"
-        class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap justify-self-start mt-1 md:mt-0"
-      >
-        {{ t('common.save') }}
-      </button>
-    </div>
-
-    <!-- 文字描边设置 -->
-    <hr class="my-4 md:my-6" />
-    <h4 class="mt-6 mb-3 text-base font-semibold text-foreground">
-      {{ t('styleCustomizer.textStrokeSettings') }}
-    </h4>
-    <div class="space-y-3 mb-3">
-      <div class="flex items-center justify-between">
-        <label for="terminalTextStrokeEnabledSwitch" class="text-foreground text-sm font-medium">{{
-          t('styleCustomizer.enableTextStroke')
-        }}</label>
-        <button
-          type="button"
-          id="terminalTextStrokeEnabledSwitch"
-          @click="toggleTextStrokeAndSave"
-          :class="[
-            'relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary',
-            editableTerminalTextStrokeEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
-          ]"
-          role="switch"
-          :aria-checked="editableTerminalTextStrokeEnabled"
-        >
-          <span
-            aria-hidden="true"
-            :class="[
-              'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200',
-              editableTerminalTextStrokeEnabled ? 'translate-x-5' : 'translate-x-0',
-            ]"
-          ></span>
-        </button>
-      </div>
-
-      <div class="space-y-3">
-        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
-          <label for="terminalTextStrokeWidth" class="text-left text-foreground text-sm font-medium"
-            >{{ t('styleCustomizer.textStrokeWidth') }}:</label
+          <div
+            class="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-start md:items-center gap-2 md:gap-3 mb-3"
           >
-          <input
-            type="number"
-            id="terminalTextStrokeWidth"
-            v-model.number="editableTerminalTextStrokeWidth"
-            min="0"
-            step="0.1"
-            class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
-          />
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
-          <label for="terminalTextStrokeColor" class="text-left text-foreground text-sm font-medium"
-            >{{ t('styleCustomizer.textStrokeColor') }}:</label
-          >
-          <div class="flex items-center gap-2">
-            <input
-              type="color"
-              id="terminalTextStrokeColor"
-              v-model.lazy="editableTerminalTextStrokeColor"
-              class="p-0.5 h-[34px] min-w-[40px] max-w-[50px] rounded border border-border flex-shrink-0"
-            />
+            <label
+              for="terminalFontFamily"
+              class="text-left text-foreground text-sm font-medium overflow-hidden text-ellipsis block w-full mb-1 md:mb-0"
+              >{{ t('styleCustomizer.terminalFontFamily') }}:</label
+            >
             <input
               type="text"
-              :value="editableTerminalTextStrokeColor"
-              @input="editableTerminalTextStrokeColor = ($event.target as HTMLInputElement).value"
-              class="flex-grow min-w-[80px] bg-header border border-border px-[0.7rem] py-2 rounded text-sm text-foreground box-border"
+              id="terminalFontFamily"
+              v-model="editableTerminalFontFamily"
+              class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              :placeholder="t('styleCustomizer.terminalFontPlaceholder')"
             />
+            <button
+              @click="handleSaveTerminalFont"
+              class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap justify-self-start mt-1 md:mt-0"
+            >
+              {{ t('common.save') }}
+            </button>
           </div>
-        </div>
-      </div>
-      <div class="flex justify-start mt-2">
-        <button
-          @click="handleSaveTerminalTextStroke"
-          class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap"
-        >
-          {{ t('common.save') }}
-        </button>
-      </div>
-    </div>
+          <p class="text-xs text-text-secondary -mt-1 mb-2">
+            {{ t('styleCustomizer.terminalFontDescription') }}
+          </p>
 
-    <!-- 文字阴影设置 -->
-    <hr class="my-4 md:my-6" />
-    <h4 class="mt-6 mb-3 text-base font-semibold text-foreground">
-      {{ t('styleCustomizer.textShadowSettings') }}
-    </h4>
-    <div class="space-y-3 mb-3">
-      <div class="flex items-center justify-between">
-        <label for="terminalTextShadowEnabledSwitch" class="text-foreground text-sm font-medium">{{
-          t('styleCustomizer.enableTextShadow')
-        }}</label>
-        <button
-          type="button"
-          id="terminalTextShadowEnabledSwitch"
-          @click="toggleTextShadowAndSave"
-          :class="[
-            'relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary',
-            editableTerminalTextShadowEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
-          ]"
-          role="switch"
-          :aria-checked="editableTerminalTextShadowEnabled"
-        >
-          <span
-            aria-hidden="true"
-            :class="[
-              'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200',
-              editableTerminalTextShadowEnabled ? 'translate-x-5' : 'translate-x-0',
-            ]"
-          ></span>
-        </button>
-      </div>
-
-      <div class="space-y-3">
-        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
-          <label
-            for="terminalTextShadowOffsetX"
-            class="text-left text-foreground text-sm font-medium"
-            >{{ t('styleCustomizer.textShadowOffsetX') }}:</label
+          <div
+            class="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-start md:items-center gap-2 md:gap-3 mb-3"
           >
-          <input
-            type="number"
-            id="terminalTextShadowOffsetX"
-            v-model.number="editableTerminalTextShadowOffsetX"
-            step="0.1"
-            class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
-          />
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
-          <label
-            for="terminalTextShadowOffsetY"
-            class="text-left text-foreground text-sm font-medium"
-            >{{ t('styleCustomizer.textShadowOffsetY') }}:</label
-          >
-          <input
-            type="number"
-            id="terminalTextShadowOffsetY"
-            v-model.number="editableTerminalTextShadowOffsetY"
-            step="0.1"
-            class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
-          />
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
-          <label for="terminalTextShadowBlur" class="text-left text-foreground text-sm font-medium"
-            >{{ t('styleCustomizer.textShadowBlur') }}:</label
-          >
-          <input
-            type="number"
-            id="terminalTextShadowBlur"
-            v-model.number="editableTerminalTextShadowBlur"
-            min="0"
-            step="0.1"
-            class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
-          />
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
-          <label for="terminalTextShadowColor" class="text-left text-foreground text-sm font-medium"
-            >{{ t('styleCustomizer.textShadowColor') }}:</label
-          >
-          <div class="flex items-center gap-2">
+            <label
+              for="terminalFontSize"
+              class="text-left text-foreground text-sm font-medium overflow-hidden text-ellipsis block w-full mb-1 md:mb-0"
+              >{{ t('styleCustomizer.terminalFontSize') }}:</label
+            >
             <input
-              type="color"
-              id="terminalTextShadowColor"
-              v-model.lazy="editableTerminalTextShadowColor"
-              class="p-0.5 h-[34px] min-w-[40px] max-w-[50px] rounded border border-border flex-shrink-0"
+              type="number"
+              id="terminalFontSize"
+              v-model.number="editableTerminalFontSize"
+              class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              min="1"
             />
+            <button
+              @click="handleSaveTerminalFontSize"
+              class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap justify-self-start mt-1 md:mt-0"
+            >
+              {{ t('common.save') }}
+            </button>
+          </div>
+
+          <!-- 文字描边设置 -->
+          <hr class="my-4 md:my-6" />
+          <h4 class="mt-6 mb-3 text-base font-semibold text-foreground">
+            {{ t('styleCustomizer.textStrokeSettings') }}
+          </h4>
+          <div class="space-y-3 mb-3">
+            <div class="flex items-center justify-between">
+              <label
+                for="terminalTextStrokeEnabledSwitch"
+                class="text-foreground text-sm font-medium"
+                >{{ t('styleCustomizer.enableTextStroke') }}</label
+              >
+              <button
+                type="button"
+                id="terminalTextStrokeEnabledSwitch"
+                @click="toggleTextStrokeAndSave"
+                :class="[
+                  'relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary',
+                  editableTerminalTextStrokeEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
+                ]"
+                role="switch"
+                :aria-checked="editableTerminalTextStrokeEnabled"
+              >
+                <span
+                  aria-hidden="true"
+                  :class="[
+                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200',
+                    editableTerminalTextStrokeEnabled ? 'translate-x-5' : 'translate-x-0',
+                  ]"
+                ></span>
+              </button>
+            </div>
+
+            <div class="space-y-3">
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
+                <label
+                  for="terminalTextStrokeWidth"
+                  class="text-left text-foreground text-sm font-medium"
+                  >{{ t('styleCustomizer.textStrokeWidth') }}:</label
+                >
+                <input
+                  type="number"
+                  id="terminalTextStrokeWidth"
+                  v-model.number="editableTerminalTextStrokeWidth"
+                  min="0"
+                  step="0.1"
+                  class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
+                />
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
+                <label
+                  for="terminalTextStrokeColor"
+                  class="text-left text-foreground text-sm font-medium"
+                  >{{ t('styleCustomizer.textStrokeColor') }}:</label
+                >
+                <div class="flex items-center gap-2">
+                  <input
+                    type="color"
+                    id="terminalTextStrokeColor"
+                    v-model.lazy="editableTerminalTextStrokeColor"
+                    class="p-0.5 h-[34px] min-w-[40px] max-w-[50px] rounded border border-border flex-shrink-0"
+                  />
+                  <input
+                    type="text"
+                    :value="editableTerminalTextStrokeColor"
+                    @input="
+                      editableTerminalTextStrokeColor = ($event.target as HTMLInputElement).value
+                    "
+                    class="flex-grow min-w-[80px] bg-header border border-border px-[0.7rem] py-2 rounded text-sm text-foreground box-border"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="flex justify-start mt-2">
+              <button
+                @click="handleSaveTerminalTextStroke"
+                class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap"
+              >
+                {{ t('common.save') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 文字阴影设置 -->
+          <hr class="my-4 md:my-6" />
+          <h4 class="mt-6 mb-3 text-base font-semibold text-foreground">
+            {{ t('styleCustomizer.textShadowSettings') }}
+          </h4>
+          <div class="space-y-3 mb-3">
+            <div class="flex items-center justify-between">
+              <label
+                for="terminalTextShadowEnabledSwitch"
+                class="text-foreground text-sm font-medium"
+                >{{ t('styleCustomizer.enableTextShadow') }}</label
+              >
+              <button
+                type="button"
+                id="terminalTextShadowEnabledSwitch"
+                @click="toggleTextShadowAndSave"
+                :class="[
+                  'relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary',
+                  editableTerminalTextShadowEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
+                ]"
+                role="switch"
+                :aria-checked="editableTerminalTextShadowEnabled"
+              >
+                <span
+                  aria-hidden="true"
+                  :class="[
+                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition ease-in-out duration-200',
+                    editableTerminalTextShadowEnabled ? 'translate-x-5' : 'translate-x-0',
+                  ]"
+                ></span>
+              </button>
+            </div>
+
+            <div class="space-y-3">
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
+                <label
+                  for="terminalTextShadowOffsetX"
+                  class="text-left text-foreground text-sm font-medium"
+                  >{{ t('styleCustomizer.textShadowOffsetX') }}:</label
+                >
+                <input
+                  type="number"
+                  id="terminalTextShadowOffsetX"
+                  v-model.number="editableTerminalTextShadowOffsetX"
+                  step="0.1"
+                  class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
+                />
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
+                <label
+                  for="terminalTextShadowOffsetY"
+                  class="text-left text-foreground text-sm font-medium"
+                  >{{ t('styleCustomizer.textShadowOffsetY') }}:</label
+                >
+                <input
+                  type="number"
+                  id="terminalTextShadowOffsetY"
+                  v-model.number="editableTerminalTextShadowOffsetY"
+                  step="0.1"
+                  class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
+                />
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
+                <label
+                  for="terminalTextShadowBlur"
+                  class="text-left text-foreground text-sm font-medium"
+                  >{{ t('styleCustomizer.textShadowBlur') }}:</label
+                >
+                <input
+                  type="number"
+                  id="terminalTextShadowBlur"
+                  v-model.number="editableTerminalTextShadowBlur"
+                  min="0"
+                  step="0.1"
+                  class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground max-w-[100px] justify-self-start box-border"
+                />
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-2">
+                <label
+                  for="terminalTextShadowColor"
+                  class="text-left text-foreground text-sm font-medium"
+                  >{{ t('styleCustomizer.textShadowColor') }}:</label
+                >
+                <div class="flex items-center gap-2">
+                  <input
+                    type="color"
+                    id="terminalTextShadowColor"
+                    v-model.lazy="editableTerminalTextShadowColor"
+                    class="p-0.5 h-[34px] min-w-[40px] max-w-[50px] rounded border border-border flex-shrink-0"
+                  />
+                  <input
+                    type="text"
+                    :value="editableTerminalTextShadowColor"
+                    @input="
+                      editableTerminalTextShadowColor = ($event.target as HTMLInputElement).value
+                    "
+                    class="flex-grow min-w-[80px] bg-header border border-border px-[0.7rem] py-2 rounded text-sm text-foreground box-border"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="flex justify-start mt-2">
+              <button
+                @click="handleSaveTerminalTextShadow"
+                class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap"
+              >
+                {{ t('common.save') }}
+              </button>
+            </div>
+          </div>
+
+          <hr class="my-4 md:my-6" />
+
+          <h4 class="mt-6 mb-2 text-base font-semibold text-foreground">
+            {{ t('styleCustomizer.terminalThemeSelection') }}
+          </h4>
+
+          <div
+            class="mb-4 py-2 text-sm md:text-[0.95rem] flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3"
+          >
+            <span class="text-text-secondary">{{ t('styleCustomizer.activeTheme') }}:</span>
+            <strong class="text-foreground font-semibold">{{ activeThemeName }}</strong>
+          </div>
+
+          <div
+            class="mt-4 mb-6 flex gap-2 flex-wrap items-center pb-4 border-b border-dashed border-border"
+          >
+            <button
+              @click="handleAddNewTheme"
+              class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {{ t('styleCustomizer.addNewTheme') }}
+            </button>
+          </div>
+
+          <div class="mb-4">
             <input
               type="text"
-              :value="editableTerminalTextShadowColor"
-              @input="editableTerminalTextShadowColor = ($event.target as HTMLInputElement).value"
-              class="flex-grow min-w-[80px] bg-header border border-border px-[0.7rem] py-2 rounded text-sm text-foreground box-border"
+              v-model="themeSearchTerm"
+              :placeholder="t('styleCustomizer.searchThemePlaceholder', '搜索主题名称...')"
+              class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
+
+          <ul
+            class="list-none p-0 mt-4 max-h-[200px] md:max-h-[280px] overflow-y-auto border border-border rounded bg-background"
+          >
+            <li
+              v-if="filteredAndSortedThemes.length === 0"
+              class="text-center text-text-secondary p-4 italic"
+            >
+              {{ t('styleCustomizer.noThemesFound', 'No matching themes found') }}
+            </li>
+            <li
+              v-else
+              v-for="(theme, index) in filteredAndSortedThemes"
+              :key="theme._id"
+              :class="[
+                'block md:grid md:grid-cols-[1fr_auto] items-center px-3 py-2.5 text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out gap-2',
+                index < filteredAndSortedThemes.length - 1 ? 'border-b border-border' : '',
+                { 'bg-button text-button-text': theme._id === activeTerminalThemeId?.toString() },
+                { 'hover:bg-header': theme._id !== activeTerminalThemeId?.toString() },
+              ]"
+            >
+              <span
+                class="block md:col-start-1 md:col-end-2 overflow-hidden text-ellipsis whitespace-nowrap mb-2 md:mb-0"
+                :class="
+                  theme._id === activeTerminalThemeId?.toString()
+                    ? 'font-bold text-button-text'
+                    : 'text-foreground'
+                "
+                :title="theme.name"
+                >{{ theme.name }}</span
+              >
+              <div
+                class="flex md:col-start-2 md:col-end-3 flex-shrink-0 gap-2 justify-start md:justify-end flex-wrap"
+              >
+                <button
+                  @click="handleApplyTheme(theme)"
+                  :disabled="theme._id === activeTerminalThemeId?.toString()"
+                  :title="t('styleCustomizer.applyThemeTooltip', 'Apply this theme')"
+                  :class="[
+                    'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
+                    theme._id === activeTerminalThemeId?.toString()
+                      ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50 disabled:opacity-50 disabled:cursor-default disabled:bg-transparent disabled:border-transparent'
+                      : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary',
+                  ]"
+                >
+                  {{ t('styleCustomizer.applyButton', 'Apply') }}
+                </button>
+                <button
+                  @click="handleEditTheme(theme)"
+                  :title="
+                    theme.isPreset
+                      ? t('styleCustomizer.editAsCopy', 'Edit as Copy')
+                      : t('common.edit')
+                  "
+                  :class="[
+                    'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
+                    theme._id === activeTerminalThemeId?.toString()
+                      ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50'
+                      : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary',
+                  ]"
+                >
+                  {{ t('common.edit') }}
+                </button>
+                <button
+                  @click="handleDeleteTheme(theme)"
+                  :disabled="theme.isPreset"
+                  :title="
+                    theme.isPreset
+                      ? t('styleCustomizer.cannotDeletePreset', 'Cannot delete preset theme')
+                      : t('common.delete')
+                  "
+                  :class="[
+                    'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
+                    theme._id === activeTerminalThemeId?.toString()
+                      ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50'
+                      : 'bg-error/10 text-error border-error/30 hover:bg-error/20',
+                  ]"
+                >
+                  {{ t('common.delete') }}
+                </button>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </div>
+
+      <!-- 右侧预览区域 -->
+      <div class="terminal-tab-preview">
+        <div class="terminal-preview-sticky">
+          <TerminalPreview height="600px" />
         </div>
       </div>
-      <div class="flex justify-start mt-2">
-        <button
-          @click="handleSaveTerminalTextShadow"
-          class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap"
-        >
-          {{ t('common.save') }}
-        </button>
-      </div>
     </div>
+  </div>
 
-    <hr class="my-4 md:my-6" />
-
-    <h4 class="mt-6 mb-2 text-base font-semibold text-foreground">
-      {{ t('styleCustomizer.terminalThemeSelection') }}
-    </h4>
-
-    <div
-      class="mb-4 py-2 text-sm md:text-[0.95rem] flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3"
-    >
-      <span class="text-text-secondary">{{ t('styleCustomizer.activeTheme') }}:</span>
-      <strong class="text-foreground font-semibold">{{ activeThemeName }}</strong>
-    </div>
-
-    <div
-      class="mt-4 mb-6 flex gap-2 flex-wrap items-center pb-4 border-b border-dashed border-border"
-    >
-      <button
-        @click="handleAddNewTheme"
-        class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {{ t('styleCustomizer.addNewTheme') }}
-      </button>
-    </div>
-
-    <div class="mb-4">
-      <input
-        type="text"
-        v-model="themeSearchTerm"
-        :placeholder="t('styleCustomizer.searchThemePlaceholder', '搜索主题名称...')"
-        class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-      />
-    </div>
-
-    <ul
-      class="list-none p-0 mt-4 max-h-[200px] md:max-h-[280px] overflow-y-auto border border-border rounded bg-background"
-    >
-      <li
-        v-if="filteredAndSortedThemes.length === 0"
-        class="text-center text-text-secondary p-4 italic"
-      >
-        {{ t('styleCustomizer.noThemesFound', 'No matching themes found') }}
-      </li>
-      <li
-        v-else
-        v-for="(theme, index) in filteredAndSortedThemes"
-        :key="theme._id"
-        :class="[
-          'block md:grid md:grid-cols-[1fr_auto] items-center px-3 py-2.5 text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out gap-2',
-          index < filteredAndSortedThemes.length - 1 ? 'border-b border-border' : '',
-          { 'bg-button text-button-text': theme._id === activeTerminalThemeId?.toString() },
-          { 'hover:bg-header': theme._id !== activeTerminalThemeId?.toString() },
-        ]"
-      >
-        <span
-          class="block md:col-start-1 md:col-end-2 overflow-hidden text-ellipsis whitespace-nowrap mb-2 md:mb-0"
-          :class="
-            theme._id === activeTerminalThemeId?.toString()
-              ? 'font-bold text-button-text'
-              : 'text-foreground'
-          "
-          :title="theme.name"
-          >{{ theme.name }}</span
-        >
-        <div
-          class="flex md:col-start-2 md:col-end-3 flex-shrink-0 gap-2 justify-start md:justify-end flex-wrap"
-        >
-          <button
-            @click="handleApplyTheme(theme)"
-            :disabled="theme._id === activeTerminalThemeId?.toString()"
-            :title="t('styleCustomizer.applyThemeTooltip', 'Apply this theme')"
-            :class="[
-              'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
-              theme._id === activeTerminalThemeId?.toString()
-                ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50 disabled:opacity-50 disabled:cursor-default disabled:bg-transparent disabled:border-transparent'
-                : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary',
-            ]"
-          >
-            {{ t('styleCustomizer.applyButton', 'Apply') }}
-          </button>
-          <button
-            @click="handleEditTheme(theme)"
-            :title="
-              theme.isPreset ? t('styleCustomizer.editAsCopy', 'Edit as Copy') : t('common.edit')
-            "
-            :class="[
-              'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
-              theme._id === activeTerminalThemeId?.toString()
-                ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50'
-                : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary',
-            ]"
-          >
-            {{ t('common.edit') }}
-          </button>
-          <button
-            @click="handleDeleteTheme(theme)"
-            :disabled="theme.isPreset"
-            :title="
-              theme.isPreset
-                ? t('styleCustomizer.cannotDeletePreset', 'Cannot delete preset theme')
-                : t('common.delete')
-            "
-            :class="[
-              'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
-              theme._id === activeTerminalThemeId?.toString()
-                ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50'
-                : 'bg-error/10 text-error border-error/30 hover:bg-error/20',
-            ]"
-          >
-            {{ t('common.delete') }}
-          </button>
-        </div>
-      </li>
-    </ul>
-  </section>
-
-  <section v-if="isEditingTheme && editingTheme">
+  <section v-if="isEditingTheme && editingTheme" class="terminal-tab-edit-mode">
     <h3 class="mt-0 border-b border-border pb-2 mb-4 text-lg font-semibold text-foreground">
       {{
         editingTheme._id ? t('styleCustomizer.editThemeTitle') : t('styleCustomizer.newThemeTitle')
@@ -1016,3 +1049,56 @@ watch(
     </div>
   </section>
 </template>
+
+<style scoped>
+/* 左右分栏布局 */
+.terminal-tab-container {
+  width: 100%;
+}
+
+.terminal-tab-grid {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 24px;
+  align-items: start;
+}
+
+.terminal-tab-config {
+  min-width: 0;
+}
+
+.terminal-tab-preview {
+  position: relative;
+}
+
+.terminal-preview-sticky {
+  position: sticky;
+  top: 16px;
+}
+
+.terminal-tab-edit-mode {
+  width: 100%;
+}
+
+/* 移动端响应式布局 */
+@media (max-width: 1024px) {
+  .terminal-tab-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-tab-preview {
+    order: -1;
+    margin-bottom: 16px;
+  }
+
+  .terminal-preview-sticky {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .terminal-tab-grid {
+    gap: 16px;
+  }
+}
+</style>

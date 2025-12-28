@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **终端外观实时预览功能**：在外观自定义设置中新增实时预览窗口
+  - 新增组件：`TerminalPreview.vue` - 独立的 Xterm.js 预览实例，支持实时配置同步
+  - 三种预览模式：命令输出、代码高亮、文本样式（可切换）
+  - 性能优化：150ms 防抖 + requestAnimationFrame 渲染优化
+  - 响应式布局：桌面端左右分栏（配置 + 预览），移动端上下布局
+  - 实时同步：字体、字体大小、主题颜色、文字描边、文字阴影
+  - 测试覆盖：`TerminalPreview.test.ts` 16 个测试用例全部通过
+  - 国际化支持：zh-CN、en-US 预览模式翻译
+  - 涉及文件：
+    - `packages/frontend/src/components/style-customizer/TerminalPreview.vue` (新增)
+    - `packages/frontend/src/components/style-customizer/TerminalPreview.test.ts` (新增)
+    - `packages/frontend/src/components/style-customizer/StyleCustomizerTerminalTab.vue` (修改)
+    - `packages/frontend/src/locales/zh-CN.json` (修改)
+    - `packages/frontend/src/locales/en-US.json` (修改)
+
+### Fixed
+
+- **TerminalPreview CSS 样式累积 Bug**：修复 `applyTextStyles` 使用 `+=` 追加样式导致重复的问题
+  - 改为直接设置 `canvas.style.webkitTextStroke` 和 `canvas.style.textShadow` 属性
+  - 避免每次配置变更时累积样式字符串
+  - 修复位置：`packages/frontend/src/components/style-customizer/TerminalPreview.vue:125-137`
+
 - **强制键盘交互式认证功能**：新增 SSH 连接选项，支持 TOTP/2FA 服务器认证
   - 数据库层：`connections` 表添加 `force_keyboard_interactive` 字段
   - 后端 Service：SSH `establishSshConnection` 支持 `keyboard-interactive` 认证方式
