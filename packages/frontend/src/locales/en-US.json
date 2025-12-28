@@ -342,7 +342,7 @@
       "addJumpHost": "Add Jump Host",
       "noAvailableSshConnectionsForJump": "No available SSH connections for jump host. Please create some SSH connections first.",
       "forceKeyboardInteractive": "Force Keyboard Interactive Authentication",
-      "forceKeyboardInteractiveDesc": "Force the use of keyboard interactive authentication. This is typically required for servers using two-factor authentication (TOTP/2FA)."
+      "forceKeyboardInteractiveDesc": "This is typically required for servers using two-factor authentication (TOTP/2FA)."
     },
     "test": {
       "success": "Connection test successful!",

@@ -343,7 +343,7 @@
       "addJumpHost": "添加跳板机",
       "noAvailableSshConnectionsForJump": "没有可用的SSH连接作为跳板机。请先创建一些SSH连接。",
       "forceKeyboardInteractive": "强制键盘交互式认证",
-      "forceKeyboardInteractiveDesc": "强制使用键盘交互式认证。这通常是使用双因素认证(TOTP/2FA) 的服务器所必需的。"
+      "forceKeyboardInteractiveDesc": "这通常是使用双因素认证(TOTP/2FA) 的服务器所必需的。"
     },
     "test": {
       "success": "连接测试成功！",
