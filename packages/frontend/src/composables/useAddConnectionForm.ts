@@ -139,6 +139,8 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         formData.notes = newVal.notes ?? '';
         formData.tag_ids = newVal.tag_ids ? [...newVal.tag_ids] : [];
 
+        formData.force_keyboard_interactive = newVal.force_keyboard_interactive ?? false;
+
         if (newVal.type === 'SSH' && newVal.auth_method === 'key') {
           formData.selected_ssh_key_id = newVal.ssh_key_id ?? null;
         } else {

@@ -20,6 +20,7 @@ export interface ConnectionInfo {
   notes?: string | null;
   vncPassword?: string; // VNC specific password
   jump_chain?: number[] | null;
+  force_keyboard_interactive?: boolean;
 }
 
 // 定义 Store State 的接口
