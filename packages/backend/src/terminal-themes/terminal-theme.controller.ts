@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/terminal-theme.types';
 import * as terminalThemeService from './terminal-theme.service';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 // 配置 multer 用于处理 JSON 文件上传 (导入)
 const upload = multer({
@@ -78,10 +78,10 @@ export const createThemeController = async (
     }
     const newTheme = await terminalThemeService.createNewTheme(themeDto);
     res.status(201).json(newTheme);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 检查是否是名称重复错误
-    if (error.message.includes('已存在')) {
-      res.status(409).json({ message: error.message }); // 409 Conflict
+    if (getErrorMessage(error).includes('已存在')) {
+      res.status(409).json({ message: getErrorMessage(error) }); // 409 Conflict
     } else {
       next(error);
     }
@@ -115,9 +115,9 @@ export const updateThemeController = async (
       // 可能因为 ID 不存在或主题是预设主题而更新失败
       res.status(404).json({ message: '未找到可更新的主题或该主题为预设主题' });
     }
-  } catch (error: any) {
-    if (error.message.includes('已存在')) {
-      res.status(409).json({ message: error.message }); // 409 Conflict
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('已存在')) {
+      res.status(409).json({ message: getErrorMessage(error) }); // 409 Conflict
     } else {
       next(error);
     }
@@ -181,7 +181,7 @@ export const importThemeController = async (
     await fs.promises.unlink(filePath);
 
     res.status(201).json(importedTheme);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 确保即使出错也删除临时文件
     if (fs.existsSync(filePath)) {
       await fs.promises
@@ -191,8 +191,8 @@ export const importThemeController = async (
 
     if (error instanceof SyntaxError) {
       res.status(400).json({ message: '导入失败：文件不是有效的 JSON 格式', error: error.message });
-    } else if (error.message.includes('已存在')) {
-      res.status(409).json({ message: `导入失败: ${error.message}` }); // 409 Conflict
+    } else if (getErrorMessage(error).includes('已存在')) {
+      res.status(409).json({ message: `导入失败: ${getErrorMessage(error)}` }); // 409 Conflict
     } else {
       next(error);
     }

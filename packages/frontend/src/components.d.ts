@@ -85,6 +85,7 @@ declare module 'vue' {
     TabBarContextMenu: typeof import('./components/TabBarContextMenu.vue')['default']
     TagInput: typeof import('./components/TagInput.vue')['default']
     Terminal: typeof import('./features/terminal/Terminal.vue')['default']
+    TerminalPreview: typeof import('./components/style-customizer/TerminalPreview.vue')['default']
     TerminalTabBar: typeof import('./components/TerminalTabBar.vue')['default']
     TransferProgressModal: typeof import('./components/TransferProgressModal.vue')['default']
     TwoFactorAuthSettings: typeof import('./components/settings/TwoFactorAuthSettings.vue')['default']

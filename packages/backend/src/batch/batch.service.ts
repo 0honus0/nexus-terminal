@@ -5,6 +5,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { Client, ClientChannel } from 'ssh2';
+import { getErrorMessage } from '../utils/AppError';
 import {
   BatchTask,
   BatchSubTask,
@@ -426,8 +427,8 @@ async function runSubTask(
       result.exitCode
     );
     return 'failed';
-  } catch (error: any) {
-    const errorMsg = error.message || '未知错误';
+  } catch (error: unknown) {
+    const errorMsg = getErrorMessage(error);
     console.error(`[BatchService] 子任务 ${subTaskId} 执行失败:`, errorMsg);
 
     await updateSubTask(taskId, subTaskId, 'failed', 0, {

@@ -4,6 +4,7 @@ import * as pathModule from 'path';
 import * as jschardet from 'jschardet';
 import * as iconv from 'iconv-lite';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
+import { getErrorMessage } from '../utils/AppError';
 // +++ 导入新类型 +++
 import {
   SftpCompressRequestPayload,
@@ -211,7 +212,7 @@ export class SftpService {
           );
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] readdir ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -220,7 +221,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:readdir:error',
           path,
-          payload: `读取目录时发生意外错误: ${error.message}`,
+          payload: `读取目录时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -278,7 +279,7 @@ export class SftpService {
           );
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] stat ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -287,7 +288,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:stat:error',
           path,
-          payload: `获取状态时发生意外错误: ${error.message}`,
+          payload: `获取状态时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -468,12 +469,12 @@ export class SftpService {
             );
             // decodeError = `解码内容可能不正确 (使用 ${encodingUsed})，检测到无效字符。`; // Optionally set error
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error(
             `[SFTP ${sessionId}] Error detecting/decoding file content for ${path} (ID: ${requestId}):`,
             err
           );
-          decodeError = `文件编码检测或转换失败: ${err.message}`;
+          decodeError = `文件编码检测或转换失败: ${getErrorMessage(err)}`;
           state.ws.send(
             JSON.stringify({
               type: 'sftp:readfile:error',
@@ -501,7 +502,7 @@ export class SftpService {
           })
         );
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] readFile ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -510,7 +511,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:readfile:error',
           path,
-          payload: `读取文件时发生意外错误: ${error.message}`,
+          payload: `读取文件时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -680,7 +681,7 @@ export class SftpService {
       console.debug(`[SFTP ${sessionId}] writefile ${path} end() called (ID: ${requestId})`);
 
       // Success message is now sent in the 'close' event handler
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] writefile ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -689,7 +690,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:writefile:error',
           path,
-          payload: `写入文件时发生意外错误: ${error.message}`,
+          payload: `写入文件时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -775,7 +776,7 @@ export class SftpService {
           });
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] mkdir ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -784,7 +785,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:mkdir:error',
           path,
-          payload: `创建目录时发生意外错误: ${error.message}`,
+          payload: `创建目录时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -872,7 +873,7 @@ export class SftpService {
             );
           });
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(
           `[SSH Exec ${sessionId}] rm -rf ${path} caught unexpected error during exec setup (ID: ${requestId}):`,
           error
@@ -882,7 +883,7 @@ export class SftpService {
           JSON.stringify({
             type: 'sftp:rmdir:error',
             path,
-            payload: `删除目录失败: rm -rf 执行时发生意外错误: ${error.message}`,
+            payload: `删除目录失败: rm -rf 执行时发生意外错误: ${getErrorMessage(error)}`,
             requestId,
           })
         );
@@ -926,7 +927,7 @@ export class SftpService {
           state.ws.send(JSON.stringify({ type: 'sftp:unlink:success', path, requestId })); // Send specific success type
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] unlink ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -935,7 +936,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:unlink:error',
           path,
-          payload: `删除文件时发生意外错误: ${error.message}`,
+          payload: `删除文件时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -1031,7 +1032,7 @@ export class SftpService {
           });
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} caught unexpected error (ID: ${requestId}):`,
         error
@@ -1041,7 +1042,7 @@ export class SftpService {
           type: 'sftp:rename:error',
           oldPath,
           newPath,
-          payload: `重命名/移动时发生意外错误: ${error.message}`,
+          payload: `重命名/移动时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -1132,7 +1133,7 @@ export class SftpService {
           });
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] chmod ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -1141,7 +1142,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:chmod:error',
           path,
-          payload: `修改权限时发生意外错误: ${error.message}`,
+          payload: `修改权限时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -1248,7 +1249,7 @@ export class SftpService {
           });
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP ${sessionId}] realpath ${path} caught unexpected error (ID: ${requestId}):`,
         error
@@ -1257,7 +1258,7 @@ export class SftpService {
         JSON.stringify({
           type: 'sftp:realpath:error',
           path,
-          payload: `获取绝对路径时发生意外错误: ${error.message}`,
+          payload: `获取绝对路径时发生意外错误: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -1361,12 +1362,12 @@ export class SftpService {
           requestId,
         })
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[SFTP ${sessionId}] Copy operation failed (ID: ${requestId}):`, error);
       state.ws.send(
         JSON.stringify({
           type: 'sftp:copy:error',
-          payload: `复制操作失败: ${error.message}`,
+          payload: `复制操作失败: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -1479,12 +1480,12 @@ export class SftpService {
           requestId,
         })
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[SFTP ${sessionId}] Move operation failed (ID: ${requestId}):`, error);
       state.ws.send(
         JSON.stringify({
           type: 'sftp:move:error',
-          payload: `移动操作失败: ${error.message}`,
+          payload: `移动操作失败: ${getErrorMessage(error)}`,
           requestId,
         })
       );
@@ -1548,9 +1549,9 @@ export class SftpService {
           console.warn(`[SFTP Copy Recurse] Skipping unsupported type: ${currentSourcePath}`);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Error recursively copying directory ${sourcePath} to ${destPath}:`, error);
-      throw new Error(`递归复制目录失败: ${error.message}`);
+      throw new Error(`递归复制目录失败: ${getErrorMessage(error)}`);
     }
   }
 
@@ -2400,12 +2401,12 @@ export class SftpService {
 
       // Notify client that we are ready for chunks
       state.ws.send(JSON.stringify({ type: 'sftp:upload:ready', payload: { uploadId } }));
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[SFTP Upload ${uploadId}] Error starting upload for ${remotePath}:`, error);
       state.ws.send(
         JSON.stringify({
           type: 'sftp:upload:error',
-          payload: { uploadId, message: `开始上传时出错: ${error.message}` },
+          payload: { uploadId, message: `开始上传时出错: ${getErrorMessage(error)}` },
         })
       );
       this.activeUploads.delete(uploadId); // Clean up if start failed
@@ -2537,7 +2538,7 @@ export class SftpService {
           throw drainError;
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[SFTP Upload ${uploadId}] Error handling chunk ${chunkIndex} for ${uploadState?.remotePath}:`,
         error
@@ -2545,7 +2546,7 @@ export class SftpService {
       state.ws.send(
         JSON.stringify({
           type: 'sftp:upload:error',
-          payload: { uploadId, message: `处理块 ${chunkIndex} 时出错: ${error.message}` },
+          payload: { uploadId, message: `处理块 ${chunkIndex} 时出错: ${getErrorMessage(error)}` },
         })
       );
       this.cancelUploadInternal(uploadId, `Error handling chunk ${chunkIndex}`);

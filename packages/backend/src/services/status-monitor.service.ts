@@ -2,6 +2,7 @@ import { Client } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState } from '../websocket';
 import { settingsService } from '../settings/settings.service';
+import { getErrorMessage } from '../utils/AppError';
 
 interface ServerStatus {
   cpuPercent?: number;
@@ -112,7 +113,7 @@ export class StatusMonitorService {
           payload: { connectionId: state.dbConnectionId, status },
         })
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       // --- 移除 console.warn ---
       // console.warn(`[StatusMonitor] 获取会话 ${sessionId} 服务器状态失败:`, error);
       state.ws.send(
@@ -120,7 +121,7 @@ export class StatusMonitorService {
           type: 'status_error',
           payload: {
             connectionId: state.dbConnectionId,
-            message: `获取状态失败: ${error.message}`,
+            message: `获取状态失败: ${getErrorMessage(error)}`,
           },
         })
       );

@@ -1,5 +1,5 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 // 定义收藏路径接口
 export interface FavoritePath {
@@ -29,8 +29,8 @@ export const addFavoritePath = async (name: string | null, path: string): Promis
       );
     }
     return result.lastID;
-  } catch (err: any) {
-    console.error('添加收藏路径时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('添加收藏路径时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法添加收藏路径', '无法添加收藏路径');
   }
 };
@@ -52,8 +52,8 @@ export const updateFavoritePath = async (
     const db = await getDbInstance();
     const result = await runDb(db, sql, [name, path, id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('更新收藏路径时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('更新收藏路径时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法更新收藏路径', '无法更新收藏路径');
   }
 };
@@ -69,8 +69,8 @@ export const deleteFavoritePath = async (id: number): Promise<boolean> => {
     const db = await getDbInstance();
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('删除收藏路径时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('删除收藏路径时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法删除收藏路径', '无法删除收藏路径');
   }
 };
@@ -101,8 +101,8 @@ export const getAllFavoritePaths = async (
     const db = await getDbInstance();
     const rows = await allDb<FavoritePath>(db, sql);
     return rows;
-  } catch (err: any) {
-    console.error('获取收藏路径时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('获取收藏路径时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法获取收藏路径', '无法获取收藏路径');
   }
 };
@@ -118,8 +118,8 @@ export const updateFavoritePathLastUsedAt = async (id: number): Promise<boolean>
     const db = await getDbInstance();
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('更新收藏路径上次使用时间时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('更新收藏路径上次使用时间时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '无法更新收藏路径上次使用时间',
       '无法更新收藏路径上次使用时间'
@@ -138,8 +138,8 @@ export const findFavoritePathById = async (id: number): Promise<FavoritePath | u
     const db = await getDbInstance();
     const row = await getDbRow<FavoritePath>(db, sql, [id]);
     return row;
-  } catch (err: any) {
-    console.error('查找收藏路径时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('查找收藏路径时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法查找收藏路径', '无法查找收藏路径');
   }
 };

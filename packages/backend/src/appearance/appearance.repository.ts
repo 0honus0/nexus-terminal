@@ -3,7 +3,7 @@ import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { defaultUiTheme } from '../config/default-themes';
 import { findThemeById as findTerminalThemeById } from '../terminal-themes/terminal-theme.repository';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 const TABLE_NAME = 'appearance_settings';
 
@@ -259,11 +259,11 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
 
     // 确保键存在后，如果当前为 null，则尝试设置默认主题 ID
     await findAndSetDefaultThemeIdIfNull(db);
-  } catch (err: any) {
-    console.error(`[AppearanceRepo] 检查或插入默认外观设置键值对时出错:`, err.message);
+  } catch (err: unknown) {
+    console.error(`[AppearanceRepo] 检查或插入默认外观设置键值对时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '初始化外观设置失败',
-      `检查或插入默认外观设置失败: ${err.message}`
+      `检查或插入默认外观设置失败: ${getErrorMessage(err)}`
     );
   }
 };
@@ -302,8 +302,8 @@ const findAndSetDefaultThemeIdIfNull = async (db: sqlite3.Database): Promise<voi
       }
     }
     // 如果 activeTerminalThemeId 已设置或键不存在，则不执行任何操作
-  } catch (error: any) {
-    console.error('[AppearanceRepo] 设置默认终端主题 ID 时出错:', error.message);
+  } catch (error: unknown) {
+    console.error('[AppearanceRepo] 设置默认终端主题 ID 时出错:', getErrorMessage(error));
     // 这里不抛出错误，只记录日志
   }
 };
@@ -327,9 +327,12 @@ export const getAppearanceSettings = async (): Promise<AppearanceSettings> => {
       `[AppearanceRepo LOG] 映射后的 terminalBackgroundEnabled 值: ${mappedSettings.terminalBackgroundEnabled}`
     ); // 添加映射后值的日志
     return mappedSettings;
-  } catch (err: any) {
-    console.error('[AppearanceRepo] 获取外观设置失败:', err.message);
-    throw ErrorFactory.databaseError('获取外观设置失败', `获取外观设置失败: ${err.message}`);
+  } catch (err: unknown) {
+    console.error('[AppearanceRepo] 获取外观设置失败:', getErrorMessage(err));
+    throw ErrorFactory.databaseError(
+      '获取外观设置失败',
+      `获取外观设置失败: ${getErrorMessage(err)}`
+    );
   }
 };
 
@@ -358,14 +361,14 @@ export const updateAppearanceSettings = async (
           `指定的终端主题 ID 不存在: ${settingsDto.activeTerminalThemeId}`
         );
       }
-    } catch (validationError: any) {
+    } catch (validationError: unknown) {
       console.error(
         `[AppearanceRepo] 验证主题 ID ${settingsDto.activeTerminalThemeId} 时出错:`,
-        validationError.message
+        getErrorMessage(validationError)
       );
       throw ErrorFactory.databaseError(
         '验证主题失败',
-        `验证主题 ID 失败: ${validationError.message}`
+        `验证主题 ID 失败: ${getErrorMessage(validationError)}`
       );
     }
   }
@@ -440,8 +443,11 @@ const updateAppearanceSettingsInternal = async (
       }
     }
     return changesMade; // 如果有任何行被插入或替换，则返回 true
-  } catch (err: any) {
-    console.error('[AppearanceRepo] 更新外观设置失败:', err.message);
-    throw ErrorFactory.databaseError('更新外观设置失败', `更新外观设置失败: ${err.message}`);
+  } catch (err: unknown) {
+    console.error('[AppearanceRepo] 更新外观设置失败:', getErrorMessage(err));
+    throw ErrorFactory.databaseError(
+      '更新外观设置失败',
+      `更新外观设置失败: ${getErrorMessage(err)}`
+    );
   }
 };

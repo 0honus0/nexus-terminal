@@ -1,5 +1,5 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 // 定义命令历史记录的接口
 export interface CommandHistoryEntry {
@@ -47,8 +47,8 @@ export const upsertCommand = async (command: string): Promise<number> => {
       }
       return insertResult.lastID;
     }
-  } catch (err: any) {
-    console.error('Upsert 命令历史记录时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('Upsert 命令历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法更新或插入命令历史记录', '无法更新或插入命令历史记录');
   }
 };
@@ -63,8 +63,8 @@ export const getAllCommands = async (): Promise<CommandHistoryEntry[]> => {
     const db = await getDbInstance();
     const rows = await allDb<DbCommandHistoryRow>(db, sql);
     return rows;
-  } catch (err: any) {
-    console.error('获取命令历史记录时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('获取命令历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法获取命令历史记录', '无法获取命令历史记录');
   }
 };
@@ -80,8 +80,8 @@ export const deleteCommandById = async (id: number): Promise<boolean> => {
     const db = await getDbInstance();
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('删除命令历史记录时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('删除命令历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法删除命令历史记录', '无法删除命令历史记录');
   }
 };
@@ -96,8 +96,8 @@ export const clearAllCommands = async (): Promise<number> => {
     const db = await getDbInstance();
     const result = await runDb(db, sql);
     return result.changes;
-  } catch (err: any) {
-    console.error('清空命令历史记录时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('清空命令历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法清空命令历史记录', '无法清空命令历史记录');
   }
 };

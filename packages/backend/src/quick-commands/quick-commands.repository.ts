@@ -1,5 +1,5 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 // 定义基础快捷指令接口
 export interface QuickCommand {
@@ -48,8 +48,8 @@ export const addQuickCommand = async (
       );
     }
     return result.lastID;
-  } catch (err: any) {
-    console.error('添加快捷指令时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('添加快捷指令时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法添加快捷指令', '无法添加快捷指令');
   }
 };
@@ -74,8 +74,8 @@ export const updateQuickCommand = async (
     const variablesJson = variables ? JSON.stringify(variables) : null;
     const result = await runDb(db, sql, [name, command, variablesJson, id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('更新快捷指令时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('更新快捷指令时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法更新快捷指令', '无法更新快捷指令');
   }
 };
@@ -91,8 +91,8 @@ export const deleteQuickCommand = async (id: number): Promise<boolean> => {
     const db = await getDbInstance();
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('删除快捷指令时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('删除快捷指令时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法删除快捷指令', '无法删除快捷指令');
   }
 };
@@ -153,8 +153,8 @@ export const getAllQuickCommands = async (
           : [],
       };
     });
-  } catch (err: any) {
-    console.error('获取快捷指令（带标签）时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('获取快捷指令（带标签）时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法获取快捷指令', '无法获取快捷指令');
   }
 };
@@ -170,8 +170,8 @@ export const incrementUsageCount = async (id: number): Promise<boolean> => {
     const db = await getDbInstance();
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error('增加快捷指令使用次数时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('增加快捷指令使用次数时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法增加快捷指令使用次数', '无法增加快捷指令使用次数');
   }
 };
@@ -220,8 +220,8 @@ export const findQuickCommandById = async (
       };
     }
     return undefined;
-  } catch (err: any) {
-    console.error('查找快捷指令（带标签）时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('查找快捷指令（带标签）时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法查找快捷指令', '无法查找快捷指令');
   }
 };

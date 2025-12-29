@@ -6,6 +6,7 @@ import { AuditLogService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service';
 import { DockerService } from '../docker/docker.service';
 import { settingsService } from '../settings/settings.service'; // 添加导入
+import { getErrorMessage } from '../utils/AppError';
 
 // 存储所有活动客户端的状态 (key: sessionId)
 export const clientStates = new Map<string, ClientState>();
@@ -70,8 +71,11 @@ export function broadcastToUser(userId: number, message: any): number {
       try {
         ws.send(messageStr);
         successCount++;
-      } catch (error: any) {
-        console.error(`[WebSocket 广播] 向用户 ${userId} 的一个连接发送消息失败:`, error.message);
+      } catch (error: unknown) {
+        console.error(
+          `[WebSocket 广播] 向用户 ${userId} 的一个连接发送消息失败:`,
+          getErrorMessage(error)
+        );
         deadSockets.push(ws);
       }
     } else {

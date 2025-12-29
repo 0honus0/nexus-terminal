@@ -1,6 +1,7 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { settingsService } from '../settings/settings.service';
 import { NotificationService } from '../notifications/notification.service';
+import { getErrorMessage } from '../utils/AppError';
 
 const notificationService = new NotificationService(); // 实例化 NotificationService
 
@@ -38,8 +39,8 @@ export class IpBlacklistService {
         ip,
       ]);
       return row; // Returns undefined if not found
-    } catch (err: any) {
-      console.error(`[IP Blacklist] 查询 IP ${ip} 时出错:`, err.message);
+    } catch (err: unknown) {
+      console.error(`[IP Blacklist] 查询 IP ${ip} 时出错:`, getErrorMessage(err));
       throw new Error('数据库查询失败'); // Re-throw error
     }
   }
@@ -69,9 +70,9 @@ export class IpBlacklistService {
         return true; // 仍在封禁期内
       }
       return false;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Catch errors from getEntry
-      console.error(`[IP Blacklist] 检查 IP ${ip} 封禁状态时出错:`, error.message);
+      console.error(`[IP Blacklist] 检查 IP ${ip} 封禁状态时出错:`, getErrorMessage(error));
       return false; // 出错时默认不封禁
     }
   }
@@ -170,8 +171,8 @@ export class IpBlacklistService {
             );
         }
       }
-    } catch (error: any) {
-      console.error(`[IP Blacklist] 记录 IP ${ip} 失败尝试时出错:`, error.message);
+    } catch (error: unknown) {
+      console.error(`[IP Blacklist] 记录 IP ${ip} 失败尝试时出错:`, getErrorMessage(error));
     }
   }
 
@@ -184,8 +185,8 @@ export class IpBlacklistService {
       const db = await getDbInstance();
       await runDb(db, 'DELETE FROM ip_blacklist WHERE ip = ?', [ip]);
       console.log(`[IP Blacklist] 已重置 IP ${ip} 的失败尝试记录。`);
-    } catch (error: any) {
-      console.error(`[IP Blacklist] 重置 IP ${ip} 尝试次数时出错:`, error.message);
+    } catch (error: unknown) {
+      console.error(`[IP Blacklist] 重置 IP ${ip} 尝试次数时出错:`, getErrorMessage(error));
     }
   }
 
@@ -211,8 +212,8 @@ export class IpBlacklistService {
       );
       const total = countRow?.count ?? 0;
       return { entries, total };
-    } catch (error: any) {
-      console.error('[IP Blacklist] 获取黑名单列表时出错:', error.message);
+    } catch (error: unknown) {
+      console.error('[IP Blacklist] 获取黑名单列表时出错:', getErrorMessage(error));
       return { entries: [], total: 0 };
     }
   }
@@ -232,8 +233,8 @@ export class IpBlacklistService {
       }
       console.warn(`[IP Blacklist] 尝试删除 IP ${ip}，但该 IP 不在黑名单中。`);
       return false;
-    } catch (error: any) {
-      console.error(`[IP Blacklist] 从黑名单删除 IP ${ip} 时出错:`, error.message);
+    } catch (error: unknown) {
+      console.error(`[IP Blacklist] 从黑名单删除 IP ${ip} 时出错:`, getErrorMessage(error));
       throw new Error(`从黑名单删除 IP ${ip} 时出错`);
     }
   }

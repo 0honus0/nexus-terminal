@@ -2,7 +2,7 @@ import { Database } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { AuditLogEntry, AuditLogActionType } from '../types/audit.types';
 import { settingsService } from '../settings/settings.service';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 type DbAuditLogRow = AuditLogEntry;
 
@@ -22,8 +22,8 @@ export class AuditLogRepository {
     if (details) {
       try {
         detailsString = typeof details === 'string' ? details : JSON.stringify(details);
-      } catch (error: any) {
-        console.error(`[审计日志] 序列化操作 ${actionType} 的详情失败:`, error.message);
+      } catch (error: unknown) {
+        console.error(`[审计日志] 序列化操作 ${actionType} 的详情失败:`, getErrorMessage(error));
         detailsString = JSON.stringify({
           error: 'Failed to stringify details',
           originalDetails: String(details),
@@ -41,8 +41,8 @@ export class AuditLogRepository {
       // --- 添加日志清理逻辑 ---
       await this.cleanupOldLogs(db);
       // --- 清理逻辑结束 ---
-    } catch (err: any) {
-      console.error(`[审计日志] 添加操作 ${actionType} 的日志条目时出错: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[审计日志] 添加操作 ${actionType} 的日志条目时出错: ${getErrorMessage(err)}`);
       // 决定日志记录失败是应该抛出错误还是仅记录日志
     }
   }
@@ -77,8 +77,8 @@ export class AuditLogRepository {
         );
         await runDb(db, deleteSql, [logsToDelete]);
       }
-    } catch (err: any) {
-      console.error(`[审计日志] 日志清理过程中出错: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[审计日志] 日志清理过程中出错: ${getErrorMessage(err)}`);
       // 清理失败不应阻止主日志记录流程，仅记录错误。
     }
   }
@@ -94,9 +94,12 @@ export class AuditLogRepository {
       const result = await runDb(db, sql, []);
       console.log(`[审计日志] 已删除所有审计日志，共 ${result.changes} 条记录。`);
       return result.changes;
-    } catch (err: any) {
-      console.error(`[审计日志] 删除所有日志时出错: ${err.message}`);
-      throw ErrorFactory.databaseError('删除审计日志失败', `删除审计日志失败: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[审计日志] 删除所有日志时出错: ${getErrorMessage(err)}`);
+      throw ErrorFactory.databaseError(
+        '删除审计日志失败',
+        `删除审计日志失败: ${getErrorMessage(err)}`
+      );
     }
   }
 
@@ -110,11 +113,11 @@ export class AuditLogRepository {
       const db = await getDbInstance();
       const countRow = await getDbRow<{ total: number }>(db, sql);
       return countRow?.total ?? 0;
-    } catch (err: any) {
-      console.error(`[审计日志] 获取日志总数时出错: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[审计日志] 获取日志总数时出错: ${getErrorMessage(err)}`);
       throw ErrorFactory.databaseError(
         '获取审计日志总数失败',
-        `获取审计日志总数失败: ${err.message}`
+        `获取审计日志总数失败: ${getErrorMessage(err)}`
       );
     }
   }
@@ -173,9 +176,12 @@ export class AuditLogRepository {
       const logs = await allDb<DbAuditLogRow>(db, baseSql, params);
 
       return { logs, total };
-    } catch (err: any) {
-      console.error(`获取审计日志时出错:`, err.message);
-      throw ErrorFactory.databaseError('获取审计日志失败', `获取审计日志时出错: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`获取审计日志时出错:`, getErrorMessage(err));
+      throw ErrorFactory.databaseError(
+        '获取审计日志失败',
+        `获取审计日志时出错: ${getErrorMessage(err)}`
+      );
     }
   }
 }

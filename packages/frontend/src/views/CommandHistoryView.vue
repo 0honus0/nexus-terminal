@@ -44,44 +44,47 @@
           <i class="fas fa-history text-xl mb-2"></i>
           <p>{{ $t('commandHistory.empty', '没有历史记录') }}</p>
         </div>
-        <!-- History List -->
-        <ul ref="historyListRef" v-else class="list-none p-0 m-0">
-          <li
-            v-for="(entry, index) in filteredHistory"
-            :key="entry.id"
-            class="group flex justify-between items-center px-3 py-2.5 mb-1 cursor-pointer rounded-md hover:bg-primary/10 transition-colors duration-150"
-            :class="{ 'bg-primary/20 font-medium': index === storeSelectedIndex }"
-            @click="executeCommand(entry.command)"
-            @contextmenu.prevent="showCommandHistoryContextMenu($event, entry)"
-            :title="entry.command"
-          >
-            <!-- Command Text -->
-            <span class="truncate mr-2 flex-grow font-mono text-sm text-foreground">{{
-              entry.command
-            }}</span>
-            <!-- Actions (Show on Hover) -->
-            <div
-              class="flex items-center flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150"
+        <!-- History List (虚拟滚动) -->
+        <div v-else v-bind="containerProps" class="h-full">
+          <ul v-bind="wrapperProps" class="list-none p-0 m-0">
+            <li
+              v-for="{ data: entry, index } in virtualList"
+              :key="entry.id"
+              class="group flex justify-between items-center px-3 py-2.5 mb-1 cursor-pointer rounded-md hover:bg-primary/10 transition-colors duration-150"
+              :class="{ 'bg-primary/20 font-medium': index === storeSelectedIndex }"
+              :style="{ height: `${ITEM_HEIGHT}px` }"
+              @click="executeCommand(entry.command)"
+              @contextmenu.prevent="showCommandHistoryContextMenu($event, entry)"
+              :title="entry.command"
             >
-              <!-- Copy Button -->
-              <button
-                @click.stop="copyCommand(entry.command)"
-                class="p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary"
-                :title="$t('commandHistory.copy', '复制')"
+              <!-- Command Text -->
+              <span class="truncate mr-2 flex-grow font-mono text-sm text-foreground">{{
+                entry.command
+              }}</span>
+              <!-- Actions (Show on Hover) -->
+              <div
+                class="flex items-center flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150"
               >
-                <i class="fas fa-copy text-sm"></i>
-              </button>
-              <!-- Delete Button -->
-              <button
-                @click.stop="deleteSingleCommand(entry.id)"
-                class="ml-1 p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-error"
-                :title="$t('commandHistory.delete', '删除')"
-              >
-                <i class="fas fa-times text-sm"></i>
-              </button>
-            </div>
-          </li>
-        </ul>
+                <!-- Copy Button -->
+                <button
+                  @click.stop="copyCommand(entry.command)"
+                  class="p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary"
+                  :title="$t('commandHistory.copy', '复制')"
+                >
+                  <i class="fas fa-copy text-sm"></i>
+                </button>
+                <!-- Delete Button -->
+                <button
+                  @click.stop="deleteSingleCommand(entry.id)"
+                  class="ml-1 p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-error"
+                  :title="$t('commandHistory.delete', '删除')"
+                >
+                  <i class="fas fa-times text-sm"></i>
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -113,6 +116,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, defineExpose, watch } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useVirtualList } from '@vueuse/core';
 import { useCommandHistoryStore, CommandHistoryEntryFE } from '../stores/commandHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
@@ -133,7 +137,6 @@ const sessionStore = useSessionStore(); // +++ 实例化 SessionStore +++
 const connectionsStore = useConnectionsStore(); // +++ 实例化 ConnectionsStore +++
 const hoveredItemId = ref<number | null>(null);
 // const selectedIndex = ref<number>(-1); // REMOVED: Use store's selectedIndex
-const historyListRef = ref<HTMLUListElement | null>(null); // Ref for the history list UL
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
 let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
 
@@ -148,6 +151,17 @@ const searchTerm = computed(() => commandHistoryStore.searchTerm);
 const filteredHistory = computed(() => commandHistoryStore.filteredHistory);
 const isLoading = computed(() => commandHistoryStore.isLoading);
 const { selectedIndex: storeSelectedIndex } = storeToRefs(commandHistoryStore); // Get selectedIndex reactively
+
+// --- 虚拟滚动配置 ---
+const ITEM_HEIGHT = 44; // 每个命令项的高度 (px)
+const {
+  list: virtualList,
+  containerProps,
+  wrapperProps,
+} = useVirtualList(filteredHistory, {
+  itemHeight: ITEM_HEIGHT,
+  overscan: 10, // 上下各预渲染 10 个项目
+});
 
 // --- 生命周期钩子 ---
 onMounted(() => {
@@ -181,21 +195,27 @@ const updateSearchTerm = (event: Event) => {
   // selectedIndex.value = -1; // REMOVED: Store handles resetting index
 };
 
-// 滚动到选中的项目
+// 滚动到选中的项目（虚拟滚动兼容）
 const scrollToSelected = async (index: number) => {
   // Accept index as argument
   await nextTick(); // 等待 DOM 更新
-  if (index < 0 || !historyListRef.value) return;
+  if (index < 0) return;
 
-  const listElement = historyListRef.value;
-  const selectedItem = listElement.children[index] as HTMLLIElement;
+  // 使用 containerProps.ref 访问虚拟滚动容器
+  const container = containerProps.ref.value as HTMLDivElement | null;
+  if (!container) return;
 
-  if (selectedItem) {
-    // 使用 scrollIntoView 使元素可见，滚动最小距离
-    selectedItem.scrollIntoView({
-      behavior: 'smooth', // 可以使用 'auto' 来实现即时滚动
-      block: 'nearest',
-    });
+  // 虚拟滚动：直接计算目标位置并滚动
+  const targetScrollTop = index * ITEM_HEIGHT;
+  const containerHeight = container.clientHeight;
+
+  // 确保选中项在可视区域内
+  if (targetScrollTop < container.scrollTop) {
+    // 选中项在可视区域上方
+    container.scrollTop = targetScrollTop;
+  } else if (targetScrollTop + ITEM_HEIGHT > container.scrollTop + containerHeight) {
+    // 选中项在可视区域下方
+    container.scrollTop = targetScrollTop - containerHeight + ITEM_HEIGHT;
   }
 };
 
@@ -235,9 +255,10 @@ const handleSearchInputBlur = () => {
   setTimeout(() => {
     // 检查焦点是否还在组件内部的其他可聚焦元素上（例如按钮）
     // 如果焦点移出整个组件区域，则重置选择
+    const container = containerProps.ref.value as HTMLDivElement | null;
     if (
       document.activeElement !== searchInputRef.value &&
-      !historyListRef.value?.contains(document.activeElement)
+      !container?.contains(document.activeElement)
     ) {
       commandHistoryStore.resetSelection();
     }

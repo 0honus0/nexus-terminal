@@ -1,5 +1,5 @@
 import * as sqlite3 from 'sqlite3';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { SidebarConfig, LayoutNode, PaneName, CaptchaSettings } from '../types/settings.types';
 
@@ -19,8 +19,8 @@ export const settingsRepository = {
       const db = await getDbInstance();
       const rows = await allDb<DbSettingRow>(db, 'SELECT key, value FROM settings');
       return rows;
-    } catch (err: any) {
-      console.error('[Repository] 获取所有设置时出错:', err.message);
+    } catch (err: unknown) {
+      console.error('[Repository] 获取所有设置时出错:', getErrorMessage(err));
       throw ErrorFactory.databaseError('获取设置失败', '获取设置失败');
     }
   },
@@ -37,9 +37,12 @@ export const settingsRepository = {
       const value = row ? row.value : null;
       // console.log(`[仓库] 找到键 ${key} 的值:`, value);
       return value;
-    } catch (err: any) {
-      console.error(`[Repository] 获取设置项 ${key} 时出错:`, err.message);
-      throw ErrorFactory.databaseError('获取设置项失败', `获取设置项 ${key} 失败: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[Repository] 获取设置项 ${key} 时出错:`, getErrorMessage(err));
+      throw ErrorFactory.databaseError(
+        '获取设置项失败',
+        `获取设置项 ${key} 失败: ${getErrorMessage(err)}`
+      );
     }
   },
 
@@ -55,9 +58,12 @@ export const settingsRepository = {
     try {
       const db = await getDbInstance();
       const result = await runDb(db, sql, params);
-    } catch (err: any) {
-      console.error(`[Repository] 设置设置项 ${key} 时出错:`, err.message);
-      throw ErrorFactory.databaseError('设置设置项失败', `设置设置项 ${key} 失败: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[Repository] 设置设置项 ${key} 时出错:`, getErrorMessage(err));
+      throw ErrorFactory.databaseError(
+        '设置设置项失败',
+        `设置设置项 ${key} 失败: ${getErrorMessage(err)}`
+      );
     }
   },
 
@@ -69,9 +75,12 @@ export const settingsRepository = {
       const result = await runDb(db, sql, [key]);
       // console.log(`[仓库] 成功删除键为 ${key} 的设置。影响行数: ${result.changes}`);
       return result.changes > 0;
-    } catch (err: any) {
-      console.error(`[Repository] 删除设置项 ${key} 时出错:`, err.message);
-      throw ErrorFactory.databaseError('删除设置项失败', `删除设置项 ${key} 失败: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`[Repository] 删除设置项 ${key} 时出错:`, getErrorMessage(err));
+      throw ErrorFactory.databaseError(
+        '删除设置项失败',
+        `删除设置项 ${key} 失败: ${getErrorMessage(err)}`
+      );
     }
   },
 
@@ -297,8 +306,11 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
     for (const [key, value] of Object.entries(defaultSettings)) {
       await runDb(db, sqlInsertOrIgnore, [key, value, nowSeconds, nowSeconds]);
     }
-  } catch (err: any) {
-    console.error(`[设置仓库] 确保默认设置时出错:`, err.message);
-    throw ErrorFactory.databaseError('确保默认设置失败', `确保默认设置失败: ${err.message}`);
+  } catch (err: unknown) {
+    console.error(`[设置仓库] 确保默认设置时出错:`, getErrorMessage(err));
+    throw ErrorFactory.databaseError(
+      '确保默认设置失败',
+      `确保默认设置失败: ${getErrorMessage(err)}`
+    );
   }
 };

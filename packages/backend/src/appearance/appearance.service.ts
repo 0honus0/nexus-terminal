@@ -5,6 +5,7 @@ import sanitize from 'sanitize-filename'; // 用于清理文件名
 import * as appearanceRepository from './appearance.repository';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
+import { getErrorMessage } from '../utils/AppError';
 
 // 预设 HTML 主题的存储路径 (作为只读预设)
 const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
@@ -85,9 +86,12 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
         throw new Error(`指定的终端主题 ID 不存在: ${themeIdNum}`);
       }
       console.log(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
-    } catch (e: any) {
-      console.error(`[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`, e.message);
-      throw new Error(`验证终端主题 ID 时出错: ${e.message || themeIdNum}`);
+    } catch (e: unknown) {
+      console.error(
+        `[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`,
+        getErrorMessage(e)
+      );
+      throw new Error(`验证终端主题 ID 时出错: ${getErrorMessage(e) || themeIdNum}`);
     }
   } else if (
     settingsDto.hasOwnProperty('activeTerminalThemeId') &&

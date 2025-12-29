@@ -21,6 +21,7 @@ import type {
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository, User } from '../user/user.repository';
 import { config } from '../config/app.config';
+import { getErrorMessage } from '../utils/AppError';
 
 const RP_ID = config.rpId;
 const RP_ORIGIN = config.rpOrigin;
@@ -211,10 +212,10 @@ export class PasskeyService {
         if (authenticatorDataBytes.length < 37) {
           // console.warn(`[PasskeyService] WARNING: Decoded authenticatorData length (${authenticatorDataBytes.length} bytes) is less than the expected minimum of 37 bytes. This may lead to CBOR parsing errors and subsequent failures (e.g., 'cannot read counter').`);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(
           '[PasskeyService] Error decoding authenticatorData from client response:',
-          e.message
+          getErrorMessage(e)
         );
         // Potentially re-throw or handle as a critical error, as this is unexpected.
       }
@@ -240,11 +241,11 @@ export class PasskeyService {
     let authenticatorCredentialID: Uint8Array;
     try {
       authenticatorCredentialID = base64UrlToUint8Array(passkey.credential_id);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(
         '[PasskeyService] Error decoding credential_id to Uint8Array:',
         passkey.credential_id,
-        e.message
+        getErrorMessage(e)
       );
       throw new Error('Failed to decode credential_id.');
     }
@@ -258,11 +259,11 @@ export class PasskeyService {
         pkBuffer.byteOffset,
         pkBuffer.byteLength
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(
         '[PasskeyService] Error decoding public_key to Uint8Array:',
         passkey.public_key,
-        e.message
+        getErrorMessage(e)
       );
       throw new Error('Failed to decode public_key.');
     }
@@ -272,11 +273,11 @@ export class PasskeyService {
       authenticatorTransports = passkey.transports
         ? (JSON.parse(passkey.transports) as AuthenticatorTransportFuture[])
         : undefined;
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(
         '[PasskeyService] Error parsing transports JSON:',
         passkey.transports,
-        e.message
+        getErrorMessage(e)
       );
       authenticatorTransports = undefined;
     }

@@ -1,0 +1,639 @@
+/**
+ * SSH WebSocket Handler 单元测试
+ * 测试 SSH 连接管理的 WebSocket 消息处理逻辑
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
+import WebSocket from 'ws';
+
+import {
+  handleSshConnect,
+  handleSshInput,
+  handleSshResize,
+  handleSshResumeSuccess,
+} from './ssh.handler';
+import { AuthenticatedWebSocket, ClientState } from '../types';
+import { clientStates } from '../state';
+import * as SshService from '../../services/ssh.service';
+
+// Mock uuid
+vi.mock('uuid', () => ({
+  v4: vi.fn(() => 'mock-session-id-12345'),
+}));
+
+// Mock SSH Service
+vi.mock('../../services/ssh.service', () => ({
+  getConnectionDetails: vi.fn(),
+  establishSshConnection: vi.fn(),
+}));
+
+// Mock state module services
+vi.mock('../state', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../state')>();
+  return {
+    ...original,
+    clientStates: new Map<string, ClientState>(),
+    sftpService: {
+      initializeSftpSession: vi.fn().mockResolvedValue(undefined),
+    },
+    statusMonitorService: {
+      startStatusPolling: vi.fn(),
+    },
+    auditLogService: {
+      logAction: vi.fn(),
+    },
+    notificationService: {
+      sendNotification: vi.fn(),
+    },
+  };
+});
+
+// Mock utils
+vi.mock('../utils', () => ({
+  cleanupClientConnection: vi.fn(),
+}));
+
+// Mock temporaryLogStorageService
+vi.mock('../../ssh-suspend/temporary-log-storage.service', () => ({
+  temporaryLogStorageService: {
+    writeToLog: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// Mock docker handler
+vi.mock('./docker.handler', () => ({
+  startDockerStatusPolling: vi.fn(),
+}));
+
+// Mock SSH Client
+class MockSshClient extends EventEmitter {
+  end = vi.fn();
+  shell = vi.fn();
+}
+
+// Mock Shell Stream
+class MockShellStream extends EventEmitter {
+  write = vi.fn();
+  setWindow = vi.fn();
+  stderr = new EventEmitter();
+}
+
+// Helper to create mock WebSocket
+function createMockWebSocket(
+  overrides: Partial<AuthenticatedWebSocket> = {}
+): AuthenticatedWebSocket {
+  const ws = new EventEmitter() as AuthenticatedWebSocket;
+  ws.readyState = WebSocket.OPEN;
+  ws.send = vi.fn();
+  ws.close = vi.fn();
+  ws.userId = 1;
+  ws.username = 'testuser';
+  ws.sessionId = undefined;
+  Object.assign(ws, overrides);
+  return ws;
+}
+
+// Helper to create mock Request
+function createMockRequest(clientIp: string = '127.0.0.1'): any {
+  return {
+    clientIpAddress: clientIp,
+  };
+}
+
+describe('SSH WebSocket Handler', () => {
+  let mockWs: AuthenticatedWebSocket;
+  let mockRequest: any;
+  let mockSshClient: MockSshClient;
+  let mockShellStream: MockShellStream;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clientStates.clear();
+
+    mockWs = createMockWebSocket();
+    mockRequest = createMockRequest();
+    mockSshClient = new MockSshClient();
+    mockShellStream = new MockShellStream();
+  });
+
+  afterEach(() => {
+    clientStates.clear();
+  });
+
+  describe('handleSshConnect', () => {
+    const mockConnectionDetails: SshService.DecryptedConnectionDetails = {
+      id: 1,
+      name: '测试服务器',
+      host: '192.168.1.1',
+      port: 22,
+      username: 'testuser',
+      auth_method: 'password',
+      password: 'testpass',
+      proxy: null,
+      connection_proxy_setting: null,
+    };
+
+    it('缺少 connectionId 时应发送错误消息', async () => {
+      await handleSshConnect(mockWs, mockRequest, {});
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: '缺少 connectionId。' })
+      );
+    });
+
+    it('已有活动连接时应忽略新的连接请求', async () => {
+      // 设置已有会话
+      mockWs.sessionId = 'existing-session';
+      const existingState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        dbConnectionId: 1,
+        connectionName: '现有连接',
+        isShellReady: true,
+      };
+      clientStates.set('existing-session', existingState);
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: '已存在活动的 SSH 连接。' })
+      );
+      expect(SshService.getConnectionDetails).not.toHaveBeenCalled();
+    });
+
+    it('应成功建立 SSH 连接并打开 Shell', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      // 模拟 shell 成功打开
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      const connectPromise = handleSshConnect(mockWs, mockRequest, {
+        connectionId: 1,
+        cols: 120,
+        rows: 40,
+        term: 'xterm-256color',
+      });
+
+      await connectPromise;
+
+      // 验证状态消息
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' })
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' })
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:status', payload: '正在连接到 192.168.1.1...' })
+      );
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:status', payload: 'SSH 连接成功，正在打开 Shell...' })
+      );
+
+      // 验证 shell 调用参数
+      expect(mockSshClient.shell).toHaveBeenCalledWith(
+        { term: 'xterm-256color', cols: 120, rows: 40 },
+        expect.any(Function)
+      );
+
+      // 验证连接成功消息
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"type":"ssh:connected"'));
+
+      // 验证 sessionId 被设置
+      expect(mockWs.sessionId).toBe('mock-session-id-12345');
+
+      // 验证状态被保存
+      expect(clientStates.has('mock-session-id-12345')).toBe(true);
+      const state = clientStates.get('mock-session-id-12345');
+      expect(state?.dbConnectionId).toBe(1);
+      expect(state?.connectionName).toBe('测试服务器');
+      expect(state?.isShellReady).toBe(true);
+    });
+
+    it('使用默认终端参数', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 验证使用默认参数
+      expect(mockSshClient.shell).toHaveBeenCalledWith(
+        { term: 'xterm-256color', cols: 80, rows: 24 },
+        expect.any(Function)
+      );
+    });
+
+    it('无效的 connectionId 应发送错误并关闭', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 'invalid' });
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' })
+      );
+      expect(mockSshClient.end).toHaveBeenCalled();
+      expect(mockWs.close).toHaveBeenCalledWith(1008, 'Invalid Connection ID');
+    });
+
+    it('Shell 打开失败时应清理连接', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(new Error('Shell 打开失败'));
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: '打开 Shell 失败: Shell 打开失败' })
+      );
+    });
+
+    it('SSH 连接失败时应发送错误', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockRejectedValue(new Error('Connection refused'));
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: '连接失败: Connection refused' })
+      );
+      expect(mockWs.close).toHaveBeenCalledWith(1011, 'SSH Connection Failed: Connection refused');
+    });
+
+    it('获取连接详情失败时应发送错误', async () => {
+      (SshService.getConnectionDetails as any).mockRejectedValue(new Error('连接配置未找到'));
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 999 });
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: '连接失败: 连接配置未找到' })
+      );
+    });
+
+    it('WebSocket 关闭时不应发送消息', async () => {
+      mockWs.readyState = WebSocket.CLOSED;
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // send 不应被调用（除了可能的初始状态检查）
+      const sendCalls = (mockWs.send as any).mock.calls;
+      expect(sendCalls.length).toBe(0);
+    });
+
+    it('应正确处理 Shell 数据输出', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 模拟 Shell 输出数据
+      const testData = Buffer.from('Hello, World!');
+      mockShellStream.emit('data', testData);
+
+      // 验证数据以 Base64 编码发送
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"type":"ssh:output"'));
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"encoding":"base64"'));
+    });
+
+    it('应正确处理 Shell stderr 输出', async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 模拟 stderr 输出
+      const errorData = Buffer.from('Error message');
+      mockShellStream.stderr.emit('data', errorData);
+
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"type":"ssh:output"'));
+    });
+
+    it('Shell 关闭时应清理连接', async () => {
+      const { cleanupClientConnection } = await import('../utils');
+
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 模拟 Shell 关闭
+      mockShellStream.emit('close');
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' })
+      );
+      expect(cleanupClientConnection).toHaveBeenCalledWith('mock-session-id-12345');
+    });
+  });
+
+  describe('handleSshInput', () => {
+    it('无活动会话时应忽略输入', () => {
+      handleSshInput(mockWs, 'test input');
+
+      expect(mockShellStream.write).not.toHaveBeenCalled();
+    });
+
+    it('无 Shell Stream 时应忽略输入', () => {
+      mockWs.sessionId = 'test-session';
+      const stateWithoutShell: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        dbConnectionId: 1,
+        isShellReady: false,
+      };
+      clientStates.set('test-session', stateWithoutShell);
+
+      handleSshInput(mockWs, 'test input');
+
+      // 不应写入任何数据
+    });
+
+    it('Shell 未就绪时应忽略输入', () => {
+      mockWs.sessionId = 'test-session';
+      const stateNotReady: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: false,
+      };
+      clientStates.set('test-session', stateNotReady);
+
+      handleSshInput(mockWs, 'test input');
+
+      expect(mockShellStream.write).not.toHaveBeenCalled();
+    });
+
+    it('Shell 就绪时应正确写入字符串输入', () => {
+      mockWs.sessionId = 'test-session';
+      const readyState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: true,
+      };
+      clientStates.set('test-session', readyState);
+
+      handleSshInput(mockWs, 'ls -la\r');
+
+      expect(mockShellStream.write).toHaveBeenCalledWith('ls -la\r');
+    });
+
+    it('应处理对象格式的 payload', () => {
+      mockWs.sessionId = 'test-session';
+      const readyState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: true,
+      };
+      clientStates.set('test-session', readyState);
+
+      handleSshInput(mockWs, { data: 'command\r' });
+
+      expect(mockShellStream.write).toHaveBeenCalledWith('command\r');
+    });
+  });
+
+  describe('handleSshResize', () => {
+    it('无活动会话时应忽略调整大小请求', () => {
+      handleSshResize(mockWs, { cols: 120, rows: 40 });
+
+      expect(mockShellStream.setWindow).not.toHaveBeenCalled();
+    });
+
+    it('无效的尺寸参数应被忽略', () => {
+      mockWs.sessionId = 'test-session';
+      const readyState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: true,
+      };
+      clientStates.set('test-session', readyState);
+
+      handleSshResize(mockWs, { cols: -1, rows: 40 });
+      expect(mockShellStream.setWindow).not.toHaveBeenCalled();
+
+      handleSshResize(mockWs, { cols: 120, rows: 0 });
+      expect(mockShellStream.setWindow).not.toHaveBeenCalled();
+
+      handleSshResize(mockWs, { cols: 'invalid', rows: 40 });
+      expect(mockShellStream.setWindow).not.toHaveBeenCalled();
+
+      handleSshResize(mockWs, null);
+      expect(mockShellStream.setWindow).not.toHaveBeenCalled();
+    });
+
+    it('Shell 就绪时应正确调整终端大小', () => {
+      mockWs.sessionId = 'test-session';
+      const readyState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: true,
+      };
+      clientStates.set('test-session', readyState);
+
+      handleSshResize(mockWs, { cols: 120, rows: 40 });
+
+      expect(mockShellStream.setWindow).toHaveBeenCalledWith(40, 120, 0, 0);
+    });
+
+    it('Shell 未就绪时应记录警告但不崩溃', () => {
+      mockWs.sessionId = 'test-session';
+      const notReadyState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: false,
+      };
+      clientStates.set('test-session', notReadyState);
+
+      // 不应抛出错误
+      expect(() => handleSshResize(mockWs, { cols: 120, rows: 40 })).not.toThrow();
+      expect(mockShellStream.setWindow).not.toHaveBeenCalled();
+    });
+
+    it('有 SSH Client 但无 Shell Stream 时应正常处理', () => {
+      mockWs.sessionId = 'test-session';
+      const noStreamState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        dbConnectionId: 1,
+        isShellReady: false,
+      };
+      clientStates.set('test-session', noStreamState);
+
+      expect(() => handleSshResize(mockWs, { cols: 120, rows: 40 })).not.toThrow();
+    });
+  });
+
+  describe('handleSshResumeSuccess', () => {
+    it('有效会话应启动状态轮询', async () => {
+      const { statusMonitorService } = await import('../state');
+
+      const readyState: ClientState = {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        sshShellStream: mockShellStream as any,
+        dbConnectionId: 1,
+        isShellReady: true,
+      };
+      clientStates.set('resume-session', readyState);
+
+      handleSshResumeSuccess('resume-session');
+
+      expect(statusMonitorService.startStatusPolling).toHaveBeenCalledWith('resume-session');
+    });
+
+    it('无效会话应记录错误但不崩溃', () => {
+      // 不应抛出错误
+      expect(() => handleSshResumeSuccess('non-existent-session')).not.toThrow();
+    });
+
+    it('会话存在但无 SSH Client 时应记录错误', () => {
+      const invalidState: ClientState = {
+        ws: mockWs,
+        sshClient: null as any,
+        dbConnectionId: 1,
+        isShellReady: false,
+      };
+      clientStates.set('invalid-session', invalidState);
+
+      expect(() => handleSshResumeSuccess('invalid-session')).not.toThrow();
+    });
+  });
+
+  describe('SSH Client 事件处理', () => {
+    it('SSH Client 关闭事件应触发清理', async () => {
+      const { cleanupClientConnection } = await import('../utils');
+
+      (SshService.getConnectionDetails as any).mockResolvedValue({
+        id: 1,
+        name: '测试服务器',
+        host: '192.168.1.1',
+        port: 22,
+        username: 'testuser',
+        auth_method: 'password',
+        password: 'testpass',
+        proxy: null,
+        connection_proxy_setting: null,
+      });
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 模拟 SSH Client 关闭
+      mockSshClient.emit('close');
+
+      expect(cleanupClientConnection).toHaveBeenCalledWith('mock-session-id-12345');
+    });
+
+    it('SSH Client 错误事件应发送错误消息并清理', async () => {
+      const { cleanupClientConnection } = await import('../utils');
+
+      (SshService.getConnectionDetails as any).mockResolvedValue({
+        id: 1,
+        name: '测试服务器',
+        host: '192.168.1.1',
+        port: 22,
+        username: 'testuser',
+        auth_method: 'password',
+        password: 'testpass',
+        proxy: null,
+        connection_proxy_setting: null,
+      });
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 模拟 SSH Client 错误
+      mockSshClient.emit('error', new Error('Network error'));
+
+      expect(mockWs.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'ssh:error', payload: 'SSH 连接错误: Network error' })
+      );
+      expect(cleanupClientConnection).toHaveBeenCalledWith('mock-session-id-12345');
+    });
+  });
+
+  describe('会话挂起日志写入', () => {
+    it('标记挂起的会话应写入输出日志', async () => {
+      const { temporaryLogStorageService } =
+        await import('../../ssh-suspend/temporary-log-storage.service');
+
+      (SshService.getConnectionDetails as any).mockResolvedValue({
+        id: 1,
+        name: '测试服务器',
+        host: '192.168.1.1',
+        port: 22,
+        username: 'testuser',
+        auth_method: 'password',
+        password: 'testpass',
+        proxy: null,
+        connection_proxy_setting: null,
+      });
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+
+      // 手动标记会话为挂起状态
+      const state = clientStates.get('mock-session-id-12345');
+      if (state) {
+        state.isMarkedForSuspend = true;
+        state.suspendLogPath = '/tmp/test-log.txt';
+      }
+
+      // 模拟 Shell 输出
+      mockShellStream.emit('data', Buffer.from('test output'));
+
+      // 等待异步操作
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(temporaryLogStorageService.writeToLog).toHaveBeenCalledWith(
+        '/tmp/test-log.txt',
+        'test output'
+      );
+    });
+  });
+});

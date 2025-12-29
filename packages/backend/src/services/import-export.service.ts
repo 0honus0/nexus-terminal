@@ -5,6 +5,7 @@ import * as TagService from '../tags/tag.service';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { decrypt, getEncryptionKeyBuffer as getCryptoKeyBuffer } from '../utils/crypto';
 import { getAllDecryptedSshKeys, DecryptedSshKeyDetails } from '../ssh-keys/ssh-keys.service';
+import { getErrorMessage } from '../utils/AppError';
 
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
@@ -215,9 +216,9 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
     });
 
     return formattedData;
-  } catch (err: any) {
-    console.error('Service: 获取明文连接数据时出错:', err.message);
-    throw new Error(`获取明文连接数据失败: ${err.message}`);
+  } catch (err: unknown) {
+    console.error('Service: 获取明文连接数据时出错:', getErrorMessage(err));
+    throw new Error(`获取明文连接数据失败: ${getErrorMessage(err)}`);
   }
 };
 

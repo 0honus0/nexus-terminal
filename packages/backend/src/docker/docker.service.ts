@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getErrorMessage } from '../utils/AppError';
 
 const execAsync = promisify(exec);
 
@@ -60,7 +61,7 @@ export class DockerService {
       await execAsync('docker version', { timeout: 2000 }); // 5秒超时
       this.isDockerAvailableCache = true;
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.isDockerAvailableCache = false;
       return false;
     }
@@ -106,10 +107,10 @@ export class DockerService {
           }
         })
         .filter((container): container is DockerContainer => container !== null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[DockerService] Failed to execute "docker ps"', {
-        error: error.message,
-        stderr: error.stderr,
+        error: getErrorMessage(error),
+        stderr: (error as any)?.stderr,
       });
       this.isDockerAvailableCache = false;
       return { available: false, containers: [] };
@@ -145,11 +146,11 @@ export class DockerService {
           });
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 获取 stats 失败不应阻止返回容器列表，只是 stats 会是 null
       console.warn('[DockerService] Failed to execute "docker stats"', {
-        error: error.message,
-        stderr: error.stderr,
+        error: getErrorMessage(error),
+        stderr: (error as any)?.stderr,
       });
     }
 
@@ -222,15 +223,15 @@ export class DockerService {
       console.log(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, {
         stdout,
       }); // Use console.log
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error);
+      const stderr = (error as any)?.stderr;
       console.error(`[DockerService] Failed to execute command "${dockerCliCommand}"`, {
-        error: error.message,
-        stderr: error.stderr,
+        error: errorMsg,
+        stderr,
       }); // Use console.error
       // 抛出错误，让 Controller 层处理并返回给前端
-      throw new Error(
-        `Failed to execute Docker command "${command}": ${error.stderr || error.message}`
-      );
+      throw new Error(`Failed to execute Docker command "${command}": ${stderr || errorMsg}`);
     }
   }
 }

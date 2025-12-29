@@ -84,7 +84,23 @@ export const allDb = <T = any>(
 };
 
 const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> => {
-  // 开始事务
+  // SQLite 性能优化配置（必须在事务外执行）
+  // WAL 模式：提升并发读写性能 2-3 倍
+  await runDb(db, 'PRAGMA journal_mode = WAL;');
+  // NORMAL 同步模式：平衡安全性与性能
+  await runDb(db, 'PRAGMA synchronous = NORMAL;');
+  // 64MB 内存缓存
+  await runDb(db, 'PRAGMA cache_size = -64000;');
+  // 临时表使用内存存储
+  await runDb(db, 'PRAGMA temp_store = MEMORY;');
+  // 启用内存映射 I/O (256MB)
+  await runDb(db, 'PRAGMA mmap_size = 268435456;');
+  // 启用外键约束
+  await runDb(db, 'PRAGMA foreign_keys = ON;');
+
+  console.log('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
+
+  // 开始事务（用于表创建）
   await new Promise<void>((resolveTx, rejectTx) => {
     db.run('BEGIN TRANSACTION', (beginErr) => {
       if (beginErr) {
@@ -97,7 +113,6 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
   });
 
   try {
-    await runDb(db, 'PRAGMA foreign_keys = ON;');
     for (const tableDef of tableDefinitions) {
       await runDb(db, tableDef.sql);
       if (tableDef.init) {

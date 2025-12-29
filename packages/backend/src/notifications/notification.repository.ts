@@ -1,5 +1,5 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import {
   NotificationSetting,
   RawNotificationSetting,
@@ -16,8 +16,8 @@ const parseRawSetting = (raw: RawNotificationSetting): NotificationSetting => {
       config: JSON.parse(raw.config || '{}'),
       enabled_events: JSON.parse(raw.enabled_events || '[]'),
     };
-  } catch (error: any) {
-    console.error(`解析通知设置 ID ${raw.id} 时出错:`, error.message);
+  } catch (error: unknown) {
+    console.error(`解析通知设置 ID ${raw.id} 时出错:`, getErrorMessage(error));
     return {
       ...raw,
       enabled: Boolean(raw.enabled),
@@ -36,9 +36,12 @@ export class NotificationSettingsRepository {
         'SELECT * FROM notification_settings ORDER BY created_at ASC'
       );
       return rows.map(parseRawSetting);
-    } catch (err: any) {
-      console.error(`获取通知设置时出错:`, err.message);
-      throw ErrorFactory.databaseError('获取通知设置失败', `获取通知设置时出错: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`获取通知设置时出错:`, getErrorMessage(err));
+      throw ErrorFactory.databaseError(
+        '获取通知设置失败',
+        `获取通知设置时出错: ${getErrorMessage(err)}`
+      );
     }
   }
 
@@ -51,11 +54,11 @@ export class NotificationSettingsRepository {
         [id]
       );
       return row ? parseRawSetting(row) : null;
-    } catch (err: any) {
-      console.error(`通过 ID ${id} 获取通知设置时出错:`, err.message);
+    } catch (err: unknown) {
+      console.error(`通过 ID ${id} 获取通知设置时出错:`, getErrorMessage(err));
       throw ErrorFactory.databaseError(
         '获取通知设置失败',
-        `通过 ID ${id} 获取通知设置时出错: ${err.message}`
+        `通过 ID ${id} 获取通知设置时出错: ${getErrorMessage(err)}`
       );
     }
   }
@@ -70,11 +73,11 @@ export class NotificationSettingsRepository {
       const parsedRows = rows.map(parseRawSetting);
       const filteredRows = parsedRows.filter((setting) => setting.enabled_events.includes(event));
       return filteredRows;
-    } catch (err: any) {
-      console.error(`获取启用的通知设置时出错:`, err.message);
+    } catch (err: unknown) {
+      console.error(`获取启用的通知设置时出错:`, getErrorMessage(err));
       throw ErrorFactory.databaseError(
         '获取通知设置失败',
-        `获取启用的通知设置时出错: ${err.message}`
+        `获取启用的通知设置时出错: ${getErrorMessage(err)}`
       );
     }
   }
@@ -104,9 +107,12 @@ export class NotificationSettingsRepository {
         );
       }
       return result.lastID;
-    } catch (err: any) {
-      console.error(`创建通知设置时出错:`, err.message);
-      throw ErrorFactory.databaseError('创建通知设置失败', `创建通知设置时出错: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`创建通知设置时出错:`, getErrorMessage(err));
+      throw ErrorFactory.databaseError(
+        '创建通知设置失败',
+        `创建通知设置时出错: ${getErrorMessage(err)}`
+      );
     }
   }
 
@@ -152,11 +158,11 @@ export class NotificationSettingsRepository {
       const db = await getDbInstance();
       const result = await runDb(db, sql, params);
       return result.changes > 0;
-    } catch (err: any) {
-      console.error(`更新通知设置 ID ${id} 时出错:`, err.message);
+    } catch (err: unknown) {
+      console.error(`更新通知设置 ID ${id} 时出错:`, getErrorMessage(err));
       throw ErrorFactory.databaseError(
         '更新通知设置失败',
-        `更新通知设置 ID ${id} 时出错: ${err.message}`
+        `更新通知设置 ID ${id} 时出错: ${getErrorMessage(err)}`
       );
     }
   }
@@ -167,11 +173,11 @@ export class NotificationSettingsRepository {
       const db = await getDbInstance();
       const result = await runDb(db, sql, [id]);
       return result.changes > 0;
-    } catch (err: any) {
-      console.error(`删除通知设置 ID ${id} 时出错:`, err.message);
+    } catch (err: unknown) {
+      console.error(`删除通知设置 ID ${id} 时出错:`, getErrorMessage(err));
       throw ErrorFactory.databaseError(
         '删除通知设置失败',
-        `删除通知设置 ID ${id} 时出错: ${err.message}`
+        `删除通知设置 ID ${id} 时出错: ${getErrorMessage(err)}`
       );
     }
   }

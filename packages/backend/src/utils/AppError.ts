@@ -40,6 +40,31 @@ export class AppError extends Error {
 }
 
 /**
+ * 从 unknown 类型的错误中安全提取错误消息
+ * 用于替代 catch (error: any) 模式
+ * @param error - 捕获的错误（类型为 unknown）
+ * @returns 错误消息字符串
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return '未知错误';
+}
+
+/**
+ * 检查错误是否为 AppError 实例
+ * @param error - 捕获的错误
+ * @returns 是否为 AppError
+ */
+export function isAppError(error: unknown): error is AppError {
+  return error instanceof AppError;
+}
+
+/**
  * 常用错误工厂函数
  */
 export class ErrorFactory {

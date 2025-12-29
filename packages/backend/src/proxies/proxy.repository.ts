@@ -1,5 +1,5 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 export interface ProxyData {
   id: number;
@@ -32,12 +32,13 @@ export const findProxyByNameTypeHostPort = async (
     const db = await getDbInstance();
     const row = await getDbRow<{ id: number }>(db, sql, [name, type, host, port]);
     return row;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errMsg = getErrorMessage(err);
     console.error(
       `Repository: 查找代理时出错 (name=${name}, type=${type}, host=${host}, port=${port}):`,
-      err.message
+      errMsg
     );
-    throw ErrorFactory.databaseError('查找代理失败', `查找代理时出错: ${err.message}`);
+    throw ErrorFactory.databaseError('查找代理失败', `查找代理时出错: ${errMsg}`);
   }
 };
 
@@ -73,9 +74,10 @@ export const createProxy = async (
       );
     }
     return result.lastID;
-  } catch (err: any) {
-    console.error('Repository: 创建代理时出错:', err.message);
-    throw ErrorFactory.databaseError('创建代理失败', `创建代理时出错: ${err.message}`);
+  } catch (err: unknown) {
+    const errMsg = getErrorMessage(err);
+    console.error('Repository: 创建代理时出错:', errMsg);
+    throw ErrorFactory.databaseError('创建代理失败', `创建代理时出错: ${errMsg}`);
   }
 };
 
@@ -88,8 +90,8 @@ export const findAllProxies = async (): Promise<ProxyData[]> => {
     const db = await getDbInstance();
     const rows = await allDb<DbProxyRow>(db, sql);
     return rows;
-  } catch (err: any) {
-    console.error('Repository: 查询代理列表时出错:', err.message);
+  } catch (err: unknown) {
+    console.error('Repository: 查询代理列表时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('获取代理列表失败', '获取代理列表失败');
   }
 };
@@ -103,8 +105,8 @@ export const findProxyById = async (id: number): Promise<ProxyData | null> => {
     const db = await getDbInstance();
     const row = await getDbRow<DbProxyRow>(db, sql, [id]);
     return row || null;
-  } catch (err: any) {
-    console.error(`Repository: 查询代理 ${id} 时出错:`, err.message);
+  } catch (err: unknown) {
+    console.error(`Repository: 查询代理 ${id} 时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('获取代理信息失败', '获取代理信息失败');
   }
 };
@@ -141,8 +143,8 @@ export const updateProxy = async (
     const db = await getDbInstance();
     const result = await runDb(db, sql, params);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error(`Repository: 更新代理 ${id} 时出错:`, err.message);
+  } catch (err: unknown) {
+    console.error(`Repository: 更新代理 ${id} 时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('更新代理记录失败', '更新代理记录失败');
   }
 };
@@ -156,8 +158,8 @@ export const deleteProxy = async (id: number): Promise<boolean> => {
     const db = await getDbInstance();
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
-  } catch (err: any) {
-    console.error(`Repository: 删除代理 ${id} 时出错:`, err.message);
+  } catch (err: unknown) {
+    console.error(`Repository: 删除代理 ${id} 时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('删除代理记录失败', '删除代理记录失败');
   }
 };

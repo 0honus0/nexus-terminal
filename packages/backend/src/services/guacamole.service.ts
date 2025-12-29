@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { ConnectionWithTags } from '../types/connection.types';
+import { getErrorMessage } from '../utils/AppError';
 
 // 统一远程桌面网关服务的 Base URL
 const REMOTE_GATEWAY_API_BASE =
@@ -111,16 +112,17 @@ export const getRemoteDesktopToken = async (
       `[GuacamoleService:getRemoteDesktopToken] Received Guacamole token from ${protocol.toUpperCase()} backend for connection ${connection.id}`
     );
     return response.data.token;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMsg = getErrorMessage(error);
     console.error(
       `[GuacamoleService:getRemoteDesktopToken] Error calling ${protocol.toUpperCase()} backend for connection ${connection.id}:`,
-      error.message
+      errorMsg
     );
     if (axios.isAxiosError(error) && error.response) {
       throw new Error(
-        `调用 ${protocol.toUpperCase()} 后端服务失败 (状态: ${error.response.status}): ${error.response.data?.message || error.message}`
+        `调用 ${protocol.toUpperCase()} 后端服务失败 (状态: ${error.response.status}): ${error.response.data?.message || errorMsg}`
       );
     }
-    throw new Error(`调用 ${protocol.toUpperCase()} 后端服务时发生错误: ${error.message}`);
+    throw new Error(`调用 ${protocol.toUpperCase()} 后端服务时发生错误: ${errorMsg}`);
   }
 };

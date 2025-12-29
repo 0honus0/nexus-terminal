@@ -1,6 +1,7 @@
 import * as ConnectionRepository from './connection.repository';
 import { encrypt, decrypt } from '../utils/crypto';
 import { AuditLogService } from '../audit/audit.service';
+import { getErrorMessage } from '../utils/AppError';
 import * as SshKeyService from '../ssh-keys/ssh-keys.service';
 import {
   ConnectionBase,
@@ -613,14 +614,15 @@ export const getConnectionWithDecryptedCredentials = async (
         // No key available to decrypt
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Catch decryption or key fetching errors
     console.error(
       `[Service:getConnWithDecrypt] Failed to decrypt credentials for connection ID ${id}:`,
       error
     );
     // 关键配置错误（如 SSH 密钥不存在）必须重新抛出，让调用者处理
-    if (error.message?.includes('SSH 密钥')) {
+    const errorMsg = getErrorMessage(error);
+    if (errorMsg?.includes('SSH 密钥')) {
       throw error;
     }
     // 其他解密错误（如加密密钥变更）记录日志并继续，返回 undefined 凭证
@@ -743,7 +745,7 @@ export const addTagToConnections = async (
 
     // 记录审计日志
     auditLogService.logAction('CONNECTIONS_TAG_ADDED', { connectionIds, tagId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       `Service: 为连接 ${connectionIds.join(', ')} 添加标签 ${tagId} 时发生错误:`,
       error
@@ -765,7 +767,7 @@ export const updateConnectionTags = async (
   try {
     const updated = await ConnectionRepository.updateConnectionTags(connectionId, tagIds);
     return updated;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Service: 更新连接 ${connectionId} 的标签时发生错误:`, error);
     throw error;
   }

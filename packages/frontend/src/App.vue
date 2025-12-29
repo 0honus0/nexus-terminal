@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router';
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useDeviceDetection } from './composables/useDeviceDetection';
@@ -16,10 +16,14 @@ import CommandPalette from './components/common/CommandPalette.vue';
 import FileEditorOverlay from './components/FileEditorOverlay.vue';
 import StyleCustomizer from './components/StyleCustomizer.vue';
 import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
-import RemoteDesktopModal from './components/RemoteDesktopModal.vue';
-import VncModal from './components/VncModal.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
+
+// 延迟加载重型组件（包含 guacamole-common-js ~200KB）
+const RemoteDesktopModal = defineAsyncComponent(
+  () => import('./components/RemoteDesktopModal.vue')
+);
+const VncModal = defineAsyncComponent(() => import('./components/VncModal.vue'));
 
 const { t } = useI18n();
 const authStore = useAuthStore();

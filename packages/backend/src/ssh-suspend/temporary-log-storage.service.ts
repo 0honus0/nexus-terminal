@@ -1,5 +1,11 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { getErrorMessage } from '../utils/AppError';
+
+// 类型守卫：检查是否为带有 code 属性的 Node.js 系统错误
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
 
 const MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
 const LOG_DIRECTORY = './data/temp_suspended_ssh_logs/';
@@ -60,8 +66,8 @@ export class TemporaryLogStorageService {
       let stat;
       try {
         stat = await fs.stat(filePath);
-      } catch (e: any) {
-        if (e.code !== 'ENOENT') {
+      } catch (e: unknown) {
+        if (!isNodeError(e) || e.code !== 'ENOENT') {
           throw e;
         }
         // 文件不存在，是正常情况，后续会创建
@@ -92,8 +98,8 @@ export class TemporaryLogStorageService {
     try {
       const data = await fs.readFile(filePath, 'utf8');
       return data;
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
         // console.log(`日志文件 '${filePath}' 不存在，返回空内容。`);
         return ''; // 文件不存在，通常意味着没有日志
       }
@@ -111,8 +117,8 @@ export class TemporaryLogStorageService {
     try {
       await fs.unlink(filePath);
       // console.log(`日志文件 '${filePath}' 已成功删除。`);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
         // console.warn(`尝试删除日志文件 '${filePath}' 时发现文件已不存在，操作忽略。`);
         return; // 文件不存在，无需操作
       }
@@ -158,8 +164,8 @@ export class TemporaryLogStorageService {
         return null;
       }
       return metadata;
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
         return null; // 文件不存在
       }
       console.error(`读取元数据文件 '${filePath}' 失败:`, error);
@@ -175,8 +181,8 @@ export class TemporaryLogStorageService {
     const filePath = this.getMetadataFilePath(suspendSessionId);
     try {
       await fs.unlink(filePath);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
         return; // 文件不存在，无需操作
       }
       console.error(`删除元数据文件 '${filePath}' 失败:`, error);

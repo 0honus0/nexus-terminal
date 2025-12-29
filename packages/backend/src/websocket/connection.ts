@@ -1,5 +1,6 @@
 import WebSocket, { WebSocketServer, RawData } from 'ws';
 import { Request } from 'express';
+import { getErrorMessage } from '../utils/AppError';
 import {
   AuthenticatedWebSocket,
   SshSuspendStartRequest,
@@ -220,7 +221,7 @@ export function initializeConnectionHandler(
                   payload: { suspendSessions: sessions },
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error(`[SSH_SUSPEND_LIST_REQUEST] 获取挂起列表失败:`, error);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
@@ -389,7 +390,7 @@ export function initializeConnectionHandler(
                   // console.warn(`[WebSocket Handler][${type}] sshSuspendService.resumeSession 返回 null，无法恢复会话 ${suspendSessionId}。`);
                   throw new Error('服务未能恢复会话，或会话不存在/状态不正确。');
                 }
-              } catch (error: any) {
+              } catch (error: unknown) {
                 // console.error(`[WebSocket Handler][${type}] 处理恢复会话 ${suspendSessionId} 时发生错误:`, error);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
@@ -399,7 +400,7 @@ export function initializeConnectionHandler(
                         suspendSessionId,
                         newFrontendSessionId,
                         success: false,
-                        error: error.message || '恢复会话失败',
+                        error: getErrorMessage(error) || '恢复会话失败',
                       },
                     })
                   );
@@ -434,7 +435,7 @@ export function initializeConnectionHandler(
                   payload: { suspendSessionId, success },
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error(
                   `[SSH_SUSPEND_TERMINATE_REQUEST] 终止会话 ${suspendSessionId} 失败:`,
                   error
@@ -446,7 +447,7 @@ export function initializeConnectionHandler(
                       payload: {
                         suspendSessionId,
                         success: false,
-                        error: error.message || '终止会话失败',
+                        error: getErrorMessage(error) || '终止会话失败',
                       },
                     })
                   );
@@ -481,7 +482,7 @@ export function initializeConnectionHandler(
                   payload: { suspendSessionId, success },
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error(
                   `[SSH_SUSPEND_REMOVE_ENTRY] 移除条目 ${suspendSessionId} 失败:`,
                   error
@@ -493,7 +494,7 @@ export function initializeConnectionHandler(
                       payload: {
                         suspendSessionId,
                         success: false,
-                        error: error.message || '移除条目失败',
+                        error: getErrorMessage(error) || '移除条目失败',
                       },
                     })
                   );
@@ -598,7 +599,7 @@ export function initializeConnectionHandler(
                   payload: { sessionId: sessionToMarkId, success: true },
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error(`[SSH_MARK_FOR_SUSPEND] 标记会话 ${sessionToMarkId} 失败:`, error);
                 if (activeSessionState) {
                   // 如果状态存在，尝试回滚标记
@@ -612,7 +613,7 @@ export function initializeConnectionHandler(
                       payload: {
                         sessionId: sessionToMarkId,
                         success: false,
-                        error: error.message || '标记会话失败',
+                        error: getErrorMessage(error) || '标记会话失败',
                       } as SshMarkedForSuspendAck['payload'],
                     })
                   );
@@ -697,7 +698,7 @@ export function initializeConnectionHandler(
                   payload: { ...ackPayloadBase, success: true },
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
-              } catch (error: any) {
+              } catch (error: unknown) {
                 console.error(
                   `[SSH_UNMARK_FOR_SUSPEND] 取消标记会话 ${sessionToUnmarkId} 失败:`,
                   error
@@ -714,7 +715,7 @@ export function initializeConnectionHandler(
                       payload: {
                         ...ackPayloadBase,
                         success: false,
-                        error: error.message || '取消标记会话失败',
+                        error: getErrorMessage(error) || '取消标记会话失败',
                       } as SshUnmarkedForSuspendAck['payload'],
                     })
                   );
@@ -728,14 +729,17 @@ export function initializeConnectionHandler(
               if (ws.readyState === WebSocket.OPEN)
                 ws.send(JSON.stringify({ type: 'error', payload: `不支持的消息类型: ${type}` }));
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(
             `WebSocket: 处理来自 ${ws.username} (会话: ${sessionId}) 的消息 (${type}) 时发生顶层错误:`,
             error
           );
           if (ws.readyState === WebSocket.OPEN)
             ws.send(
-              JSON.stringify({ type: 'error', payload: `处理消息时发生内部错误: ${error.message}` })
+              JSON.stringify({
+                type: 'error',
+                payload: `处理消息时发生内部错误: ${getErrorMessage(error)}`,
+              })
             );
         }
       });

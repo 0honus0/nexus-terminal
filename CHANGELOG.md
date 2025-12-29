@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **BaseRepository 抽象基类**：统一 Repository 层错误处理与日志记录
+  - 新增 `packages/backend/src/database/base.repository.ts`
+  - 提供 `safeDbOperation` 包装方法，自动捕获数据库错误并转换为 `DatabaseError`
+  - 所有 Repository 继承此基类，消除重复的 try-catch 代码
+  - 统一日志格式：`[RepositoryName] Operation failed: {error}`
+
+- **SFTP 模块重构拆分**：将 God Class `SftpService` 拆分为职责单一的子模块
+  - 新增 `packages/backend/src/sftp/sftp-upload.manager.ts` - 文件上传管理器
+  - 新增 `packages/backend/src/sftp/sftp-archive.manager.ts` - 压缩/解压管理器
+  - 新增 `packages/backend/src/sftp/sftp-utils.ts` - 共享工具函数与类型
+  - 新增 `packages/backend/src/sftp/index.ts` - 模块导出入口
+  - `SftpService` 现作为门面类协调子模块
+
+- **WebSocket Handlers 测试覆盖**：新增 4 个测试文件
+  - `packages/backend/src/websocket/handlers/ssh.handler.test.ts`
+  - `packages/backend/src/websocket/handlers/sftp.handler.test.ts`
+  - `packages/backend/src/websocket/handlers/docker.handler.test.ts`
+  - `packages/backend/src/websocket/handlers/rdp.handler.test.ts`
+
+- **认证中间件测试覆盖**：新增 3 个测试文件
+  - `packages/backend/src/auth/auth.middleware.test.ts`
+  - `packages/backend/src/auth/ipWhitelist.middleware.test.ts`
+  - `packages/backend/src/auth/ipBlacklistCheck.middleware.test.ts`
+
+- **加密模块测试**：新增密钥轮换测试
+  - `packages/backend/src/utils/crypto.test.ts`
+
+### Changed
+
+- **SQLite WAL 模式启用**：优化数据库并发性能
+  - 修改 `packages/backend/src/database/connection.ts`
+  - 数据库初始化时自动启用 WAL 模式
+  - 提升读写并发能力，减少锁竞争
+
+- **类型化错误体系**：消除 `any` 类型，增强类型安全
+  - 扩展 `packages/backend/src/utils/AppError.ts`
+  - 新增 `DatabaseError`、`ValidationError`、`ExternalServiceError` 等子类
+  - 所有错误现在都是类型安全的
+
+- **前端虚拟滚动优化**：为 `CommandHistoryView` 添加虚拟滚动
+  - 修改 `packages/frontend/src/views/CommandHistoryView.vue`
+  - 使用 `@vueuse/core` 的 `useVirtualList`
+  - 支持数千条历史记录的流畅渲染
+
+- **前端懒加载优化**：减少初始加载体积
+  - 修改 `packages/frontend/src/App.vue`
+  - `RemoteDesktopModal` 和 `VncModal` 改为 `defineAsyncComponent` 动态导入
+  - guacamole 依赖 (~200KB) 现在按需加载
+
+- **Repository 层重构**：所有 Repository 继承 `BaseRepository`
+  - 统一错误处理模式
+  - 涉及 15+ 个 Repository 文件
+
 ### Fixed
 
 - **SSH 终端光标位置错乱修复**：修复 bbf8bca 提交引入的终端输出顺序错乱问题

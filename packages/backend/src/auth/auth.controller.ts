@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
@@ -333,17 +333,17 @@ export const verifyPasskeyAuthenticationHandler = async (
       });
       res.status(401).json({ verified: false, message: 'Passkey 认证失败。' });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[AuthController] 验证 Passkey 认证时出错:`, error);
     const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
     auditLogService.logAction('PASSKEY_AUTH_FAILURE', {
       credentialId: authenticationResponseJSON?.id || 'unknown',
-      reason: error.message || 'Unknown error',
+      reason: getErrorMessage(error) || 'Unknown error',
       ip: clientIp,
     });
     notificationService.sendNotification('PASSKEY_AUTH_FAILURE', {
       credentialId: authenticationResponseJSON?.id || 'unknown',
-      reason: error.message || 'Unknown error',
+      reason: getErrorMessage(error) || 'Unknown error',
       ip: clientIp,
     });
     next(error);
@@ -427,15 +427,15 @@ export const deleteUserPasskeyHandler = async (
       );
       res.status(404).json({ message: 'Passkey 未找到或无法删除。' });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 时出错:`,
-      error.message,
-      error.stack
+      getErrorMessage(error),
+      (error as Error)?.stack
     );
-    if (error.message === 'Passkey not found.') {
+    if (getErrorMessage(error) === 'Passkey not found.') {
       res.status(404).json({ message: '指定的 Passkey 未找到。' });
-    } else if (error.message === 'Unauthorized to delete this passkey.') {
+    } else if (getErrorMessage(error) === 'Unauthorized to delete this passkey.') {
       auditLogService.logAction('PASSKEY_DELETE_UNAUTHORIZED', {
         userId,
         username,
@@ -492,15 +492,15 @@ export const updateUserPasskeyNameHandler = async (
     // Optionally send a notification if desired
     // notificationService.sendNotification('PASSKEY_NAME_UPDATED', { userId, username, credentialId: credentialID, newName: trimmedName });
     res.status(200).json({ message: 'Passkey 名称更新成功。' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       `[AuthController] 用户 ${username} (ID: ${userId}) 更新 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 名称时出错:`,
-      error.message,
-      error.stack
+      getErrorMessage(error),
+      (error as Error)?.stack
     );
-    if (error.message === 'Passkey not found.') {
+    if (getErrorMessage(error) === 'Passkey not found.') {
       res.status(404).json({ message: '指定的 Passkey 未找到。' });
-    } else if (error.message === 'Unauthorized to update this passkey name.') {
+    } else if (getErrorMessage(error) === 'Unauthorized to update this passkey name.') {
       auditLogService.logAction('PASSKEY_NAME_UPDATE_UNAUTHORIZED', {
         userId,
         username,
@@ -1015,7 +1015,7 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
         qrCodeUrl: data_url,
       });
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`用户 ${userId} 设置 2FA 时出错:`, error);
     next(error);
   }
@@ -1082,7 +1082,7 @@ export const verifyAndActivate2FA = async (
       console.log(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
       res.status(400).json({ message: '验证码无效。' });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`用户 ${userId} 验证并激活 2FA 时出错:`, error);
     next(error);
   }
@@ -1143,7 +1143,7 @@ export const disable2FA = async (
     notificationService.sendNotification('2FA_DISABLED', { userId, ip: clientIp });
 
     res.status(200).json({ message: '两步验证已成功禁用。' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`用户 ${userId} 禁用 2FA 时出错:`, error);
     next(error);
   }
@@ -1236,7 +1236,7 @@ export const setupAdmin = async (
     });
 
     res.status(201).json({ message: '初始账号创建成功！' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('初始设置过程中发生内部错误:', error);
     next(error);
   }
@@ -1288,7 +1288,7 @@ export const getPublicCaptchaConfig = async (
 
     console.log('[AuthController] Sending public CAPTCHA config to client:', publicConfig);
     res.status(200).json(publicConfig);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AuthController] 获取公共 CAPTCHA 配置时出错:', error);
     next(error);
   }
@@ -1308,10 +1308,10 @@ export const checkHasPasskeys = async (
   try {
     const hasPasskeys = await passkeyService.hasPasskeysConfigured(username);
     res.status(200).json({ hasPasskeys });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       `[AuthController] 检查 Passkey 配置状态时出错 (username: ${username || 'any'}):`,
-      error.message
+      getErrorMessage(error)
     );
     next(error);
   }
