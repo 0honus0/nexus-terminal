@@ -15,6 +15,7 @@ import {
   SftpDecompressSuccessPayload,
   SftpDecompressErrorPayload,
 } from '../websocket/types';
+import { getErrorMessage } from '../utils/AppError';
 
 export class SftpArchiveManager {
   private clientStates: Map<string, ClientState>;
@@ -50,12 +51,12 @@ export class SftpArchiveManager {
         );
         return;
       }
-    } catch (checkError: any) {
+    } catch (checkError: unknown) {
       this.sendCompressError(
         state.ws,
         `检查命令 '${requiredCommand}' 时出错`,
         requestId,
-        checkError.message
+        getErrorMessage(checkError)
       );
       return;
     }
@@ -145,9 +146,13 @@ export class SftpArchiveManager {
           }
         });
       });
-    } catch (execError: any) {
+    } catch (execError: unknown) {
       console.error(`[SFTP Compress ${sessionId}] Unexpected error (ID: ${requestId}):`, execError);
-      this.sendCompressError(state.ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
+      this.sendCompressError(
+        state.ws,
+        `执行压缩时发生意外错误: ${getErrorMessage(execError)}`,
+        requestId
+      );
     }
   }
 
@@ -194,12 +199,12 @@ export class SftpArchiveManager {
         );
         return;
       }
-    } catch (checkError: any) {
+    } catch (checkError: unknown) {
       this.sendDecompressError(
         state.ws,
         `检查命令 '${requiredCommand}' 时出错`,
         requestId,
-        checkError.message
+        getErrorMessage(checkError)
       );
       return;
     }
@@ -279,12 +284,16 @@ export class SftpArchiveManager {
           }
         });
       });
-    } catch (execError: any) {
+    } catch (execError: unknown) {
       console.error(
         `[SFTP Decompress ${sessionId}] Unexpected error (ID: ${requestId}):`,
         execError
       );
-      this.sendDecompressError(state.ws, `执行解压时发生意外错误: ${execError.message}`, requestId);
+      this.sendDecompressError(
+        state.ws,
+        `执行解压时发生意外错误: ${getErrorMessage(execError)}`,
+        requestId
+      );
     }
   }
 

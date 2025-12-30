@@ -5,7 +5,7 @@ import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { clientStates } from '../websocket';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import {
   SftpCompressRequestPayload,
   SftpDecompressRequestPayload,
@@ -112,11 +112,12 @@ export const downloadFile = async (
     });
 
     console.log(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`SFTP 下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
+      const errMsg = getErrorMessage(error);
       // 统一使用 ErrorFactory，不暴露内部错误细节
-      if (error.message?.includes('No such file')) {
+      if (errMsg?.includes('No such file')) {
         next(ErrorFactory.notFound('远程文件未找到'));
       } else {
         next(ErrorFactory.internalError('处理文件下载请求失败'));
@@ -284,11 +285,13 @@ export const downloadDirectory = async (
     await archive.finalize();
 
     console.log(`SFTP 文件夹下载完成 (用户 ${userId}, 路径 ${remotePath})`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`SFTP 文件夹下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
+      const err = error as any;
+      const errMsg = getErrorMessage(error);
       // 统一使用 ErrorFactory，不暴露内部错误细节
-      if (error.code === 'ENOENT' || error.message?.includes('No such file')) {
+      if (err.code === 'ENOENT' || errMsg?.includes('No such file')) {
         next(ErrorFactory.notFound('远程目录未找到'));
       } else {
         next(ErrorFactory.internalError('处理文件夹下载请求失败'));
@@ -514,12 +517,12 @@ export const handleCompressRequest = async (
         }
       });
     });
-  } catch (execError: any) {
+  } catch (execError: unknown) {
     console.error(
       `[WS SFTP Compress ${sessionId}] Unexpected error setting up exec (ID: ${requestId}):`,
       execError
     );
-    sendCompressError(ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
+    sendCompressError(ws, `执行压缩时发生意外错误: ${getErrorMessage(execError)}`, requestId);
   }
 };
 
@@ -650,11 +653,11 @@ export const handleDecompressRequest = async (
         }
       });
     });
-  } catch (execError: any) {
+  } catch (execError: unknown) {
     console.error(
       `[WS SFTP Decompress ${sessionId}] Unexpected error setting up exec (ID: ${requestId}):`,
       execError
     );
-    sendDecompressError(ws, `执行解压时发生意外错误: ${execError.message}`, requestId);
+    sendDecompressError(ws, `执行解压时发生意外错误: ${getErrorMessage(execError)}`, requestId);
   }
 };

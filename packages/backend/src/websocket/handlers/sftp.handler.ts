@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { AuthenticatedWebSocket } from '../types';
 import { clientStates, sftpService } from '../state';
+import { getErrorMessage } from '../../utils/AppError';
 
 export async function handleSftpOperation(
   ws: AuthenticatedWebSocket,
@@ -145,7 +146,8 @@ export async function handleSftpOperation(
           );
         throw new Error(`Unhandled SFTP type: ${type}`);
     }
-  } catch (sftpCallError: any) {
+  } catch (sftpCallError: unknown) {
+    const sftpCallErrMsg = getErrorMessage(sftpCallError);
     console.error(
       `WebSocket: Error preparing/calling SFTP service for ${type} (Request ID: ${requestId}):`,
       sftpCallError
@@ -155,7 +157,7 @@ export async function handleSftpOperation(
         JSON.stringify({
           type: 'sftp_error',
           payload: {
-            message: `处理 SFTP 请求 ${type} 时出错: ${sftpCallError.message}`,
+            message: `处理 SFTP 请求 ${type} 时出错: ${sftpCallErrMsg}`,
             requestId,
           },
         })

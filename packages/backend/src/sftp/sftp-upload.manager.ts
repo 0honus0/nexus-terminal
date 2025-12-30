@@ -83,7 +83,8 @@ export class SftpUploadManager {
         try {
           if (!state.sftp) throw new Error('SFTP session is not available.');
           await SftpUtils.ensureDirectoryExists(state.sftp, targetDirectory);
-        } catch (dirError: any) {
+        } catch (dirError: unknown) {
+          const dirErrMsg = getErrorMessage(dirError);
           console.error(
             `[SFTP Upload ${uploadId}] Failed to create directory ${targetDirectory}:`,
             dirError
@@ -91,7 +92,7 @@ export class SftpUploadManager {
           state.ws.send(
             JSON.stringify({
               type: 'sftp:upload:error',
-              payload: { uploadId, message: `创建目录失败: ${dirError.message}` },
+              payload: { uploadId, message: `创建目录失败: ${dirErrMsg}` },
             })
           );
           return;
@@ -109,7 +110,8 @@ export class SftpUploadManager {
             state.sftp!.close(handle, () => resolve());
           });
         });
-      } catch (preCheckError: any) {
+      } catch (preCheckError: unknown) {
+        const preCheckErrMsg = getErrorMessage(preCheckError);
         console.error(
           `[SFTP Upload ${uploadId}] Writability pre-check failed for ${remotePath}:`,
           preCheckError
@@ -117,7 +119,7 @@ export class SftpUploadManager {
         state.ws.send(
           JSON.stringify({
             type: 'sftp:upload:error',
-            payload: { uploadId, message: `文件不可写或创建失败: ${preCheckError.message}` },
+            payload: { uploadId, message: `文件不可写或创建失败: ${preCheckErrMsg}` },
           })
         );
         return;

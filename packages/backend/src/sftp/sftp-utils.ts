@@ -5,6 +5,7 @@
 
 import { SFTPWrapper, Stats } from 'ssh2';
 import * as pathModule from 'path';
+import { getErrorMessage } from '../utils/AppError';
 
 /** SFTP 目录条目 */
 export interface SftpDirEntry {
@@ -112,11 +113,10 @@ export class SftpUtils {
 
     try {
       await SftpUtils.getStats(sftp, normalizedPath);
-    } catch (statError: any) {
-      if (
-        statError.code === 'ENOENT' ||
-        (statError.message && statError.message.includes('No such file'))
-      ) {
+    } catch (statError: unknown) {
+      const statErrCode = (statError as any)?.code;
+      const statErrMsg = getErrorMessage(statError);
+      if (statErrCode === 'ENOENT' || statErrMsg.includes('No such file')) {
         try {
           await new Promise<void>((resolveMkdir, rejectMkdir) => {
             // @ts-ignore - ssh2 types might not include 'recursive' in attributes
@@ -128,7 +128,7 @@ export class SftpUtils {
               }
             });
           });
-        } catch (recursiveMkdirError) {
+        } catch (_recursiveMkdirError: unknown) {
           const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
           if (parentDir && parentDir !== '/' && parentDir !== '.') {
             await SftpUtils.ensureDirectoryExists(sftp, parentDir);
@@ -143,19 +143,19 @@ export class SftpUtils {
                 }
               });
             });
-          } catch (iterativeMkdirError: any) {
+          } catch (iterativeMkdirError: unknown) {
             try {
               const finalStats = await SftpUtils.getStats(sftp, normalizedPath);
               if (!finalStats.isDirectory()) {
                 throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
               }
-            } catch (finalStatError) {
+            } catch (_finalStatError: unknown) {
               throw iterativeMkdirError;
             }
           }
         }
       } else {
-        throw new Error(`检查目录失败 ${normalizedPath}: ${statError.message}`);
+        throw new Error(`检查目录失败 ${normalizedPath}: ${statErrMsg}`);
       }
     }
   }

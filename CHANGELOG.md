@@ -38,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **错误处理类型安全强化**：消除 `catch (error: any)` 反模式
+  - 修改 29 个文件，使用 `unknown` 类型配合 `getErrorMessage()` 工具函数
+  - 涉及模块：ai-ops, appearance, auth, connections, notifications, proxies, quick-commands, settings, sftp, ssh-keys, tags, transfers, websocket
+  - 提升代码健壮性，防止 `undefined` 属性访问导致的运行时错误
+
+- **SftpService God Class 清理**：移除冗余代码
+  - 删除已委托到 `SftpUploadManager` 的 `activeUploads` 属性及其初始化代码
+  - 删除无用的 `cancelUploadInternal()` 私有方法
+  - 代码行数减少约 745 行，模块职责更加清晰
+
 - **SQLite WAL 模式启用**：优化数据库并发性能
   - 修改 `packages/backend/src/database/connection.ts`
   - 数据库初始化时自动启用 WAL 模式
