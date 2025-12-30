@@ -89,6 +89,8 @@ router.get(
 
 ```typescript
 // 旧代码 - 不安全且冗余
+import { getErrorMessage, isError } from '../utils/AppError';
+
 export const getUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.params.id;
@@ -106,10 +108,13 @@ export const getUser = async (req: Request, res: Response): Promise<void> => {
     }
 
     res.status(200).json(user);
-  } catch (error: any) {
-    console.error('获取用户失败:', error);
+  } catch (error: unknown) {
+    console.error('获取用户失败:', getErrorMessage(error));
     // ⚠️ 危险：泄露技术细节！
-    res.status(500).json({ message: error.message, stack: error.stack });
+    res.status(500).json({
+      message: getErrorMessage(error),
+      stack: isError(error) ? error.stack : undefined,
+    });
   }
 };
 ```
@@ -229,28 +234,28 @@ export const getTaskById = async (
 Service 层应该抛出 AppError，而不是直接返回错误响应：
 
 ```typescript
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+
 // ❌ 错误做法
 export const findUserById = async (id: number) => {
   try {
     const user = await db.get('SELECT * FROM users WHERE id = ?', [id]);
     return { success: true, user };
-  } catch (error: any) {
-    return { success: false, message: error.message };
+  } catch (error: unknown) {
+    return { success: false, message: getErrorMessage(error) };
   }
 };
 
 // ✅ 正确做法
-import { ErrorFactory } from '../utils/AppError';
-
 export const findUserById = async (id: number) => {
   try {
     const user = await db.get('SELECT * FROM users WHERE id = ?', [id]);
     return user;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 将数据库错误转换为应用错误
     throw ErrorFactory.databaseError(
       '查询用户失败',
-      `Database error: ${error.message}` // 技术细节仅记录到日志
+      `Database error: ${getErrorMessage(error)}` // 技术细节仅记录到日志
     );
   }
 };

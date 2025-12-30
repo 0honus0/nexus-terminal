@@ -1,6 +1,7 @@
 import * as QuickCommandsRepository from './quick-commands.repository';
 import { QuickCommandWithTags } from './quick-commands.repository';
 import * as QuickCommandTagRepository from '../quick-command-tags/quick-command-tag.repository';
+import { getErrorMessage } from '../utils/AppError';
 
 // 定义排序类型
 export type QuickCommandSortBy = 'name' | 'usage_count';
@@ -34,11 +35,11 @@ export const addQuickCommand = async (
   if (commandId > 0 && tagIds && Array.isArray(tagIds)) {
     try {
       await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds);
-    } catch (tagError: any) {
+    } catch (tagError: unknown) {
       // 如果标签关联失败，可以选择记录警告或回滚（但通常不回滚主记录）
       console.warn(
         `[Service] 添加快捷指令 ${commandId} 成功，但设置标签关联失败:`,
-        tagError.message
+        getErrorMessage(tagError)
       );
       // 可以考虑是否需要通知用户部分操作失败
     }
@@ -77,8 +78,11 @@ export const updateQuickCommand = async (
   if (commandUpdated && typeof tagIds !== 'undefined') {
     try {
       await QuickCommandTagRepository.setCommandTagAssociations(id, tagIds);
-    } catch (tagError: any) {
-      console.warn(`[Service] 更新快捷指令 ${id} 成功，但更新标签关联失败:`, tagError.message);
+    } catch (tagError: unknown) {
+      console.warn(
+        `[Service] 更新快捷指令 ${id} 成功，但更新标签关联失败:`,
+        getErrorMessage(tagError)
+      );
       // 即使标签更新失败，主记录已更新，通常返回 true
     }
   }
@@ -157,10 +161,10 @@ export const assignTagToCommands = async (commandIds: number[], tagId: number): 
     await QuickCommandTagRepository.addTagToCommands(commandIds, tagId);
     console.log(`[Service] assignTagToCommands: Repo call finished for tag ${tagId}.`); // +++ 修改日志 +++
     // 可以在这里添加额外的业务逻辑，例如发送事件通知等
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       `[Service] assignTagToCommands: 批量关联标签 ${tagId} 到指令时出错:`,
-      error.message
+      getErrorMessage(error)
     );
     // 向上抛出错误，让 Controller 处理 HTTP 响应
     throw error;

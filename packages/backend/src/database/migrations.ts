@@ -1,4 +1,5 @@
 import { Database } from 'sqlite3';
+import { getErrorMessage } from '../utils/AppError';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -480,8 +481,9 @@ export const runMigrations = (db: Database): Promise<void> => {
                       }
                     });
                   });
-                } catch (migrationStepError: any) {
+                } catch (migrationStepError: unknown) {
                   // 捕获 check, exec, insert 或 commit 中的任何错误
+                  const migrationStepErrMsg = getErrorMessage(migrationStepError);
                   console.error(`[Migrations] 迁移 #${migration.id} 步骤失败，正在回滚事务...`);
                   await new Promise<void>((resolveRollback) => {
                     // No reject needed for rollback itself
@@ -492,9 +494,7 @@ export const runMigrations = (db: Database): Promise<void> => {
                           rollbackErr
                         );
                       // 拒绝整个迁移过程
-                      reject(
-                        new Error(`迁移 #${migration.id} 失败: ${migrationStepError.message}`)
-                      );
+                      reject(new Error(`迁移 #${migration.id} 失败: ${migrationStepErrMsg}`));
                       resolveRollback(); // Indicate rollback attempt finished
                     });
                   });

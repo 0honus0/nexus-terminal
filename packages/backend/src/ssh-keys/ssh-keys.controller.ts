@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as SshKeyService from './ssh-keys.service';
 import { CreateSshKeyInput, UpdateSshKeyInput } from './ssh-keys.service';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 /**
  * 获取所有 SSH 密钥的名称列表 (GET /api/v1/ssh-keys)
@@ -14,7 +14,7 @@ export const getSshKeyNames = async (
   try {
     const keys = await SshKeyService.getAllSshKeyNames();
     res.status(200).json(keys);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取 SSH 密钥列表失败:', error);
     next(error);
   }
@@ -37,11 +37,12 @@ export const createSshKey = async (
     }
     const newKey = await SshKeyService.createSshKey(input);
     res.status(201).json({ message: 'SSH 密钥创建成功。', key: newKey });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Controller: 创建 SSH 密钥失败:', error);
+    const errMsg = getErrorMessage(error);
     // 检查是否是 Service 层抛出的特定错误 (如名称重复)
-    if (error.message.includes('已存在') || error.message.includes('必须提供')) {
-      res.status(400).json({ message: error.message });
+    if (errMsg.includes('已存在') || errMsg.includes('必须提供')) {
+      res.status(400).json({ message: errMsg });
     } else {
       next(error);
     }
@@ -70,7 +71,7 @@ export const getDecryptedSshKey = async (
       // 返回解密后的数据，前端需要妥善处理
       res.status(200).json(keyDetails);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Controller: 获取解密后的 SSH 密钥 ${req.params.id} 失败:`, error);
     next(error);
   }
@@ -103,11 +104,12 @@ export const updateSshKey = async (
     } else {
       res.status(200).json({ message: 'SSH 密钥更新成功。', key: updatedKey });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 更新 SSH 密钥 ${req.params.id} 失败:`, error);
+    const errMsg = getErrorMessage(error);
     // 检查是否是 Service 层抛出的特定错误 (如名称重复或验证失败)
-    if (error.message.includes('已存在') || error.message.includes('不能为空')) {
-      res.status(400).json({ message: error.message });
+    if (errMsg.includes('已存在') || errMsg.includes('不能为空')) {
+      res.status(400).json({ message: errMsg });
     } else {
       next(error);
     }
@@ -134,7 +136,7 @@ export const deleteSshKey = async (
     } else {
       res.status(200).json({ message: 'SSH 密钥删除成功。' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Controller: 删除 SSH 密钥 ${req.params.id} 失败:`, error);
     next(error);
   }

@@ -58,6 +58,7 @@ vi.mock('nodemailer', () => ({
 vi.mock('axios', () => ({
   default: Object.assign(mockAxios, {
     post: mockAxiosPost,
+    isAxiosError: (error: any): boolean => error?.isAxiosError === true,
   }),
 }));
 

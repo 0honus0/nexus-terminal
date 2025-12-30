@@ -13,6 +13,7 @@ import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
 import { startDockerStatusPolling } from './docker.handler';
+import { getErrorMessage } from '../../utils/AppError';
 
 export async function handleSshConnect(
   ws: AuthenticatedWebSocket,
@@ -231,13 +232,14 @@ export async function handleSshConnect(
           startDockerStatusPolling(newSessionId); // Start Docker polling
         }
       );
-    } catch (shellError: any) {
-      console.error(`SSH: 会话 ${newSessionId} 打开 Shell 时发生意外错误:`, shellError);
+    } catch (shellError: unknown) {
+      const shellErrMsg = getErrorMessage(shellError);
+      console.error(`SSH: 会话 ${newSessionId} 打开 Shell 时发生意外错误: ${shellErrMsg}`);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
           JSON.stringify({
             type: 'ssh:error',
-            payload: `打开 Shell 时发生意外错误: ${shellError.message}`,
+            payload: `打开 Shell 时发生意外错误: ${shellErrMsg}`,
           })
         );
       }
@@ -255,7 +257,8 @@ export async function handleSshConnect(
       }
       cleanupClientConnection(newSessionId);
     });
-  } catch (connectError: any) {
+  } catch (connectError: unknown) {
+    const connectErrMsg = getErrorMessage(connectError);
     console.error(
       `WebSocket: 用户 ${ws.username} (IP: ${clientIp}) 连接到数据库 ID ${dbConnectionId} 失败:`,
       connectError
@@ -266,18 +269,18 @@ export async function handleSshConnect(
       connectionId: dbConnectionId,
       connectionName: connInfo?.name || 'Unknown',
       ip: clientIp,
-      reason: connectError.message,
+      reason: connectErrMsg,
     });
     notificationService.sendNotification('SSH_CONNECT_FAILURE', {
       userId: ws.userId,
       username: ws.username,
       connectionId: dbConnectionId,
       ip: clientIp,
-      reason: connectError.message,
+      reason: connectErrMsg,
     });
     if (ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'ssh:error', payload: `连接失败: ${connectError.message}` }));
-    ws.close(1011, `SSH Connection Failed: ${connectError.message}`);
+      ws.send(JSON.stringify({ type: 'ssh:error', payload: `连接失败: ${connectErrMsg}` }));
+    ws.close(1011, `SSH Connection Failed: ${connectErrMsg}`);
   }
 }
 

@@ -12,6 +12,7 @@ import {
 // import { AuditLogService } from '../services/audit.service'; // Keep for now if other parts use it - Removed as eventService is used
 import { AppEventType, default as eventService } from '../services/event.service'; // Import event service
 import i18next from '../i18n'; // Import the i18next instance
+import { getErrorMessage } from '../utils/AppError';
 
 // Remove sender imports as they are no longer called directly for testing
 // import telegramSenderService from '../services/senders/telegram.sender.service';
@@ -35,11 +36,11 @@ export class NotificationController {
     try {
       const settings = await this.repository.getAll(); // Use repository
       res.status(200).json(settings);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorFetchSettings'),
-        error: error.message,
+        error: getErrorMessage(error),
       });
     }
   };
@@ -69,11 +70,11 @@ export class NotificationController {
         });
       }
       res.status(201).json(newSetting);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorCreateSetting'),
-        error: error.message,
+        error: getErrorMessage(error),
       });
     }
   };
@@ -111,11 +112,11 @@ export class NotificationController {
           .status(404)
           .json({ message: i18next.t('notificationController.errorNotFound', { id }) });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorUpdateSetting'),
-        error: error.message,
+        error: getErrorMessage(error),
       });
     }
   };
@@ -158,11 +159,11 @@ export class NotificationController {
           .status(404)
           .json({ message: i18next.t('notificationController.errorDeleteNotFound', { id }) });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorDeleteSetting'),
-        error: error.message,
+        error: getErrorMessage(error),
       });
     }
   };
@@ -209,12 +210,12 @@ export class NotificationController {
       // Respond immediately confirming the event was triggered
       // Use i18next.t for i18n
       res.status(200).json({ message: i18next.t('notificationController.testEventTriggered') });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[NotificationController] Error triggering test for setting ${id}:`, error);
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorTriggerTest'),
-        error: error.message,
+        error: getErrorMessage(error),
       });
     }
   };
@@ -258,7 +259,7 @@ export class NotificationController {
       // Respond immediately confirming the event was triggered
       // Use i18next.t for i18n
       res.status(200).json({ message: i18next.t('notificationController.testEventTriggered') });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         `[NotificationController] Error triggering test for unsaved ${channel_type}:`,
         error
@@ -266,7 +267,7 @@ export class NotificationController {
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorTriggerTest'),
-        error: error.message,
+        error: getErrorMessage(error),
       });
     }
   };

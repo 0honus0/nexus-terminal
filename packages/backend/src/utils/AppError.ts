@@ -41,7 +41,7 @@ export class AppError extends Error {
 
 /**
  * 从 unknown 类型的错误中安全提取错误消息
- * 用于替代 catch (error: any) 模式
+ * 用于替代 catch (error: unknown) 模式
  * @param error - 捕获的错误（类型为 unknown）
  * @returns 错误消息字符串
  */
@@ -53,6 +53,36 @@ export function getErrorMessage(error: unknown): string {
     return error;
   }
   return '未知错误';
+}
+
+/**
+ * 类型守卫：检查 unknown 类型是否为带有 message 属性的 Error
+ * @param error - 捕获的错误
+ * @returns 是否为 Error 实例
+ */
+export function isError(error: unknown): error is Error {
+  return error instanceof Error;
+}
+
+/**
+ * 类型守卫：检查 unknown 类型是否为带有 code 属性的 Node.js 系统错误
+ * @param error - 捕获的错误
+ * @returns 是否为带有 code 的 NodeJS.ErrnoException
+ */
+export function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
+/**
+ * 类型守卫：检查 unknown 类型是否为带有 response 属性的 Axios 错误形态
+ * 注意：这不等同于 axios.isAxiosError()，仅用于简单的结构检查
+ * @param error - 捕获的错误
+ * @returns 是否具有 response 属性
+ */
+export function hasResponse(
+  error: unknown
+): error is Error & { response?: { data?: unknown; status?: number } } {
+  return error instanceof Error && 'response' in error;
 }
 
 /**

@@ -4,6 +4,7 @@ import { AuditLogService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service';
 import { ipBlacklistService } from '../auth/ip-blacklist.service';
 import { exportConnectionsAsEncryptedZip } from '../services/import-export.service';
+import { getErrorMessage } from '../utils/AppError';
 import {
   UpdateSidebarConfigDto,
   UpdateCaptchaSettingsDto,
@@ -28,7 +29,7 @@ export const settingsController = {
     try {
       const settings = await getAppearanceSettings();
       res.json(settings);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取外观设置时出错:', error);
       next(error);
     }
@@ -52,7 +53,7 @@ export const settingsController = {
         // 如果仓库层返回 false，可能表示没有实际更改或更新失败
         res.status(200).json({ message: '外观设置未发生更改或更新失败' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 更新外观设置时出错:', error);
       next(error);
     }
@@ -64,7 +65,7 @@ export const settingsController = {
     try {
       const settings = await settingsService.getAllSettings();
       res.json(settings);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取所有设置时出错:', error);
       next(error);
     }
@@ -133,7 +134,7 @@ export const settingsController = {
         }
       }
       res.status(200).json({ message: '设置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 更新设置时出错:', error);
       next(error);
     }
@@ -146,7 +147,7 @@ export const settingsController = {
     try {
       const sequence = await settingsService.getFocusSwitcherSequence();
       res.json(sequence);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取焦点切换顺序时出错:', error);
       next(error);
     }
@@ -190,10 +191,11 @@ export const settingsController = {
       await settingsService.setFocusSwitcherSequence(fullConfig);
 
       res.status(200).json({ message: '焦点切换顺序已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置焦点切换顺序时出错:', error);
-      if (error.message === 'Invalid sequence format provided.') {
-        res.status(400).json({ message: '设置焦点切换顺序失败: 无效的格式', error: error.message });
+      const errMsg = getErrorMessage(error);
+      if (errMsg === 'Invalid sequence format provided.') {
+        res.status(400).json({ message: '设置焦点切换顺序失败: 无效的格式', error: errMsg });
       } else {
         next(error);
       }
@@ -207,7 +209,7 @@ export const settingsController = {
     try {
       const isVisible = await settingsService.getNavBarVisibility();
       res.json({ visible: isVisible });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取导航栏可见性时出错:', error);
       next(error);
     }
@@ -230,7 +232,7 @@ export const settingsController = {
       await settingsService.setNavBarVisibility(visible);
 
       res.status(200).json({ message: '导航栏可见性已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置导航栏可见性时出错:', error);
       next(error);
     }
@@ -247,14 +249,16 @@ export const settingsController = {
           const layout = JSON.parse(layoutJson);
 
           res.json(layout);
-        } catch (parseError) {
-          console.error('[SettingsController] 从数据库解析布局树 JSON 失败:', parseError);
-          next(parseError);
+        } catch (parseError: unknown) {
+          console.error(
+            `[SettingsController] 从数据库解析布局树 JSON 失败: ${getErrorMessage(parseError)}`
+          );
+          next(parseError instanceof Error ? parseError : new Error(getErrorMessage(parseError)));
         }
       } else {
         res.json(null);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取布局树时出错:', error);
       next(error);
     }
@@ -280,10 +284,11 @@ export const settingsController = {
       // auditLogService.logAction('LAYOUT_TREE_UPDATED');
 
       res.status(200).json({ message: '布局树已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置布局树时出错:', error);
-      if (error.message === 'Invalid layout tree JSON format.') {
-        res.status(400).json({ message: '设置布局树失败: 无效的 JSON 格式', error: error.message });
+      const errMsg = getErrorMessage(error);
+      if (errMsg === 'Invalid layout tree JSON format.') {
+        res.status(400).json({ message: '设置布局树失败: 无效的 JSON 格式', error: errMsg });
       } else {
         next(error);
       }
@@ -299,7 +304,7 @@ export const settingsController = {
       const offset = parseInt((req.query.offset as string) || '0', 10);
       const result = await ipBlacklistService.getBlacklist(limit, offset);
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取 IP 黑名单时出错:', error);
       next(error);
     }
@@ -317,7 +322,7 @@ export const settingsController = {
       }
       await ipBlacklistService.removeFromBlacklist(ipToDelete);
       res.status(200).json({ message: `IP 地址 ${ipToDelete} 已从黑名单中移除` });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[SettingsController] 从 IP 黑名单删除 ${req.params.ip} 时出错:`, error);
       next(error);
     }
@@ -330,7 +335,7 @@ export const settingsController = {
     try {
       const isEnabled = await settingsService.getAutoCopyOnSelect();
       res.json({ enabled: isEnabled });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取终端选中自动复制设置时出错:', error);
       next(error);
     }
@@ -353,7 +358,7 @@ export const settingsController = {
       await settingsService.setAutoCopyOnSelect(enabled);
 
       res.status(200).json({ message: '终端选中自动复制设置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置终端选中自动复制时出错:', error);
       next(error);
     }
@@ -367,7 +372,7 @@ export const settingsController = {
       const config = await settingsService.getSidebarConfig();
       console.log('[SettingsController] 向客户端发送侧边栏配置:', config);
       res.json(config);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取侧栏配置时出错:', error);
       next(error);
     }
@@ -397,14 +402,12 @@ export const settingsController = {
       await settingsService.setSidebarConfig(configDto);
 
       res.status(200).json({ message: '侧栏配置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置侧栏配置时出错:', error);
+      const errMsg = getErrorMessage(error);
       // Handle specific validation errors from the service
-      if (
-        error.message.includes('无效的面板名称') ||
-        error.message.includes('无效的侧栏配置格式')
-      ) {
-        res.status(400).json({ message: `设置侧栏配置失败: ${error.message}` });
+      if (errMsg.includes('无效的面板名称') || errMsg.includes('无效的侧栏配置格式')) {
+        res.status(400).json({ message: `设置侧栏配置失败: ${errMsg}` });
       } else {
         next(error);
       }
@@ -427,7 +430,7 @@ export const settingsController = {
 
       console.log('[SettingsController] 向客户端发送公共 CAPTCHA 配置:', publicConfig);
       res.json(publicConfig);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取 CAPTCHA 配置时出错:', error);
       next(error);
     }
@@ -454,11 +457,12 @@ export const settingsController = {
       await settingsService.setCaptchaConfig(configDto);
 
       res.status(200).json({ message: 'CAPTCHA 配置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置 CAPTCHA 配置时出错:', error);
+      const errMsg = getErrorMessage(error);
       // Handle specific validation errors from the service
-      if (error.message.includes('无效的') || error.message.includes('必须是')) {
-        res.status(400).json({ message: `设置 CAPTCHA 配置失败: ${error.message}` });
+      if (errMsg.includes('无效的') || errMsg.includes('必须是')) {
+        res.status(400).json({ message: `设置 CAPTCHA 配置失败: ${errMsg}` });
       } else {
         next(error);
       }
@@ -470,7 +474,7 @@ export const settingsController = {
     try {
       const isEnabled = await settingsService.getShowConnectionTags();
       res.json({ enabled: isEnabled });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取"显示连接标签"设置时出错:', error);
       next(error);
     }
@@ -495,7 +499,7 @@ export const settingsController = {
       });
 
       res.status(200).json({ message: '"显示连接标签"设置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置"显示连接标签"时出错:', error);
       next(error);
     }
@@ -506,7 +510,7 @@ export const settingsController = {
     try {
       const isEnabled = await settingsService.getShowQuickCommandTags();
       res.json({ enabled: isEnabled });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取"显示快捷指令标签"设置时出错:', error);
       next(error);
     }
@@ -531,7 +535,7 @@ export const settingsController = {
       });
 
       res.status(200).json({ message: '"显示快捷指令标签"设置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置"显示快捷指令标签"时出错:', error);
       next(error);
     }
@@ -546,7 +550,7 @@ export const settingsController = {
     try {
       const isEnabled = await settingsService.getShowStatusMonitorIpAddress();
       res.json({ enabled: isEnabled });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取"显示状态监视器IP地址"设置时出错:', error);
       next(error);
     }
@@ -577,7 +581,7 @@ export const settingsController = {
       });
 
       res.status(200).json({ message: '"显示状态监视器IP地址"设置已成功更新' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置"显示状态监视器IP地址"时出错:', error);
       next(error);
     }
@@ -595,7 +599,7 @@ export const settingsController = {
       res.send(encryptedZipBuffer);
 
       // auditLogService.logAction('CONNECTIONS_EXPORTED', { userId: (req.user as any)?.id || 'unknown' }); // 移除审计日志
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 导出所有连接时出错:', error);
       next(error);
     }
@@ -609,7 +613,7 @@ export const settingsController = {
     try {
       const level = await settingsService.getLogLevel();
       res.json({ level });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取日志等级时出错:', error);
       next(error);
     }
@@ -638,7 +642,7 @@ export const settingsController = {
       auditLogService.logAction('SETTINGS_UPDATED', { updatedKeys: ['logLevel'], newValue: level });
 
       res.status(200).json({ message: '日志等级已成功更新', level });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置日志等级时出错:', error);
       next(error);
     }
@@ -652,7 +656,7 @@ export const settingsController = {
     try {
       const maxEntries = await settingsService.getAuditLogMaxEntries();
       res.json({ maxEntries });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 获取审计日志最大条数时出错:', error);
       next(error);
     }
@@ -678,7 +682,7 @@ export const settingsController = {
       });
 
       res.status(200).json({ message: '审计日志最大条数已成功更新', maxEntries });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[SettingsController] 设置审计日志最大条数时出错:', error);
       next(error);
     }

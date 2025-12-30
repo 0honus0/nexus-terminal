@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket, ClientType } from './types';
 import { cleanupClientConnection } from './utils';
+import { getErrorMessage } from '../utils/AppError';
 
 // 心跳配置接口
 interface HeartbeatConfig {
@@ -101,8 +102,11 @@ export function initializeHeartbeat(
         try {
           extWs.ping(() => {});
           lastPingTime.set(extWs, now);
-        } catch (error: any) {
-          console.warn(`[WebSocket 心跳] ping 发送失败 (${extWs.username}):`, error.message);
+        } catch (error: unknown) {
+          console.warn(
+            `[WebSocket 心跳] ping 发送失败 (${extWs.username}):`,
+            getErrorMessage(error)
+          );
           lastPingTime.delete(extWs);
           return;
         }

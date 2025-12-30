@@ -5,6 +5,7 @@ import fs from 'fs'; // Keep fs for sync operations if needed, add promises for 
 import fsp from 'fs/promises'; // Use fs.promises for async file operations
 import { UpdateAppearanceDto } from '../types/appearance.types';
 import * as appearanceService from './appearance.service';
+import { getErrorMessage } from '../utils/AppError';
 
 // --- 背景图片上传配置 (保持不变) ---
 const backgroundStorage = multer.diskStorage({
@@ -45,7 +46,7 @@ export const getAppearanceSettingsController = async (
   try {
     const settings = await appearanceService.getSettings();
     res.status(200).json(settings);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 获取外观设置失败:', error);
     next(error);
   }
@@ -68,7 +69,7 @@ export const updateAppearanceSettingsController = async (
     } else {
       throw new Error('更新外观设置似乎失败了');
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 更新外观设置失败:', error);
     next(error);
   }
@@ -95,7 +96,7 @@ export const uploadPageBackgroundController = async (
 
     // 返回新的 API 路径给前端
     res.status(200).json({ message: '页面背景上传成功', filePath: apiPath });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('删除上传失败的背景文件时出错:', err);
@@ -127,7 +128,7 @@ export const uploadTerminalBackgroundController = async (
 
     // 返回新的 API 路径给前端
     res.status(200).json({ message: '终端背景上传成功', filePath: apiPath });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlink(req.file.path, (err) => {
         if (err) console.error('删除上传失败的背景文件时出错:', err);
@@ -176,8 +177,9 @@ export const getBackgroundFileController = async (
         }
       }
     });
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
+  } catch (error: unknown) {
+    const err = error as any;
+    if (err.code === 'ENOENT') {
       console.warn(`[AppearanceController] 请求的背景文件未找到: ${filename}`);
       res.status(404).json({ message: '文件未找到' });
     } else {
@@ -202,7 +204,7 @@ export const removePageBackgroundController = async (
   try {
     await appearanceService.removePageBackground();
     res.status(200).json({ message: '页面背景已移除' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 移除页面背景失败:', error);
     next(error);
   }
@@ -219,7 +221,7 @@ export const removeTerminalBackgroundController = async (
   try {
     await appearanceService.removeTerminalBackground();
     res.status(200).json({ message: '终端背景已移除' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 移除终端背景失败:', error);
     next(error);
   }
@@ -237,7 +239,7 @@ export const listLocalHtmlPresetsController = async (
     // 现在获取所有主题，包括预设和自定义，它们将带有 type 属性
     const allThemes = await appearanceService.listAllHtmlThemes();
     res.status(200).json(allThemes); // 直接返回带有 type 的列表
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 获取 HTML 主题列表失败:', error);
     next(error);
   }
@@ -258,8 +260,8 @@ export const getLocalHtmlPresetContentController = async (
     try {
       content = await appearanceService.getUserCustomHtmlThemeContent(themeName);
       found = true;
-    } catch (customError: any) {
-      if (!customError.message.includes('未找到')) {
+    } catch (customError: unknown) {
+      if (!getErrorMessage(customError).includes('未找到')) {
         // 如果不是 "未找到" 错误，则直接抛出
         throw customError;
       }
@@ -271,8 +273,8 @@ export const getLocalHtmlPresetContentController = async (
       try {
         content = await appearanceService.getPresetHtmlThemeContent(themeName);
         found = true;
-      } catch (presetError: any) {
-        if (!presetError.message.includes('未找到')) {
+      } catch (presetError: unknown) {
+        if (!getErrorMessage(presetError).includes('未找到')) {
           throw presetError;
         }
         // 如果预设也未找到，此时才真正是 404
@@ -285,7 +287,7 @@ export const getLocalHtmlPresetContentController = async (
     } else {
       res.status(404).json({ message: `主题 '${themeName}' 未找到` });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[AppearanceController] 获取主题 '${req.params.themeName}' 内容失败:`, error);
     next(error);
   }
@@ -306,7 +308,7 @@ export const createLocalHtmlPresetController = async (
     // "本地创建" 现在总是创建用户自定义主题
     await appearanceService.createUserCustomHtmlTheme(name, content);
     res.status(201).json({ message: '用户自定义 HTML 主题创建成功' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 创建用户自定义 HTML 主题失败:', error);
     next(error);
   }
@@ -328,9 +330,9 @@ export const updateLocalHtmlPresetController = async (
     // "本地更新" 现在总是更新用户自定义主题
     await appearanceService.updateUserCustomHtmlTheme(themeName, content);
     res.status(200).json({ message: '用户自定义 HTML 主题更新成功' });
-  } catch (error: any) {
-    if (error.message.includes('未找到')) {
-      res.status(404).json({ message: error.message });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('未找到')) {
+      res.status(404).json({ message: getErrorMessage(error) });
     } else {
       console.error('[AppearanceController] 更新用户自定义 HTML 主题失败:', error);
       next(error);
@@ -349,9 +351,9 @@ export const deleteLocalHtmlPresetController = async (
     // "本地删除" 现在总是删除用户自定义主题
     await appearanceService.deleteUserCustomHtmlTheme(themeName);
     res.status(200).json({ message: '用户自定义 HTML 主题删除成功' });
-  } catch (error: any) {
-    if (error.message.includes('未找到')) {
-      res.status(404).json({ message: error.message });
+  } catch (error: unknown) {
+    if (getErrorMessage(error).includes('未找到')) {
+      res.status(404).json({ message: getErrorMessage(error) });
     } else {
       console.error('[AppearanceController] 删除用户自定义 HTML 主题失败:', error);
       next(error);
@@ -368,7 +370,7 @@ export const getRemoteHtmlPresetsRepositoryUrlController = async (
   try {
     const url = await appearanceService.getRemoteHtmlPresetsRepositoryUrl();
     res.status(200).json({ url });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 获取远程 HTML 主题仓库链接失败:', error);
     next(error);
   }
@@ -389,7 +391,7 @@ export const updateRemoteHtmlPresetsRepositoryUrlController = async (
     }
     await appearanceService.updateRemoteHtmlPresetsRepositoryUrl(url);
     res.status(200).json({ message: '远程 HTML 主题仓库链接更新成功' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 更新远程 HTML 主题仓库链接失败:', error);
     next(error);
   }
@@ -405,7 +407,7 @@ export const listRemoteHtmlPresetsController = async (
     const repoUrl = req.query.repoUrl as string | undefined;
     const presets = await appearanceService.listRemoteHtmlPresets(repoUrl);
     res.status(200).json(presets);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 获取远程 HTML 主题列表失败:', error);
     next(error);
   }
@@ -426,7 +428,7 @@ export const getRemoteHtmlPresetContentController = async (
     const content = await appearanceService.getRemoteHtmlPresetContent(fileUrl);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.status(200).send(content);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AppearanceController] 获取远程 HTML 主题内容失败:', error);
     next(error);
   }

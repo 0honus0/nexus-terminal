@@ -67,7 +67,7 @@ export const processQuery = async (req: Request, res: Response): Promise<void> =
     const response = await AIService.processQuery(userId, request);
 
     res.status(200).json(response);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 处理查询失败:', error);
     res.status(500).json({ success: false, message: '处理查询失败' });
   }
@@ -99,7 +99,7 @@ export const getSessions = async (req: Request, res: Response): Promise<void> =>
       limit: safeLimit,
       offset: safeOffset,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 获取会话列表失败:', error);
     res.status(500).json({ success: false, message: '获取会话列表失败' });
   }
@@ -132,7 +132,7 @@ export const getSessionDetails = async (req: Request, res: Response): Promise<vo
     }
 
     res.status(200).json({ success: true, session });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 获取会话详情失败:', error);
     res.status(500).json({ success: false, message: '获取会话详情失败' });
   }
@@ -164,7 +164,7 @@ export const deleteSession = async (req: Request, res: Response): Promise<void> 
     } else {
       res.status(404).json({ success: false, message: '会话不存在或无权删除' });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 删除会话失败:', error);
     res.status(500).json({ success: false, message: '删除会话失败' });
   }
@@ -185,7 +185,7 @@ export const getHealthSummary = async (req: Request, res: Response): Promise<voi
     // 传入 userId 以过滤用户相关数据
     const summary = await AIService.getSystemHealthSummary(userId);
     res.status(200).json({ success: true, summary });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 获取系统健康摘要失败:', error);
     res.status(500).json({ success: false, message: '获取系统健康摘要失败' });
   }
@@ -206,7 +206,7 @@ export const getCommandPatterns = async (req: Request, res: Response): Promise<v
     // 传入 userId 以过滤用户相关数据
     const analysis = await AIService.analyzeCommandPatterns(userId);
     res.status(200).json({ success: true, analysis });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 获取命令模式分析失败:', error);
     res.status(500).json({ success: false, message: '获取命令模式分析失败' });
   }
@@ -234,7 +234,7 @@ export const cleanupSessions = async (req: Request, res: Response): Promise<void
       deletedCount,
       keepCount: safeKeepCount,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[AIController] 清理会话失败:', error);
     res.status(500).json({ success: false, message: '清理会话失败' });
   }

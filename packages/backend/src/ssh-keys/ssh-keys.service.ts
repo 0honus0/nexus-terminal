@@ -1,6 +1,7 @@
 import * as SshKeyRepository from './ssh-keys.repository';
 import { encrypt, decrypt } from '../utils/crypto';
 import { SshKeyDbRow, CreateSshKeyData, UpdateSshKeyData } from './ssh-keys.repository';
+import { getErrorMessage } from '../utils/AppError';
 
 // 定义 Service 层返回给 Controller 的基本密钥信息 (不含加密内容)
 export interface SshKeyBasicInfo {
@@ -55,9 +56,10 @@ export const createSshKey = async (input: CreateSshKeyInput): Promise<SshKeyBasi
   try {
     const newId = await SshKeyRepository.createSshKey(dataToSave);
     return { id: newId, name: input.name };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
     // 处理可能的 UNIQUE constraint 错误
-    if (error.message && error.message.includes('UNIQUE constraint failed: ssh_keys.name')) {
+    if (errMsg && errMsg.includes('UNIQUE constraint failed: ssh_keys.name')) {
       throw new Error(`SSH 密钥名称 "${input.name}" 已存在。`);
     }
     throw error; // 重新抛出其他错误
@@ -104,7 +106,7 @@ export const getDecryptedSshKeyById = async (
       privateKey,
       passphrase,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Service: 解密 SSH 密钥 ${id} 失败:`, error);
     // 根据策略决定是抛出错误还是返回 null/部分信息
     throw new Error(`解密 SSH 密钥 ${id} 失败。`);
@@ -160,9 +162,10 @@ export const updateSshKey = async (
         // 理论上不应发生，因为我们已经检查过存在性
         throw new Error('更新 SSH 密钥记录失败。');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errMsg = getErrorMessage(error);
       // 处理可能的 UNIQUE constraint 错误
-      if (error.message && error.message.includes('UNIQUE constraint failed: ssh_keys.name')) {
+      if (errMsg && errMsg.includes('UNIQUE constraint failed: ssh_keys.name')) {
         throw new Error(`SSH 密钥名称 "${input.name}" 已存在。`);
       }
       throw error; // 重新抛出其他错误
@@ -202,7 +205,7 @@ export const getAllDecryptedSshKeys = async (): Promise<DecryptedSshKeyDetails[]
         privateKey,
         passphrase,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Service: 解密 SSH 密钥 ${dbRow.id} 失败:`, error);
       // 继续处理其他密钥，不因单个密钥解密失败而中断整个过程
       // 可以选择记录错误或通知管理员，但这里我们只记录日志

@@ -248,10 +248,10 @@ describe('GuacamoleService', () => {
       });
 
       it('超时应正确处理', async () => {
-        const timeoutError = {
+        // 创建一个带有 code 和 message 属性的 Error 实例，以便 getErrorMessage 能正确提取消息
+        const timeoutError = Object.assign(new Error('timeout of 10000ms exceeded'), {
           code: 'ECONNABORTED',
-          message: 'timeout of 10000ms exceeded',
-        };
+        });
         mockAxios.post.mockRejectedValue(timeoutError);
         mockAxios.isAxiosError.mockReturnValue(false);
 

@@ -5,6 +5,7 @@ import { Client, ConnectConfig, SFTPWrapper } from 'ssh2';
 import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transfers.types';
 import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
+import { getErrorMessage, isError } from '../utils/AppError';
 
 export class TransfersService {
   private transferTasks: Map<string, TransferTask> = new Map();
@@ -66,7 +67,7 @@ export class TransfersService {
         this.updateOverallTaskStatus(
           taskId,
           'failed',
-          `Background processing error: ${error.message}`
+          `Background processing error: ${getErrorMessage(error)}`
         );
       }
     });
@@ -305,8 +306,8 @@ export class TransfersService {
             task.payload.transferMethod,
             signal // +++ Pass signal +++
           );
-        } catch (subTaskError: any) {
-          if (subTaskError.name === 'AbortError') {
+        } catch (subTaskError: unknown) {
+          if (isError(subTaskError) && subTaskError.name === 'AbortError') {
             this.updateSubTaskStatus(
               taskId,
               subTask.subTaskId,
@@ -318,10 +319,11 @@ export class TransfersService {
               `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} (item: ${currentSourceItem.name}) was cancelled.`
             );
           } else {
+            const subTaskErrMsg = getErrorMessage(subTaskError);
             console.error(
               `[TransfersService] Task ${taskId}: Error in sub-task ${subTask.subTaskId} (item: ${currentSourceItem.name}) wrapper:`,
-              subTaskError.message,
-              subTaskError.stack
+              subTaskErrMsg,
+              isError(subTaskError) ? subTaskError.stack : undefined
             );
             const subTaskInstance = task.subTasks.find((st) => st.subTaskId === subTask.subTaskId);
             if (
@@ -335,7 +337,7 @@ export class TransfersService {
                 subTask.subTaskId,
                 'failed',
                 undefined,
-                subTaskError.message || `Unknown error in sub-task ${subTask.subTaskId} wrapper.`
+                subTaskErrMsg || `Unknown error in sub-task ${subTask.subTaskId} wrapper.`
               );
             }
           }
@@ -450,16 +452,19 @@ export class TransfersService {
         }
         launchNextSubTaskIfPossible();
       });
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (isError(error) && error.name === 'AbortError') {
         console.info(`[TransfersService] Task ${taskId} processing was aborted.`);
         this.updateOverallTaskStatus(taskId, 'cancelled', 'Transfer cancelled by user.');
       } else {
-        console.error(`[TransfersService] Major error processing task ${taskId}:`, error);
+        console.error(
+          `[TransfersService] Major error processing task ${taskId}: ${getErrorMessage(error)}`,
+          isError(error) ? error.stack : undefined
+        );
         this.updateOverallTaskStatus(
           taskId,
           'failed',
-          error.message || 'Failed to process task due to a major error.'
+          getErrorMessage(error) || 'Failed to process task due to a major error.'
         );
       }
     } finally {
@@ -470,8 +475,10 @@ export class TransfersService {
           console.info(
             `[TransfersService] SSH connection to source server explicitly closed for task ${taskId}.`
           );
-        } catch (e) {
-          console.warn(`[TransfersService] Error ending sourceSshClient for task ${taskId}:`, e);
+        } catch (e: unknown) {
+          console.warn(
+            `[TransfersService] Error ending sourceSshClient for task ${taskId}: ${getErrorMessage(e)}`
+          );
         }
       }
       this.finalizeOverallTaskStatus(taskId); // Ensure final status is set
@@ -565,7 +572,7 @@ export class TransfersService {
             .stderr.on('data', (data: Buffer) => {});
         });
       });
-    } catch (error) {
+    } catch (_error: unknown) {
       foundCommandPath = null; // Ensure it's null on error
     } finally {
       targetClient.end();
@@ -968,7 +975,8 @@ export class TransfersService {
           8,
           `Target directory ensured. Preparing transfer command.`
         );
-      } catch (mkdirError: any) {
+      } catch (mkdirError: unknown) {
+        const mkdirErrMsg = getErrorMessage(mkdirError);
         if (
           targetClientForMkdir &&
           (targetClientForMkdir as any)._sock &&
@@ -976,21 +984,21 @@ export class TransfersService {
         ) {
           try {
             targetClientForMkdir.end();
-          } catch (e) {
+          } catch (_e: unknown) {
             /* ignore */
           }
         }
         console.error(
           `[TransfersService] Sub-task ${subTaskId}: Failed to ensure target directory ${remoteTargetPathOnTarget} on ${targetConnection.host}:`,
-          mkdirError.message
+          mkdirErrMsg
         );
-        if (mkdirError.name === 'AbortError') {
+        if (isError(mkdirError) && mkdirError.name === 'AbortError') {
           this.updateSubTaskStatus(
             taskId,
             subTaskId,
             'cancelled',
             undefined,
-            `Directory creation cancelled: ${mkdirError.message}`
+            `Directory creation cancelled: ${mkdirErrMsg}`
           );
           throw mkdirError;
         }
@@ -999,10 +1007,10 @@ export class TransfersService {
           subTaskId,
           'failed',
           undefined,
-          `Failed to create target directory: ${mkdirError.message}`
+          `Failed to create target directory: ${mkdirErrMsg}`
         );
         throw new Error(
-          `Failed to create target directory ${remoteTargetPathOnTarget}: ${mkdirError.message}`
+          `Failed to create target directory ${remoteTargetPathOnTarget}: ${mkdirErrMsg}`
         ); // This will be caught by the outer try-catch
       }
       // +++ 结束自动创建目标目录 +++
@@ -1166,8 +1174,8 @@ export class TransfersService {
           });
         });
       });
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (isError(error) && error.name === 'AbortError') {
         console.info(
           `[TransfersService] executeRemoteTransferOnSource for sub-task ${subTaskId} (item: ${sourceItem.name}) was aborted.`
         );
@@ -1176,19 +1184,25 @@ export class TransfersService {
           .get(taskId)
           ?.subTasks.find((st) => st.subTaskId === subTaskId);
         if (subTaskInstance && subTaskInstance.status !== 'cancelled') {
-          this.updateSubTaskStatus(taskId, subTaskId, 'cancelled', undefined, error.message);
+          this.updateSubTaskStatus(
+            taskId,
+            subTaskId,
+            'cancelled',
+            undefined,
+            getErrorMessage(error)
+          );
         }
       } else {
         console.error(
-          `[TransfersService] executeRemoteTransferOnSource error for sub-task ${subTaskId} (item: ${sourceItem.name}):`,
-          error
+          `[TransfersService] executeRemoteTransferOnSource error for sub-task ${subTaskId} (item: ${sourceItem.name}): ${getErrorMessage(error)}`,
+          isError(error) ? error.stack : undefined
         );
         this.updateSubTaskStatus(
           taskId,
           subTaskId,
           'failed',
           undefined,
-          error.message || `Remote transfer execution failed for ${sourceItem.name}.`
+          getErrorMessage(error) || `Remote transfer execution failed for ${sourceItem.name}.`
         );
       }
       throw error; // Re-throw to be caught by processSingleSubTaskWrapper
@@ -1196,10 +1210,9 @@ export class TransfersService {
       if (tempTargetKeyPathOnSource) {
         try {
           await this.deleteFileOnSourceViaSftp(sourceSshClient, tempTargetKeyPathOnSource, signal);
-        } catch (cleanupError) {
+        } catch (cleanupError: unknown) {
           console.warn(
-            `[TransfersService] Failed to cleanup temp key ${tempTargetKeyPathOnSource} on source for sub-task ${subTaskId}:`,
-            cleanupError
+            `[TransfersService] Failed to cleanup temp key ${tempTargetKeyPathOnSource} on source for sub-task ${subTaskId}: ${getErrorMessage(cleanupError)}`
           );
         }
       }

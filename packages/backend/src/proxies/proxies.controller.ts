@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as ProxyService from './proxy.service';
 import { AuditLogService } from '../audit/audit.service';
-import { ErrorFactory } from '../utils/AppError';
+import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 
 const auditLogService = new AuditLogService();
 
@@ -18,7 +18,7 @@ export const getAllProxies = async (req: Request, res: Response, next: NextFunct
   try {
     const proxies = await ProxyService.getAllProxies();
     res.status(200).json(proxies.map(sanitizeProxy));
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取代理列表失败:', error);
     next(error);
   }
@@ -39,7 +39,7 @@ export const getProxyById = async (req: Request, res: Response, next: NextFuncti
     } else {
       res.status(404).json({ message: `未找到 ID 为 ${id} 的代理` });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Controller: 获取代理 ${id} 失败:`, error);
     next(error);
   }
@@ -67,18 +67,14 @@ export const createProxy = async (req: Request, res: Response, next: NextFunctio
       message: '代理创建成功',
       proxy: sanitizeProxy(newProxy),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Controller: 创建代理失败:', error);
-    if (
-      error.message.includes('UNIQUE constraint failed') ||
-      error.message.includes('同名字段冲突')
-    ) {
-      return res
-        .status(409)
-        .json({ message: '创建代理失败：可能存在同名字段冲突', error: error.message });
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('UNIQUE constraint failed') || errMsg.includes('同名字段冲突')) {
+      return res.status(409).json({ message: '创建代理失败：可能存在同名字段冲突', error: errMsg });
     }
-    if (error.message.includes('缺少') || error.message.includes('需要提供')) {
-      return res.status(400).json({ message: error.message });
+    if (errMsg.includes('缺少') || errMsg.includes('需要提供')) {
+      return res.status(400).json({ message: errMsg });
     }
     next(error);
   }
@@ -120,18 +116,14 @@ export const updateProxy = async (req: Request, res: Response, next: NextFunctio
     } else {
       res.status(404).json({ message: `未找到 ID 为 ${id} 的代理进行更新` });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 更新代理 ${id} 失败:`, error);
-    if (
-      error.message.includes('UNIQUE constraint failed') ||
-      error.message.includes('同名字段冲突')
-    ) {
-      return res
-        .status(409)
-        .json({ message: '更新代理失败：可能存在同名字段冲突', error: error.message });
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('UNIQUE constraint failed') || errMsg.includes('同名字段冲突')) {
+      return res.status(409).json({ message: '更新代理失败：可能存在同名字段冲突', error: errMsg });
     }
-    if (error.message.includes('需要提供')) {
-      return res.status(400).json({ message: error.message });
+    if (errMsg.includes('需要提供')) {
+      return res.status(400).json({ message: errMsg });
     }
     next(error);
   }
@@ -155,7 +147,7 @@ export const deleteProxy = async (req: Request, res: Response, next: NextFunctio
     } else {
       res.status(404).json({ message: `未找到 ID 为 ${id} 的代理进行删除` });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`Controller: 删除代理 ${id} 失败:`, error);
     next(error);
   }

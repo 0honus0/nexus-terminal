@@ -2,6 +2,7 @@ import axios, { Method } from 'axios';
 import { INotificationSender } from '../notification.dispatcher.service';
 import { ProcessedNotification } from '../notification.processor.service';
 import { WebhookConfig } from '../../types/notification.types';
+import { getErrorMessage } from '../../utils/AppError';
 
 class WebhookSenderService implements INotificationSender {
   async send(notification: ProcessedNotification): Promise<void> {
@@ -16,8 +17,8 @@ class WebhookSenderService implements INotificationSender {
 
     try {
       new URL(url);
-    } catch (e) {
-      console.error(`[WebhookSender] Invalid webhook URL format: ${url}`);
+    } catch (e: unknown) {
+      console.error(`[WebhookSender] Invalid webhook URL format: ${url} (${getErrorMessage(e)})`);
       throw new Error(`Invalid webhook URL format: ${url}`);
     }
 
@@ -46,9 +47,9 @@ class WebhookSenderService implements INotificationSender {
         if (finalHeaders['Content-Type']?.toLowerCase().includes('application/json')) {
           try {
             requestData = JSON.parse(requestBody);
-          } catch (parseError) {
+          } catch (parseError: unknown) {
             console.warn(
-              `[WebhookSender] Failed to parse request body as JSON for Content-Type application/json. Sending as raw string. Body: ${requestBody.substring(
+              `[WebhookSender] Failed to parse request body as JSON for Content-Type application/json. Sending as raw string. Parse error: ${getErrorMessage(parseError)}. Body: ${requestBody.substring(
                 0,
                 100
               )}...`
@@ -83,18 +84,20 @@ class WebhookSenderService implements INotificationSender {
           response.data
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         console.error(
-          `[WebhookSender] Axios error sending notification to ${url}: ${error.message}`,
+          `[WebhookSender] Axios error sending notification to ${url}: ${getErrorMessage(error)}`,
           error.response?.status,
           error.response?.data
         );
-        throw new Error(`Failed to send webhook notification (Axios Error): ${error.message}`);
+        throw new Error(
+          `Failed to send webhook notification (Axios Error): ${getErrorMessage(error)}`
+        );
       } else {
         console.error(`[WebhookSender] Unexpected error sending notification to ${url}:`, error);
         throw new Error(
-          `Failed to send webhook notification (Unexpected Error): ${error.message || error}`
+          `Failed to send webhook notification (Unexpected Error): ${getErrorMessage(error)}`
         );
       }
     }

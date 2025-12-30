@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
+import { getErrorMessage } from '../utils/AppError';
 
 const dbDir = path.join(__dirname, '..', '..', 'data');
 const dbFilename = 'nexus-terminal.db';
@@ -11,9 +12,10 @@ const dbPath = path.join(dbDir, dbFilename);
 if (!fs.existsSync(dbDir)) {
   try {
     fs.mkdirSync(dbDir, { recursive: true });
-  } catch (mkdirErr: any) {
-    console.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErr.message);
-    throw new Error(`创建数据库目录失败: ${mkdirErr.message}`);
+  } catch (mkdirErr: unknown) {
+    const mkdirErrMsg = getErrorMessage(mkdirErr);
+    console.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErrMsg);
+    throw new Error(`创建数据库目录失败: ${mkdirErrMsg}`);
   }
 } else {
 }
@@ -132,7 +134,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
         }
       });
     });
-  } catch (error) {
+  } catch (error: unknown) {
     // 回滚事务
     await new Promise<void>((resolveRollback) => {
       db.run('ROLLBACK', (rollbackErr) => {
@@ -170,7 +172,7 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
             await runMigrations(db);
             console.log('[数据库] 初始化和迁移完成。');
             resolve(db);
-          } catch (initError) {
+          } catch (initError: unknown) {
             console.error('[数据库] 连接后初始化失败，正在关闭连接...');
             dbInstancePromise = null;
             db.close((closeErr) => {
@@ -198,7 +200,7 @@ process.on('SIGINT', async () => {
         }
         process.exit(err ? 1 : 0);
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[DB] 获取数据库实例以关闭时出错 (可能初始化失败):', error);
       process.exit(1);
     }

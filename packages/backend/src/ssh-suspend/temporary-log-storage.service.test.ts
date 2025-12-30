@@ -80,7 +80,11 @@ describe('TemporaryLogStorageService', () => {
 
   describe('writeToLog', () => {
     it('应追加数据到日志文件', async () => {
-      mockFs.stat.mockRejectedValue({ code: 'ENOENT' }); // 文件不存在
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.stat.mockRejectedValue(enoentError);
       mockFs.appendFile.mockResolvedValue(undefined);
 
       await service.writeToLog('session-123', 'test log data');
@@ -124,7 +128,11 @@ describe('TemporaryLogStorageService', () => {
     });
 
     it('写入失败时应抛出错误', async () => {
-      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.stat.mockRejectedValue(enoentError);
       mockFs.appendFile.mockRejectedValue(new Error('Disk full'));
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -157,7 +165,11 @@ describe('TemporaryLogStorageService', () => {
     });
 
     it('文件不存在时应返回空字符串', async () => {
-      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.readFile.mockRejectedValue(enoentError);
 
       const result = await service.readLog('session-nonexist');
 
@@ -184,7 +196,11 @@ describe('TemporaryLogStorageService', () => {
     });
 
     it('文件不存在时应静默返回', async () => {
-      mockFs.unlink.mockRejectedValue({ code: 'ENOENT' });
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.unlink.mockRejectedValue(enoentError);
 
       // 不应抛出错误
       await expect(service.deleteLog('session-gone')).resolves.toBeUndefined();
@@ -238,7 +254,11 @@ describe('TemporaryLogStorageService', () => {
 
   describe('边界条件', () => {
     it('应处理包含特殊字符的 sessionId', async () => {
-      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.stat.mockRejectedValue(enoentError);
       mockFs.appendFile.mockResolvedValue(undefined);
 
       await service.writeToLog('session-with-特殊字符-123', 'data');
@@ -251,7 +271,11 @@ describe('TemporaryLogStorageService', () => {
     });
 
     it('应处理空数据写入', async () => {
-      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.stat.mockRejectedValue(enoentError);
       mockFs.appendFile.mockResolvedValue(undefined);
 
       await service.writeToLog('session-empty', '');
@@ -264,7 +288,11 @@ describe('TemporaryLogStorageService', () => {
     });
 
     it('应处理非常长的 sessionId', async () => {
-      mockFs.stat.mockRejectedValue({ code: 'ENOENT' });
+      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
+      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
+        code: 'ENOENT',
+      });
+      mockFs.stat.mockRejectedValue(enoentError);
       mockFs.appendFile.mockResolvedValue(undefined);
 
       const longId = 'a'.repeat(500);

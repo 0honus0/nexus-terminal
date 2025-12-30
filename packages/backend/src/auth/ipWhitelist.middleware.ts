@@ -56,7 +56,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     let requestIp: ipaddr.IPv4 | ipaddr.IPv6 | null = null;
     try {
       requestIp = ipaddr.parse(requestIpString);
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
       return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
     }
@@ -78,7 +78,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
         }
         // 如果 IP 类型和范围类型不匹配，则认为不匹配
         return false;
-      } catch (e1) {
+      } catch (e1: unknown) {
         // 如果解析 CIDR 失败，尝试解析为单个 IP 地址
         try {
           const allowedIp = ipaddr.parse(entry);
@@ -86,7 +86,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
           return (
             requestIp!.kind() === allowedIp.kind() && requestIp!.toString() === allowedIp.toString()
           );
-        } catch (e2) {
+        } catch (e2: unknown) {
           // 如果单个 IP 也解析失败，忽略此条目并记录警告
           console.warn(`无效的 IP 白名单条目: "${entry}"`);
           return false;
@@ -101,7 +101,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     // IP 不在白名单内，拒绝访问
     console.warn(`已拒绝来自 IP ${requestIpString} 的访问 (不在白名单内)。`);
     return res.status(403).json({ message: '禁止访问：您的 IP 地址不在允许列表中。' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('IP 白名单中间件执行出错:', error);
     // 中间件出错时，为安全起见，默认拒绝访问
     return res.status(500).json({ message: '服务器内部错误 (IP 校验失败)。' });

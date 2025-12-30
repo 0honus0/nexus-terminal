@@ -1,4 +1,5 @@
 import * as TagRepository from './tag.repository';
+import { getErrorMessage } from '../utils/AppError';
 
 // Re-export or define types
 export interface TagData extends TagRepository.TagData {}
@@ -33,8 +34,9 @@ export const createTag = async (name: string): Promise<TagData> => {
       throw new Error('创建标签后无法检索到该标签。');
     }
     return newTag;
-  } catch (error: any) {
-    if (error.message.includes('UNIQUE constraint failed')) {
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('UNIQUE constraint failed')) {
       throw new Error(`创建标签失败：标签名称 "${trimmedName}" 已存在。`);
     }
     throw error;
@@ -57,8 +59,9 @@ export const updateTag = async (id: number, name: string): Promise<TagData | nul
     }
 
     return getTagById(id);
-  } catch (error: any) {
-    if (error.message.includes('UNIQUE constraint failed')) {
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('UNIQUE constraint failed')) {
       throw new Error(`更新标签失败：标签名称 "${trimmedName}" 已存在。`);
     }
     throw error;
@@ -88,9 +91,10 @@ export const updateTagConnections = async (
 
   try {
     await TagRepository.updateTagConnections(tagId, idsToUpdate);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 服务层可以进一步处理或包装错误
-    console.error(`Service: 更新标签 ${tagId} 的连接关联时发生错误:`, error.message);
-    throw new Error(`服务层更新标签连接关联失败: ${error.message}`);
+    const errMsg = getErrorMessage(error);
+    console.error(`Service: 更新标签 ${tagId} 的连接关联时发生错误:`, errMsg);
+    throw new Error(`服务层更新标签连接关联失败: ${errMsg}`);
   }
 };

@@ -131,24 +131,24 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
       if (row.encrypted_password) {
         try {
           plainPassword = decrypt(row.encrypted_password);
-        } catch (e) {
-          console.warn(`解密连接 [${row.name}] 密码失败: ${(e as Error).message}`);
+        } catch (e: unknown) {
+          console.warn(`解密连接 [${row.name}] 密码失败: ${getErrorMessage(e)}`);
         }
       }
       let plainPrivateKey = null;
       if (row.encrypted_private_key) {
         try {
           plainPrivateKey = decrypt(row.encrypted_private_key);
-        } catch (e) {
-          console.warn(`解密连接 [${row.name}] 私钥失败: ${(e as Error).message}`);
+        } catch (e: unknown) {
+          console.warn(`解密连接 [${row.name}] 私钥失败: ${getErrorMessage(e)}`);
         }
       }
       let plainPassphrase = null;
       if (row.encrypted_passphrase) {
         try {
           plainPassphrase = decrypt(row.encrypted_passphrase);
-        } catch (e) {
-          console.warn(`解密连接 [${row.name}] 私钥密码失败: ${(e as Error).message}`);
+        } catch (e: unknown) {
+          console.warn(`解密连接 [${row.name}] 私钥密码失败: ${getErrorMessage(e)}`);
         }
       }
 
@@ -179,24 +179,24 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
         if (row.proxy_encrypted_password) {
           try {
             proxyPlainPassword = decrypt(row.proxy_encrypted_password);
-          } catch (e) {
-            console.warn(`解密代理 [${row.proxy_name}] 密码失败: ${(e as Error).message}`);
+          } catch (e: unknown) {
+            console.warn(`解密代理 [${row.proxy_name}] 密码失败: ${getErrorMessage(e)}`);
           }
         }
         let proxyPlainPrivateKey = null;
         if (row.proxy_encrypted_private_key) {
           try {
             proxyPlainPrivateKey = decrypt(row.proxy_encrypted_private_key);
-          } catch (e) {
-            console.warn(`解密代理 [${row.proxy_name}] 私钥失败: ${(e as Error).message}`);
+          } catch (e: unknown) {
+            console.warn(`解密代理 [${row.proxy_name}] 私钥失败: ${getErrorMessage(e)}`);
           }
         }
         let proxyPlainPassphrase = null;
         if (row.proxy_encrypted_passphrase) {
           try {
             proxyPlainPassphrase = decrypt(row.proxy_encrypted_passphrase);
-          } catch (e) {
-            console.warn(`解密代理 [${row.proxy_name}] 私钥密码失败: ${(e as Error).message}`);
+          } catch (e: unknown) {
+            console.warn(`解密代理 [${row.proxy_name}] 私钥密码失败: ${getErrorMessage(e)}`);
           }
         }
 
@@ -376,9 +376,9 @@ export const exportConnectionsAsEncryptedZip = async (
           reject(new Error(`Failed to finalize archive: ${err.message}`));
         });
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Service: 导出连接 ZIP (outer try-catch) 时发生意外错误:', error);
-    throw new Error(`导出连接 ZIP (archiver) 失败: ${error.message}`);
+    throw new Error(`导出连接 ZIP (archiver) 失败: ${getErrorMessage(error)}`);
   }
 };
 
@@ -394,9 +394,9 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
     if (!Array.isArray(importedData)) {
       throw new Error('JSON 文件内容必须是一个数组。');
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Service: 解析导入文件失败:', error);
-    throw new Error(`解析 JSON 文件失败: ${error.message}`);
+    throw new Error(`解析 JSON 文件失败: ${getErrorMessage(error)}`);
   }
 
   let successCount = 0;
@@ -493,12 +493,11 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
           tag_ids: connData.tag_ids || [],
           jump_chain: null, // 为 jump_chain 添加默认值
         });
-      } catch (connError: any) {
+      } catch (connError: unknown) {
+        const connErrMsg = getErrorMessage(connError);
         failureCount++;
-        errors.push({ connectionName: connData.name || '未知连接', message: connError.message });
-        console.warn(
-          `Service: 处理导入连接 "${connData.name || '未知'}" 时出错: ${connError.message}`
-        );
+        errors.push({ connectionName: connData.name || '未知连接', message: connErrMsg });
+        console.warn(`Service: 处理导入连接 "${connData.name || '未知'}" 时出错: ${connErrMsg}`);
       }
     }
     let insertedResults: { connectionId: number; originalData: any }[] = [];
@@ -528,16 +527,16 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
     await runDb(db, 'COMMIT');
     console.log(`Service: 导入事务提交。成功: ${successCount}, 失败: ${failureCount}`);
     return { successCount, failureCount, errors };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Service: 导入事务处理出错，正在回滚:', error);
     try {
       await runDb(db, 'ROLLBACK');
-    } catch (rollbackErr: any) {
+    } catch (rollbackErr: unknown) {
       console.error('Service: 回滚事务失败:', rollbackErr);
     }
     failureCount = importedData.length;
     successCount = 0;
-    errors.push({ message: `事务处理失败: ${error.message}` });
+    errors.push({ message: `事务处理失败: ${getErrorMessage(error)}` });
     return { successCount, failureCount, errors };
   }
 };

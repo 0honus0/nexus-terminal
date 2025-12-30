@@ -94,7 +94,7 @@ export const generatePasskeyRegistrationOptionsHandler = async (
       console.log(`[AuthController] Generated Passkey registration options for user ${username}`);
       res.json(options);
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[AuthController] 生成 Passkey 注册选项时出错 (用户: ${username}):`, error);
     next(error);
   }
@@ -169,7 +169,7 @@ export const verifyPasskeyRegistrationHandler = async (
         error: (verification as any).error?.message || 'Unknown verification error',
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[AuthController] 验证 Passkey 注册时出错 (用户: ${userHandle}):`, error);
     next(error);
   }
@@ -210,7 +210,7 @@ export const generatePasskeyAuthenticationOptionsHandler = async (
       );
       res.json(options);
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(
       `[AuthController] 生成 Passkey 认证选项时出错 (username: ${username || 'any'}):`,
       error
@@ -372,7 +372,7 @@ export const listUserPasskeysHandler = async (
       `[AuthController] 用户 ${username} (ID: ${userId}) 获取了 Passkey 列表，数量: ${passkeys.length}`
     );
     res.status(200).json(passkeys);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(
       `[AuthController] 用户 ${username} (ID: ${userId}) 获取 Passkey 列表时出错:`,
       error
@@ -554,10 +554,10 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           return;
         }
         console.log(`[AuthController] CAPTCHA 验证成功 - ${username}`);
-      } catch (captchaError: any) {
+      } catch (captchaError: unknown) {
         console.error(
           `[AuthController] CAPTCHA 验证过程中出错 (${username}):`,
-          captchaError.message
+          getErrorMessage(captchaError)
         );
         res.status(500).json({ message: 'CAPTCHA 验证服务出错，请稍后重试或检查配置。' });
         return;
@@ -693,7 +693,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         });
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('登录时出错:', error);
     next(error);
   }
@@ -736,7 +736,7 @@ export const getAuthStatus = async (
         isTwoFactorEnabled: !!user.two_factor_secret,
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`获取用户 ${userId} 状态时发生内部错误:`, error);
     next(error);
   }
@@ -887,7 +887,7 @@ export const verifyLogin2FA = async (
       });
       res.status(401).json({ message: '验证码无效。' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`2FA 验证时发生内部错误 (用户: ${pendingAuth?.userId || 'unknown'}):`, error);
     next(error);
   }
@@ -961,7 +961,7 @@ export const changePassword = async (
     notificationService.sendNotification('PASSWORD_CHANGED', { userId, ip: clientIp });
 
     res.status(200).json({ message: '密码已成功修改。' });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`修改用户 ${userId} 密码时发生内部错误:`, error);
     next(error);
   }
@@ -1164,7 +1164,7 @@ export const needsSetup = async (
     const userCount = row ? row.count : 0;
 
     res.status(200).json({ needsSetup: userCount === 0 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('检查设置状态时发生内部错误:', error);
     next(error);
   }

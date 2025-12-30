@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { settingsService } from '../settings/settings.service';
+import { getErrorMessage } from '../utils/AppError';
 
 // CAPTCHA 验证 API 端点
 const HCAPTCHA_VERIFY_URL = 'https://api.hcaptcha.com/siteverify';
@@ -81,9 +82,9 @@ export class CaptchaService {
         throw new Error(`不支持的 CAPTCHA 提供商: ${provider}`);
       }
       return success;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // _verifyHCaptcha/_verifyReCaptcha 在凭据检查模式下会抛出特定错误
-      console.error(`[CaptchaService] ${provider} 凭据验证期间发生错误:`, error.message);
+      console.error(`[CaptchaService] ${provider} 凭据验证期间发生错误:`, getErrorMessage(error));
       return false; // 任何在验证方法内部捕获并重新抛出的错误都意味着凭据无效
     }
   }
@@ -161,12 +162,15 @@ export class CaptchaService {
         return false; // 其他所有情况的失败
       }
       return false; // 令牌验证失败
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || '未知网络错误';
+    } catch (error: unknown) {
+      const errorMessage =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? error.response.data.message
+          : getErrorMessage(error);
       console.error(
         `[CaptchaService] 调用 hCaptcha ${mode}验证 API 时出错:`,
         errorMessage,
-        error.response?.data || ''
+        axios.isAxiosError(error) && error.response?.data ? error.response.data : ''
       );
       // 抛出错误，让上层处理
       throw new Error(`hCaptcha ${mode}验证请求失败: ${errorMessage}`);
@@ -232,12 +236,15 @@ export class CaptchaService {
         return false; // 对于凭据验证，如果不是true，就严格返回false
       }
       return false; // 令牌验证失败
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || '未知网络错误';
+    } catch (error: unknown) {
+      const errorMessage =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? error.response.data.message
+          : getErrorMessage(error);
       console.error(
         `[CaptchaService] 调用 Google reCAPTCHA ${mode}验证 API 时出错:`,
         errorMessage,
-        error.response?.data || ''
+        axios.isAxiosError(error) && error.response?.data ? error.response.data : ''
       );
       throw new Error(`Google reCAPTCHA ${mode}验证请求失败: ${errorMessage}`);
     }

@@ -5,6 +5,7 @@ import { INotificationSender } from '../notification.dispatcher.service';
 import { ProcessedNotification } from '../notification.processor.service';
 import { EmailConfig } from '../../types/notification.types';
 import { settingsService } from '../../settings/settings.service';
+import { getErrorMessage } from '../../utils/AppError';
 
 class EmailSenderService implements INotificationSender {
   async send(notification: ProcessedNotification): Promise<void> {
@@ -79,10 +80,10 @@ class EmailSenderService implements INotificationSender {
       console.log(`[EmailSender] Sending email notification to: ${to} with subject: "${subject}"`);
       const info = await transporter.sendMail(mailOptions);
       console.log(`[EmailSender] Email sent successfully. Message ID: ${info.messageId}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[EmailSender] Error sending email notification to ${to}:`, error);
 
-      throw new Error(`Failed to send email notification: ${error.message || error}`);
+      throw new Error(`Failed to send email notification: ${getErrorMessage(error)}`);
     }
   }
 }

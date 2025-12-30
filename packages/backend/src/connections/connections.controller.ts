@@ -5,6 +5,7 @@ import * as SshService from '../services/ssh.service';
 import * as GuacamoleService from '../services/guacamole.service';
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
+import { getErrorMessage } from '../utils/AppError';
 
 /**
  * 创建新连接 (POST /api/v1/connections)
@@ -17,10 +18,11 @@ export const createConnection = async (
   try {
     const newConnection = await ConnectionService.createConnection(req.body);
     res.status(201).json({ message: '连接创建成功。', connection: newConnection });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Controller: 创建连接时发生错误:', error);
-    if (error.message.includes('缺少') || error.message.includes('需要提供')) {
-      res.status(400).json({ message: error.message });
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('缺少') || errMsg.includes('需要提供')) {
+      res.status(400).json({ message: errMsg });
     } else {
       next(error);
     }
@@ -38,7 +40,7 @@ export const getConnections = async (
   try {
     const connections = await ConnectionService.getAllConnections();
     res.status(200).json(connections);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Controller: 获取连接列表时发生错误:', error);
     next(error);
   }
@@ -66,7 +68,7 @@ export const getConnectionById = async (
     } else {
       res.status(200).json(connection);
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 获取连接 ${req.params.id} 时发生错误:`, error);
     next(error);
   }
@@ -94,10 +96,11 @@ export const updateConnection = async (
     } else {
       res.status(200).json({ message: '连接更新成功。', connection: updatedConnection });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 更新连接 ${req.params.id} 时发生错误:`, error);
-    if (error.message.includes('需要提供')) {
-      res.status(400).json({ message: error.message });
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('需要提供')) {
+      res.status(400).json({ message: errMsg });
     } else {
       next(error);
     }
@@ -126,7 +129,7 @@ export const deleteConnection = async (
     } else {
       res.status(200).json({ message: '连接删除成功。' });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 删除连接 ${req.params.id} 时发生错误:`, error);
     next(error);
   }
@@ -151,7 +154,7 @@ export const testConnection = async (
     const { latency } = await SshService.testConnection(connectionId);
 
     res.status(200).json({ success: true, message: '连接测试成功。', latency }); // 返回延迟
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 测试连接 ${req.params.id} 时发生错误:`, error);
     next(error);
   }
@@ -244,7 +247,7 @@ export const testUnsavedConnection = async (
 
     // 如果 SshService.testUnsavedConnection 没有抛出错误，则表示成功
     res.status(200).json({ success: true, message: '连接测试成功。', latency });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Controller: 测试未保存连接时发生错误:`, error);
     next(error);
   }
@@ -267,7 +270,7 @@ export const exportConnections = async (
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'application/zip');
     res.status(200).send(exportedData);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Controller: 导出连接时发生错误:', error);
     next(error);
   }
@@ -303,10 +306,11 @@ export const importConnections = async (
         failureCount: 0,
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Controller: 导入连接时发生错误:', error);
-    if (error.message.includes('解析 JSON 文件失败')) {
-      res.status(400).json({ message: error.message });
+    const errMsg = getErrorMessage(error);
+    if (errMsg.includes('解析 JSON 文件失败')) {
+      res.status(400).json({ message: errMsg });
     } else {
       next(error);
     }
@@ -355,7 +359,7 @@ export const getRdpSessionToken = async (
       console.log(
         `[Controller:getRdpSessionToken] 已更新 RDP 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`
       );
-    } catch (updateError) {
+    } catch (updateError: unknown) {
       // 记录更新时间戳的错误，但不阻止获取令牌的流程
       console.error(
         `[Controller:getRdpSessionToken] 更新 RDP 连接 ${connectionId} 的 last_connected_at 时出错:`,
@@ -395,30 +399,31 @@ export const getRdpSessionToken = async (
 
     // 5. 将 Guacamole 令牌返回给前端
     res.status(200).json({ token: guacamoleToken });
-  } catch (error: any) {
-    console.error(`Controller: 获取 RDP 会话令牌时发生错误 (ID: ${req.params.id}):`, error.message);
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
+    console.error(`Controller: 获取 RDP 会话令牌时发生错误 (ID: ${req.params.id}):`, errMsg);
 
     let statusCode = 500;
     let responseMessage = '获取 RDP 会话令牌时发生内部服务器错误。';
 
     if (
-      error.message.includes('调用 RDP 后端服务失败') ||
-      error.message.includes('从 RDP 后端获取令牌失败') ||
-      error.message.includes('调用 Remote Gateway API 时出错 (RDP)')
+      errMsg.includes('调用 RDP 后端服务失败') ||
+      errMsg.includes('从 RDP 后端获取令牌失败') ||
+      errMsg.includes('调用 Remote Gateway API 时出错 (RDP)')
     ) {
-      responseMessage = error.message;
-      if (error.message.includes('(状态: 4')) statusCode = 400;
-      else if (error.message.includes('(状态: 5')) statusCode = 502;
+      responseMessage = errMsg;
+      if (errMsg.includes('(状态: 4')) statusCode = 400;
+      else if (errMsg.includes('(状态: 5')) statusCode = 502;
       else statusCode = 503;
     } else if (
-      error.message.includes('RDP 连接需要使用密码认证') ||
-      error.message.includes('密码解密失败') ||
-      error.message.includes('RDP 连接使用密码认证，但密码解密失败或未提供密码')
+      errMsg.includes('RDP 连接需要使用密码认证') ||
+      errMsg.includes('密码解密失败') ||
+      errMsg.includes('RDP 连接使用密码认证，但密码解密失败或未提供密码')
     ) {
-      responseMessage = error.message;
+      responseMessage = errMsg;
       statusCode = 400;
-    } else if (error.message.includes('连接类型必须是 RDP')) {
-      responseMessage = error.message;
+    } else if (errMsg.includes('连接类型必须是 RDP')) {
+      responseMessage = errMsg;
       statusCode = 400;
     } else if (axios.isAxiosError(error)) {
       responseMessage = '调用远程桌面网关服务时发生网络或请求错误。';
@@ -434,7 +439,7 @@ export const getRdpSessionToken = async (
         responseMessage += ' (无法连接或超时)';
         statusCode = 504;
       }
-    } else if (error.message.includes('解密失败')) {
+    } else if (errMsg.includes('解密失败')) {
       responseMessage = '获取 RDP 会话令牌时发生内部错误（凭证处理失败）。';
     }
     if (statusCode >= 500) {
@@ -482,7 +487,7 @@ export const getVncSessionToken = async (
       console.log(
         `[Controller:getVncSessionToken] 已更新 VNC 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`
       );
-    } catch (updateError) {
+    } catch (updateError: unknown) {
       console.error(
         `[Controller:getVncSessionToken] 更新 VNC 连接 ${connectionId} 的 last_connected_at 时出错:`,
         updateError
@@ -514,30 +519,31 @@ export const getVncSessionToken = async (
     );
 
     res.status(200).json({ token: guacamoleToken });
-  } catch (error: any) {
-    console.error(`Controller: 获取 VNC 会话令牌时发生错误 (ID: ${req.params.id}):`, error.message);
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
+    console.error(`Controller: 获取 VNC 会话令牌时发生错误 (ID: ${req.params.id}):`, errMsg);
 
     let statusCode = 500;
     let responseMessage = '获取 VNC 会话令牌时发生内部服务器错误。';
 
     if (
-      error.message.includes('调用 VNC 后端服务失败') ||
-      error.message.includes('从 VNC 后端获取令牌失败') ||
-      error.message.includes('调用 Remote Gateway API 时出错 (VNC)')
+      errMsg.includes('调用 VNC 后端服务失败') ||
+      errMsg.includes('从 VNC 后端获取令牌失败') ||
+      errMsg.includes('调用 Remote Gateway API 时出错 (VNC)')
     ) {
-      responseMessage = error.message;
-      if (error.message.includes('(状态: 4')) statusCode = 400;
-      else if (error.message.includes('(状态: 5')) statusCode = 502;
+      responseMessage = errMsg;
+      if (errMsg.includes('(状态: 4')) statusCode = 400;
+      else if (errMsg.includes('(状态: 5')) statusCode = 502;
       else statusCode = 503;
     } else if (
-      error.message.includes('VNC 连接需要使用密码认证') ||
-      error.message.includes('密码解密失败') ||
-      error.message.includes('VNC 连接使用密码认证，但密码解密失败或未提供密码')
+      errMsg.includes('VNC 连接需要使用密码认证') ||
+      errMsg.includes('密码解密失败') ||
+      errMsg.includes('VNC 连接使用密码认证，但密码解密失败或未提供密码')
     ) {
-      responseMessage = error.message;
+      responseMessage = errMsg;
       statusCode = 400;
-    } else if (error.message.includes('连接类型必须是 VNC')) {
-      responseMessage = error.message;
+    } else if (errMsg.includes('连接类型必须是 VNC')) {
+      responseMessage = errMsg;
       statusCode = 400;
     } else if (axios.isAxiosError(error)) {
       responseMessage = '调用远程桌面网关服务时发生网络或请求错误。';
@@ -553,7 +559,7 @@ export const getVncSessionToken = async (
         responseMessage += ' (无法连接或超时)';
         statusCode = 504;
       }
-    } else if (error.message.includes('解密失败')) {
+    } else if (errMsg.includes('解密失败')) {
       responseMessage = '获取 VNC 会话令牌时发生内部错误（凭证处理失败）。';
     }
     if (statusCode >= 500) {
@@ -587,12 +593,13 @@ export const cloneConnection = async (
     const clonedConnection = await ConnectionService.cloneConnection(originalConnectionId, newName);
 
     res.status(201).json({ message: '连接克隆成功。', connection: clonedConnection });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
     console.error(`Controller: 克隆连接 ${req.params.id} 时发生错误:`, error);
-    if (error.message.includes('未找到')) {
-      res.status(404).json({ message: error.message });
-    } else if (error.message.includes('名称已存在')) {
-      res.status(409).json({ message: error.message }); // 409 Conflict for duplicate name
+    if (errMsg.includes('未找到')) {
+      res.status(404).json({ message: errMsg });
+    } else if (errMsg.includes('名称已存在')) {
+      res.status(409).json({ message: errMsg }); // 409 Conflict for duplicate name
     } else {
       next(error);
     }
@@ -628,10 +635,11 @@ export const addTagToConnections = async (
     await ConnectionService.addTagToConnections(connection_ids, tag_id);
 
     res.status(200).json({ message: '标签已成功添加到指定连接。' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
     console.error(`Controller: 为多个连接添加标签 ${req.body?.tag_id} 时发生错误:`, error);
-    if (error.message.includes('标签 ID') && error.message.includes('不存在')) {
-      res.status(400).json({ message: error.message }); // Bad request if tag doesn't exist
+    if (errMsg.includes('标签 ID') && errMsg.includes('不存在')) {
+      res.status(400).json({ message: errMsg }); // Bad request if tag doesn't exist
     } else {
       next(error);
     }
@@ -667,10 +675,11 @@ export const updateConnectionTags = async (
     } else {
       res.status(200).json({ message: '连接标签更新成功。' });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errMsg = getErrorMessage(error);
     console.error(`Controller: 更新连接 ${req.params.id} 的标签时发生错误:`, error);
-    if (error.message.includes('未找到')) {
-      res.status(404).json({ message: error.message });
+    if (errMsg.includes('未找到')) {
+      res.status(404).json({ message: errMsg });
     } else {
       next(error);
     }
