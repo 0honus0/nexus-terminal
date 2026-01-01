@@ -116,7 +116,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, defineExpose, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useVirtualList } from '@vueuse/core';
+import { useVirtualList, useDebounceFn } from '@vueuse/core';
 import { useCommandHistoryStore, CommandHistoryEntryFE } from '../stores/commandHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
@@ -189,11 +189,11 @@ onBeforeUnmount(() => {
 // --- 事件处理 ---
 
 // 更新搜索词
-const updateSearchTerm = (event: Event) => {
+const updateSearchTerm = useDebounceFn((event: Event) => {
   const target = event.target as HTMLInputElement;
   commandHistoryStore.setSearchTerm(target.value);
   // selectedIndex.value = -1; // REMOVED: Store handles resetting index
-};
+}, 300);
 
 // 滚动到选中的项目（虚拟滚动兼容）
 const scrollToSelected = async (index: number) => {

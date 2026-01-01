@@ -10,10 +10,13 @@ export interface UseFileManagerKeyboardNavigationOptions {
 
   // 回调函数
   onEnterPress: (item: FileListItem) => void; // 按下 Enter 键时触发的回调
+
+  // 虚拟滚动支持
+  scrollTo?: (index: number) => void; // 滚动到指定索引的函数
 }
 
 export function useFileManagerKeyboardNavigation(options: UseFileManagerKeyboardNavigationOptions) {
-  const { filteredFileList, currentPath, fileListContainerRef, onEnterPress } = options;
+  const { filteredFileList, currentPath, fileListContainerRef, onEnterPress, scrollTo } = options;
 
   // --- 状态 Refs ---
   const selectedIndex = ref<number>(-1); // 键盘选中索引 (-1 表示未选中, 0 代表 '..', 1+ 代表 filteredList 的 index + 1)
@@ -29,9 +32,26 @@ export function useFileManagerKeyboardNavigation(options: UseFileManagerKeyboard
     await nextTick();
     if (selectedIndex.value < 0 || !fileListContainerRef.value) return;
 
+    // 优先使用虚拟滚动的 scrollTo
+    if (scrollTo) {
+      if (selectedIndex.value === 0 && hasParentLink.value) {
+        // 如果选中 '..', 滚动到顶部
+        fileListContainerRef.value.scrollTop = 0;
+      } else {
+        // 如果选中文件, 滚动到对应的虚拟列表索引
+        // 注意：键盘索引包含了 '..', 而虚拟列表不包含
+        const virtualIndex = selectedIndex.value - (hasParentLink.value ? 1 : 0);
+        if (virtualIndex >= 0) {
+          scrollTo(virtualIndex);
+        }
+      }
+      return;
+    }
+
+    // Fallback: 使用 DOM 滚动 (旧逻辑, 仅当 scrollTo 未提供时)
     const container = fileListContainerRef.value;
     // 使用更通用的选择器获取所有数据行
-    const rows = container.querySelectorAll('tbody > tr'); // Changed selector
+    const rows = container.querySelectorAll('.file-row'); // Changed selector
     if (selectedIndex.value >= rows.length) return; // 索引超出范围
 
     const selectedRow = rows[selectedIndex.value] as HTMLElement;

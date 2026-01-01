@@ -119,7 +119,9 @@ const {
     mockContextMenuState: {
       contextMenuVisible: mockRef(false),
       contextMenuPosition: mockRef({ x: 0, y: 0 }),
-      contextMenuItem: mockRef<any>(null),
+      contextMenuItems: mockRef<any[]>([]),
+      contextMenuRef: mockRef<any>(null),
+      contextTargetItem: mockRef<any>(null),
       showContextMenu: vi.fn(),
       hideContextMenu: vi.fn(),
       handleContextMenuAction: vi.fn(),
@@ -369,12 +371,11 @@ describe('FileManager.vue', () => {
         },
       });
 
-      expect(wrapper.find('table').exists()).toBe(true);
       expect(wrapper.text()).toContain('fileManager.headers.name');
       expect(wrapper.text()).toContain('fileManager.headers.size');
     });
 
-    it('应渲染文件列表项', () => {
+    it('应渲染文件列表项', async () => {
       const wrapper = mount(FileManager, {
         props: {
           sessionId: 'session-1',
@@ -384,6 +385,7 @@ describe('FileManager.vue', () => {
         },
       });
 
+      await nextTick();
       expect(wrapper.text()).toContain('test.txt');
       expect(wrapper.text()).toContain('folder');
     });
@@ -404,7 +406,7 @@ describe('FileManager.vue', () => {
       const mockOnItemAction = mockSelectionState.handleItemClick;
 
       // 找到目录行并触发点击
-      const rows = wrapper.findAll('tr');
+      const rows = wrapper.findAll('.file-row');
       const folderRow = rows.find((row) => row.text().includes('folder'));
 
       if (folderRow) {
@@ -683,6 +685,7 @@ describe('FileManager.vue', () => {
         },
       });
 
+      await nextTick();
       expect(wrapper.text()).toContain('fileManager.emptyDirectory');
     });
   });
@@ -718,7 +721,7 @@ describe('FileManager.vue', () => {
   });
 
   describe('文件大小格式化', () => {
-    it('应正确格式化文件大小', () => {
+    it('应正确格式化文件大小', async () => {
       mockSftpManager.fileList.value = [
         {
           filename: 'small.txt',
@@ -753,6 +756,7 @@ describe('FileManager.vue', () => {
         },
       });
 
+      await nextTick();
       // 文件大小应被格式化
       const text = wrapper.text();
       expect(text.includes('B') || text.includes('KB') || text.includes('MB')).toBe(true);

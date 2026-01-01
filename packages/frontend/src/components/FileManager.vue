@@ -9,9 +9,9 @@ import {
   watchEffect,
   type PropType,
   readonly,
-  defineExpose,
   shallowRef,
 } from 'vue';
+import { useVirtualList } from '@vueuse/core';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -170,7 +170,6 @@ const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会
 // const selectedIndex = ref<number>(-1);
 
 // --- Column Resizing State (Remains the same) ---
-const tableRef = ref<HTMLTableElement | null>(null);
 const colWidths = ref({
   // 默认值会被 store 覆盖
   type: 50,
@@ -516,6 +515,71 @@ const handleSort = (key: keyof FileListItem | 'type' | 'size' | 'mtime') => {
   }
 };
 
+// +++ Virtual List Logic +++
+const PARENT_DIR_ITEM: FileListItem = {
+  filename: '..',
+  longname: '..',
+  attrs: {
+    isDirectory: true,
+    isFile: false,
+    isSymbolicLink: false,
+    size: 0,
+    uid: 0,
+    gid: 0,
+    mode: 0,
+    atime: 0,
+    mtime: 0,
+  },
+};
+
+const hasParentLinkForList = computed(
+  () => (currentSftpManager.value?.currentPath.value ?? '/') !== '/'
+);
+
+const virtualListSource = computed(() => {
+  const list = filteredFileList.value;
+  return hasParentLinkForList.value ? [PARENT_DIR_ITEM, ...list] : list;
+});
+
+// 计算 Grid 样式
+const gridStyle = computed(() => ({
+  display: 'grid',
+  // Use columns from colWidths
+  gridTemplateColumns: `${colWidths.value.type}px ${colWidths.value.name}px ${colWidths.value.size}px ${colWidths.value.permissions}px ${colWidths.value.modified}px`,
+}));
+
+// 计算每一行的高度
+const itemHeight = computed(() => Math.round(36 * rowSizeMultiplier.value));
+
+// Initialize Virtual List
+const {
+  list: virtualList,
+  containerProps,
+  wrapperProps,
+  scrollTo: virtualScrollTo,
+} = useVirtualList(virtualListSource, {
+  itemHeight: () => itemHeight.value,
+});
+
+const scrollToForKeyboardNavigation = (fileIndex: number) => {
+  const offset = hasParentLinkForList.value ? 1 : 0;
+  virtualScrollTo(fileIndex + offset);
+};
+
+watch(
+  () => containerProps.ref.value,
+  (val) => {
+    if (!val) return;
+    fileListContainerRef.value = val as HTMLDivElement;
+    containerProps.onScroll();
+  }
+);
+
+watch(itemHeight, async () => {
+  await nextTick();
+  containerProps.onScroll();
+});
+
 // --- 列表项点击与选择逻辑 (使用 Composable) ---
 // 定义单击时的动作回调 (移到 Selection 实例化之前)
 const handleItemAction = (item: FileListItem) => {
@@ -723,6 +787,11 @@ const {
 
 // 自定义 handleItemClick 函数以支持移动端多选模式
 const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect = false) => {
+  if (item.filename === '..') {
+    originalHandleItemClick(event, item);
+    return;
+  }
+
   if (props.isMobile && (isMultiSelectMode.value || forceMultiSelect)) {
     if (selectedItems.value.has(item.filename)) {
       selectedItems.value.delete(item.filename);
@@ -1272,6 +1341,7 @@ const {
   fileListContainerRef: fileListContainerRef,
   // 当 Enter 键按下时，模拟鼠标单击
   onEnterPress: (item) => handleItemClick(new MouseEvent('click'), item),
+  scrollTo: scrollToForKeyboardNavigation, // 传递虚拟滚动的 scrollTo 函数（键盘索引 -> 虚拟列表索引）
 });
 
 // --- 重置选中索引和清空选择的 Watchers ---
@@ -2267,13 +2337,13 @@ const handleNavigateToPathFromFavorites = (path: string) => {
 
     <!-- File List Container -->
     <div
-      ref="fileListContainerRef"
-      class="flex-grow overflow-y-auto relative outline-none"
+      v-bind="containerProps"
+      class="flex-grow overflow-auto relative outline-none"
       @dragenter.prevent="handleDragEnter"
       @dragover.prevent="handleDragOver"
       @dragleave.prevent="handleDragLeave"
       @drop.prevent="handleDrop"
-      @click="fileListContainerRef?.focus()"
+      @click="containerProps.ref.value?.focus()"
       @keydown="handleKeydown"
       @wheel="handleWheel"
       @contextmenu.prevent="showContextMenu($event)"
@@ -2292,274 +2362,126 @@ const handleNavigateToPathFromFavorites = (path: string) => {
         {{ t('fileManager.dropFilesHere', 'Drop files here to upload') }}
       </div>
 
-      <!-- File Table -->
-      <table
-        ref="tableRef"
-        class="w-full border-collapse table-fixed border-border rounded"
-        :class="{ 'pointer-events-none': showExternalDropOverlay }"
-        @contextmenu.prevent
+      <!-- Header Row (Sticky) -->
+      <div
+        class="sticky top-0 z-10 bg-header border-b border-border font-medium text-text-secondary uppercase tracking-wider text-xs select-none"
+        :style="gridStyle"
       >
-        <colgroup>
-          <col :style="{ width: `${colWidths.type}px` }" />
-          <col :style="{ width: `${colWidths.name}px` }" />
-          <col :style="{ width: `${colWidths.size}px` }" />
-          <col :style="{ width: `${colWidths.permissions}px` }" />
-          <col :style="{ width: `${colWidths.modified}px` }" />
-        </colgroup>
-        <thead class="sticky top-0 z-10 bg-header">
-          <tr>
-            <th
-              @click="handleSort('type')"
-              class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-              :style="{
-                paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
-                paddingRight: `calc(0.5rem * var(--row-size-multiplier))`,
-              }"
-            >
-              {{ t('fileManager.headers.type') }}
-              <span v-if="sortKey === 'type'" class="ml-1">{{
-                sortDirection === 'asc' ? '▲' : '▼'
-              }}</span>
-              <span
-                class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-                @mousedown.prevent="startResize($event, 0)"
-                @click.stop
-              ></span>
-            </th>
-            <th
-              @click="handleSort('filename')"
-              class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-              }"
-            >
-              {{ t('fileManager.headers.name') }}
-              <span v-if="sortKey === 'filename'" class="ml-1">{{
-                sortDirection === 'asc' ? '▲' : '▼'
-              }}</span>
-              <span
-                class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-                @mousedown.prevent="startResize($event, 1)"
-                @click.stop
-              ></span>
-            </th>
-            <th
-              @click="handleSort('size')"
-              class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-              }"
-            >
-              {{ t('fileManager.headers.size') }}
-              <span v-if="sortKey === 'size'" class="ml-1">{{
-                sortDirection === 'asc' ? '▲' : '▼'
-              }}</span>
-              <span
-                class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-                @mousedown.prevent="startResize($event, 2)"
-                @click.stop
-              ></span>
-            </th>
-            <th
-              class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-              }"
-            >
-              {{ t('fileManager.headers.permissions') }}
-              <span
-                class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-                @mousedown.prevent="startResize($event, 3)"
-                @click.stop
-              ></span>
-            </th>
-            <th
-              @click="handleSort('mtime')"
-              class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-              }"
-            >
-              {{ t('fileManager.headers.modified') }}
-              <span v-if="sortKey === 'mtime'" class="ml-1">{{
-                sortDirection === 'asc' ? '▲' : '▼'
-              }}</span>
-              <!-- No resizer on the last column -->
-            </th>
-          </tr>
-        </thead>
+        <!-- Type -->
+        <div
+          @click="handleSort('type')"
+          class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
+          :style="{
+            paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
+            paddingRight: `calc(0.5rem * var(--row-size-multiplier))`,
+            paddingTop: '0.25rem',
+            paddingBottom: '0.25rem',
+          }"
+        >
+          {{ t('fileManager.headers.type') }}
+          <span v-if="sortKey === 'type'" class="ml-1">{{
+            sortDirection === 'asc' ? '▲' : '▼'
+          }}</span>
+          <span
+            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
+            @mousedown.prevent="startResize($event, 0)"
+            @click.stop
+          ></span>
+        </div>
+        <!-- Name -->
+        <div
+          @click="handleSort('filename')"
+          class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
+          :style="{
+            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
+          }"
+        >
+          {{ t('fileManager.headers.name') }}
+          <span v-if="sortKey === 'filename'" class="ml-1">{{
+            sortDirection === 'asc' ? '▲' : '▼'
+          }}</span>
+          <span
+            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
+            @mousedown.prevent="startResize($event, 1)"
+            @click.stop
+          ></span>
+        </div>
+        <!-- Size -->
+        <div
+          @click="handleSort('size')"
+          class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
+          :style="{
+            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
+          }"
+        >
+          {{ t('fileManager.headers.size') }}
+          <span v-if="sortKey === 'size'" class="ml-1">{{
+            sortDirection === 'asc' ? '▲' : '▼'
+          }}</span>
+          <span
+            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
+            @mousedown.prevent="startResize($event, 2)"
+            @click.stop
+          ></span>
+        </div>
+        <!-- Permissions -->
+        <div
+          class="relative border-r border-border/10 flex items-center truncate"
+          :style="{
+            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
+          }"
+        >
+          {{ t('fileManager.headers.permissions') }}
+          <span
+            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
+            @mousedown.prevent="startResize($event, 3)"
+            @click.stop
+          ></span>
+        </div>
+        <!-- Modified -->
+        <div
+          @click="handleSort('mtime')"
+          class="relative hover:bg-black/5 cursor-pointer flex items-center truncate"
+          :style="{
+            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
+          }"
+        >
+          {{ t('fileManager.headers.modified') }}
+          <span v-if="sortKey === 'mtime'" class="ml-1">{{
+            sortDirection === 'asc' ? '▲' : '▼'
+          }}</span>
+        </div>
+      </div>
 
+      <!-- List Wrapper -->
+      <div v-bind="wrapperProps">
         <!-- Loading State -->
-        <tbody v-if="!currentSftpManager || currentSftpManager.isLoading.value">
-          <tr>
-            <td :colspan="5" class="px-4 py-6 text-center text-text-secondary italic">
-              {{ t('fileManager.loading') }}
-            </td>
-          </tr>
-        </tbody>
+        <div
+          v-if="!currentSftpManager || currentSftpManager.isLoading.value"
+          class="px-4 py-6 text-center text-text-secondary italic"
+        >
+          {{ t('fileManager.loading') }}
+        </div>
 
-        <!-- Empty Directory State -->
-        <tbody v-else-if="filteredFileList.length === 0">
-          <tr>
-            <td :colspan="5" class="px-4 py-6 text-center text-text-secondary italic">
-              {{ searchQuery ? t('fileManager.noSearchResults') : t('fileManager.emptyDirectory') }}
-            </td>
-          </tr>
-        </tbody>
-
-        <!-- File List State -->
-        <tbody v-else>
-          <!-- Remove context menu handler from tbody -->
-          <!-- '..' Entry -->
-          <tr
-            v-if="currentSftpManager?.currentPath.value !== '/'"
-            class="transition-colors duration-150 cursor-pointer select-none"
-            :class="{
-              'bg-primary/10': selectedIndex === 0,
-              'outline-dashed outline-2 outline-offset-[-1px] outline-primary':
-                dragOverTarget === '..',
-              'hover:bg-header/50': dragOverTarget !== '..',
-            }"
-            @click="
-              handleItemClick($event, {
-                filename: '..',
-                longname: '..',
-                attrs: {
-                  isDirectory: true,
-                  isFile: false,
-                  isSymbolicLink: false,
-                  size: 0,
-                  uid: 0,
-                  gid: 0,
-                  mode: 0,
-                  atime: 0,
-                  mtime: 0,
-                },
-              })
-            "
-            @contextmenu.prevent.stop="
-              showContextMenu($event, {
-                filename: '..',
-                longname: '..',
-                attrs: {
-                  isDirectory: true,
-                  isFile: false,
-                  isSymbolicLink: false,
-                  size: 0,
-                  uid: 0,
-                  gid: 0,
-                  mode: 0,
-                  atime: 0,
-                  mtime: 0,
-                },
-              })
-            "
-            @dragover.prevent="
-              handleDragOverRow(
-                {
-                  filename: '..',
-                  longname: '..',
-                  attrs: {
-                    isDirectory: true,
-                    isFile: false,
-                    isSymbolicLink: false,
-                    size: 0,
-                    uid: 0,
-                    gid: 0,
-                    mode: 0,
-                    atime: 0,
-                    mtime: 0,
-                  },
-                },
-                $event
-              )
-            "
-            @dragleave="
-              handleDragLeaveRow({
-                filename: '..',
-                longname: '..',
-                attrs: {
-                  isDirectory: true,
-                  isFile: false,
-                  isSymbolicLink: false,
-                  size: 0,
-                  uid: 0,
-                  gid: 0,
-                  mode: 0,
-                  atime: 0,
-                  mtime: 0,
-                },
-              })
-            "
-            @drop.prevent="
-              handleDropOnRow(
-                {
-                  filename: '..',
-                  longname: '..',
-                  attrs: {
-                    isDirectory: true,
-                    isFile: false,
-                    isSymbolicLink: false,
-                    size: 0,
-                    uid: 0,
-                    gid: 0,
-                    mode: 0,
-                    atime: 0,
-                    mtime: 0,
-                  },
-                },
-                $event
-              )
-            "
-            :data-filename="'..'"
-          >
-            <td
-              class="text-center border-b border-border align-middle"
-              :style="{
-                paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
-                paddingRight: `calc(0.5rem * var(--row-size-multiplier))`,
-              }"
-            >
-              <i
-                class="fas fa-level-up-alt text-primary"
-                :style="{
-                  fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-                }"
-              ></i>
-            </td>
-            <td
-              class="border-b border-border align-middle"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-                fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-              }"
-            >
-              ..
-            </td>
-            <td class="border-b border-border align-middle"></td>
-            <td class="border-b border-border align-middle"></td>
-            <td class="border-b border-border align-middle"></td>
-          </tr>
-          <!-- File Entries -->
-          <tr
-            v-for="(item, index) in filteredFileList"
+        <div v-else>
+          <div
+            v-for="{ data: item, index } in virtualList"
             :key="item.filename"
+            class="border-b border-border transition-colors duration-150 select-none items-center file-row"
+            :style="gridStyle"
             :draggable="item.filename !== '..'"
             @dragstart="handleDragStart(item)"
             @dragend="handleDragEnd"
             @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
-            class="transition-colors duration-150 select-none"
             :class="[
               { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
               {
                 'bg-primary text-white':
-                  selectedItems.has(item.filename) ||
-                  index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex,
+                  selectedItems.has(item.filename) || index === selectedIndex,
               },
               {
                 'hover:bg-header/50': !(
-                  selectedItems.has(item.filename) ||
-                  index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex
+                  selectedItems.has(item.filename) || index === selectedIndex
                 ),
               },
               {
@@ -2573,14 +2495,23 @@ const handleNavigateToPathFromFavorites = (path: string) => {
             @dragleave="handleDragLeaveRow(item)"
             @drop.prevent="handleDropOnRow(item, $event)"
           >
-            <td
-              class="text-center border-b border-border align-middle"
+            <!-- Type Icon -->
+            <div
+              class="text-center truncate flex items-center justify-center min-w-0"
               :style="{
                 paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
                 paddingRight: `calc(0.5rem * var(--row-size-multiplier))`,
               }"
             >
               <i
+                v-if="item.filename === '..'"
+                class="fas fa-level-up-alt text-primary"
+                :style="{
+                  fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
+                }"
+              ></i>
+              <i
+                v-else
                 :class="[
                   'transition-colors duration-150',
                   item.attrs.isDirectory
@@ -2589,19 +2520,18 @@ const handleNavigateToPathFromFavorites = (path: string) => {
                       ? 'fas fa-link text-cyan-500'
                       : `${getFileIconClassBase(item.filename)} text-text-secondary`,
                   {
-                    'text-white':
-                      selectedItems.has(item.filename) ||
-                      index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) ===
-                        selectedIndex,
+                    'text-white': selectedItems.has(item.filename) || index === selectedIndex,
                   },
                 ]"
                 :style="{
                   fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
                 }"
               ></i>
-            </td>
-            <td
-              class="border-b border-border truncate align-middle"
+            </div>
+
+            <!-- Name -->
+            <div
+              class="truncate flex items-center min-w-0"
               :class="{ 'font-medium': item.attrs.isDirectory }"
               :style="{
                 padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
@@ -2609,12 +2539,13 @@ const handleNavigateToPathFromFavorites = (path: string) => {
               }"
             >
               {{ item.filename }}
-            </td>
-            <td
-              class="border-b border-border truncate align-middle"
+            </div>
+
+            <!-- Size -->
+            <div
+              class="truncate flex items-center min-w-0"
               :class="[
-                selectedItems.has(item.filename) ||
-                index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex
+                selectedItems.has(item.filename) || index === selectedIndex
                   ? 'text-white'
                   : 'text-text-secondary',
               ]"
@@ -2624,12 +2555,13 @@ const handleNavigateToPathFromFavorites = (path: string) => {
               }"
             >
               {{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}
-            </td>
-            <td
-              class="border-b border-border truncate font-mono align-middle"
+            </div>
+
+            <!-- Permissions -->
+            <div
+              class="truncate font-mono flex items-center min-w-0"
               :class="[
-                selectedItems.has(item.filename) ||
-                index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex
+                selectedItems.has(item.filename) || index === selectedIndex
                   ? 'text-white'
                   : 'text-text-secondary',
               ]"
@@ -2638,13 +2570,14 @@ const handleNavigateToPathFromFavorites = (path: string) => {
                 fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
               }"
             >
-              {{ formatMode(item.attrs.mode) }}
-            </td>
-            <td
-              class="border-b border-border truncate align-middle"
+              {{ item.filename !== '..' ? formatMode(item.attrs.mode) : '' }}
+            </div>
+
+            <!-- Modified -->
+            <div
+              class="truncate flex items-center min-w-0"
               :class="[
-                selectedItems.has(item.filename) ||
-                index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex
+                selectedItems.has(item.filename) || index === selectedIndex
                   ? 'text-white'
                   : 'text-text-secondary',
               ]"
@@ -2653,12 +2586,19 @@ const handleNavigateToPathFromFavorites = (path: string) => {
                 fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
               }"
             >
-              {{ new Date(item.attrs.mtime).toLocaleString() }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <!-- Removed separate loading/empty divs -->
+              {{ item.filename !== '..' ? new Date(item.attrs.mtime).toLocaleString() : '' }}
+            </div>
+          </div>
+
+          <!-- Empty Directory / Search Result State -->
+          <div
+            v-if="filteredFileList.length === 0"
+            class="px-4 py-6 text-center text-text-secondary italic"
+          >
+            {{ searchQuery ? t('fileManager.noSearchResults') : t('fileManager.emptyDirectory') }}
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 使用 FileUploadPopup 组件 -->

@@ -87,7 +87,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       event.preventDefault(); // 阻止默认行为（如文本选择），允许滚动逻辑
       // 效果由 handleDragOverRow 设置，但在空白区域应为 none
       const targetElement = event.target as HTMLElement;
-      const targetRow = targetElement.closest('tr.file-row');
+      const targetRow = targetElement.closest('.file-row');
       if (!targetRow && event.dataTransfer) {
         // 如果不在行上
         event.dataTransfer.dropEffect = 'none';
@@ -158,7 +158,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       // 鼠标仍在容器内（可能移到了子元素上），不隐藏蒙版或清除状态
       // 但如果是内部拖拽移到了非行区域，需要清除行高亮
       if (draggedItem.value) {
-        const relatedRow = target instanceof HTMLElement ? target.closest('tr.file-row') : null;
+        const relatedRow = target instanceof HTMLElement ? target.closest('.file-row') : null;
         if (!relatedRow) {
           dragOverTarget.value = null;
         }

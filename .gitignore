@@ -147,6 +147,7 @@ dist
 .codex
 .serena
 .gemini-clipboard
+~/
 
 # Build/Distribution scripts
 dist-scripts/
