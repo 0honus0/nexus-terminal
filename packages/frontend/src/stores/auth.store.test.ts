@@ -459,7 +459,7 @@ describe('auth.store', () => {
       await store.fetchPasskeys();
 
       expect(store.passkeys).toHaveLength(1);
-      expect(store.passkeys[0]).toEqual({
+      expect(store.passkeys![0]).toEqual({
         credentialID: 'cred-1',
         publicKey: 'key-1',
         counter: 1,
