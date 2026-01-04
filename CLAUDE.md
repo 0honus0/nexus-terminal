@@ -6,6 +6,23 @@
 
 ## 变更记录
 
+### 2026-01-04 (项目 AI 上下文初始化 - 自适应扫描)
+
+- **架构文档更新**：完成项目全局架构扫描与文档更新
+- **模块统计更新**：
+  - Backend: 121 个 TypeScript 文件，516+ 类型/类/接口导出，23 个数据表
+  - Frontend: 51 个 TypeScript 核心文件，531+ 类型/类/接口导出，24 个 Pinia stores，13 个视图路由
+  - Remote Gateway: 单一入口文件，轻量化网关服务
+- **测试覆盖率统计**：
+  - Backend: 59+ 测试文件（单元测试 + 集成测试）
+  - Frontend: 27+ 测试文件（单元测试 + E2E 测试）
+  - Remote Gateway: 1 测试文件
+- **数据库 Schema 完整性**：识别 23 个业务表 + 1 个迁移管理表
+- **扫描策略**：阶段 A（全仓清点）+ 阶段 B（模块优先扫描）
+- **覆盖率**：100% 模块文档化完成
+
+### 历史变更
+
 详见 [CHANGELOG.md](./CHANGELOG.md)
 
 ---
@@ -20,6 +37,7 @@
 - **高度可定制**：终端主题、布局、背景动效、键盘映射
 - **安全机制**：双因素认证（2FA）、Passkey 登录、IP 白名单/黑名单
 - **审计与监控**：完整的用户行为日志、通知系统（Webhook/Email/Telegram）
+- **智能运维**：AI 智能助手、批量命令执行、系统健康分析
 - **轻量化部署**：基于 Node.js 后端，资源占用低，支持 Docker 一键部署
 
 ---
@@ -48,6 +66,7 @@
 5. **安全与审计**：用户认证、会话管理、IP 访问控制、行为审计日志
 6. **通知系统**：可配置的多渠道通知（登录提醒、异常告警）
 7. **容器管理**：内置简易 Docker 容器运维面板
+8. **智能运维**：AI 智能分析、批量命令执行（Phase 4/5）
 
 ---
 
@@ -57,10 +76,10 @@
 graph TD
     subgraph "Nexus Terminal Monorepo"
         A["📦 nexus-terminal (根)"] --> B["📂 packages"]
-        B --> C["🔧 backend<br/>Express + SQLite"]
-        B --> D["🎨 frontend<br/>Vue 3 + Vite"]
-        B --> E["🖥️ remote-gateway<br/>Guacamole Lite"]
-        A --> F["📚 doc"]
+        B --> C["🔧 backend<br/>Express + SQLite<br/>(121 TS文件, 23 数据表)"]
+        B --> D["🎨 frontend<br/>Vue 3 + Vite<br/>(51 核心TS, 24 Stores)"]
+        B --> E["🖥️ remote-gateway<br/>Guacamole Lite<br/>(1 入口文件)"]
+        A --> F["📚 doc<br/>(技术债务、路线图)"]
     end
 
     subgraph "外部依赖"
@@ -115,11 +134,11 @@ sequenceDiagram
 
 ## 模块索引
 
-| 模块名称           | 路径                      | 语言/框架               | 文件数 | 职责描述                                                                | 文档入口                                                        |
-| ------------------ | ------------------------- | ----------------------- | ------ | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
-| **backend**        | `packages/backend`        | TypeScript / Express.js | 177    | 后端 API 服务：SSH/SFTP 连接、用户认证、审计日志、通知、Docker 管理等   | [backend/CLAUDE.md](./packages/backend/CLAUDE.md)               |
-| **frontend**       | `packages/frontend`       | TypeScript / Vue 3      | 184    | 前端 Web 应用：终端界面、文件管理器、连接管理、主题定制、路由与状态管理 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
-| **remote-gateway** | `packages/remote-gateway` | TypeScript / Express.js | 1      | 远程桌面网关：RDP/VNC 连接代理，基于 Guacamole 协议                     | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
+| 模块名称           | 路径                      | 语言/框架               | TS 文件数 | 职责描述                                                                | 文档入口                                                        |
+| ------------------ | ------------------------- | ----------------------- | --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **backend**        | `packages/backend`        | TypeScript / Express.js | 121       | 后端 API 服务：SSH/SFTP 连接、用户认证、审计日志、通知、Docker 管理等   | [backend/CLAUDE.md](./packages/backend/CLAUDE.md)               |
+| **frontend**       | `packages/frontend`       | TypeScript / Vue 3      | 51 (核心) | 前端 Web 应用：终端界面、文件管理器、连接管理、主题定制、路由与状态管理 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
+| **remote-gateway** | `packages/remote-gateway` | TypeScript / Express.js | 1         | 远程桌面网关：RDP/VNC 连接代理，基于 Guacamole 协议                     | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
 
 ### 规划文档
 
@@ -197,10 +216,10 @@ npm run build
 ### 当前状态
 
 - **测试框架已配置**：Backend 与 Frontend 均已配置完整测试框架
-- **测试覆盖率**（2025-12-24 更新）：
-  - Backend: 59 个 `*.test.ts` 文件，1,223 个测试用例（单元测试 + 集成测试）
-  - Frontend: 15+ 个 `*.test.ts` 文件（组件、Store 与 Composables 测试）
-  - E2E: 4 个 `*.spec.ts` 文件（Playwright 端到端测试）
+- **测试覆盖率**（2026-01-04 更新）：
+  - Backend: 59+ 个 `*.test.ts` 文件（单元测试 + 集成测试）
+  - Frontend: 27+ 个 `*.test.ts` 文件（组件、Store、Composables 测试 + E2E）
+  - Remote Gateway: 1 个 `*.test.ts` 文件
 - **测试类型覆盖**：
   - ✅ 单元测试（Vitest）
   - ✅ 集成测试（SSH/SFTP/RDP/VNC 协议模拟）
@@ -649,13 +668,13 @@ class LoginPage {
 ### 项目关键文件路径速查
 
 - **Docker 配置**：`docker-compose.yml`、`packages/backend/Dockerfile`
-- **数据库 Schema**：`packages/backend/src/database/schema.ts`
+- **数据库 Schema**：`packages/backend/src/database/schema.ts`（23 个业务表）
 - **后端入口**：`packages/backend/src/index.ts`
 - **前端入口**：`packages/frontend/src/main.ts`
 - **路由定义**：
-  - 后端：`packages/backend/src/*/routes.ts`
-  - 前端：`packages/frontend/src/router/index.ts`
-- **状态管理**：`packages/frontend/src/stores/*.store.ts`
+  - 后端：`packages/backend/src/*/routes.ts`（识别 20+ 路由模块）
+  - 前端：`packages/frontend/src/router/index.ts`（13 个视图路由）
+- **状态管理**：`packages/frontend/src/stores/*.store.ts`（24 个 Pinia stores）
 - **WebSocket**：
   - 服务端：`packages/backend/src/websocket.ts`
   - 处理器：`packages/backend/src/websocket/handlers/`
@@ -685,16 +704,21 @@ Guacd (4822) → RDP/VNC 协议转换
 
 ---
 
-**文档生成时间**：2025-12-24（E2E 与集成测试框架实现）
+**文档生成时间**：2026-01-04 17:30:00 CST（项目 AI 上下文初始化）
+
 **已完成任务**：
 
-- ✅ E2E 测试（Playwright）验证关键用户流程
-- ✅ SSH/SFTP 协议交互集成测试
-- ✅ RDP/VNC 代理功能测试
+- ✅ 阶段 A：全仓清点 - 文件统计与模块识别
+- ✅ 阶段 B：模块优先扫描 - 23 个数据表、121+ TypeScript 文件（Backend）、51+ 核心文件（Frontend）
+- ✅ 架构图更新 - 增加模块统计信息
+- ✅ 测试覆盖率更新 - 59+ Backend 测试、27+ Frontend 测试
+- ✅ 覆盖率报告 - 100% 模块文档化完成
 
 **下次扫描建议**：
 
-- 监控 Phase 4/5 新增模块的测试覆盖率提升
-- 定期审查技术债务报告并处理高优先级项
-- 扩展 E2E 测试用例覆盖更多边缘场景
-- 添加性能测试基准（响应时间、并发连接数）
+- 补充后端各业务模块的 Service 层单元测试覆盖率（当前 59+ 文件）
+- 补充前端 Components 与 Composables 的单元测试（当前 27+ 文件）
+- 扩展 E2E 测试用例覆盖更多边缘场景（基于 Playwright）
+- 定期审查技术债务报告（doc/TECHNICAL_DEBT_REPORT.md）并处理高优先级项
+- 监控 Phase 4/5 新增模块（批量操作、AI 智能运维）的测试覆盖率提升
+- 添加性能测试基准（响应时间、并发连接数、内存占用监控）

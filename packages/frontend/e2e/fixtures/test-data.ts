@@ -50,3 +50,56 @@ export const VNC_CONNECTION = {
 export const TWO_FACTOR_AUTH = {
   secret: process.env.E2E_2FA_SECRET || 'JBSWY3DPEHPK3PXP',
 };
+
+/**
+ * 边缘场景测试数据
+ */
+export const EDGE_CASE_DATA = {
+  // 无效连接数据
+  invalidConnection: {
+    name: 'Invalid SSH Connection',
+    host: '192.0.2.1', // TEST-NET-1 (RFC 5737)
+    port: 22,
+    username: 'nonexistent',
+    password: 'invalid',
+  },
+  // 超时配置
+  shortTimeout: {
+    name: 'Timeout Test',
+    host: '192.0.2.1',
+    port: 22,
+    username: 'test',
+    password: 'test',
+    timeout: 1000, // 1秒超时
+  },
+  // 大文件测试
+  largeFile: {
+    name: 'large-test-file.bin',
+    size: 100 * 1024 * 1024, // 100MB
+  },
+  // 特殊字符文件名
+  specialCharsFile: {
+    name: '测试文件 (test) [123].txt',
+    content: 'UTF-8 内容测试',
+  },
+  // 权限测试
+  restrictedPath: {
+    path: '/root',
+    expectedError: 'Permission denied',
+  },
+  // 批量操作测试
+  batchServers: [
+    { name: 'Batch Test 1', host: 'server1.test' },
+    { name: 'Batch Test 2', host: 'server2.test' },
+    { name: 'Batch Test 3', host: 'server3.test' },
+  ],
+  // 长时间运行命令
+  longRunningCommand: {
+    command: 'sleep 60',
+    expectedDuration: 60000, // 60秒
+  },
+  // 会话恢复测试
+  sessionResume: {
+    suspendDuration: 5000, // 5秒后恢复
+  },
+};

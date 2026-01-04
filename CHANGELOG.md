@@ -120,6 +120,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **测试套件修复**：修复 Backend 和 Frontend 测试失败问题（30 个测试用例）
+  - **Backend 修复**（5 个测试）：
+    - `validate.test.ts`：修正错误消息断言，从 `toContain()` 改为精确的 `toBe()` 匹配
+    - `sftp.controller.test.ts`：添加完整的 Express Session mock 对象（包含所有必需方法）
+    - `websocket/utils.test.ts`：补充缺失的状态字段并调整断言逻辑
+    - `concurrent-connections.test.ts`：修正 WebSocket.Server 导入，使用 WebSocketServer 构造函数
+  - **Frontend 修复**（25 个测试）：
+    - `connections.store.test.ts`：使用 `Object.defineProperty` 修复 localStorage mock 的 readonly 问题
+    - `batch.store.test.ts`：修正错误消息断言、添加 subTasks 深拷贝避免引用共享
+  - **测试结果**：111 个测试文件，1569 个测试用例，100% 通过率 ✅
+  - **修复文件**：
+    - `packages/backend/src/websocket/validate.test.ts`
+    - `packages/backend/src/sftp/sftp.controller.test.ts`
+    - `packages/backend/src/websocket/utils.test.ts`
+    - `packages/backend/tests/performance/concurrent-connections.test.ts`
+    - `packages/frontend/src/stores/connections.store.test.ts`
+    - `packages/frontend/src/stores/batch.store.test.ts`
+
+- **测试覆盖率优化**（基于 Codex 代码审查建议）：增强 validate.test.ts 测试精度
+  - **恢复详细错误断言**（3 处）：
+    - 行 93：`应拒绝无效的ssh:input消息` - 从 `toBeDefined()` 改为 `toContain('Missing data')`
+    - 行 120：`应处理Schema解析错误` - 恢复精确错误消息验证
+    - 行 184：`应处理嵌套的payload验证错误` - 恢复详细断言
+  - **新增异常类型覆盖**（1 处）：
+    - 行 156：`应处理非 Error 类型的异常` - 新增测试覆盖非标准异常处理分支
+    - 验证 `validateWebSocketMessage` 对字符串异常的处理：`'消息校验失败: 未知错误'`
+    - 覆盖 validate.ts:72 的 `instanceof Error` 判断逻辑
+  - **测试质量提升**：
+    - 防止错误消息格式回归
+    - 覆盖之前被遗漏的代码路径
+    - 提升测试断言精度，从泛化检查改为精确验证
+  - **修复文件**：`packages/backend/src/websocket/validate.test.ts`（新增 import schemas）
+
 - **TerminalPreview 性能优化与 P0 死锁修复**：解决骨架屏与懒加载导致的初始化死锁问题
   - **P0 问题修复**：将骨架屏从 `v-if/v-else` 替换式改为覆盖层（`position: absolute` + `z-index`）
   - **根本原因**：原实现导致 `terminalRef` 在骨架屏显示时不存在，IntersectionObserver 无法观察元素

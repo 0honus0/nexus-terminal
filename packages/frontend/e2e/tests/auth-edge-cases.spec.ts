@@ -1,0 +1,300 @@
+import { test, expect } from '../fixtures/auth.fixture';
+import { LoginPage } from '../pages/login.page';
+import { TEST_USER, TWO_FACTOR_AUTH } from '../fixtures/test-data';
+import { generateTOTP } from '../utils/totp';
+
+test.describe('认证边缘场景测试', () => {
+  test.describe('登录失败场景', () => {
+    test('连续登录失败不应导致应用崩溃', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+
+      // 连续3次失败登录
+      for (let i = 0; i < 3; i++) {
+        await login.login(TEST_USER.username, `wrong-password-${i}`);
+        await login.expectLoginFailure();
+      }
+
+      // 验证表单仍然可用
+      await expect(login.usernameInput).toBeEnabled();
+      await expect(login.passwordInput).toBeEnabled();
+      await expect(login.loginButton).toBeEnabled();
+    });
+
+    test('使用特殊字符的密码正常工作', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      const specialPassword = '!@#$%^&*()_+-=[]{}|;:,.<>?~`';
+
+      await login.login(TEST_USER.username, specialPassword);
+      // 预期失败但不应崩溃
+      await login.expectLoginFailure();
+    });
+
+    test('用户名大小写敏感检查', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+
+      // 使用大写用户名
+      await login.login(TEST_USER.username.toUpperCase(), TEST_USER.password);
+
+      // 根据系统配置，可能成功或失败，但不应崩溃
+      const success = await loginPage
+        .waitForURL(/\/(workspace|dashboard)/, { timeout: 3000 })
+        .catch(() => false);
+      if (!success) {
+        await login.expectLoginFailure();
+      }
+    });
+
+    test('SQL 注入尝试应被安全处理', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      const sqlInjection = "admin' OR '1'='1";
+
+      await login.login(sqlInjection, 'password');
+      await login.expectLoginFailure();
+    });
+
+    test('XSS 尝试应被过滤', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      const xssPayload = '<script>alert("XSS")</script>';
+
+      await login.login(xssPayload, 'password');
+      await login.expectLoginFailure();
+
+      // 验证没有执行脚本
+      const alerts = await loginPage.evaluate(() => {
+        return window.document.querySelectorAll('script').length;
+      });
+      expect(alerts).toBe(0);
+    });
+  });
+
+  test.describe('2FA 边缘场景', () => {
+    test.skip('2FA 验证码过期处理', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      await login.login('2fa-enabled-user', 'password');
+      await login.expect2FARequired();
+
+      // 使用过期的验证码（60秒前的）
+      const expiredCode = '000000';
+      await login.submit2FACode(expiredCode);
+
+      // 应该显示错误
+      await login.expectLoginFailure();
+    });
+
+    test.skip('2FA 验证码格式验证', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      await login.login('2fa-enabled-user', 'password');
+      await login.expect2FARequired();
+
+      // 尝试无效格式
+      await login.twoFactorInput.fill('abc123');
+      const submitButton = loginPage.locator('button[type="submit"]:has-text("验证")');
+      await expect(submitButton).toBeDisabled();
+    });
+
+    test.skip('2FA 连续失败尝试', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      await login.login('2fa-enabled-user', 'password');
+      await login.expect2FARequired();
+
+      // 连续5次错误验证码
+      for (let i = 0; i < 5; i++) {
+        await login.submit2FACode('123456');
+        if (i < 4) {
+          await expect(login.errorMessage).toBeVisible();
+        }
+      }
+
+      // 可能触发账户锁定或冷却时间
+      await expect(loginPage.locator('text=/锁定|冷却|暂时禁用/i')).toBeVisible({ timeout: 5000 });
+    });
+
+    test.skip('2FA 正确验证码但会话已过期', async ({ loginPage, context }) => {
+      const login = new LoginPage(loginPage);
+      await login.login('2fa-enabled-user', 'password');
+      await login.expect2FARequired();
+
+      // 清除会话 cookie
+      await context.clearCookies();
+
+      // 生成有效的 TOTP
+      const validCode = generateTOTP(TWO_FACTOR_AUTH.secret);
+      await login.submit2FACode(validCode);
+
+      // 应该返回登录页或显示错误
+      await expect(loginPage).toHaveURL(/\/login/, { timeout: 5000 });
+    });
+  });
+
+  test.describe('会话管理边缘场景', () => {
+    test('会话过期后访问受保护资源重定向到登录页', async ({ authenticatedPage, context }) => {
+      // 清除会话
+      await context.clearCookies();
+
+      // 尝试访问工作区
+      await authenticatedPage.goto('/workspace');
+
+      // 应该重定向到登录页
+      await expect(authenticatedPage).toHaveURL(/\/login/, { timeout: 5000 });
+    });
+
+    test('同时打开多个标签页时会话同步', async ({ authenticatedPage, context }) => {
+      // 打开第二个标签页
+      const secondPage = await context.newPage();
+      await secondPage.goto('/workspace');
+
+      // 验证两个页面都已认证
+      await expect(authenticatedPage).toHaveURL(/\/(workspace|dashboard)/);
+      await expect(secondPage).toHaveURL(/\/(workspace|dashboard)/);
+
+      // 在第一个页面登出
+      await authenticatedPage.locator('button:has-text("登出")').click();
+      const confirmButton = authenticatedPage.locator(
+        '.el-message-box__btns button:has-text("确定")'
+      );
+      if (await confirmButton.isVisible()) {
+        await confirmButton.click();
+      }
+
+      // 等待登出完成
+      await expect(authenticatedPage).toHaveURL(/\/login/, { timeout: 5000 });
+
+      // 刷新第二个页面，应该也被登出
+      await secondPage.reload();
+      await expect(secondPage).toHaveURL(/\/login/, { timeout: 5000 });
+
+      await secondPage.close();
+    });
+
+    test('网络断开后恢复时会话仍然有效', async ({ authenticatedPage, context }) => {
+      // 验证已登录
+      await expect(authenticatedPage).toHaveURL(/\/(workspace|dashboard)/);
+
+      // 模拟网络断开
+      await context.setOffline(true);
+      await authenticatedPage.waitForTimeout(2000);
+
+      // 恢复网络
+      await context.setOffline(false);
+
+      // 刷新页面
+      await authenticatedPage.reload();
+
+      // 会话应该仍然有效
+      await expect(authenticatedPage).toHaveURL(/\/(workspace|dashboard)/, { timeout: 10000 });
+    });
+
+    test('"记住我" 功能在浏览器重启后仍有效', async ({ page, context }) => {
+      const login = new LoginPage(page);
+      await login.goto();
+      await login.loginWithRememberMe(TEST_USER.username, TEST_USER.password);
+      await login.expectLoginSuccess();
+
+      // 获取当前 cookies
+      const cookies = await context.cookies();
+
+      // 关闭浏览器上下文并创建新的
+      const newContext = await page
+        .context()
+        .browser()
+        ?.newContext({
+          storageState: {
+            cookies,
+            origins: [],
+          },
+        });
+
+      if (newContext) {
+        const newPage = await newContext.newPage();
+        await newPage.goto('/workspace');
+
+        // 应该仍然保持登录状态
+        await expect(newPage).toHaveURL(/\/(workspace|dashboard)/, { timeout: 5000 });
+
+        await newPage.close();
+        await newContext.close();
+      }
+    });
+  });
+
+  test.describe('Passkey 边缘场景', () => {
+    test.skip('Passkey 不可用时的降级处理', async ({ loginPage, context }) => {
+      const login = new LoginPage(loginPage);
+
+      // 模拟 WebAuthn 不可用
+      await context.addInitScript(() => {
+        // @ts-expect-error - 删除 WebAuthn API
+        delete window.navigator.credentials;
+      });
+
+      await loginPage.reload();
+
+      // Passkey 按钮应该被隐藏或禁用
+      await expect(login.passkeyButton).not.toBeVisible();
+    });
+
+    test.skip('Passkey 验证超时处理', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      await login.clickPasskeyLogin();
+
+      // 等待超时（不进行任何操作）
+      await loginPage.waitForTimeout(30000);
+
+      // 应该显示超时错误
+      await expect(login.errorMessage).toBeVisible();
+    });
+
+    test.skip('Passkey 验证失败后切换到密码登录', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+      await login.clickPasskeyLogin();
+
+      // 取消 Passkey 验证
+      await loginPage.keyboard.press('Escape');
+
+      // 应该能够切换回密码登录
+      await expect(login.usernameInput).toBeVisible();
+      await login.login(TEST_USER.username, TEST_USER.password);
+      await login.expectLoginSuccess();
+    });
+  });
+
+  test.describe('CSRF 保护', () => {
+    test('缺少 CSRF token 的请求应被拒绝', async ({ loginPage, context }) => {
+      const login = new LoginPage(loginPage);
+
+      // 拦截登录请求并移除 CSRF token
+      await context.route('**/api/v1/auth/login', (route) => {
+        const request = route.request();
+        const headers = request.headers();
+        delete headers['x-csrf-token'];
+        delete headers['csrf-token'];
+
+        route.continue({ headers });
+      });
+
+      await login.login(TEST_USER.username, TEST_USER.password);
+
+      // 应该失败
+      await login.expectLoginFailure();
+    });
+  });
+
+  test.describe('速率限制', () => {
+    test.skip('短时间内多次登录尝试应触发速率限制', async ({ loginPage }) => {
+      const login = new LoginPage(loginPage);
+
+      // 快速连续10次登录尝试
+      for (let i = 0; i < 10; i++) {
+        await login.login(TEST_USER.username, 'wrong-password');
+        await loginPage.waitForTimeout(200);
+      }
+
+      // 应该显示速率限制错误
+      await expect(
+        loginPage.locator('text=/请稍后再试|Too many attempts|Rate limit/i')
+      ).toBeVisible({
+        timeout: 5000,
+      });
+    });
+  });
+});

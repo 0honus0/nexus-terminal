@@ -9,3 +9,4 @@ packages/*/build
 packages/*/coverage
 commitlint.config.js
 packages/frontend/public/sw.js
+packages/frontend/lighthouse.config.js
