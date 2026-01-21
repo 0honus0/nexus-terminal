@@ -75,6 +75,7 @@ interface AuthState {
   passkeys: PasskeyInfo[] | null;
   passkeysLoading: boolean;
   hasPasskeysAvailable: boolean;
+  isInitCompleted: boolean; // 初始化是否已完成（用于防止路由守卫在数据加载前做决策）
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -91,6 +92,7 @@ export const useAuthStore = defineStore('auth', {
     passkeys: null, // Initialize passkeys as null
     passkeysLoading: false, // Initialize passkeysLoading as false
     hasPasskeysAvailable: false, // Initialize as false
+    isInitCompleted: false, // 初始化未完成，防止路由守卫在数据加载前做决策
   }),
   getters: {
     // 可以添加一些 getter，例如获取用户名
@@ -559,6 +561,77 @@ export const useAuthStore = defineStore('auth', {
         );
         this.hasPasskeysAvailable = false; // Default to false on error
         return false;
+      }
+    },
+
+    // 统一初始化数据加载 (优化版:使用后端统一API)
+    async loadInitData() {
+      this.isLoading = true;
+      try {
+        const response = await apiClient.get<{
+          needsSetup: boolean;
+          isAuthenticated: boolean;
+          user: UserInfo | null;
+          captchaConfig: {
+            enabled: boolean;
+            provider: string;
+            hcaptchaSiteKey: string | null;
+            recaptchaSiteKey: string | null;
+          };
+        }>('/auth/init');
+
+        // 校验 provider 值是否合法
+        const provider = response.data.captchaConfig.provider;
+        const validProviders = ['none', 'hcaptcha', 'recaptcha'] as const;
+        if (!validProviders.includes(provider as any)) {
+          throw new Error(`无效的 CAPTCHA provider: ${provider}`);
+        }
+
+        // 更新状态
+        this.needsSetup = response.data.needsSetup;
+        this.isAuthenticated = response.data.isAuthenticated;
+        this.user = response.data.user;
+        // 类型安全：使用类型断言前先校验
+        this.publicCaptchaConfig = {
+          enabled: response.data.captchaConfig.enabled,
+          provider: provider as 'none' | 'hcaptcha' | 'recaptcha',
+          hcaptchaSiteKey: response.data.captchaConfig.hcaptchaSiteKey ?? undefined,
+          recaptchaSiteKey: response.data.captchaConfig.recaptchaSiteKey ?? undefined,
+        };
+
+        // 设置语言
+        if (this.user?.language) {
+          setLocale(this.user.language);
+        }
+
+        // 标记初始化完成
+        this.isInitCompleted = true;
+
+        console.log('[AuthStore] 统一初始化数据加载完成:', {
+          needsSetup: this.needsSetup,
+          isAuthenticated: this.isAuthenticated,
+          user: this.user,
+        });
+      } catch (error: unknown) {
+        // 类型安全的错误处理
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const axiosError = error as { response?: { data?: { message?: string } } };
+        const serverMessage = axiosError.response?.data?.message;
+
+        console.error('[AuthStore] 加载初始化数据失败:', serverMessage || errorMessage);
+
+        // 降级策略：保留 Pinia persist 中的旧状态，不强制重置
+        // 这样可以避免网络抖动导致误判已登录用户
+        // 但仍然标记初始化已完成，避免路由守卫一直等待
+        this.isInitCompleted = true;
+
+        // 如果是完全首次加载（persist 中也没有数据），才设置默认值
+        if (this.user === null && this.needsSetup === false && this.isAuthenticated === false) {
+          // 无法判断，使用保守策略：假设需要设置
+          this.needsSetup = true;
+        }
+      } finally {
+        this.isLoading = false;
       }
     },
   },

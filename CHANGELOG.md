@@ -38,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **应用启动性能优化**：统一初始化 API 并优化前端加载流程
+  - 后端新增统一初始化端点 `GET /api/v1/auth/init`，合并 needsSetup、isAuthenticated、captchaConfig 检查
+  - 修改 `packages/backend/src/auth/auth.controller.ts` (+63 行)
+  - 修改 `packages/backend/src/auth/auth.routes.ts` (+1 路由)
+  - 前端初始化流程重构：先挂载应用，后台异步加载数据
+  - 修改 `packages/frontend/src/main.ts` (重构 67 行)
+  - 新增 `packages/frontend/src/stores/auth.store.ts::loadInitData` action (+49 行)
+  - **性能提升**：减少 3-4 次网络请求合并为 1 次
+  - **用户体验**：应用立即显示，数据后台加载，消除"INITIALIZING NEXUS..."白屏等待
+
 - **错误处理类型安全强化**：消除 `catch (error: any)` 反模式
   - 修改 29 个文件，使用 `unknown` 类型配合 `getErrorMessage()` 工具函数
   - 涉及模块：ai-ops, appearance, auth, connections, notifications, proxies, quick-commands, settings, sftp, ssh-keys, tags, transfers, websocket

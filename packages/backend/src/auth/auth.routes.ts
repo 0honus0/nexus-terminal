@@ -11,6 +11,7 @@ import {
   setupAdmin,
   logout,
   getPublicCaptchaConfig,
+  getInitData,
   // Passkey handlers
   generatePasskeyRegistrationOptionsHandler,
   verifyPasskeyRegistrationHandler,
@@ -27,6 +28,54 @@ import { ipBlacklistCheckMiddleware } from './ipBlacklistCheck.middleware';
 import { strictAuthLimiter, moderateAuthLimiter } from '../config/rate-limit.config';
 
 const router = Router();
+
+/**
+ * @swagger
+ * /api/v1/auth/init:
+ *   get:
+ *     summary: 获取统一初始化数据
+ *     description: 合并多个初始化检查(needsSetup, authStatus, captchaConfig),减少前端网络请求次数
+ *     tags: [auth]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: 成功获取初始化数据
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 needsSetup:
+ *                   type: boolean
+ *                   description: 是否需要初始设置
+ *                 isAuthenticated:
+ *                   type: boolean
+ *                   description: 是否已认证
+ *                 user:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     username:
+ *                       type: string
+ *                     isTwoFactorEnabled:
+ *                       type: boolean
+ *                 captchaConfig:
+ *                   type: object
+ *                   properties:
+ *                     enabled:
+ *                       type: boolean
+ *                     provider:
+ *                       type: string
+ *                     hcaptchaSiteKey:
+ *                       type: string
+ *                       nullable: true
+ *                     recaptchaSiteKey:
+ *                       type: string
+ *                       nullable: true
+ */
+router.get('/init', getInitData);
 
 /**
  * @swagger

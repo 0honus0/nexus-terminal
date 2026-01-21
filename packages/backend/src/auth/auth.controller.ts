@@ -1295,6 +1295,71 @@ export const getPublicCaptchaConfig = async (
 };
 
 /**
+ * 统一初始化端点 (GET /api/v1/auth/init)
+ * 合并多个初始化检查，减少前端网络请求次数，提升应用启动速度
+ * 返回: needsSetup, isAuthenticated, user, captchaConfig
+ */
+export const getInitData = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const db = await getDbInstance();
+
+    // 1. 检查是否需要初始设置
+    const userCountRow = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
+    const needsSetup = userCountRow ? userCountRow.count === 0 : true;
+
+    // 2. 检查认证状态
+    const { userId, username, requiresTwoFactor } = req.session;
+    let isAuthenticated = false;
+    let user: { id: number; username: string; isTwoFactorEnabled: boolean } | null = null;
+
+    if (userId && username && !requiresTwoFactor) {
+      const userRow = await getDb<{ two_factor_secret: string | null }>(
+        db,
+        'SELECT two_factor_secret FROM users WHERE id = ?',
+        [userId]
+      );
+
+      if (userRow) {
+        isAuthenticated = true;
+        user = {
+          id: userId,
+          username,
+          isTwoFactorEnabled: !!userRow.two_factor_secret,
+        };
+      }
+    }
+
+    // 3. 获取公共 CAPTCHA 配置
+    const fullCaptchaConfig = await settingsService.getCaptchaConfig();
+    const captchaConfig = {
+      enabled: fullCaptchaConfig.enabled,
+      provider: fullCaptchaConfig.provider,
+      hcaptchaSiteKey: fullCaptchaConfig.hcaptchaSiteKey,
+      recaptchaSiteKey: fullCaptchaConfig.recaptchaSiteKey,
+    };
+
+    // 4. 返回统一的初始化数据
+    res.status(200).json({
+      needsSetup,
+      isAuthenticated,
+      user,
+      captchaConfig,
+    });
+
+    console.log(
+      `[AuthController] 初始化数据已发送: needsSetup=${needsSetup}, isAuthenticated=${isAuthenticated}`
+    );
+  } catch (error: unknown) {
+    console.error('[AuthController] 获取初始化数据时出错:', error);
+    next(error);
+  }
+};
+
+/**
  * 检查系统中是否配置了任何 Passkey (GET /api/v1/auth/passkey/has-configured)
  * 或者特定用户是否配置了 Passkey (GET /api/v1/auth/passkey/has-configured?username=xxx)
  * 公开访问，用于登录页面判断是否显示 Passkey 登录按钮。

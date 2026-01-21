@@ -78,13 +78,19 @@ router.beforeEach((to, from, next) => {
   // 在守卫内部获取 store 实例，确保 Pinia 已初始化
   const authStore = useAuthStore();
 
-  // 定义不需要认证的路由名称列表
   // 定义不需要认证的路由名称列表 (现在包括 Setup)
   const publicRoutes = ['Login', 'Setup'];
   const requiresAuth = !publicRoutes.includes(to.name as string);
 
-  // 假设有一个状态表示是否需要初始设置，这里暂时用一个变量模拟
-  // 实际应用中，这个状态应该在应用启动时通过 API 获取
+  // 如果初始化尚未完成，允许导航（让 main.ts 完成初始化后再重定向）
+  // 这样可以避免基于不完整的状态做决策，导致 UI 闪烁
+  if (!authStore.isInitCompleted) {
+    console.log('路由守卫：初始化尚未完成，允许导航（等待 main.ts 完成初始化）');
+    next();
+    return;
+  }
+
+  // 初始化完成后，根据最新状态做导航决策
   const { needsSetup } = authStore; // 从 authStore 获取状态
 
   if (needsSetup && to.name !== 'Setup') {

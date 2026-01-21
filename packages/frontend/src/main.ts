@@ -18,65 +18,77 @@ pinia.use(piniaPluginPersistedstate); // 使用持久化插件
 const app = createApp(App);
 
 app.use(pinia); // 使用配置好的 Pinia 实例
-// 注意：在状态初始化完成前，暂时不 use(router)
+app.use(router); // 立即启用路由,不再等待初始化完成
 app.use(i18n); // 使用 i18n
 
-// --- 应用初始化逻辑 ---
-// 使用 async IIFE 来允许顶层 await
+// --- 应用初始化逻辑 (优化版:先挂载,后加载数据) ---
 (async () => {
   const authStore = useAuthStore(pinia); // 实例化 Auth Store
-  // **提前实例化 AppearanceStore 以确保 immediate watcher 运行**
-  const appearanceStore = useAppearanceStore(pinia);
+  const appearanceStore = useAppearanceStore(pinia); // 提前实例化 AppearanceStore
 
   try {
-    console.log('[main.ts] 开始检查设置和认证状态...');
-    // 1. 同时检查设置和认证状态，并等待它们完成
-    // 确保 checkAuthStatus 可以在 needsSetup=true 时也能安全运行并返回正确状态
-    await Promise.all([authStore.checkSetupStatus(), authStore.checkAuthStatus()]);
+    console.log('[main.ts] 开始初始化应用...');
+
+    // 1. 立即挂载应用,不等待数据加载
+    await router.isReady(); // 等待路由初始化完成
+    app.mount('#app');
+    console.log('[main.ts] 应用已挂载,开始后台加载数据...');
+
+    // 2. 后台异步加载初始化数据 (使用新的统一API)
+    await authStore.loadInitData();
     console.log(
-      `[main.ts] 状态检查完成: needsSetup=${authStore.needsSetup}, isAuthenticated=${authStore.isAuthenticated}`
+      `[main.ts] 初始化数据加载完成: needsSetup=${authStore.needsSetup}, isAuthenticated=${authStore.isAuthenticated}`
     );
 
-    // 2. 如果不需要设置且用户已认证，则加载用户特定数据
+    // 3. 数据加载完成后,检查是否需要重定向
+    const currentRoute = router.currentRoute.value;
+
+    // 优先级1: 需要初始设置
+    if (authStore.needsSetup && currentRoute.name !== 'Setup') {
+      console.log('[main.ts] 需要初始设置,重定向到 /setup');
+      router.push({ name: 'Setup' });
+    }
+    // 优先级2: 已登录用户在登录页，重定向到仪表盘
+    else if (!authStore.needsSetup && currentRoute.name === 'Login' && authStore.isAuthenticated) {
+      console.log('[main.ts] 已登录用户在登录页,重定向到仪表盘');
+      router.push({ name: 'Dashboard' });
+    }
+    // 优先级3: 不需要设置但在设置页
+    else if (!authStore.needsSetup && currentRoute.name === 'Setup') {
+      console.log('[main.ts] 不需要设置,从 /setup 重定向');
+      router.push(authStore.isAuthenticated ? { name: 'Dashboard' } : { name: 'Login' });
+    }
+    // 优先级4: 未认证用户访问受保护页面
+    else if (
+      !authStore.isAuthenticated &&
+      currentRoute.name !== 'Login' &&
+      currentRoute.name !== 'Setup'
+    ) {
+      console.log('[main.ts] 用户未认证,重定向到 /login');
+      router.push({ name: 'Login' });
+    }
+
+    // 4. 如果用户已认证,加载用户特定数据
     if (!authStore.needsSetup && authStore.isAuthenticated) {
-      console.log('[main.ts] 用户已认证且无需设置，加载设置和外观数据...');
+      console.log('[main.ts] 用户已认证,加载设置和外观数据...');
       const settingsStore = useSettingsStore(pinia);
       try {
         await Promise.all([
           settingsStore.loadInitialSettings(),
-          appearanceStore.loadInitialAppearanceData(), // 调用已实例化的 store 的 action
+          appearanceStore.loadInitialAppearanceData(),
         ]);
         console.log('[main.ts] 用户设置和外观数据加载完成。');
       } catch (error) {
         console.error('[main.ts] 加载用户设置或外观数据失败:', error);
-        // 加载失败也继续，可能使用默认值或显示错误
+        // 加载失败也继续,可能使用默认值或显示错误
       }
-    } else if (authStore.needsSetup) {
-      console.log('[main.ts] 需要初始设置，将由路由守卫处理重定向。');
-      // 不再手动 router.push('/setup')
-    } else {
-      console.log('[main.ts] 用户未认证或无需设置。');
-      // appearanceStore 已实例化，其 immediate watcher 会应用默认主题
     }
-
-    // 3. 状态和数据准备就绪后，再启用路由并挂载应用
-    console.log('[main.ts] 状态准备就绪，启用路由并挂载应用...');
-    app.use(router); // 在这里启用路由，确保守卫能获取到最新状态
-    await router.isReady(); // 等待路由初始化完成 (特别是异步路由加载)
-    app.mount('#app');
-    console.log('[main.ts] 应用已挂载。');
   } catch (error) {
     // 捕获初始化过程中的意外错误
     console.error('[main.ts] 应用初始化过程中发生严重错误:', error);
-    // 即使发生严重错误，也尝试启用路由并挂载应用，可能显示错误页面或回退状态
-    app.use(router); // 确保路由被添加
-    try {
-      await router.isReady();
-    } catch (routerError) {
-      console.error('[main.ts] 路由初始化失败:', routerError);
-    }
-    app.mount('#app');
+    // 即使发生严重错误,应用也已经挂载,可能显示错误页面或回退状态
   }
+
   // --- PWA Service Worker Registration ---
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
