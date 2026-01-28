@@ -369,15 +369,6 @@ const handleMainAreaClick = () => {
   }
 };
 
-// --- Debug Watcher for sidebarPanes from store ---
-watch(
-  sidebarPanes,
-  (newVal) => {
-    // console.log('[LayoutRenderer] Received updated sidebarPanes from store:', JSON.parse(JSON.stringify(newVal)));
-  },
-  { deep: true, immediate: true }
-); // Immediate to log initial value
-
 // --- Icon Helper ---
 const getIconClasses = (paneName: PaneName): string[] => {
   switch (paneName) {
@@ -408,8 +399,13 @@ const getIconClasses = (paneName: PaneName): string[] => {
 };
 
 // --- Sidebar Resize Logic ---
+// 提取事件处理器引用，确保 mount/unmount 使用同一个函数
+let stabilizedResizeHandler:
+  | ((payload: { sessionId: string; width: number; height: number }) => void)
+  | null = null;
+
 onMounted(() => {
-  const handleStabilizedTerminalResize = ({
+  stabilizedResizeHandler = ({
     sessionId,
     width,
     height,
@@ -427,7 +423,7 @@ onMounted(() => {
       customHtmlLayerRef.value.style.height = `${height}px`;
     }
   };
-  subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  subscribeToWorkspaceEvent('terminal:stabilizedResize', stabilizedResizeHandler);
 
   // Left Sidebar Resize
   useSidebarResize({
@@ -507,25 +503,10 @@ const sanitizedTerminalCustomHTML = computed(() => {
 });
 
 onBeforeUnmount(() => {
-  const handleStabilizedTerminalResizeHandler = ({
-    sessionId,
-    width,
-    height,
-  }: {
-    sessionId: string;
-    width: number;
-    height: number;
-  }) => {
-    if (
-      props.layoutNode.component === 'terminal' &&
-      sessionId === props.activeSessionId &&
-      customHtmlLayerRef.value
-    ) {
-      customHtmlLayerRef.value.style.width = `${width}px`;
-      customHtmlLayerRef.value.style.height = `${height}px`;
-    }
-  };
-  unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResizeHandler); // Use the same handler reference if possible
+  if (stabilizedResizeHandler) {
+    unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', stabilizedResizeHandler);
+    stabilizedResizeHandler = null;
+  }
 });
 </script>
 

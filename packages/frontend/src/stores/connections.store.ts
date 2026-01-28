@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
-import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
+import apiClient from '../utils/apiClient';
+import { cacheManager, CACHE_KEYS, CACHE_CONFIG } from '../utils/cacheManager';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 // 定义连接信息接口 (与后端对应，不含敏感信息)
 export interface ConnectionInfo {
@@ -40,50 +42,44 @@ export const useConnectionsStore = defineStore('connections', {
   actions: {
     // 获取连接列表 Action (带缓存)
     async fetchConnections() {
-      const cacheKey = 'connectionsCache';
-      this.error = null; // 重置错误状态
+      const cacheOptions = CACHE_CONFIG[CACHE_KEYS.CONNECTIONS];
+      this.error = null;
 
-      // 1. 尝试从 localStorage 加载缓存
-      try {
-        const cachedData = localStorage.getItem(cacheKey);
-        if (cachedData) {
-          this.connections = JSON.parse(cachedData);
-          this.isLoading = false; // 先显示缓存，设置为 false
-        } else {
-          // 没有缓存时，初始加载状态设为 true
-          this.isLoading = true;
-        }
-      } catch (e) {
-        console.error('[ConnectionsStore] Failed to load or parse connections cache:', e);
-        localStorage.removeItem(cacheKey); // 解析失败则移除缓存
-        this.isLoading = true; // 缓存无效，需要加载
+      // 1. 尝试从缓存加载（CacheManager 自动处理版本校验和 TTL）
+      const cachedData = cacheManager.get<ConnectionInfo[]>(
+        CACHE_KEYS.CONNECTIONS,
+        [],
+        cacheOptions
+      );
+      if (cachedData.length > 0) {
+        this.connections = cachedData;
+        this.isLoading = false;
+      } else {
+        this.isLoading = true;
       }
 
       // 2. 后台获取最新数据
-      this.isLoading = true; // 标记正在后台获取
+      this.isLoading = true;
       try {
         const response = await apiClient.get<ConnectionInfo[]>('/connections');
         const freshData = response.data;
-        const freshDataString = JSON.stringify(freshData);
 
         // 3. 对比并更新
         const currentDataString = JSON.stringify(this.connections);
+        const freshDataString = JSON.stringify(freshData);
         if (currentDataString !== freshDataString) {
           this.connections = freshData;
-          localStorage.setItem(cacheKey, freshDataString); // 更新缓存
-        } else {
+          cacheManager.set(CACHE_KEYS.CONNECTIONS, freshData, cacheOptions);
         }
-        this.error = null; // 清除之前的错误（如果有）
+        this.error = null;
       } catch (err: any) {
         console.error('[ConnectionsStore] 获取连接列表失败:', err);
-        this.error = err.response?.data?.message || err.message || '获取连接列表时发生未知错误。';
-        // 保留缓存数据，仅设置错误状态
+        this.error = extractErrorMessage(err, '获取连接列表时发生未知错误。');
         if (err.response?.status === 401) {
           console.warn('[ConnectionsStore] 未授权，需要登录才能获取连接列表。');
-          // 可能需要触发全局的未授权处理逻辑
         }
       } finally {
-        this.isLoading = false; // 无论成功失败，最终加载完成
+        this.isLoading = false;
       }
     },
 
@@ -113,14 +109,14 @@ export const useConnectionsStore = defineStore('connections', {
           newConnectionData
         ); // 使用 apiClient
         // 添加成功后，清除缓存以便下次获取最新数据
-        localStorage.removeItem('connectionsCache');
+        cacheManager.remove(CACHE_KEYS.CONNECTIONS);
         // 可以选择重新获取整个列表，或者仅在本地添加
         // this.connections.unshift(response.data.connection); // 本地添加可能导致与缓存不一致，建议重新获取
         await this.fetchConnections(); // 推荐重新获取以保证数据一致性
         return true; // 表示成功
       } catch (err: any) {
         console.error('添加连接失败:', err);
-        this.error = err.response?.data?.message || err.message || '添加连接时发生未知错误。';
+        this.error = extractErrorMessage(err, '添加连接时发生未知错误。');
         if (err.response?.status === 401) {
           console.warn('未授权，需要登录才能添加连接。');
         }
@@ -170,7 +166,7 @@ export const useConnectionsStore = defineStore('connections', {
           // await this.fetchConnections(); // fetchConnections 内部会处理
         }
         // 更新成功后，清除缓存以便下次获取最新数据
-        localStorage.removeItem('connectionsCache');
+        cacheManager.remove(CACHE_KEYS.CONNECTIONS);
         // 重新获取以确保数据同步（如果上面没有找到 index 并调用 fetchConnections）
         if (index !== -1) {
           // 只有在本地找到并更新后才需要手动触发刷新缓存
@@ -179,7 +175,7 @@ export const useConnectionsStore = defineStore('connections', {
         return true; // 表示成功
       } catch (err: any) {
         console.error(`更新连接 ${connectionId} 失败:`, err);
-        this.error = err.response?.data?.message || err.message || `更新连接时发生未知错误。`;
+        this.error = extractErrorMessage(err, '更新连接时发生未知错误。');
         if (err.response?.status === 401) {
           console.warn('未授权，需要登录才能更新连接。');
         }
@@ -198,7 +194,7 @@ export const useConnectionsStore = defineStore('connections', {
         await apiClient.delete(`/connections/${connectionId}`); // 使用 apiClient
 
         // 删除成功后，清除缓存以便下次获取最新数据
-        localStorage.removeItem('connectionsCache');
+        cacheManager.remove(CACHE_KEYS.CONNECTIONS);
         // 从本地列表中移除该连接
         this.connections = this.connections.filter((conn) => conn.id !== connectionId);
         // 可以选择重新获取，但 filter 已经更新了本地状态，下次 fetch 会自动更新缓存
@@ -206,7 +202,7 @@ export const useConnectionsStore = defineStore('connections', {
         return true; // 表示成功
       } catch (err: any) {
         console.error(`删除连接 ${connectionId} 失败:`, err);
-        this.error = err.response?.data?.message || err.message || `删除连接时发生未知错误。`;
+        this.error = extractErrorMessage(err, '删除连接时发生未知错误。');
         if (err.response?.status === 401) {
           console.warn('未授权，需要登录才能删除连接。');
         }
@@ -288,13 +284,10 @@ export const useConnectionsStore = defineStore('connections', {
         };
       } catch (err: any) {
         console.error(`测试连接 ${connectionId} 失败:`, err);
-        const errorMessage =
-          err.response?.data?.message || err.message || '测试连接时发生未知错误。';
         if (err.response?.status === 401) {
           console.warn('未授权，需要登录才能测试连接。');
         }
-        // 返回失败状态和错误消息
-        return { success: false, message: errorMessage };
+        return { success: false, message: extractErrorMessage(err, '测试连接时发生未知错误。') };
       } finally {
         // this.isLoading = false;
       }
@@ -311,12 +304,12 @@ export const useConnectionsStore = defineStore('connections', {
         await apiClient.post(`/connections/${originalId}/clone`, { name: newName });
 
         // 克隆成功后，清除缓存并重新获取列表以显示新连接
-        localStorage.removeItem('connectionsCache');
+        cacheManager.remove(CACHE_KEYS.CONNECTIONS);
         await this.fetchConnections(); // 重新获取以保证数据一致性
         return true; // 表示成功
       } catch (err: any) {
         console.error(`克隆连接 ${originalId} 失败:`, err);
-        this.error = err.response?.data?.message || err.message || `克隆连接时发生未知错误。`;
+        this.error = extractErrorMessage(err, '克隆连接时发生未知错误。');
         if (err.response?.status === 401) {
           console.warn('未授权，需要登录才能克隆连接。');
         }
@@ -340,12 +333,12 @@ export const useConnectionsStore = defineStore('connections', {
         });
 
         // 更新成功后，清除缓存并重新获取以保证数据一致性
-        localStorage.removeItem('connectionsCache');
+        cacheManager.remove(CACHE_KEYS.CONNECTIONS);
         await this.fetchConnections();
         return true; // 表示成功
       } catch (err: any) {
         console.error(`为连接 ${connectionIds.join(', ')} 添加标签 ${tagId} 失败:`, err);
-        this.error = err.response?.data?.message || err.message || `为连接添加标签时发生未知错误。`;
+        this.error = extractErrorMessage(err, '为连接添加标签时发生未知错误。');
         if (err.response?.status === 401) {
           console.warn('未授权，需要登录才能为连接添加标签。');
         }
@@ -362,12 +355,12 @@ export const useConnectionsStore = defineStore('connections', {
       try {
         // 注意：此 API 端点可能已在后端移除或更改
         await apiClient.put(`/connections/${connectionId}/tags`, { tag_ids: tagIds });
-        localStorage.removeItem('connectionsCache');
+        cacheManager.remove(CACHE_KEYS.CONNECTIONS);
         await this.fetchConnections();
         return true;
       } catch (err: any) {
         console.error(`更新连接 ${connectionId} 的标签失败:`, err);
-        this.error = err.response?.data?.message || err.message || `更新连接标签时发生未知错误。`;
+        this.error = extractErrorMessage(err, '更新连接标签时发生未知错误。');
         return false;
       } finally {
         this.isLoading = false;

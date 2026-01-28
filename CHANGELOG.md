@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **统一缓存管理器 CacheManager**：提供类型安全的 localStorage 操作
+  - 新增 `packages/frontend/src/utils/cacheManager.ts`
+  - 支持版本控制、TTL 过期管理、缓存统计
+  - 导出 `CACHE_KEYS` 常量和 `CACHE_CONFIG` 配置，统一管理所有缓存项
+
+- **统一错误消息提取器**：消除重复的错误提取模式
+  - 新增 `packages/frontend/src/utils/errorExtractor.ts`
+  - 提供 `extractErrorMessage(err, fallback)` 函数，替代 8 处 `err.response?.data?.message || err.message || '...'` 重复代码
+
+- **ConnectionList 虚拟滚动**：扁平视图超过 50 个连接时自动启用
+  - 使用 `@vueuse/core` 的 `useVirtualList` 实现
+  - 修改 `packages/frontend/src/components/WorkspaceConnectionList.vue`
+
+### Changed
+
+- **connections.store 迁移至 CacheManager**：替换 8 处直接 localStorage 操作
+  - `fetchConnections()` 使用 `cacheManager.get/set` 替代手动 JSON 解析
+  - 6 处缓存清除统一使用 `cacheManager.remove(CACHE_KEYS.CONNECTIONS)`
+
+### Fixed
+
+- **LayoutRenderer 事件监听器泄漏**：`onBeforeUnmount` 中创建新函数引用导致事件无法正确注销
+  - 提取 `stabilizedResizeHandler` 为模块级变量，确保 mount/unmount 使用同一引用
+  - 修改 `packages/frontend/src/components/LayoutRenderer.vue`
+
+- **LayoutRenderer 无用 debug watcher**：移除 `sidebarPanes` 的 deep immediate watcher（日志已注释但 watcher 仍在运行）
+
+### Added
+
 - **BaseRepository 抽象基类**：统一 Repository 层错误处理与日志记录
   - 新增 `packages/backend/src/database/base.repository.ts`
   - 提供 `safeDbOperation` 包装方法，自动捕获数据库错误并转换为 `DatabaseError`

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, defineExpose, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useVirtualList } from '@vueuse/core';
 
 import { useI18n } from 'vue-i18n';
 
@@ -254,6 +255,26 @@ const flatFilteredConnections = computed(() => {
 
   // Sort the flat list
   return filtered.sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host));
+});
+
+// +++ 虚拟列表配置（用于扁平视图大量连接时的性能优化）+++
+const VIRTUAL_LIST_THRESHOLD = 50; // 超过此数量时启用虚拟滚动
+const CONNECTION_ITEM_HEIGHT = 36; // 每个连接项的高度（px）
+
+const shouldUseVirtualList = computed(() => {
+  return (
+    !showConnectionTagsBoolean.value &&
+    flatFilteredConnections.value.length > VIRTUAL_LIST_THRESHOLD
+  );
+});
+
+const {
+  list: virtualList,
+  containerProps,
+  wrapperProps,
+} = useVirtualList(flatFilteredConnections, {
+  itemHeight: CONNECTION_ITEM_HEIGHT,
+  overscan: 5, // 预渲染额外的5个项目以确保滚动流畅
 });
 
 // +++ 监听分组状态变化并保存到 localStorage +++
@@ -1016,6 +1037,42 @@ const cancelEditingTag = () => {
             </div>
           </div>
           <!-- Flat View -->
+          <!-- 虚拟滚动模式（连接数 > 50 时启用）-->
+          <div v-else-if="shouldUseVirtualList" v-bind="containerProps" class="h-full">
+            <ul v-bind="wrapperProps" class="list-none p-0 m-0">
+              <li
+                v-for="{ data: conn, index } in virtualList"
+                :key="conn.id"
+                class="group my-0.5 py-2 pr-3 pl-4 cursor-pointer flex items-center rounded-md whitespace-nowrap overflow-hidden text-ellipsis text-foreground hover:bg-primary/10 transition-colors duration-150"
+                :class="{ 'bg-primary/20 font-medium': conn.id === highlightedConnectionId }"
+                :data-conn-id="conn.id"
+                :style="{ height: `${CONNECTION_ITEM_HEIGHT}px` }"
+                @click.left="handleConnect(conn.id)"
+                @click.right.prevent
+                @contextmenu.prevent="showContextMenu($event, conn)"
+              >
+                <i
+                  :class="[
+                    'fas',
+                    conn.type === 'RDP'
+                      ? 'fa-desktop'
+                      : conn.type === 'VNC'
+                        ? 'fa-chalkboard'
+                        : 'fa-server',
+                    'mr-2.5 w-4 text-center text-text-secondary group-hover:text-primary',
+                    { 'text-white': conn.id === highlightedConnectionId },
+                  ]"
+                ></i>
+                <span
+                  class="overflow-hidden text-ellipsis whitespace-nowrap flex-grow text-sm"
+                  :title="conn.name || conn.host"
+                >
+                  {{ conn.name || conn.host }}
+                </span>
+              </li>
+            </ul>
+          </div>
+          <!-- 普通模式（连接数 <= 50）-->
           <ul v-else class="list-none p-0 m-0">
             <li
               v-for="conn in flatFilteredConnections"
