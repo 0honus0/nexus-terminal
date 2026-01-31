@@ -6,6 +6,28 @@
 
 ## 变更记录
 
+### 2026-01-31 (架构文档增量更新)
+
+- **文件统计更新**：
+  - Backend: 121 个 TypeScript 文件（+13 测试文件），516+ 导出符号
+  - Frontend: 184 个 TypeScript/Vue 文件（+4 测试文件），531+ 导出符号
+  - 总计: 306 个源代码文件
+- **测试覆盖率提升**：
+  - Backend: 72+ 测试文件（新增 WebSocket Handlers、认证中间件、加密模块测试）
+  - Frontend: 31+ 测试文件（新增 TerminalPreview、AI/Batch stores 测试）
+  - E2E: 8 个测试规范（新增边缘场景覆盖）
+- **新增功能记录**：
+  - 统一缓存管理器（CacheManager）
+  - 统一错误消息提取器（ErrorExtractor）
+  - ConnectionList 虚拟滚动（@vueuse/core）
+  - TerminalPreview 实时预览组件
+  - 应用启动性能优化（统一初始化 API）
+  - SFTP 模块重构（BaseRepository 抽象基类）
+  - SSH 终端输入延迟优化（98% 性能提升）
+  - 强制键盘交互式认证（keyboard-interactive）
+- **数据库 Schema 更新**：24 个数据表（新增 force_keyboard_interactive 字段）
+- **覆盖率**：100% 模块文档化完成
+
 ### 2026-01-04 (项目 AI 上下文初始化 - 自适应扫描)
 
 - **架构文档更新**：完成项目全局架构扫描与文档更新
@@ -76,8 +98,8 @@
 graph TD
     subgraph "Nexus Terminal Monorepo"
         A["📦 nexus-terminal (根)"] --> B["📂 packages"]
-        B --> C["🔧 backend<br/>Express + SQLite<br/>(121 TS文件, 23 数据表)"]
-        B --> D["🎨 frontend<br/>Vue 3 + Vite<br/>(51 核心TS, 24 Stores)"]
+        B --> C["🔧 backend<br/>Express + SQLite<br/>(121 TS文件, 24 数据表)"]
+        B --> D["🎨 frontend<br/>Vue 3 + Vite<br/>(184 TS/Vue, 24 Stores)"]
         B --> E["🖥️ remote-gateway<br/>Guacamole Lite<br/>(1 入口文件)"]
         A --> F["📚 doc<br/>(技术债务、路线图)"]
     end
@@ -137,7 +159,7 @@ sequenceDiagram
 | 模块名称           | 路径                      | 语言/框架               | TS 文件数 | 职责描述                                                                | 文档入口                                                        |
 | ------------------ | ------------------------- | ----------------------- | --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
 | **backend**        | `packages/backend`        | TypeScript / Express.js | 121       | 后端 API 服务：SSH/SFTP 连接、用户认证、审计日志、通知、Docker 管理等   | [backend/CLAUDE.md](./packages/backend/CLAUDE.md)               |
-| **frontend**       | `packages/frontend`       | TypeScript / Vue 3      | 51 (核心) | 前端 Web 应用：终端界面、文件管理器、连接管理、主题定制、路由与状态管理 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
+| **frontend**       | `packages/frontend`       | TypeScript / Vue 3      | 184       | 前端 Web 应用：终端界面、文件管理器、连接管理、主题定制、路由与状态管理 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
 | **remote-gateway** | `packages/remote-gateway` | TypeScript / Express.js | 1         | 远程桌面网关：RDP/VNC 连接代理，基于 Guacamole 协议                     | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
 
 ### 规划文档
@@ -216,14 +238,16 @@ npm run build
 ### 当前状态
 
 - **测试框架已配置**：Backend 与 Frontend 均已配置完整测试框架
-- **测试覆盖率**（2026-01-04 更新）：
-  - Backend: 59+ 个 `*.test.ts` 文件（单元测试 + 集成测试）
-  - Frontend: 27+ 个 `*.test.ts` 文件（组件、Store、Composables 测试 + E2E）
+- **测试覆盖率**（2026-01-31 更新）：
+  - Backend: 72+ 个 `*.test.ts` 文件（单元测试 + 集成测试 + 性能测试）
+  - Frontend: 31+ 个 `*.test.ts` 文件（组件、Store、Composables 测试）
+  - E2E: 8 个 `*.spec.ts` 文件（边缘场景覆盖）
   - Remote Gateway: 1 个 `*.test.ts` 文件
 - **测试类型覆盖**：
   - ✅ 单元测试（Vitest）
   - ✅ 集成测试（SSH/SFTP/RDP/VNC 协议模拟）
   - ✅ E2E 测试（Playwright）
+  - ✅ 性能测试（Autocannon）
 
 ### 测试框架配置
 
@@ -238,6 +262,9 @@ npm run build
 - **集成测试**：
   - SSH/SFTP Mock 服务器：`packages/backend/tests/integration/ssh/mock-ssh-server.ts`
   - Guacamole 协议测试：`packages/backend/tests/integration/guacamole/`
+- **性能测试**：
+  - 配置文件：`packages/backend/tests/performance/concurrent-connections.test.ts`
+  - 工具：Autocannon
 
 ### 测试命令
 
@@ -259,6 +286,10 @@ npm run test:coverage               # 生成覆盖率报告
 npm run test:e2e                    # 运行 E2E 测试（无头模式）
 npm run test:e2e:ui                 # Playwright UI 模式（交互式调试）
 npm run test:e2e:headed             # 有头模式（可见浏览器）
+
+# 性能测试
+npm run test:perf                   # 运行性能测试
+npm run test:perf:watch             # 性能测试监视模式
 
 # 首次运行 E2E 测试前需安装浏览器
 npx playwright install
@@ -285,6 +316,8 @@ packages/
 │   │   └── guacamole/            # RDP/VNC 代理测试
 │   │       ├── guacamole.service.test.ts
 │   │       └── rdp-proxy.test.ts
+│   ├── performance/              # 性能测试
+│   │   └── concurrent-connections.test.ts
 │   └── unit/                     # 单元测试（与源码同目录）
 │
 ├── frontend/
@@ -293,6 +326,14 @@ packages/
 │   │   ├── fixtures/
 │   │   ├── pages/
 │   │   └── tests/
+│   │       ├── auth.spec.ts
+│   │       ├── ssh-connection.spec.ts
+│   │       ├── sftp-operations.spec.ts
+│   │       ├── remote-desktop.spec.ts
+│   │       ├── auth-edge-cases.spec.ts
+│   │       ├── connection-edge-cases.spec.ts
+│   │       ├── file-management-edge-cases.spec.ts
+│   │       └── terminal-edge-cases.spec.ts
 │   └── src/**/*.test.ts          # 单元测试（与源码同目录）
 │
 └── remote-gateway/tests/
@@ -668,11 +709,11 @@ class LoginPage {
 ### 项目关键文件路径速查
 
 - **Docker 配置**：`docker-compose.yml`、`packages/backend/Dockerfile`
-- **数据库 Schema**：`packages/backend/src/database/schema.ts`（23 个业务表）
+- **数据库 Schema**：`packages/backend/src/database/schema.ts`（24 个数据表）
 - **后端入口**：`packages/backend/src/index.ts`
 - **前端入口**：`packages/frontend/src/main.ts`
 - **路由定义**：
-  - 后端：`packages/backend/src/*/routes.ts`（识别 20+ 路由模块）
+  - 后端：`packages/backend/src/*/routes.ts`（识别 22 个路由模块）
   - 前端：`packages/frontend/src/router/index.ts`（13 个视图路由）
 - **状态管理**：`packages/frontend/src/stores/*.store.ts`（24 个 Pinia stores）
 - **WebSocket**：
@@ -681,6 +722,9 @@ class LoginPage {
 - **主题配置**：
   - 后端：`packages/backend/src/config/default-themes.ts`
   - 前端：`packages/frontend/src/features/appearance/config/`
+- **缓存管理**：`packages/frontend/src/utils/cacheManager.ts`
+- **错误处理**：`packages/frontend/src/utils/errorExtractor.ts`
+- **Repository 基类**：`packages/backend/src/database/base.repository.ts`
 
 ### 部署架构
 
@@ -704,21 +748,22 @@ Guacd (4822) → RDP/VNC 协议转换
 
 ---
 
-**文档生成时间**：2026-01-04 17:30:00 CST（项目 AI 上下文初始化）
+**文档生成时间**：2026-01-31 14:32:58 CST（架构文档增量更新）
 
 **已完成任务**：
 
 - ✅ 阶段 A：全仓清点 - 文件统计与模块识别
-- ✅ 阶段 B：模块优先扫描 - 23 个数据表、121+ TypeScript 文件（Backend）、51+ 核心文件（Frontend）
+- ✅ 阶段 B：模块优先扫描 - 24 个数据表、121+ TypeScript 文件（Backend）、184 TypeScript/Vue 文件（Frontend）
 - ✅ 架构图更新 - 增加模块统计信息
-- ✅ 测试覆盖率更新 - 59+ Backend 测试、27+ Frontend 测试
+- ✅ 测试覆盖率更新 - 72+ Backend 测试、31+ Frontend 测试、8 个 E2E 测试
 - ✅ 覆盖率报告 - 100% 模块文档化完成
 
 **下次扫描建议**：
 
-- 补充后端各业务模块的 Service 层单元测试覆盖率（当前 59+ 文件）
-- 补充前端 Components 与 Composables 的单元测试（当前 27+ 文件）
+- 补充后端各业务模块的 Service 层单元测试覆盖率（目标：≥80% 行覆盖率）
+- 补充前端 Components 与 Composables 的单元测试（目标：≥60% 组件覆盖率）
 - 扩展 E2E 测试用例覆盖更多边缘场景（基于 Playwright）
 - 定期审查技术债务报告（doc/TECHNICAL_DEBT_REPORT.md）并处理高优先级项
 - 监控 Phase 4/5 新增模块（批量操作、AI 智能运维）的测试覆盖率提升
 - 添加性能测试基准（响应时间、并发连接数、内存占用监控）
+- 补充 Remote Gateway 的协议交互集成测试（RDP/VNC 令牌验证与数据流）

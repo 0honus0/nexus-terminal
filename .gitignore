@@ -148,6 +148,7 @@ dist
 .serena
 .gemini-clipboard
 ~/
+.omc
 
 # Build/Distribution scripts
 dist-scripts/
@@ -168,3 +169,4 @@ electron-app/dist_electron/
 
 # Husky git hooks (local only)
 .husky/
+.ace-tool/
