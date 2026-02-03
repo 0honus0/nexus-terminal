@@ -113,8 +113,8 @@ jobs:
           model: ${{ steps.gist_config.outputs.model }}
           responses-api-endpoint: "${{ steps.gist_config.outputs.url }}/v1/responses"
           agents-config: ".github/assets/AGENTS.md"
-          # 直接使用构建好的纯文本，不包含任何 Shell 脚本字符
-          prompt: ${{ steps.prompt_builder.outputs.final_prompt }}
+          # 修复步骤引用:使用正确的 steps.context 而不是 steps.prompt_builder
+          prompt: ${{ steps.context.outputs.final_prompt }}
 
       - name: Post Results
         if: always()
