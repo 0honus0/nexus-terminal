@@ -14,6 +14,53 @@
 
 **Nexus Terminal** is a modern, feature-rich web-based SSH / RDP / VNC client dedicated to providing a highly customizable remote connection experience.
 
+## 🔀 Differences from Upstream
+
+> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal), with significant engineering quality improvements and feature enhancements on top of the upstream version. Below are the unique improvements in this fork:
+
+### ⚡ Performance Optimizations
+
+| Optimization                          | Effect                                                                                                                      |
+| :------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------- |
+| **SSH Terminal Input Latency**        | Reduced from 72-232ms to <3ms (**98% improvement**), separating small packet direct-write from large packet batch buffering |
+| **App Startup Performance**           | Unified initialization API, merging 3-4 network requests into 1, eliminating white-screen waiting                           |
+| **FileManager Virtual Scrolling**     | Auto-enabled when connections exceed 50, smooth rendering for massive file lists                                            |
+| **Command History Virtual Scrolling** | Smooth rendering of thousands of history records without lag                                                                |
+| **Frontend Lazy Loading**             | RDP/VNC components loaded on-demand, guacamole dependency (~200KB) no longer blocks initial render                          |
+| **SQLite WAL Mode**                   | Enabled WAL mode for optimized concurrent read/write, reduced lock contention                                               |
+
+### 🛠️ New Features
+
+- **Terminal Appearance Live Preview**: Real-time preview window in appearance settings for font, theme, stroke, and shadow changes
+- **Force Keyboard-Interactive Auth**: New `keyboard-interactive` option for SSH connections, supporting TOTP/2FA server authentication
+- **NL2CMD Natural Language Commands**: Multi-model integration (OpenAI/Claude/Gemini), converting natural language directly to terminal commands
+- **Configurable Rate Limiting**: Flexible API rate limit control via environment variables
+- **Unified Cache Manager**: Type-safe localStorage operations with version control and TTL expiration management
+- **Unified Error Extractor**: Eliminated duplicated error extraction patterns with globally unified error handling
+
+### 🏗️ Architecture Refactoring
+
+- **Technical Debt Cleared**: 24/24 technical debt items fully resolved (100%), covering P0-P3 priorities
+- **Type-Safe Error Handling**: Eliminated `catch (error: any)` anti-pattern, 29 files migrated to `unknown` type
+- **SFTP Module Split**: Decomposed God Class into UploadManager, ArchiveManager, Utils with single responsibility
+- **Repository Base Class**: Unified Repository-layer error handling and logging, benefiting 15+ files
+- **Typed Error Hierarchy**: Added `DatabaseError`, `ValidationError`, `ExternalServiceError` type-safe error subclasses
+
+### 🧪 Test Coverage
+
+- **Comprehensive Test Framework**: From near-zero tests to 1500+ test cases, 100% pass rate
+- **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
+- **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
+- **Unit Tests**: Backend 72+ test files, Frontend 31+ test files
+
+### 🔒 Dependency Security
+
+- **Critical Vulnerability Fixes**: Proactively patched known high-severity vulnerabilities in axios, qs, tar (CVE/GHSA)
+- **Dependabot Automation**: Configured automatic dependency updates for continuous security monitoring
+- **Dependency Overrides**: Enforced secure versions via npm overrides
+
+---
+
 ## ✨ Features
 
 - Manage SSH and SFTP connections with multiple tabs
