@@ -366,7 +366,7 @@ jobs:
   cleanup-old-runs:
     name: Cleanup workflow runs (3 days)
     runs-on: ubuntu-latest
-    needs: [build-backend, build-frontend, build-remote-gateway]
+    needs: [detect-changes]
     if: always()
     steps:
       - name: Delete runs older than 3 days
