@@ -149,6 +149,7 @@ dist
 .gemini-clipboard
 ~/
 .omc
+.omx
 
 # Build/Distribution scripts
 dist-scripts/
