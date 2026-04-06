@@ -103,6 +103,17 @@ describe('IP Whitelist Middleware', () => {
     });
 
     describe('白名单未设置', () => {
+      it('白名单功能显式禁用时应允许所有请求', async () => {
+        const mockReq = createMockRequest('192.168.1.100');
+        vi.mocked(settingsService.getSetting).mockResolvedValueOnce('false');
+
+        await ipWhitelistMiddleware(mockReq as Request, mockRes as Response, mockNext);
+
+        expect(mockNext).toHaveBeenCalledTimes(1);
+        expect(settingsService.getSetting).toHaveBeenCalledTimes(1);
+        expect(settingsService.getSetting).toHaveBeenCalledWith('ipWhitelistEnabled');
+      });
+
       it('白名单为 null 时应允许所有请求', async () => {
         const mockReq = createMockRequest('192.168.1.100');
         vi.mocked(settingsService.getSetting).mockResolvedValue(null);

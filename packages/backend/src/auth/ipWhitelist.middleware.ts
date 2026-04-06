@@ -3,6 +3,7 @@ import ipaddr from 'ipaddr.js';
 import { settingsService } from '../settings/settings.service';
 
 const IP_WHITELIST_SETTING_KEY = 'ipWhitelist';
+const IP_WHITELIST_ENABLED_SETTING_KEY = 'ipWhitelistEnabled';
 
 // 本地开发环境的 IP 地址列表
 const LOCAL_IPS = [
@@ -31,6 +32,14 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     // 检查是否是本地开发环境的 IP
     if (LOCAL_IPS.includes(requestIpString)) {
       console.log(`允许来自本地开发环境 (${requestIpString}) 的访问。`);
+      return next();
+    }
+
+    const ipWhitelistEnabledValue = await settingsService.getSetting(
+      IP_WHITELIST_ENABLED_SETTING_KEY
+    );
+    // 默认启用白名单，仅当明确为 'false' 时关闭
+    if (ipWhitelistEnabledValue === 'false') {
       return next();
     }
 

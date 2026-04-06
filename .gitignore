@@ -45,6 +45,7 @@ scripts/
 !scripts/
 scripts/*
 !scripts/validate-commit-msg.js
+!scripts/sync-locales.js
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 

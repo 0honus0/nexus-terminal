@@ -149,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '../stores/auth.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store';
@@ -176,7 +176,7 @@ const { t } = useI18n();
 const { isUpdateAvailable, checkLatestVersion } = useVersionCheck();
 
 // Define tabs for settings sections
-const tabs = ref([
+const tabs = computed(() => [
   { key: 'workspace', label: t('settings.tabs.workspace', '工作区') },
   { key: 'system', label: t('settings.tabs.system', '系统') },
   { key: 'ai', label: t('settings.tabs.ai', 'AI 助手') },
@@ -186,7 +186,7 @@ const tabs = ref([
   { key: 'appearance', label: t('settings.tabs.appearance', '外观') },
   { key: 'about', label: t('settings.tabs.about', '关于') },
 ]);
-const activeTab = ref(tabs.value[0].key);
+const activeTab = ref('workspace');
 
 // --- Reactive state from store ---
 // 使用 storeToRefs 获取响应式 getter，包括 language

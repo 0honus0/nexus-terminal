@@ -25,15 +25,12 @@ export function useIpBlacklist() {
 
   const handleUpdateIpBlacklistEnabled = async () => {
     const originalValue = ipBlacklistEnabled.value;
-    // Toggle local state immediately for UI feedback if it's directly bound to the switch
-    // If the switch v-model is ipBlacklistEnabled, this line is not strictly needed before API call,
-    // but helps if we want to manage the state change explicitly.
-    // ipBlacklistEnabled.value = !ipBlacklistEnabled.value; // This line might be redundant if v-model handles it
+    const nextValue = !originalValue;
+    // 立即切换本地状态，失败时再回滚
+    ipBlacklistEnabled.value = nextValue;
 
     try {
-      // The value to save is the new state of the switch
-      const valueToSave = ipBlacklistEnabled.value; // This should reflect the intended new state
-      await settingsStore.updateSetting('ipBlacklistEnabled', valueToSave ? 'true' : 'false');
+      await settingsStore.updateSetting('ipBlacklistEnabled', nextValue ? 'true' : 'false');
       // Success: ipBlacklistEnabledBoolean will update via store watcher, syncing ipBlacklistEnabled.value
     } catch (error: any) {
       console.error('更新 IP 黑名单启用状态失败:', error);
