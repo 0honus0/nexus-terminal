@@ -457,6 +457,31 @@ describe('SSH WebSocket Handler', () => {
       expect(Buffer.from(outputMessage.payload, 'base64').toString('utf8')).toBe('user@host:~$ ');
     });
 
+    it('设置 suppressTerminalPrompt 时不应透传静默命令产生的尾部 prompt', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        { command: 'pwd', suppressTerminalPrompt: true },
+        'req-silent-no-prompt-echo'
+      );
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit(
+        'data',
+        Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\nuser@host:~$ `)
+      );
+
+      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      const resultMessage = messages.find((msg: any) => msg.type === 'ssh:exec_silent:result');
+      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+
+      expect(resultMessage.requestId).toBe('req-silent-no-prompt-echo');
+      expect(resultMessage.payload.output).toContain('/home/test');
+      expect(outputMessage).toBeUndefined();
+    });
+
     it('结束标记后大块无换行输出应完整透传', async () => {
       await connectReadyShellSession();
 

@@ -38,7 +38,6 @@
     "themeCreatedSuccess": "Theme created successfully.",
     "themeSaveFailed": "Failed to save theme.",
     "themeDeletedSuccess": "Theme deleted successfully.",
-    "passkeyLoginButton": "Login with Passkey",
     "themeDeleteFailed": "Failed to delete theme: {message}",
     "importSuccess": "Theme imported successfully.",
     "importFailed": "Theme import failed.",
@@ -141,10 +140,11 @@
     "remotePresetsLoaded": "Remote HTML themes list loaded.",
     "remotePresetsLoadFailed": "Failed to load remote HTML themes list: {message}",
     "localPresetApplyFailed": "Failed to apply local HTML theme: {message}",
-    "errorPresetNameRequired": "Preset name cannot be empty.",
     "errorMissingDownloadUrl": "Remote theme download URL is missing.",
     "remotePresetApplyFailed": "Failed to apply remote HTML theme: {message}",
-    "customHtmlResetSuccess": "Custom HTML has been reset.",
+    "errorPresetNameRequired": "Preset name cannot be empty.",
+    "localPresetRenamed": "本地预设 “{oldName}” 已成功重命名为 “{newName}”。",
+    "localPresetRenameFailed": "重命名本地预设失败: {message}",
     "searchLocalThemesPlaceholder": "Search local themes...",
     "searchRemoteThemesPlaceholder": "Search remote themes...",
     "noMatchingLocalPresetsFound": "No matching local themes found",
@@ -152,6 +152,7 @@
     "editAsNewTooltip": "Edit as new custom theme",
     "presetTag": "Preset",
     "customTag": "Custom",
+    "customHtmlResetSuccess": "Custom HTML has been reset.",
     "textStrokeSettingsSaved": "Text stroke settings saved.",
     "textStrokeSettingsSaveFailed": "Failed to save text stroke settings: {message}",
     "textShadowSettingsSaved": "Text shadow settings saved.",
@@ -175,7 +176,8 @@
     "errorJsonSyntax": "JSON Syntax Error",
     "noThemeSelected": "No theme selected",
     "unknownTheme": "Unknown theme",
-    "noThemesFound": "No matching themes found"
+    "noThemesFound": "No matching themes found",
+    "passkeyLoginButton": "Login with Passkey"
   },
   "login": {
     "title": "User Login",
@@ -186,8 +188,8 @@
     "twoFactorPrompt": "Enter your two-factor authentication code:",
     "verifyButton": "Verify",
     "rememberMe": "Remember Me",
-    "loginWithPasskey": "Login with Passkey",
     "captchaPrompt": "Please complete the verification below:",
+    "loginWithPasskey": "Login with Passkey",
     "error": {
       "captchaLoadFailed": "Failed to load CAPTCHA. Please try refreshing.",
       "captchaRequired": "Please complete the CAPTCHA verification.",
@@ -216,10 +218,10 @@
       "selectAll": "Select All",
       "deselectAll": "Deselect All",
       "invertSelection": "Invert Selection",
-      "title": "Batch Edit Connections",
       "editSelected": "Edit Selected",
-      "noChange": "No change",
+      "title": "Batch Edit Connections",
       "selectedItems": "{count} items selected",
+      "noChange": "No change",
       "deleteSelectedButton": "Delete Selected",
       "deleteSelectedTooltip": "Delete selected connections",
       "confirmMessage": "Are you sure you want to delete the selected {count} connections? This action cannot be undone.",
@@ -252,7 +254,6 @@
       "confirm": "Confirm Add",
       "adding": "Adding...",
       "cancel": "Cancel",
-      "noSshKey": "No SSH Key",
       "errorRequiredFields": "Please fill in all required fields.",
       "errorPasswordRequired": "Password is required for password authentication.",
       "errorPrivateKeyRequired": "Private key is required for key authentication.",
@@ -286,6 +287,7 @@
       "testConnection": "Test Connection",
       "testing": "Testing...",
       "sshKey": "SSH Key",
+      "noSshKey": "No SSH Key",
       "privateKeyDirect": "Private Key Content",
       "keyUpdateNoteDirect": "Leave private key and passphrase blank to keep the existing key when editing.",
       "keyUpdateNoteSelected": "Select another key or use direct input to change the key when editing.",
@@ -440,9 +442,9 @@
       "uploadFile": "Upload File",
       "upload": "Upload",
       "newFolder": "New Folder",
+      "newFile": "New File",
       "rename": "Rename",
       "changePermissions": "Change Permissions",
-      "newFile": "New File",
       "delete": "Delete",
       "deleteMultiple": "Delete {count} items",
       "download": "Download",
@@ -452,8 +454,8 @@
       "save": "Save",
       "closeTab": "Close Tab",
       "closeEditor": "Close Editor",
-      "cdToTerminal": "Change terminal directory to current path",
-      "syncFromTerminalPath": "Sync file manager to terminal directory",
+      "cdToTerminal": "Change terminal path to file manager current path",
+      "syncFromTerminalPath": "Change file manager path to terminal current path",
       "copy": "Copy",
       "cut": "Cut",
       "paste": "Paste",
@@ -660,12 +662,6 @@
       "about": "About",
       "dataManagement": "Data Management"
     },
-    "exportConnections": {
-      "title": "Export Connection Data",
-      "decryptKeyInfo": "The decryption password is the ENCRYPTION_KEY in your data/.env file. Please keep this file secure.",
-      "buttonText": "Start Export"
-    },
-
     "timezone": {
       "title": "Timezone Settings",
       "selectLabel": "Select Timezone:",
@@ -856,6 +852,7 @@
         "CONNECTION_CREATED": "Connection Created",
         "CONNECTION_UPDATED": "Connection Updated",
         "CONNECTION_DELETED": "Connection Deleted",
+        "CONNECTIONS_EXPORTED": "连接已导出",
         "PROXY_CREATED": "Proxy Created",
         "PROXY_UPDATED": "Proxy Updated",
         "PROXY_DELETED": "Proxy Deleted",
@@ -1055,6 +1052,11 @@
         "rateLimit": "GitHub API rate limit exceeded, please try again later"
       }
     },
+    "exportConnections": {
+      "title": "Export Connection Data",
+      "decryptKeyInfo": "The decryption password is the ENCRYPTION_KEY in your data/.env file. Please keep this file secure.",
+      "buttonText": "Start Export"
+    },
     "tabs": {
       "security": "Security",
       "ipControl": "IP Control",
@@ -1114,11 +1116,6 @@
     "testMessageUnsaved": "Test triggered for unsaved {channelType} configuration"
   },
   "common": {
-    "confirm": "Confirm",
-    "ok": "OK",
-    "success": "Success",
-    "error": "Error",
-    "alert": "Alert",
     "apply": "Apply",
     "loading": "Loading...",
     "cancel": "Cancel",
@@ -1148,8 +1145,15 @@
     "restore": "Restore",
     "minimize": "Minimize",
     "send": "Send",
+    "copied": "Copied to clipboard",
+    "ok": "OK",
+    "success": "Success",
+    "error": "Error",
+    "alert": "Alert",
+    "confirm": "Confirm",
     "updateSuccess": "Update successful",
-    "copied": "Copied to clipboard"
+    "selectAll": "全选",
+    "deselectAll": "取消全选"
   },
   "layoutConfigurator": {
     "title": "Layout Configurator",
@@ -1161,6 +1165,8 @@
     "leftSidebar": "Left Sidebar Panes",
     "rightSidebar": "Right Sidebar Panes",
     "dropHere": "Drop panes from available list here",
+    "confirmClose": "有未保存的更改，确定要关闭吗？",
+    "confirmReset": "确定要恢复默认布局和侧栏配置吗？当前更改将丢失。",
     "saveError": "Error saving layout. Please try again later.",
     "confirmClearLayout": "Are you sure you want to clear the entire layout? All panes will return to the available list.",
     "lockLayout": "Lock Layout",
@@ -1269,12 +1275,12 @@
       "connectingRdp": "Connecting Remote Desktop...",
       "connectingVnc": "Connecting VNC...",
       "waiting": "Waiting for server response...",
+      "connecting": "Connecting...",
+      "error": "Error",
       "connected": "Connected",
       "disconnecting": "Disconnecting...",
       "disconnected": "Disconnected",
-      "unknownState": "Unknown State",
-      "connecting": "Connecting...",
-      "error": "Error"
+      "unknownState": "Unknown State"
     },
     "errors": {
       "missingInfo": "Connection info or display element missing.",
@@ -1631,38 +1637,6 @@
       "exportLog": "Export Log"
     }
   },
-  "time": {
-    "unknown": "Unknown time",
-    "invalidDate": "Invalid date"
-  },
-  "sshSuspend": {
-    "notifications": {
-      "markedForSuspendInfo": "Session {id} marked for suspend. It will be suspended when the tab is closed exits.",
-      "wsNotConnectedError": "WebSocket not connected. Cannot perform suspend/resume action.",
-      "sessionNotFoundError": "Session not found or WebSocket manager unavailable.",
-      "notMarkedWarning": "Session was not marked for suspend.",
-      "fetchListError": "Failed to fetch suspended sessions list: {error}",
-      "resumeErrorInfoNotFound": "Resume error: Suspended session {id} not found in the list.",
-      "resumeErrorConnectionConfigNotFound": "Resume error: Original connection configuration for {id} not found.",
-      "resumeErrorGeneric": "Failed to resume session: {error}",
-      "terminatedSuccess": "Suspended session \"{name}\" terminated successfully.",
-      "terminateError": "Failed to terminate suspended session: {error}",
-      "entryRemovedSuccess": "Suspended session entry \"{name}\" removed successfully.",
-      "entryRemovedError": "Failed to remove suspended session entry: {error}",
-      "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
-      "nameEditedError": "Failed to edit suspended session name: {error}",
-      "markedForSuspendSuccess": "Session {id} successfully marked for suspend.",
-      "markForSuspendError": "Failed to mark session for suspend: {error}",
-      "unmarkedSuccess": "Session {id} unmarked from suspend successfully.",
-      "unmarkError": "Failed to unmark session from suspend: {error}",
-      "defaultSessionName": "Session",
-      "resumeSuccess": "Session \"{name}\" resumed successfully.",
-      "resumeErrorBackend": "Backend failed to resume session: {error}",
-      "autoTerminated": "Suspended session \"{name}\" was auto-terminated by the backend due to: {reason}",
-      "logExportSuccess": "Suspended session log {name} has started downloading.",
-      "logExportError": "Failed to export suspended session log: {error}"
-    }
-  },
   "transferProgressModal": {
     "title": "File Transfer Progress",
     "loading": "Loading transfer tasks...",
@@ -1735,6 +1709,38 @@
     "transferInitiatedGeneric": "Transfer task created successfully.",
     "transferFailedError": "Failed to initiate transfer. Please try again."
   },
+  "time": {
+    "unknown": "Unknown time",
+    "invalidDate": "Invalid date"
+  },
+  "sshSuspend": {
+    "notifications": {
+      "markedForSuspendInfo": "Session {id} marked for suspend. It will be suspended when the tab is closed exits.",
+      "wsNotConnectedError": "WebSocket not connected. Cannot perform suspend/resume action.",
+      "sessionNotFoundError": "Session not found or WebSocket manager unavailable.",
+      "notMarkedWarning": "Session was not marked for suspend.",
+      "fetchListError": "Failed to fetch suspended sessions list: {error}",
+      "resumeErrorInfoNotFound": "Resume error: Suspended session {id} not found in the list.",
+      "resumeErrorConnectionConfigNotFound": "Resume error: Original connection configuration for {id} not found.",
+      "resumeErrorGeneric": "Failed to resume session: {error}",
+      "terminatedSuccess": "Suspended session \"{name}\" terminated successfully.",
+      "terminateError": "Failed to terminate suspended session: {error}",
+      "entryRemovedSuccess": "Suspended session entry \"{name}\" removed successfully.",
+      "entryRemovedError": "Failed to remove suspended session entry: {error}",
+      "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
+      "nameEditedError": "Failed to edit suspended session name: {error}",
+      "markedForSuspendSuccess": "Session {id} successfully marked for suspend.",
+      "markForSuspendError": "Failed to mark session for suspend: {error}",
+      "unmarkedSuccess": "Session {id} unmarked from suspend successfully.",
+      "unmarkError": "Failed to unmark session from suspend: {error}",
+      "defaultSessionName": "Session",
+      "resumeSuccess": "Session \"{name}\" resumed successfully.",
+      "resumeErrorBackend": "Backend failed to resume session: {error}",
+      "autoTerminated": "Suspended session \"{name}\" was auto-terminated by the backend due to: {reason}",
+      "logExportSuccess": "Suspended session log {name} has started downloading.",
+      "logExportError": "Failed to export suspended session log: {error}"
+    }
+  },
   "favoritePaths": {
     "addEditForm": {
       "validation": {
@@ -1766,13 +1772,6 @@
       "deleteError": "Failed to delete favorite path."
     }
   },
-  "editor": {
-    "unsavedChanges": {
-      "title": "Unsaved Changes",
-      "message": "File \"{filename}\" has unsaved changes. Are you sure you want to discard them?",
-      "discard": "Discard Changes"
-    }
-  },
   "pathHistory": {
     "loading": "Loading...",
     "empty": "No path history",
@@ -1780,5 +1779,54 @@
     "delete": "Delete this history entry",
     "copiedSuccess": "Path copied to clipboard",
     "copiedError": "Failed to copy path"
+  },
+  "batchOps": {
+    "title": "批量执行",
+    "progress": "进度",
+    "selectServers": "选择服务器",
+    "noConnections": "没有可用的 SSH 连接",
+    "commandLabel": "要执行的命令",
+    "commandPlaceholder": "例如 apt-get update",
+    "execute": "广播执行",
+    "cancel": "取消",
+    "sudo": "以 sudo 运行",
+    "concurrency": "并发数",
+    "results": "执行结果",
+    "viewOutput": "查看",
+    "output": "输出",
+    "noOutput": "无输出",
+    "status": {
+      "queued": "队列中",
+      "inProgress": "执行中",
+      "partiallyCompleted": "部分完成",
+      "completed": "已完成",
+      "failed": "已失败",
+      "cancelled": "已取消"
+    }
+  },
+  "editor": {
+    "unsavedChanges": {
+      "title": "Unsaved Changes",
+      "message": "File \"{filename}\" has unsaved changes. Are you sure you want to discard them?",
+      "discard": "Discard Changes"
+    }
+  },
+  "aiOps": {
+    "title": "AI 运维助手",
+    "newSession": "新建会话",
+    "history": "历史记录",
+    "sessionHistory": "会话历史",
+    "noSessions": "暂无历史会话",
+    "untitled": "未命名会话",
+    "placeholder": "询问关于服务器或日志的任何问题...",
+    "typing": "AI 正在分析...",
+    "insights": "洞察",
+    "inputPlaceholder": "输入消息...",
+    "suggestions": {
+      "health": "检查系统健康状态",
+      "commands": "分析命令执行模式",
+      "security": "查看安全事件统计",
+      "connections": "连接使用情况"
+    }
   }
 }

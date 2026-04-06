@@ -25,6 +25,7 @@ export interface SshExecSilentRequestPayload {
   timeoutMs?: number;
   shellFlavorHint?: 'posix' | 'powershell' | 'cmd' | 'fish';
   successCriteria?: 'any' | 'non_empty' | 'absolute_path';
+  suppressTerminalPrompt?: boolean;
 }
 
 export interface SshExecSilentRequestMessage extends WebSocketMessage {

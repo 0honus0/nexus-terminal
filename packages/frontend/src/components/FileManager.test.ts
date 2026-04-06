@@ -619,6 +619,7 @@ describe('FileManager.vue', () => {
           payload: expect.objectContaining({
             timeoutMs: 5000,
             successCriteria: 'absolute_path',
+            suppressTerminalPrompt: true,
             commandsByShell: expect.objectContaining({
               posix: expect.stringContaining('__NX_PWD__'),
               powershell: expect.stringContaining('__NX_PWD__'),

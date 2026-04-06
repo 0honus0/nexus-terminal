@@ -32,6 +32,7 @@ export const sshExecSilentSchema = z
       timeoutMs: z.number().int().min(1000).max(20000).optional(),
       shellFlavorHint: z.enum(['posix', 'powershell', 'cmd', 'fish']).optional(),
       successCriteria: z.enum(['any', 'non_empty', 'absolute_path']).optional(),
+      suppressTerminalPrompt: z.boolean().optional(),
     }),
   })
   .superRefine((message, ctx) => {

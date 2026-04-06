@@ -24,6 +24,7 @@ interface SilentExecPayload {
   timeoutMs?: number;
   shellFlavorHint?: string;
   successCriteria?: string;
+  suppressTerminalPrompt?: boolean;
 }
 
 const MAX_SILENT_OUTPUT_SIZE = 64 * 1024;
@@ -43,6 +44,7 @@ interface PendingSilentExecRequest {
   pendingLineBuffer: string;
   isCollectingOutput: boolean;
   collectedOutput: string;
+  suppressTerminalPrompt: boolean;
   timeoutId?: NodeJS.Timeout;
 }
 
@@ -61,6 +63,17 @@ const extractAbsolutePathFromSilentLine = (line: string): string | null => {
     ? sanitizedLine.slice(SILENT_PWD_PREFIX.length).trim()
     : sanitizedLine;
   return isAbsolutePath(pathCandidate) ? pathCandidate : null;
+};
+
+const isLikelyShellPromptLine = (line: string): boolean => {
+  const sanitizedLine = line.replace(ANSI_ESCAPE_PATTERN, '').trim();
+  if (!sanitizedLine) {
+    return false;
+  }
+
+  const unixPromptPattern = /^[^@\s]+@[^:\s]+:[^#$>\n]*[#$>]$/;
+  const windowsPromptPattern = /^[A-Za-z]:\\[^>\n]*>$/;
+  return unixPromptPattern.test(sanitizedLine) || windowsPromptPattern.test(sanitizedLine);
 };
 
 const clearSilentExecTimer = (request: PendingSilentExecRequest): void => {
@@ -214,6 +227,7 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
     }
   }
   const visibleLines: string[] = [];
+  let completedInThisChunk = false;
 
   for (const rawLine of lines) {
     const trimmedLine = rawLine.trim();
@@ -254,12 +268,21 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
         );
         startSilentExecAttempt(sessionId);
       } else {
+        completedInThisChunk = true;
         finalizeSilentExecWithResult(sessionId, normalizedOutput);
       }
       continue;
     }
 
     if (isEndEchoLine) {
+      continue;
+    }
+
+    if (
+      completedInThisChunk &&
+      request.suppressTerminalPrompt &&
+      isLikelyShellPromptLine(rawLine)
+    ) {
       continue;
     }
 
@@ -276,7 +299,11 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
 
   // 如果本次处理过程中请求已结束，补发尚未换行的尾部内容（常见于 shell prompt）。
   if (!pendingSilentExecRequests.has(sessionId) && request.pendingLineBuffer) {
-    visibleOutput += request.pendingLineBuffer;
+    const shouldSuppressPendingPrompt =
+      request.suppressTerminalPrompt && isLikelyShellPromptLine(request.pendingLineBuffer);
+    if (!shouldSuppressPendingPrompt) {
+      visibleOutput += request.pendingLineBuffer;
+    }
     request.pendingLineBuffer = '';
   }
 
@@ -393,6 +420,7 @@ export function handleSshExecSilent(
     pendingLineBuffer: '',
     isCollectingOutput: false,
     collectedOutput: '',
+    suppressTerminalPrompt: payload.suppressTerminalPrompt === true,
   };
 
   pendingSilentExecRequests.set(sessionId, request);

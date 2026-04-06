@@ -2146,6 +2146,7 @@ const syncCurrentPathToTerminalDirectory = () => {
       commandsByShell,
       timeoutMs: 5000,
       successCriteria: 'absolute_path',
+      suppressTerminalPrompt: true,
     },
   });
 };
@@ -2264,9 +2265,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
             class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
             @click.stop="sendCdCommandToTerminal"
             :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
-            :title="
-              t('fileManager.actions.cdToTerminal', 'Change terminal directory to current path')
-            "
+            :title="t('fileManager.actions.cdToTerminal', '将终端路径切换到文件管理器当前路径')"
           >
             <i class="fas fa-terminal text-base"></i>
           </button>
@@ -2279,7 +2278,9 @@ const handleNavigateToPathFromFavorites = (path: string) => {
               isEditingPath ||
               isSyncingPathFromTerminal
             "
-            :title="t('fileManager.actions.syncFromTerminalPath', '将文件管理器同步到终端目录')"
+            :title="
+              t('fileManager.actions.syncFromTerminalPath', '将文件管理器路径切换到终端当前路径')
+            "
           >
             <i
               :class="[
