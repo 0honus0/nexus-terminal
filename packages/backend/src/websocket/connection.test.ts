@@ -50,7 +50,9 @@ class MockWebSocketServer extends EventEmitter {
   clients = new Set<WebSocket>();
 }
 
-function createMockWebSocket(overrides: Partial<AuthenticatedWebSocket> = {}): AuthenticatedWebSocket {
+function createMockWebSocket(
+  overrides: Partial<AuthenticatedWebSocket> = {}
+): AuthenticatedWebSocket {
   const ws = new EventEmitter() as AuthenticatedWebSocket;
   ws.readyState = WebSocket.OPEN;
   ws.send = vi.fn();
@@ -114,16 +116,15 @@ describe('WebSocket Connection Handler', () => {
     } as any;
 
     wss.emit('connection', ws, request);
-    ws.emit(
-      'message',
-      Buffer.from(JSON.stringify({ type: 'ssh:exec_silent', payload: {} }))
-    );
+    ws.emit('message', Buffer.from(JSON.stringify({ type: 'ssh:exec_silent', payload: {} })));
     await Promise.resolve();
 
     expect(handleSshExecSilent).not.toHaveBeenCalled();
     const rawMessage = (ws.send as any).mock.calls[(ws.send as any).mock.calls.length - 1][0];
     const parsedMessage = JSON.parse(rawMessage);
     expect(parsedMessage.type).toBe('error');
-    expect(parsedMessage.payload).toContain('payload.command 或 payload.commandsByShell 至少提供一个');
+    expect(parsedMessage.payload).toContain(
+      'payload.command 或 payload.commandsByShell 至少提供一个'
+    );
   });
 });

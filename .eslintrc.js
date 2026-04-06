@@ -148,6 +148,13 @@ module.exports = {
         'import/no-extraneous-dependencies': 'off',
       },
     },
+    {
+      // Playwright E2E Page Object / Fixture 文件
+      files: ['packages/frontend/e2e/**/*.ts'],
+      rules: {
+        'import/no-extraneous-dependencies': 'off',
+      },
+    },
   ],
   ignorePatterns: [
     'node_modules',

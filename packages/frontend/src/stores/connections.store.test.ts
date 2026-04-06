@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useConnectionsStore, type ConnectionInfo } from './connections.store';
 import apiClient from '../utils/apiClient';
+import { cacheManager, CACHE_KEYS, CACHE_CONFIG } from '../utils/cacheManager';
 
 vi.mock('../utils/apiClient', () => ({
   default: {
@@ -14,6 +15,7 @@ vi.mock('../utils/apiClient', () => ({
 
 describe('connections.store', () => {
   let localStorageMock: Record<string, string> = {};
+  const connectionCacheOptions = CACHE_CONFIG[CACHE_KEYS.CONNECTIONS];
 
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -100,14 +102,16 @@ describe('connections.store', () => {
 
       expect(store.connections).toEqual(mockConnections);
       expect(store.isLoading).toBe(false);
-      expect(localStorage.getItem('connectionsCache')).toBe(JSON.stringify(mockConnections));
+      expect(cacheManager.get(CACHE_KEYS.CONNECTIONS, [], connectionCacheOptions)).toEqual(
+        mockConnections
+      );
     });
 
     it('有缓存时应先显示缓存再后台更新', async () => {
       const store = useConnectionsStore();
       const cachedData = mockConnections.slice(0, 1);
 
-      localStorage.setItem('connectionsCache', JSON.stringify(cachedData));
+      cacheManager.set(CACHE_KEYS.CONNECTIONS, cachedData, connectionCacheOptions);
 
       vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockConnections });
 
@@ -119,7 +123,7 @@ describe('connections.store', () => {
     it('后端数据与缓存相同时不更新', async () => {
       const store = useConnectionsStore();
 
-      localStorage.setItem('connectionsCache', JSON.stringify(mockConnections));
+      cacheManager.set(CACHE_KEYS.CONNECTIONS, mockConnections, connectionCacheOptions);
 
       vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockConnections });
 
@@ -132,7 +136,7 @@ describe('connections.store', () => {
       const store = useConnectionsStore();
       const cachedData = mockConnections.slice(0, 1);
 
-      localStorage.setItem('connectionsCache', JSON.stringify(cachedData));
+      cacheManager.set(CACHE_KEYS.CONNECTIONS, cachedData, connectionCacheOptions);
 
       vi.mocked(apiClient.get).mockRejectedValueOnce({
         response: { data: { message: '网络错误' } },
@@ -197,12 +201,10 @@ describe('connections.store', () => {
 
       expect(result).toBe(true);
       expect(apiClient.post).toHaveBeenCalledWith('/connections', newConnectionData);
-      // fetchConnections 会重新设置缓存，所以缓存不会为 null
-      const cache = localStorage.getItem('connectionsCache');
-      expect(cache).not.toBeNull();
-      if (cache) {
-        expect(JSON.parse(cache)).toEqual([...mockConnections, createdConnection]);
-      }
+      expect(cacheManager.get(CACHE_KEYS.CONNECTIONS, [], connectionCacheOptions)).toEqual([
+        ...mockConnections,
+        createdConnection,
+      ]);
     });
 
     it('添加失败应设置错误', async () => {
@@ -283,7 +285,7 @@ describe('connections.store', () => {
       expect(result).toBe(true);
       expect(store.connections).toHaveLength(1);
       expect(store.connections[0].id).toBe(2);
-      expect(localStorage.getItem('connectionsCache')).toBeNull();
+      expect(cacheManager.has(CACHE_KEYS.CONNECTIONS, connectionCacheOptions)).toBe(false);
     });
 
     it('删除失败应设置错误', async () => {
