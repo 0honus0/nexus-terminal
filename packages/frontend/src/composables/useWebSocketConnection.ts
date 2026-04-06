@@ -54,6 +54,8 @@ export function createWebSocketConnectionManager(
     'ssh:error',
     'ssh:output',
     'ssh:status',
+    'ssh:exec_silent:result',
+    'ssh:exec_silent:error',
     'terminal:data',
     'terminal:resize',
     // SFTP messages
@@ -161,6 +163,8 @@ export function createWebSocketConnectionManager(
       typeof p.frontendSessionId === 'string' &&
       typeof p.data === 'string' &&
       typeof p.isLastChunk === 'boolean',
+    'ssh:exec_silent:result': (p) => typeof p === 'object' && typeof p?.output === 'string',
+    'ssh:exec_silent:error': (p) => typeof p === 'object' && typeof p?.error === 'string',
   };
 
   /**

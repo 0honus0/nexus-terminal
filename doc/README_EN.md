@@ -204,6 +204,7 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 3.  **Internal Drag and Drop**: You can directly drag and drop files or folders within the file manager to move them.
 4.  **Multiple Selection**: Hold down the `Ctrl` or `Shift` key to select multiple files or folders.
 5.  **Context Menu**: Provides common file operations such as copy, paste, cut, delete, rename, and modify permissions.
+6.  **Sync to Terminal Directory**: Click the toolbar folder button to switch the file manager to the current terminal working directory. The backend reads from the active interactive shell and includes shell-specific fallbacks (`posix`/`fish`/`powershell`/`cmd`).
 
 ### Command History Component
 

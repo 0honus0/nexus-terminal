@@ -596,6 +596,102 @@ describe('FileManager.vue', () => {
 
       expect(wrapper.find('.fa-upload').exists()).toBe(true);
     });
+
+    it('同步终端路径按钮应发送 ssh:exec_silent 请求并注册监听器', async () => {
+      const wsDeps = createMockWsDeps();
+      const wrapper = mount(FileManager, {
+        props: {
+          sessionId: 'session-1',
+          instanceId: 'instance-1',
+          dbConnectionId: 'conn-1',
+          wsDeps,
+        },
+      });
+
+      const syncButton = wrapper.find('button[title="fileManager.actions.syncFromTerminalPath"]');
+      expect(syncButton.exists()).toBe(true);
+
+      await syncButton.trigger('click');
+
+      expect(wsDeps.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'ssh:exec_silent',
+          payload: expect.objectContaining({
+            timeoutMs: 5000,
+            successCriteria: 'absolute_path',
+          }),
+        })
+      );
+      expect(wsDeps.onMessage).toHaveBeenCalledWith('ssh:exec_silent:result', expect.any(Function));
+      expect(wsDeps.onMessage).toHaveBeenCalledWith('ssh:exec_silent:error', expect.any(Function));
+      expect(wsDeps.onMessage).toHaveBeenCalledWith('ssh:disconnected', expect.any(Function));
+      expect(wsDeps.onMessage).toHaveBeenCalledWith('internal:closed', expect.any(Function));
+      expect(wsDeps.onMessage).toHaveBeenCalledWith('internal:error', expect.any(Function));
+    });
+
+    it('同步终端路径成功回包后应加载目标目录', async () => {
+      const handlers: Record<string, Function> = {};
+      const wsDeps = {
+        sendMessage: vi.fn(),
+        onMessage: vi.fn((type: string, handler: Function) => {
+          handlers[type] = handler;
+          return vi.fn();
+        }),
+        isConnected: computed(() => true),
+        isSftpReady: ref(true),
+      };
+      const wrapper = mount(FileManager, {
+        props: {
+          sessionId: 'session-1',
+          instanceId: 'instance-1',
+          dbConnectionId: 'conn-1',
+          wsDeps,
+        },
+      });
+
+      const syncButton = wrapper.find('button[title="fileManager.actions.syncFromTerminalPath"]');
+      await syncButton.trigger('click');
+
+      const request = (wsDeps.sendMessage as any).mock.calls[0][0];
+      handlers['ssh:exec_silent:result'](
+        { output: '/var/log\n' },
+        { requestId: request.requestId }
+      );
+      await nextTick();
+
+      expect(mockSftpManager.loadDirectory).toHaveBeenCalledWith('/var/log');
+    });
+
+    it('组件卸载时应清理同步终端路径监听器', async () => {
+      const unregisterFns: Array<ReturnType<typeof vi.fn>> = [];
+      const wsDeps = {
+        sendMessage: vi.fn(),
+        onMessage: vi.fn((_type: string, _handler: Function) => {
+          const unregister = vi.fn();
+          unregisterFns.push(unregister);
+          return unregister;
+        }),
+        isConnected: computed(() => true),
+        isSftpReady: ref(true),
+      };
+      const wrapper = mount(FileManager, {
+        props: {
+          sessionId: 'session-1',
+          instanceId: 'instance-1',
+          dbConnectionId: 'conn-1',
+          wsDeps,
+        },
+      });
+
+      const syncButton = wrapper.find('button[title="fileManager.actions.syncFromTerminalPath"]');
+      await syncButton.trigger('click');
+      wrapper.unmount();
+
+      expect(unregisterFns.length).toBeGreaterThanOrEqual(5);
+      unregisterFns.forEach((unregister) => {
+        expect(unregister).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('选择功能', () => {

@@ -166,6 +166,13 @@ const clipboardSourcePaths = ref<string[]>([]); // 存储源完整路径
 const clipboardSourceBaseDir = ref<string>(''); // 存储源目录
 
 const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会被 store 覆盖
+const isSyncingPathFromTerminal = ref(false);
+let unregisterSilentExecResult: (() => void) | null = null;
+let unregisterSilentExecError: (() => void) | null = null;
+let unregisterSilentExecDisconnect: (() => void) | null = null;
+let unregisterSilentExecClosed: (() => void) | null = null;
+let unregisterSilentExecSocketError: (() => void) | null = null;
+let silentExecTimeoutId: ReturnType<typeof setTimeout> | null = null;
 // --- 键盘导航状态 (移至 useFileManagerKeyboardNavigation) ---
 // const selectedIndex = ref<number>(-1);
 
@@ -1672,6 +1679,8 @@ onBeforeUnmount(() => {
   }
   unregisterPathFocusAction = null;
   document.removeEventListener('click', handleClickOutsidePathInput);
+  cleanupSilentExecRequest();
+  isSyncingPathFromTerminal.value = false;
   sessionStore.removeSftpManager(props.sessionId, props.instanceId);
 });
 
@@ -2001,6 +2010,129 @@ const sendCdCommandToTerminal = () => {
   }
 };
 
+const cleanupSilentExecRequest = () => {
+  unregisterSilentExecResult?.();
+  unregisterSilentExecResult = null;
+  unregisterSilentExecError?.();
+  unregisterSilentExecError = null;
+  unregisterSilentExecDisconnect?.();
+  unregisterSilentExecDisconnect = null;
+  unregisterSilentExecClosed?.();
+  unregisterSilentExecClosed = null;
+  unregisterSilentExecSocketError?.();
+  unregisterSilentExecSocketError = null;
+  if (silentExecTimeoutId) {
+    clearTimeout(silentExecTimeoutId);
+    silentExecTimeoutId = null;
+  }
+};
+
+const parsePathFromSilentOutput = (output: string): string | null => {
+  const lines = output
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const absolutePath = lines.find((line) => /^(\/|[A-Za-z]:[\\/])/.test(line));
+  return absolutePath || null;
+};
+
+const syncCurrentPathToTerminalDirectory = () => {
+  if (!currentSftpManager.value || !props.wsDeps.isConnected.value || isSyncingPathFromTerminal.value) {
+    return;
+  }
+
+  const requestId = generateRequestId();
+  const { sendMessage, onMessage } = props.wsDeps;
+  const commandsByShell = {
+    posix:
+      "pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf '%s\\n' \"$PWD\" 2>/dev/null || echo \"$PWD\" 2>/dev/null",
+    fish: 'pwd',
+    powershell: '(Get-Location).Path',
+    cmd: 'echo %cd%',
+    default:
+      "pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf '%s\\n' \"$PWD\" 2>/dev/null || echo \"$PWD\" 2>/dev/null",
+  };
+
+  isSyncingPathFromTerminal.value = true;
+  cleanupSilentExecRequest();
+
+  const finishWithError = (message: string) => {
+    cleanupSilentExecRequest();
+    isSyncingPathFromTerminal.value = false;
+    uiNotificationsStore.showError(message);
+  };
+
+  const finishSilentlyOnDisconnect = () => {
+    cleanupSilentExecRequest();
+    isSyncingPathFromTerminal.value = false;
+  };
+
+  unregisterSilentExecResult = onMessage(
+    'ssh:exec_silent:result',
+    (payload: any, message: WebSocketMessage) => {
+      if (message.requestId !== requestId) return;
+
+      cleanupSilentExecRequest();
+      isSyncingPathFromTerminal.value = false;
+
+      const output = typeof payload?.output === 'string' ? payload.output : '';
+      const path = parsePathFromSilentOutput(output);
+
+      if (!path) {
+        uiNotificationsStore.showError(
+          t('fileManager.errors.pathReadFailed', 'Failed to read terminal path.')
+        );
+        return;
+      }
+
+      currentSftpManager.value?.loadDirectory(path);
+    }
+  );
+
+  unregisterSilentExecError = onMessage('ssh:exec_silent:error', (payload: any, message: WebSocketMessage) => {
+    if (message.requestId !== requestId) return;
+    const errorMessage =
+      typeof payload?.error === 'string'
+        ? payload.error
+        : t('fileManager.errors.pathReadFailed', 'Failed to read terminal path.');
+    finishWithError(errorMessage);
+  });
+
+  unregisterSilentExecDisconnect = onMessage('ssh:disconnected', () => {
+    finishSilentlyOnDisconnect();
+  });
+
+  unregisterSilentExecClosed = onMessage('internal:closed', () => {
+    finishSilentlyOnDisconnect();
+  });
+
+  unregisterSilentExecSocketError = onMessage('internal:error', () => {
+    finishSilentlyOnDisconnect();
+  });
+
+  silentExecTimeoutId = setTimeout(() => {
+    finishWithError(
+      t('fileManager.errors.pathReadTimeout', 'Timed out while reading terminal path.')
+    );
+  }, 6000);
+
+  sendMessage({
+    type: 'ssh:exec_silent',
+    requestId,
+    payload: {
+      commandsByShell,
+      timeoutMs: 5000,
+      successCriteria: 'absolute_path',
+    },
+  });
+};
+
 // --- 打开弹窗编辑器的方法 ---
 const openPopupEditor = () => {
   if (!props.sessionId) {
@@ -2120,6 +2252,30 @@ const handleNavigateToPathFromFavorites = (path: string) => {
             "
           >
             <i class="fas fa-terminal text-base"></i>
+          </button>
+          <button
+            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+            @click.stop="syncCurrentPathToTerminalDirectory"
+            :disabled="
+              !currentSftpManager ||
+              !props.wsDeps.isConnected.value ||
+              isEditingPath ||
+              isSyncingPathFromTerminal
+            "
+            :title="
+              t(
+                'fileManager.actions.syncFromTerminalPath',
+                'Sync file manager to terminal directory'
+              )
+            "
+          >
+            <i
+              :class="[
+                'fas',
+                isSyncingPathFromTerminal ? 'fa-spinner fa-spin' : 'fa-folder-open',
+                'text-base',
+              ]"
+            ></i>
           </button>
           <!-- 刷新按钮 -->
           <button

@@ -38,6 +38,7 @@ import {
   handleSshInput,
   handleSshResize,
   handleSshResumeSuccess,
+  handleSshExecSilent,
 } from './handlers/ssh.handler';
 import {
   handleDockerGetStatus,
@@ -158,6 +159,9 @@ export function initializeConnectionHandler(
               break;
             case 'ssh:resize':
               handleSshResize(ws, payload);
+              break;
+            case 'ssh:exec_silent':
+              handleSshExecSilent(ws, payload, requestId);
               break;
 
             // Docker Cases

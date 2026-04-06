@@ -15,6 +15,370 @@ import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-stor
 import { startDockerStatusPolling } from './docker.handler';
 import { getErrorMessage } from '../../utils/AppError';
 
+type SilentExecShellFlavor = 'posix' | 'powershell' | 'cmd' | 'fish';
+type SilentExecSuccessCriteria = 'any' | 'non_empty' | 'absolute_path';
+
+interface SilentExecPayload {
+  command?: string;
+  commandsByShell?: Record<string, unknown>;
+  timeoutMs?: number;
+  shellFlavorHint?: string;
+  successCriteria?: string;
+}
+
+const MAX_SILENT_OUTPUT_SIZE = 64 * 1024;
+const MAX_SILENT_LINE_BUFFER_SIZE = 16 * 1024;
+
+interface PendingSilentExecRequest {
+  ws: AuthenticatedWebSocket;
+  sessionId: string;
+  requestId: string;
+  commandCandidates: string[];
+  timeoutMs: number;
+  successCriteria: SilentExecSuccessCriteria;
+  attemptIndex: number;
+  lastError?: string;
+  startMarker: string;
+  endMarker: string;
+  pendingLineBuffer: string;
+  isCollectingOutput: boolean;
+  collectedOutput: string;
+  timeoutId?: NodeJS.Timeout;
+}
+
+const pendingSilentExecRequests = new Map<string, PendingSilentExecRequest>();
+
+const clearSilentExecTimer = (request: PendingSilentExecRequest): void => {
+  if (request.timeoutId) {
+    clearTimeout(request.timeoutId);
+    request.timeoutId = undefined;
+  }
+};
+
+const hasAbsolutePathInOutput = (output: string): boolean =>
+  output
+    .replace(/\r/g, '')
+    .split('\n')
+    .some((line) => /^(\/|[A-Za-z]:[\\/])/.test(line.trim()));
+
+const normalizeSilentExecSuccessCriteria = (value: unknown): SilentExecSuccessCriteria => {
+  if (value === 'any' || value === 'non_empty' || value === 'absolute_path') {
+    return value;
+  }
+  return 'non_empty';
+};
+
+const isSilentExecOutputAccepted = (
+  criteria: SilentExecSuccessCriteria,
+  output: string
+): boolean => {
+  if (criteria === 'any') {
+    return true;
+  }
+  if (criteria === 'absolute_path') {
+    return hasAbsolutePathInOutput(output);
+  }
+  return output.trim().length > 0;
+};
+
+const finalizeSilentExecWithError = (sessionId: string, error: string): void => {
+  const request = pendingSilentExecRequests.get(sessionId);
+  if (!request) {
+    return;
+  }
+  clearSilentExecTimer(request);
+  pendingSilentExecRequests.delete(sessionId);
+  sendSilentExecResponse(request.ws, 'ssh:exec_silent:error', request.requestId, { error });
+};
+
+const finalizeSilentExecWithResult = (sessionId: string, output: string): void => {
+  const request = pendingSilentExecRequests.get(sessionId);
+  if (!request) {
+    return;
+  }
+  clearSilentExecTimer(request);
+  pendingSilentExecRequests.delete(sessionId);
+  sendSilentExecResponse(request.ws, 'ssh:exec_silent:result', request.requestId, {
+    output: output.replace(/\r/g, ''),
+  });
+};
+
+const moveToNextSilentExecAttempt = (sessionId: string, reason: string): void => {
+  const request = pendingSilentExecRequests.get(sessionId);
+  if (!request) {
+    return;
+  }
+  clearSilentExecTimer(request);
+  request.attemptIndex += 1;
+  request.lastError = reason;
+  request.isCollectingOutput = false;
+  request.collectedOutput = '';
+};
+
+const appendSilentCollectedOutput = (request: PendingSilentExecRequest, chunk: string): void => {
+  if (!chunk || request.collectedOutput.length >= MAX_SILENT_OUTPUT_SIZE) {
+    return;
+  }
+  request.collectedOutput += chunk;
+  if (request.collectedOutput.length > MAX_SILENT_OUTPUT_SIZE) {
+    request.collectedOutput = request.collectedOutput.slice(0, MAX_SILENT_OUTPUT_SIZE);
+  }
+};
+
+const createSilentExecMarker = (requestId: string, attemptIndex: number): string => {
+  const normalizedRequestId = requestId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const randomSuffix = uuidv4().replace(/-/g, '').slice(0, 10);
+  return `${normalizedRequestId}_${attemptIndex}_${randomSuffix}`;
+};
+
+const startSilentExecAttempt = (sessionId: string): void => {
+  const request = pendingSilentExecRequests.get(sessionId);
+  if (!request) {
+    return;
+  }
+
+  const command = request.commandCandidates[request.attemptIndex];
+  if (!command) {
+    finalizeSilentExecWithError(
+      sessionId,
+      request.lastError || 'Failed to execute silent command in current shell.'
+    );
+    return;
+  }
+
+  const state = clientStates.get(sessionId);
+  if (!state?.sshShellStream || !state.isShellReady) {
+    finalizeSilentExecWithError(sessionId, 'Shell channel is not ready.');
+    return;
+  }
+
+  const marker = createSilentExecMarker(request.requestId, request.attemptIndex);
+  request.startMarker = `__NX_SILENT_START_${marker}__`;
+  request.endMarker = `__NX_SILENT_END_${marker}__`;
+  request.isCollectingOutput = false;
+  request.collectedOutput = '';
+
+  request.timeoutId = setTimeout(() => {
+    moveToNextSilentExecAttempt(sessionId, 'Timed out while waiting for command output.');
+    startSilentExecAttempt(sessionId);
+  }, request.timeoutMs);
+
+  try {
+    const wrappedCommand = `echo ${request.startMarker}\n${command}\necho ${request.endMarker}\n`;
+    state.sshShellStream.write(wrappedCommand);
+  } catch (error: unknown) {
+    moveToNextSilentExecAttempt(
+      sessionId,
+      `Failed to write command to shell stream: ${getErrorMessage(error)}`
+    );
+    startSilentExecAttempt(sessionId);
+  }
+};
+
+const processSshStreamOutput = (sessionId: string, chunk: string): string => {
+  const request = pendingSilentExecRequests.get(sessionId);
+  if (!request) {
+    return chunk;
+  }
+
+  request.pendingLineBuffer += chunk.replace(/\r/g, '');
+  const lines = request.pendingLineBuffer.split('\n');
+  request.pendingLineBuffer = lines.pop() || '';
+  let overflowOutput = '';
+
+  // 仅对“最后一个未换行残片”做上限控制，避免大包时误伤 marker 所在完整行。
+  if (request.pendingLineBuffer.length > MAX_SILENT_LINE_BUFFER_SIZE) {
+    const overflowLength = request.pendingLineBuffer.length - MAX_SILENT_LINE_BUFFER_SIZE;
+    const overflowChunk = request.pendingLineBuffer.slice(0, overflowLength);
+    request.pendingLineBuffer = request.pendingLineBuffer.slice(overflowLength);
+
+    if (request.isCollectingOutput) {
+      appendSilentCollectedOutput(request, overflowChunk);
+    } else {
+      overflowOutput = overflowChunk;
+    }
+  }
+  const visibleLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const trimmedLine = rawLine.trim();
+
+    if (!request.isCollectingOutput) {
+      if (trimmedLine === request.startMarker) {
+        request.isCollectingOutput = true;
+        request.collectedOutput = '';
+        continue;
+      }
+
+      if (rawLine.includes(`echo ${request.startMarker}`)) {
+        continue;
+      }
+
+      visibleLines.push(rawLine);
+      continue;
+    }
+
+    if (trimmedLine === request.endMarker) {
+      const normalizedOutput = request.collectedOutput.replace(/\r/g, '');
+      const hasMoreCandidates = request.attemptIndex + 1 < request.commandCandidates.length;
+      const isAccepted = isSilentExecOutputAccepted(request.successCriteria, normalizedOutput);
+
+      clearSilentExecTimer(request);
+      request.isCollectingOutput = false;
+      request.collectedOutput = '';
+
+      if (!isAccepted && hasMoreCandidates) {
+        moveToNextSilentExecAttempt(
+          sessionId,
+          `Command output does not match success criteria: ${request.successCriteria}.`
+        );
+        startSilentExecAttempt(sessionId);
+      } else {
+        finalizeSilentExecWithResult(sessionId, normalizedOutput);
+      }
+      continue;
+    }
+
+    if (rawLine.includes(`echo ${request.endMarker}`)) {
+      continue;
+    }
+
+    appendSilentCollectedOutput(
+      request,
+      request.collectedOutput.length > 0 ? `\n${rawLine}` : rawLine
+    );
+  }
+
+  let visibleOutput = visibleLines.length > 0 ? `${visibleLines.join('\n')}\n` : '';
+  if (overflowOutput) {
+    visibleOutput += overflowOutput;
+  }
+
+  // 如果本次处理过程中请求已结束，补发尚未换行的尾部内容（常见于 shell prompt）。
+  if (!pendingSilentExecRequests.has(sessionId) && request.pendingLineBuffer) {
+    visibleOutput += request.pendingLineBuffer;
+    request.pendingLineBuffer = '';
+  }
+
+  return visibleOutput;
+};
+
+const normalizeShellFlavor = (value: unknown): SilentExecShellFlavor | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'posix' || normalized === 'powershell' || normalized === 'cmd' || normalized === 'fish') {
+    return normalized;
+  }
+  return undefined;
+};
+
+const getSilentExecCommandCandidates = (payload: SilentExecPayload): string[] => {
+  if (typeof payload.command === 'string' && payload.command.trim()) {
+    return [payload.command.trim()];
+  }
+
+  if (!payload.commandsByShell || typeof payload.commandsByShell !== 'object') {
+    return [];
+  }
+
+  const commandMap = payload.commandsByShell;
+  const shellHint = normalizeShellFlavor(payload.shellFlavorHint);
+  const candidateKeys: Array<SilentExecShellFlavor | 'default'> = [
+    ...(shellHint ? [shellHint] : []),
+    'posix',
+    'powershell',
+    'cmd',
+    'fish',
+    'default',
+  ];
+  const commands = new Set<string>();
+
+  for (const key of candidateKeys) {
+    const value = commandMap[key];
+    if (typeof value === 'string' && value.trim()) {
+      commands.add(value.trim());
+    }
+  }
+
+  return Array.from(commands);
+};
+
+const getSilentExecTimeoutMs = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 5000;
+  }
+  return Math.max(1000, Math.min(Math.floor(value), 20000));
+};
+
+const sendSilentExecResponse = (
+  ws: AuthenticatedWebSocket,
+  type: 'ssh:exec_silent:result' | 'ssh:exec_silent:error',
+  requestId: string,
+  payload: Record<string, unknown>
+): void => {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  ws.send(JSON.stringify({ type, requestId, payload }));
+};
+
+export function handleSshExecSilent(
+  ws: AuthenticatedWebSocket,
+  rawPayload: unknown,
+  requestIdFromMessage?: string
+): void {
+  const sessionId = ws.sessionId;
+  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const requestId =
+    typeof requestIdFromMessage === 'string' && requestIdFromMessage.trim()
+      ? requestIdFromMessage
+      : uuidv4();
+
+  if (!sessionId || !state?.sshClient || !state.sshShellStream || !state.isShellReady) {
+    sendSilentExecResponse(ws, 'ssh:exec_silent:error', requestId, {
+      error: 'SSH shell is not ready.',
+    });
+    return;
+  }
+
+  const payload = (rawPayload || {}) as SilentExecPayload;
+  const commandCandidates = getSilentExecCommandCandidates(payload);
+  if (commandCandidates.length === 0) {
+    sendSilentExecResponse(ws, 'ssh:exec_silent:error', requestId, {
+      error: 'Missing command for silent execution.',
+    });
+    return;
+  }
+
+  if (pendingSilentExecRequests.has(sessionId)) {
+    sendSilentExecResponse(ws, 'ssh:exec_silent:error', requestId, {
+      error: 'Another silent command is already in progress.',
+    });
+    return;
+  }
+
+  const request: PendingSilentExecRequest = {
+    ws,
+    sessionId,
+    requestId,
+    commandCandidates,
+    timeoutMs: getSilentExecTimeoutMs(payload.timeoutMs),
+    successCriteria: normalizeSilentExecSuccessCriteria(payload.successCriteria),
+    attemptIndex: 0,
+    startMarker: '',
+    endMarker: '',
+    pendingLineBuffer: '',
+    isCollectingOutput: false,
+    collectedOutput: '',
+  };
+
+  pendingSilentExecRequests.set(sessionId, request);
+  startSilentExecAttempt(sessionId);
+}
+
 export async function handleSshConnect(
   ws: AuthenticatedWebSocket,
   request: Request,
@@ -133,22 +497,24 @@ export async function handleSshConnect(
           newState.isShellReady = true;
 
           stream.on('data', (data: Buffer) => {
+            const processedOutput = processSshStreamOutput(newSessionId, data.toString('utf8'));
             if (ws.readyState === WebSocket.OPEN) {
-              // 确保数据以 UTF-8 编码转换为 Base64
-              const utf8Data = data.toString('utf8');
-              ws.send(
-                JSON.stringify({
-                  type: 'ssh:output',
-                  payload: Buffer.from(utf8Data, 'utf8').toString('base64'),
-                  encoding: 'base64',
-                })
-              );
+              if (processedOutput) {
+                // 确保数据以 UTF-8 编码转换为 Base64
+                ws.send(
+                  JSON.stringify({
+                    type: 'ssh:output',
+                    payload: Buffer.from(processedOutput, 'utf8').toString('base64'),
+                    encoding: 'base64',
+                  })
+                );
+              }
             }
             // 如果会话被标记为待挂起，则将输出写入日志
             const currentState = clientStates.get(newSessionId); // 获取最新的状态
-            if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
+            if (processedOutput && currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
               temporaryLogStorageService
-                .writeToLog(currentState.suspendLogPath, data.toString('utf-8'))
+                .writeToLog(currentState.suspendLogPath, processedOutput)
                 .catch((err) => {
                   console.error(
                     `[SSH Handler] 写入标记会话 ${newSessionId} 的日志失败 (路径: ${currentState.suspendLogPath}):`,
@@ -158,25 +524,29 @@ export async function handleSshConnect(
             }
           });
           stream.stderr.on('data', (data: Buffer) => {
-            console.error(
-              `SSH Stderr (会话: ${newSessionId}): ${data.toString('utf8').substring(0, 100)}...`
-            );
-            if (ws.readyState === WebSocket.OPEN) {
-              // 确保数据以 UTF-8 编码转换为 Base64
-              const utf8ErrData = data.toString('utf8');
-              ws.send(
-                JSON.stringify({
-                  type: 'ssh:output',
-                  payload: Buffer.from(utf8ErrData, 'utf8').toString('base64'),
-                  encoding: 'base64',
-                })
+            const processedOutput = processSshStreamOutput(newSessionId, data.toString('utf8'));
+            if (processedOutput) {
+              console.error(
+                `SSH Stderr (会话: ${newSessionId}): ${processedOutput.substring(0, 100)}...`
               );
+            }
+            if (ws.readyState === WebSocket.OPEN) {
+              if (processedOutput) {
+                // 确保数据以 UTF-8 编码转换为 Base64
+                ws.send(
+                  JSON.stringify({
+                    type: 'ssh:output',
+                    payload: Buffer.from(processedOutput, 'utf8').toString('base64'),
+                    encoding: 'base64',
+                  })
+                );
+              }
             }
             // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
             const currentState = clientStates.get(newSessionId);
-            if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
+            if (processedOutput && currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
               temporaryLogStorageService
-                .writeToLog(currentState.suspendLogPath, `[STDERR] ${data.toString('utf-8')}`)
+                .writeToLog(currentState.suspendLogPath, `[STDERR] ${processedOutput}`)
                 .catch((err) => {
                   console.error(
                     `[SSH Handler] 写入标记会话 ${newSessionId} 的 STDERR 日志失败 (路径: ${currentState.suspendLogPath}):`,
@@ -186,6 +556,10 @@ export async function handleSshConnect(
             }
           });
           stream.on('close', () => {
+            finalizeSilentExecWithError(
+              newSessionId,
+              'Shell channel closed before silent command completed.'
+            );
             console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
@@ -247,10 +621,15 @@ export async function handleSshConnect(
     }
 
     sshClient.on('close', () => {
+      finalizeSilentExecWithError(newSessionId, 'SSH connection closed before silent command completed.');
       console.log(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
       cleanupClientConnection(newSessionId);
     });
     sshClient.on('error', (err: Error) => {
+      finalizeSilentExecWithError(
+        newSessionId,
+        `SSH client error before silent command completed: ${err.message}`
+      );
       console.error(`SSH: 会话 ${newSessionId} 的客户端连接错误:`, err);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));

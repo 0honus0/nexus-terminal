@@ -18,6 +18,37 @@ export interface WebSocketMessage {
   [key: string]: any; // 允许其他属性，如 requestId, encoding 等
 }
 
+// --- SSH Silent Exec 消息类型 ---
+export interface SshExecSilentRequestPayload {
+  command?: string;
+  commandsByShell?: Record<string, string>;
+  timeoutMs?: number;
+  shellFlavorHint?: 'posix' | 'powershell' | 'cmd' | 'fish';
+  successCriteria?: 'any' | 'non_empty' | 'absolute_path';
+}
+
+export interface SshExecSilentRequestMessage extends WebSocketMessage {
+  type: 'ssh:exec_silent';
+  requestId?: string;
+  payload: SshExecSilentRequestPayload;
+}
+
+export interface SshExecSilentResultMessage extends WebSocketMessage {
+  type: 'ssh:exec_silent:result';
+  requestId?: string;
+  payload: {
+    output: string;
+  };
+}
+
+export interface SshExecSilentErrorMessage extends WebSocketMessage {
+  type: 'ssh:exec_silent:error';
+  requestId?: string;
+  payload: {
+    error: string;
+  };
+}
+
 // 消息处理器函数类型
 export type MessageHandler = (payload: MessagePayload, message: WebSocketMessage) => void; // 恢复 message 参数为必需
 export interface SftpUploadProgressPayload {

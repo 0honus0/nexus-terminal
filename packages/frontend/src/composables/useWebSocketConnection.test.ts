@@ -277,6 +277,27 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       expect(manager.isSftpReady.value).toBe(true);
     });
 
+    it('应接收并分发 ssh:exec_silent:result 消息', () => {
+      const manager = createManager();
+      const handler = vi.fn();
+
+      manager.onMessage('ssh:exec_silent:result', handler);
+      manager.connect('ws://localhost:3001');
+      const ws = createdWebSockets[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'ssh:exec_silent:result',
+        payload: { output: '/home/test\n' },
+        requestId: 'req-1',
+      });
+
+      expect(handler).toHaveBeenCalledWith(
+        { output: '/home/test\n' },
+        expect.objectContaining({ requestId: 'req-1' })
+      );
+    });
+
     it('未知消息类型应被忽略', () => {
       const manager = createManager();
       const handler = vi.fn();

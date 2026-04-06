@@ -134,9 +134,28 @@ const getScrollbackValue = (limit: number): number => {
 // --- 右键粘贴功能 ---
 const handleContextMenuPaste = async (event: MouseEvent) => {
   event.preventDefault();
+  const terminal = terminalInstance.value;
+  if (!terminal) {
+    return;
+  }
+
+  const selection = terminal.getSelection();
+  // 右键拆分为两步：
+  // 1) 有选区 => 复制选区
+  // 2) 无选区 => 执行粘贴
+  if (selection) {
+    try {
+      await navigator.clipboard.writeText(selection);
+      terminal.clearSelection();
+    } catch (err) {
+      console.error('[Terminal] Failed to copy selection via Right Click:', err);
+    }
+    return;
+  }
+
   try {
     const text = await navigator.clipboard.readText();
-    if (text && terminalInstance.value) {
+    if (text) {
       const processedText = text.replace(/\r\n?/g, '\n');
       emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
     }

@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 
 import {
   handleSshConnect,
+  handleSshExecSilent,
   handleSshInput,
   handleSshResize,
   handleSshResumeSuccess,
@@ -69,6 +70,7 @@ vi.mock('./docker.handler', () => ({
 class MockSshClient extends EventEmitter {
   end = vi.fn();
   shell = vi.fn();
+  exec = vi.fn();
 }
 
 // Mock Shell Stream
@@ -345,6 +347,212 @@ describe('SSH WebSocket Handler', () => {
         JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' })
       );
       expect(cleanupClientConnection).toHaveBeenCalledWith('mock-session-id-12345');
+    });
+  });
+
+  describe('handleSshExecSilent', () => {
+    const mockConnectionDetails: SshService.DecryptedConnectionDetails = {
+      id: 1,
+      name: '测试服务器',
+      host: '192.168.1.1',
+      port: 22,
+      username: 'testuser',
+      auth_method: 'password',
+      password: 'testpass',
+      proxy: null,
+      connection_proxy_setting: null,
+    };
+
+    const getLastSentMessage = () => {
+      const calls = (mockWs.send as any).mock.calls;
+      const raw = calls[calls.length - 1]?.[0];
+      return raw ? JSON.parse(raw) : null;
+    };
+
+    const connectReadyShellSession = async () => {
+      (SshService.getConnectionDetails as any).mockResolvedValue(mockConnectionDetails);
+      (SshService.establishSshConnection as any).mockResolvedValue(mockSshClient);
+      mockSshClient.shell.mockImplementation((opts, callback) => {
+        callback(null, mockShellStream);
+      });
+      await handleSshConnect(mockWs, mockRequest, { connectionId: 1 });
+      (mockWs.send as any).mockClear();
+    };
+
+    const extractMarkers = (writtenCommand: string) => {
+      const [startLine = '', , endLine = ''] = writtenCommand.split('\n');
+      return {
+        startMarker: startLine.replace(/^echo\s+/, '').trim(),
+        endMarker: endLine.replace(/^echo\s+/, '').trim(),
+      };
+    };
+
+    it('应在命令执行成功时返回结果', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(mockWs, { command: 'pwd' }, 'req-silent-1');
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`echo ${startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from(`${startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('pwd\n/home/test\n'));
+      mockShellStream.emit('data', Buffer.from(`${endMarker}\n`));
+
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-1');
+      expect(message.payload.output).toContain('/home/test');
+
+      const outputMessages = (mockWs.send as any).mock.calls
+        .map((call: any[]) => JSON.parse(call[0]))
+        .filter((msg: any) => msg.type === 'ssh:output');
+      expect(outputMessages).toHaveLength(0);
+    });
+
+    it('结束标记后的无换行 prompt 尾部应继续透传到终端', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(mockWs, { command: 'pwd' }, 'req-silent-1b');
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit(
+        'data',
+        Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\nuser@host:~$ `)
+      );
+
+      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      const resultMessage = messages.find((msg: any) => msg.type === 'ssh:exec_silent:result');
+      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+
+      expect(resultMessage.requestId).toBe('req-silent-1b');
+      expect(resultMessage.payload.output).toContain('/home/test');
+      expect(outputMessage).toBeTruthy();
+      expect(Buffer.from(outputMessage.payload, 'base64').toString('utf8')).toBe('user@host:~$ ');
+    });
+
+    it('结束标记后大块无换行输出应完整透传', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(mockWs, { command: 'pwd' }, 'req-silent-1c');
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+      const tail = 'x'.repeat(20000);
+
+      mockShellStream.emit(
+        'data',
+        Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\n${tail}`)
+      );
+
+      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+      expect(outputMessage).toBeTruthy();
+      expect(Buffer.from(outputMessage.payload, 'base64').toString('utf8')).toBe(tail);
+    });
+
+    it('应在首个命令不返回路径时自动回退后续命令', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        {
+          successCriteria: 'absolute_path',
+          commandsByShell: {
+            posix: 'bad-cmd',
+            default: 'pwd',
+          },
+        },
+        'req-silent-2'
+      );
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const firstMarkers = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${firstMarkers.startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('bad-cmd\ncommand not found\n'));
+      mockShellStream.emit('data', Buffer.from(`${firstMarkers.endMarker}\n`));
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(2);
+      const secondWrite = (mockShellStream.write as any).mock.calls[1][0] as string;
+      const secondMarkers = extractMarkers(secondWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${secondMarkers.startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('pwd\n/var/www\n'));
+      mockShellStream.emit('data', Buffer.from(`${secondMarkers.endMarker}\n`));
+
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-2');
+      expect(message.payload.output).toContain('/var/www');
+    });
+
+    it('默认 non_empty 策略下非路径输出应直接成功，不触发回退', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        {
+          commandsByShell: {
+            posix: 'echo hello',
+            default: 'pwd',
+          },
+        },
+        'req-silent-2b'
+      );
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const firstMarkers = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${firstMarkers.startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('echo hello\nhello\n'));
+      mockShellStream.emit('data', Buffer.from(`${firstMarkers.endMarker}\n`));
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-2b');
+      expect(message.payload.output).toContain('hello');
+    });
+
+    it('超时时应返回错误', async () => {
+      vi.useFakeTimers();
+      try {
+        await connectReadyShellSession();
+
+        handleSshExecSilent(mockWs, { command: 'pwd', timeoutMs: 1000 }, 'req-silent-3');
+        vi.advanceTimersByTime(1000);
+        await vi.runOnlyPendingTimersAsync();
+
+        const message = getLastSentMessage();
+        expect(message.type).toBe('ssh:exec_silent:error');
+        expect(message.requestId).toBe('req-silent-3');
+        expect(message.payload.error).toContain('Timed out');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('Shell 未就绪时应返回错误', () => {
+      mockWs.sessionId = 'silent-session';
+      clientStates.set('silent-session', {
+        ws: mockWs,
+        sshClient: mockSshClient as any,
+        dbConnectionId: 1,
+        isShellReady: false,
+      });
+
+      handleSshExecSilent(mockWs, { command: 'pwd' }, 'req-silent-4');
+      const message = getLastSentMessage();
+
+      expect(message.type).toBe('ssh:exec_silent:error');
+      expect(message.requestId).toBe('req-silent-4');
+      expect(message.payload.error).toBe('SSH shell is not ready.');
     });
   });
 

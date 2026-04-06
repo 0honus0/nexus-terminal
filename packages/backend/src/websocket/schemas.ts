@@ -22,6 +22,29 @@ export const sshResizeSchema = z.object({
   }),
 });
 
+export const sshExecSilentSchema = z
+  .object({
+    type: z.literal('ssh:exec_silent'),
+    requestId: z.string().min(1).max(128).optional(),
+    payload: z.object({
+      command: z.string().min(1).max(4096).optional(),
+      commandsByShell: z.record(z.string().max(64), z.string().max(4096)).optional(),
+      timeoutMs: z.number().int().min(1000).max(20000).optional(),
+      shellFlavorHint: z.enum(['posix', 'powershell', 'cmd', 'fish']).optional(),
+      successCriteria: z.enum(['any', 'non_empty', 'absolute_path']).optional(),
+    }),
+  })
+  .superRefine((message, ctx) => {
+    const { command, commandsByShell } = message.payload;
+    if (!command && (!commandsByShell || Object.keys(commandsByShell).length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['payload'],
+        message: 'payload.command 或 payload.commandsByShell 至少提供一个',
+      });
+    }
+  });
+
 // --- Docker 操作 Schema ---
 
 export const dockerGetStatusSchema = z.object({
@@ -146,6 +169,7 @@ export const messageSchemaRegistry = {
   'ssh:connect': sshConnectSchema,
   'ssh:input': sshInputSchema,
   'ssh:resize': sshResizeSchema,
+  'ssh:exec_silent': sshExecSilentSchema,
 
   // Docker 操作
   'docker:get_status': dockerGetStatusSchema,
