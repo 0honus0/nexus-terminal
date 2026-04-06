@@ -453,6 +453,7 @@
       "closeTab": "Close Tab",
       "closeEditor": "Close Editor",
       "cdToTerminal": "Change terminal directory to current path",
+      "syncFromTerminalPath": "Sync file manager to terminal directory",
       "copy": "Copy",
       "cut": "Cut",
       "paste": "Paste",
@@ -514,7 +515,9 @@
       "genericCommandNotFound": "Command '{command}' not found on server, cannot complete '{operation}' operation.",
       "copyPathFailed": "Failed to copy path",
       "sftpManagerUnavailable": "SFTP manager unavailable",
-      "missingSessionId": "Missing session ID"
+      "missingSessionId": "Missing session ID",
+      "pathReadFailed": "Failed to read terminal path.",
+      "pathReadTimeout": "Timed out while reading terminal path."
     },
     "notifications": {
       "copySuccess": "Copy successful",

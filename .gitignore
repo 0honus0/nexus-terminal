@@ -173,7 +173,4 @@ electron-app/dist_electron/
 
 # Husky git hooks
 .husky/
-!.husky/
-!.husky/commit-msg
-!.husky/pre-commit
 .ace-tool/

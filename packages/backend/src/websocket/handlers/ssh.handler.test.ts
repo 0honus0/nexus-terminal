@@ -412,6 +412,29 @@ describe('SSH WebSocket Handler', () => {
       expect(outputMessages).toHaveLength(0);
     });
 
+    it('start marker 前存在 shell prompt 时也应正确采集输出并返回结果', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(mockWs, { command: 'pwd' }, 'req-silent-prompt-marker');
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`root@localhost:/opt$ ${startMarker}\n`));
+      mockShellStream.emit(
+        'data',
+        Buffer.from(
+          `root@localhost:/opt$ pwd 2>/dev/null || /bin/pwd 2>/dev/null\n/opt\nroot@localhost:/opt$ echo ${endMarker}\n${endMarker}\n`
+        )
+      );
+
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-prompt-marker');
+      expect(message.payload.output).toContain('/opt');
+    });
+
     it('结束标记后的无换行 prompt 尾部应继续透传到终端', async () => {
       await connectReadyShellSession();
 
@@ -518,6 +541,48 @@ describe('SSH WebSocket Handler', () => {
       expect(message.type).toBe('ssh:exec_silent:result');
       expect(message.requestId).toBe('req-silent-2b');
       expect(message.payload.output).toContain('hello');
+    });
+
+    it('提供 shellFlavorHint 时应优先同壳命令并仅回退 default', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        {
+          shellFlavorHint: 'posix',
+          successCriteria: 'absolute_path',
+          commandsByShell: {
+            posix: 'echo not-a-path',
+            powershell: '(Get-Location).Path',
+            default: 'pwd',
+          },
+        },
+        'req-silent-shell-hint'
+      );
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      expect(firstWrite).toContain('echo not-a-path');
+      const firstMarkers = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${firstMarkers.startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('echo not-a-path\nnot-a-path\n'));
+      mockShellStream.emit('data', Buffer.from(`${firstMarkers.endMarker}\n`));
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(2);
+      const secondWrite = (mockShellStream.write as any).mock.calls[1][0] as string;
+      expect(secondWrite).toContain('pwd');
+      expect(secondWrite).not.toContain('(Get-Location).Path');
+      const secondMarkers = extractMarkers(secondWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${secondMarkers.startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('pwd\n/var/www\n'));
+      mockShellStream.emit('data', Buffer.from(`${secondMarkers.endMarker}\n`));
+
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-shell-hint');
+      expect(message.payload.output).toContain('/var/www');
     });
 
     it('超时时应返回错误', async () => {

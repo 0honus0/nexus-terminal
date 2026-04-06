@@ -2043,7 +2043,11 @@ const parsePathFromSilentOutput = (output: string): string | null => {
 };
 
 const syncCurrentPathToTerminalDirectory = () => {
-  if (!currentSftpManager.value || !props.wsDeps.isConnected.value || isSyncingPathFromTerminal.value) {
+  if (
+    !currentSftpManager.value ||
+    !props.wsDeps.isConnected.value ||
+    isSyncingPathFromTerminal.value
+  ) {
     return;
   }
 
@@ -2051,12 +2055,12 @@ const syncCurrentPathToTerminalDirectory = () => {
   const { sendMessage, onMessage } = props.wsDeps;
   const commandsByShell = {
     posix:
-      "pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf '%s\\n' \"$PWD\" 2>/dev/null || echo \"$PWD\" 2>/dev/null",
+      'pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf \'%s\\n\' "$PWD" 2>/dev/null || echo "$PWD" 2>/dev/null',
     fish: 'pwd',
     powershell: '(Get-Location).Path',
     cmd: 'echo %cd%',
     default:
-      "pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf '%s\\n' \"$PWD\" 2>/dev/null || echo \"$PWD\" 2>/dev/null",
+      'pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf \'%s\\n\' "$PWD" 2>/dev/null || echo "$PWD" 2>/dev/null',
   };
 
   isSyncingPathFromTerminal.value = true;
@@ -2085,9 +2089,7 @@ const syncCurrentPathToTerminalDirectory = () => {
       const path = parsePathFromSilentOutput(output);
 
       if (!path) {
-        uiNotificationsStore.showError(
-          t('fileManager.errors.pathReadFailed', 'Failed to read terminal path.')
-        );
+        uiNotificationsStore.showError(t('fileManager.errors.pathReadFailed', '读取终端路径失败'));
         return;
       }
 
@@ -2095,14 +2097,17 @@ const syncCurrentPathToTerminalDirectory = () => {
     }
   );
 
-  unregisterSilentExecError = onMessage('ssh:exec_silent:error', (payload: any, message: WebSocketMessage) => {
-    if (message.requestId !== requestId) return;
-    const errorMessage =
-      typeof payload?.error === 'string'
-        ? payload.error
-        : t('fileManager.errors.pathReadFailed', 'Failed to read terminal path.');
-    finishWithError(errorMessage);
-  });
+  unregisterSilentExecError = onMessage(
+    'ssh:exec_silent:error',
+    (payload: any, message: WebSocketMessage) => {
+      if (message.requestId !== requestId) return;
+      const errorMessage =
+        typeof payload?.error === 'string'
+          ? payload.error
+          : t('fileManager.errors.pathReadFailed', '读取终端路径失败');
+      finishWithError(errorMessage);
+    }
+  );
 
   unregisterSilentExecDisconnect = onMessage('ssh:disconnected', () => {
     finishSilentlyOnDisconnect();
@@ -2117,9 +2122,7 @@ const syncCurrentPathToTerminalDirectory = () => {
   });
 
   silentExecTimeoutId = setTimeout(() => {
-    finishWithError(
-      t('fileManager.errors.pathReadTimeout', 'Timed out while reading terminal path.')
-    );
+    finishWithError(t('fileManager.errors.pathReadTimeout', '读取终端路径超时'));
   }, 6000);
 
   sendMessage({
@@ -2262,12 +2265,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
               isEditingPath ||
               isSyncingPathFromTerminal
             "
-            :title="
-              t(
-                'fileManager.actions.syncFromTerminalPath',
-                'Sync file manager to terminal directory'
-              )
-            "
+            :title="t('fileManager.actions.syncFromTerminalPath', '将文件管理器同步到终端目录')"
           >
             <i
               :class="[

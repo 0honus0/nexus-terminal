@@ -377,6 +377,7 @@
       "refresh": "更新",
       "rename": "名前を変更",
       "save": "保存",
+      "syncFromTerminalPath": "ファイルマネージャーをターミナルのディレクトリに同期",
       "upload": "アップロード",
       "uploadFile": "ファイルをアップロード",
       "copyPath": "パスをコピー"
@@ -427,7 +428,9 @@
       "commandNotFoundCompress": "サーバーにコマンド '{command}' が見つからないため、圧縮操作を完了できません。",
       "commandNotFoundDecompress": "サーバーにコマンド '{command}' が見つからないため、解凍操作を完了できません。",
       "genericCommandNotFound": "サーバーにコマンド '{command}' が見つからないため、'{operation}' 操作を完了できません。",
-      "copyPathFailed": "パスのコピーに失敗しました"
+      "copyPathFailed": "パスのコピーに失敗しました",
+      "pathReadFailed": "ターミナルのパスの読み取りに失敗しました",
+      "pathReadTimeout": "ターミナルのパスの読み取りがタイムアウトしました"
     },
     "headers": {
       "modified": "変更日",

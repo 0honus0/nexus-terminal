@@ -454,6 +454,7 @@
       "closeTab": "关闭标签页",
       "closeEditor": "关闭编辑器",
       "cdToTerminal": "将终端目录切换到当前路径",
+      "syncFromTerminalPath": "将文件管理器同步到终端目录",
       "copy": "复制",
       "cut": "剪切",
       "paste": "粘贴",
@@ -515,7 +516,9 @@
       "genericCommandNotFound": "服务器上缺少 '{command}' 命令，无法完成 '{operation}' 操作。",
       "copyPathFailed": "复制路径失败",
       "sftpManagerUnavailable": "SFTP 管理器不可用",
-      "missingSessionId": "缺少会话 ID"
+      "missingSessionId": "缺少会话 ID",
+      "pathReadFailed": "读取终端路径失败",
+      "pathReadTimeout": "读取终端路径超时"
     },
     "notifications": {
       "copySuccess": "复制成功",

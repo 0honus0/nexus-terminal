@@ -202,15 +202,20 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
 
   for (const rawLine of lines) {
     const trimmedLine = rawLine.trim();
+    const hasStartMarker =
+      trimmedLine === request.startMarker || rawLine.includes(request.startMarker);
+    const isStartEchoLine = rawLine.includes(`echo ${request.startMarker}`);
+    const hasEndMarker = trimmedLine === request.endMarker || rawLine.includes(request.endMarker);
+    const isEndEchoLine = rawLine.includes(`echo ${request.endMarker}`);
 
     if (!request.isCollectingOutput) {
-      if (trimmedLine === request.startMarker) {
+      if (hasStartMarker && !isStartEchoLine) {
         request.isCollectingOutput = true;
         request.collectedOutput = '';
         continue;
       }
 
-      if (rawLine.includes(`echo ${request.startMarker}`)) {
+      if (isStartEchoLine) {
         continue;
       }
 
@@ -218,7 +223,7 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
       continue;
     }
 
-    if (trimmedLine === request.endMarker) {
+    if (hasEndMarker && !isEndEchoLine) {
       const normalizedOutput = request.collectedOutput.replace(/\r/g, '');
       const hasMoreCandidates = request.attemptIndex + 1 < request.commandCandidates.length;
       const isAccepted = isSilentExecOutputAccepted(request.successCriteria, normalizedOutput);
@@ -239,7 +244,7 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
       continue;
     }
 
-    if (rawLine.includes(`echo ${request.endMarker}`)) {
+    if (isEndEchoLine) {
       continue;
     }
 
@@ -269,7 +274,12 @@ const normalizeShellFlavor = (value: unknown): SilentExecShellFlavor | undefined
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'posix' || normalized === 'powershell' || normalized === 'cmd' || normalized === 'fish') {
+  if (
+    normalized === 'posix' ||
+    normalized === 'powershell' ||
+    normalized === 'cmd' ||
+    normalized === 'fish'
+  ) {
     return normalized;
   }
   return undefined;
@@ -286,14 +296,9 @@ const getSilentExecCommandCandidates = (payload: SilentExecPayload): string[] =>
 
   const commandMap = payload.commandsByShell;
   const shellHint = normalizeShellFlavor(payload.shellFlavorHint);
-  const candidateKeys: Array<SilentExecShellFlavor | 'default'> = [
-    ...(shellHint ? [shellHint] : []),
-    'posix',
-    'powershell',
-    'cmd',
-    'fish',
-    'default',
-  ];
+  const candidateKeys: Array<SilentExecShellFlavor | 'default'> = shellHint
+    ? [shellHint, 'default']
+    : ['posix', 'default', 'fish', 'powershell', 'cmd'];
   const commands = new Set<string>();
 
   for (const key of candidateKeys) {
@@ -512,7 +517,11 @@ export async function handleSshConnect(
             }
             // 如果会话被标记为待挂起，则将输出写入日志
             const currentState = clientStates.get(newSessionId); // 获取最新的状态
-            if (processedOutput && currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
+            if (
+              processedOutput &&
+              currentState?.isMarkedForSuspend &&
+              currentState.suspendLogPath
+            ) {
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, processedOutput)
                 .catch((err) => {
@@ -544,7 +553,11 @@ export async function handleSshConnect(
             }
             // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
             const currentState = clientStates.get(newSessionId);
-            if (processedOutput && currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
+            if (
+              processedOutput &&
+              currentState?.isMarkedForSuspend &&
+              currentState.suspendLogPath
+            ) {
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, `[STDERR] ${processedOutput}`)
                 .catch((err) => {
@@ -621,7 +634,10 @@ export async function handleSshConnect(
     }
 
     sshClient.on('close', () => {
-      finalizeSilentExecWithError(newSessionId, 'SSH connection closed before silent command completed.');
+      finalizeSilentExecWithError(
+        newSessionId,
+        'SSH connection closed before silent command completed.'
+      );
       console.log(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
       cleanupClientConnection(newSessionId);
     });
