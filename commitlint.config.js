@@ -7,6 +7,13 @@
 
 module.exports = {
   extends: ['@commitlint/config-conventional'],
+  parserPreset: {
+    parserOpts: {
+      headerPattern:
+        /^(?:(?::[\w+-]+:|[\p{Extended_Pictographic}\uFE0F](?:[\u200D\p{Extended_Pictographic}\uFE0F])*)\s*)?(\w+)(?:\(([^)]+)\))?!?:\s(.+)$/u,
+      headerCorrespondence: ['type', 'scope', 'subject'],
+    },
+  },
 
   /**
    * 自定义规则

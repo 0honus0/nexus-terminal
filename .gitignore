@@ -42,6 +42,9 @@ build/Release
 node_modules/
 jspm_packages/
 scripts/
+!scripts/
+scripts/*
+!scripts/validate-commit-msg.js
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -168,6 +171,9 @@ dist-scripts/
 electron-app/node_modules/
 electron-app/dist_electron/
 
-# Husky git hooks (local only)
+# Husky git hooks
 .husky/
+!.husky/
+!.husky/commit-msg
+!.husky/pre-commit
 .ace-tool/
