@@ -482,6 +482,50 @@ describe('SSH WebSocket Handler', () => {
       expect(outputMessage).toBeUndefined();
     });
 
+    it('设置 suppressTerminalPrompt 时应抑制下一数据分片中的尾部 prompt', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        { command: 'pwd', suppressTerminalPrompt: true },
+        'req-silent-no-prompt-next-chunk'
+      );
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('user@host:~$ '));
+
+      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      const resultMessage = messages.find((msg: any) => msg.type === 'ssh:exec_silent:result');
+      const outputMessages = messages.filter((msg: any) => msg.type === 'ssh:output');
+
+      expect(resultMessage.requestId).toBe('req-silent-no-prompt-next-chunk');
+      expect(resultMessage.payload.output).toContain('/home/test');
+      expect(outputMessages).toHaveLength(0);
+    });
+
+    it('设置 suppressTerminalPrompt 时不应吞掉下一分片的非提示符输出', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        { command: 'pwd', suppressTerminalPrompt: true },
+        'req-silent-pass-through-next-chunk'
+      );
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('file changed\n'));
+
+      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+
+      expect(outputMessage).toBeTruthy();
+      expect(Buffer.from(outputMessage.payload, 'base64').toString('utf8')).toBe('file changed\n');
+    });
+
     it('结束标记后大块无换行输出应完整透传', async () => {
       await connectReadyShellSession();
 

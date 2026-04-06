@@ -49,12 +49,17 @@ interface PendingSilentExecRequest {
 }
 
 const pendingSilentExecRequests = new Map<string, PendingSilentExecRequest>();
+const pendingPromptSuppressionSessions = new Set<string>();
 const SILENT_PWD_PREFIX = '__NX_PWD__';
 const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const OSC_ESCAPE_PATTERN = /\x1B\][^\x07]*(?:\x07|\x1B\\)/g;
 const isAbsolutePath = (value: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(value);
 
+const stripTerminalControlSequences = (value: string): string =>
+  value.replace(OSC_ESCAPE_PATTERN, '').replace(ANSI_ESCAPE_PATTERN, '');
+
 const extractAbsolutePathFromSilentLine = (line: string): string | null => {
-  const sanitizedLine = line.replace(ANSI_ESCAPE_PATTERN, '').trim();
+  const sanitizedLine = stripTerminalControlSequences(line).trim();
   if (!sanitizedLine) {
     return null;
   }
@@ -66,14 +71,54 @@ const extractAbsolutePathFromSilentLine = (line: string): string | null => {
 };
 
 const isLikelyShellPromptLine = (line: string): boolean => {
-  const sanitizedLine = line.replace(ANSI_ESCAPE_PATTERN, '').trim();
+  const sanitizedLine = stripTerminalControlSequences(line).trim();
   if (!sanitizedLine) {
     return false;
   }
 
-  const unixPromptPattern = /^[^@\s]+@[^:\s]+:[^#$>\n]*[#$>]$/;
-  const windowsPromptPattern = /^[A-Za-z]:\\[^>\n]*>$/;
+  const unixPromptCorePattern = '[^@\\s]+@[^:\\s]+:[^#$>\\n]*[#$>]';
+  const windowsPromptCorePattern = '[A-Za-z]:\\\\[^>\\n]*>';
+  const unixPromptPattern = new RegExp(`^(?:${unixPromptCorePattern}\\s*)+$`);
+  const windowsPromptPattern = new RegExp(`^(?:${windowsPromptCorePattern}\\s*)+$`);
   return unixPromptPattern.test(sanitizedLine) || windowsPromptPattern.test(sanitizedLine);
+};
+
+const consumeSuppressedPromptChunk = (
+  chunk: string
+): { output: string; consumedPrompt: boolean; keepSuppression: boolean } => {
+  const normalizedChunk = chunk.replace(/\r/g, '');
+  if (!normalizedChunk) {
+    return { output: '', consumedPrompt: false, keepSuppression: true };
+  }
+
+  const lineBreakIndex = normalizedChunk.indexOf('\n');
+  if (lineBreakIndex === -1) {
+    if (isLikelyShellPromptLine(normalizedChunk)) {
+      return { output: '', consumedPrompt: true, keepSuppression: false };
+    }
+    const hasVisibleText = stripTerminalControlSequences(normalizedChunk).trim().length > 0;
+    return {
+      output: chunk,
+      consumedPrompt: false,
+      keepSuppression: !hasVisibleText,
+    };
+  }
+
+  const firstLine = normalizedChunk.slice(0, lineBreakIndex);
+  if (!isLikelyShellPromptLine(firstLine)) {
+    const hasVisibleText = stripTerminalControlSequences(firstLine).trim().length > 0;
+    return {
+      output: chunk,
+      consumedPrompt: false,
+      keepSuppression: !hasVisibleText,
+    };
+  }
+
+  return {
+    output: normalizedChunk.slice(lineBreakIndex + 1),
+    consumedPrompt: true,
+    keepSuppression: false,
+  };
 };
 
 const clearSilentExecTimer = (request: PendingSilentExecRequest): void => {
@@ -116,6 +161,7 @@ const finalizeSilentExecWithError = (sessionId: string, error: string): void => 
   }
   clearSilentExecTimer(request);
   pendingSilentExecRequests.delete(sessionId);
+  pendingPromptSuppressionSessions.delete(sessionId);
   sendSilentExecResponse(request.ws, 'ssh:exec_silent:error', request.requestId, { error });
 };
 
@@ -126,6 +172,11 @@ const finalizeSilentExecWithResult = (sessionId: string, output: string): void =
   }
   clearSilentExecTimer(request);
   pendingSilentExecRequests.delete(sessionId);
+  if (request.suppressTerminalPrompt) {
+    pendingPromptSuppressionSessions.add(sessionId);
+  } else {
+    pendingPromptSuppressionSessions.delete(sessionId);
+  }
   sendSilentExecResponse(request.ws, 'ssh:exec_silent:result', request.requestId, {
     output: output.replace(/\r/g, ''),
   });
@@ -206,7 +257,15 @@ const startSilentExecAttempt = (sessionId: string): void => {
 const processSshStreamOutput = (sessionId: string, chunk: string): string => {
   const request = pendingSilentExecRequests.get(sessionId);
   if (!request) {
-    return chunk;
+    if (!pendingPromptSuppressionSessions.has(sessionId)) {
+      return chunk;
+    }
+
+    const { output, consumedPrompt, keepSuppression } = consumeSuppressedPromptChunk(chunk);
+    if (consumedPrompt || !keepSuppression) {
+      pendingPromptSuppressionSessions.delete(sessionId);
+    }
+    return output;
   }
 
   request.pendingLineBuffer += chunk.replace(/\r/g, '');
