@@ -2027,19 +2027,34 @@ const cleanupSilentExecRequest = () => {
   }
 };
 
+const SILENT_PWD_PREFIX = '__NX_PWD__';
+const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const isAbsolutePath = (value: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(value);
+
 const parsePathFromSilentOutput = (output: string): string | null => {
   const lines = output
     .replace(/\r/g, '')
     .split('\n')
-    .map((line) => line.trim())
+    .map((line) => line.replace(ANSI_ESCAPE_PATTERN, '').trim())
     .filter(Boolean);
 
   if (lines.length === 0) {
     return null;
   }
 
-  const absolutePath = lines.find((line) => /^(\/|[A-Za-z]:[\\/])/.test(line));
-  return absolutePath || null;
+  for (const line of lines) {
+    const prefixedPath = line.startsWith(SILENT_PWD_PREFIX)
+      ? line.slice(SILENT_PWD_PREFIX.length).trim()
+      : '';
+    if (prefixedPath && isAbsolutePath(prefixedPath)) {
+      return prefixedPath;
+    }
+    if (isAbsolutePath(line)) {
+      return line;
+    }
+  }
+
+  return null;
 };
 
 const syncCurrentPathToTerminalDirectory = () => {
@@ -2053,14 +2068,13 @@ const syncCurrentPathToTerminalDirectory = () => {
 
   const requestId = generateRequestId();
   const { sendMessage, onMessage } = props.wsDeps;
+  const posixPwdCommand = `printf '${SILENT_PWD_PREFIX}%s\\n' "$(pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf '%s' "$PWD" 2>/dev/null || echo "$PWD" 2>/dev/null)"`;
   const commandsByShell = {
-    posix:
-      'pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf \'%s\\n\' "$PWD" 2>/dev/null || echo "$PWD" 2>/dev/null',
-    fish: 'pwd',
-    powershell: '(Get-Location).Path',
-    cmd: 'echo %cd%',
-    default:
-      'pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf \'%s\\n\' "$PWD" 2>/dev/null || echo "$PWD" 2>/dev/null',
+    posix: posixPwdCommand,
+    fish: `printf '${SILENT_PWD_PREFIX}%s\\n' (pwd)`,
+    powershell: `Write-Output ('${SILENT_PWD_PREFIX}' + (Get-Location).Path)`,
+    cmd: `echo ${SILENT_PWD_PREFIX}%cd%`,
+    default: posixPwdCommand,
   };
 
   isSyncingPathFromTerminal.value = true;

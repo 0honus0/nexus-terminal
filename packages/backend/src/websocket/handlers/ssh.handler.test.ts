@@ -585,6 +585,32 @@ describe('SSH WebSocket Handler', () => {
       expect(message.payload.output).toContain('/var/www');
     });
 
+    it('absolute_path 策略应识别带 __NX_PWD__ 前缀的路径行', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        {
+          command: "printf '__NX_PWD__%s\\n' '/srv/app'",
+          successCriteria: 'absolute_path',
+        },
+        'req-silent-prefixed-path'
+      );
+
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from(`${startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('__NX_PWD__/srv/app\n'));
+      mockShellStream.emit('data', Buffer.from(`${endMarker}\n`));
+
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-prefixed-path');
+      expect(message.payload.output).toContain('__NX_PWD__/srv/app');
+    });
+
     it('超时时应返回错误', async () => {
       vi.useFakeTimers();
       try {

@@ -619,6 +619,11 @@ describe('FileManager.vue', () => {
           payload: expect.objectContaining({
             timeoutMs: 5000,
             successCriteria: 'absolute_path',
+            commandsByShell: expect.objectContaining({
+              posix: expect.stringContaining('__NX_PWD__'),
+              powershell: expect.stringContaining('__NX_PWD__'),
+              cmd: expect.stringContaining('__NX_PWD__'),
+            }),
           }),
         })
       );
@@ -654,12 +659,15 @@ describe('FileManager.vue', () => {
 
       const request = (wsDeps.sendMessage as any).mock.calls[0][0];
       handlers['ssh:exec_silent:result'](
-        { output: '/var/log\n' },
+        {
+          output:
+            'root@localhost:/root$ pwd 2>/dev/null\n\u001b[0m__NX_PWD__/root\nroot@localhost:/root$ ',
+        },
         { requestId: request.requestId }
       );
       await nextTick();
 
-      expect(mockSftpManager.loadDirectory).toHaveBeenCalledWith('/var/log');
+      expect(mockSftpManager.loadDirectory).toHaveBeenCalledWith('/root');
     });
 
     it('组件卸载时应清理同步终端路径监听器', async () => {

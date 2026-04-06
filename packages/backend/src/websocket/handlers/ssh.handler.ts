@@ -47,6 +47,21 @@ interface PendingSilentExecRequest {
 }
 
 const pendingSilentExecRequests = new Map<string, PendingSilentExecRequest>();
+const SILENT_PWD_PREFIX = '__NX_PWD__';
+const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const isAbsolutePath = (value: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(value);
+
+const extractAbsolutePathFromSilentLine = (line: string): string | null => {
+  const sanitizedLine = line.replace(ANSI_ESCAPE_PATTERN, '').trim();
+  if (!sanitizedLine) {
+    return null;
+  }
+
+  const pathCandidate = sanitizedLine.startsWith(SILENT_PWD_PREFIX)
+    ? sanitizedLine.slice(SILENT_PWD_PREFIX.length).trim()
+    : sanitizedLine;
+  return isAbsolutePath(pathCandidate) ? pathCandidate : null;
+};
 
 const clearSilentExecTimer = (request: PendingSilentExecRequest): void => {
   if (request.timeoutId) {
@@ -59,7 +74,7 @@ const hasAbsolutePathInOutput = (output: string): boolean =>
   output
     .replace(/\r/g, '')
     .split('\n')
-    .some((line) => /^(\/|[A-Za-z]:[\\/])/.test(line.trim()));
+    .some((line) => Boolean(extractAbsolutePathFromSilentLine(line)));
 
 const normalizeSilentExecSuccessCriteria = (value: unknown): SilentExecSuccessCriteria => {
   if (value === 'any' || value === 'non_empty' || value === 'absolute_path') {
