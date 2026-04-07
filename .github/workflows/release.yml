@@ -104,6 +104,7 @@ jobs:
           CUR_DATE=$(date -u -d "$CUR_DATE_RAW" +"%Y-%m-%dT%H:%M:%SZ")
 
           OWNER="${GITHUB_REPOSITORY%/*}"
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           REPO="${GITHUB_REPOSITORY#*/}"
           BASE_BRANCH="${DEFAULT_BRANCH:-main}"
 
@@ -152,16 +153,16 @@ jobs:
             echo
             echo "\`\`\`bash"
             echo "# Backend"
-            echo "docker pull ghcr.io/${OWNER}/${REPO}-backend:${VERSION}"
-            echo "docker pull ghcr.io/${OWNER}/${REPO}-backend:latest"
+            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-backend:${VERSION}"
+            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-backend:latest"
             echo
             echo "# Frontend"
-            echo "docker pull ghcr.io/${OWNER}/${REPO}-frontend:${VERSION}"
-            echo "docker pull ghcr.io/${OWNER}/${REPO}-frontend:latest"
+            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-frontend:${VERSION}"
+            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-frontend:latest"
             echo
             echo "# Remote Gateway"
-            echo "docker pull ghcr.io/${OWNER}/${REPO}-remote-gateway:${VERSION}"
-            echo "docker pull ghcr.io/${OWNER}/${REPO}-remote-gateway:latest"
+            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-remote-gateway:${VERSION}"
+            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-remote-gateway:latest"
             echo "\`\`\`"
             echo
             echo "**Full Changelog**: ${CHANGELOG_URL}"

@@ -12,7 +12,7 @@
 
 ## 📖 概述
 
-**星枢终端（Nexus Terminal）** 是一款现代化、功能丰富的 Web SSH / RDP / VNC 客户端，致力于提供高度可定制的远程连接体验。提供独立的本地桌面端。
+**星枢终端（Nexus Terminal）** 是一款现代化、功能丰富的 Web SSH / RDP / VNC 客户端，致力于提供高度可定制的远程连接体验。
 
 ## 🔀 与上游的不同之处
 
@@ -49,7 +49,7 @@
 ### 🧪 测试覆盖
 
 - **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，100% 通过率
-- **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
+- **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、RDP/VNC 场景及边缘场景
 - **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
 - **单元测试**：Backend 72+ 测试文件，Frontend 31+ 测试文件
 
@@ -97,12 +97,6 @@
 | ![1746339196937.png](https://lsky.tuyu.me/i/2025/05/04/6817056948ac2.png) | ![1746339222136.png](https://lsky.tuyu.me/i/2025/05/04/681705820fe01.png) |
 
 ---
-
-## 🖥️ 桌面端
-
-> 移除了web端的特有功能，如各种登录验证，会话挂起等功能
-
-https://github.com/Silentely/nexus-terminal/releases/latest
 
 ## 🚀 快速开始
 
@@ -247,7 +241,7 @@ docker compose up -d
 
 ### CORS 跨域配置
 
-如果你需要配置额外的允许域名访问远程桌面网关（Remote Gateway），请参考 [CORS 配置文档](./doc/CORS_CONFIG.md)。
+如果你需要配置额外的允许域名访问图形会话网关（Remote Gateway），请参考 [CORS 配置文档](./doc/CORS_CONFIG.md)。
 
 **常见场景**：
 

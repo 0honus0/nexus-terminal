@@ -62,7 +62,7 @@ server {
         proxy_send_timeout 86400s;
     }
 
-    # 远程桌面网关 WebSocket
+    # 图形会话网关 WebSocket
     location /guacamole/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -136,7 +136,7 @@ server {
         proxy_send_timeout 86400s;
     }
 
-    # 远程桌面 WebSocket
+    # 图形会话 WebSocket
     location /guacamole/ {
         proxy_pass http://nexus_gateway;
         proxy_http_version 1.1;
@@ -231,7 +231,7 @@ server {
         proxy_send_timeout 86400s;
     }
 
-    # 远程桌面 WebSocket
+    # 图形会话 WebSocket
     location /guacamole/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -283,7 +283,7 @@ server {
 | 路径          | 用途                     | 后端服务       | 默认端口 |
 | ------------- | ------------------------ | -------------- | -------- |
 | `/ws/`        | SSH 终端、SFTP、批量执行 | backend        | 3001     |
-| `/guacamole/` | RDP/VNC 远程桌面         | remote-gateway | 8080     |
+| `/guacamole/` | RDP/VNC 图形会话         | remote-gateway | 8080     |
 
 ### WebSocket 专用配置
 
@@ -325,7 +325,7 @@ server {
         tcp_nodelay on;
     }
 
-    # 远程桌面 WebSocket
+    # 图形会话 WebSocket
     location /guacamole/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -362,7 +362,7 @@ upstream nexus_backend_cluster {
 }
 
 upstream nexus_gateway_cluster {
-    ip_hash;  # 会话粘滞（远程桌面需要）
+    ip_hash;  # 会话粘滞（图形会话需要）
 
     server 192.168.1.10:8080;
     server 192.168.1.11:8080;
@@ -658,7 +658,7 @@ location /api/ {
 }
 ```
 
-### Q5: 远程桌面连接失败
+### Q5: 图形会话连接失败
 
 **原因**：Guacamole WebSocket 代理配置错误。
 
