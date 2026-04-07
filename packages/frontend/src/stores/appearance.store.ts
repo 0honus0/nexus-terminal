@@ -47,6 +47,55 @@ const isColorDark = (hexColor: string): boolean => {
   return hsp < 127.5; // 阈值取中间值
 };
 
+const hasOwnThemeKey = (theme: Record<string, string>, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(theme, key);
+
+const isUiThemeRecord = (theme: unknown): theme is Record<string, string> =>
+  typeof theme === 'object' && theme !== null && !Array.isArray(theme);
+
+const normalizeUiTheme = (rawTheme: Record<string, string>): Record<string, string> => {
+  const normalizedTheme: Record<string, string> = { ...defaultUiTheme, ...rawTheme };
+  const isDarkBackground = isColorDark(normalizedTheme['--app-bg-color'] || '#ffffff');
+
+  if (!hasOwnThemeKey(rawTheme, '--input-bg-color')) {
+    normalizedTheme['--input-bg-color'] = isDarkBackground
+      ? '#1e293b'
+      : defaultUiTheme['--input-bg-color'];
+  }
+
+  if (!hasOwnThemeKey(rawTheme, '--input-text-color')) {
+    normalizedTheme['--input-text-color'] = isDarkBackground
+      ? '#f8fafc'
+      : normalizedTheme['--text-color'];
+  }
+
+  if (!hasOwnThemeKey(rawTheme, '--input-placeholder-color')) {
+    normalizedTheme['--input-placeholder-color'] = isDarkBackground
+      ? '#94a3b8'
+      : normalizedTheme['--text-color-secondary'];
+  }
+
+  if (!hasOwnThemeKey(rawTheme, '--input-disabled-bg-color')) {
+    normalizedTheme['--input-disabled-bg-color'] = isDarkBackground ? '#0b1220' : '#f3f4f6';
+  }
+
+  if (!hasOwnThemeKey(rawTheme, '--input-disabled-text-color')) {
+    normalizedTheme['--input-disabled-text-color'] = isDarkBackground ? '#64748b' : '#6b7280';
+  }
+
+  if (!hasOwnThemeKey(rawTheme, '--input-disabled-placeholder-color')) {
+    normalizedTheme['--input-disabled-placeholder-color'] = isDarkBackground
+      ? '#475569'
+      : '#9ca3af';
+  }
+
+  if (!hasOwnThemeKey(rawTheme, '--input-disabled-border-color')) {
+    normalizedTheme['--input-disabled-border-color'] = isDarkBackground ? '#334155' : '#d1d5db';
+  }
+
+  return normalizedTheme;
+};
+
 export const useAppearanceStore = defineStore('appearance', () => {
   const { isMobile } = useDeviceDetection(); // + 获取设备检测结果
 
@@ -83,7 +132,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
   // 移除 availableTerminalThemes 计算属性，直接使用 allTerminalThemes
   // 当前应用的 UI 主题 (CSS 变量对象)
   const currentUiTheme = computed<Record<string, string>>(() => {
-    return safeJsonParse(appearanceSettings.value.customUiTheme, defaultUiTheme);
+    const parsedTheme = safeJsonParse<Record<string, string> | null>(
+      appearanceSettings.value.customUiTheme,
+      defaultUiTheme
+    );
+    return normalizeUiTheme(isUiThemeRecord(parsedTheme) ? parsedTheme : {});
   });
 
   // 当前激活的终端主题 ID

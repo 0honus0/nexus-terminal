@@ -890,7 +890,7 @@ const cancelEditingTag = () => {
           @blur="handleBlur"
         />
         <button
-          class="ml-2 w-8 h-8 bg-primary text-white border-none rounded-lg text-sm font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70 flex-shrink-0 flex items-center justify-center"
+          class="ml-2 w-8 h-8 bg-primary text-white border-none rounded-lg text-sm font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-70 flex-shrink-0 flex items-center justify-center"
           @click="handleMenuAction('add')"
           :title="t('connections.addConnection')"
         >

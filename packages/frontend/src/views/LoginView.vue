@@ -187,7 +187,7 @@ const handlePasskeyLogin = async () => {
                 v-model="credentials.username"
                 required
                 :disabled="isLoading"
-                class="w-full px-4 py-3 border border-border/50 rounded-lg bg-input text-foreground text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out disabled:bg-gray-100 disabled:cursor-not-allowed"
+                class="w-full px-4 py-3 border border-border/50 rounded-lg bg-input text-foreground text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out disabled:cursor-not-allowed"
               />
             </div>
             <div>
@@ -200,7 +200,7 @@ const handlePasskeyLogin = async () => {
                 v-model="credentials.password"
                 required
                 :disabled="isLoading"
-                class="w-full px-4 py-3 border border-border/50 rounded-lg bg-input text-foreground text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out disabled:bg-gray-100 disabled:cursor-not-allowed"
+                class="w-full px-4 py-3 border border-border/50 rounded-lg bg-input text-foreground text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out disabled:cursor-not-allowed"
               />
             </div>
             <!-- Remember Me Checkbox -->
@@ -233,7 +233,7 @@ const handlePasskeyLogin = async () => {
               :disabled="isLoading"
               pattern="\d{6}"
               title="请输入 6 位数字验证码"
-              class="w-full px-4 py-3 border border-border/50 rounded-lg bg-input text-foreground text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out disabled:bg-gray-100 disabled:cursor-not-allowed"
+              class="w-full px-4 py-3 border border-border/50 rounded-lg bg-input text-foreground text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out disabled:cursor-not-allowed"
             />
           </div>
 
@@ -296,7 +296,7 @@ const handlePasskeyLogin = async () => {
           <button
             type="submit"
             :disabled="isLoading"
-            class="w-full py-3 px-4 bg-primary text-white border-none rounded-lg text-base font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70"
+            class="w-full py-3 px-4 bg-primary text-white border-none rounded-lg text-base font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-70"
           >
             {{
               isLoading
@@ -313,7 +313,7 @@ const handlePasskeyLogin = async () => {
               type="button"
               @click="handlePasskeyLogin"
               :disabled="isLoading"
-              class="w-full py-3 px-4 bg-secondary text-black border-none rounded-lg text-base font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-secondary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-70 flex items-center justify-center"
+              class="w-full py-3 px-4 bg-secondary text-black border-none rounded-lg text-base font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-secondary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary disabled:cursor-not-allowed disabled:opacity-70 flex items-center justify-center"
             >
               <i class="fas fa-key mr-2"></i>
               <span>{{ isLoading ? t('login.loggingIn') : t('login.loginWithPasskey') }}</span>

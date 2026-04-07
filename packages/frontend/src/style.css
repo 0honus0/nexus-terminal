@@ -29,6 +29,12 @@
   --color-split-line: var(--split-line-color);
   --color-split-line-hover: var(--split-line-hover-color);
   --color-input: var(--input-bg-color);
+  --color-input-text: var(--input-text-color);
+  --color-input-placeholder: var(--input-placeholder-color);
+  --color-input-disabled: var(--input-disabled-bg-color);
+  --color-input-disabled-text: var(--input-disabled-text-color);
+  --color-input-disabled-placeholder: var(--input-disabled-placeholder-color);
+  --color-input-disabled-border: var(--input-disabled-border-color);
   --color-input-focus-border: var(--input-focus-border-color);
   --color-overlay: var(--overlay-bg-color);
   --color-success: var(--status-success);
@@ -74,6 +80,12 @@
   --split-line-color: #e5e7eb; /* Gray 200 */
   --split-line-hover-color: #0ea5e9;
   --input-bg-color: #ffffff;
+  --input-text-color: #1f2937;
+  --input-placeholder-color: #6b7280;
+  --input-disabled-bg-color: #f3f4f6;
+  --input-disabled-text-color: #6b7280;
+  --input-disabled-placeholder-color: #9ca3af;
+  --input-disabled-border-color: #d1d5db;
   --input-focus-border-color: #0ea5e9;
   --input-focus-glow-rgb: 14, 165, 233; /* RGB for Sky 500 */
   --overlay-bg-color: rgba(0, 0, 0, 0.6);
@@ -237,6 +249,31 @@ hr {
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: #475569;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder-color, var(--text-color-secondary));
+  opacity: 1;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):disabled,
+textarea:disabled,
+select:disabled {
+  background-color: var(--input-disabled-bg-color, var(--header-bg-color)) !important;
+  color: var(--input-disabled-text-color, var(--text-color-secondary)) !important;
+  -webkit-text-fill-color: var(--input-disabled-text-color, var(--text-color-secondary));
+  border-color: var(--input-disabled-border-color, var(--border-color)) !important;
+  opacity: 1 !important;
+  cursor: not-allowed;
+}
+
+input:disabled::placeholder,
+textarea:disabled::placeholder {
+  color: var(
+    --input-disabled-placeholder-color,
+    var(--input-disabled-text-color, var(--text-color-secondary))
+  );
 }
 
 /* Input focus styles */

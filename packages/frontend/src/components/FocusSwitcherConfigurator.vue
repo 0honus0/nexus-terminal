@@ -422,7 +422,7 @@ const localAvailableInputs = computed(() => {
         </button>
         <button
           @click="saveConfiguration"
-          class="py-2 px-4 rounded text-sm transition-colors duration-150 bg-primary text-white hover:bg-primary-dark disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed"
+          class="py-2 px-4 rounded text-sm transition-colors duration-150 bg-primary text-white hover:bg-primary-dark disabled:opacity-70 disabled:cursor-not-allowed"
           :disabled="!hasChanges"
         >
           {{ t('common.save', '保存') }} {{ hasChanges ? '*' : '' }}
