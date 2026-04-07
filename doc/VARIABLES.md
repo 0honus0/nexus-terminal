@@ -76,9 +76,9 @@
 
 | 变量名                       | 类型     | 必填 | 默认值  | 描述                   |
 | ---------------------------- | -------- | ---- | ------- | ---------------------- |
-| `HEARTBEAT_INTERVAL_DESKTOP` | `number` | 否   | `30000` | 默认心跳间隔 (毫秒)    |
+| `HEARTBEAT_INTERVAL_DESKTOP` | `number` | 否   | `30000` | 桌面端心跳间隔 (毫秒)  |
 | `HEARTBEAT_INTERVAL_MOBILE`  | `number` | 否   | `12000` | 移动端心跳间隔 (毫秒)  |
-| `MAX_MISSED_PONGS_DESKTOP`   | `number` | 否   | `1`     | 默认最大容忍丢包次数   |
+| `MAX_MISSED_PONGS_DESKTOP`   | `number` | 否   | `1`     | 桌面端最大容忍丢包次数 |
 | `MAX_MISSED_PONGS_MOBILE`    | `number` | 否   | `3`     | 移动端最大容忍丢包次数 |
 
 ### 1.8 AI/NL2CMD 调试

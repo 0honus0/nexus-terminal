@@ -49,7 +49,7 @@
 ### 🧪 Test Coverage
 
 - **Comprehensive Test Framework**: From near-zero tests to 1500+ test cases, 100% pass rate
-- **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, RDP/VNC scenarios, and edge cases
+- **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
 - **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
 - **Unit Tests**: Backend 72+ test files, Frontend 31+ test files
 
@@ -64,7 +64,7 @@
 ## ✨ Features
 
 - Manage SSH and SFTP connections with multiple tabs
-- Support RDP/VNC graphical remote access sessions
+- Support remote access to desktops via RDP/VNC protocol
 - Utilizes Monaco Editor for online file editing
 - Integrated multi-factor login security mechanisms, including human verification (hCaptcha, Google reCAPTCHA) and two-factor authentication (2FA)
 - Highly customizable interface themes and layout styles

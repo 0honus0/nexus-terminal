@@ -63,7 +63,7 @@
 | ---------------------------- | ------- | --------------------------------------------- |
 | `ALLOWED_ORIGINS`            | -       | 额外允许的 CORS 来源（逗号分隔多个域名）      |
 | `ALLOWED_WS_ORIGINS`         | -       | 额外允许的 WebSocket 来源（逗号分隔多个域名） |
-| `HEARTBEAT_INTERVAL_DESKTOP` | `30000` | 默认心跳间隔（毫秒）                          |
+| `HEARTBEAT_INTERVAL_DESKTOP` | `30000` | 桌面端心跳间隔（毫秒）                        |
 | `HEARTBEAT_INTERVAL_MOBILE`  | `12000` | 移动端心跳间隔（毫秒）                        |
 | `TRUST_PROXY`                | -       | 是否信任代理 (`true`/`false`)                 |
 | `TRUST_PROXY_HOPS`           | -       | 信任的代理跳数                                |

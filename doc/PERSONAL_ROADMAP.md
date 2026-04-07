@@ -890,7 +890,7 @@ export function useDeviceDetection() {
   const deviceType = computed(() => {
     if (isMobile.value) return 'mobile';
     if (isTouchDevice.value) return 'tablet';
-    return 'default';
+    return 'desktop';
   });
 
   return { isMobile, isTouchDevice, deviceType };

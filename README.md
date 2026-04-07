@@ -49,7 +49,7 @@
 ### 🧪 测试覆盖
 
 - **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，100% 通过率
-- **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、RDP/VNC 场景及边缘场景
+- **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
 - **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
 - **单元测试**：Backend 72+ 测试文件，Frontend 31+ 测试文件
 
@@ -241,7 +241,7 @@ docker compose up -d
 
 ### CORS 跨域配置
 
-如果你需要配置额外的允许域名访问图形会话网关（Remote Gateway），请参考 [CORS 配置文档](./doc/CORS_CONFIG.md)。
+如果你需要配置额外的允许域名访问远程桌面网关（Remote Gateway），请参考 [CORS 配置文档](./doc/CORS_CONFIG.md)。
 
 **常见场景**：
 
