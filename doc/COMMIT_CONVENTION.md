@@ -231,14 +231,14 @@ $ git commit -m "✨ feat(connections): 添加连接分组功能"
 
 ### Q: 可以使用 Emoji 吗？
 
-可以。支持在开头添加一个 Emoji 或 Gitmoji（可选），例如：
+必须使用。提交信息开头必须包含一个 Emoji 或 Gitmoji，例如：
 
 ```text
 ✨ feat(websocket): 增加静默执行路径同步
 :bug: fix(lint): 修复 eslint-plugin-import 异常
 ```
 
-不使用 Emoji 也完全允许。
+不带 Emoji 的提交信息将被 commit-msg hook 拒绝。
 
 ### Q: 提交消息必须用中文吗？
 

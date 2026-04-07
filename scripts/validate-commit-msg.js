@@ -23,18 +23,18 @@ if (ignoredPrefixes.some((pattern) => pattern.test(header))) {
 }
 
 const headerPattern =
-  /^(?:(?::[\w+-]+:|[\p{Extended_Pictographic}\uFE0F](?:[\u200D\p{Extended_Pictographic}\uFE0F])*)\s*)?(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security|release)(?:\([^)]+\))?!?:\s(.+)$/u;
+  /^(:[\w+-]+:|[\p{Extended_Pictographic}\uFE0F](?:[\u200D\p{Extended_Pictographic}\uFE0F])*)\s+(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security|release)(?:\([^)]+\))?!?:\s(.+)$/u;
 
 const matched = header.match(headerPattern);
 
 if (!matched) {
   console.error('提交信息格式不符合要求。');
-  console.error('允许格式：<可选 emoji> <type>(<scope>): <中文描述>');
+  console.error('允许格式：<emoji> <type>(<scope>): <中文描述>');
   console.error('示例：✨ feat(websocket): 增加静默执行路径同步');
   process.exit(1);
 }
 
-const subject = matched[2];
+const subject = matched[3];
 if (!/[\u4e00-\u9fff]/.test(subject)) {
   console.error('提交主题必须包含中文描述。');
   console.error('示例：🐛 fix(lint): 修复 eslint-plugin-import 异常');

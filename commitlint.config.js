@@ -10,8 +10,8 @@ module.exports = {
   parserPreset: {
     parserOpts: {
       headerPattern:
-        /^(?:(?::[\w+-]+:|[\p{Extended_Pictographic}\uFE0F](?:[\u200D\p{Extended_Pictographic}\uFE0F])*)\s*)?(\w+)(?:\(([^)]+)\))?!?:\s(.+)$/u,
-      headerCorrespondence: ['type', 'scope', 'subject'],
+        /^(:[\w+-]+:|[\p{Extended_Pictographic}\uFE0F](?:[\u200D\p{Extended_Pictographic}\uFE0F])*)\s+(\w+)(?:\(([^)]+)\))?!?:\s(.+)$/u,
+      headerCorrespondence: ['emoji', 'type', 'scope', 'subject'],
     },
   },
 
