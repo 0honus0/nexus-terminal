@@ -15,6 +15,7 @@
 - [7. 前端状态管理变量](#7-前端状态管理变量)
 - [8. 前端设置变量](#8-前端设置变量)
 - [9. 数据库配置](#9-数据库配置)
+- [10. 测试与 CI 环境变量](#10-测试与-ci-环境变量)
 
 ---
 
@@ -92,6 +93,37 @@
 | `NL2CMD_SLOW_THRESHOLD_MS` | `number`     | 否   | `3000` | 慢请求阈值（毫秒）。当总耗时 ≥ 阈值时输出耗时日志。                          |
 
 > 相关输出：后端会输出以 `[NL2CMD Timing]` / `[NL2CMD HTTP]` 开头的日志，并在 `/api/v1/ai/nl2cmd` 与 `/api/v1/ai/test` 响应头中返回 `x-request-id` 以便串联前后端排查。
+
+### 1.9 日志与时区配置
+
+> 定义位置：`packages/backend/src/config/env.validator.ts`、`packages/backend/src/logging/logger.ts`
+
+| 变量名      | 类型                                     | 必填 | 默认值 | 描述                                                       |
+| ----------- | ---------------------------------------- | ---- | ------ | ---------------------------------------------------------- |
+| `LOG_LEVEL` | `'debug' \| 'info' \| 'warn' \| 'error'` | 否   | `info` | 后端日志等级。                                             |
+| `LOG_TZ`    | `string`                                 | 否   | -      | 日志时间戳时区，优先级高于 `TZ`。                          |
+| `TZ`        | `string`                                 | 否   | `UTC`  | 进程默认时区，日志模块在未设置 `LOG_TZ` 时会回退使用此值。 |
+
+### 1.10 API 限流覆盖配置
+
+> 定义位置：`packages/backend/src/index.ts`（解析与应用）  
+> 说明：缺省或非法值会自动回退到默认值。
+
+| 变量名                          | 类型     | 必填 | 默认值   | 描述                                            |
+| ------------------------------- | -------- | ---- | -------- | ----------------------------------------------- |
+| `API_RATE_LIMIT_WINDOW_MS`      | `number` | 否   | `900000` | 通用 API 限流窗口（毫秒，默认 15 分钟）。       |
+| `API_RATE_LIMIT_MAX`            | `number` | 否   | `300`    | 通用 API 在窗口内允许的最大请求数。             |
+| `SETTINGS_RATE_LIMIT_WINDOW_MS` | `number` | 否   | `900000` | `/api/v1/settings/*` 限流窗口（毫秒）。         |
+| `SETTINGS_RATE_LIMIT_MAX`       | `number` | 否   | `500`    | `/api/v1/settings/*` 在窗口内允许的最大请求数。 |
+
+### 1.11 NL2CMD 请求超时与 Shell 推断
+
+> 定义位置：`packages/backend/src/ai-ops/nl2cmd.constants.ts`、`packages/backend/src/ai-ops/nl2cmd.service.ts`
+
+| 变量名                      | 类型     | 必填 | 默认值  | 描述                                                                 |
+| --------------------------- | -------- | ---- | ------- | -------------------------------------------------------------------- |
+| `NL2CMD_REQUEST_TIMEOUT_MS` | `number` | 否   | `30000` | NL2CMD 上游 HTTP 请求超时（毫秒）。                                  |
+| `SHELL`                     | `string` | 否   | -       | 运行环境 Shell 路径（系统变量）。NL2CMD 在部分场景会据此推断 shell。 |
 
 ---
 
@@ -219,16 +251,18 @@
 
 ### 6.1 前端构建环境变量（Vite）
 
-> 定义位置：`packages/frontend/src/stores/uiNotifications.store.ts`
+> 定义位置：`packages/frontend/src/stores/uiNotifications.store.ts`、`packages/frontend/src/components/LayoutRenderer.vue`、`packages/frontend/src/stores/appearance.store.ts`
 
-| 变量名                         | 类型     | 必填 | 默认值 | 描述                                                                    |
-| ------------------------------ | -------- | ---- | ------ | ----------------------------------------------------------------------- |
-| `VITE_NOTIFICATION_TIMEOUT_MS` | `number` | 否   | `3000` | 前端 UI 通知自动关闭时间（毫秒）。仅支持正整数，缺省/非法会回退默认值。 |
+| 变量名                         | 类型     | 必填 | 默认值 | 描述                                                                        |
+| ------------------------------ | -------- | ---- | ------ | --------------------------------------------------------------------------- |
+| `VITE_NOTIFICATION_TIMEOUT_MS` | `number` | 否   | `3000` | 前端 UI 通知自动关闭时间（毫秒）。仅支持正整数，缺省/非法会回退默认值。     |
+| `VITE_API_BASE_URL`            | `string` | 否   | -      | 前端拼接后端静态资源 URL 的基础地址（如背景图 URL）。未设置时按当前源回退。 |
 
 > 生效说明：
 >
 > - 该变量通过 `import.meta.env` 读取，属于 **前端构建时变量**。
 > - 使用预构建前端镜像时，运行时修改容器环境变量不会生效；需重新构建前端镜像。
+> - `BASE_URL`、`DEV` 为 Vite 内置变量，属于框架运行上下文，不建议作为业务配置项暴露给用户。
 
 ---
 
@@ -390,6 +424,39 @@
 | 数据库目录   | `packages/backend/data/` | 数据库文件存储目录   |
 | 数据库文件名 | `nexus-terminal.db`      | SQLite 数据库文件    |
 | 数据表前缀   | 无 (单表)                | 使用独立表名而非前缀 |
+
+---
+
+## 10. 测试与 CI 环境变量
+
+> 定义位置：`packages/frontend/e2e/playwright.config.ts`、`packages/frontend/e2e/fixtures/*.ts`
+> 用途：仅用于 E2E/CI 测试，不属于生产运行时配置。
+
+### 10.1 Playwright / CI
+
+| 变量名         | 默认值                  | 描述                                      |
+| -------------- | ----------------------- | ----------------------------------------- |
+| `CI`           | -                       | CI 环境标识。用于控制重试次数、并行度等。 |
+| `E2E_BASE_URL` | `http://localhost:5173` | E2E 测试目标地址。                        |
+
+### 10.2 E2E 测试账号与目标服务
+
+| 变量名              | 默认值             | 描述                 |
+| ------------------- | ------------------ | -------------------- |
+| `E2E_TEST_USERNAME` | `admin`            | E2E 登录用户名       |
+| `E2E_TEST_PASSWORD` | `admin123`         | E2E 登录密码         |
+| `E2E_SSH_HOST`      | `localhost`        | E2E SSH 目标主机     |
+| `E2E_SSH_PORT`      | `22`               | E2E SSH 目标端口     |
+| `E2E_SSH_USERNAME`  | `testuser`         | E2E SSH 用户名       |
+| `E2E_SSH_PASSWORD`  | `testpass`         | E2E SSH 密码         |
+| `E2E_RDP_HOST`      | `localhost`        | E2E RDP 目标主机     |
+| `E2E_RDP_PORT`      | `3389`             | E2E RDP 目标端口     |
+| `E2E_RDP_USERNAME`  | `Administrator`    | E2E RDP 用户名       |
+| `E2E_RDP_PASSWORD`  | `password`         | E2E RDP 密码         |
+| `E2E_VNC_HOST`      | `localhost`        | E2E VNC 目标主机     |
+| `E2E_VNC_PORT`      | `5900`             | E2E VNC 目标端口     |
+| `E2E_VNC_PASSWORD`  | `password`         | E2E VNC 密码         |
+| `E2E_2FA_SECRET`    | `JBSWY3DPEHPK3PXP` | E2E 2FA 秘钥（TOTP） |
 
 ---
 

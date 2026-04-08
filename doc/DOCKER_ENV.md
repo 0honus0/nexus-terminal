@@ -67,13 +67,17 @@
 | `HEARTBEAT_INTERVAL_MOBILE`  | `12000` | 移动端心跳间隔（毫秒）                        |
 | `TRUST_PROXY`                | -       | 是否信任代理 (`true`/`false`)                 |
 | `TRUST_PROXY_HOPS`           | -       | 信任的代理跳数                                |
+| `LOG_LEVEL`                  | `info`  | 后端日志等级（`debug/info/warn/error`）       |
+| `LOG_TZ`                     | -       | 日志时间戳时区（优先级高于 `TZ`）             |
+| `TZ`                         | `UTC`   | 后端进程默认时区                              |
 
 ### NL2CMD 调试配置
 
-| 变量名                     | 默认值 | 范围      | 描述                                 |
-| -------------------------- | ------ | --------- | ------------------------------------ |
-| `NL2CMD_TIMING_LOG`        | `0`    | `0` / `1` | 是否启用计时日志（开发模式自动启用） |
-| `NL2CMD_SLOW_THRESHOLD_MS` | `3000` | 0-300000  | 慢查询阈值（毫秒），超过会记录警告   |
+| 变量名                      | 默认值  | 范围        | 描述                                 |
+| --------------------------- | ------- | ----------- | ------------------------------------ |
+| `NL2CMD_TIMING_LOG`         | `0`     | `0` / `1`   | 是否启用计时日志（开发模式自动启用） |
+| `NL2CMD_SLOW_THRESHOLD_MS`  | `3000`  | 0-300000    | 慢查询阈值（毫秒），超过会记录警告   |
+| `NL2CMD_REQUEST_TIMEOUT_MS` | `30000` | 1000-300000 | NL2CMD 上游 HTTP 请求超时（毫秒）    |
 
 > ⚠️ **注意**: NL2CMD 的 AI 配置（API Key、Provider、Model 等）存储在**数据库**中，通过前端设置页面 (`/settings/ai`) 或 API 配置。
 
@@ -144,6 +148,10 @@ REMOTE_GATEWAY_API_TOKEN=
 # 前端通知自动关闭时间（毫秒，正整数）
 # 仅在自构建 frontend 镜像时生效（Vite 构建时变量）
 VITE_NOTIFICATION_TIMEOUT_MS=3000
+
+# 前端资源 URL 基础地址（可选）
+# 仅在自构建 frontend 镜像时生效（Vite 构建时变量）
+VITE_API_BASE_URL=
 ```
 
 ## Rate Limit（后端限流）
@@ -227,6 +235,7 @@ networks:
 | 变量名                         | 默认值 | 描述                                                                  |
 | ------------------------------ | ------ | --------------------------------------------------------------------- |
 | `VITE_NOTIFICATION_TIMEOUT_MS` | `3000` | 前端通知自动关闭时间（毫秒）。仅支持正整数，缺省/非法值会回退默认值。 |
+| `VITE_API_BASE_URL`            | -      | 前端拼接后端静态资源地址的基础 URL（如背景图 URL）。                  |
 
 > 重要说明：
 >
@@ -244,6 +253,7 @@ services:
       dockerfile: packages/frontend/Dockerfile
       args:
         VITE_NOTIFICATION_TIMEOUT_MS: ${VITE_NOTIFICATION_TIMEOUT_MS:-3000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     ports:
       - '18111:80'
     depends_on:
