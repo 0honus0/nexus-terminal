@@ -150,7 +150,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'; // +++ 导入 nextTick, watch 和 onUnmounted +++
+import {
+  ref,
+  onMounted,
+  onUnmounted,
+  onActivated,
+  onDeactivated,
+  computed,
+  nextTick,
+  watch,
+} from 'vue'; // +++ 导入 nextTick, watch、KeepAlive 生命周期和 onUnmounted +++
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '../stores/session.store';
@@ -299,34 +308,111 @@ const exportLog = async (session: SuspendedSshSession) => {
   // 不需要 emitWorkspaceEvent，因为导出日志通常不关闭模态框
 };
 
-let fetchIntervalId: number | undefined;
+const BASE_POLL_INTERVAL_MS = 3000;
+const MAX_POLL_INTERVAL_MS = 60000;
 
-onMounted(async () => {
+let fetchTimeoutId: number | undefined;
+let isPollingActive = false;
+let isFetching = false;
+let currentPollIntervalMs = BASE_POLL_INTERVAL_MS;
+let connectionsPrefetched = false;
+
+const clearPollingTimer = () => {
+  if (fetchTimeoutId) {
+    clearTimeout(fetchTimeoutId);
+    fetchTimeoutId = undefined;
+  }
+};
+
+const stopPolling = () => {
+  isPollingActive = false;
+  clearPollingTimer();
+};
+
+const applyBackoff = (result?: { ok: boolean; status?: number }) => {
+  if (result?.ok) {
+    currentPollIntervalMs = BASE_POLL_INTERVAL_MS;
+    return;
+  }
+
+  if (result?.status === 429) {
+    currentPollIntervalMs = Math.min(currentPollIntervalMs * 2, MAX_POLL_INTERVAL_MS);
+    return;
+  }
+
+  currentPollIntervalMs = Math.min(Math.max(currentPollIntervalMs, BASE_POLL_INTERVAL_MS), 10000);
+};
+
+const scheduleNextPoll = () => {
+  clearPollingTimer();
+  if (!isPollingActive) return;
+  fetchTimeoutId = window.setTimeout(runPollingTick, currentPollIntervalMs);
+};
+
+const runPollingTick = async () => {
+  if (!isPollingActive || isFetching) return;
+
+  isFetching = true;
+  try {
+    const result = await sessionStore.fetchSuspendedSshSessions({
+      showLoadingIndicator: false,
+      notifyOnError: false,
+    });
+    applyBackoff(result);
+  } finally {
+    isFetching = false;
+    scheduleNextPoll();
+  }
+};
+
+const ensureConnectionsFetched = async () => {
+  if (connectionsPrefetched) return;
   const connectionsStore = useConnectionsStore(); // +++ 获取 Connections Store 实例 +++
   // 确保连接列表已加载或正在加载
   // 通常 store 的 fetch 方法会处理重复调用或自行管理加载状态
   try {
     console.log('[SuspendedSshSessionsView] Ensuring connections are fetched.');
     await connectionsStore.fetchConnections(); // +++ 获取连接列表 +++
+    connectionsPrefetched = true;
   } catch (error) {
     console.error('[SuspendedSshSessionsView] Error fetching connections:', error);
     // 根据需要处理错误，例如显示通知
   }
+};
+
+const startPolling = async (options?: { forceInitialLoading?: boolean }) => {
+  if (isPollingActive) return;
+
+  isPollingActive = true;
+  currentPollIntervalMs = BASE_POLL_INTERVAL_MS;
+  await ensureConnectionsFetched();
 
   // 立即获取一次挂起会话数据 (显示加载指示器)
-  await sessionStore.fetchSuspendedSshSessions();
+  const initialResult = await sessionStore.fetchSuspendedSshSessions({
+    showLoadingIndicator: options?.forceInitialLoading ?? true,
+    notifyOnError: true,
+  });
+  applyBackoff(initialResult);
+  scheduleNextPoll();
+};
 
-  // 设置定时器，每3秒获取一次挂起会话数据 (不显示加载指示器)
-  fetchIntervalId = window.setInterval(async () => {
-    await sessionStore.fetchSuspendedSshSessions({ showLoadingIndicator: false });
-  }, 3000);
+onMounted(async () => {
+  await startPolling({ forceInitialLoading: true });
+});
+
+onActivated(async () => {
+  if (!isPollingActive) {
+    await startPolling({ forceInitialLoading: false });
+  }
+});
+
+onDeactivated(() => {
+  stopPolling();
 });
 
 onUnmounted(() => {
-  // 组件卸载时清除定时器
-  if (fetchIntervalId) {
-    clearInterval(fetchIntervalId);
-  }
+  // 组件卸载时清理轮询
+  stopPolling();
 });
 </script>
 
