@@ -140,6 +140,10 @@ REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8080
 
 # Remote Gateway API 访问令牌（可选但强烈推荐；需与 docker-compose.yml 的 remote-gateway 一致）
 REMOTE_GATEWAY_API_TOKEN=
+
+# 前端通知自动关闭时间（毫秒，正整数）
+# 仅在自构建 frontend 镜像时生效（Vite 构建时变量）
+VITE_NOTIFICATION_TIMEOUT_MS=3000
 ```
 
 ## Rate Limit（后端限流）
@@ -216,6 +220,35 @@ services:
 networks:
   nexus-terminal-network:
     driver: bridge
+```
+
+### 前端构建时变量（可选）
+
+| 变量名                         | 默认值 | 描述                                                                  |
+| ------------------------------ | ------ | --------------------------------------------------------------------- |
+| `VITE_NOTIFICATION_TIMEOUT_MS` | `3000` | 前端通知自动关闭时间（毫秒）。仅支持正整数，缺省/非法值会回退默认值。 |
+
+> 重要说明：
+>
+> - 该变量是 **Vite 构建时变量**，通过 `import.meta.env` 读取。
+> - 使用 `heavrnl/nexus-terminal-frontend:latest` 预构建镜像时，运行时注入此变量不会生效。
+> - 如需自定义，请改为自行构建 frontend 镜像，并在构建阶段传入。
+
+示例（改为 build 模式）：
+
+```yaml
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+      args:
+        VITE_NOTIFICATION_TIMEOUT_MS: ${VITE_NOTIFICATION_TIMEOUT_MS:-3000}
+    ports:
+      - '18111:80'
+    depends_on:
+      - backend
+      - remote-gateway
 ```
 
 ---
