@@ -256,6 +256,18 @@ If you find this project helpful, feel free to buy me a coffee through the follo
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01GGLJU)
 
+## AI-assisted issue triage
+
+This repository uses an AI-assisted issue triage workflow to:
+
+- identify likely deployment, reverse proxy, auth, and protocol-specific issues
+- suggest concrete troubleshooting steps
+- point reporters to the most relevant documentation
+- propose implementation plans for likely defects
+
+The assistant may reply with troubleshooting steps or request minimal additional information.
+Code changes are not proposed automatically unless a maintainer explicitly requests implementation.
+
 ## 📄 License
 
 This project is licensed under the [GPL-3.0](LICENSE) license. See the [LICENSE](LICENSE) file for details.

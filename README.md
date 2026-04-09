@@ -280,6 +280,17 @@ remote-gateway:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01GGLJU)
 
+## 人工智能辅助问题分类
+
+该仓库采用了一种由人工智能辅助的问题分类（issue triage）工作流程，具体功能包括：
+
+- 识别可能与部署、反向代理（reverse proxy）、身份验证（auth）或特定协议（protocol）相关的问题；
+- 提出具体的故障排除步骤；
+- 将问题报告者引导至最相关的文档资料；
+- 为可能存在的缺陷制定实施计划。
+
+助手可以提供故障排除步骤，或要求用户提供最少的额外信息。除非维护人员明确要求进行代码修改，否则系统不会自动建议进行代码更改。
+
 ## 📄 开源协议
 
 本项目采用 [GPL-3.0](LICENSE) 开源协议，详细信息请参阅 [LICENSE](LICENSE) 文件。
