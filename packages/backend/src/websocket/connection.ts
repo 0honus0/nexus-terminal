@@ -508,11 +508,24 @@ export function initializeConnectionHandler(
             // SSH_SUSPEND_EDIT_NAME case removed, handled by HTTP API now
             case 'SSH_MARK_FOR_SUSPEND': {
               const markPayload = payload as SshMarkForSuspendRequest['payload'];
-              const sessionToMarkId = markPayload.sessionId;
+              const requestedSessionToMarkId = markPayload.sessionId;
+              const wsBoundSessionId = typeof ws.sessionId === 'string' ? ws.sessionId : '';
+              // 以后端当前连接绑定的 SID 为准，兼容前端 reconnect 后仍携带旧 SID 的请求。
+              const sessionToMarkId = wsBoundSessionId || requestedSessionToMarkId;
               const { initialBuffer } = markPayload; // +++ 获取 initialBuffer +++
               console.log(
-                `[WebSocket Handler] Received SSH_MARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToMarkId}, InitialBuffer provided: ${!!initialBuffer}`
+                `[WebSocket Handler] Received SSH_MARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToMarkId}, RequestedSessionID: ${requestedSessionToMarkId}, InitialBuffer provided: ${!!initialBuffer}`
               );
+
+              if (
+                requestedSessionToMarkId &&
+                wsBoundSessionId &&
+                requestedSessionToMarkId !== wsBoundSessionId
+              ) {
+                console.warn(
+                  `[SSH_MARK_FOR_SUSPEND] 请求会话ID(${requestedSessionToMarkId})与当前WebSocket绑定会话ID(${wsBoundSessionId})不一致，已按当前连接会话处理。`
+                );
+              }
 
               if (!ws.userId) {
                 console.error(`[SSH_MARK_FOR_SUSPEND] 用户 ID 未定义。`);
@@ -524,6 +537,22 @@ export function initializeConnectionHandler(
                         sessionId: sessionToMarkId,
                         success: false,
                         error: '用户认证失败',
+                      } as SshMarkedForSuspendAck['payload'],
+                    })
+                  );
+                break;
+              }
+
+              if (!sessionToMarkId) {
+                console.error('[SSH_MARK_FOR_SUSPEND] 缺少有效会话 ID。');
+                if (ws.readyState === WebSocket.OPEN)
+                  ws.send(
+                    JSON.stringify({
+                      type: 'SSH_MARKED_FOR_SUSPEND_ACK',
+                      payload: {
+                        sessionId: requestedSessionToMarkId || wsBoundSessionId || 'unknown',
+                        success: false,
+                        error: '缺少有效会话ID',
                       } as SshMarkedForSuspendAck['payload'],
                     })
                   );
@@ -626,11 +655,24 @@ export function initializeConnectionHandler(
             }
             case 'SSH_UNMARK_FOR_SUSPEND': {
               const unmarkPayload = payload as SshUnmarkForSuspendRequest['payload'];
-              const sessionToUnmarkId = unmarkPayload.sessionId;
+              const requestedSessionToUnmarkId = unmarkPayload.sessionId;
+              const wsBoundSessionId = typeof ws.sessionId === 'string' ? ws.sessionId : '';
+              // 与标记逻辑一致：优先使用当前连接 SID，避免旧 SID 导致“会话不存在”。
+              const sessionToUnmarkId = wsBoundSessionId || requestedSessionToUnmarkId;
               console.log(
-                `[WebSocket Handler] Received SSH_UNMARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToUnmarkId}`
+                `[WebSocket Handler] Received SSH_UNMARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToUnmarkId}, RequestedSessionID: ${requestedSessionToUnmarkId}`
               );
               const ackPayloadBase = { sessionId: sessionToUnmarkId };
+
+              if (
+                requestedSessionToUnmarkId &&
+                wsBoundSessionId &&
+                requestedSessionToUnmarkId !== wsBoundSessionId
+              ) {
+                console.warn(
+                  `[SSH_UNMARK_FOR_SUSPEND] 请求会话ID(${requestedSessionToUnmarkId})与当前WebSocket绑定会话ID(${wsBoundSessionId})不一致，已按当前连接会话处理。`
+                );
+              }
 
               if (!ws.userId) {
                 console.error(`[SSH_UNMARK_FOR_SUSPEND] 用户 ID 未定义。`);
@@ -642,6 +684,22 @@ export function initializeConnectionHandler(
                         ...ackPayloadBase,
                         success: false,
                         error: '用户认证失败',
+                      } as SshUnmarkedForSuspendAck['payload'],
+                    })
+                  );
+                break;
+              }
+
+              if (!sessionToUnmarkId) {
+                console.error('[SSH_UNMARK_FOR_SUSPEND] 缺少有效会话 ID。');
+                if (ws.readyState === WebSocket.OPEN)
+                  ws.send(
+                    JSON.stringify({
+                      type: 'SSH_UNMARKED_FOR_SUSPEND_ACK',
+                      payload: {
+                        sessionId: requestedSessionToUnmarkId || wsBoundSessionId || 'unknown',
+                        success: false,
+                        error: '缺少有效会话ID',
                       } as SshUnmarkedForSuspendAck['payload'],
                     })
                   );
