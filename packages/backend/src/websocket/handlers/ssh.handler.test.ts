@@ -380,7 +380,18 @@ describe('SSH WebSocket Handler', () => {
     };
 
     const extractMarkers = (writtenCommand: string) => {
-      const [startLine = '', , endLine = ''] = writtenCommand.split('\n');
+      const lines = writtenCommand
+        .split('\n')
+        .map((line) => {
+          let normalizedLine = line;
+          while (normalizedLine.charCodeAt(0) === 21) {
+            normalizedLine = normalizedLine.slice(1);
+          }
+          return normalizedLine.trim();
+        })
+        .filter(Boolean);
+      const startLine = lines.find((line) => line.includes('__NX_SILENT_START_')) || '';
+      const endLine = lines.find((line) => line.includes('__NX_SILENT_END_')) || '';
       return {
         startMarker: startLine.replace(/^echo\s+/, '').trim(),
         endMarker: endLine.replace(/^echo\s+/, '').trim(),
@@ -433,6 +444,34 @@ describe('SSH WebSocket Handler', () => {
       expect(message.type).toBe('ssh:exec_silent:result');
       expect(message.requestId).toBe('req-silent-prompt-marker');
       expect(message.payload.output).toContain('/opt');
+    });
+
+    it('执行静默命令前应先清空当前输入行，避免与未回车输入拼接', async () => {
+      await connectReadyShellSession();
+
+      handleSshExecSilent(
+        mockWs,
+        {
+          command: "printf '__NX_PWD__%s\\n' '/root'",
+          successCriteria: 'absolute_path',
+        },
+        'req-silent-clear-pending-input'
+      );
+      expect(mockShellStream.write).toHaveBeenCalledTimes(1);
+
+      const firstWrite = (mockShellStream.write as any).mock.calls[0][0] as string;
+      expect(firstWrite.startsWith('\u0015')).toBe(true);
+      const { startMarker, endMarker } = extractMarkers(firstWrite);
+
+      mockShellStream.emit('data', Buffer.from('bash: aptecho: command not found\n'));
+      mockShellStream.emit('data', Buffer.from(`${startMarker}\n`));
+      mockShellStream.emit('data', Buffer.from('__NX_PWD__/root\n'));
+      mockShellStream.emit('data', Buffer.from(`${endMarker}\n`));
+
+      const message = getLastSentMessage();
+      expect(message.type).toBe('ssh:exec_silent:result');
+      expect(message.requestId).toBe('req-silent-clear-pending-input');
+      expect(message.payload.output).toContain('__NX_PWD__/root');
     });
 
     it('结束标记后的无换行 prompt 尾部应继续透传到终端', async () => {

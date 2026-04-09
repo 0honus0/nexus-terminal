@@ -29,6 +29,7 @@ interface SilentExecPayload {
 
 const MAX_SILENT_OUTPUT_SIZE = 64 * 1024;
 const MAX_SILENT_LINE_BUFFER_SIZE = 16 * 1024;
+const TERMINAL_LINE_KILL_CONTROL = '\u0015';
 
 interface PendingSilentExecRequest {
   ws: AuthenticatedWebSocket;
@@ -244,7 +245,8 @@ const startSilentExecAttempt = (sessionId: string): void => {
 
   try {
     const wrappedCommand = `echo ${request.startMarker}\n${command}\necho ${request.endMarker}\n`;
-    state.sshShellStream.write(wrappedCommand);
+    // 先清空当前编辑行，避免与用户未回车输入拼接（如 apt + echo => aptecho）。
+    state.sshShellStream.write(`${TERMINAL_LINE_KILL_CONTROL}${wrappedCommand}`);
   } catch (error: unknown) {
     moveToNextSilentExecAttempt(
       sessionId,
