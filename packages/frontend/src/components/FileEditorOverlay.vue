@@ -610,8 +610,7 @@ onBeforeUnmount(() => {
             class="refresh-btn"
             :title="t('fileManager.actions.refresh')"
           >
-            <i class="fas fa-sync-alt"></i>
-            <span v-if="!props.isMobile">{{ t('fileManager.actions.refresh') }}</span>
+            {{ t('fileManager.actions.refresh') }}
           </button>
           <button
             @click="handleSaveRequest"
