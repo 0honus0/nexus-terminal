@@ -68,7 +68,6 @@ const loadTabContentInSession = async (
       const errorMessage = err instanceof Error ? err.message : String(err);
       errorTabRef.isLoading = false;
       errorTabRef.loadingError = `${t('fileManager.errors.readFileFailed')}: ${errorMessage}`;
-      errorTabRef.content = `// 加载错误: ${errorMessage}`;
     }
   }
 };

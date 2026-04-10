@@ -211,7 +211,6 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       if (tabToUpdate) {
         tabToUpdate.isLoading = false;
         tabToUpdate.loadingError = errorMsg;
-        tabToUpdate.content = `// ${errorMsg}`;
       }
     }
   };

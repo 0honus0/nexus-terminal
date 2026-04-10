@@ -9,12 +9,14 @@ import { useFileEditorStore, type FileTab } from '../stores/fileEditor.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useSessionStore } from '../stores/session.store';
 import { useAppearanceStore } from '../stores/appearance.store';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 
 const { t } = useI18n();
 const fileEditorStore = useFileEditorStore();
 const settingsStore = useSettingsStore();
 const sessionStore = useSessionStore();
 const appearanceStore = useAppearanceStore();
+const { showConfirmDialog } = useConfirmDialog();
 
 // --- 本地状态控制弹窗显示 ---
 const isVisible = ref(false);
@@ -444,6 +446,18 @@ const handleRefreshRequest = async () => {
   const currentActiveTab = activeTab.value;
   if (!currentActiveTab) return;
 
+  if (currentActiveTab.isModified) {
+    const confirmed = await showConfirmDialog({
+      title: t('editor.unsavedChanges.title', '未保存的更改'),
+      message: t('editor.unsavedChanges.message', {
+        filename: currentActiveTab.filename,
+      }),
+      confirmText: t('editor.unsavedChanges.discard', '丢弃更改'),
+      cancelText: t('common.cancel', '取消'),
+    });
+    if (!confirmed) return;
+  }
+
   if (shareFileEditorTabsBoolean.value) {
     await reloadGlobalTab(currentActiveTab.id);
   } else {
@@ -592,9 +606,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             @click="handleRefreshRequest"
-            :disabled="
-              currentTabIsSaving || currentTabIsLoading || !!currentTabLoadingError || !activeTab
-            "
+            :disabled="currentTabIsSaving || currentTabIsLoading || !activeTab"
             class="refresh-btn"
             :title="t('fileManager.actions.refresh')"
           >
