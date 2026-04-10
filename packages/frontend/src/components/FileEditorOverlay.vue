@@ -51,6 +51,7 @@ const {
   closeTabsToTheRight, // 修正：移除 Global 后缀
   closeTabsToTheLeft, // 修正：移除 Global 后缀
   changeEncoding: changeGlobalEncoding, // +++ 全局编码更改 action +++
+  reloadTab: reloadGlobalTab,
   updateTabScrollPosition, // 全局滚动位置更新 action
 } = fileEditorStore;
 
@@ -64,6 +65,7 @@ const {
   closeOtherTabsInSession,
   closeTabsToTheRightInSession,
   closeTabsToTheLeftInSession,
+  reloadTabInSession,
   changeEncodingInSession, // +++ 会话编码更改 action +++
   updateTabScrollPositionInSession, // 会话滚动位置更新 action
 } = sessionStore;
@@ -438,6 +440,22 @@ const handleOpenSearch = () => {
   }
 };
 
+const handleRefreshRequest = async () => {
+  const currentActiveTab = activeTab.value;
+  if (!currentActiveTab) return;
+
+  if (shareFileEditorTabsBoolean.value) {
+    await reloadGlobalTab(currentActiveTab.id);
+  } else {
+    const sessionId = popupFileInfo.value?.sessionId;
+    if (sessionId) {
+      await reloadTabInSession(sessionId, currentActiveTab.id);
+    } else {
+      console.error('[FileEditorOverlay] 无法刷新：非共享模式下缺少 sessionId。');
+    }
+  }
+};
+
 // 关闭弹窗 (保持不变)
 const handleCloseContainer = () => {
   isVisible.value = false;
@@ -571,6 +589,17 @@ onBeforeUnmount(() => {
             :title="t('fileManager.actions.search', 'Search')"
           >
             <i class="fas fa-search"></i>
+          </button>
+          <button
+            @click="handleRefreshRequest"
+            :disabled="
+              currentTabIsSaving || currentTabIsLoading || !!currentTabLoadingError || !activeTab
+            "
+            class="refresh-btn"
+            :title="t('fileManager.actions.refresh')"
+          >
+            <i class="fas fa-sync-alt"></i>
+            <span v-if="!props.isMobile">{{ t('fileManager.actions.refresh') }}</span>
           </button>
           <button
             @click="handleSaveRequest"
@@ -861,6 +890,26 @@ onBeforeUnmount(() => {
 }
 .save-btn:hover:not(:disabled) {
   background-color: #45a049;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #607d8b;
+  color: #fff;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+.refresh-btn:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+.refresh-btn:hover:not(:disabled) {
+  background-color: #546e7a;
 }
 
 .search-btn {

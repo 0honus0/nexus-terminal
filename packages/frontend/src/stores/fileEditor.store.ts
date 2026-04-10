@@ -18,6 +18,7 @@ export interface FileInfo {
 export interface FileTab {
   id: string;
   sessionId: string;
+  instanceId?: string;
   filePath: string;
   filename: string;
   content: string; // 当前解码后的内容 (前端解码)
@@ -159,6 +160,62 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
   // --- 核心方法 ---
 
+  // 统一的加载逻辑：首次打开与手动刷新共用，避免状态处理分叉
+  const loadTabContent = async (
+    tabId: string,
+    filePath: string,
+    readFile: (path: string) => Promise<SftpReadFileSuccessPayload>
+  ) => {
+    const tab = tabs.value.get(tabId);
+    if (!tab) {
+      console.warn(`[文件编辑器 Store] 无法加载标签页 ${tabId}：标签页不存在。`);
+      return;
+    }
+
+    tab.isLoading = true;
+    tab.loadingError = null;
+
+    try {
+      const fileData = await readFile(filePath);
+      console.log(
+        `[文件编辑器 Store] 文件 ${filePath} 原始数据读取成功。后端使用编码: ${fileData.encodingUsed}`
+      );
+
+      const tabToUpdate = tabs.value.get(tabId);
+      if (!tabToUpdate) {
+        console.error(`[文件编辑器 Store] 无法更新标签页 ${tabId}，因为它在加载完成前被关闭了。`);
+        return;
+      }
+
+      const initialContent = decodeRawContent(fileData.rawContentBase64, fileData.encodingUsed);
+      const updatedTab: FileTab = {
+        ...tabToUpdate,
+        rawContentBase64: fileData.rawContentBase64,
+        content: initialContent,
+        originalContent: initialContent,
+        selectedEncoding: fileData.encodingUsed,
+        isLoading: false,
+        isModified: false,
+        loadingError: null,
+      };
+      tabs.value.set(tabId, updatedTab);
+
+      console.log(
+        `[文件编辑器 Store] 文件 ${filePath} 内容已解码 (${fileData.encodingUsed}) 并设置到标签页 ${tabId}。`
+      );
+    } catch (err: unknown) {
+      console.error(`[文件编辑器 Store] 读取文件 ${filePath} 失败:`, err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMsg = `${t('fileManager.errors.readFileFailed')}: ${errorMessage}`;
+      const tabToUpdate = tabs.value.get(tabId);
+      if (tabToUpdate) {
+        tabToUpdate.isLoading = false;
+        tabToUpdate.loadingError = errorMsg;
+        tabToUpdate.content = `// ${errorMsg}`;
+      }
+    }
+  };
+
   // 修改：triggerPopup 接收文件信息并存储
   const triggerPopup = (filePath: string, sessionId: string) => {
     console.log(`[文件编辑器 Store] Triggering popup for ${filePath} in session ${sessionId}.`);
@@ -200,6 +257,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     const newTab: FileTab = {
       id: tabId,
       sessionId,
+      instanceId,
       filePath: targetFilePath,
       filename: getFilenameFromPath(targetFilePath),
       content: '', // 将在加载后由前端解码填充
@@ -242,49 +300,34 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       return;
     }
 
-    // 读取文件内容
-    try {
-      // 调用 sftpManager.readFile 获取原始数据和编码
-      const fileData: SftpReadFileSuccessPayload = await sftpManager.readFile(targetFilePath);
-      console.log(
-        `[文件编辑器 Store] 文件 ${targetFilePath} 原始数据读取成功。后端使用编码: ${fileData.encodingUsed}`
-      );
+    await loadTabContent(tabId, targetFilePath, (path) => sftpManager.readFile(path));
+  };
 
-      const tabToUpdate = tabs.value.get(tabId);
-      if (!tabToUpdate) {
-        console.error(`[文件编辑器 Store] 无法更新标签页 ${tabId}，因为它在加载完成前被关闭了。`);
-        return;
-      }
-
-      // +++ 前端解码 +++
-      const initialContent = decodeRawContent(fileData.rawContentBase64, fileData.encodingUsed);
-
-      // 更新标签页状态
-      const updatedTab: FileTab = {
-        ...tabToUpdate,
-        rawContentBase64: fileData.rawContentBase64, // 存储原始数据
-        content: initialContent,
-        originalContent: initialContent, // 初始原始内容
-        selectedEncoding: fileData.encodingUsed, // 存储后端实际使用的编码
-        isLoading: false,
-        isModified: false,
-        loadingError: null,
-      };
-      tabs.value.set(tabId, updatedTab); // 替换以确保响应性
-
-      console.log(
-        `[文件编辑器 Store] 文件 ${targetFilePath} 内容已解码 (${fileData.encodingUsed}) 并设置到标签页 ${tabId}。`
-      );
-    } catch (err: any) {
-      console.error(`[文件编辑器 Store] 读取文件 ${targetFilePath} 失败:`, err);
-      const errorMsg = `${t('fileManager.errors.readFileFailed')}: ${err.message || err}`;
-      const tabToUpdate = tabs.value.get(tabId);
-      if (tabToUpdate) {
-        tabToUpdate.isLoading = false;
-        tabToUpdate.loadingError = errorMsg;
-        tabToUpdate.content = `// ${errorMsg}`; // 在编辑器中显示错误
-      }
+  // 手动刷新标签页内容（覆盖当前内容）
+  const reloadTab = async (tabId: string) => {
+    const tab = tabs.value.get(tabId);
+    if (!tab) {
+      console.warn(`[文件编辑器 Store] 刷新失败：标签页 ${tabId} 不存在。`);
+      return;
     }
+
+    if (tab.isSaving) {
+      console.warn(`[文件编辑器 Store] 刷新失败：标签页 ${tabId} 正在保存。`);
+      return;
+    }
+
+    const instanceId = tab.instanceId ?? 'primary';
+    const sftpManager = sessionStore.getOrCreateSftpManager(tab.sessionId, instanceId);
+    if (!sftpManager) {
+      console.error(
+        `[文件编辑器 Store] 刷新失败：无法找到会话 ${tab.sessionId} (实例 ${instanceId}) 的 SFTP 管理器。`
+      );
+      tab.isLoading = false;
+      tab.loadingError = t('fileManager.errors.sftpManagerNotFound');
+      return;
+    }
+
+    await loadTabContent(tab.id, tab.filePath, (path) => sftpManager.readFile(path));
   };
 
   // 保存指定（或当前激活）标签页的文件
@@ -698,6 +741,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     setActiveTab,
     updateFileContent, // 暴露新的更新方法
     changeEncoding, // +++ 暴露更改编码的方法 +++
+    reloadTab,
     triggerPopup, // 暴露新的触发方法
     // setEditorVisibility, // 移除
     updateTabScrollPosition, // +++ 暴露更新滚动位置的方法 +++

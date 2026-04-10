@@ -8,6 +8,71 @@ import type { FileInfo } from '../../fileEditor.store'; // 路径: packages/fron
 import type { SftpReadFileSuccessPayload } from '../../../types/sftp.types'; // 路径: packages/frontend/src/types/sftp.types.ts
 
 // --- Editor Actions ---
+const loadTabContentInSession = async (
+  sessionId: string,
+  tabId: string,
+  filePath: string,
+  dependencies: {
+    getOrCreateSftpManager: (sessionId: string, instanceId: string) => SftpManagerInstance | null;
+    t: ReturnType<typeof useI18n>['t'];
+  }
+) => {
+  const session = sessions.value.get(sessionId);
+  if (!session) {
+    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中加载标签页 ${tabId}`);
+    return;
+  }
+
+  const { getOrCreateSftpManager, t } = dependencies;
+  const tabRef = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
+  if (!tabRef) {
+    console.warn(`[EditorActions] 会话 ${sessionId} 中不存在标签页 ${tabId}，无法加载文件内容。`);
+    return;
+  }
+
+  tabRef.isLoading = true;
+  tabRef.loadingError = null;
+
+  try {
+    const sftpManager = getOrCreateSftpManager(sessionId, 'primary-editor');
+    if (!sftpManager) {
+      throw new Error(t('fileManager.errors.sftpManagerNotFound'));
+    }
+    console.log(
+      `[EditorActions ${sessionId}] 使用 primary-editor sftpManager 读取文件 ${filePath}`
+    );
+
+    const fileData: SftpReadFileSuccessPayload = await sftpManager.readFile(filePath);
+    console.log(
+      `[EditorActions ${sessionId}] 文件 ${filePath} 读取成功。后端使用编码: ${fileData.encodingUsed}`
+    );
+
+    const currentTabState = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
+    if (!currentTabState) return;
+
+    const initialContent = decodeRawContent(fileData.rawContentBase64, fileData.encodingUsed);
+    currentTabState.content = initialContent;
+    currentTabState.originalContent = initialContent;
+    currentTabState.rawContentBase64 = fileData.rawContentBase64;
+    currentTabState.selectedEncoding = fileData.encodingUsed;
+    currentTabState.isLoading = false;
+    currentTabState.isModified = false;
+    currentTabState.loadingError = null;
+    console.log(
+      `[EditorActions ${sessionId}] 文件 ${filePath} 内容已加载并设置到标签页 ${tabId}。`
+    );
+  } catch (err: unknown) {
+    console.error(`[EditorActions ${sessionId}] 读取文件 ${filePath} 失败:`, err);
+    const errorTabRef = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
+    if (errorTabRef) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      errorTabRef.isLoading = false;
+      errorTabRef.loadingError = `${t('fileManager.errors.readFileFailed')}: ${errorMessage}`;
+      errorTabRef.content = `// 加载错误: ${errorMessage}`;
+    }
+  }
+};
+
 export const openFileInSession = (
   sessionId: string,
   fileInfo: FileInfo,
@@ -53,56 +118,36 @@ export const openFileInSession = (
     console.log(
       `[EditorActions] 已在会话 ${sessionId} 中为文件 ${fileInfo.fullPath} 创建新标签页: ${newTab.id}`
     );
-
-    const loadContent = async () => {
-      const tabRef = session.editorTabs.value.find((t) => t.id === newTab.id);
-      if (!tabRef) return;
-
-      // 使用 tabRef 更新，确保操作的是响应式对象内的属性
-      tabRef.isLoading = true;
-      tabRef.loadingError = null;
-
-      try {
-        const sftpManager = getOrCreateSftpManager(sessionId, 'primary-editor'); // 使用特定实例 ID
-        if (!sftpManager) {
-          throw new Error(t('fileManager.errors.sftpManagerNotFound'));
-        }
-        console.log(
-          `[EditorActions ${sessionId}] 使用 primary-editor sftpManager 读取文件 ${fileInfo.fullPath}`
-        );
-
-        const fileData: SftpReadFileSuccessPayload = await sftpManager.readFile(fileInfo.fullPath);
-        console.log(
-          `[EditorActions ${sessionId}] 文件 ${fileInfo.fullPath} 读取成功。后端使用编码: ${fileData.encodingUsed}`
-        );
-
-        // 再次查找 tab，因为它可能在异步操作期间被关闭
-        const currentTabState = session.editorTabs.value.find((t) => t.id === newTab.id);
-        if (!currentTabState) return;
-
-        const initialContent = decodeRawContent(fileData.rawContentBase64, fileData.encodingUsed);
-        currentTabState.content = initialContent;
-        currentTabState.originalContent = initialContent;
-        currentTabState.rawContentBase64 = fileData.rawContentBase64;
-        currentTabState.selectedEncoding = fileData.encodingUsed;
-        currentTabState.isLoading = false;
-        currentTabState.isModified = false;
-        currentTabState.loadingError = null;
-        console.log(
-          `[EditorActions ${sessionId}] 文件 ${fileInfo.fullPath} 内容已加载并设置到标签页 ${newTab.id}。`
-        );
-      } catch (err: any) {
-        console.error(`[EditorActions ${sessionId}] 读取文件 ${fileInfo.fullPath} 失败:`, err);
-        const errorTabRef = session.editorTabs.value.find((t) => t.id === newTab.id);
-        if (errorTabRef) {
-          errorTabRef.isLoading = false;
-          errorTabRef.loadingError = `${t('fileManager.errors.readFileFailed')}: ${err.message || err}`;
-          errorTabRef.content = `// 加载错误: ${err.message || err}`;
-        }
-      }
-    };
-    loadContent();
+    loadTabContentInSession(sessionId, newTab.id, fileInfo.fullPath, { getOrCreateSftpManager, t });
   }
+};
+
+export const reloadTabInSession = async (
+  sessionId: string,
+  tabId: string,
+  dependencies: {
+    getOrCreateSftpManager: (sessionId: string, instanceId: string) => SftpManagerInstance | null;
+    t: ReturnType<typeof useI18n>['t'];
+  }
+) => {
+  const session = sessions.value.get(sessionId);
+  if (!session) {
+    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中刷新标签页 ${tabId}`);
+    return;
+  }
+
+  const tab = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
+  if (!tab) {
+    console.warn(`[EditorActions] 尝试刷新会话 ${sessionId} 中不存在的标签页 ${tabId}`);
+    return;
+  }
+
+  if (tab.isSaving) {
+    console.warn(`[EditorActions] 标签页 ${tabId} 正在保存，跳过刷新。`);
+    return;
+  }
+
+  await loadTabContentInSession(sessionId, tabId, tab.filePath, dependencies);
 };
 
 export const closeEditorTabInSession = async (

@@ -18,9 +18,75 @@ Important paths:
 - `doc/CORS_CONFIG.md` — CORS behavior and multi-origin configuration guidance
 - `README.md` — product overview, feature list, quick start, supported deployment notes
 
-## Triage goals
+---
 
-When analyzing GitHub issues, classify each issue into exactly one category:
+## Operating modes
+
+This repository supports **two distinct working modes**:
+
+### 1. Issue triage mode
+
+Use this mode only when the task is clearly about:
+
+- GitHub issues
+- issue comments
+- support-style diagnosis
+- bug triage
+- implementation planning before approval
+- orchestrator / automation initiated issue handling
+
+In this mode, the agent should:
+
+- diagnose first
+- classify the issue
+- prefer user-side or operator-side fixes when appropriate
+- propose an implementation plan before changing code
+- avoid making code changes unless explicitly approved by the workflow
+
+### 2. Direct coding mode
+
+Use this mode when the user is directly asking to:
+
+- modify code
+- implement a feature
+- refactor code
+- fix a bug in the local repository
+- update tests
+- edit files directly
+- make a patch in the working tree
+
+In this mode, the agent should:
+
+- directly inspect the repository
+- make the requested code changes
+- update tests if needed
+- avoid unnecessary ticket-style diagnosis output
+- avoid blocking on issue-approval rules unless the user explicitly asked for issue-style planning first
+
+**Important rule:**  
+If the user is working directly in the repository (for example via local Codex CLI / `codex code`) and asks to change code, default to **Direct coding mode**, not Issue triage mode.
+
+---
+
+## Mode selection rule
+
+Choose the mode using this priority:
+
+1. If the request explicitly references a GitHub issue, issue comment, triage, support response, or orchestrator workflow:
+   - use **Issue triage mode**
+
+2. If the request explicitly asks to implement, modify, edit, refactor, or patch code in the current repository:
+   - use **Direct coding mode**
+
+3. If uncertain:
+   - prefer **Direct coding mode** for local repository work
+   - prefer **Issue triage mode** only for support / issue handling contexts
+
+---
+
+## Issue triage categories
+
+When in **Issue triage mode**, classify each issue into exactly one category:
 
 - deployment_or_proxy_issue
 - auth_or_security_config_issue
@@ -31,44 +97,17 @@ When analyzing GitHub issues, classify each issue into exactly one category:
 - feature_request
 - unclear
 
-## Classification guidance
-
 ### deployment_or_proxy_issue
 
 Use this when the issue is likely caused by Docker, environment variables, reverse proxy, websocket forwarding, CORS, network, port exposure, or deployment topology.
-
-Typical examples:
-
-- nginx reverse proxy misconfiguration
-- websocket upgrade failure
-- container startup failure
-- wrong environment variable values
-- Docker compose deployment problems
-- CORS misconfiguration
-- TLS / domain / proxy header issues
 
 ### auth_or_security_config_issue
 
 Use this when the issue is likely caused by authentication, captcha, 2FA, access restrictions, IP allow/deny rules, or other security configuration.
 
-Typical examples:
-
-- login rejected because of captcha config
-- 2FA flow mismatch
-- IP whitelist / blacklist confusion
-- audit or security policy misunderstanding
-
 ### connection_protocol_issue
 
 Use this when the issue is related to SSH, SFTP, RDP, VNC, terminal session stability, keyboard-interactive auth, file transfer, remote desktop negotiation, or gateway protocol behavior.
-
-Typical examples:
-
-- SSH connection fails
-- SFTP upload/download/archive problems
-- RDP/VNC connection initialization fails
-- keyboard-interactive / TOTP SSH auth issues
-- remote-gateway handshake behavior
 
 ### frontend_behavior_issue
 
@@ -90,9 +129,11 @@ Use this when the user is asking for new behavior rather than reporting a broken
 
 Use this when the report lacks enough information for responsible diagnosis.
 
+---
+
 ## Context priorities
 
-When searching for an answer, prioritize sources in this order:
+When searching for an answer or implementation path, prioritize sources in this order:
 
 1. `AGENTS.md`
 2. `README.md`
@@ -105,9 +146,11 @@ When searching for an answer, prioritize sources in this order:
 9. `packages/frontend/**`
 10. Relevant tests for the same module
 
-## Required triage output
+---
 
-For every issue analysis, always determine:
+## Required behavior in Issue triage mode
+
+When in **Issue triage mode**, determine:
 
 - classification
 - confidence
@@ -118,11 +161,58 @@ For every issue analysis, always determine:
 - root_cause_hypothesis
 - reporter_next_steps
 - maintainer_action_plan
-- concise_comment_markdown
+
+### Issue triage comment style
+
+When replying in issue triage mode:
+
+- start with a short diagnosis
+- mention the most likely workspace
+- provide 2–5 concrete next steps
+- ask only for the minimum reproducible details if more info is needed
+- prefer operator guidance before code changes
+
+### Issue triage approval rule
+
+Only in **Issue triage mode**, implementation should be treated as approval-gated.
+
+For orchestrator / issue workflow usage:
+
+- code changes should be proposed only after explicit approval
+- maintainer approval comment is:
+
+`/codex implement`
+
+**This rule applies only to issue automation / triage workflows.**  
+**It does NOT block direct local repository coding requests.**
+
+---
+
+## Required behavior in Direct coding mode
+
+When in **Direct coding mode**:
+
+- directly make the requested code changes
+- inspect the relevant files first
+- keep changes minimal and scoped
+- avoid unnecessary diagnosis-only output
+- update tests if relevant
+- summarize what was changed and any remaining risks
+
+### Direct coding response style
+
+In direct coding mode:
+
+- do not respond like an issue triage bot
+- do not require `/codex implement`
+- do not stop at “建议下一步” unless the user explicitly asked for planning only
+- prefer implementation over support-style analysis
+
+---
 
 ## High-risk areas
 
-If the issue touches any of the following, do not auto-implement unless a maintainer explicitly requests it:
+For both modes, be conservative in these areas:
 
 - authentication or session handling
 - captcha / 2FA / login enforcement
@@ -134,53 +224,33 @@ If the issue touches any of the following, do not auto-implement unless a mainta
 - data deletion / credential storage
 - remote execution authorization
 
-## Auto-reply policy
+### High-risk rule
 
-The assistant may auto-reply when confidence is high and the issue is likely:
+If a change affects these areas:
 
-- deployment_or_proxy_issue
-- auth_or_security_config_issue
-- connection_protocol_issue caused by configuration
-- docs_gap
-- unclear
+- avoid broad refactors
+- prefer the smallest viable patch
+- call out security or behavior risks clearly
+- add or update tests where practical
 
-Prefer operational guidance first:
-
-- exact config to verify
-- exact doc path to check
-- exact logs / reproduction info to request
-
-## Auto-implementation gate
-
-Only implement code changes when a maintainer explicitly comments:
-
-`/codex implement`
+---
 
 ## Implementation rules
 
-If implementation is explicitly requested:
+Whenever actually implementing code:
 
 1. Make the smallest viable change.
 2. Avoid unrelated refactors.
 3. Prefer fixing the correct workspace only.
 4. Update tests if needed.
-5. Summarize root cause, fix, deployment impact, and residual risk in the PR body.
-6. If the issue is security-sensitive or could weaken access control, stop and return a plan instead of a patch.
+5. Summarize root cause, fix, deployment impact, and residual risk.
+6. If the change is security-sensitive or could weaken access control, be extra conservative.
 
-## Comment style
-
-When replying to issues:
-
-- Start with a short diagnosis.
-- Mention the most likely workspace (`backend`, `frontend`, `remote-gateway`, or docs/deployment).
-- Provide 2-5 concrete next steps.
-- If more info is needed, ask only for the minimum reproducible details.
-- For deployment issues, request sanitized config only.
-- Never ask users to paste secrets, passwords, private keys, tokens, or full database credentials.
+---
 
 ## Labels guidance
 
-Use these labels where relevant:
+These labels are relevant only for issue automation / triage workflows:
 
 - triaged
 - needs-info
@@ -199,3 +269,5 @@ Use these labels where relevant:
 - feature
 - bug-candidate
 - ai-proposed-fix
+
+Do not treat label logic as relevant for direct local coding work unless explicitly requested.
