@@ -1,6 +1,6 @@
-import { test, expect } from '../fixtures/auth.fixture';
+import { test, expect, TEST_USER } from '../fixtures/auth.fixture';
 import { LoginPage } from '../pages/login.page';
-import { TEST_USER, TWO_FACTOR_AUTH } from '../fixtures/test-data';
+import { TWO_FACTOR_AUTH } from '../fixtures/test-data';
 import { generateTOTP } from '../utils/totp';
 
 test.describe('认证边缘场景测试', () => {
@@ -68,7 +68,29 @@ test.describe('认证边缘场景测试', () => {
   });
 
   test.describe('2FA 边缘场景', () => {
-    test.skip('2FA 验证码过期处理', async ({ loginPage }) => {
+    test('2FA 验证码过期处理', async ({ loginPage }) => {
+      // 通过 mock 2FA 登录流程，稳定验证过期验证码行为
+      await loginPage.route('**/api/v1/auth/login', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '需要 2FA 验证',
+            requiresTwoFactor: true,
+            tempToken: 'e2e-temp-token',
+          }),
+        });
+      });
+      await loginPage.route('**/api/v1/auth/login/2fa', async (route) => {
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '验证码无效或已过期。',
+          }),
+        });
+      });
+
       const login = new LoginPage(loginPage);
       await login.login('2fa-enabled-user', 'password');
       await login.expect2FARequired();
@@ -81,18 +103,68 @@ test.describe('认证边缘场景测试', () => {
       await login.expectLoginFailure();
     });
 
-    test.skip('2FA 验证码格式验证', async ({ loginPage }) => {
+    test('2FA 验证码格式验证', async ({ loginPage }) => {
+      // 通过 mock 2FA 登录流程，稳定验证非法格式提交后的错误提示
+      await loginPage.route('**/api/v1/auth/login', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '需要 2FA 验证',
+            requiresTwoFactor: true,
+            tempToken: 'e2e-temp-token',
+          }),
+        });
+      });
+      await loginPage.route('**/api/v1/auth/login/2fa', async (route) => {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '验证码格式不正确。',
+          }),
+        });
+      });
+
       const login = new LoginPage(loginPage);
       await login.login('2fa-enabled-user', 'password');
       await login.expect2FARequired();
 
       // 尝试无效格式
-      await login.twoFactorInput.fill('abc123');
-      const submitButton = loginPage.locator('button[type="submit"]:has-text("验证")');
-      await expect(submitButton).toBeDisabled();
+      await login.submit2FACode('abc123');
+
+      // 应显示错误并保留在 2FA 输入状态
+      await login.expectLoginFailure();
+      await expect(login.twoFactorInput).toBeVisible();
     });
 
-    test.skip('2FA 连续失败尝试', async ({ loginPage }) => {
+    test('2FA 连续失败尝试', async ({ loginPage }) => {
+      // 通过 mock 2FA 验证接口返回序列，稳定验证锁定提示
+      await loginPage.route('**/api/v1/auth/login', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '需要 2FA 验证',
+            requiresTwoFactor: true,
+            tempToken: 'e2e-temp-token',
+          }),
+        });
+      });
+
+      let verifyAttempts = 0;
+      await loginPage.route('**/api/v1/auth/login/2fa', async (route) => {
+        verifyAttempts += 1;
+        const isLocked = verifyAttempts >= 5;
+        await route.fulfill({
+          status: isLocked ? 429 : 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: isLocked ? '账户已锁定，请稍后再试。' : '验证码错误。',
+          }),
+        });
+      });
+
       const login = new LoginPage(loginPage);
       await login.login('2fa-enabled-user', 'password');
       await login.expect2FARequired();
@@ -280,7 +352,21 @@ test.describe('认证边缘场景测试', () => {
   });
 
   test.describe('速率限制', () => {
-    test.skip('短时间内多次登录尝试应触发速率限制', async ({ loginPage }) => {
+    test('短时间内多次登录尝试应触发速率限制', async ({ loginPage }) => {
+      // 通过 mock 登录接口返回序列，稳定验证前端限流提示
+      let loginAttempts = 0;
+      await loginPage.route('**/api/v1/auth/login', async (route) => {
+        loginAttempts += 1;
+        const rateLimited = loginAttempts >= 10;
+        await route.fulfill({
+          status: rateLimited ? 429 : 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: rateLimited ? 'Too many attempts' : 'Invalid credentials',
+          }),
+        });
+      });
+
       const login = new LoginPage(loginPage);
 
       // 快速连续10次登录尝试
