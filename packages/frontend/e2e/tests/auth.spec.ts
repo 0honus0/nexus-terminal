@@ -83,15 +83,64 @@ test.describe('2FA 流程测试', () => {
     await login.expect2FARequired();
   });
 
-  test.skip('输入正确的 2FA 码成功登录', async ({ loginPage }) => {
-    // 此测试需要模拟 TOTP 生成
+  test('输入正确的 2FA 码成功登录', async ({ loginPage }) => {
+    // 通过 mock 2FA 登录与初始化接口，稳定验证成功路径
+    await loginPage.route('**/api/v1/auth/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          message: '需要 2FA 验证',
+          requiresTwoFactor: true,
+          tempToken: 'e2e-temp-token',
+        }),
+      });
+    });
+
+    await loginPage.route('**/api/v1/auth/login/2fa', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          message: '2FA 验证成功',
+          user: {
+            id: 1,
+            username: TEST_USER.username,
+            isTwoFactorEnabled: true,
+            language: 'zh',
+          },
+        }),
+      });
+    });
+
+    await loginPage.route('**/api/v1/auth/init**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          needsSetup: false,
+          isAuthenticated: true,
+          user: {
+            id: 1,
+            username: TEST_USER.username,
+            isTwoFactorEnabled: true,
+            language: 'zh',
+          },
+          captchaConfig: {
+            enabled: false,
+            provider: 'none',
+            hcaptchaSiteKey: null,
+            recaptchaSiteKey: null,
+          },
+        }),
+      });
+    });
+
     const login = new LoginPage(loginPage);
     await login.login('2fa-enabled-user', 'password');
     await login.expect2FARequired();
-    // 使用测试 secret 生成 TOTP
-    // const code = generateTOTP(TWO_FACTOR_AUTH.secret);
-    // await login.submit2FACode(code);
-    // await login.expectLoginSuccess();
+    await login.submit2FACode('123456');
+    await login.expectLoginSuccess();
   });
 });
 

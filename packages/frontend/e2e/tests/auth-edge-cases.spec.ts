@@ -181,7 +181,29 @@ test.describe('认证边缘场景测试', () => {
       await expect(loginPage.locator('text=/锁定|冷却|暂时禁用/i')).toBeVisible({ timeout: 5000 });
     });
 
-    test.skip('2FA 正确验证码但会话已过期', async ({ loginPage, context }) => {
+    test('2FA 正确验证码但会话已过期', async ({ loginPage, context }) => {
+      // 通过 mock 2FA 登录流程，稳定验证会话过期处理
+      await loginPage.route('**/api/v1/auth/login', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '需要 2FA 验证',
+            requiresTwoFactor: true,
+            tempToken: 'e2e-temp-token',
+          }),
+        });
+      });
+      await loginPage.route('**/api/v1/auth/login/2fa', async (route) => {
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: '会话已过期，请重新登录。',
+          }),
+        });
+      });
+
       const login = new LoginPage(loginPage);
       await login.login('2fa-enabled-user', 'password');
       await login.expect2FARequired();
@@ -195,6 +217,7 @@ test.describe('认证边缘场景测试', () => {
 
       // 应该返回登录页或显示错误
       await expect(loginPage).toHaveURL(/\/login/, { timeout: 5000 });
+      await login.expectLoginFailure();
     });
   });
 
