@@ -1,6 +1,5 @@
-import { test, expect } from '../fixtures/auth.fixture';
+import { test, expect, TEST_USER } from '../fixtures/auth.fixture';
 import { LoginPage } from '../pages/login.page';
-import { TEST_USER } from '../fixtures/test-data';
 
 test.describe('认证流程测试', () => {
   test.describe('密码登录', () => {
@@ -65,8 +64,20 @@ test.describe('认证流程测试', () => {
 });
 
 test.describe('2FA 流程测试', () => {
-  test.skip('需要 2FA 时显示验证码输入框', async ({ loginPage }) => {
-    // 此测试需要启用了 2FA 的用户账户
+  test('需要 2FA 时显示验证码输入框', async ({ loginPage }) => {
+    // 通过 mock 登录响应，避免依赖真实 2FA 账号配置
+    await loginPage.route('**/api/v1/auth/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          message: '需要 2FA 验证',
+          requiresTwoFactor: true,
+          tempToken: 'e2e-temp-token',
+        }),
+      });
+    });
+
     const login = new LoginPage(loginPage);
     await login.login('2fa-enabled-user', 'password');
     await login.expect2FARequired();
@@ -85,7 +96,20 @@ test.describe('2FA 流程测试', () => {
 });
 
 test.describe('Passkey 流程测试', () => {
-  test.skip('Passkey 按钮可见', async ({ loginPage }) => {
+  test('Passkey 按钮可见', async ({ loginPage }) => {
+    // 通过 mock has-configured 接口，稳定验证按钮显隐逻辑
+    await loginPage.route('**/api/v1/auth/passkey/has-configured**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ hasPasskeys: true }),
+      });
+    });
+
+    // 重新进入登录页以触发 onMounted 检查
+    await loginPage.goto('/login');
+    await loginPage.waitForLoadState('networkidle');
+
     const login = new LoginPage(loginPage);
     await expect(login.passkeyButton).toBeVisible();
   });

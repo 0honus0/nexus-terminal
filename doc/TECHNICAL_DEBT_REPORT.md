@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 68 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 62 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -45,6 +45,10 @@
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。
+- E2E 回补（新增）：
+  - 恢复 `packages/frontend/e2e/tests/auth.spec.ts` 中 2 个用例：
+    - `需要 2FA 时显示验证码输入框`（mock `/api/v1/auth/login` 返回 `requiresTwoFactor`）
+    - `Passkey 按钮可见`（mock `/api/v1/auth/passkey/has-configured` 返回 `hasPasskeys: true`）
 
 ### 本轮未闭环风险（继续跟踪）
 
