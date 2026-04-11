@@ -11,13 +11,13 @@
 
 ### 当前债务总览
 
-| 类别           | 当前状态                 | 说明                                                                 |
-| -------------- | ------------------------ | -------------------------------------------------------------------- |
-| 代码标记债务   | ⚠️ 1 条                  | `packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148` |
-| E2E 测试债务   | ⚠️ 68 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                                 |
-| 运行时安全债务 | 🔴 36 条漏洞             | `critical 0 / high 23 / moderate 11 / low 2`                         |
-| 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）       |
-| 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`                    |
+| 类别           | 当前状态                 | 说明                                                           |
+| -------------- | ------------------------ | -------------------------------------------------------------- |
+| 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
+| E2E 测试债务   | ⚠️ 68 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
+| 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
+| 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
+| 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
 
 ### 与历史口径差异
 
@@ -41,6 +41,7 @@
   - `express-rate-limit` → `^8.3.2`
   - `dompurify` → `^3.3.3`
   - `element-plus` → `^2.13.7`
+  - 根依赖清理：移除未使用的 `plist`
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。
@@ -667,7 +668,7 @@ fi
 **关键指标**：
 
 - ~~当前 TODO 总数：**24 个**~~
-- ⚠️ 当前 TODO 总数：**1 个**（2026-04-11 复查）
+- ✅ 当前 TODO 总数：**0 个**（2026-04-11 第二轮修复）
 - ~~高优先级：**7 个**（需在 2 周内处理）~~
 - ✅ 高优先级：**0 个**（全部已修复）
 - ~~预估总工作量：**约 15-20 人天**~~

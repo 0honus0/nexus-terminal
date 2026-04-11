@@ -10,21 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **技术债务复查（2026-04-11）**：完成一轮基于仓库现状的技术债务重审
-  - **标记扫描**：执行 `rg -n "\b(TODO|FIXME|HACK)\b" packages`，当前代码仅发现 1 处待处理标记（`packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148`）
+  - **标记扫描**：初次复查发现 1 处待处理标记（`packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148`），第二轮修复后 `packages/**` 下 `TODO/FIXME/HACK` 已清零
   - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 68 个 `test.skip`，需分批恢复或明确豁免理由
-  - **文档一致性**：`doc/TECHNICAL_DEBT_REPORT.md` 当前仍展示“TODO 总数 0”，与本轮扫描结果（1 条）不一致，已记录为文档同步债务
+  - **文档一致性**：`doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md` 已同步到最新统计口径
   - **文档同步修复**：已更新 `doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md`，修正“债务清零”与当前存量口径冲突
   - **类型忽略修复**：清理关键后端路径 `@ts-ignore`（`transfers.controller.ts`、`websocket/upgrade.ts`、`sftp-utils.ts`、`sftp.service.ts`）
   - **前端类型补齐**：新增 `guacamole-common-js` 本地类型声明，移除 `RemoteDesktopModal.vue` 与 `VncModal.vue` 中全部 `@ts-ignore`
   - **测试残留清理**：移除调试测试文件 `packages/backend/src/connections/crypto-mock-debug.test.ts`
   - **质量门禁增强**：`.lintstagedrc.js` 对 `*.vue` 增加 `eslint --fix`；`audit.yml` 新增 high/critical 直连依赖摘要与 high 告警
+  - **标记债务清零**：移除 E2E 剩余 TODO 标记，当前 `packages/**` 下 `TODO/FIXME/HACK` 为 0
 
 ### Security
 
 - **依赖安全债务复查（2026-04-11）**：基于 npm 官方源重新执行审计
-  - `npm audit --registry=https://registry.npmjs.org --json`：总计 **98**（critical 0 / high 53 / moderate 43 / low 2）
-  - `npm audit --omit=dev --registry=https://registry.npmjs.org --json`：运行时依赖总计 **36**（critical 0 / high 23 / moderate 11 / low 2）
+  - `npm audit --registry=https://registry.npmjs.org --json`：总计 **93**（critical 0 / high 49 / moderate 42 / low 2）
+  - `npm audit --omit=dev --registry=https://registry.npmjs.org --json`：运行时依赖总计 **32**（critical 0 / high 20 / moderate 10 / low 2）
   - 已完成补丁升级：`axios -> ^1.15.0`、`multer -> ^2.1.1`、`express-rate-limit -> ^8.3.2`、`dompurify -> ^3.3.3`、`element-plus -> ^2.13.7`
+  - 已完成依赖清理：移除根依赖未使用的 `plist`
 
 ### Added
 

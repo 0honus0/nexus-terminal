@@ -55,7 +55,6 @@
     "element-plus": "^2.13.7",
     "fs-extra": "^11.3.0",
     "pinia-plugin-persistedstate": "^4.2.0",
-    "plist": "^3.1.0",
     "vuedraggable": "^4.1.0",
     "ws": "^8.18.1"
   },

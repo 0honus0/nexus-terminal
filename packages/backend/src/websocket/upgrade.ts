@@ -18,7 +18,6 @@ export function initializeUpgradeHandler(
     const safeHeaders = {
       origin: request.headers.origin,
       'user-agent': request.headers['user-agent'],
-      'sec-websocket-key': request.headers['sec-websocket-key'],
       'sec-websocket-version': request.headers['sec-websocket-version'],
       upgrade: request.headers.upgrade,
       connection: request.headers.connection,

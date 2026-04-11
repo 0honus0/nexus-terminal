@@ -642,7 +642,6 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           }
           if (isDev) {
             console.log(`[AuthController] 2FA pendingAuth 已保存到 session`);
-            console.log(`[AuthController] Session ID: ${req.sessionID}`);
             const anyReq = req as any;
             const forwardedProto =
               typeof anyReq.get === 'function'
@@ -761,14 +760,8 @@ export const verifyLogin2FA = async (
       return anyReq.headers?.[headerName];
     };
 
-    console.log(`[AuthController] verifyLogin2FA - Session ID: ${req.sessionID}`);
-    console.log(
-      `[AuthController] verifyLogin2FA - Session Cookie: ${getHeaderValue('Cookie') ?? ''}`
-    );
     console.log(`[AuthController] verifyLogin2FA - Has pendingAuth: ${!!pendingAuth}`);
-    console.log(
-      `[AuthController] verifyLogin2FA - Received tempToken: ${tempToken ? `${tempToken.substring(0, 8)}...` : 'null'}`
-    );
+    console.log(`[AuthController] verifyLogin2FA - Has tempToken: ${!!tempToken}`);
     console.log(
       `[AuthController] verifyLogin2FA - X-Forwarded-Proto: ${getHeaderValue('X-Forwarded-Proto') ?? ''}`
     );

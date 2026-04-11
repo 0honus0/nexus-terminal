@@ -145,8 +145,8 @@ test.describe('文件管理边缘场景测试', () => {
         await fileManager.uploadFile(testFilePath);
         await fileManager.waitForUploadComplete();
 
-        // TODO: 在服务器上设置文件为只读
-        // 这需要后端支持或在 mock SSH 服务器中实现
+        // 当前测试环境暂不支持直接在远端设置只读属性，
+        // 该场景需依赖后端能力或 SSH mock 扩展后再启用。
 
         // 尝试删除
         await fileManager.deleteFile('readonly.txt');
