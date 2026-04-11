@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, watch, nextTick, computed, watchEffect } f
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
-// @ts-ignore - guacamole-common-js 缺少官方类型定义
 import Guacamole from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
 
@@ -26,7 +25,7 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 
 const vncDisplayRef = ref<HTMLDivElement | null>(null);
 const vncContainerRef = ref<HTMLDivElement | null>(null);
-const guacClient = ref<any | null>(null);
+const guacClient = ref<InstanceType<typeof Guacamole.Client> | null>(null);
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 const isResizing = ref(false);
 const resizeStartX = ref(0);
@@ -70,8 +69,8 @@ const sendInputTextToVnc = async () => {
     statusMessage.value = t('vncModal.errors.simulateInputError', { error: err.message });
   }
 };
-const keyboard = ref<any | null>(null);
-const mouse = ref<any | null>(null);
+const keyboard = ref<InstanceType<typeof Guacamole.Keyboard> | null>(null);
+const mouse = ref<InstanceType<typeof Guacamole.Mouse> | null>(null);
 // Initialize desiredModalWidth and desiredModalHeight from store or defaults
 const initialStoreWidth = settingsStore.settings.vncModalWidth
   ? parseInt(settingsStore.settings.vncModalWidth, 10)
@@ -154,7 +153,6 @@ const handleConnection = async () => {
     // We need to ensure width and height are passed for the proxy to correctly forward.
     const tunnelUrl = `${remoteDesktopWsBaseUrl}?token=${encodeURIComponent(token)}&width=${desiredModalWidth.value}&height=${desiredModalHeight.value}`;
 
-    // @ts-ignore
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
 
     tunnel.onerror = (status: any) => {
@@ -165,7 +163,6 @@ const handleConnection = async () => {
       disconnectGuacamole();
     };
 
-    // @ts-ignore
     guacClient.value = new Guacamole.Client(tunnel);
     guacClient.value.keepAliveFrequency = 3000;
 
@@ -260,9 +257,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
   try {
     const currentClipboardText = await navigator.clipboard.readText();
     if (currentClipboardText && guacClient.value) {
-      // @ts-ignore
       const stream = guacClient.value.createClipboardStream('text/plain');
-      // @ts-ignore
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
@@ -312,7 +307,6 @@ const setupInputListeners = () => {
     displayEl.addEventListener('mouseenter', handleMouseEnter);
     displayEl.addEventListener('mouseleave', handleMouseLeave);
 
-    // @ts-ignore
     mouse.value = new Guacamole.Mouse(displayEl);
     const display = guacClient.value.getDisplay();
     display.showCursor(true);
@@ -325,17 +319,15 @@ const setupInputListeners = () => {
       }
     }
 
-    // @ts-ignore
     mouse.value.onmousedown =
       mouse.value.onmouseup =
       mouse.value.onmousemove =
-        (mouseState: any) => {
+        (mouseState) => {
           if (guacClient.value) {
             guacClient.value.sendMouseState(mouseState);
           }
         };
 
-    // @ts-ignore
     keyboard.value = new Guacamole.Keyboard(displayEl);
 
     keyboard.value.onkeydown = (keysym: number) => {

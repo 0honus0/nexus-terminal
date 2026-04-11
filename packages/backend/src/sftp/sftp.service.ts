@@ -18,6 +18,12 @@ import { SftpUploadManager } from './sftp-upload.manager';
 import { SftpArchiveManager } from './sftp-archive.manager';
 import { SftpUtils, type FileListItem } from './sftp-utils';
 
+type MkdirWithRecursive = (
+  path: string,
+  attrs: { recursive?: boolean },
+  callback: (err?: Error | undefined) => void
+) => void;
+
 // +++ Define local interface for readdir results +++
 interface SftpDirEntry {
   filename: string;
@@ -1573,9 +1579,9 @@ export class SftpService {
         try {
           // 3. 尝试递归创建 (ssh2 的 mkdir 支持非标准 recursive 属性)
           // 注意：这可能不适用于所有 SFTP 服务器
+          const mkdirWithRecursive = sftp.mkdir as unknown as MkdirWithRecursive;
           await new Promise<void>((resolveMkdir, rejectMkdir) => {
-            // @ts-ignore - ssh2 types might not include 'recursive' in attributes
-            sftp.mkdir(normalizedPath, { recursive: true }, (mkdirErr) => {
+            mkdirWithRecursive(normalizedPath, { recursive: true }, (mkdirErr) => {
               if (mkdirErr) {
                 // 如果递归创建失败，尝试逐级创建
                 console.warn(

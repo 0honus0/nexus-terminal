@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, watch, nextTick, computed, watchEffect } f
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
-// @ts-ignore - guacamole-common-js 缺少官方类型定义
 import Guacamole from 'guacamole-common-js';
 import apiClient from '../utils/apiClient';
 import { ConnectionInfo } from '../stores/connections.store';
@@ -27,7 +26,7 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 
 const rdpDisplayRef = ref<HTMLDivElement | null>(null);
 const rdpContainerRef = ref<HTMLDivElement | null>(null);
-const guacClient = ref<any | null>(null);
+const guacClient = ref<InstanceType<typeof Guacamole.Client> | null>(null);
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 const isResizing = ref(false);
 const resizeStartX = ref(0);
@@ -35,8 +34,8 @@ const resizeStartY = ref(0);
 const initialModalWidthForResize = ref(0);
 const initialModalHeightForResize = ref(0);
 const statusMessage = ref('');
-const keyboard = ref<any | null>(null);
-const mouse = ref<any | null>(null);
+const keyboard = ref<InstanceType<typeof Guacamole.Keyboard> | null>(null);
+const mouse = ref<InstanceType<typeof Guacamole.Mouse> | null>(null);
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
 
@@ -114,7 +113,6 @@ const handleConnection = async () => {
       throw new Error(`Unsupported connection type: ${props.connection.type}`);
     }
 
-    // @ts-ignore
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
 
     tunnel.onerror = (status: any) => {
@@ -125,7 +123,6 @@ const handleConnection = async () => {
       disconnectGuacamole();
     };
 
-    // @ts-ignore
     guacClient.value = new Guacamole.Client(tunnel);
     guacClient.value.keepAliveFrequency = 3000;
 
@@ -210,9 +207,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
   try {
     const currentClipboardText = await navigator.clipboard.readText();
     if (currentClipboardText && guacClient.value) {
-      // @ts-ignore
       const stream = guacClient.value.createClipboardStream('text/plain');
-      // @ts-ignore
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
@@ -268,7 +263,6 @@ const setupInputListeners = () => {
     displayEl.addEventListener('mouseenter', handleMouseEnter);
     displayEl.addEventListener('mouseleave', handleMouseLeave);
 
-    // @ts-ignore
     mouse.value = new Guacamole.Mouse(displayEl);
 
     const display = guacClient.value.getDisplay();
@@ -289,17 +283,15 @@ const setupInputListeners = () => {
       console.warn('[RDP Modal] Could not get cursor layer to set z-index.');
     }
 
-    // @ts-ignore
     mouse.value.onmousedown =
       mouse.value.onmouseup =
       mouse.value.onmousemove =
-        (mouseState: any) => {
+        (mouseState) => {
           if (guacClient.value) {
             guacClient.value.sendMouseState(mouseState);
           }
         };
 
-    // @ts-ignore
     keyboard.value = new Guacamole.Keyboard(displayEl); // 将监听器附加到 RDP 显示元素
 
     keyboard.value.onkeydown = (keysym: number) => {
@@ -319,10 +311,8 @@ const setupInputListeners = () => {
     displayEl.addEventListener('focus', trySyncClipboardOnDisplayFocus);
 
     // Listen for clipboard data from RDP (RDP -> Host)
-    // @ts-ignore
     guacClient.value.onclipboard = async (stream, mimetype) => {
       if (mimetype === 'text/plain') {
-        // @ts-ignore
         const reader = new Guacamole.StringReader(stream);
         let text = '';
         reader.ontext = (chunk: string) => {
@@ -379,7 +369,6 @@ const removeInputListeners = () => {
   }
   // 清理剪贴板监听器
   if (guacClient.value) {
-    // @ts-ignore
     guacClient.value.onclipboard = null;
   }
 };

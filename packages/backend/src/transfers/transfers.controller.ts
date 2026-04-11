@@ -2,6 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { TransfersService } from './transfers.service';
 import { initiateTransferPayloadSchema } from './transfers.schema';
 
+type SessionWithUserId = Request['session'] & { userId?: number };
+
+function getSessionUserId(req: Request): number | undefined {
+  return (req.session as SessionWithUserId | undefined)?.userId;
+}
+
 export class TransfersController {
   private transfersService: TransfersService;
 
@@ -16,8 +22,7 @@ export class TransfersController {
 
   public async initiateTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore // session可能没有强类型定义，或者userId是可选的
-      const userId = req.session?.userId;
+      const userId = getSessionUserId(req);
       if (!userId) {
         // 此检查是为了双重保险，理论上isAuthenticated中间件会阻止未认证的请求
         res.status(401).json({ message: '用户未认证或会话无效。' });
@@ -47,8 +52,7 @@ export class TransfersController {
 
   public async getAllStatuses(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore
-      const userId = req.session?.userId;
+      const userId = getSessionUserId(req);
       if (!userId) {
         res.status(401).json({ message: '用户未认证或会话无效。' });
         return;
@@ -66,8 +70,7 @@ export class TransfersController {
 
   public async getTaskStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore
-      const userId = req.session?.userId;
+      const userId = getSessionUserId(req);
       if (!userId) {
         res.status(401).json({ message: '用户未认证或会话无效。' });
         return;
@@ -101,8 +104,7 @@ export class TransfersController {
 
   public async cancelTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore
-      const userId = req.session?.userId;
+      const userId = getSessionUserId(req);
       if (!userId) {
         res.status(401).json({ message: '用户未认证或会话无效。' });
         return;

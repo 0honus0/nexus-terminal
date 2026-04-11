@@ -40,15 +40,15 @@
 
 ### 🏗️ 架构重构
 
-- **技术债务清零**：24/24 项技术债务全部修复（100%），P0-P3 优先级全覆盖
-- **类型安全错误处理**：消除 `catch (error: any)` 反模式，29 个文件全面使用 `unknown` 类型
+- **技术债务治理（持续进行）**：历史批次已完成 24/24 项清理；截至 2026-04-11 仍有存量债务（TODO 1 条、E2E `test.skip` 68 条、运行时漏洞 36 条）
+- **类型安全持续治理**：关键路径 `@ts-ignore` 已专项清理，`any` 与弱类型用法仍在分批收敛
 - **SFTP 模块拆分**：将 God Class 拆分为 UploadManager、ArchiveManager、Utils 等职责单一的子模块
 - **Repository 基类抽象**：统一 Repository 层错误处理与日志记录，15+ 文件受益
 - **类型化错误体系**：新增 `DatabaseError`、`ValidationError`、`ExternalServiceError` 等类型安全的错误子类
 
 ### 🧪 测试覆盖
 
-- **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，100% 通过率
+- **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，持续推进 E2E 跳过用例回补
 - **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
 - **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
 - **单元测试**：Backend 72+ 测试文件，Frontend 31+ 测试文件

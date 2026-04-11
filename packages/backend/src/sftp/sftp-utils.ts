@@ -7,6 +7,12 @@ import { SFTPWrapper, Stats } from 'ssh2';
 import * as pathModule from 'path';
 import { getErrorMessage } from '../utils/AppError';
 
+type MkdirWithRecursive = (
+  path: string,
+  attrs: { recursive?: boolean },
+  callback: (err?: Error | undefined) => void
+) => void;
+
 /** SFTP 目录条目 */
 export interface SftpDirEntry {
   filename: string;
@@ -118,9 +124,9 @@ export class SftpUtils {
       const statErrMsg = getErrorMessage(statError);
       if (statErrCode === 'ENOENT' || statErrMsg.includes('No such file')) {
         try {
+          const mkdirWithRecursive = sftp.mkdir as unknown as MkdirWithRecursive;
           await new Promise<void>((resolveMkdir, rejectMkdir) => {
-            // @ts-ignore - ssh2 types might not include 'recursive' in attributes
-            sftp.mkdir(normalizedPath, { recursive: true }, (mkdirErr) => {
+            mkdirWithRecursive(normalizedPath, { recursive: true }, (mkdirErr) => {
               if (mkdirErr) {
                 rejectMkdir(mkdirErr);
               } else {

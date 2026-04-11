@@ -1,9 +1,55 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-01-31
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-11
 > **扫描范围**：packages/backend 和 packages/frontend
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：✅ 代码标记全部修复 (2025-12-24) | ⚠️ 新增安全债务 (2026-01-31)
+> **状态**：⚠️ 存量债务持续治理中（2026-04-11 复查）
+
+---
+
+## 2026-04-11 复查快照
+
+### 当前债务总览
+
+| 类别           | 当前状态                 | 说明                                                                 |
+| -------------- | ------------------------ | -------------------------------------------------------------------- |
+| 代码标记债务   | ⚠️ 1 条                  | `packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148` |
+| E2E 测试债务   | ⚠️ 68 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                                 |
+| 运行时安全债务 | 🔴 36 条漏洞             | `critical 0 / high 23 / moderate 11 / low 2`                         |
+| 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）       |
+| 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`                    |
+
+### 与历史口径差异
+
+- 历史“24/24 技术债务清零”仅覆盖当时 TODO/FIXME 清理批次，不等于当前无存量债务。
+- 目前债务以“测试跳过、运行时漏洞、类型忽略、日志治理”为主，需要持续治理。
+
+### 2026-04-11 已落地修复
+
+- 移除调试测试残留：删除 `packages/backend/src/connections/crypto-mock-debug.test.ts`。
+- 消除关键 `@ts-ignore`：
+  - `packages/backend/src/transfers/transfers.controller.ts`
+  - `packages/backend/src/websocket/upgrade.ts`
+  - `packages/backend/src/sftp/sftp-utils.ts`
+  - `packages/backend/src/sftp/sftp.service.ts`
+- 前端远程桌面类型补齐：
+  - 新增 `packages/frontend/src/types/guacamole-common-js.d.ts`
+  - 清理 `RemoteDesktopModal.vue` 与 `VncModal.vue` 内全部 `@ts-ignore`
+- 依赖安全补丁升级：
+  - `axios` → `^1.15.0`
+  - `multer` → `^2.1.1`
+  - `express-rate-limit` → `^8.3.2`
+  - `dompurify` → `^3.3.3`
+  - `element-plus` → `^2.13.7`
+- 提交门禁增强：
+  - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
+  - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。
+
+### 本轮未闭环风险（继续跟踪）
+
+- 依赖审计仍有运行时 `critical/high` 风险，需按可升级性与兼容性逐批处理。
+- E2E `skip` 数量高，影响回归覆盖率与变更信心。
+- 源码 `any/console.log` 存量较大，需建立分模块治理节奏。
 
 ---
 
@@ -621,7 +667,7 @@ fi
 **关键指标**：
 
 - ~~当前 TODO 总数：**24 个**~~
-- ✅ 当前 TODO 总数：**0 个**
+- ⚠️ 当前 TODO 总数：**1 个**（2026-04-11 复查）
 - ~~高优先级：**7 个**（需在 2 周内处理）~~
 - ✅ 高优先级：**0 个**（全部已修复）
 - ~~预估总工作量：**约 15-20 人天**~~
@@ -632,7 +678,7 @@ fi
 **文档生成时间**：2025-12-23
 **修复完成时间**：2025-12-24
 **负责人**：哈雷酱 (本小姐！)
-**状态**：✅ 代码标记全部修复完成
+**状态**：⚠️ 历史修复批次已完成，当前仍有新增存量债务（见 2026-04-11 复查快照）
 
 ---
 

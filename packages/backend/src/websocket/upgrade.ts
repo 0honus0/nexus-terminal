@@ -89,8 +89,8 @@ export function initializeUpgradeHandler(
 
     console.log(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
 
-    // @ts-ignore Express-session 类型问题
-    sessionParser(request, {} as any, () => {
+    const noopResponse = {} as unknown as Parameters<RequestHandler>[1];
+    sessionParser(request, noopResponse, () => {
       // --- Origin 校验 (CSWSH 防护) ---
       const { origin } = request.headers;
       console.log(`[WebSocket Upgrade] Origin Header: ${origin}`);
