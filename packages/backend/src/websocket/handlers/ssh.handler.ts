@@ -512,7 +512,7 @@ export async function handleSshConnect(
     return;
   }
 
-  console.log(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
+  console.info(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
   if (ws.readyState === WebSocket.OPEN)
     ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' }));
 
@@ -555,7 +555,7 @@ export async function handleSshConnect(
       isShellReady: false,
     };
     clientStates.set(newSessionId, newState);
-    console.log(
+    console.info(
       `WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`
     );
 
@@ -599,7 +599,7 @@ export async function handleSshConnect(
             return;
           }
 
-          console.log(
+          console.info(
             `WebSocket: 会话 ${newSessionId} Shell 打开成功 (尺寸 ${defaultCols}x${defaultRows})。`
           );
           newState.sshShellStream = stream;
@@ -677,7 +677,7 @@ export async function handleSshConnect(
               newSessionId,
               'Shell channel closed before silent command completed.'
             );
-            console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
+            console.info(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
             }
@@ -694,7 +694,7 @@ export async function handleSshConnect(
                 },
               })
             );
-          console.log(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
+          console.info(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
           auditLogService.logAction('SSH_CONNECT_SUCCESS', {
             userId: ws.userId,
             username: ws.username,
@@ -711,10 +711,10 @@ export async function handleSshConnect(
             ip: newState.ipAddress,
           });
 
-          console.log(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
+          console.info(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
           sftpService
             .initializeSftpSession(newSessionId)
-            .then(() => console.log(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
+            .then(() => console.info(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
             .catch((sftpInitError) =>
               console.error(`WebSocket: 会话 ${newSessionId} 异步初始化 SFTP 失败:`, sftpInitError)
             );
@@ -742,7 +742,7 @@ export async function handleSshConnect(
         newSessionId,
         'SSH connection closed before silent command completed.'
       );
-      console.log(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
+      console.info(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
       cleanupClientConnection(newSessionId);
     });
     sshClient.on('error', (err: Error) => {
@@ -823,7 +823,7 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
   }
 
   if (state.isShellReady && state.sshShellStream) {
-    console.log(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
+    console.info(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
     state.sshShellStream.setWindow(rows, cols, 0, 0);
   } else {
     // Store intended size if shell not ready, apply when shell is ready.
