@@ -368,7 +368,7 @@ export const exportConnectionsAsEncryptedZip = async (
       archive
         .finalize()
         .then(() => {
-          console.log('Archiver finalized successfully.');
+          console.info('Archiver finalized successfully.');
           resolve(Buffer.concat(buffers));
         })
         .catch((err) => {
@@ -468,7 +468,7 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
                 encrypted_passphrase: proxyData.encrypted_passphrase || null,
               };
               proxyIdToUse = await ProxyRepository.createProxy(newProxyData);
-              console.log(
+              console.info(
                 `Service: 导入连接 ${connData.name}: 新代理 ${proxyData.name} 创建成功 (ID: ${proxyIdToUse})`
               );
             }
@@ -525,7 +525,7 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
     }
 
     await runDb(db, 'COMMIT');
-    console.log(`Service: 导入事务提交。成功: ${successCount}, 失败: ${failureCount}`);
+    console.info(`Service: 导入事务提交。成功: ${successCount}, 失败: ${failureCount}`);
     return { successCount, failureCount, errors };
   } catch (error: unknown) {
     console.error('Service: 导入事务处理出错，正在回滚:', error);

@@ -15,7 +15,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     if (import.meta.env.DEV) {
-      console.log(`[apiClient Debug] ${config.method?.toUpperCase()} ${config.url}`);
+      console.info(`[apiClient Debug] ${config.method?.toUpperCase()} ${config.url}`);
     }
     // 可以在这里添加逻辑，比如从 store 获取 token 并添加到请求头
     // const authStore = useAuthStore();
@@ -57,7 +57,7 @@ apiClient.interceptors.response.use(
             return Promise.reject(new Error('Unauthorized, logging out.'));
           }
           // 如果用户本来就未认证，可能只是访问了需要登录的接口，暂时不强制跳转
-          console.log('Unauthorized access to protected route.');
+          console.info('Unauthorized access to protected route.');
 
           break;
         case 403: // 禁止访问

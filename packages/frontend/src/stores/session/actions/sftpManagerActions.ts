@@ -25,7 +25,9 @@ export const getOrCreateSftpManager = (
 
   let manager = session.sftpManagers.get(instanceId);
   if (!manager) {
-    console.log(`[SftpManagerActions] 为会话 ${sessionId} 创建新的 SFTP 管理器实例: ${instanceId}`);
+    console.info(
+      `[SftpManagerActions] 为会话 ${sessionId} 创建新的 SFTP 管理器实例: ${instanceId}`
+    );
     const currentSftpPath = ref<string>('.'); // 每个实例有自己的路径
     const wsDeps: WebSocketDependencies = {
       sendMessage: session.wsManager.sendMessage,
@@ -46,7 +48,7 @@ export const removeSftpManager = (sessionId: string, instanceId: string) => {
     if (manager) {
       manager.cleanup();
       session.sftpManagers.delete(instanceId);
-      console.log(
+      console.info(
         `[SftpManagerActions] 已移除并清理会话 ${sessionId} 的 SFTP 管理器实例: ${instanceId}`
       );
     }

@@ -20,7 +20,7 @@ class TelegramSenderService implements INotificationSender {
       try {
         const url = new URL(customDomain); // Validate and parse the custom domain
         baseApiUrl = `${url.protocol}//${url.host}`; // Use protocol and host from customDomain
-        console.log(`[TelegramSender] Using custom domain: ${baseApiUrl}`);
+        console.info(`[TelegramSender] Using custom domain: ${baseApiUrl}`);
       } catch (e: unknown) {
         console.warn(
           `[TelegramSender] Invalid customDomain URL: ${customDomain}. Falling back to default Telegram API. (${getErrorMessage(e)})`
@@ -32,7 +32,7 @@ class TelegramSenderService implements INotificationSender {
     const apiUrl = `${baseApiUrl}/bot${botToken}/sendMessage`;
 
     try {
-      console.log(`[TelegramSender] Sending notification to chat ID: ${chatId}`);
+      console.info(`[TelegramSender] Sending notification to chat ID: ${chatId}`);
       const response = await axios.post(
         apiUrl,
         {
@@ -47,7 +47,7 @@ class TelegramSenderService implements INotificationSender {
       );
 
       if (response.data && response.data.ok) {
-        console.log(`[TelegramSender] Successfully sent notification to chat ID: ${chatId}`);
+        console.info(`[TelegramSender] Successfully sent notification to chat ID: ${chatId}`);
       } else {
         const errorDescription = response.data?.description || 'Unknown error from Telegram API';
         console.error(
