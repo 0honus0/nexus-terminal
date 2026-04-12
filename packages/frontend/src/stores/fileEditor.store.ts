@@ -177,7 +177,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
     try {
       const fileData = await readFile(filePath);
-      console.log(
+      console.info(
         `[文件编辑器 Store] 文件 ${filePath} 原始数据读取成功。后端使用编码: ${fileData.encodingUsed}`
       );
 
@@ -200,7 +200,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       };
       tabs.value.set(tabId, updatedTab);
 
-      console.log(
+      console.info(
         `[文件编辑器 Store] 文件 ${filePath} 内容已解码 (${fileData.encodingUsed}) 并设置到标签页 ${tabId}。`
       );
     } catch (err: unknown) {
@@ -217,7 +217,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
   // 修改：triggerPopup 接收文件信息并存储
   const triggerPopup = (filePath: string, sessionId: string) => {
-    console.log(`[文件编辑器 Store] Triggering popup for ${filePath} in session ${sessionId}.`);
+    console.info(`[文件编辑器 Store] Triggering popup for ${filePath} in session ${sessionId}.`);
     popupFileInfo.value = { filePath, sessionId };
     popupTrigger.value++; // 增加触发器值以通知监听者
   };
@@ -234,7 +234,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     // 在共享模式下，我们仍然需要 sessionId 来构建唯一的 tabId
     // 并与 SFTP 管理器关联
     const tabId = `${sessionId}:${targetFilePath}`; // Tab ID 仍然基于 sessionId 和 filePath 保持唯一性
-    console.log(
+    console.info(
       `[文件编辑器 Store - 共享模式] 尝试打开文件: ${targetFilePath} (会话: ${sessionId}, 实例: ${instanceId}, Tab ID: ${tabId})`
     );
 
@@ -245,7 +245,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
     // 如果标签页已存在，则激活它
     if (tabs.value.has(tabId)) {
-      console.log(`[文件编辑器 Store] 标签页 ${tabId} 已存在，激活它。`);
+      console.info(`[文件编辑器 Store] 标签页 ${tabId} 已存在，激活它。`);
       setActiveTab(tabId);
       // 触发弹窗 (如果设置允许)
       popupTrigger.value++;
@@ -422,7 +422,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     }
     // --- 检查结束 ---
 
-    console.log(
+    console.info(
       `[文件编辑器 Store] 开始保存文件: ${tab.filePath} (Tab ID: ${tab.id}) 使用实例 ${instanceId}`
     ); // 使用解构出的 instanceId
     tab.isSaving = true;
@@ -435,7 +435,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     try {
       // --- 修改：传递 selectedEncoding 给 writeFile ---
       await sftpManager.writeFile(tab.filePath, contentToSave, encodingToUse);
-      console.log(`[文件编辑器 Store] 文件 ${tab.filePath} 使用编码 ${encodingToUse} 保存成功。`);
+      console.info(`[文件编辑器 Store] 文件 ${tab.filePath} 使用编码 ${encodingToUse} 保存成功。`);
       tab.isSaving = false;
       tab.saveStatus = 'success';
       tab.saveError = null;
@@ -475,7 +475,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       );
     }
 
-    console.log(`[文件编辑器 Store] 关闭标签页: ${tabId}`);
+    console.info(`[文件编辑器 Store] 关闭标签页: ${tabId}`);
     tabs.value.delete(tabId);
 
     // 如果关闭的是当前激活的标签页，则切换到另一个标签页
@@ -498,7 +498,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
   // 关闭所有标签页
   const closeAllTabs = () => {
     // 简单处理：直接关闭所有，不检查修改状态（实际应用需要确认）
-    console.log('[文件编辑器 Store] 关闭所有标签页...');
+    console.info('[文件编辑器 Store] 关闭所有标签页...');
     tabs.value.clear();
     activeTabId.value = null;
     // setEditorVisibility('closed'); // 移除：容器可见性由外部控制
@@ -506,7 +506,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
   // +++ 关闭其他标签页 +++
   const closeOtherTabs = (targetTabId: string) => {
-    console.log(
+    console.info(
       `[文件编辑器 Store] closeOtherTabs: Action called. Current keys in tabs map:`,
       Array.from(tabs.value.keys())
     ); // ++ Log current keys at start
@@ -514,11 +514,13 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       console.warn(`[文件编辑器 Store] closeOtherTabs: 目标 ID ${targetTabId} 在 Map 中不存在。`); // Updated warning
       return;
     }
-    console.log(`[文件编辑器 Store] closeOtherTabs: 开始关闭除 ${targetTabId} 之外的所有标签页...`);
+    console.info(
+      `[文件编辑器 Store] closeOtherTabs: 开始关闭除 ${targetTabId} 之外的所有标签页...`
+    );
     const tabsToClose = Array.from(tabs.value.keys()).filter((id) => id !== targetTabId);
-    console.log(`[文件编辑器 Store] closeOtherTabs: 将要关闭的标签页 IDs:`, tabsToClose); // + Log IDs to close
+    console.info(`[文件编辑器 Store] closeOtherTabs: 将要关闭的标签页 IDs:`, tabsToClose); // + Log IDs to close
     tabsToClose.forEach((id) => {
-      console.log(`[文件编辑器 Store] closeOtherTabs: 正在调用 closeTab 关闭 ${id}`); // + Log loop iteration
+      console.info(`[文件编辑器 Store] closeOtherTabs: 正在调用 closeTab 关闭 ${id}`); // + Log loop iteration
       closeTab(id);
     });
   };
@@ -527,7 +529,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
   const closeTabsToTheRight = (targetTabId: string) => {
     const tabsArray = Array.from(tabs.value.values());
     const targetIndex = tabsArray.findIndex((tab) => tab.id === targetTabId);
-    console.log(
+    console.info(
       `[文件编辑器 Store] closeTabsToTheRight: Action called. Current keys in tabs map:`,
       Array.from(tabs.value.keys())
     ); // ++ Log current keys at start
@@ -535,13 +537,13 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       console.warn(`[文件编辑器 Store] closeTabsToTheRight: 目标 ID ${targetTabId} 未找到索引。`);
       return;
     }
-    console.log(
+    console.info(
       `[文件编辑器 Store] closeTabsToTheRight: 开始关闭 ${targetTabId} (索引 ${targetIndex}) 右侧的所有标签页...`
     );
     const tabsToClose = tabsArray.slice(targetIndex + 1).map((tab) => tab.id);
-    console.log(`[文件编辑器 Store] closeTabsToTheRight: 将要关闭的标签页 IDs:`, tabsToClose); // + Log IDs to close
+    console.info(`[文件编辑器 Store] closeTabsToTheRight: 将要关闭的标签页 IDs:`, tabsToClose); // + Log IDs to close
     tabsToClose.forEach((id) => {
-      console.log(`[文件编辑器 Store] closeTabsToTheRight: 正在调用 closeTab 关闭 ${id}`); // + Log loop iteration
+      console.info(`[文件编辑器 Store] closeTabsToTheRight: 正在调用 closeTab 关闭 ${id}`); // + Log loop iteration
       closeTab(id);
     });
   };
@@ -550,7 +552,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
   const closeTabsToTheLeft = (targetTabId: string) => {
     const tabsArray = Array.from(tabs.value.values());
     const targetIndex = tabsArray.findIndex((tab) => tab.id === targetTabId);
-    console.log(
+    console.info(
       `[文件编辑器 Store] closeTabsToTheLeft: Action called. Current keys in tabs map:`,
       Array.from(tabs.value.keys())
     ); // ++ Log current keys at start
@@ -558,13 +560,13 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       console.warn(`[文件编辑器 Store] closeTabsToTheLeft: 目标 ID ${targetTabId} 未找到索引。`);
       return;
     }
-    console.log(
+    console.info(
       `[文件编辑器 Store] closeTabsToTheLeft: 开始关闭 ${targetTabId} (索引 ${targetIndex}) 左侧的所有标签页...`
     );
     const tabsToClose = tabsArray.slice(0, targetIndex).map((tab) => tab.id);
-    console.log(`[文件编辑器 Store] closeTabsToTheLeft: 将要关闭的标签页 IDs:`, tabsToClose); // + Log IDs to close
+    console.info(`[文件编辑器 Store] closeTabsToTheLeft: 将要关闭的标签页 IDs:`, tabsToClose); // + Log IDs to close
     tabsToClose.forEach((id) => {
-      console.log(`[文件编辑器 Store] closeTabsToTheLeft: 正在调用 closeTab 关闭 ${id}`); // + Log loop iteration
+      console.info(`[文件编辑器 Store] closeTabsToTheLeft: 正在调用 closeTab 关闭 ${id}`); // + Log loop iteration
       closeTab(id);
     });
   };
@@ -573,7 +575,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
   const setActiveTab = (tabId: string) => {
     if (tabs.value.has(tabId)) {
       activeTabId.value = tabId;
-      console.log(`[文件编辑器 Store] 激活标签页: ${tabId}`);
+      console.info(`[文件编辑器 Store] 激活标签页: ${tabId}`);
       // 移除：切换标签不应改变容器可见性状态
       // if (editorVisibleState.value === 'closed' || editorVisibleState.value === 'minimized') {
       //     setEditorVisibility('visible');
@@ -613,11 +615,11 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       return;
     }
     if (tab.selectedEncoding === newEncoding) {
-      console.log(`[文件编辑器 Store] 编码已经是 ${newEncoding}，无需更改。`);
+      console.info(`[文件编辑器 Store] 编码已经是 ${newEncoding}，无需更改。`);
       return;
     }
 
-    console.log(
+    console.info(
       `[文件编辑器 Store] 使用新编码 "${newEncoding}" 在前端重新解码文件: ${tab.filePath} (Tab ID: ${tabId})`
     );
 
@@ -639,7 +641,9 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
         // isModified 状态保持不变
       };
       tabs.value.set(tabId, updatedTab);
-      console.log(`[文件编辑器 Store] 文件 ${tab.filePath} 使用新编码 "${newEncoding}" 解码完成。`);
+      console.info(
+        `[文件编辑器 Store] 文件 ${tab.filePath} 使用新编码 "${newEncoding}" 解码完成。`
+      );
     } catch (err: any) {
       // catch 应该在 decodeRawContent 内部处理了，但以防万一
       console.error(
@@ -684,12 +688,12 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       });
 
       if (closedSessionIds.size > 0) {
-        console.log('[文件编辑器 Store] 检测到会话关闭:', Array.from(closedSessionIds));
+        console.info('[文件编辑器 Store] 检测到会话关闭:', Array.from(closedSessionIds));
         const tabsToRemove = Array.from(tabs.value.values()).filter((tab) =>
           closedSessionIds.has(tab.sessionId)
         );
         tabsToRemove.forEach((tab) => {
-          console.log(
+          console.info(
             `[文件编辑器 Store] 移除与已关闭会话 ${tab.sessionId} 相关的标签页: ${tab.id}`
           );
           // 这里不调用 closeTab 以避免潜在的修改提示，直接移除

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **日志治理（第六批，并行）**：`packages/backend/src/settings/settings.service.ts`、`packages/backend/src/sftp/sftp.service.ts`、`packages/backend/src/notifications/notification.service.ts` 将 142 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1167 降至 1025
   - **日志治理（第七批，并行降级执行）**：`packages/frontend/src/stores/layout.store.ts`、`packages/frontend/src/components/FileManager.vue`、`packages/frontend/src/stores/settings.store.ts` 将 124 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1025 降至 901
   - **日志治理（第八批，并行降级执行）**：`packages/frontend/src/stores/session/actions/sshSuspendActions.ts`、`packages/frontend/src/composables/useSftpActions.ts`、`packages/frontend/src/views/WorkspaceView.vue` 将 99 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 901 降至 802
+  - **日志治理（第九批，并行降级执行）**：`packages/frontend/src/stores/session/actions/sessionActions.ts` 与 `packages/frontend/src/stores/fileEditor.store.ts` 将 55 处信息级输出由 `console.log` 统一调整为 `console.info`，`packages/frontend/src/stores/focusSwitcher.store.ts` 仅剩注释日志，`console.log` 存量从 802 降至 747
   - **E2E 回补（第一批）**：恢复 `ssh-connection.spec.ts` 中 4 个用例（命令执行、快捷键、多标签、关闭标签）
   - **E2E 回补（第二批）**：恢复 `auth.spec.ts` 中 2 个用例（2FA 输入框展示、Passkey 按钮展示），通过接口 mock 去除环境依赖
   - **E2E 回补（第三批）**：恢复 `auth-edge-cases.spec.ts` 中 4 个用例（2FA 过期验证码、2FA 格式验证、2FA 连续失败、登录速率限制），并修正 `TEST_USER` 引用来源
