@@ -40,7 +40,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       try {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
-          console.log('[AuditLogStore] Loading dashboard logs from cache.');
+          console.info('[AuditLogStore] Loading dashboard logs from cache.');
           // 仪表盘只关心日志列表，不关心 totalLogs 或 currentPage
           logs.value = JSON.parse(cachedData);
           isLoading.value = false; // 先显示缓存
@@ -70,7 +70,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         ...(sortOrder && { sort_order: sortOrder }),
       };
 
-      console.log(
+      console.info(
         `[AuditLogStore] Fetching logs from server (isDashboard: ${isDashboardRequest}). Params:`,
         params
       );
@@ -84,16 +84,16 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         const currentLogsString = JSON.stringify(logs.value);
 
         if (currentLogsString !== freshLogsString) {
-          console.log('[AuditLogStore] Dashboard logs data changed, updating state and cache.');
+          console.info('[AuditLogStore] Dashboard logs data changed, updating state and cache.');
           logs.value = freshLogs;
           localStorage.setItem(cacheKey, freshLogsString); // 更新缓存
         } else {
-          console.log('[AuditLogStore] Dashboard logs data is up-to-date.');
+          console.info('[AuditLogStore] Dashboard logs data is up-to-date.');
         }
         // 仪表盘请求不更新 totalLogs 或 currentPage
       } else {
         // 非仪表盘请求，直接更新日志和总数
-        console.log('[AuditLogStore] Updating logs for full view.');
+        console.info('[AuditLogStore] Updating logs for full view.');
         logs.value = freshLogs;
         totalLogs.value = freshTotal;
       }

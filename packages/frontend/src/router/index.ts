@@ -85,7 +85,7 @@ router.beforeEach((to, from, next) => {
   // 如果初始化尚未完成，允许导航（让 main.ts 完成初始化后再重定向）
   // 这样可以避免基于不完整的状态做决策，导致 UI 闪烁
   if (!authStore.isInitCompleted) {
-    console.log('路由守卫：初始化尚未完成，允许导航（等待 main.ts 完成初始化）');
+    console.info('路由守卫：初始化尚未完成，允许导航（等待 main.ts 完成初始化）');
     next();
     return;
   }
@@ -95,19 +95,19 @@ router.beforeEach((to, from, next) => {
 
   if (needsSetup && to.name !== 'Setup') {
     // 如果需要设置，但目标不是设置页面，则强制重定向到设置页面
-    console.log('路由守卫：需要初始设置，重定向到 /setup');
+    console.info('路由守卫：需要初始设置，重定向到 /setup');
     next({ name: 'Setup' });
   } else if (!needsSetup && to.name === 'Setup') {
     // 如果不需要设置，但尝试访问设置页面，重定向到登录页或首页
-    console.log('路由守卫：不需要设置，从 /setup 重定向');
+    console.info('路由守卫：不需要设置，从 /setup 重定向');
     next(authStore.isAuthenticated ? { name: 'Dashboard' } : { name: 'Login' });
   } else if (requiresAuth && !authStore.isAuthenticated && !needsSetup) {
     // 如果需要认证、用户未登录且不需要设置，重定向到登录页
-    console.log('路由守卫：未登录，重定向到 /login');
+    console.info('路由守卫：未登录，重定向到 /login');
     next({ name: 'Login' });
   } else if (to.name === 'Login' && authStore.isAuthenticated && !needsSetup) {
     // 如果用户已登录、不需要设置且尝试访问登录页，重定向到仪表盘
-    console.log('路由守卫：已登录，从 /login 重定向到 /');
+    console.info('路由守卫：已登录，从 /login 重定向到 /');
     next({ name: 'Dashboard' });
   } else {
     // 其他情况（例如访问公共页面，或已登录访问需认证页面）允许导航
