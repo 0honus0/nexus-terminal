@@ -266,11 +266,11 @@ const cancelEditingName = () => {
 
 const resumeSession = async (session: SuspendedSshSession) => {
   // 参数类型改为 SuspendedSshSession
-  console.log(
+  console.info(
     `[SuspendedSshSessionsView] Attempting to resume session ID: ${session.suspendSessionId}, Name: ${session.customSuspendName || session.connectionName}`
   );
   // 使用 JSON.parse(JSON.stringify()) 来记录会话对象的一个快照，避免在异步操作后因对象被修改而导致日志不准确
-  console.log(
+  console.info(
     '[SuspendedSshSessionsView] Session details snapshot:',
     JSON.parse(JSON.stringify(session))
   );
@@ -278,7 +278,7 @@ const resumeSession = async (session: SuspendedSshSession) => {
   try {
     // resumeSshSession 返回 Promise<void>，调用完成即表示操作已执行
     await sessionStore.resumeSshSession(session.suspendSessionId);
-    console.log('[SuspendedSshSessionsView] Call to sessionStore.resumeSshSession completed.');
+    console.info('[SuspendedSshSessionsView] Call to sessionStore.resumeSshSession completed.');
   } catch (error) {
     console.error(
       `[SuspendedSshSessionsView] Error during resumeSession for ${session.suspendSessionId}:`,
@@ -301,7 +301,7 @@ const removeSession = (session: SuspendedSshSession) => {
 };
 
 const exportLog = async (session: SuspendedSshSession) => {
-  console.log(
+  console.info(
     `[SuspendedSshSessionsView] Attempting to export log for session ID: ${session.suspendSessionId}`
   );
   await sessionStore.exportSshSessionLog(session.suspendSessionId);
@@ -371,7 +371,7 @@ const ensureConnectionsFetched = async () => {
   // 确保连接列表已加载或正在加载
   // 通常 store 的 fetch 方法会处理重复调用或自行管理加载状态
   try {
-    console.log('[SuspendedSshSessionsView] Ensuring connections are fetched.');
+    console.info('[SuspendedSshSessionsView] Ensuring connections are fetched.');
     await connectionsStore.fetchConnections(); // +++ 获取连接列表 +++
     connectionsPrefetched = true;
   } catch (error) {

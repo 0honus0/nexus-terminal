@@ -154,7 +154,7 @@ const updateSelectWidth = () => {
     // Set the select width (add extra space for dropdown arrow, adjust as needed)
     const arrowPadding = 25; // Increased padding for arrow and visual spacing
     selectElement.style.width = `${textWidth + arrowPadding}px`;
-    // console.log(`[EditorOverlay] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
+    // console.info(`[EditorOverlay] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
   });
 };
 
@@ -340,7 +340,7 @@ const handleCloseTab = (tabId: string) => {
 
 // +++ 处理右键菜单事件 +++
 const handleCloseOtherTabs = (targetTabId: string) => {
-  console.log(`[FileEditorOverlay] handleCloseOtherTabs called for target: ${targetTabId}`); // Add log
+  console.info(`[FileEditorOverlay] handleCloseOtherTabs called for target: ${targetTabId}`); // Add log
   if (shareFileEditorTabsBoolean.value) {
     closeOtherTabs(targetTabId);
   } else {
@@ -354,7 +354,7 @@ const handleCloseOtherTabs = (targetTabId: string) => {
 };
 
 const handleCloseRightTabs = (targetTabId: string) => {
-  console.log(`[FileEditorOverlay] handleCloseRightTabs called for target: ${targetTabId}`); // Add log
+  console.info(`[FileEditorOverlay] handleCloseRightTabs called for target: ${targetTabId}`); // Add log
   if (shareFileEditorTabsBoolean.value) {
     closeTabsToTheRight(targetTabId);
   } else {
@@ -368,7 +368,7 @@ const handleCloseRightTabs = (targetTabId: string) => {
 };
 
 const handleCloseLeftTabs = (targetTabId: string) => {
-  console.log(`[FileEditorOverlay] handleCloseLeftTabs called for target: ${targetTabId}`); // Add log
+  console.info(`[FileEditorOverlay] handleCloseLeftTabs called for target: ${targetTabId}`); // Add log
   if (shareFileEditorTabsBoolean.value) {
     closeTabsToTheLeft(targetTabId); // 修正：调用正确的 action 名称
   } else {
@@ -388,7 +388,7 @@ const handleEncodingChange = (event: Event) => {
   const currentActiveTab = activeTab.value;
 
   if (currentActiveTab && newEncoding && newEncoding !== currentSelectedEncoding.value) {
-    console.log(
+    console.info(
       `[EditorOverlay] Encoding changed to ${newEncoding} for tab ${currentActiveTab.id}`
     );
     if (shareFileEditorTabsBoolean.value) {
@@ -509,7 +509,7 @@ const stopResize = () => {
 // 监听 popupTrigger 的变化来显示弹窗
 watch(popupTrigger, () => {
   if (!showPopupFileEditorBoolean.value || !popupFileInfo.value) {
-    console.log(
+    console.info(
       '[FileEditorOverlay] Popup trigger changed, but overlay is disabled or file info is missing.'
     );
     isVisible.value = false;
@@ -517,7 +517,7 @@ watch(popupTrigger, () => {
   }
 
   const { filePath, sessionId } = popupFileInfo.value;
-  console.log(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
+  console.info(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
 
   isVisible.value = true;
 });
