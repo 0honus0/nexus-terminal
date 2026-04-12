@@ -194,7 +194,7 @@ export function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload: any):
     return;
   }
   const relativePath = payload?.relativePath;
-  console.log(
+  console.info(
     `WebSocket: SFTP Upload Start - Session: ${sessionId}, UploadID: ${payload.uploadId}, RemotePath: ${payload.remotePath}, Size: ${payload.size}, RelativePath: ${relativePath}`
   );
   sftpService.startUpload(
