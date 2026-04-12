@@ -23,7 +23,7 @@ export class CaptchaService {
     const captchaConfig = await settingsService.getCaptchaConfig();
 
     if (!captchaConfig.enabled) {
-      console.log('[CaptchaService] CAPTCHA 未启用，跳过验证。');
+      console.info('[CaptchaService] CAPTCHA 未启用，跳过验证。');
       return true; // 未启用则视为验证通过
     }
 
@@ -39,7 +39,7 @@ export class CaptchaService {
         }
         return this._verifyReCaptcha(token, captchaConfig.recaptchaSecretKey);
       case 'none':
-        console.log('[CaptchaService] CAPTCHA 提供商设置为 "none"，跳过验证。');
+        console.info('[CaptchaService] CAPTCHA 提供商设置为 "none"，跳过验证。');
         return true; // 提供商为 none 也视为通过
       default:
         console.error(`[CaptchaService] 未知的 CAPTCHA 提供商: ${captchaConfig.provider}`);
@@ -68,7 +68,7 @@ export class CaptchaService {
     // 使用一个固定的、已知的无效令牌或一个不太可能有效的测试令牌
     const testToken = 'static_test_token_for_credential_verification_NexusTerminal';
 
-    console.log(
+    console.info(
       `[CaptchaService] 正在验证 ${provider} 凭据 (SiteKey: ${siteKey.substring(0, 5)}...)`
     );
 
@@ -104,7 +104,7 @@ export class CaptchaService {
     isCredentialVerification = false
   ): Promise<boolean> {
     const mode = isCredentialVerification ? '凭据' : '令牌';
-    console.log(`[CaptchaService] 正在验证 hCaptcha ${mode}...`);
+    console.info(`[CaptchaService] 正在验证 hCaptcha ${mode}...`);
     try {
       const params = new URLSearchParams();
       params.append('secret', secretKey);
@@ -118,11 +118,11 @@ export class CaptchaService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      console.log(`[CaptchaService] hCaptcha ${mode}验证响应:`, response.data);
+      console.info(`[CaptchaService] hCaptcha ${mode}验证响应:`, response.data);
       const errorCodes: string[] = response.data['error-codes'] || [];
 
       if (response.data && response.data.success === true) {
-        console.log(`[CaptchaService] hCaptcha ${mode}验证成功。`);
+        console.info(`[CaptchaService] hCaptcha ${mode}验证成功。`);
         return true;
       }
       console.warn(
@@ -192,7 +192,7 @@ export class CaptchaService {
     isCredentialVerification = false
   ): Promise<boolean> {
     const mode = isCredentialVerification ? '凭据' : '令牌';
-    console.log(
+    console.info(
       `[CaptchaService] 正在验证 Google reCAPTCHA ${mode}... (SiteKey: ${siteKey ? `${siteKey.substring(0, 5)}...` : 'N/A'})`
     );
     try {
@@ -206,11 +206,11 @@ export class CaptchaService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      console.log(`[CaptchaService] Google reCAPTCHA ${mode}验证响应:`, response.data);
+      console.info(`[CaptchaService] Google reCAPTCHA ${mode}验证响应:`, response.data);
       const errorCodes: string[] = response.data['error-codes'] || [];
 
       if (response.data && response.data.success === true) {
-        console.log(`[CaptchaService] Google reCAPTCHA ${mode}验证成功。`);
+        console.info(`[CaptchaService] Google reCAPTCHA ${mode}验证成功。`);
         return true;
       }
       console.warn(

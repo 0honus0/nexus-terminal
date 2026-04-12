@@ -160,7 +160,7 @@ export const settingsController = {
     try {
       // +++ 修改：获取请求体并验证其是否符合 FocusSwitcherFullConfig 结构 +++
       const fullConfig = req.body;
-      console.log('[SettingsController] 请求体 fullConfig:', JSON.stringify(fullConfig));
+      console.info('[SettingsController] 请求体 fullConfig:', JSON.stringify(fullConfig));
 
       // +++ 验证 FocusSwitcherFullConfig 结构 +++
       if (
@@ -221,7 +221,7 @@ export const settingsController = {
   async setNavBarVisibility(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { visible } = req.body;
-      console.log('[SettingsController] 请求体 visible:', visible);
+      console.info('[SettingsController] 请求体 visible:', visible);
 
       if (typeof visible !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 visible 格式:', visible);
@@ -347,7 +347,7 @@ export const settingsController = {
   async setAutoCopyOnSelect(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { enabled } = req.body;
-      console.log('[SettingsController] 请求体 enabled:', enabled);
+      console.info('[SettingsController] 请求体 enabled:', enabled);
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
@@ -370,7 +370,7 @@ export const settingsController = {
   async getSidebarConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const config = await settingsService.getSidebarConfig();
-      console.log('[SettingsController] 向客户端发送侧边栏配置:', config);
+      console.info('[SettingsController] 向客户端发送侧边栏配置:', config);
       res.json(config);
     } catch (error: unknown) {
       console.error('[SettingsController] 获取侧栏配置时出错:', error);
@@ -384,7 +384,7 @@ export const settingsController = {
   async setSidebarConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const configDto: UpdateSidebarConfigDto = req.body;
-      console.log('[SettingsController] 请求体:', configDto);
+      console.info('[SettingsController] 请求体:', configDto);
 
       // --- DTO Validation (Basic) ---
       // More specific validation happens in the service layer
@@ -428,7 +428,7 @@ export const settingsController = {
         recaptchaSiteKey: fullConfig.recaptchaSiteKey,
       };
 
-      console.log('[SettingsController] 向客户端发送公共 CAPTCHA 配置:', publicConfig);
+      console.info('[SettingsController] 向客户端发送公共 CAPTCHA 配置:', publicConfig);
       res.json(publicConfig);
     } catch (error: unknown) {
       console.error('[SettingsController] 获取 CAPTCHA 配置时出错:', error);
@@ -442,7 +442,7 @@ export const settingsController = {
   async setCaptchaConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const configDto: UpdateCaptchaSettingsDto = req.body;
-      console.log('[SettingsController] 请求体 (DTO, 密钥已屏蔽):', {
+      console.info('[SettingsController] 请求体 (DTO, 密钥已屏蔽):', {
         ...configDto,
         hcaptchaSecretKey: '***',
         recaptchaSecretKey: '***',
@@ -483,7 +483,7 @@ export const settingsController = {
   async setShowConnectionTags(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { enabled } = req.body;
-      console.log('[SettingsController] 请求体 enabled:', enabled);
+      console.info('[SettingsController] 请求体 enabled:', enabled);
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
@@ -519,7 +519,7 @@ export const settingsController = {
   async setShowQuickCommandTags(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { enabled } = req.body;
-      console.log('[SettingsController] 请求体 enabled:', enabled);
+      console.info('[SettingsController] 请求体 enabled:', enabled);
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
@@ -563,7 +563,7 @@ export const settingsController = {
   ): Promise<void> {
     try {
       const { enabled } = req.body;
-      console.log('[SettingsController] 请求体 enabled:', enabled);
+      console.info('[SettingsController] 请求体 enabled:', enabled);
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);

@@ -77,7 +77,7 @@ export function useFileUploader(
         if (!isLast) {
           nextTick(readNextChunk);
         } else {
-          console.log(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
+          console.info(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
         }
       } else {
         console.error(
@@ -114,7 +114,7 @@ export function useFileUploader(
       readNextChunk();
     } else {
       // 立即处理零字节文件
-      console.log(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
+      console.info(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
       // Send chunkIndex 0 for zero-byte file
       wsDeps.value.sendMessage({
         type: 'sftp:upload:chunk',
@@ -156,7 +156,7 @@ export function useFileUploader(
     }
     // 规范化路径，移除多余的斜杠 e.g. /root//dir -> /root/dir
     finalRemotePath = finalRemotePath.replace(/\/+/g, '/');
-    console.log(
+    console.info(
       `[FileUploader ${sessionIdForLog.value}] Calculated finalRemotePath: ${finalRemotePath} (current: ${currentPathRef.value}, relative: ${relativePath}, filename: ${file.name}) // wsDeps.isSftpReady: ${wsDeps.value.isSftpReady.value}`
     );
     // --- 结束修正 ---
@@ -170,7 +170,7 @@ export function useFileUploader(
       status: 'pending', // 初始状态
     };
 
-    console.log(
+    console.info(
       `[FileUploader ${sessionIdForLog.value}] Starting upload ${uploadId} to ${finalRemotePath}`
     );
     wsDeps.value.sendMessage({
@@ -188,7 +188,7 @@ export function useFileUploader(
   const cancelUpload = (uploadId: string, notifyBackend = true) => {
     const upload = uploads[uploadId];
     if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
-      console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
+      console.info(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
       upload.status = 'cancelled'; // 立即更新状态
 
       if (notifyBackend && wsDeps.value.isConnected.value) {
@@ -212,7 +212,7 @@ export function useFileUploader(
 
     const upload = uploads[uploadId];
     if (upload && upload.status === 'pending') {
-      console.log(
+      console.info(
         `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} ready, starting chunk sending.`
       );
       upload.status = 'uploading';
@@ -230,7 +230,7 @@ export function useFileUploader(
 
     const upload = uploads[uploadId];
     if (upload) {
-      console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
+      console.info(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
       upload.status = 'success';
       upload.progress = 100;
 
@@ -286,7 +286,7 @@ export function useFileUploader(
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload && upload.status === 'uploading') {
-      console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused.`);
+      console.info(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused.`);
       upload.status = 'paused';
     }
   };
@@ -296,7 +296,7 @@ export function useFileUploader(
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload && upload.status === 'paused') {
-      console.log(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
+      console.info(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
       upload.status = 'uploading';
       sendFileChunks(uploadId, upload.file);
     }
