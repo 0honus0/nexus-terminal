@@ -159,23 +159,33 @@ test.describe('SSH 连接测试', () => {
   });
 
   test.describe('连接状态', () => {
-    test.skip('连接断开后显示断开状态', async ({ authenticatedPage }) => {
+    test('连接断开后显示断开状态', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       await workspace.goto();
-      await workspace.connectToServer('Test Server');
+      const connected = await connectFirstVisibleConnection(authenticatedPage, workspace);
+      expect(connected).toBeTruthy();
 
-      // 模拟网络断开
-      await authenticatedPage.context().setOffline(true);
+      try {
+        await authenticatedPage.context().setOffline(true);
+        await authenticatedPage.waitForTimeout(3000);
 
-      // 应该显示断开状态
-      await expect(
-        authenticatedPage.locator('.connection-status-disconnected, [data-status="disconnected"]')
-      ).toBeVisible({
-        timeout: 30000,
-      });
+        const disconnectedState = await authenticatedPage
+          .locator('.connection-status-disconnected, [data-status="disconnected"]')
+          .isVisible({ timeout: 10000 })
+          .catch(() => false);
+        const disconnectedHint = await authenticatedPage
+          .locator('text=/断开|重连|disconnected|reconnect/i')
+          .first()
+          .isVisible({ timeout: 3000 })
+          .catch(() => false);
 
-      // 恢复网络
-      await authenticatedPage.context().setOffline(false);
+        expect(disconnectedState || disconnectedHint).toBeTruthy();
+      } finally {
+        await authenticatedPage
+          .context()
+          .setOffline(false)
+          .catch(() => undefined);
+      }
     });
   });
 });
