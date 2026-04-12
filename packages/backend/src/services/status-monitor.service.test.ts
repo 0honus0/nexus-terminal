@@ -290,7 +290,7 @@ describe('StatusMonitorService', () => {
       };
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           const output = Object.entries(execResults).find(([key]) => cmd.includes(key))?.[1] || '';
           const stream = createMockStream(output);
@@ -328,7 +328,7 @@ describe('StatusMonitorService', () => {
       };
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           const output = Object.entries(execResults).find(([key]) => cmd.includes(key))?.[1] || '';
           const stream = createMockStream(output);
@@ -368,7 +368,7 @@ describe('StatusMonitorService', () => {
       };
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           const output = Object.entries(execResults).find(([key]) => cmd.includes(key))?.[1] || '';
           const stream = createMockStream(output);
@@ -401,7 +401,7 @@ describe('StatusMonitorService', () => {
       ];
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           let output = '';
 
@@ -448,7 +448,7 @@ describe('StatusMonitorService', () => {
       };
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           const output = Object.entries(execResults).find(([key]) => cmd.includes(key))?.[1] || '';
           const stream = createMockStream(output);
@@ -488,7 +488,7 @@ describe('StatusMonitorService', () => {
       };
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           const output = Object.entries(execResults).find(([key]) => cmd.includes(key))?.[1] || '';
           const stream = createMockStream(output);
@@ -515,7 +515,7 @@ describe('StatusMonitorService', () => {
     it('命令执行超时应正确处理', async () => {
       const mockClient = createMockSshClient();
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           // 模拟超时 - 不调用 callback
           // 实际测试中这会导致 Promise 永远 pending
@@ -551,7 +551,7 @@ describe('StatusMonitorService', () => {
       };
 
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: any, callback?: Function) => {
+        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
           const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
           const output = Object.entries(execResults).find(([key]) => cmd.includes(key))?.[1] || '';
           const stream = createMockStream(output);

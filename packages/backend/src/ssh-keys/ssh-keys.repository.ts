@@ -120,10 +120,10 @@ export const updateSshKey = async (id: number, data: UpdateSshKeyData): Promise<
     .filter(([_, value]) => value !== undefined)
     .reduce(
       (obj, [key, value]) => {
-        (obj as any)[key] = value;
+        obj[key] = value;
         return obj;
       },
-      {} as { [key: string]: any }
+      {} as Record<string, unknown>
     ); // Type assertion for index signature
 
   if (Object.keys(fieldsToUpdate).length === 0) {

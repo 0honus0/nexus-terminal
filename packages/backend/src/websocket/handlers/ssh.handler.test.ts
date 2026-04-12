@@ -96,7 +96,7 @@ function createMockWebSocket(
 }
 
 // Helper to create mock Request
-function createMockRequest(clientIp: string = '127.0.0.1'): any {
+function createMockRequest(clientIp: string = '127.0.0.1'): unknown {
   return {
     clientIpAddress: clientIp,
   };
@@ -104,7 +104,7 @@ function createMockRequest(clientIp: string = '127.0.0.1'): any {
 
 describe('SSH WebSocket Handler', () => {
   let mockWs: AuthenticatedWebSocket;
-  let mockRequest: any;
+  let mockRequest: unknown;
   let mockSshClient: MockSshClient;
   let mockShellStream: MockShellStream;
 
@@ -418,8 +418,8 @@ describe('SSH WebSocket Handler', () => {
       expect(message.payload.output).toContain('/home/test');
 
       const outputMessages = (mockWs.send as any).mock.calls
-        .map((call: any[]) => JSON.parse(call[0]))
-        .filter((msg: any) => msg.type === 'ssh:output');
+        .map((call: unknown[]) => JSON.parse(call[0]))
+        .filter((msg: unknown) => msg.type === 'ssh:output');
       expect(outputMessages).toHaveLength(0);
     });
 
@@ -486,9 +486,11 @@ describe('SSH WebSocket Handler', () => {
         Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\nuser@host:~$ `)
       );
 
-      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
-      const resultMessage = messages.find((msg: any) => msg.type === 'ssh:exec_silent:result');
-      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+      const messages = (mockWs.send as any).mock.calls.map((call: unknown[]) =>
+        JSON.parse(call[0])
+      );
+      const resultMessage = messages.find((msg: unknown) => msg.type === 'ssh:exec_silent:result');
+      const outputMessage = messages.find((msg: unknown) => msg.type === 'ssh:output');
 
       expect(resultMessage.requestId).toBe('req-silent-1b');
       expect(resultMessage.payload.output).toContain('/home/test');
@@ -512,9 +514,11 @@ describe('SSH WebSocket Handler', () => {
         Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\nuser@host:~$ `)
       );
 
-      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
-      const resultMessage = messages.find((msg: any) => msg.type === 'ssh:exec_silent:result');
-      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+      const messages = (mockWs.send as any).mock.calls.map((call: unknown[]) =>
+        JSON.parse(call[0])
+      );
+      const resultMessage = messages.find((msg: unknown) => msg.type === 'ssh:exec_silent:result');
+      const outputMessage = messages.find((msg: unknown) => msg.type === 'ssh:output');
 
       expect(resultMessage.requestId).toBe('req-silent-no-prompt-echo');
       expect(resultMessage.payload.output).toContain('/home/test');
@@ -535,9 +539,11 @@ describe('SSH WebSocket Handler', () => {
       mockShellStream.emit('data', Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\n`));
       mockShellStream.emit('data', Buffer.from('user@host:~$ '));
 
-      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
-      const resultMessage = messages.find((msg: any) => msg.type === 'ssh:exec_silent:result');
-      const outputMessages = messages.filter((msg: any) => msg.type === 'ssh:output');
+      const messages = (mockWs.send as any).mock.calls.map((call: unknown[]) =>
+        JSON.parse(call[0])
+      );
+      const resultMessage = messages.find((msg: unknown) => msg.type === 'ssh:exec_silent:result');
+      const outputMessages = messages.filter((msg: unknown) => msg.type === 'ssh:output');
 
       expect(resultMessage.requestId).toBe('req-silent-no-prompt-next-chunk');
       expect(resultMessage.payload.output).toContain('/home/test');
@@ -558,8 +564,10 @@ describe('SSH WebSocket Handler', () => {
       mockShellStream.emit('data', Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\n`));
       mockShellStream.emit('data', Buffer.from('file changed\n'));
 
-      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
-      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+      const messages = (mockWs.send as any).mock.calls.map((call: unknown[]) =>
+        JSON.parse(call[0])
+      );
+      const outputMessage = messages.find((msg: unknown) => msg.type === 'ssh:output');
 
       expect(outputMessage).toBeTruthy();
       expect(Buffer.from(outputMessage.payload, 'base64').toString('utf8')).toBe('file changed\n');
@@ -578,8 +586,10 @@ describe('SSH WebSocket Handler', () => {
         Buffer.from(`${startMarker}\npwd\n/home/test\n${endMarker}\n${tail}`)
       );
 
-      const messages = (mockWs.send as any).mock.calls.map((call: any[]) => JSON.parse(call[0]));
-      const outputMessage = messages.find((msg: any) => msg.type === 'ssh:output');
+      const messages = (mockWs.send as any).mock.calls.map((call: unknown[]) =>
+        JSON.parse(call[0])
+      );
+      const outputMessage = messages.find((msg: unknown) => msg.type === 'ssh:output');
       expect(outputMessage).toBeTruthy();
       expect(Buffer.from(outputMessage.payload, 'base64').toString('utf8')).toBe(tail);
     });

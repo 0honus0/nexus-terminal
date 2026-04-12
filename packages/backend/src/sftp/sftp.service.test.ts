@@ -138,7 +138,7 @@ describe('SftpService', () => {
       };
       clientStates.set(sessionId, stateWithoutSftp);
 
-      mockSshClient.sftp.mockImplementation((callback: any) => {
+      mockSshClient.sftp.mockImplementation((callback: unknown) => {
         callback(null, mockSftp);
       });
 
@@ -177,7 +177,7 @@ describe('SftpService', () => {
       };
       clientStates.set(sessionId, stateWithoutSftp);
 
-      mockSshClient.sftp.mockImplementation((callback: any) => {
+      mockSshClient.sftp.mockImplementation((callback: unknown) => {
         callback(new Error('SFTP 初始化失败'));
       });
 
@@ -246,7 +246,7 @@ describe('SftpService', () => {
         },
       ];
 
-      mockSftp.readdir.mockImplementation((path: string, callback: any) => {
+      mockSftp.readdir.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockList);
       });
 
@@ -269,7 +269,7 @@ describe('SftpService', () => {
     });
 
     it('读取失败时应发送错误消息', async () => {
-      mockSftp.readdir.mockImplementation((path: string, callback: any) => {
+      mockSftp.readdir.mockImplementation((path: string, callback: unknown) => {
         callback(new Error('Permission denied'));
       });
 
@@ -295,7 +295,7 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
 
@@ -318,7 +318,7 @@ describe('SftpService', () => {
     });
 
     it('获取状态失败时应发送错误', async () => {
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(new Error('No such file'));
       });
 
@@ -424,7 +424,7 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
       mockSftp.createWriteStream.mockReturnValue(mockWriteStream);
@@ -454,7 +454,7 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
       mockSftp.createWriteStream.mockReturnValue(mockWriteStream);
@@ -485,7 +485,7 @@ describe('SftpService', () => {
     it('写入流错误时应发送错误消息', async () => {
       const mockWriteStream = new MockWriteStream();
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(new Error('Not found')); // 文件不存在，继续写入
       });
       mockSftp.createWriteStream.mockReturnValue(mockWriteStream);
@@ -521,10 +521,10 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.mkdir.mockImplementation((path: string, callback: any) => {
+      mockSftp.mkdir.mockImplementation((path: string, callback: unknown) => {
         callback(null);
       });
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
 
@@ -547,7 +547,7 @@ describe('SftpService', () => {
     });
 
     it('创建目录失败时应发送错误', async () => {
-      mockSftp.mkdir.mockImplementation((path: string, callback: any) => {
+      mockSftp.mkdir.mockImplementation((path: string, callback: unknown) => {
         callback(new Error('Directory already exists'));
       });
 
@@ -564,7 +564,7 @@ describe('SftpService', () => {
       const mockStream = new EventEmitter() as any;
       mockStream.stderr = new EventEmitter();
 
-      mockSshClient.exec.mockImplementation((cmd: string, callback: any) => {
+      mockSshClient.exec.mockImplementation((cmd: string, callback: unknown) => {
         callback(null, mockStream);
         setTimeout(() => {
           mockStream.emit('close', 0, null);
@@ -598,7 +598,7 @@ describe('SftpService', () => {
       const mockStream = new EventEmitter() as any;
       mockStream.stderr = new EventEmitter();
 
-      mockSshClient.exec.mockImplementation((cmd: string, callback: any) => {
+      mockSshClient.exec.mockImplementation((cmd: string, callback: unknown) => {
         callback(null, mockStream);
         setTimeout(() => {
           mockStream.stderr.emit('data', Buffer.from('Permission denied'));
@@ -618,7 +618,7 @@ describe('SftpService', () => {
     const testPath = '/home/user/file.txt';
 
     it('应成功删除文件', async () => {
-      mockSftp.unlink.mockImplementation((path: string, callback: any) => {
+      mockSftp.unlink.mockImplementation((path: string, callback: unknown) => {
         callback(null);
       });
 
@@ -641,7 +641,7 @@ describe('SftpService', () => {
     });
 
     it('删除失败时应发送错误', async () => {
-      mockSftp.unlink.mockImplementation((path: string, callback: any) => {
+      mockSftp.unlink.mockImplementation((path: string, callback: unknown) => {
         callback(new Error('No such file'));
       });
 
@@ -668,10 +668,10 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.rename.mockImplementation((old: string, newP: string, callback: any) => {
+      mockSftp.rename.mockImplementation((old: string, newP: string, callback: unknown) => {
         callback(null);
       });
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
 
@@ -694,7 +694,7 @@ describe('SftpService', () => {
     });
 
     it('重命名失败时应发送错误', async () => {
-      mockSftp.rename.mockImplementation((old: string, newP: string, callback: any) => {
+      mockSftp.rename.mockImplementation((old: string, newP: string, callback: unknown) => {
         callback(new Error('Permission denied'));
       });
 
@@ -721,10 +721,10 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.chmod.mockImplementation((path: string, mode: number, callback: any) => {
+      mockSftp.chmod.mockImplementation((path: string, mode: number, callback: unknown) => {
         callback(null);
       });
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
 
@@ -747,7 +747,7 @@ describe('SftpService', () => {
     });
 
     it('修改权限失败时应发送错误', async () => {
-      mockSftp.chmod.mockImplementation((path: string, mode: number, callback: any) => {
+      mockSftp.chmod.mockImplementation((path: string, mode: number, callback: unknown) => {
         callback(new Error('Operation not permitted'));
       });
 
@@ -774,10 +774,10 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.realpath.mockImplementation((path: string, callback: any) => {
+      mockSftp.realpath.mockImplementation((path: string, callback: unknown) => {
         callback(null, resolvedPath);
       });
-      mockSftp.stat.mockImplementation((path: string, callback: any) => {
+      mockSftp.stat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
 
@@ -800,7 +800,7 @@ describe('SftpService', () => {
     });
 
     it('路径解析失败时应发送错误', async () => {
-      mockSftp.realpath.mockImplementation((path: string, callback: any) => {
+      mockSftp.realpath.mockImplementation((path: string, callback: unknown) => {
         callback(new Error('No such file or directory'));
       });
 
@@ -830,7 +830,7 @@ describe('SftpService', () => {
       const mockReadStream = new MockReadStream();
       const mockWriteStream = new MockWriteStream();
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
       mockSftp.createReadStream.mockReturnValue(mockReadStream);
@@ -873,7 +873,7 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats);
       });
 
@@ -904,7 +904,7 @@ describe('SftpService', () => {
       // 第二次 lstat: 检查目标文件不存在 (应抛出 ENOENT)
       // 第三次 lstat: 移动后获取状态
       let lstatCallCount = 0;
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         lstatCallCount++;
         if (path.includes('archive/file1.txt') && lstatCallCount === 2) {
           // 目标文件不存在
@@ -916,7 +916,7 @@ describe('SftpService', () => {
         }
       });
 
-      mockSftp.rename.mockImplementation((old: string, newP: string, callback: any) => {
+      mockSftp.rename.mockImplementation((old: string, newP: string, callback: unknown) => {
         callback(null);
       });
 
@@ -951,7 +951,7 @@ describe('SftpService', () => {
         isSymbolicLink: () => false,
       };
 
-      mockSftp.lstat.mockImplementation((path: string, callback: any) => {
+      mockSftp.lstat.mockImplementation((path: string, callback: unknown) => {
         callback(null, mockStats); // 目标文件存在
       });
 
@@ -971,7 +971,7 @@ describe('SftpService', () => {
       mockStream.stderr = new EventEmitter();
 
       // 模拟命令存在检查
-      mockSshClient.exec.mockImplementation((cmd: string, callback: any) => {
+      mockSshClient.exec.mockImplementation((cmd: string, callback: unknown) => {
         callback(null, mockStream);
         setTimeout(() => {
           mockStream.emit('close', 0, null);
@@ -1017,7 +1017,7 @@ describe('SftpService', () => {
       const mockStream = new EventEmitter() as any;
       mockStream.stderr = new EventEmitter();
 
-      mockSshClient.exec.mockImplementation((cmd: string, callback: any) => {
+      mockSshClient.exec.mockImplementation((cmd: string, callback: unknown) => {
         callback(null, mockStream);
         setTimeout(() => {
           mockStream.emit('close', 0, null);
@@ -1068,10 +1068,10 @@ describe('SftpService', () => {
       const mockWriteStream = new MockWriteStream();
       const openHandle = {};
 
-      mockSftp.open.mockImplementation((path: string, flags: string, callback: any) => {
+      mockSftp.open.mockImplementation((path: string, flags: string, callback: unknown) => {
         callback(null, openHandle);
       });
-      mockSftp.close.mockImplementation((handle: any, callback: any) => {
+      mockSftp.close.mockImplementation((handle: unknown, callback: unknown) => {
         callback(null);
       });
       mockSftp.createWriteStream.mockReturnValue(mockWriteStream);
@@ -1094,7 +1094,7 @@ describe('SftpService', () => {
     });
 
     it('文件不可写时应发送错误', async () => {
-      mockSftp.open.mockImplementation((path: string, flags: string, callback: any) => {
+      mockSftp.open.mockImplementation((path: string, flags: string, callback: unknown) => {
         callback(new Error('Permission denied'));
       });
 

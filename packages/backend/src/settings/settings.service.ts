@@ -178,14 +178,14 @@ export const settingsService = {
           typeof config === 'object' &&
           config !== null &&
           Array.isArray(config.sequence) &&
-          config.sequence.every((item: any) => typeof item === 'string') &&
+          config.sequence.every((item: unknown) => typeof item === 'string') &&
           typeof config.shortcuts === 'object' &&
           config.shortcuts !== null &&
           Object.values(config.shortcuts).every(
-            (sc: any) =>
+            (sc: unknown) =>
               typeof sc === 'object' &&
               sc !== null &&
-              (sc.shortcut === undefined || typeof sc.shortcut === 'string')
+              (!('shortcut' in sc) || typeof (sc as { shortcut?: unknown }).shortcut === 'string')
           )
         ) {
           console.info(
@@ -226,14 +226,14 @@ export const settingsService = {
         typeof fullConfig === 'object' &&
         fullConfig !== null &&
         Array.isArray(fullConfig.sequence) &&
-        fullConfig.sequence.every((item: any) => typeof item === 'string') &&
+        fullConfig.sequence.every((item: unknown) => typeof item === 'string') &&
         typeof fullConfig.shortcuts === 'object' &&
         fullConfig.shortcuts !== null &&
         Object.values(fullConfig.shortcuts).every(
-          (sc: any) =>
+          (sc: unknown) =>
             typeof sc === 'object' &&
             sc !== null &&
-            (sc.shortcut === undefined || typeof sc.shortcut === 'string')
+            (!('shortcut' in sc) || typeof (sc as { shortcut?: unknown }).shortcut === 'string')
         )
       )
     ) {
@@ -549,7 +549,7 @@ export const settingsService = {
       'batchExec',
     ]);
 
-    const validatePaneArray = (arr: any[], side: string) => {
+    const validatePaneArray = (arr: unknown[], side: string) => {
       if (!arr.every((item) => typeof item === 'string' && validPaneNames.has(item as PaneName))) {
         const invalidItems = arr.filter(
           (item) => typeof item !== 'string' || !validPaneNames.has(item as PaneName)
