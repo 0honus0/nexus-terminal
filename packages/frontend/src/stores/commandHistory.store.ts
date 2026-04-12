@@ -79,7 +79,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
     // 2. 后台获取最新数据
     isLoading.value = true; // 标记正在后台获取
     try {
-      console.log('[CmdHistoryStore] Fetching latest history from server...');
+      console.info('[CmdHistoryStore] Fetching latest history from server...');
       const response = await apiClient.get<CommandHistoryEntryBE[]>('/command-history');
       // 后端返回升序，前端需要降序
       const freshData = response.data.reverse();
@@ -88,11 +88,11 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       // 3. 对比并更新
       const currentDataString = JSON.stringify(historyList.value);
       if (currentDataString !== freshDataString) {
-        console.log('[CmdHistoryStore] History data changed, updating state and cache.');
+        console.info('[CmdHistoryStore] History data changed, updating state and cache.');
         historyList.value = freshData;
         localStorage.setItem(cacheKey, freshDataString); // 更新缓存 (存降序)
       } else {
-        console.log('[CmdHistoryStore] History data is up-to-date.');
+        console.info('[CmdHistoryStore] History data is up-to-date.');
       }
       error.value = null; // 清除错误
     } catch (err: any) {
@@ -109,7 +109,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
   const addCommand = async (command: string) => {
     //  Filter out Ctrl+C signal (\x03) from being added to history
     if (command === '\x03') {
-      console.log('[CmdHistoryStore] Ignoring Ctrl+C signal for history.');
+      console.info('[CmdHistoryStore] Ignoring Ctrl+C signal for history.');
       return;
     }
     if (!command || command.trim().length === 0) {

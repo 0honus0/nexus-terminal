@@ -25,7 +25,7 @@ export function registerUserSocket(userId: number, ws: AuthenticatedWebSocket): 
     userSockets.set(userId, new Set());
   }
   userSockets.get(userId)!.add(ws);
-  console.log(
+  console.info(
     `[WebSocket 状态] 用户 ${userId} 的连接已注册，当前连接数: ${userSockets.get(userId)!.size}`
   );
 }
@@ -42,9 +42,9 @@ export function unregisterUserSocket(userId: number, ws: AuthenticatedWebSocket)
     sockets.delete(ws);
     if (sockets.size === 0) {
       userSockets.delete(userId);
-      console.log(`[WebSocket 状态] 用户 ${userId} 的所有连接已断开，已清理映射。`);
+      console.info(`[WebSocket 状态] 用户 ${userId} 的所有连接已断开，已清理映射。`);
     } else {
-      console.log(`[WebSocket 状态] 用户 ${userId} 的一个连接已断开，剩余连接数: ${sockets.size}`);
+      console.info(`[WebSocket 状态] 用户 ${userId} 的一个连接已断开，剩余连接数: ${sockets.size}`);
     }
   }
 }
@@ -87,7 +87,7 @@ export function broadcastToUser(userId: number, message: any): number {
   // 清理死连接
   if (deadSockets.length > 0) {
     deadSockets.forEach((ws) => sockets.delete(ws));
-    console.log(`[WebSocket 广播] 已清理用户 ${userId} 的 ${deadSockets.length} 个死连接。`);
+    console.info(`[WebSocket 广播] 已清理用户 ${userId} 的 ${deadSockets.length} 个死连接。`);
 
     // 如果所有连接都已死亡，清理整个映射
     if (sockets.size === 0) {
@@ -95,7 +95,7 @@ export function broadcastToUser(userId: number, message: any): number {
     }
   }
 
-  console.log(
+  console.info(
     `[WebSocket 广播] 已向用户 ${userId} 的 ${successCount}/${sockets.size + deadSockets.length} 个连接发送消息。`
   );
   return successCount;
