@@ -363,14 +363,14 @@ export const initializePresetThemes = async (
     Omit<TerminalTheme, '_id' | 'createdAt' | 'updatedAt' | 'isSystemDefault'> & { name: string }
   >
 ) => {
-  console.log('[DB Init] 开始检查并初始化预设主题...');
+  console.info('[DB Init] 开始检查并初始化预设主题...');
   // 在这里添加日志，显示总共要处理多少个预设主题
-  console.log(`[DB Init] 发现 ${presets.length} 个预设主题定义。`);
+  console.info(`[DB Init] 发现 ${presets.length} 个预设主题定义。`);
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   for (const preset of presets) {
     // 在循环开始时添加日志，显示正在处理哪个主题
-    // console.log(`[DB Init] 正在处理预设主题: "${preset.name}"`);
+    // console.info(`[DB Init] 正在处理预设主题: "${preset.name}"`);
     try {
       const existing = await getDb<{ id: number }>(
         db,
@@ -441,13 +441,13 @@ export const initializePresetThemes = async (
                     VALUES (${placeholders})
                 `;
         await runDb(db, insertSql, values);
-        // console.log(`[DB Init] 预设主题 "${preset.name}" 已初始化到数据库。`);
+        // console.info(`[DB Init] 预设主题 "${preset.name}" 已初始化到数据库。`);
       } else {
-        //  console.log(`[DB Init] 预设主题 "${preset.name}" 已存在，跳过初始化。`);
+        //  console.info(`[DB Init] 预设主题 "${preset.name}" 已存在，跳过初始化。`);
       }
     } catch (err: unknown) {
       console.error(`[DB Init] 处理预设主题 "${preset.name}" 时出错:`, getErrorMessage(err));
     }
   }
-  console.log('[DB Init] 预设主题检查和初始化完成。');
+  console.info('[DB Init] 预设主题检查和初始化完成。');
 };

@@ -131,8 +131,8 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         formData.jump_chain = newVal.jump_chain
           ? JSON.parse(JSON.stringify(newVal.jump_chain))
           : null;
-        console.log('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
-        console.log(
+        console.info('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
+        console.info(
           '[Debug] watch connectionToEdit - formData.jump_chain initialized:',
           formData.jump_chain
         );
@@ -182,7 +182,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         formData.jump_chain = null;
         formData.proxy_type = null;
         formData.force_keyboard_interactive = false;
-        console.log('[Debug] watch connectionToEdit - formData.jump_chain reset');
+        console.info('[Debug] watch connectionToEdit - formData.jump_chain reset');
         advancedConnectionMode.value = 'proxy';
       }
     },
@@ -230,7 +230,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       } else {
         formData.proxy_type = null;
       }
-      console.log(
+      console.info(
         `[Debug] useAddConnectionForm: proxy_type set to ${formData.proxy_type} (type: ${newType}, mode: ${newAdvMode})`
       );
     },

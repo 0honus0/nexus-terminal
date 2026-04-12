@@ -45,7 +45,7 @@ const handleClose = (event: MouseEvent, tabId: string) => {
 const showContextMenu = (event: MouseEvent, tabId: string) => {
   event.preventDefault();
   event.stopPropagation();
-  console.log(`[FileTabs] showContextMenu called with tabId: ${tabId}`); // ++ Log the received tabId
+  console.info(`[FileTabs] showContextMenu called with tabId: ${tabId}`); // ++ Log the received tabId
   contextTargetTabId.value = tabId; // Still set the original ref if needed elsewhere
   menuTargetId.value = tabId; // + Set the dedicated ref for the prop
   contextMenuPosition.value = { x: event.clientX, y: event.clientY };
@@ -70,7 +70,7 @@ const closeContextMenuOnClickOutside = (event: MouseEvent) => {
 // + Update function signature to receive payload
 const handleContextMenuAction = (payload: { action: string; targetId: string | number | null }) => {
   const { action, targetId } = payload;
-  console.log(`[FileTabs] handleContextMenuAction received payload:`, JSON.stringify(payload)); // + Log received payload
+  console.info(`[FileTabs] handleContextMenuAction received payload:`, JSON.stringify(payload)); // + Log received payload
   // const targetId = contextTargetTabId.value; // No longer needed
   if (!targetId || typeof targetId !== 'string') {
     // Ensure targetId is a string (tab ID)
@@ -78,7 +78,7 @@ const handleContextMenuAction = (payload: { action: string; targetId: string | n
     return;
   }
 
-  console.log(`[FileTabs] Context menu action '${action}' requested for tab ID: ${targetId}`); // Keep original log
+  console.info(`[FileTabs] Context menu action '${action}' requested for tab ID: ${targetId}`); // Keep original log
 
   switch (action) {
     case 'close':
@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
       @click="handleActivate(tab.id)"
       @contextmenu.prevent="
         (event) => {
-          console.log(`[FileTabs Template Debug] Context menu for tab.id: ${tab.id}`);
+          console.info(`[FileTabs Template Debug] Context menu for tab.id: ${tab.id}`);
           showContextMenu(event, tab.id);
         }
       "
