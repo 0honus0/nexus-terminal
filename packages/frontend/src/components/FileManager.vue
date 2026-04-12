@@ -43,6 +43,16 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
+type SftpRealpathPayload = {
+  requestedPath?: string;
+  absolutePath?: string;
+  targetType?: 'file' | 'directory' | 'unknown';
+  error?: string;
+};
+type SilentExecPayload = {
+  output?: string;
+  error?: string;
+};
 
 // --- Props ---
 const props = defineProps({
@@ -673,7 +683,7 @@ const handleItemAction = (item: FileListItem) => {
 
     unregisterSuccess = wsOnMessage(
       'sftp:realpath:success',
-      (payload: any, message: WebSocketMessage) => {
+      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
         if (message.requestId === requestId && payload.requestedPath === itemPath) {
           cleanupListeners();
           if (!currentSftpManager.value) return;
@@ -702,7 +712,7 @@ const handleItemAction = (item: FileListItem) => {
 
     unregisterError = wsOnMessage(
       'sftp:realpath:error',
-      (payload: any, message: WebSocketMessage) => {
+      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
         if (message.requestId === requestId && payload?.requestedPath === itemPath) {
           cleanupListeners();
           // payload.error 可能包含来自后端的具体错误信息
@@ -1487,12 +1497,20 @@ watchEffect((onCleanup) => {
 
     unregisterSuccess = wsOnMessage(
       'sftp:realpath:success',
-      (payload: any, message: WebSocketMessage) => {
+      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
         // message 已有类型
         if (message.requestId === requestId && payload.requestedPath === requestedPath) {
           // 修改：检查 currentSftpManager 是否存在
           if (!currentSftpManager.value) return;
           const absolutePath = payload.absolutePath;
+          if (!absolutePath) {
+            console.error(
+              `[FileManager ${props.sessionId}-${props.instanceId}] Missing absolutePath for initial realpath response.`,
+              payload
+            );
+            cleanupListeners();
+            return;
+          }
           console.info(
             `[FileManager ${props.sessionId}-${props.instanceId}] Received initial absolute path for '.': ${absolutePath}. Loading directory.`
           );
@@ -1506,7 +1524,7 @@ watchEffect((onCleanup) => {
 
     unregisterError = wsOnMessage(
       'sftp:realpath:error',
-      (payload: any, message: WebSocketMessage) => {
+      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
         // message 已有类型
         // 修改：使用 payload.requestedPath (如果存在) 或 message.requestId 匹配
         if (message.requestId === requestId && payload?.requestedPath === requestedPath) {
@@ -2093,7 +2111,7 @@ const syncCurrentPathToTerminalDirectory = () => {
 
   unregisterSilentExecResult = onMessage(
     'ssh:exec_silent:result',
-    (payload: any, message: WebSocketMessage) => {
+    (payload: SilentExecPayload, message: WebSocketMessage) => {
       if (message.requestId !== requestId) return;
 
       cleanupSilentExecRequest();
@@ -2113,7 +2131,7 @@ const syncCurrentPathToTerminalDirectory = () => {
 
   unregisterSilentExecError = onMessage(
     'ssh:exec_silent:error',
-    (payload: any, message: WebSocketMessage) => {
+    (payload: SilentExecPayload, message: WebSocketMessage) => {
       if (message.requestId !== requestId) return;
       const errorMessage =
         typeof payload?.error === 'string'

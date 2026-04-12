@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 import type {
   BatchTask,
   BatchSubTask,
@@ -75,9 +76,9 @@ export const useBatchStore = defineStore('batch', () => {
         return response.data.taskId;
       }
       throw new Error(response.data.message || '执行失败');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[BatchStore] 执行批量命令失败:', err);
-      error.value = err.response?.data?.message || '执行批量命令失败';
+      error.value = extractErrorMessage(err, '执行批量命令失败');
       isExecuting.value = false;
       return null;
     }
@@ -118,10 +119,10 @@ export const useBatchStore = defineStore('batch', () => {
         return task;
       }
       return null;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[BatchStore] 获取任务状态失败:', err);
       // 设置错误状态，但不直接释放 isExecuting（任务可能仍在执行，只是查询失败）
-      error.value = err.response?.data?.message || '获取任务状态失败，请稍后重试';
+      error.value = extractErrorMessage(err, '获取任务状态失败，请稍后重试');
       return null;
     }
   };
@@ -151,9 +152,9 @@ export const useBatchStore = defineStore('batch', () => {
             })) || [],
         }));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[BatchStore] 获取任务列表失败:', err);
-      error.value = err.response?.data?.message || '获取任务列表失败';
+      error.value = extractErrorMessage(err, '获取任务列表失败');
     } finally {
       isLoading.value = false;
     }
@@ -172,9 +173,9 @@ export const useBatchStore = defineStore('batch', () => {
         return true;
       }
       return false;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[BatchStore] 取消任务失败:', err);
-      error.value = err.response?.data?.message || '取消任务失败';
+      error.value = extractErrorMessage(err, '取消任务失败');
       return false;
     }
   };
@@ -196,9 +197,9 @@ export const useBatchStore = defineStore('batch', () => {
       }
 
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[BatchStore] 删除任务失败:', err);
-      error.value = err.response?.data?.message || '删除任务失败';
+      error.value = extractErrorMessage(err, '删除任务失败');
       return false;
     }
   };
@@ -206,22 +207,36 @@ export const useBatchStore = defineStore('batch', () => {
   /**
    * 处理 WebSocket 批量事件
    */
-  const handleBatchWsEvent = (type: string, payload: any): void => {
-    if (!currentTask.value || currentTask.value.taskId !== payload.taskId) return;
+  const handleBatchWsEvent = (type: string, payload: unknown): void => {
+    const eventPayload = payload as {
+      taskId?: string;
+      subTaskId?: string;
+      status?: BatchSubTaskStatus | BatchTask['status'];
+      progress?: number;
+      output?: string;
+      exitCode?: number;
+      message?: string;
+      overallProgress?: number;
+      completed?: number;
+      failed?: number;
+      chunk?: string;
+    };
+
+    if (!currentTask.value || currentTask.value.taskId !== eventPayload.taskId) return;
 
     switch (type) {
       case 'batch:subtask:update':
         // 更新子任务状态
-        if (payload.subTaskId) {
+        if (eventPayload.subTaskId) {
           const subTask = currentTask.value.subTasks.find(
-            (st) => st.subTaskId === payload.subTaskId
+            (st) => st.subTaskId === eventPayload.subTaskId
           );
           if (subTask) {
-            if (payload.status) subTask.status = payload.status;
-            if (payload.progress !== undefined) subTask.progress = payload.progress;
-            if (payload.output !== undefined) subTask.output = payload.output;
-            if (payload.exitCode !== undefined) subTask.exitCode = payload.exitCode;
-            if (payload.message) subTask.message = payload.message;
+            if (eventPayload.status) subTask.status = eventPayload.status as BatchSubTaskStatus;
+            if (eventPayload.progress !== undefined) subTask.progress = eventPayload.progress;
+            if (eventPayload.output !== undefined) subTask.output = eventPayload.output;
+            if (eventPayload.exitCode !== undefined) subTask.exitCode = eventPayload.exitCode;
+            if (eventPayload.message) subTask.message = eventPayload.message;
 
             // 更新状态映射
             subTaskStatusMap.value[subTask.connectionId] = subTask.status;
@@ -231,12 +246,14 @@ export const useBatchStore = defineStore('batch', () => {
 
       case 'batch:overall':
         // 更新整体进度
-        if (payload.status) currentTask.value.status = payload.status;
-        if (payload.overallProgress !== undefined)
-          currentTask.value.overallProgress = payload.overallProgress;
-        if (payload.completed !== undefined)
-          currentTask.value.completedSubTasks = payload.completed;
-        if (payload.failed !== undefined) currentTask.value.failedSubTasks = payload.failed;
+        if (eventPayload.status)
+          currentTask.value.status = eventPayload.status as BatchTask['status'];
+        if (eventPayload.overallProgress !== undefined)
+          currentTask.value.overallProgress = eventPayload.overallProgress;
+        if (eventPayload.completed !== undefined)
+          currentTask.value.completedSubTasks = eventPayload.completed;
+        if (eventPayload.failed !== undefined)
+          currentTask.value.failedSubTasks = eventPayload.failed;
         break;
 
       case 'batch:completed':
@@ -245,17 +262,19 @@ export const useBatchStore = defineStore('batch', () => {
         // 任务结束
         isExecuting.value = false;
         // 刷新最终状态
-        fetchTaskStatus(payload.taskId);
+        if (eventPayload.taskId) {
+          fetchTaskStatus(eventPayload.taskId);
+        }
         break;
 
       case 'batch:log':
         // 流式输出
-        if (payload.subTaskId && payload.chunk) {
+        if (eventPayload.subTaskId && eventPayload.chunk) {
           const subTask = currentTask.value.subTasks.find(
-            (st) => st.subTaskId === payload.subTaskId
+            (st) => st.subTaskId === eventPayload.subTaskId
           );
           if (subTask) {
-            subTask.output = (subTask.output || '') + payload.chunk;
+            subTask.output = (subTask.output || '') + eventPayload.chunk;
           }
         }
         break;
