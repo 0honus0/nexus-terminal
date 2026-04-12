@@ -37,7 +37,7 @@ watch(
   () => props.connections,
   (newVal: ConnectionInfo[]) => {
     // Add type annotation for newVal
-    console.log('[ConnectionList] Received connections prop:', JSON.stringify(newVal, null, 2));
+    console.info('[ConnectionList] Received connections prop:', JSON.stringify(newVal, null, 2));
   },
   { immediate: true, deep: true }
 );
@@ -315,7 +315,7 @@ const handleTestConnection = async (connectionId: number) => {
 export default {
   methods: {
     connectToServer(connectionId: number) {
-      console.log(`请求连接到服务器 ID: ${connectionId}`);
+      console.info(`请求连接到服务器 ID: ${connectionId}`);
       // 使用 router 实例进行导航
       this.$router.push({ name: 'Workspace', params: { connectionId: connectionId.toString() } });
     },

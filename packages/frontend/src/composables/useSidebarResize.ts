@@ -22,12 +22,12 @@ export function useSidebarResize({
   const startWidth = ref(0);
 
   const handleMouseDown = (event: MouseEvent) => {
-    console.log(`[useSidebarResize] handleMouseDown triggered for side: ${side}`, {
+    console.info(`[useSidebarResize] handleMouseDown triggered for side: ${side}`, {
       sidebar: sidebarRef.value,
       handle: handleRef.value,
     }); // +++ Add Log +++
     if (!sidebarRef.value || !handleRef.value) {
-      console.log('[useSidebarResize] MouseDown ignored: sidebarRef or handleRef is null.');
+      console.info('[useSidebarResize] MouseDown ignored: sidebarRef or handleRef is null.');
       return;
     }
 

@@ -90,7 +90,7 @@ export function useNL2CMD() {
       };
 
       if (import.meta.env.DEV) {
-        console.log('[NL2CMD Debug] Request:', request);
+        console.info('[NL2CMD Debug] Request:', request);
       }
 
       const response = await apiClient.post<NL2CMDResponse>('/ai/nl2cmd', request, {
@@ -98,7 +98,7 @@ export function useNL2CMD() {
       });
 
       if (import.meta.env.DEV) {
-        console.log('[NL2CMD Debug] Response:', response.data);
+        console.info('[NL2CMD Debug] Response:', response.data);
       }
 
       if (response.data.success) {

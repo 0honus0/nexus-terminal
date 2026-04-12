@@ -460,8 +460,8 @@ export const useLayoutStore = defineStore('layout', () => {
 
     console.info('[Layout Store] initializeLayout finished.');
     // --- 移除最终状态的详细日志，避免冗余 ---
-    // console.log('[Layout Store] Final layoutTree.value:', JSON.stringify(layoutTree.value, null, 2));
-    // console.log('[Layout Store] Final sidebarPanes.value:', JSON.stringify(sidebarPanes.value, null, 2));
+    // console.info('[Layout Store] Final layoutTree.value:', JSON.stringify(layoutTree.value, null, 2));
+    // console.info('[Layout Store] Final sidebarPanes.value:', JSON.stringify(sidebarPanes.value, null, 2));
   }
 
   // --- Helper for debounced persistence ---
