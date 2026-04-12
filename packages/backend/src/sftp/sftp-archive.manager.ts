@@ -96,7 +96,7 @@ export class SftpArchiveManager {
         return;
     }
 
-    console.log(`[SFTP Compress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
+    console.info(`[SFTP Compress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
 
     try {
       state.sshClient.exec(command, (err, stream) => {
@@ -115,7 +115,9 @@ export class SftpArchiveManager {
 
         stream.on('close', (exitCode: number | null) => {
           code = exitCode;
-          console.log(`[SFTP Compress ${sessionId}] Finished with code ${code} (ID: ${requestId})`);
+          console.info(
+            `[SFTP Compress ${sessionId}] Finished with code ${code} (ID: ${requestId})`
+          );
           if (code === 0 && !this.isErrorInStdErr(stderrData)) {
             const successPayload: SftpCompressSuccessPayload = {
               message: '压缩成功',
@@ -229,7 +231,7 @@ export class SftpArchiveManager {
       return;
     }
 
-    console.log(`[SFTP Decompress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
+    console.info(`[SFTP Decompress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
 
     try {
       state.sshClient.exec(command, (err, stream) => {
@@ -248,7 +250,7 @@ export class SftpArchiveManager {
 
         stream.on('close', (exitCode: number | null) => {
           code = exitCode;
-          console.log(
+          console.info(
             `[SFTP Decompress ${sessionId}] Finished with code ${code} (ID: ${requestId})`
           );
           if (code === 0 && !this.isErrorInStdErr(stderrData)) {

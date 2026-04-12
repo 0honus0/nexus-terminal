@@ -47,7 +47,7 @@ class NotificationDispatcherService {
       );
     }
     this.senders.set(channelType, sender);
-    console.log(`[NotificationDispatcher] 已为通道类型 '${channelType}' 注册发送器。`);
+    console.info(`[NotificationDispatcher] 已为通道类型 '${channelType}' 注册发送器。`);
   }
 
   listenForNotifications() {
@@ -69,7 +69,7 @@ class NotificationDispatcherService {
         });
       }
     );
-    console.log('[NotificationDispatcher] 正在监听处理后的通知。');
+    console.info('[NotificationDispatcher] 正在监听处理后的通知。');
   }
 
   async dispatchNotification(notification: ProcessedNotification): Promise<void> {
@@ -86,10 +86,10 @@ class NotificationDispatcherService {
       return;
     }
 
-    console.log(`[NotificationDispatcher] 正在通过 ${notification.channelType} 分发通知`);
+    console.info(`[NotificationDispatcher] 正在通过 ${notification.channelType} 分发通知`);
     try {
       await sender.send(notification);
-      console.log(`[NotificationDispatcher] 已成功通过 ${notification.channelType} 发送通知`);
+      console.info(`[NotificationDispatcher] 已成功通过 ${notification.channelType} 发送通知`);
     } catch (error) {
       console.error(
         `[NotificationDispatcher] 通过 ${notification.channelType} 发送通知失败:`,

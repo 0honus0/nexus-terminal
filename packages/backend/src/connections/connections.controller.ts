@@ -356,7 +356,7 @@ export const getRdpSessionToken = async (
     try {
       const currentTimeSeconds = Math.floor(Date.now() / 1000);
       await ConnectionRepository.updateLastConnected(connectionId, currentTimeSeconds);
-      console.log(
+      console.info(
         `[Controller:getRdpSessionToken] 已更新 RDP 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`
       );
     } catch (updateError: unknown) {
@@ -393,7 +393,7 @@ export const getRdpSessionToken = async (
       rdpDpi
     );
 
-    console.log(
+    console.info(
       `[Controller:getRdpSessionToken] Received Guacamole token via GuacamoleService for RDP connection ${connectionId}`
     );
 
@@ -484,7 +484,7 @@ export const getVncSessionToken = async (
     try {
       const currentTimeSeconds = Math.floor(Date.now() / 1000);
       await ConnectionRepository.updateLastConnected(connectionId, currentTimeSeconds);
-      console.log(
+      console.info(
         `[Controller:getVncSessionToken] 已更新 VNC 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`
       );
     } catch (updateError: unknown) {
@@ -514,7 +514,7 @@ export const getVncSessionToken = async (
       initialHeight
     );
 
-    console.log(
+    console.info(
       `[Controller:getVncSessionToken] Received Guacamole token via GuacamoleService for VNC connection ${connectionId} with size ${initialWidth}x${initialHeight}`
     );
 
