@@ -81,11 +81,11 @@ onMounted(() => {
 
   // PWA Install Prompt
   window.addEventListener('beforeinstallprompt', (e) => {
-    console.log('[App.vue] beforeinstallprompt event fired. Browser will handle install prompt.');
+    console.info('[App.vue] beforeinstallprompt event fired. Browser will handle install prompt.');
   });
 
   window.addEventListener('appinstalled', () => {
-    console.log('[App.vue] PWA was installed');
+    console.info('[App.vue] PWA was installed');
   });
 
   // +++ 加载 Header 可见性状态 +++
@@ -151,23 +151,23 @@ const handleAltKeyDown = async (event: KeyboardEvent) => {
     if (/^[a-zA-Z0-9]$/.test(key)) {
       altShortcutKey.value = key; // 记录按键
       const shortcutString = `Alt+${key}`;
-      console.log(`[App] KeyDown: Alt+${key} detected. Checking shortcut: ${shortcutString}`);
+      console.info(`[App] KeyDown: Alt+${key} detected. Checking shortcut: ${shortcutString}`);
       const targetId = focusSwitcherStore.getFocusTargetIdByShortcut(shortcutString);
 
       if (targetId) {
-        console.log(`[App] KeyDown: Shortcut match found. Targeting ID: ${targetId}`);
+        console.info(`[App] KeyDown: Shortcut match found. Targeting ID: ${targetId}`);
         event.preventDefault(); // 阻止默认行为 (如菜单)
         const success = await focusSwitcherStore.focusTarget(targetId); // +++ 立即尝试聚焦 +++
         if (success) {
-          console.log(`[App] KeyDown: Successfully focused ${targetId} via shortcut.`);
+          console.info(`[App] KeyDown: Successfully focused ${targetId} via shortcut.`);
           lastFocusedIdBySwitcher.value = targetId;
           // --- 移除设置标志位 ---
         } else {
-          console.log(`[App] KeyDown: Failed to focus ${targetId} via shortcut action.`);
+          console.info(`[App] KeyDown: Failed to focus ${targetId} via shortcut action.`);
           // 聚焦失败，可以选择是否取消 Alt 状态，暂时不处理，让 keyup 重置
         }
       } else {
-        console.log(`[App] KeyDown: No configured shortcut found for ${shortcutString}.`);
+        console.info(`[App] KeyDown: No configured shortcut found for ${shortcutString}.`);
         // 没有匹配的快捷键，可以选择取消 Alt 状态以允许默认行为，或保持状态等待 keyup
         // isAltPressed.value = false;
         // altShortcutKey.value = null;
@@ -177,14 +177,14 @@ const handleAltKeyDown = async (event: KeyboardEvent) => {
       isAltPressed.value = false;
       altShortcutKey.value = null;
       // --- 移除重置标志位 ---
-      console.log('[App] KeyDown: Alt sequence cancelled by non-alphanumeric key press.');
+      console.info('[App] KeyDown: Alt sequence cancelled by non-alphanumeric key press.');
     }
   } else if (isAltPressed.value && ['Control', 'Shift', 'Meta'].includes(event.key)) {
     // 按下其他修饰键，取消 Alt 状态
     isAltPressed.value = false;
     altShortcutKey.value = null;
     // --- 移除重置标志位 ---
-    console.log('[App] KeyDown: Alt sequence cancelled by other modifier key press.');
+    console.info('[App] KeyDown: Alt sequence cancelled by other modifier key press.');
   }
 };
 
@@ -202,31 +202,31 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     if (altWasPressed && triggeredShortcutKey === null) {
       // 如果 Alt 之前是按下的，并且没有记录到有效的快捷键，则执行顺序切换
-      console.log(
+      console.info(
         '[App] KeyUp: Alt released without a valid shortcut key captured. Attempting sequential focus switch.'
       );
       event.preventDefault(); // 仅在执行顺序切换时阻止默认行为
 
       // --- 顺序切换逻辑 (保持不变) ---
       let currentFocusId: string | null = lastFocusedIdBySwitcher.value;
-      console.log(`[App] Sequential switch. Last focused by switcher: ${currentFocusId}`);
+      console.info(`[App] Sequential switch. Last focused by switcher: ${currentFocusId}`);
 
       if (!currentFocusId) {
         const activeElement = document.activeElement as HTMLElement;
         if (activeElement && activeElement.hasAttribute('data-focus-id')) {
           currentFocusId = activeElement.getAttribute('data-focus-id');
-          console.log(
+          console.info(
             `[App] Sequential switch. Found focus ID from activeElement: ${currentFocusId}`
           );
         } else {
-          console.log(`[App] Sequential switch. Could not determine current focus ID.`);
+          console.info(`[App] Sequential switch. Could not determine current focus ID.`);
         }
       }
 
       const order = focusSwitcherStore.sequenceOrder; // ++ 使用新的 sequenceOrder state ++
       if (order.length === 0) {
         // ++ 检查新的 state ++
-        console.log('[App] No focus sequence configured.');
+        console.info('[App] No focus sequence configured.');
         return;
       }
 
@@ -239,33 +239,33 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
           break;
         }
 
-        console.log(`[App] Sequential switch. Trying to focus target ID: ${nextFocusId}`);
+        console.info(`[App] Sequential switch. Trying to focus target ID: ${nextFocusId}`);
         const success = await focusSwitcherStore.focusTarget(nextFocusId);
 
         if (success) {
-          console.log(`[App] Successfully focused ${nextFocusId} sequentially.`);
+          console.info(`[App] Successfully focused ${nextFocusId} sequentially.`);
           lastFocusedIdBySwitcher.value = nextFocusId;
           focused = true;
           break;
         } else {
-          console.log(`[App] Failed to focus ${nextFocusId} sequentially. Trying next...`);
+          console.info(`[App] Failed to focus ${nextFocusId} sequentially. Trying next...`);
           currentFocusId = nextFocusId;
         }
       }
 
       if (!focused) {
-        console.log('[App] Cycled through sequence, no target could be focused.');
+        console.info('[App] Cycled through sequence, no target could be focused.');
         lastFocusedIdBySwitcher.value = null;
       }
       // --- 顺序切换逻辑结束 ---
     } else if (altWasPressed && triggeredShortcutKey !== null) {
-      console.log(
+      console.info(
         `[App] KeyUp: Alt released after capturing key '${triggeredShortcutKey}'. Shortcut logic handled in keydown. No sequential switch.`
       );
       // 快捷键逻辑已在 keydown 处理，keyup 时无需操作，也不阻止默认行为（除非特定需要）
     } else {
       // Alt 松开，但 isAltPressed 已经是 false (例如被其他键取消了)
-      console.log('[App] KeyUp: Alt released, but sequence was already cancelled or not active.');
+      console.info('[App] KeyUp: Alt released, but sequence was already cancelled or not active.');
     }
   }
 };

@@ -82,7 +82,7 @@ watch(
         (a, b) => layoutStore.allPossiblePanes.indexOf(a) - layoutStore.allPossiblePanes.indexOf(b)
       );
 
-      console.log(
+      console.info(
         '[LayoutConfigurator] Dialog opened, initial data loaded and original copies created.'
       );
     } else {
@@ -92,7 +92,7 @@ watch(
       localSidebarPanes.value = { left: [], right: [] };
       originalSidebarPanes.value = { left: [], right: [] };
       localAvailablePanes.value = [];
-      console.log('[LayoutConfigurator] Dialog closed, state cleared.');
+      console.info('[LayoutConfigurator] Dialog closed, state cleared.');
     }
   }
 );
@@ -142,7 +142,7 @@ function addPaneToAvailableList(paneName: PaneName) {
     if (!inserted) {
       localAvailablePanes.value.push('terminal'); // Add to end if no suitable spot found
     }
-    console.log(`[LayoutConfigurator] Added 'terminal' back to available panes.`);
+    console.info(`[LayoutConfigurator] Added 'terminal' back to available panes.`);
   }
 }
 
@@ -152,7 +152,7 @@ function removePaneFromAvailableList(paneName: PaneName) {
     const index = localAvailablePanes.value.indexOf('terminal');
     if (index > -1) {
       localAvailablePanes.value.splice(index, 1);
-      console.log(`[LayoutConfigurator] Removed 'terminal' from available panes.`);
+      console.info(`[LayoutConfigurator] Removed 'terminal' from available panes.`);
     }
   }
 }
@@ -194,7 +194,7 @@ const paneLabels = computed(() => ({
 const handleLayoutLockChange = async () => {
   // Removed event parameter
   const isLocked = !layoutLockedBoolean.value; // Toggle the current state
-  console.log(`[LayoutConfigurator] Layout lock toggled: ${isLocked}`);
+  console.info(`[LayoutConfigurator] Layout lock toggled: ${isLocked}`);
   try {
     // +++ Convert boolean to string before sending +++
     await settingsStore.updateSetting('layoutLocked', String(isLocked));
@@ -221,22 +221,22 @@ const closeDialog = async () => {
 
 const saveLayout = async () => {
   // Make async
-  console.log('[LayoutConfigurator] Attempting to save layout...');
+  console.info('[LayoutConfigurator] Attempting to save layout...');
   try {
     // Save main layout and wait for persistence
-    console.log('[LayoutConfigurator] Updating main layout tree in store...');
+    console.info('[LayoutConfigurator] Updating main layout tree in store...');
     await layoutStore.updateLayoutTree(localLayoutTree.value); // Await the async action
-    console.log('[LayoutConfigurator] Main layout tree update awaited.');
+    console.info('[LayoutConfigurator] Main layout tree update awaited.');
 
     // Save sidebar config and wait for persistence
     const sidebarConfigToSave = JSON.parse(JSON.stringify(localSidebarPanes.value));
-    console.log('[LayoutConfigurator] Updating sidebar panes in store:', sidebarConfigToSave);
+    console.info('[LayoutConfigurator] Updating sidebar panes in store:', sidebarConfigToSave);
     await layoutStore.updateSidebarPanes(sidebarConfigToSave); // Await the async action
-    console.log('[LayoutConfigurator] Sidebar panes update awaited.');
+    console.info('[LayoutConfigurator] Sidebar panes update awaited.');
 
     // isModified will update automatically based on comparison with original state after save
     emit('close'); // Close dialog *after* save is complete
-    console.log('[LayoutConfigurator] Layout saved successfully, dialog closed.');
+    console.info('[LayoutConfigurator] Layout saved successfully, dialog closed.');
   } catch (error) {
     console.error('[LayoutConfigurator] Error saving layout:', error);
   }
@@ -270,7 +270,7 @@ const resetToDefault = async () => {
       (a, b) => layoutStore.allPossiblePanes.indexOf(a) - layoutStore.allPossiblePanes.indexOf(b)
     );
 
-    console.log(
+    console.info(
       '[LayoutConfigurator] Reset to default layout, sidebar panes, and available panes.'
     );
     // isModified computed property will detect the change automatically by comparing with original state
@@ -279,7 +279,7 @@ const resetToDefault = async () => {
 
 // Clone function for dragging available panes
 const clonePane = (paneName: PaneName): LayoutNode => {
-  console.log(`[LayoutConfigurator] Cloning pane: ${paneName}`);
+  console.info(`[LayoutConfigurator] Cloning pane: ${paneName}`);
   return {
     id: layoutStore.generateId(),
     type: 'pane',
@@ -290,7 +290,7 @@ const clonePane = (paneName: PaneName): LayoutNode => {
 
 // Handle updates from LayoutNodeEditor (for main layout)
 const handleNodeUpdate = (updatedNode: LayoutNode) => {
-  console.log('[LayoutConfigurator] Received node update from editor:', updatedNode);
+  console.info('[LayoutConfigurator] Received node update from editor:', updatedNode);
   localLayoutTree.value = updatedNode;
 };
 
@@ -311,7 +311,7 @@ function findAndRemoveNode(
   ) {
     const updatedChildren = [...node.children];
     const removedNode = updatedChildren.splice(nodeIndex, 1)[0]; // Remove and get the node
-    console.log(
+    console.info(
       `[LayoutConfigurator] Removing node at index ${nodeIndex} from parent ${parentNodeId}`
     );
 
@@ -343,7 +343,7 @@ const handleNodeRemove = async (payload: {
   parentNodeId: string | undefined;
   nodeIndex: number;
 }) => {
-  console.log('[LayoutConfigurator] Received node remove request:', payload);
+  console.info('[LayoutConfigurator] Received node remove request:', payload);
   if (payload.parentNodeId === undefined && payload.nodeIndex === 0) {
     const confirmed = await showConfirmDialog({
       message: t(
@@ -370,7 +370,7 @@ const handleNodeRemove = async (payload: {
 const removeSidebarPane = (side: 'left' | 'right', index: number) => {
   const removedPane = localSidebarPanes.value[side].splice(index, 1)[0]; // Remove and get pane name
   if (removedPane) {
-    console.log(
+    console.info(
       `[LayoutConfigurator] Removed pane '${removedPane}' from ${side} sidebar at index ${index}.`
     );
     // If the removed pane was 'terminal', add it back to available list
@@ -384,7 +384,7 @@ const removeSidebarPane = (side: 'left' | 'right', index: number) => {
 // Handler for vuedraggable end event to ensure changes flag is set and handle added items
 const onDraggableChange = (event: any, side: 'left' | 'right') => {
   // Add side parameter
-  console.log(`[LayoutConfigurator] Draggable change event detected on ${side} sidebar:`, event);
+  console.info(`[LayoutConfigurator] Draggable change event detected on ${side} sidebar:`, event);
 
   // Check if an element was added to the sidebar list
   if (event.added) {
@@ -402,17 +402,17 @@ const onDraggableChange = (event: any, side: 'left' | 'right') => {
     ) {
       // Replace the added LayoutNode object with its component name (PaneName)
       targetList.splice(addedIndex, 1, addedElement.component);
-      console.log(
+      console.info(
         `[LayoutConfigurator] Replaced added LayoutNode at index ${addedIndex} on ${side} sidebar with PaneName: ${addedElement.component}`
       );
     } else {
-      console.log(
+      console.info(
         `[LayoutConfigurator] Added event detected on ${side} sidebar, but element was not a LayoutNode:`,
         addedElement
       );
     }
   } else if (event.moved || event.removed) {
-    console.log(`[LayoutConfigurator] Item moved or removed within/from ${side} sidebar.`);
+    console.info(`[LayoutConfigurator] Item moved or removed within/from ${side} sidebar.`);
   }
 
   // isModified will react automatically
@@ -429,7 +429,7 @@ const handleAvailablePaneDragEnd = (event: any) => {
     if (paneName === 'terminal') {
       removePaneFromAvailableList('terminal');
     } else if (paneName) {
-      console.log(
+      console.info(
         `[LayoutConfigurator] Non-terminal pane "${paneName}" dropped elsewhere (clone).`
       );
       // Other panes are clones, do nothing to the available list
@@ -439,7 +439,7 @@ const handleAvailablePaneDragEnd = (event: any) => {
       );
     }
   } else {
-    console.log('[LayoutConfigurator] Item dropped back into available list or drag cancelled.');
+    console.info('[LayoutConfigurator] Item dropped back into available list or drag cancelled.');
   }
 };
 </script>
