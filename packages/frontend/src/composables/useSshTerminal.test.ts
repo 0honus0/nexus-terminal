@@ -27,10 +27,13 @@ vi.mock('../stores/session/state', () => ({
 }));
 
 describe('useSshTerminal (createSshTerminalManager)', () => {
+  type WsMessageMeta = { sessionId?: string; encoding?: string };
+  type TestMessageHandler = (payload: unknown, message?: WsMessageMeta) => void;
+
   let mockSendMessage: ReturnType<typeof vi.fn>;
   let mockOnMessage: ReturnType<typeof vi.fn>;
   let mockIsConnected: ReturnType<typeof ref<boolean>>;
-  let messageHandlers: Map<string, ((payload: any, message?: any) => void)[]>;
+  let messageHandlers: Map<string, TestMessageHandler[]>;
 
   // 模拟 Terminal 实例
   function createMockTerminal() {
@@ -68,7 +71,7 @@ describe('useSshTerminal (createSshTerminalManager)', () => {
   }
 
   // 辅助函数：触发消息处理器
-  function triggerMessage(type: string, payload: any, sessionId?: string, encoding?: string) {
+  function triggerMessage(type: string, payload: unknown, sessionId?: string, encoding?: string) {
     const handlers = messageHandlers.get(type) || [];
     handlers.forEach((handler) => handler(payload, { sessionId, encoding }));
   }
@@ -81,7 +84,7 @@ describe('useSshTerminal (createSshTerminalManager)', () => {
     messageHandlers = new Map();
 
     // 模拟 onMessage 注册消息处理器
-    mockOnMessage = vi.fn((type: string, handler: (payload: any, message?: any) => void) => {
+    mockOnMessage = vi.fn((type: string, handler: TestMessageHandler) => {
       if (!messageHandlers.has(type)) {
         messageHandlers.set(type, []);
       }

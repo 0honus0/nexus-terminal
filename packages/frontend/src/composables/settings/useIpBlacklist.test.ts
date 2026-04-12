@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { defineComponent, nextTick, ref } from 'vue';
+import { defineComponent, nextTick, ref, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 
 import { useIpBlacklist } from './useIpBlacklist';
@@ -11,15 +11,34 @@ vi.mock('vue-i18n', () => ({
 }));
 
 vi.mock('pinia', async () => {
-  const actual = await vi.importActual<any>('pinia');
+  const actual = await vi.importActual<typeof import('pinia')>('pinia');
   return {
     ...actual,
-    storeToRefs: (store: any) => store,
+    storeToRefs: <T extends object>(store: T) => store,
   };
 });
 
-let settingsStoreMock: any;
-let authStoreMock: any;
+type MockFn = ReturnType<typeof vi.fn>;
+
+interface SettingsStoreMock {
+  settings: Ref<{ maxLoginAttempts: string; loginBanDuration: string }>;
+  ipBlacklistEnabledBoolean: Ref<boolean>;
+  updateSetting: MockFn;
+  updateMultipleSettings: MockFn;
+}
+
+interface AuthStoreMock {
+  fetchIpBlacklist: MockFn;
+  deleteIpFromBlacklist: MockFn;
+}
+
+interface IpBlacklistTestVm {
+  ipBlacklistEnabled: boolean;
+  handleUpdateIpBlacklistEnabled: () => Promise<void>;
+}
+
+let settingsStoreMock: SettingsStoreMock;
+let authStoreMock: AuthStoreMock;
 
 vi.mock('../../stores/settings.store', () => ({
   useSettingsStore: () => settingsStoreMock,
@@ -66,12 +85,14 @@ describe('useIpBlacklist', () => {
     const wrapper = mount(Comp);
     await flush();
 
-    expect((wrapper.vm as any).ipBlacklistEnabled).toBe(false);
+    const vm = wrapper.vm as unknown as IpBlacklistTestVm;
 
-    await (wrapper.vm as any).handleUpdateIpBlacklistEnabled();
+    expect(vm.ipBlacklistEnabled).toBe(false);
+
+    await vm.handleUpdateIpBlacklistEnabled();
 
     expect(settingsStoreMock.updateSetting).toHaveBeenCalledWith('ipBlacklistEnabled', 'true');
-    expect((wrapper.vm as any).ipBlacklistEnabled).toBe(true);
+    expect(vm.ipBlacklistEnabled).toBe(true);
   });
 
   it('保存失败时应回滚开关状态', async () => {
@@ -88,11 +109,13 @@ describe('useIpBlacklist', () => {
     const wrapper = mount(Comp);
     await flush();
 
-    expect((wrapper.vm as any).ipBlacklistEnabled).toBe(true);
+    const vm = wrapper.vm as unknown as IpBlacklistTestVm;
 
-    await (wrapper.vm as any).handleUpdateIpBlacklistEnabled();
+    expect(vm.ipBlacklistEnabled).toBe(true);
+
+    await vm.handleUpdateIpBlacklistEnabled();
 
     expect(settingsStoreMock.updateSetting).toHaveBeenCalledWith('ipBlacklistEnabled', 'false');
-    expect((wrapper.vm as any).ipBlacklistEnabled).toBe(true);
+    expect(vm.ipBlacklistEnabled).toBe(true);
   });
 });

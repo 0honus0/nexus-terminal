@@ -2,6 +2,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth.store';
 import apiClient from '../../utils/apiClient';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 export function useTwoFactorAuth() {
   const authStore = useAuthStore();
@@ -36,10 +37,12 @@ export function useTwoFactorAuth() {
         '/auth/2fa/setup'
       );
       setupData.value = response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('开始设置 2FA 失败:', error);
-      twoFactorMessage.value =
-        error.response?.data?.message || t('settings.twoFactor.error.setupFailed');
+      twoFactorMessage.value = extractErrorMessage(
+        error,
+        t('settings.twoFactor.error.setupFailed')
+      );
     } finally {
       twoFactorLoading.value = false;
     }
@@ -61,10 +64,12 @@ export function useTwoFactorAuth() {
       setupData.value = null;
       verificationCode.value = '';
       await authStore.checkAuthStatus(); // Refresh user data
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('验证并激活 2FA 失败:', error);
-      twoFactorMessage.value =
-        error.response?.data?.message || t('settings.twoFactor.error.verificationFailed');
+      twoFactorMessage.value = extractErrorMessage(
+        error,
+        t('settings.twoFactor.error.verificationFailed')
+      );
     } finally {
       twoFactorLoading.value = false;
     }
@@ -85,10 +90,12 @@ export function useTwoFactorAuth() {
       twoFactorEnabled.value = false;
       disablePassword.value = '';
       await authStore.checkAuthStatus(); // Refresh user data
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('禁用 2FA 失败:', error);
-      twoFactorMessage.value =
-        error.response?.data?.message || t('settings.twoFactor.error.disableFailed');
+      twoFactorMessage.value = extractErrorMessage(
+        error,
+        t('settings.twoFactor.error.disableFailed')
+      );
     } finally {
       twoFactorLoading.value = false;
     }

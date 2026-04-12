@@ -66,6 +66,23 @@ interface FullConnectionDbRow extends Omit<FullConnectionData, 'jump_chain' | 't
   proxy_encrypted_passphrase?: string | null;
 }
 
+type BulkInsertConnectionInput = Omit<
+  FullConnectionData,
+  'id' | 'created_at' | 'updated_at' | 'last_connected_at'
+> & {
+  tag_ids?: number[];
+};
+
+interface BulkInsertConnectionResult {
+  connectionId: number;
+  originalData: BulkInsertConnectionInput;
+}
+
+type ConnectionUpdateFields = Record<string, unknown> & {
+  updated_at?: number;
+};
+type SqlParamValue = string | number | boolean | null;
+
 /**
  * 获取所有连接及其标签
  */
@@ -264,8 +281,8 @@ export const updateConnection = async (
     `[Repository:updateConnection] Received data for ID ${id}:`,
     JSON.stringify(data, null, 2)
   );
-  const fieldsToUpdate: { [key: string]: any } = { ...data };
-  const params: any[] = [];
+  const fieldsToUpdate: ConnectionUpdateFields = { ...data };
+  const params: SqlParamValue[] = [];
 
   delete fieldsToUpdate.id;
   delete fieldsToUpdate.created_at;
@@ -293,7 +310,17 @@ export const updateConnection = async (
       // 布尔值转换为整数存储
       params.push(value ? 1 : 0);
     } else {
-      params.push(value ?? null);
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean' ||
+        value === null ||
+        value === undefined
+      ) {
+        params.push((value ?? null) as SqlParamValue);
+      } else {
+        params.push(String(value));
+      }
     }
   });
 
@@ -463,14 +490,10 @@ export const findConnectionTags = async (
 export const bulkInsertConnections = async (
   db: Database,
   // Update input type to reflect FullConnectionData now has 'type'
-  connections: Array<
-    Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & {
-      tag_ids?: number[];
-    }
-  >
-): Promise<{ connectionId: number; originalData: any }[]> => {
+  connections: BulkInsertConnectionInput[]
+): Promise<BulkInsertConnectionResult[]> => {
   const insertConnSql = `INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`; // Add type, proxy_type and notes columns and placeholders
-  const results: { connectionId: number; originalData: any }[] = [];
+  const results: BulkInsertConnectionResult[] = [];
   const now = Math.floor(Date.now() / 1000);
 
   for (const connData of connections) {

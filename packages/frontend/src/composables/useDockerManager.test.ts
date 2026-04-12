@@ -31,7 +31,7 @@ vi.mock('pinia', async (importOriginal) => {
   const actual = await importOriginal<typeof import('pinia')>();
   return {
     ...actual,
-    storeToRefs: (store: any) => ({
+    storeToRefs: (_store: unknown) => ({
       dockerDefaultExpandBoolean: mockDockerDefaultExpandBoolean,
     }),
   };
@@ -44,10 +44,13 @@ vi.mock('../stores/layout.store', () => ({
 }));
 
 describe('useDockerManager (createDockerManager)', () => {
+  type WsMessageMeta = { sessionId?: string };
+  type TestMessageHandler = (payload: unknown, message?: WsMessageMeta) => void;
+
   let mockSendMessage: ReturnType<typeof vi.fn>;
   let mockOnMessage: ReturnType<typeof vi.fn>;
   let mockIsConnected: ReturnType<typeof ref<boolean>>;
-  let messageHandlers: Map<string, ((payload: any, message?: any) => void)[]>;
+  let messageHandlers: Map<string, TestMessageHandler[]>;
 
   // 模拟 i18n
   const mockI18n = {
@@ -64,7 +67,7 @@ describe('useDockerManager (createDockerManager)', () => {
   }
 
   // 辅助函数：触发消息处理器
-  function triggerMessage(type: string, payload: any, sessionId?: string) {
+  function triggerMessage(type: string, payload: unknown, sessionId?: string) {
     const handlers = messageHandlers.get(type) || [];
     handlers.forEach((handler) => handler(payload, { sessionId }));
   }
@@ -95,7 +98,7 @@ describe('useDockerManager (createDockerManager)', () => {
     messageHandlers = new Map();
 
     // 模拟 onMessage 注册消息处理器
-    mockOnMessage = vi.fn((type: string, handler: (payload: any, message?: any) => void) => {
+    mockOnMessage = vi.fn((type: string, handler: TestMessageHandler) => {
       if (!messageHandlers.has(type)) {
         messageHandlers.set(type, []);
       }

@@ -5,6 +5,7 @@ import * as iconv from '@vscode/iconv-lite-umd';
 import { Buffer } from 'buffer/';
 import { useSessionStore } from './session.store';
 import type { SaveStatus, SftpReadFileSuccessPayload } from '../types/sftp.types';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 // --- 类型定义 ---
 // 文件信息，用于打开文件操作
@@ -122,9 +123,10 @@ const decodeRawContent = (rawContentBase64: string, encoding: string): string =>
     );
     const decoder = new TextDecoder('utf-8');
     return decoder.decode(buffer);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const decodeErrorMessage = extractErrorMessage(error, 'Unknown decode error');
     console.error(`[decodeRawContent] Error decoding content with encoding "${encoding}":`, error);
-    return `// Error decoding content: ${error.message}`; // 返回错误信息
+    return `// Error decoding content: ${decodeErrorMessage}`; // 返回错误信息
   }
 };
 
@@ -447,11 +449,12 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
           tab.saveStatus = 'idle';
         }
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err, String(err));
       console.error(`[文件编辑器 Store] 保存文件 ${tab.filePath} 失败:`, err);
       tab.isSaving = false;
       tab.saveStatus = 'error';
-      tab.saveError = `${t('fileManager.errors.saveFailed')}: ${err.message || err}`;
+      tab.saveError = `${t('fileManager.errors.saveFailed')}: ${errorMessage}`;
 
       setTimeout(() => {
         if (tab.saveStatus === 'error') {
@@ -644,13 +647,14 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       console.info(
         `[文件编辑器 Store] 文件 ${tab.filePath} 使用新编码 "${newEncoding}" 解码完成。`
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err, String(err));
       // catch 应该在 decodeRawContent 内部处理了，但以防万一
       console.error(
         `[文件编辑器 Store] 使用编码 "${newEncoding}" 在前端解码文件 ${tab.filePath} 失败:`,
         err
       );
-      const errorMsg = `前端解码失败 (编码: ${newEncoding}): ${err.message || err}`;
+      const errorMsg = `前端解码失败 (编码: ${newEncoding}): ${errorMessage}`;
       // 更新错误状态
       const errorTab: FileTab = {
         ...tab,

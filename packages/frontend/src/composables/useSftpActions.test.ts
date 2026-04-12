@@ -30,12 +30,15 @@ vi.mock('../stores/uiNotifications.store', () => ({
 }));
 
 describe('useSftpActions (createSftpActionsManager)', () => {
+  type WsMessageMeta = Record<string, unknown> & { type?: string };
+  type TestMessageHandler = (payload: unknown, message?: WsMessageMeta) => void;
+
   let mockSendMessage: ReturnType<typeof vi.fn>;
   let mockOnMessage: ReturnType<typeof vi.fn>;
   let mockIsConnected: Ref<boolean>;
   let mockIsSftpReady: Ref<boolean>;
   let currentPathRef: Ref<string>;
-  let messageHandlers: Map<string, ((payload: any, message?: any) => void)[]>;
+  let messageHandlers: Map<string, TestMessageHandler[]>;
 
   // 模拟 i18n 翻译函数
   const mockT = (key: string, params?: Record<string, any>) => {
@@ -54,7 +57,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
   }
 
   // 辅助函数：触发消息处理器
-  function triggerMessage(type: string, payload: any, extras?: Record<string, any>) {
+  function triggerMessage(type: string, payload: unknown, extras?: Record<string, unknown>) {
     const handlers = messageHandlers.get(type) || [];
     handlers.forEach((handler) => handler(payload, { type, ...extras }));
   }
@@ -89,7 +92,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
     messageHandlers = new Map();
 
     // 模拟 onMessage 注册消息处理器
-    mockOnMessage = vi.fn((type: string, handler: (payload: any, message?: any) => void) => {
+    mockOnMessage = vi.fn((type: string, handler: TestMessageHandler) => {
       if (!messageHandlers.has(type)) {
         messageHandlers.set(type, []);
       }

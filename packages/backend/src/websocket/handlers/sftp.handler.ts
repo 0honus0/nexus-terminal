@@ -1,12 +1,47 @@
 import WebSocket from 'ws';
-import { AuthenticatedWebSocket } from '../types';
+import {
+  AuthenticatedWebSocket,
+  SftpCompressRequestPayload,
+  SftpDecompressRequestPayload,
+} from '../types';
 import { clientStates, sftpService } from '../state';
 import { getErrorMessage } from '../../utils/AppError';
+
+type SftpOperationPayload = {
+  path?: string;
+  encoding?: string;
+  content?: string;
+  data?: string;
+  oldPath?: string;
+  newPath?: string;
+  mode?: number;
+  sources?: string[];
+  destination?: string;
+  format?: 'zip' | 'targz' | 'tarbz2';
+  source?: string;
+};
+
+type SftpUploadStartPayload = {
+  uploadId?: string;
+  remotePath?: string;
+  size?: number;
+  relativePath?: string;
+};
+
+type SftpUploadChunkPayload = {
+  uploadId?: string;
+  chunkIndex?: number;
+  data?: string;
+};
+
+type SftpUploadCancelPayload = {
+  uploadId?: string;
+};
 
 export async function handleSftpOperation(
   ws: AuthenticatedWebSocket,
   type: string,
-  payload: any,
+  payload: SftpOperationPayload,
   requestId?: string
 ): Promise<void> {
   const { sessionId } = ws;
@@ -112,10 +147,10 @@ export async function handleSftpOperation(
           const targetDirectory = pathModule.posix.dirname(destinationPath);
           const destinationArchiveName = pathModule.posix.basename(destinationPath);
 
-          const compressPayload = {
-            sources: payload.sources as string[],
+          const compressPayload: SftpCompressRequestPayload = {
+            sources: payload.sources,
             destinationArchiveName,
-            format: payload.format as 'zip' | 'targz' | 'tarbz2',
+            format: payload.format,
             targetDirectory,
             requestId,
           };
@@ -127,8 +162,8 @@ export async function handleSftpOperation(
         break;
       case 'sftp:decompress':
         if (payload?.source && requestId) {
-          const decompressPayload = {
-            archivePath: payload.source as string,
+          const decompressPayload: SftpDecompressRequestPayload = {
+            archivePath: payload.source,
             // destinationDirectory: payload.destination as string, // sftpService.decompress 目前不使用此参数
             requestId,
           };
@@ -165,7 +200,10 @@ export async function handleSftpOperation(
   }
 }
 
-export function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload: any): void {
+export function handleSftpUploadStart(
+  ws: AuthenticatedWebSocket,
+  payload: SftpUploadStartPayload
+): void {
   const { sessionId } = ws;
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 
@@ -208,7 +246,7 @@ export function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload: any):
 
 export async function handleSftpUploadChunk(
   ws: AuthenticatedWebSocket,
-  payload: any
+  payload: SftpUploadChunkPayload
 ): Promise<void> {
   const { sessionId } = ws;
   const state = sessionId ? clientStates.get(sessionId) : undefined;
@@ -229,7 +267,10 @@ export async function handleSftpUploadChunk(
   );
 }
 
-export function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload: any): void {
+export function handleSftpUploadCancel(
+  ws: AuthenticatedWebSocket,
+  payload: SftpUploadCancelPayload
+): void {
   const { sessionId } = ws;
   const state = sessionId ? clientStates.get(sessionId) : undefined;
   if (!sessionId || !state) return; // Silently ignore

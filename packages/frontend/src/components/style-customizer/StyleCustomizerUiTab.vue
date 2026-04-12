@@ -6,6 +6,7 @@ import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
 import { defaultUiTheme } from '../../features/appearance/config/default-themes';
 import { safeJsonParse } from '../../stores/appearance.store';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -85,11 +86,13 @@ const handleSaveUiTheme = async () => {
       type: 'success',
       message: t('styleCustomizer.uiThemeSaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存 UI 主题失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.uiThemeSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.uiThemeSaveFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -101,11 +104,13 @@ const handleResetUiTheme = async () => {
       type: 'info',
       message: t('styleCustomizer.uiThemeReset'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('重置 UI 主题失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.uiThemeResetFailed', { message: error.message }),
+      message: t('styleCustomizer.uiThemeResetFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -118,11 +123,13 @@ const applyDarkMode = async () => {
       type: 'success',
       message: t('styleCustomizer.darkModeApplied'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('应用黑暗模式失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.darkModeApplyFailed', { message: error.message || '未知错误' }),
+      message: t('styleCustomizer.darkModeApplyFailed', {
+        message: extractErrorMessage(error, '未知错误'),
+      }),
     });
   }
 };
@@ -204,11 +211,15 @@ const handleUiThemeStringChange = () => {
       throw new Error(t('styleCustomizer.errorInvalidJsonObject'));
     }
     editableUiTheme.value = parsedTheme;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('解析 UI 主题配置失败:', error);
-    let errorMessage = error.message || t('styleCustomizer.errorInvalidJsonConfig');
+    const fallbackError = t('styleCustomizer.errorInvalidJsonConfig');
+    let errorMessage = extractErrorMessage(error, fallbackError);
     if (error instanceof SyntaxError) {
-      errorMessage = `${t('styleCustomizer.errorJsonSyntax')}: ${error.message}`;
+      errorMessage = `${t('styleCustomizer.errorJsonSyntax')}: ${extractErrorMessage(
+        error,
+        fallbackError
+      )}`;
     }
     themeParseError.value = errorMessage;
   }
