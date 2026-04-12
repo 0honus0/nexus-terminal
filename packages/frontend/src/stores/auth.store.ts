@@ -126,7 +126,7 @@ export const useAuthStore = defineStore('auth', {
 
         if (response.data.requiresTwoFactor) {
           // 需要 2FA 验证
-          console.log('登录需要 2FA 验证');
+          console.info('登录需要 2FA 验证');
           this.loginRequires2FA = true;
           // 保存 tempToken 用于后续 2FA 验证
           this.tempToken = response.data.tempToken || null;
@@ -137,7 +137,7 @@ export const useAuthStore = defineStore('auth', {
           // 登录成功 (无 2FA)
           this.isAuthenticated = true;
           this.user = response.data.user;
-          console.log('登录成功 (无 2FA):', this.user);
+          console.info('登录成功 (无 2FA):', this.user);
           // 设置语言
           if (this.user?.language) {
             setLocale(this.user.language);
@@ -178,7 +178,7 @@ export const useAuthStore = defineStore('auth', {
         this.user = response.data.user;
         this.loginRequires2FA = false; // 重置状态
         this.tempToken = null; // 清理临时令牌
-        console.log('2FA 验证成功，登录完成:', this.user);
+        console.info('2FA 验证成功，登录完成:', this.user);
         // 设置语言
         if (this.user?.language) {
           setLocale(this.user.language);
@@ -209,7 +209,7 @@ export const useAuthStore = defineStore('auth', {
         this.isAuthenticated = false;
         this.user = null;
         // Removed passkeys clear on logout
-        console.log('已登出');
+        console.info('已登出');
         // 登出后重定向到登录页
         await router.push({ name: 'Login' });
       } catch (err: any) {
@@ -231,7 +231,7 @@ export const useAuthStore = defineStore('auth', {
           this.isAuthenticated = true;
           this.user = response.data.user; // 更新用户信息，包含 isTwoFactorEnabled 和 language
           this.loginRequires2FA = false; // 确保重置
-          console.log('认证状态已更新:', this.user);
+          console.info('认证状态已更新:', this.user);
           // 设置语言
           if (this.user?.language) {
             setLocale(this.user.language);
@@ -268,7 +268,7 @@ export const useAuthStore = defineStore('auth', {
           currentPassword,
           newPassword,
         });
-        console.log('密码修改成功:', response.data.message);
+        console.info('密码修改成功:', response.data.message);
         // 密码修改成功后，通常不需要更新本地状态，但可以清除错误
         return true;
       } catch (err: any) {
@@ -298,7 +298,7 @@ export const useAuthStore = defineStore('auth', {
         // 更新本地状态
         this.ipBlacklist.entries = response.data.entries;
         this.ipBlacklist.total = response.data.total;
-        console.log('获取 IP 黑名单成功:', response.data);
+        console.info('获取 IP 黑名单成功:', response.data);
         return response.data; // { entries: [], total: number }
       } catch (err: any) {
         console.error('获取 IP 黑名单失败:', err);
@@ -319,7 +319,7 @@ export const useAuthStore = defineStore('auth', {
       this.error = null;
       try {
         await apiClient.delete(`/settings/ip-blacklist/${encodeURIComponent(ip)}`); // 使用 apiClient
-        console.log(`IP ${ip} 已从黑名单删除`);
+        console.info(`IP ${ip} 已从黑名单删除`);
         // 从本地 state 中移除 (或者重新获取列表)
         this.ipBlacklist.entries = this.ipBlacklist.entries.filter((entry) => entry.ip !== ip);
         this.ipBlacklist.total = Math.max(0, this.ipBlacklist.total - 1);
@@ -340,7 +340,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const response = await apiClient.get<{ needsSetup: boolean }>('/auth/needs-setup'); // 使用 apiClient
         this.needsSetup = response.data.needsSetup;
-        console.log(`[AuthStore] Needs setup status: ${this.needsSetup}`);
+        console.info(`[AuthStore] Needs setup status: ${this.needsSetup}`);
         return this.needsSetup; // 返回状态给调用者
       } catch (error: any) {
         console.error('检查设置状态失败:', error.response?.data?.message || error.message);
@@ -352,11 +352,11 @@ export const useAuthStore = defineStore('auth', {
 
     //  获取公共 CAPTCHA 配置 (修改为从 /settings/captcha 获取)
     async fetchCaptchaConfig() {
-      console.log('[AuthStore] fetchCaptchaConfig called. Forcing refetch.'); // 更新日志，表明强制刷新
+      console.info('[AuthStore] fetchCaptchaConfig called. Forcing refetch.'); // 更新日志，表明强制刷新
 
       // Don't set isLoading for this, it should be quick background fetch
       try {
-        console.log('[AuthStore] Fetching CAPTCHA config from /settings/captcha...');
+        console.info('[AuthStore] Fetching CAPTCHA config from /settings/captcha...');
         // 修改 API 端点
         const response = await apiClient.get<FullCaptchaSettings>('/settings/captcha');
         const fullConfig = response.data;
@@ -369,7 +369,7 @@ export const useAuthStore = defineStore('auth', {
           recaptchaSiteKey: fullConfig.recaptchaSiteKey,
         };
 
-        console.log(
+        console.info(
           '[AuthStore] Public CAPTCHA config derived from /settings/captcha:',
           this.publicCaptchaConfig
         );
@@ -402,7 +402,7 @@ export const useAuthStore = defineStore('auth', {
 
         this.isAuthenticated = true;
         this.user = response.data.user;
-        console.log('Passkey 登录成功:', this.user);
+        console.info('Passkey 登录成功:', this.user);
         if (this.user?.language) {
           setLocale(this.user.language);
         }
@@ -442,7 +442,7 @@ export const useAuthStore = defineStore('auth', {
           username,
           registrationResponse,
         });
-        console.log('Passkey 注册成功');
+        console.info('Passkey 注册成功');
         // Optionally, refresh user data or passkeys list if applicable
         return { success: true };
       } catch (err: any) {
@@ -485,7 +485,7 @@ export const useAuthStore = defineStore('auth', {
           lastUsedDate: pk.last_used_at, // Map last_used_at to lastUsedDate
           name: pk.name,
         }));
-        console.log('Passkeys fetched and mapped successfully:', this.passkeys);
+        console.info('Passkeys fetched and mapped successfully:', this.passkeys);
       } catch (err: any) {
         console.error('Failed to fetch passkeys:', err);
         this.error = err.response?.data?.message || err.message || 'Failed to load passkeys.';
@@ -504,7 +504,7 @@ export const useAuthStore = defineStore('auth', {
       this.error = null;
       try {
         await apiClient.delete(`/auth/user/passkeys/${credentialID}`);
-        console.log(`Passkey ${credentialID} deleted successfully.`);
+        console.info(`Passkey ${credentialID} deleted successfully.`);
         // Refresh the passkey list
         await this.fetchPasskeys();
         return { success: true };
@@ -526,7 +526,7 @@ export const useAuthStore = defineStore('auth', {
       this.error = null;
       try {
         await apiClient.put(`/auth/user/passkeys/${credentialID}/name`, { name: newName });
-        console.log(`Passkey ${credentialID} name updated to "${newName}".`);
+        console.info(`Passkey ${credentialID} name updated to "${newName}".`);
         // Refresh the passkey list to show the new name
         await this.fetchPasskeys();
         return { success: true };
@@ -550,7 +550,7 @@ export const useAuthStore = defineStore('auth', {
           { params }
         );
         this.hasPasskeysAvailable = response.data.hasPasskeys;
-        console.log(
+        console.info(
           `[AuthStore] Passkeys available for ${username || 'any user'}: ${this.hasPasskeysAvailable}`
         );
         return this.hasPasskeysAvailable;
@@ -607,7 +607,7 @@ export const useAuthStore = defineStore('auth', {
         // 标记初始化完成
         this.isInitCompleted = true;
 
-        console.log('[AuthStore] 统一初始化数据加载完成:', {
+        console.info('[AuthStore] 统一初始化数据加载完成:', {
           needsSetup: this.needsSetup,
           isAuthenticated: this.isAuthenticated,
           user: this.user,
