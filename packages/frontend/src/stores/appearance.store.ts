@@ -330,7 +330,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
   function toggleStyleCustomizer(visible?: boolean) {
     isStyleCustomizerVisible.value =
       visible === undefined ? !isStyleCustomizerVisible.value : visible;
-    console.log(
+    console.info(
       '[AppearanceStore] Style Customizer visibility toggled:',
       isStyleCustomizerVisible.value
     );
@@ -354,7 +354,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
       const response = await apiClient.put<AppearanceSettings>('/appearance', payloadToSend); // 使用 apiClient, 发送合并后的 payload
       // 使用后端返回的最新设置更新本地状态
       appearanceSettings.value = response.data;
-      console.log('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
+      console.info('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
 
       // 如果 UI 主题或背景更新，重新应用
       if (updates.customUiTheme !== undefined) applyUiTheme(currentUiTheme.value);
@@ -410,12 +410,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
     // 2. 立即更新前端本地状态 (使用数字 ID)
     appearanceSettings.value.activeTerminalThemeId = idNum;
-    console.log(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
+    console.info(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
 
     // 3. 更新后端 (发送数字 ID)
     try {
       await updateAppearanceSettings({ activeTerminalThemeId: idNum });
-      console.log(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
+      console.info(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
     } catch (error) {
       // 如果更新后端失败，回滚前端状态
       console.error('[AppearanceStore] Failed to update backend activeTerminalThemeId:', error);
@@ -478,11 +478,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
    * @param enabled 是否启用
    */
   async function setTerminalBackgroundEnabled(enabled: boolean) {
-    console.log(
+    console.info(
       `[AppearanceStore LOG] setTerminalBackgroundEnabled 调用，准备发送给后端的值: ${enabled}`
     );
     await updateAppearanceSettings({ terminalBackgroundEnabled: enabled });
-    console.log(`[AppearanceStore LOG] setTerminalBackgroundEnabled 更新后端调用完成。`);
+    console.info(`[AppearanceStore LOG] setTerminalBackgroundEnabled 更新后端调用完成。`);
   }
 
   /**
@@ -590,7 +590,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
         );
         const defaultThemeId = defaultTheme?._id;
         if (defaultThemeId) {
-          console.log(
+          console.info(
             `[AppearanceStore] 删除的主题是当前激活主题，尝试切换到默认主题 ID: ${defaultThemeId}`
           );
           await setActiveTerminalTheme(defaultThemeId);
@@ -673,12 +673,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
     // 2. 如果找到且已有 themeData，直接返回
     if (existingTheme?.themeData && Object.keys(existingTheme.themeData).length > 0) {
-      console.log(`[AppearanceStore] Theme data for ${themeId} already loaded.`);
+      console.info(`[AppearanceStore] Theme data for ${themeId} already loaded.`);
       return existingTheme.themeData;
     }
 
     // 3. 如果未找到或缺少 themeData，从后端加载
-    console.log(`[AppearanceStore] Loading theme data for ${themeId} from backend...`);
+    console.info(`[AppearanceStore] Loading theme data for ${themeId} from backend...`);
     try {
       const response = await apiClient.get<TerminalTheme>(`/terminal-themes/${themeId}`); // 假设后端提供此接口
       const fullTheme = response.data;
@@ -693,7 +693,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             ...allTerminalThemes.value[index],
             themeData: fullTheme.themeData,
           };
-          console.log(`[AppearanceStore] Updated theme data for ${themeId} in local store.`);
+          console.info(`[AppearanceStore] Updated theme data for ${themeId} in local store.`);
         } else {
           // 如果列表中不存在（理论上不应发生，因为初始加载了元数据），可以考虑添加到列表
           console.warn(
@@ -798,13 +798,13 @@ export const useAppearanceStore = defineStore('appearance', () => {
   function startTerminalThemePreview(themeData: ITheme) {
     previewTerminalThemeData.value = themeData;
     isPreviewingTerminalTheme.value = true;
-    console.log('[AppearanceStore] Started terminal theme preview.');
+    console.info('[AppearanceStore] Started terminal theme preview.');
   }
 
   function stopTerminalThemePreview() {
     previewTerminalThemeData.value = null;
     isPreviewingTerminalTheme.value = false;
-    console.log('[AppearanceStore] Stopped terminal theme preview.');
+    console.info('[AppearanceStore] Stopped terminal theme preview.');
   }
 
   // --- HTML Preset Actions ---
@@ -984,7 +984,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
       // --- 修改开始：使用 URL 构造函数改进 URL 拼接 ---
       const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin; // 如果未设置 VITE_API_BASE_URL，则回退到当前页面源
       const imagePath = pageBackgroundImage.value;
-      console.log(
+      console.info(
         `[AppearanceStore applyPageBackground] Base URL: "${backendUrl}", Image Path: "${imagePath}"`
       );
 
@@ -996,7 +996,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
         // 确保 imagePath 是以 / 开头，如果不是则添加
         const correctedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
         fullImageUrl = new URL(correctedPath, baseUrl).href;
-        console.log(
+        console.info(
           `[AppearanceStore applyPageBackground] Constructed Full Image URL: "${fullImageUrl}"`
         );
       } catch (e) {
@@ -1019,7 +1019,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
           body.style.backgroundPosition = 'center'; // 居中显示
           body.style.backgroundRepeat = 'no-repeat'; // 不重复
           body.style.backgroundAttachment = 'fixed'; // 背景固定，不随滚动条滚动 (可选)
-          console.log(
+          console.info(
             `[AppearanceStore applyPageBackground] Applied background image: ${fullImageUrl}`
           );
         } else {
@@ -1032,12 +1032,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
     } else {
       // 如果没有设置背景图片，则清除背景
       body.style.backgroundImage = 'none';
-      console.log(`[AppearanceStore applyPageBackground] Cleared background image.`);
+      console.info(`[AppearanceStore applyPageBackground] Cleared background image.`);
     }
     // 注意：直接设置 body 透明度会影响所有子元素，通常不建议。
     // 如果需要背景透明效果，通常结合伪元素或额外 div 实现。
     // 这里暂时不直接应用 pageBackgroundOpacity 到 body。
-    console.log('[AppearanceStore] 页面背景已应用:', pageBackgroundImage.value);
+    console.info('[AppearanceStore] 页面背景已应用:', pageBackgroundImage.value);
   }
 
   // --- Watchers ---

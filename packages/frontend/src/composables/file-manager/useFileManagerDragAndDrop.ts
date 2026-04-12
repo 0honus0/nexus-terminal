@@ -174,7 +174,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       (item as FileSystemFileEntry).file(
         (file) => {
           // 调用上传函数，传递文件和相对路径
-          console.log(`[DragDrop] Uploading file: ${currentPath}${file.name}`);
+          console.info(`[DragDrop] Uploading file: ${currentPath}${file.name}`);
           onFileUpload(file, currentPath); // 传递相对路径
         },
         (err) => {
@@ -189,7 +189,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       const dirReader = (item as FileSystemDirectoryEntry).createReader();
       dirReader.readEntries(
         (entries) => {
-          console.log(
+          console.info(
             `[DragDrop] Traversing directory: ${currentPath}${item.name}, found ${entries.length} entries.`
           );
           // 递归遍历目录中的每个条目
@@ -215,11 +215,11 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     const items = event.dataTransfer?.items;
     if (!items || items.length === 0 || !isConnected.value) {
-      console.log('[DragDrop] Overlay drop ignored: No items or not connected.');
+      console.info('[DragDrop] Overlay drop ignored: No items or not connected.');
       return;
     }
 
-    console.log(`[DragDrop] Processing ${items.length} items from overlay drop.`);
+    console.info(`[DragDrop] Processing ${items.length} items from overlay drop.`);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (item.kind === 'file') {
@@ -309,7 +309,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       sourceItem.filename === targetItem.filename ||
       targetItem.filename !== currentDragOverTarget
     ) {
-      console.log(
+      console.info(
         `[DragDrop] Internal drop on row ignored: Invalid conditions. Source: ${sourceItem?.filename}, Target: ${targetItem.filename}, Drop Target: ${currentDragOverTarget}`
       );
       if (sourceItem) draggedItem.value = null; // 清理拖拽状态
@@ -350,7 +350,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     // 检查被拖拽的项是否在选区内
     if (selectedItems.value.has(sourceItem.filename)) {
       // 多选拖拽：移动所有选中的项
-      console.log(
+      console.info(
         `[DragDrop] Multi-item drop detected. Moving ${selectedItems.value.size} selected items.`
       );
       selectedItems.value.forEach((filename) => {
@@ -374,7 +374,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       // clearSelection(); // 需要从 useFileManagerSelection 引入或作为参数传入
     } else {
       // 单选拖拽 (拖拽了一个未选中的项)
-      console.log(
+      console.info(
         `[DragDrop] Single unselected item drop detected. Moving ${sourceItem.filename}.`
       );
       // 检查目标路径是否与源路径相同
@@ -389,16 +389,16 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     // 统一执行移动操作
     if (itemsToMove.length > 0) {
-      console.log(
+      console.info(
         `[DragDrop] Executing move for ${itemsToMove.length} items to target directory: ${targetDirectoryFullPath}`
       );
       itemsToMove.forEach((item) => {
         const itemNewFullPath = joinPath(targetDirectoryFullPath, item.filename);
-        console.log(`[DragDrop]   - Moving '${item.filename}' to '${itemNewFullPath}'`);
+        console.info(`[DragDrop]   - Moving '${item.filename}' to '${itemNewFullPath}'`);
         onItemMove(item, itemNewFullPath); // 调用移动回调
       });
     } else {
-      console.log('[DragDrop] No valid items to move.');
+      console.info('[DragDrop] No valid items to move.');
     }
 
     // 清理拖拽状态
