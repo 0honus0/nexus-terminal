@@ -2,8 +2,9 @@ import { ref, reactive, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../../stores/settings.store';
-import { useAuthStore } from '../../stores/auth.store';
+import { useAuthStore, type IpBlacklistEntry } from '../../stores/auth.store';
 import { useConfirmDialog } from '../useConfirmDialog';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 export function useIpBlacklist() {
   const settingsStore = useSettingsStore();
@@ -32,7 +33,7 @@ export function useIpBlacklist() {
     try {
       await settingsStore.updateSetting('ipBlacklistEnabled', nextValue ? 'true' : 'false');
       // Success: ipBlacklistEnabledBoolean will update via store watcher, syncing ipBlacklistEnabled.value
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新 IP 黑名单启用状态失败:', error);
       ipBlacklistEnabled.value = originalValue; // Revert on failure
       // Optionally, show an error message to the user
@@ -76,10 +77,12 @@ export function useIpBlacklist() {
       });
       blacklistSettingsMessage.value = t('settings.ipBlacklist.success.configUpdated');
       blacklistSettingsSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新黑名单配置失败:', error);
-      blacklistSettingsMessage.value =
-        error.message || t('settings.ipBlacklist.error.updateConfigFailed');
+      blacklistSettingsMessage.value = extractErrorMessage(
+        error,
+        t('settings.ipBlacklist.error.updateConfigFailed')
+      );
       blacklistSettingsSuccess.value = false;
     } finally {
       blacklistSettingsLoading.value = false;
@@ -88,7 +91,7 @@ export function useIpBlacklist() {
 
   // --- IP Blacklist Table State & Methods ---
   const ipBlacklist = reactive({
-    entries: [] as any[],
+    entries: [] as IpBlacklistEntry[],
     total: 0,
     loading: false,
     error: null as string | null,
@@ -108,8 +111,8 @@ export function useIpBlacklist() {
       ipBlacklist.entries = data.entries;
       ipBlacklist.total = data.total;
       ipBlacklist.currentPage = page;
-    } catch (error: any) {
-      ipBlacklist.error = error.message || t('settings.ipBlacklist.error.fetchFailed');
+    } catch (error: unknown) {
+      ipBlacklist.error = extractErrorMessage(error, t('settings.ipBlacklist.error.fetchFailed'));
     } finally {
       ipBlacklist.loading = false;
     }
@@ -127,8 +130,11 @@ export function useIpBlacklist() {
       try {
         await authStore.deleteIpFromBlacklist(ip);
         await fetchIpBlacklist(ipBlacklist.currentPage); // Refresh list
-      } catch (error: any) {
-        blacklistDeleteError.value = error.message || t('settings.ipBlacklist.error.deleteFailed');
+      } catch (error: unknown) {
+        blacklistDeleteError.value = extractErrorMessage(
+          error,
+          t('settings.ipBlacklist.error.deleteFailed')
+        );
       } finally {
         blacklistDeleteLoading.value = false;
         blacklistToDeleteIp.value = null;

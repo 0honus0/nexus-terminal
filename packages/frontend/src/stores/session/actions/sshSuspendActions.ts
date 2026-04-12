@@ -35,6 +35,7 @@ import { useUiNotificationsStore } from '../../uiNotifications.store';
 import type { SuspendedSshSession } from '../../../types/ssh-suspend.types';
 import i18n from '../../../i18n';
 import apiClient from '../../../utils/apiClient';
+import { extractErrorMessage } from '../../../utils/errorExtractor';
 
 const { t } = i18n.global;
 
@@ -395,7 +396,8 @@ export const terminateAndRemoveSshSession = async (suspendSessionId: string): Pr
         }),
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = extractErrorMessage(error, t('term.unknownError'));
     console.error(
       `[${t('term.sshSuspend')}] 通过 HTTP API 终止并移除会话 ${suspendSessionId} 失败:`,
       error
@@ -403,7 +405,7 @@ export const terminateAndRemoveSshSession = async (suspendSessionId: string): Pr
     uiNotificationsStore.addNotification({
       type: 'error',
       message: t('sshSuspend.notifications.terminateError', {
-        error: error.response?.data?.message || error.message || t('term.unknownError'),
+        error: errorMessage,
       }),
     });
   }
@@ -435,7 +437,8 @@ export const removeSshSessionEntry = async (suspendSessionId: string): Promise<v
         }),
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = extractErrorMessage(error, t('term.unknownError'));
     console.error(
       `[${t('term.sshSuspend')}] 通过 HTTP API 移除已断开条目 ${suspendSessionId} 失败:`,
       error
@@ -443,7 +446,7 @@ export const removeSshSessionEntry = async (suspendSessionId: string): Promise<v
     uiNotificationsStore.addNotification({
       type: 'error',
       message: t('sshSuspend.notifications.entryRemovedError', {
-        error: error.response?.data?.message || error.message || t('term.unknownError'),
+        error: errorMessage,
       }),
     });
   }
@@ -491,7 +494,8 @@ export const editSshSessionName = async (
       // 也可以选择重新获取列表
       fetchSuspendedSshSessions();
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = extractErrorMessage(error, t('term.unknownError'));
     console.error(
       `[${t('term.sshSuspend')}] 通过 HTTP API 编辑名称 ${suspendSessionId} 失败:`,
       error
@@ -499,7 +503,7 @@ export const editSshSessionName = async (
     uiNotificationsStore.addNotification({
       type: 'error',
       message: t('sshSuspend.notifications.nameEditedError', {
-        error: error.response?.data?.message || error.message || t('term.unknownError'),
+        error: errorMessage,
       }),
     });
   }
@@ -551,29 +555,28 @@ export const exportSshSessionLog = async (suspendSessionId: string): Promise<voi
     console.info(
       `[${t('term.sshSuspend')}] 挂起会话日志 ${filename} (ID: ${suspendSessionId}) 已开始下载。`
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[${t('term.sshSuspend')}] 导出挂起会话日志 ${suspendSessionId} 失败:`, error);
     let errorMessage = t('term.unknownError');
-    if (error.response && error.response.data) {
+    if (isAxiosError(error) && error.response?.data) {
       // 如果响应是 Blob 但我们期望 JSON 错误信息，需要特殊处理
       // 假设错误时后端会返回 JSON
-      if (
-        error.response.data instanceof Blob &&
-        error.response.headers['content-type']?.includes('application/json')
-      ) {
+      const responseData = error.response.data;
+      const responseContentType = error.response.headers?.['content-type'];
+      if (responseData instanceof Blob && responseContentType?.includes('application/json')) {
         try {
-          const errorJson = JSON.parse(await error.response.data.text());
+          const errorJson = JSON.parse(await responseData.text()) as { message?: string };
           errorMessage = errorJson.message || errorMessage;
-        } catch (e) {
+        } catch {
           // Blob 不是有效的 JSON，使用通用错误
         }
-      } else if (typeof error.response.data === 'object') {
-        errorMessage = error.response.data.message || error.message;
+      } else if (typeof responseData === 'object' && responseData !== null) {
+        errorMessage = extractErrorMessage(error, errorMessage);
       } else {
-        errorMessage = error.message;
+        errorMessage = extractErrorMessage(error, errorMessage);
       }
     } else {
-      errorMessage = error.message || String(error);
+      errorMessage = extractErrorMessage(error, String(error));
     }
     uiNotificationsStore.addNotification({
       type: 'error',

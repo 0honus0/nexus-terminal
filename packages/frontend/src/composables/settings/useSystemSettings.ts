@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../../stores/settings.store';
 import { availableLocales } from '../../i18n';
 import apiClient from '../../utils/apiClient';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 export function useSystemSettings() {
   const settingsStore = useSettingsStore();
@@ -36,9 +37,9 @@ export function useSystemSettings() {
       languageSuccess.value = true;
       // The language change will be reflected globally by the i18n instance
       // when settingsStore.language updates.
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新语言设置失败:', error);
-      languageMessage.value = error.message || t('settings.language.error.saveFailed');
+      languageMessage.value = extractErrorMessage(error, t('settings.language.error.saveFailed'));
       languageSuccess.value = false;
     } finally {
       languageLoading.value = false;
@@ -87,9 +88,9 @@ export function useSystemSettings() {
       await settingsStore.updateSetting('timezone', selectedTimezone.value);
       timezoneMessage.value = t('settings.timezone.success.saved');
       timezoneSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新时区设置失败:', error);
-      timezoneMessage.value = error.message || t('settings.timezone.error.saveFailed');
+      timezoneMessage.value = extractErrorMessage(error, t('settings.timezone.error.saveFailed'));
       timezoneSuccess.value = false;
     } finally {
       timezoneLoading.value = false;
@@ -114,9 +115,12 @@ export function useSystemSettings() {
       await settingsStore.updateSetting('statusMonitorIntervalSeconds', String(intervalValue));
       statusMonitorMessage.value = t('settings.statusMonitor.success.saved');
       statusMonitorSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新状态监控间隔失败:', error);
-      statusMonitorMessage.value = error.message || t('settings.statusMonitor.error.saveFailed');
+      statusMonitorMessage.value = extractErrorMessage(
+        error,
+        t('settings.statusMonitor.error.saveFailed')
+      );
       statusMonitorSuccess.value = false;
     } finally {
       statusMonitorLoading.value = false;
@@ -145,9 +149,12 @@ export function useSystemSettings() {
       });
       dockerSettingsMessage.value = t('settings.docker.success.saved');
       dockerSettingsSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新 Docker 设置失败:', error);
-      dockerSettingsMessage.value = error.message || t('settings.docker.error.saveFailed');
+      dockerSettingsMessage.value = extractErrorMessage(
+        error,
+        t('settings.docker.error.saveFailed')
+      );
       dockerSettingsSuccess.value = false;
     } finally {
       dockerSettingsLoading.value = false;
@@ -232,11 +239,12 @@ export function useSystemSettings() {
       await apiClient.put('/settings/log-level', { level: selectedLogLevel.value });
       logLevelMessage.value = t('settings.logLevel.success.saved', '日志等级已保存');
       logLevelSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新日志等级失败:', error);
-      logLevelMessage.value =
-        error.response?.data?.message ||
-        t('settings.logLevel.error.saveFailed', '保存日志等级失败');
+      logLevelMessage.value = extractErrorMessage(
+        error,
+        t('settings.logLevel.error.saveFailed', '保存日志等级失败')
+      );
       logLevelSuccess.value = false;
     } finally {
       logLevelLoading.value = false;

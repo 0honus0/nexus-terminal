@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
 
 // 定义快捷指令标签接口 (与后端 QuickCommandTag 对应)
@@ -54,9 +55,9 @@ export const useQuickCommandTagsStore = defineStore('quickCommandTags', () => {
       }
       error.value = null;
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[QuickCmdTagStore] Failed to fetch tags:', err);
-      error.value = err.response?.data?.message || err.message || '获取快捷指令标签列表失败';
+      error.value = extractErrorMessage(err, '获取快捷指令标签列表失败');
       if (error.value) {
         // Check if error.value is not null
         uiNotificationsStore.showError(error.value); // 显示错误通知
@@ -82,9 +83,9 @@ export const useQuickCommandTagsStore = defineStore('quickCommandTags', () => {
       await fetchTags(); // 重新获取以更新列表
       uiNotificationsStore.showSuccess('快捷指令标签已添加');
       return newTag;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[QuickCmdTagStore] Failed to add tag:', err);
-      error.value = err.response?.data?.message || err.message || '添加快捷指令标签失败';
+      error.value = extractErrorMessage(err, '添加快捷指令标签失败');
       if (error.value) {
         // Check if error.value is not null
         uiNotificationsStore.showError(error.value);
@@ -106,9 +107,9 @@ export const useQuickCommandTagsStore = defineStore('quickCommandTags', () => {
       await fetchTags();
       uiNotificationsStore.showSuccess('快捷指令标签已更新');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[QuickCmdTagStore] Failed to update tag:', err);
-      error.value = err.response?.data?.message || err.message || '更新快捷指令标签失败';
+      error.value = extractErrorMessage(err, '更新快捷指令标签失败');
       if (error.value) {
         // Check if error.value is not null
         uiNotificationsStore.showError(error.value);
@@ -130,9 +131,9 @@ export const useQuickCommandTagsStore = defineStore('quickCommandTags', () => {
       await fetchTags();
       uiNotificationsStore.showSuccess('快捷指令标签已删除');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[QuickCmdTagStore] Failed to delete tag:', err);
-      error.value = err.response?.data?.message || err.message || '删除快捷指令标签失败';
+      error.value = extractErrorMessage(err, '删除快捷指令标签失败');
       if (error.value) {
         // Check if error.value is not null
         uiNotificationsStore.showError(error.value);

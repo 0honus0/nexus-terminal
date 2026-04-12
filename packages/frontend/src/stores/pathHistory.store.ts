@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
 
 // 后端返回的原始路径历史记录条目接口
@@ -73,9 +74,9 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       // 后端返回的可能是升序，前端通常希望降序显示（最新的在前面）
       historyList.value = response.data.sort((a, b) => b.timestamp - a.timestamp);
       error.value = null;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[PathHistoryStore] 获取路径历史记录失败:', err);
-      error.value = err.response?.data?.message || '获取路径历史记录时发生错误';
+      error.value = extractErrorMessage(err, '获取路径历史记录时发生错误');
       uiNotificationsStore.showError(error.value ?? '未知错误');
     } finally {
       isLoading.value = false;
@@ -97,9 +98,9 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       // const newEntry = response.data;
       // historyList.value.unshift(newEntry);
       // historyList.value.sort((a, b) => b.timestamp - a.timestamp); // 确保排序
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[PathHistoryStore] 添加路径历史记录失败:', err);
-      const message = err.response?.data?.message || '添加路径历史记录时发生错误';
+      const message = extractErrorMessage(err, '添加路径历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
   };
@@ -114,9 +115,9 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
         historyList.value.splice(index, 1);
       }
       uiNotificationsStore.showSuccess('路径历史记录已删除');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[PathHistoryStore] 删除路径历史记录失败:', err);
-      const message = err.response?.data?.message || '删除路径历史记录时发生错误';
+      const message = extractErrorMessage(err, '删除路径历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
   };
@@ -127,9 +128,9 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       await apiClient.delete('/path-history');
       historyList.value = []; // 清空本地列表
       uiNotificationsStore.showSuccess('所有路径历史记录已清空');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[PathHistoryStore] 清空路径历史记录失败:', err);
-      const message = err.response?.data?.message || '清空路径历史记录时发生错误';
+      const message = extractErrorMessage(err, '清空路径历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
   };

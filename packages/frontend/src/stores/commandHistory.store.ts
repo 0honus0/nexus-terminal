@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
+import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store'; // 用于显示通知
 
 // 后端返回的原始历史记录条目接口
@@ -95,9 +96,9 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
         console.info('[CmdHistoryStore] History data is up-to-date.');
       }
       error.value = null; // 清除错误
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[CmdHistoryStore] 获取命令历史记录失败:', err);
-      error.value = err.response?.data?.message || '获取历史记录时发生错误';
+      error.value = extractErrorMessage(err, '获取历史记录时发生错误');
       // 保留缓存数据，仅设置错误状态
       uiNotificationsStore.showError(error.value ?? '未知错误');
     } finally {
@@ -123,9 +124,9 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       // 添加成功后，清除缓存并重新获取
       localStorage.removeItem('commandHistoryCache');
       await fetchHistory(); // fetchHistory 会处理获取和缓存更新
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('添加命令历史记录失败:', err);
-      const message = err.response?.data?.message || '添加历史记录时发生错误';
+      const message = extractErrorMessage(err, '添加历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
   };
@@ -141,9 +142,9 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
         historyList.value.splice(index, 1);
       }
       uiNotificationsStore.showSuccess('历史记录已删除');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('删除命令历史记录失败:', err);
-      const message = err.response?.data?.message || '删除历史记录时发生错误';
+      const message = extractErrorMessage(err, '删除历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
   };
@@ -157,9 +158,9 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       localStorage.removeItem('commandHistoryCache');
       historyList.value = [];
       uiNotificationsStore.showSuccess('所有历史记录已清空');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('清空命令历史记录失败:', err);
-      const message = err.response?.data?.message || '清空历史记录时发生错误';
+      const message = extractErrorMessage(err, '清空历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
   };

@@ -5,6 +5,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
 import Guacamole from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -34,6 +35,17 @@ const initialModalWidthForResize = ref(0);
 const initialModalHeightForResize = ref(0);
 const statusMessage = ref('');
 const vncPasteInputText = ref('');
+interface GuacamoleStatusPayload {
+  code?: number | string;
+  message?: string;
+}
+
+const normalizeGuacamoleStatus = (status: unknown): GuacamoleStatusPayload => {
+  if (status && typeof status === 'object') {
+    return status as GuacamoleStatusPayload;
+  }
+  return {};
+};
 
 const sendInputTextToVnc = async () => {
   if (!guacClient.value || connectionStatus.value !== 'connected') {
@@ -64,9 +76,10 @@ const sendInputTextToVnc = async () => {
     }
     console.info('[VncModal] Finished simulating keyboard input.');
     // vncPasteInputText.value = ''; // 如果希望发送后清空输入框，取消此行注释
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = extractErrorMessage(err, t('term.unknownError'));
     console.error('[VncModal] Error simulating keyboard input:', err);
-    statusMessage.value = t('vncModal.errors.simulateInputError', { error: err.message });
+    statusMessage.value = t('vncModal.errors.simulateInputError', { error: errorMessage });
   }
 };
 const keyboard = ref<InstanceType<typeof Guacamole.Keyboard> | null>(null);
@@ -155,9 +168,10 @@ const handleConnection = async () => {
 
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
 
-    tunnel.onerror = (status: any) => {
-      const errorMessage = status.message || 'Unknown tunnel error';
-      const errorCode = status.code || 'N/A';
+    tunnel.onerror = (status: unknown) => {
+      const normalizedStatus = normalizeGuacamoleStatus(status);
+      const errorMessage = normalizedStatus.message || 'Unknown tunnel error';
+      const errorCode = normalizedStatus.code || 'N/A';
       statusMessage.value = `${t('remoteDesktopModal.errors.tunnelError')} (${errorCode}): ${errorMessage}`;
       connectionStatus.value = 'error';
       disconnectGuacamole();
@@ -235,16 +249,18 @@ const handleConnection = async () => {
           | 'error';
     };
 
-    guacClient.value.onerror = (status: any) => {
-      const errorMessage = status.message || 'Unknown client error';
+    guacClient.value.onerror = (status: unknown) => {
+      const normalizedStatus = normalizeGuacamoleStatus(status);
+      const errorMessage = normalizedStatus.message || 'Unknown client error';
       statusMessage.value = `${t('remoteDesktopModal.errors.clientError')}: ${errorMessage}`;
       connectionStatus.value = 'error';
       disconnectGuacamole();
     };
 
     guacClient.value.connect('');
-  } catch (error: any) {
-    statusMessage.value = `${t('remoteDesktopModal.errors.connectionFailed')}: ${error.response?.data?.message || error.message || String(error)}`;
+  } catch (error: unknown) {
+    const errorMessage = extractErrorMessage(error, t('term.unknownError'));
+    statusMessage.value = `${t('remoteDesktopModal.errors.connectionFailed')}: ${errorMessage}`;
     connectionStatus.value = 'error';
     disconnectGuacamole();
   }

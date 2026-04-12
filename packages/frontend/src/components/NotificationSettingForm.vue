@@ -441,6 +441,7 @@ import {
   NotificationChannelType,
 } from '../types/server.types';
 import { useI18n } from 'vue-i18n';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 interface SmtpEmailConfig extends Omit<EmailConfig, 'subjectTemplate'> {
   bodyTemplate?: string;
@@ -451,6 +452,7 @@ interface SmtpEmailConfig extends Omit<EmailConfig, 'subjectTemplate'> {
   smtpPass?: string;
   from?: string; // Add 'from' address
 }
+type NotificationConfigValue = WebhookConfig | SmtpEmailConfig | TelegramConfig;
 
 const props = defineProps({
   initialData: {
@@ -532,11 +534,11 @@ const allNotificationEvents: NotificationEvent[] = [
 const getDefaultFormData = (): Omit<
   NotificationSetting,
   'id' | 'created_at' | 'updated_at' | 'config'
-> & { config: any } => ({
+> & { config: NotificationConfigValue } => ({
   name: '',
   enabled: true,
   channel_type: 'webhook',
-  config: {}, // Will be populated based on channel_type
+  config: { url: '', method: 'POST', headers: {}, bodyTemplate: '' }, // Will be populated based on channel_type
   enabled_events: ['LOGIN_FAILURE'], // Sensible defaults
 });
 
@@ -675,8 +677,9 @@ watch(webhookHeadersString, (newVal) => {
     }
     webhookConfig.value.headers = parsed;
     headerError.value = null;
-  } catch (e: any) {
-    headerError.value = t('settings.notifications.form.invalidJson') + `: ${e.message}`;
+  } catch (e: unknown) {
+    const errorMessage = extractErrorMessage(e, t('common.errorOccurred'));
+    headerError.value = t('settings.notifications.form.invalidJson') + `: ${errorMessage}`;
   }
 });
 
@@ -746,7 +749,7 @@ const handleTestNotification = async () => {
   testError.value = null;
   testResult.value = null;
 
-  let testConfig: any = {};
+  let testConfig: NotificationConfigValue;
   // Prepare the config based on the current channel type
   switch (formData.channel_type) {
     case 'webhook':
@@ -761,10 +764,11 @@ const handleTestNotification = async () => {
         ) {
           throw new Error('Headers must be a JSON object.');
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const errorMessage = extractErrorMessage(e, t('common.errorOccurred'));
         testResult.value = {
           success: false,
-          message: t('settings.notifications.form.invalidJson') + `: ${e.message}`,
+          message: t('settings.notifications.form.invalidJson') + `: ${errorMessage}`,
         };
         testingNotification.value = false;
         return;
@@ -797,12 +801,9 @@ const handleTestNotification = async () => {
       success: true,
       message: t(result.message || 'settings.notifications.form.testSuccess'),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Test notification error:', error);
-    const message =
-      error?.response?.data?.message ||
-      error.message ||
-      t('settings.notifications.form.testFailed');
+    const message = extractErrorMessage(error, t('settings.notifications.form.testFailed'));
     testResult.value = { success: false, message: message };
     // Optionally set testError if you want a separate display area for errors vs results
     // testError.value = message;

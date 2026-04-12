@@ -16,6 +16,7 @@ import { storeToRefs } from 'pinia';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN, enUS, ja } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 const { t, locale } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -87,32 +88,27 @@ const filteredAndSortedConnections = computed(() => {
   }
 
   return searchedConnections.sort((a, b) => {
-    let valA: any;
-    let valB: any;
-
     switch (sortBy) {
       case 'name':
-        valA = a.name || '';
-        valB = b.name || '';
-        return valA.localeCompare(valB) * factor;
+        return (a.name || '').localeCompare(b.name || '') * factor;
       case 'type':
-        valA = a.type || '';
-        valB = b.type || '';
-        return valA.localeCompare(valB) * factor;
+        return (a.type || '').localeCompare(b.type || '') * factor;
       case 'created_at':
-        valA = a.created_at ?? 0;
-        valB = b.created_at ?? 0;
-        return (valA - valB) * factor;
+        return ((a.created_at ?? 0) - (b.created_at ?? 0)) * factor;
       case 'updated_at':
-        valA = a.updated_at ?? 0;
-        valB = b.updated_at ?? 0;
-        return (valA - valB) * factor;
-      case 'last_connected_at':
-        valA = a.last_connected_at ?? (sortOrderVal === 'desc' ? -Infinity : Infinity);
-        valB = b.last_connected_at ?? (sortOrderVal === 'desc' ? -Infinity : Infinity);
-        if (valA === valB) return 0;
-        if (valA < valB) return -1 * factor;
+        return ((a.updated_at ?? 0) - (b.updated_at ?? 0)) * factor;
+      case 'last_connected_at': {
+        const defaultLastConnected = sortOrderVal === 'desc' ? -Infinity : Infinity;
+        const valA = a.last_connected_at ?? defaultLastConnected;
+        const valB = b.last_connected_at ?? defaultLastConnected;
+        if (valA === valB) {
+          return 0;
+        }
+        if (valA < valB) {
+          return -1 * factor;
+        }
         return 1 * factor;
+      }
       default:
         return 0;
     }
@@ -312,14 +308,12 @@ const handleBatchDeleteConnections = async () => {
       selectedConnectionIdsForBatch.value.clear();
 
       await connectionsStore.fetchConnections();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error, '未知错误');
       console.error('Batch delete connections error:', error);
       showAlertDialog({
         title: t('common.error'),
-        message: t(
-          'connections.batchEdit.errorMessage',
-          `批量删除连接失败: ${error.message || '未知错误'}`
-        ),
+        message: t('connections.batchEdit.errorMessage', `批量删除连接失败: ${errorMessage}`),
       });
     } finally {
       isDeletingSelectedConnections.value = false;
@@ -384,10 +378,11 @@ const handleTestSingleConnection = async (conn: ConnectionInfo) => {
         resultText: result.message || t('connections.test.unknownError', '未知错误'),
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = extractErrorMessage(error, t('connections.test.unknownError', '未知错误'));
     connectionTestStates.value.set(conn.id, {
       status: 'error',
-      resultText: error.message || t('connections.test.unknownError', '未知错误'),
+      resultText: errorMessage,
     });
   }
 };

@@ -9,6 +9,7 @@ import { useSshKeysStore } from '../stores/sshKeys.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useConfirmDialog } from './useConfirmDialog';
 import { useAlertDialog } from './useAlertDialog';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 // Define Props interface based on the component's props
 interface AddConnectionFormProps {
@@ -22,6 +23,33 @@ type AddConnectionFormEmits = {
   (e: 'connection-updated'): void;
   (e: 'connection-deleted'): void;
 };
+
+type ConnectionType = 'SSH' | 'RDP' | 'VNC';
+type AuthMethod = 'password' | 'key';
+type JumpChain = Array<number | null> | null;
+
+interface ConnectionPayload {
+  type: ConnectionType;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  notes?: string;
+  proxy_id?: number | null;
+  proxy_type?: 'proxy' | 'jump' | null;
+  tag_ids?: number[];
+  jump_chain?: number[] | null;
+  force_keyboard_interactive?: boolean;
+  auth_method: AuthMethod;
+  password?: string;
+  ssh_key_id?: number | null;
+}
+
+interface ScriptConnectionDraft extends ConnectionPayload {
+  tag_names?: string[];
+  proxy_name?: string | null;
+  ssh_key_name?: string;
+}
 
 export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddConnectionFormEmits) {
   const { connectionToEdit } = toRefs(props);
@@ -50,18 +78,18 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
   // 表单数据模型
   const initialFormData = {
-    type: 'SSH' as 'SSH' | 'RDP' | 'VNC',
+    type: 'SSH' as ConnectionType,
     name: '',
     host: '',
     port: 22,
     username: '',
-    auth_method: 'password' as 'password' | 'key',
+    auth_method: 'password' as AuthMethod,
     password: '',
     private_key: '',
     passphrase: '',
     selected_ssh_key_id: null as number | null,
     proxy_id: null as number | null,
-    jump_chain: null as Array<any> | null,
+    jump_chain: null as JumpChain,
     proxy_type: null as 'proxy' | 'jump' | null,
     tag_ids: [] as number[],
     notes: '',
@@ -560,7 +588,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     }
 
     let allConnectionsValid = true;
-    const connectionsToAdd = [];
+    const connectionsToAdd: ScriptConnectionDraft[] = [];
 
     for (const line of lines) {
       const parsed = parseScriptLine(line);
@@ -607,19 +635,19 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         break;
       }
 
-      const connectionData: any = {
+      const connectionData: ScriptConnectionDraft = {
         type: parsed.type,
         name: parsed.name || `${username}@${host}`,
         host,
         port,
         username,
+        auth_method: parsed.type === 'SSH' && parsed.keyName ? 'key' : 'password',
         notes: parsed.note || '',
         tag_names: parsed.tags,
         proxy_name: parsed.proxyName,
       };
 
       if (parsed.type === 'SSH') {
-        connectionData.auth_method = parsed.keyName ? 'key' : 'password';
         if (connectionData.auth_method === 'password') {
           if (!parsed.password) {
             uiNotificationsStore.showError(
@@ -661,7 +689,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       return;
     }
 
-    const fullyProcessedConnections = [];
+    const fullyProcessedConnections: ConnectionPayload[] = [];
     let resolutionErrorOccurred = false;
 
     for (const connData of connectionsToAdd) {
@@ -724,7 +752,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
       if (connData.type !== 'SSH' || connData.auth_method !== 'key') delete connData.ssh_key_id;
       if (connData.type === 'SSH' && connData.auth_method === 'key') delete connData.password;
-      if (connData.type !== 'SSH') delete connData.auth_method;
 
       fullyProcessedConnections.push(connData);
     }
@@ -920,12 +947,13 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           const currentIp = ips[i];
           const ipSuffix = currentIp.split('.').pop() || `${i + 1}`;
 
-          const dataForThisIp: any = {
+          const dataForThisIp: ConnectionPayload = {
             type: formData.type,
             name: formData.name ? `${formData.name}-${ipSuffix}` : currentIp,
             host: currentIp,
             port: formData.port,
             username: formData.username,
+            auth_method: formData.auth_method,
             notes: formData.notes,
             proxy_id: formData.proxy_id || null,
             tag_ids: currentSelectedValidTagIds,
@@ -941,17 +969,14 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
             }
           } else if (formData.type === 'RDP') {
             dataForThisIp.password = formData.password;
-            delete dataForThisIp.auth_method;
           } else if (formData.type === 'VNC') {
             dataForThisIp.password = formData.vncPassword;
-            delete dataForThisIp.auth_method;
           }
 
           if (dataForThisIp.type !== 'SSH' || dataForThisIp.auth_method !== 'key')
             delete dataForThisIp.ssh_key_id;
           if (dataForThisIp.type === 'SSH' && dataForThisIp.auth_method === 'key')
             delete dataForThisIp.password;
-          if (dataForThisIp.type !== 'SSH') delete dataForThisIp.auth_method;
 
           const success = await connectionsStore.addConnection(dataForThisIp);
           if (success) {
@@ -999,22 +1024,24 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       return;
     }
 
-    const dataToSend: any = {
+    const dataToSend: ConnectionPayload = {
       type: formData.type,
       name: formData.name,
       host: formData.host.trim(),
       port: formData.port,
       notes: formData.notes,
       username: formData.username,
+      auth_method: formData.auth_method,
       proxy_id: formData.proxy_id || null,
       proxy_type: formData.proxy_type,
       tag_ids: currentSelectedValidTagIds,
-      jump_chain: formData.jump_chain ? JSON.parse(JSON.stringify(formData.jump_chain)) : null,
+      jump_chain: formData.jump_chain
+        ? (JSON.parse(JSON.stringify(formData.jump_chain)) as number[] | null)
+        : null,
       force_keyboard_interactive: formData.force_keyboard_interactive,
     };
 
     if (formData.type === 'SSH') {
-      dataToSend.auth_method = formData.auth_method;
       if (formData.auth_method === 'password') {
         if (formData.password) dataToSend.password = formData.password;
       } else if (formData.auth_method === 'key') {
@@ -1024,17 +1051,14 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       }
     } else if (formData.type === 'RDP') {
       if (formData.password) dataToSend.password = formData.password;
-      delete dataToSend.auth_method;
       delete dataToSend.force_keyboard_interactive;
     } else if (formData.type === 'VNC') {
       if (formData.vncPassword) dataToSend.password = formData.vncPassword;
-      delete dataToSend.auth_method;
       delete dataToSend.force_keyboard_interactive;
     }
 
     if (dataToSend.type !== 'SSH' || dataToSend.auth_method !== 'key') delete dataToSend.ssh_key_id;
     if (dataToSend.type === 'SSH' && dataToSend.auth_method === 'key') delete dataToSend.password;
-    if (dataToSend.type !== 'SSH') delete dataToSend.auth_method;
 
     let success = false;
     if (isEditMode.value && connectionToEdit.value) {
@@ -1161,15 +1185,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         testResult.value = errorMessage;
         uiNotificationsStore.showError(errorMessage);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('测试连接失败:', error);
       testStatus.value = 'error';
-      let errorMessageToShow: string;
-      if (error.response && error.response.data && error.response.data.message) {
-        errorMessageToShow = error.response.data.message;
-      } else {
-        errorMessageToShow = error.message || t('connections.test.errorNetwork');
-      }
+      const errorMessageToShow = extractErrorMessage(error, t('connections.test.errorNetwork'));
       testResult.value = errorMessageToShow;
       uiNotificationsStore.showError(errorMessageToShow);
     }
