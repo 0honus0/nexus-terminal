@@ -133,7 +133,7 @@ export function createSftpActionsManager(
 
   // 清理函数，用于注销所有消息处理器
   const cleanup = () => {
-    console.log(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
+    console.info(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
     unregisterCallbacks.forEach((cb) => cb());
     unregisterCallbacks.length = 0; // 清空数组
   };
@@ -164,14 +164,14 @@ export function createSftpActionsManager(
         if (!nextNode) {
           if (!currentNode.childrenLoaded && !createIfMissing) {
             // Parent not fully loaded, node not found in partial list, and not creating -> Fail
-            console.log(
+            console.info(
               `[SFTP ${instanceSessionId}] findNodeByPath: Node ${part} not found in partially loaded children of ${currentNode.filename}.`
             );
             return null;
           }
           if (currentNode.childrenLoaded && !createIfMissing) {
             // Parent fully loaded, node definitively not found, and not creating -> Fail
-            console.log(
+            console.info(
               `[SFTP ${instanceSessionId}] findNodeByPath: Node ${part} not found in fully loaded children of ${currentNode.filename}.`
             );
             return null;
@@ -182,13 +182,13 @@ export function createSftpActionsManager(
       } else if (currentNode.children === null) {
         // Children is null (definitely not loaded)
         if (!createIfMissing) {
-          console.log(
+          console.info(
             `[SFTP ${instanceSessionId}] findNodeByPath: Children of ${currentNode.filename} are null, cannot find ${part}.`
           );
           return null; // Cannot proceed without creating
         }
         // If creating is allowed, initialize children array for the placeholder
-        console.log(
+        console.info(
           `[SFTP ${instanceSessionId}] findNodeByPath: Children of ${currentNode.filename} are null, will create placeholder for ${part}.`
         );
         currentNode.children = [];
@@ -235,12 +235,12 @@ export function createSftpActionsManager(
           // Add and sort (optional, but good practice)
           currentNode.children.push(nextNode);
           currentNode.children.sort((a, b) => sortFiles(a as any, b as any));
-          console.log(
+          console.info(
             `[SFTP ${instanceSessionId}] findNodeByPath: Created placeholder node for ${part} under ${currentNode.filename}`
           );
         } else {
           // Not creating, and node not found
-          console.log(
+          console.info(
             `[SFTP ${instanceSessionId}] findNodeByPath: Node ${part} not found under ${currentNode.filename} and createIfMissing is false.`
           );
           return null;
@@ -267,7 +267,7 @@ export function createSftpActionsManager(
 
     if (targetNode && targetNode.childrenLoaded && !forceRefresh) {
       // 检查 forceRefresh
-      console.log(`[SFTP ${instanceSessionId}] 使用文件树缓存加载目录: ${path}`);
+      console.info(`[SFTP ${instanceSessionId}] 使用文件树缓存加载目录: ${path}`);
       // fileList 将通过 computed 属性更新，这里只需更新 currentPathRef
       isLoading.value = false;
       currentPathRef.value = path;
@@ -279,7 +279,7 @@ export function createSftpActionsManager(
 
     // 如果是强制刷新且节点存在，重置其加载状态
     if (forceRefresh && targetNode) {
-      console.log(`[SFTP ${instanceSessionId}] 强制刷新，重置节点 ${path} 的 childrenLoaded 状态`);
+      console.info(`[SFTP ${instanceSessionId}] 强制刷新，重置节点 ${path} 的 childrenLoaded 状态`);
       targetNode.childrenLoaded = false;
       // 可选：如果需要立即清除旧数据，可以设置 targetNode.children = null;
       // targetNode.children = null;
@@ -300,7 +300,7 @@ export function createSftpActionsManager(
       return;
     }
 
-    console.log(`[SFTP ${instanceSessionId}] ${forceRefresh ? '强制' : ''}加载目录: ${path}`); // 日志改为中文，并标明是否强制
+    console.info(`[SFTP ${instanceSessionId}] ${forceRefresh ? '强制' : ''}加载目录: ${path}`); // 日志改为中文，并标明是否强制
     isLoading.value = true;
     // error.value = null; // 不再需要
     // currentPathRef.value = path; // <-- 移除此行，延迟更新
@@ -519,7 +519,7 @@ export function createSftpActionsManager(
       requestId,
       payload: { sources: sourcePaths, destination: destinationDir },
     });
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] 发送 sftp:copy 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
     );
     // 可选：显示一个“正在复制...”的通知
@@ -545,7 +545,7 @@ export function createSftpActionsManager(
       requestId,
       payload: { sources: sourcePaths, destination: destinationDir },
     });
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] 发送 sftp:move 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
     );
     // 可选：显示一个“正在移动...”的通知
@@ -625,7 +625,7 @@ export function createSftpActionsManager(
         }
       );
 
-      console.log(
+      console.info(
         `[SFTP ${instanceSessionId}] 发送 sftp:compress 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationPath}, Format: ${format}`
       );
       sendMessage({
@@ -695,7 +695,7 @@ export function createSftpActionsManager(
         }
       );
 
-      console.log(
+      console.info(
         `[SFTP ${instanceSessionId}] 发送 sftp:decompress 请求 (ID: ${requestId}) Source: ${sourcePath}, Dest: ${destinationDir}`
       );
       sendMessage({
@@ -724,13 +724,13 @@ export function createSftpActionsManager(
 
     // 检查请求 ID 是否匹配当前加载请求
     if (message.requestId !== loadingRequestId.value) {
-      console.log(
+      console.info(
         `[SFTP ${instanceSessionId}] Received stale readdir success for ${path} (ID: ${message.requestId}, expected: ${loadingRequestId.value}). Ignoring.`
       );
       return; // 忽略过时的响应
     }
 
-    console.log(`[SFTP ${instanceSessionId}] Received file list for directory ${path}`);
+    console.info(`[SFTP ${instanceSessionId}] Received file list for directory ${path}`);
 
     // Find or create the node for the directory itself (e.g., /root)
     // Pass `true` to create placeholder nodes if the path doesn't fully exist yet.
@@ -761,7 +761,7 @@ export function createSftpActionsManager(
       if (existingNode && existingNode.childrenLoaded && existingNode.attrs.isDirectory) {
         // Keep the existing node if it's a directory and its children are already loaded
         mergedChildren.push(existingNode);
-        console.log(
+        console.info(
           `[SFTP ${instanceSessionId}] Merging: Kept existing loaded node ${path}/${existingNode.filename}`
         );
       } else {
@@ -785,11 +785,11 @@ export function createSftpActionsManager(
         });
         mergedChildren.push(newNode);
         if (existingNode && !existingNode.childrenLoaded) {
-          console.log(
+          console.info(
             `[SFTP ${instanceSessionId}] Merging: Updated placeholder node ${path}/${newNode.filename}`
           );
         } else if (!existingNode) {
-          console.log(
+          console.info(
             `[SFTP ${instanceSessionId}] Merging: Added new node ${path}/${newNode.filename}`
           );
         }
@@ -807,20 +807,20 @@ export function createSftpActionsManager(
     // Update the target node's children and mark as loaded
     targetNode.children = mergedChildren;
     targetNode.childrenLoaded = true;
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] File tree node ${path}'s children updated after merge.`
     );
 
     // *** 在成功加载并更新树之后，才更新当前路径 ***
     currentPathRef.value = path;
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] currentPathRef updated to ${path} after successful readdir.`
     );
 
     // 重置加载状态，因为这是匹配的响应
     isLoading.value = false;
     loadingRequestId.value = null;
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] isLoading reset after successful readdir for ${path}.`
     );
   };
@@ -832,7 +832,7 @@ export function createSftpActionsManager(
 
     // 检查请求 ID 是否匹配当前加载请求
     if (message.requestId !== loadingRequestId.value) {
-      console.log(
+      console.info(
         `[SFTP ${instanceSessionId}] Received stale readdir error for ${errorPath} (ID: ${message.requestId}, expected: ${loadingRequestId.value}). Ignoring.`
       );
       return; // 忽略过时的错误响应
@@ -847,7 +847,7 @@ export function createSftpActionsManager(
     // 重置加载状态，因为这是匹配的响应
     isLoading.value = false;
     loadingRequestId.value = null;
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] isLoading reset after failed readdir for ${errorPath}.`
     );
   };
@@ -866,7 +866,7 @@ export function createSftpActionsManager(
       const index = parentNode.children.findIndex((node) => node.filename === filename);
       if (index !== -1) {
         parentNode.children.splice(index, 1);
-        console.log(`[SFTP ${instanceSessionId}] 从文件树 ${parentPath} 中移除节点: ${filename}`);
+        console.info(`[SFTP ${instanceSessionId}] 从文件树 ${parentPath} 中移除节点: ${filename}`);
         return true;
       }
     }
@@ -914,7 +914,7 @@ export function createSftpActionsManager(
       if (existingIndex !== -1) {
         // 更新现有节点
         parentNode.children.splice(existingIndex, 1, newNode);
-        console.log(`[SFTP ${instanceSessionId}] 更新文件树节点: ${parentPath}/${item.filename}`);
+        console.info(`[SFTP ${instanceSessionId}] 更新文件树节点: ${parentPath}/${item.filename}`);
       } else {
         // 添加新节点并保持排序
         let insertIndex = 0;
@@ -925,7 +925,7 @@ export function createSftpActionsManager(
           insertIndex++;
         }
         parentNode.children.splice(insertIndex, 0, newNode);
-        console.log(`[SFTP ${instanceSessionId}] 添加文件树节点: ${parentPath}/${item.filename}`);
+        console.info(`[SFTP ${instanceSessionId}] 添加文件树节点: ${parentPath}/${item.filename}`);
       }
       // --- 结束现有逻辑 ---
       return true; // 添加/更新成功
@@ -942,7 +942,7 @@ export function createSftpActionsManager(
     const newItem = payload as FileListItem | null; // 后端现在会发送 FileListItem 或 null
     const parentPath = message.path?.substring(0, message.path.lastIndexOf('/')) || '/';
 
-    console.log(`[SFTP ${instanceSessionId}] 创建目录成功: ${message.path}`);
+    console.info(`[SFTP ${instanceSessionId}] 创建目录成功: ${message.path}`);
 
     // *** 修改：直接修改文件树 ***
     if (newItem) {
@@ -969,14 +969,14 @@ export function createSftpActionsManager(
     const parentPath = removedPath?.substring(0, removedPath.lastIndexOf('/')) || '/';
     const removedFilename = removedPath?.substring(removedPath.lastIndexOf('/') + 1);
 
-    console.log(`[SFTP ${instanceSessionId}] 删除成功: ${removedPath}`);
+    console.info(`[SFTP ${instanceSessionId}] 删除成功: ${removedPath}`);
     // *** 修改：直接修改文件树 ***
     removeNodeFromTree(parentPath, removedFilename || '');
     // 如果删除的是一个目录，也需要考虑移除其在树中的子节点缓存（如果已加载）
     const removedNode = findNodeByPath(fileTree, removedPath || '');
     if (removedNode && removedNode.attrs.isDirectory) {
       // 理论上 removeNodeFromTree 已经移除了它，这里可以加日志或额外清理
-      console.log(`[SFTP ${instanceSessionId}] 目录 ${removedPath} 已从树中移除`);
+      console.info(`[SFTP ${instanceSessionId}] 目录 ${removedPath} 已从树中移除`);
     }
   };
 
@@ -995,7 +995,7 @@ export function createSftpActionsManager(
     const oldFilename = renamePayload.oldPath.substring(renamePayload.oldPath.lastIndexOf('/') + 1);
     const { newItem } = renamePayload;
 
-    console.log(
+    console.info(
       `[SFTP ${instanceSessionId}] 重命名成功: ${renamePayload.oldPath} -> ${renamePayload.newPath}`
     );
 
@@ -1041,7 +1041,7 @@ export function createSftpActionsManager(
     const parentPath = targetPath?.substring(0, targetPath.lastIndexOf('/')) || '/';
     const filename = targetPath?.substring(targetPath.lastIndexOf('/') + 1);
 
-    console.log(`[SFTP ${instanceSessionId}] 修改权限成功: ${targetPath}`);
+    console.info(`[SFTP ${instanceSessionId}] 修改权限成功: ${targetPath}`);
 
     // *** 修改：直接修改文件树 ***
     if (updatedItem) {
@@ -1068,7 +1068,7 @@ export function createSftpActionsManager(
     const parentPath = filePath?.substring(0, filePath.lastIndexOf('/')) || '/';
     const filename = filePath?.substring(filePath.lastIndexOf('/') + 1);
 
-    console.log(`[SFTP ${instanceSessionId}] 写入文件成功: ${filePath}`);
+    console.info(`[SFTP ${instanceSessionId}] 写入文件成功: ${filePath}`);
 
     // *** 修改：直接修改文件树 ***
     if (updatedItem) {
@@ -1095,7 +1095,7 @@ export function createSftpActionsManager(
     const destinationDir = copyPayload.destination;
     const newItems = copyPayload.items;
 
-    console.log(`[SFTP ${instanceSessionId}] 复制成功到: ${destinationDir}`);
+    console.info(`[SFTP ${instanceSessionId}] 复制成功到: ${destinationDir}`);
     uiNotificationsStore.showSuccess(t('fileManager.notifications.copySuccess')); // 添加成功通知
 
     // 更新文件树
@@ -1107,7 +1107,7 @@ export function createSftpActionsManager(
       } else {
         // 如果目标节点未加载，标记为需要刷新
         destNode.childrenLoaded = false;
-        console.log(
+        console.info(
           `[SFTP ${instanceSessionId}] 复制成功，但目标目录 ${destinationDir} 未加载，标记为需要刷新`
         );
         // 如果复制发生在当前目录，触发刷新
@@ -1144,7 +1144,7 @@ export function createSftpActionsManager(
     const destinationDir = movePayload.destination;
     const newItems = movePayload.items;
 
-    console.log(`[SFTP ${instanceSessionId}] 移动成功到: ${destinationDir}`);
+    console.info(`[SFTP ${instanceSessionId}] 移动成功到: ${destinationDir}`);
     uiNotificationsStore.showSuccess(t('fileManager.notifications.moveSuccess')); // 添加成功通知
 
     // 1. 从旧位置移除
@@ -1161,7 +1161,7 @@ export function createSftpActionsManager(
         newItems.forEach((item) => addOrUpdateNodeInTree(destinationDir, item));
       } else {
         destNode.childrenLoaded = false; // 标记需要刷新
-        console.log(
+        console.info(
           `[SFTP ${instanceSessionId}] 移动成功，但目标目录 ${destinationDir} 未加载，标记为需要刷新`
         );
         if (destinationDir === currentPathRef.value) {
@@ -1207,7 +1207,7 @@ export function createSftpActionsManager(
     const filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
     // --- 结束修正 ---
 
-    console.log(`[SFTP ${instanceSessionId}] 上传文件成功: ${fullPath}`);
+    console.info(`[SFTP ${instanceSessionId}] 上传文件成功: ${fullPath}`);
 
     // *** 修改：使用推断出的 parentPath 更新文件树 ***
     if (newItem) {

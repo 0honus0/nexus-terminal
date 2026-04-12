@@ -141,7 +141,7 @@ const handleGlobalKeyDown = (event: KeyboardEvent) => {
 
     const nextSessionId = tabs[nextIndex].sessionId;
     if (nextSessionId !== currentId) {
-      console.log(
+      console.info(
         `[WorkspaceView] Alt+${event.key} detected. Switching to session: ${nextSessionId}`
       );
       sessionStore.activateSession(nextSessionId);
@@ -151,7 +151,7 @@ const handleGlobalKeyDown = (event: KeyboardEvent) => {
 
 // --- 生命周期钩子 ---
 onMounted(() => {
-  console.log('[工作区视图] 组件已挂载。');
+  console.info('[工作区视图] 组件已挂载。');
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleGlobalKeyDown);
   // 确保布局已初始化 (layoutStore 内部会处理)
@@ -221,7 +221,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  console.log('[工作区视图] 组件即将卸载，清理所有会话...');
+  console.info('[工作区视图] 组件即将卸载，清理所有会话...');
   // 移除键盘事件监听器
   window.removeEventListener('keydown', handleGlobalKeyDown);
   sessionStore.cleanupAllSessions();
@@ -299,7 +299,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
 // --- 本地方法 (仅处理 UI 状态) ---
 const handleRequestAddConnection = () => {
-  console.log('[WorkspaceView] handleRequestAddConnection 被调用！');
+  console.info('[WorkspaceView] handleRequestAddConnection 被调用！');
   connectionToEdit.value = null;
   showAddEditForm.value = true;
 };
@@ -315,12 +315,12 @@ const handleFormClose = () => {
 };
 
 const handleConnectionAdded = () => {
-  console.log('[工作区视图] 连接已添加');
+  console.info('[工作区视图] 连接已添加');
   handleFormClose();
 };
 
 const handleConnectionUpdated = () => {
-  console.log('[工作区视图] 连接已更新');
+  console.info('[工作区视图] 连接已更新');
   handleFormClose();
 };
 
@@ -352,7 +352,7 @@ const handleSendCommand = (command: string, targetSessionId?: string) => {
     !terminalManager.isSshConnected.value &&
     command.trim() === ''
   ) {
-    console.log(
+    console.info(
       `[WorkspaceView] Command bar Enter detected in disconnected session ${sessionToCommand.sessionId}, attempting reconnect...`
     );
     if (terminalManager.terminalInstance?.value) {
@@ -375,7 +375,7 @@ const handleSendCommand = (command: string, targetSessionId?: string) => {
 
   if (terminalManager && typeof terminalManager.sendData === 'function') {
     const commandToSend = command.trim(); // Keep trimmed for history
-    console.log(
+    console.info(
       `[WorkspaceView] Sending command/data to session ${sessionToCommand.sessionId}: ${JSON.stringify(command)}`
     ); // Log raw command
     // Only append '\r' for regular commands, not for control characters like Ctrl+C (\x03)
@@ -412,7 +412,7 @@ const handleTerminalInput = (payload: { sessionId: string; data: string }) => {
     return;
   }
   if (data === '\r' && manager.isSshConnected && !manager.isSshConnected.value) {
-    console.log(`[WorkspaceView] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
+    console.info(`[WorkspaceView] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
     if (manager.terminalInstance?.value) {
       manager.terminalInstance.value.writeln(
         `\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`
@@ -454,10 +454,10 @@ const handleTerminalReady = (payload: {
   searchAddon: any | null;
 }) => {
   // --- 使用重命名的 XtermTerminal ---
-  console.log(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload); // *** 添加 Payload 日志 ***
+  console.info(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload); // *** 添加 Payload 日志 ***
   // *** 检查 payload 中 searchAddon 是否存在 ***
   if (payload && payload.searchAddon) {
-    console.log(`[工作区视图 ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
+    console.info(`[工作区视图 ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
   } else {
     console.warn(
       `[工作区视图 ${payload.sessionId}] Payload 未包含 searchAddon 实例！ Payload:`,
@@ -477,7 +477,7 @@ const handleSearch = (term: string) => {
     handleCloseSearch();
     return;
   }
-  console.log(`[WorkspaceView] Received search event: "${term}"`);
+  console.info(`[WorkspaceView] Received search event: "${term}"`);
   // 默认向前搜索
   // 触发 findNext
   handleFindNext(); // 保持调用 findNext，内部会处理 isMobile
@@ -487,11 +487,11 @@ const handleFindNext = () => {
   const manager = activeSession.value?.terminalManager;
   if (manager && currentSearchTerm.value) {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
-    console.log(`[WorkspaceView ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`);
+    console.info(`[WorkspaceView ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`);
     const found = manager.searchNext(currentSearchTerm.value, { incremental: true });
-    console.log(`[WorkspaceView ${mode}] findNext returned: ${found}`);
+    console.info(`[WorkspaceView ${mode}] findNext returned: ${found}`);
     if (!found) {
-      console.log(
+      console.info(
         `[WorkspaceView ${mode}] findNext: No more results for "${currentSearchTerm.value}"`
       );
     }
@@ -507,13 +507,13 @@ const handleFindPrevious = () => {
   const manager = activeSession.value?.terminalManager;
   if (manager && currentSearchTerm.value) {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
-    console.log(
+    console.info(
       `[WorkspaceView ${mode}] Calling findPrevious for term: "${currentSearchTerm.value}"`
     );
     const found = manager.searchPrevious(currentSearchTerm.value, { incremental: true });
-    console.log(`[WorkspaceView ${mode}] findPrevious returned: ${found}`);
+    console.info(`[WorkspaceView ${mode}] findPrevious returned: ${found}`);
     if (!found) {
-      console.log(
+      console.info(
         `[WorkspaceView ${mode}] findPrevious: No previous results for "${currentSearchTerm.value}"`
       );
     }
@@ -526,13 +526,13 @@ const handleFindPrevious = () => {
 };
 
 const handleCloseSearch = () => {
-  console.log(`[WorkspaceView] Received close-search event.`);
+  console.info(`[WorkspaceView] Received close-search event.`);
   currentSearchTerm.value = ''; // 清空搜索词
   const manager = activeSession.value?.terminalManager;
   const mode = isMobile.value ? 'Mobile' : 'Desktop';
   if (manager) {
     manager.clearTerminalSearch();
-    console.log(`[WorkspaceView ${mode}] Search cleared.`);
+    console.info(`[WorkspaceView ${mode}] Search cleared.`);
   } else {
     console.warn(`[WorkspaceView ${mode}] Cannot clear search, no active session manager.`);
   }
@@ -553,7 +553,7 @@ const handleClearTerminal = () => {
     terminalManager.terminalInstance?.value &&
     typeof terminalManager.terminalInstance.value.clear === 'function'
   ) {
-    console.log(
+    console.info(
       `[WorkspaceView ${mode}] Clearing terminal for active session ${currentSession.sessionId}`
     );
     terminalManager.terminalInstance.value.clear();
@@ -569,7 +569,7 @@ const handleScrollToBottomRequest = (payload: { sessionId: string }) => {
   const session = sessionStore.sessions.get(payload.sessionId);
   const terminalManager = session?.terminalManager as SshTerminalInstance | undefined;
   if (terminalManager?.terminalInstance?.value) {
-    console.log(`[WorkspaceView] Scrolling to bottom for session ${payload.sessionId}`);
+    console.info(`[WorkspaceView] Scrolling to bottom for session ${payload.sessionId}`);
     terminalManager.terminalInstance.value.scrollToBottom();
   } else {
     console.warn(
@@ -582,7 +582,7 @@ const handleScrollToBottomRequest = (payload: { sessionId: string }) => {
 // --- 编辑器操作处理 (用于 FileEditorContainer) ---
 const handleCloseEditorTab = (tabId: string) => {
   const isShared = shareFileEditorTabsBoolean.value;
-  console.log(`[WorkspaceView] handleCloseEditorTab: ${tabId}, Shared mode: ${isShared}`);
+  console.info(`[WorkspaceView] handleCloseEditorTab: ${tabId}, Shared mode: ${isShared}`);
   if (isShared) {
     fileEditorStore.closeTab(tabId);
   } else {
@@ -599,7 +599,7 @@ const handleCloseEditorTab = (tabId: string) => {
 
 const handleActivateEditorTab = (tabId: string) => {
   const isShared = shareFileEditorTabsBoolean.value;
-  console.log(`[WorkspaceView] handleActivateEditorTab: ${tabId}, Shared mode: ${isShared}`);
+  console.info(`[WorkspaceView] handleActivateEditorTab: ${tabId}, Shared mode: ${isShared}`);
   if (isShared) {
     fileEditorStore.setActiveTab(tabId);
   } else {
@@ -616,7 +616,7 @@ const handleActivateEditorTab = (tabId: string) => {
 
 const handleUpdateEditorContent = (payload: { tabId: string; content: string }) => {
   const isShared = shareFileEditorTabsBoolean.value;
-  console.log(
+  console.info(
     `[WorkspaceView] handleUpdateEditorContent for tab ${payload.tabId}, Shared mode: ${isShared}`
   );
   if (isShared) {
@@ -639,7 +639,7 @@ const handleUpdateEditorContent = (payload: { tabId: string; content: string }) 
 
 const handleSaveEditorTab = (tabId: string) => {
   const isShared = shareFileEditorTabsBoolean.value;
-  console.log(`[WorkspaceView] handleSaveEditorTab: ${tabId}, Shared mode: ${isShared}`);
+  console.info(`[WorkspaceView] handleSaveEditorTab: ${tabId}, Shared mode: ${isShared}`);
   if (isShared) {
     fileEditorStore.saveFile(tabId);
   } else {
@@ -657,7 +657,7 @@ const handleSaveEditorTab = (tabId: string) => {
 // +++ 处理编辑器编码更改事件 +++
 const handleChangeEncoding = (payload: { tabId: string; encoding: string }) => {
   const isShared = shareFileEditorTabsBoolean.value;
-  console.log(
+  console.info(
     `[WorkspaceView] handleChangeEncoding for tab ${payload.tabId} to ${payload.encoding}, Shared mode: ${isShared}`
   );
   if (isShared) {
@@ -714,7 +714,7 @@ const handleConnectRequest = (id: number) => {
   }
 };
 const handleOpenNewSession = (id: number) => {
-  console.log(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
+  console.info(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
   sessionStore.handleOpenNewSession(id);
 };
 
@@ -729,7 +729,7 @@ const handleVirtualKeyPress = (keySequence: string) => {
   // 并且直接发送数据，因为虚拟键盘通常用于发送控制字符或特殊序列
   const terminalManager = currentSession.terminalManager as SshTerminalInstance | undefined;
   if (terminalManager && typeof terminalManager.sendData === 'function') {
-    console.log(
+    console.info(
       `[WorkspaceView Mobile] Sending virtual key sequence: ${JSON.stringify(keySequence)}`
     );
     terminalManager.sendData(keySequence);
@@ -854,7 +854,7 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
   fileManagerPropsMap.value.set(sessionId, newProps);
   currentFileManagerSessionId.value = sessionId;
   showFileManagerModal.value = true;
-  console.log(
+  console.info(
     `[WorkspaceView] Opening FileManager modal with props for session ${sessionId}:`,
     newProps
   );
@@ -865,7 +865,7 @@ const handleQuickCommandExecuteProcessed = (
   payload: WorkspaceEventPayloads['quickCommand:executeProcessed']
 ) => {
   const { command, sessionId: targetSessionId } = payload;
-  console.log(
+  console.info(
     `[WorkspaceView] Received quickCommand:executeProcessed event. Command: "${command}", TargetSessionID: ${targetSessionId}`
   );
 
@@ -876,7 +876,7 @@ const handleQuickCommandExecuteProcessed = (
 
 const closeFileManagerModal = () => {
   showFileManagerModal.value = false;
-  console.log('[WorkspaceView] FileManager modal hidden (kept alive).');
+  console.info('[WorkspaceView] FileManager modal hidden (kept alive).');
 };
 </script>
 
