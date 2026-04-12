@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
 import { useQuickCommandTagsStore, type QuickCommandTag } from './quickCommandTags.store';
 
@@ -299,9 +300,9 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       } else {
       }
       error.value = null;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[QuickCmdStore] 获取快捷指令失败:', err);
-      error.value = err.response?.data?.message || '获取快捷指令时发生错误';
+      error.value = extractErrorMessage(err, '获取快捷指令时发生错误');
       if (error.value) {
         uiNotificationsStore.showError(error.value);
       }
@@ -334,9 +335,9 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       await fetchQuickCommands(); // 重新获取以确保数据同步
       uiNotificationsStore.showSuccess('快捷指令已添加');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('添加快捷指令失败:', err);
-      const message = err.response?.data?.message || '添加快捷指令时发生错误';
+      const message = extractErrorMessage(err, '添加快捷指令时发生错误');
       uiNotificationsStore.showError(message);
       return false;
     }
@@ -361,9 +362,9 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       await fetchQuickCommands(); // 重新获取以确保数据同步
       uiNotificationsStore.showSuccess('快捷指令已更新');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('更新快捷指令失败:', err);
-      const message = err.response?.data?.message || '更新快捷指令时发生错误';
+      const message = extractErrorMessage(err, '更新快捷指令时发生错误');
       uiNotificationsStore.showError(message);
       return false;
     }
@@ -380,9 +381,9 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         quickCommandsList.value.splice(index, 1);
       }
       uiNotificationsStore.showSuccess('快捷指令已删除');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('删除快捷指令失败:', err);
-      const message = err.response?.data?.message || '删除快捷指令时发生错误';
+      const message = extractErrorMessage(err, '删除快捷指令时发生错误');
       uiNotificationsStore.showError(message);
     }
   };
@@ -402,7 +403,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
           await fetchQuickCommands();
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('增加使用次数失败:', err);
       // 这里可以选择不提示用户错误，因为这是一个后台操作
     }
@@ -504,10 +505,9 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         error.value = response.data.message || '批量分配标签失败 (未知)';
         if (error.value) uiNotificationsStore.showError(error.value); // Check if error.value is not null
         return false;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('[Store] Error assigning tag to commands:', err);
-        error.value =
-          err.response?.data?.message || err.message || '批量分配标签时发生网络或服务器错误';
+        error.value = extractErrorMessage(err, '批量分配标签时发生网络或服务器错误');
         if (error.value) uiNotificationsStore.showError(error.value); // Check if error.value is not null
         return false;
       } finally {

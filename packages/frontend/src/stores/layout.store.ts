@@ -148,12 +148,12 @@ function getAllUsedPaneNames(
 
 // --- Validation Helper ---
 // Checks if a value is a valid PaneName
-function isValidPaneName(value: any, allPanes: PaneName[]): value is PaneName {
+function isValidPaneName(value: unknown, allPanes: PaneName[]): value is PaneName {
   return typeof value === 'string' && allPanes.includes(value as PaneName);
 }
 
 // Checks if an array contains only unique, valid PaneName strings
-function isValidPaneNameArray(arr: any, allPanes: PaneName[]): arr is PaneName[] {
+function isValidPaneNameArray(arr: unknown, allPanes: PaneName[]): arr is PaneName[] {
   if (!Array.isArray(arr)) return false;
   const seen = new Set<PaneName>();
   for (const item of arr) {
@@ -167,7 +167,7 @@ function isValidPaneNameArray(arr: any, allPanes: PaneName[]): arr is PaneName[]
 
 // 验证 LayoutNode 结构的有效性
 function validateLayoutNode(
-  node: any,
+  node: unknown,
   allPanes: PaneName[],
   visitedIds: Set<string> = new Set()
 ): { valid: boolean; error?: string } {
@@ -175,54 +175,65 @@ function validateLayoutNode(
   if (!node || typeof node !== 'object') {
     return { valid: false, error: '节点必须是非空对象' };
   }
+  const candidate = node as {
+    id?: unknown;
+    type?: unknown;
+    component?: unknown;
+    direction?: unknown;
+    children?: unknown;
+    size?: unknown;
+  };
 
   // 验证 id
-  if (typeof node.id !== 'string' || node.id.trim() === '') {
+  if (typeof candidate.id !== 'string' || candidate.id.trim() === '') {
     return { valid: false, error: '节点 id 必须是非空字符串' };
   }
 
   // 检查 id 是否重复（循环引用检测）
-  if (visitedIds.has(node.id)) {
-    return { valid: false, error: `检测到重复的节点 id: ${node.id}` };
+  if (visitedIds.has(candidate.id)) {
+    return { valid: false, error: `检测到重复的节点 id: ${candidate.id}` };
   }
-  visitedIds.add(node.id);
+  visitedIds.add(candidate.id);
 
   // 验证 type
-  if (node.type !== 'pane' && node.type !== 'container') {
-    return { valid: false, error: `节点 type 必须是 'pane' 或 'container'，收到: ${node.type}` };
+  if (candidate.type !== 'pane' && candidate.type !== 'container') {
+    return {
+      valid: false,
+      error: `节点 type 必须是 'pane' 或 'container'，收到: ${String(candidate.type)}`,
+    };
   }
 
   // 验证 size（可选，但如果存在必须是有效数字）
-  if (node.size !== undefined && node.size !== null) {
-    if (typeof node.size !== 'number' || Number.isNaN(node.size) || node.size < 0) {
-      return { valid: false, error: `节点 size 必须是非负数，收到: ${node.size}` };
+  if (candidate.size !== undefined && candidate.size !== null) {
+    if (typeof candidate.size !== 'number' || Number.isNaN(candidate.size) || candidate.size < 0) {
+      return { valid: false, error: `节点 size 必须是非负数，收到: ${String(candidate.size)}` };
     }
   }
 
   // pane 类型验证
-  if (node.type === 'pane') {
-    if (!node.component) {
+  if (candidate.type === 'pane') {
+    if (!candidate.component) {
       return { valid: false, error: 'pane 类型节点必须指定 component' };
     }
-    if (!isValidPaneName(node.component, allPanes)) {
-      return { valid: false, error: `无效的 component 名称: ${node.component}` };
+    if (!isValidPaneName(candidate.component, allPanes)) {
+      return { valid: false, error: `无效的 component 名称: ${String(candidate.component)}` };
     }
   }
 
   // container 类型验证
-  if (node.type === 'container') {
-    if (node.direction !== 'horizontal' && node.direction !== 'vertical') {
+  if (candidate.type === 'container') {
+    if (candidate.direction !== 'horizontal' && candidate.direction !== 'vertical') {
       return {
         valid: false,
-        error: `container 类型节点 direction 必须是 'horizontal' 或 'vertical'，收到: ${node.direction}`,
+        error: `container 类型节点 direction 必须是 'horizontal' 或 'vertical'，收到: ${String(candidate.direction)}`,
       };
     }
-    if (!Array.isArray(node.children)) {
+    if (!Array.isArray(candidate.children)) {
       return { valid: false, error: 'container 类型节点必须包含 children 数组' };
     }
     // 递归验证子节点
-    for (let i = 0; i < node.children.length; i++) {
-      const childResult = validateLayoutNode(node.children[i], allPanes, visitedIds);
+    for (let i = 0; i < candidate.children.length; i++) {
+      const childResult = validateLayoutNode(candidate.children[i], allPanes, visitedIds);
       if (!childResult.valid) {
         return { valid: false, error: `子节点 [${i}] 验证失败: ${childResult.error}` };
       }
@@ -233,7 +244,10 @@ function validateLayoutNode(
 }
 
 // 验证整个布局树
-function validateLayoutTree(tree: any, allPanes: PaneName[]): { valid: boolean; error?: string } {
+function validateLayoutTree(
+  tree: unknown,
+  allPanes: PaneName[]
+): { valid: boolean; error?: string } {
   if (tree === null) {
     return { valid: true }; // null 是有效值（空布局）
   }
@@ -341,7 +355,7 @@ export const useLayoutStore = defineStore('layout', () => {
     // 2. 尝试从后端加载侧栏配置 (侧栏逻辑不变)
     try {
       console.info('[Layout Store] Step 2: Attempting to load sidebar config from backend...');
-      const response = await apiClient.get<{ left: any[]; right: any[] } | null>(
+      const response = await apiClient.get<{ left: unknown[]; right: unknown[] } | null>(
         '/settings/sidebar'
       );
       if (
@@ -404,7 +418,7 @@ export const useLayoutStore = defineStore('layout', () => {
       try {
         const savedSidebars = localStorage.getItem(SIDEBAR_STORAGE_KEY);
         if (savedSidebars) {
-          const parsedSidebars = JSON.parse(savedSidebars) as { left: any[]; right: any[] };
+          const parsedSidebars = JSON.parse(savedSidebars) as { left: unknown[]; right: unknown[] };
           if (
             parsedSidebars &&
             isValidPaneNameArray(parsedSidebars.left, allPossiblePanes.value) &&
