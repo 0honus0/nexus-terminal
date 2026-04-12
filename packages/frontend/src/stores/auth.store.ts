@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient';
 import router from '../router';
 import { setLocale } from '../i18n';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
 interface UserInfo {
@@ -148,13 +149,13 @@ export const useAuthStore = defineStore('auth', {
         }
         // 不应该发生，但作为防御性编程
         throw new Error('登录响应无效');
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('登录失败:', err);
         this.isAuthenticated = false;
         this.user = null;
         this.loginRequires2FA = false;
         this.tempToken = null; // 清理临时令牌
-        this.error = err.response?.data?.message || err.message || '登录时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
         return { success: false, error: this.error };
       } finally {
         this.isLoading = false;
@@ -186,10 +187,10 @@ export const useAuthStore = defineStore('auth', {
         // await router.push({ name: 'Workspace' }); // 改为页面刷新
         window.location.href = '/'; // 跳转到根路径并刷新
         return { success: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('2FA 验证失败:', err);
         // 不清除 isAuthenticated 或 user，因为用户可能只是输错了验证码
-        this.error = err.response?.data?.message || err.message || '2FA 验证时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
         return { success: false, error: this.error };
       } finally {
         this.isLoading = false;
@@ -212,9 +213,9 @@ export const useAuthStore = defineStore('auth', {
         console.info('已登出');
         // 登出后重定向到登录页
         await router.push({ name: 'Login' });
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('登出失败:', err);
-        this.error = err.response?.data?.message || err.message || '登出时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
       } finally {
         this.isLoading = false;
       }
@@ -242,9 +243,9 @@ export const useAuthStore = defineStore('auth', {
           this.loginRequires2FA = false;
           // Removed passkeys clear on unauthenticated
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         // 如果获取状态失败 (例如 session 过期)，则认为未认证
-        console.warn('检查认证状态失败:', error.response?.data?.message || error.message);
+        console.warn('检查认证状态失败:', extractErrorMessage(error, '检查认证状态失败'));
         this.isAuthenticated = false;
         this.user = null;
         this.loginRequires2FA = false;
@@ -271,9 +272,9 @@ export const useAuthStore = defineStore('auth', {
         console.info('密码修改成功:', response.data.message);
         // 密码修改成功后，通常不需要更新本地状态，但可以清除错误
         return true;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('修改密码失败:', err);
-        this.error = err.response?.data?.message || err.message || '修改密码时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
         // 抛出错误，以便组件可以捕获并显示 (提供默认消息以防 this.error 为 null)
         throw new Error(this.error ?? '修改密码时发生未知错误。');
       } finally {
@@ -300,9 +301,9 @@ export const useAuthStore = defineStore('auth', {
         this.ipBlacklist.total = response.data.total;
         console.info('获取 IP 黑名单成功:', response.data);
         return response.data; // { entries: [], total: number }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('获取 IP 黑名单失败:', err);
-        this.error = err.response?.data?.message || err.message || '获取 IP 黑名单时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
         // 确保抛出 Error 时提供字符串消息
         throw new Error(this.error ?? '获取 IP 黑名单时发生未知错误。');
       } finally {
@@ -324,9 +325,9 @@ export const useAuthStore = defineStore('auth', {
         this.ipBlacklist.entries = this.ipBlacklist.entries.filter((entry) => entry.ip !== ip);
         this.ipBlacklist.total = Math.max(0, this.ipBlacklist.total - 1);
         return true;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`删除 IP ${ip} 失败:`, err);
-        this.error = err.response?.data?.message || err.message || '删除 IP 时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
         // 确保抛出 Error 时提供字符串消息
         throw new Error(this.error ?? '删除 IP 时发生未知错误。');
       } finally {
@@ -342,8 +343,8 @@ export const useAuthStore = defineStore('auth', {
         this.needsSetup = response.data.needsSetup;
         console.info(`[AuthStore] Needs setup status: ${this.needsSetup}`);
         return this.needsSetup; // 返回状态给调用者
-      } catch (error: any) {
-        console.error('检查设置状态失败:', error.response?.data?.message || error.message);
+      } catch (error: unknown) {
+        console.error('检查设置状态失败:', extractErrorMessage(error, '检查设置状态失败'));
         // 如果检查失败，保守起见假设不需要设置，以避免卡在设置页面
         this.needsSetup = false;
         return false;
@@ -373,10 +374,10 @@ export const useAuthStore = defineStore('auth', {
           '[AuthStore] Public CAPTCHA config derived from /settings/captcha:',
           this.publicCaptchaConfig
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(
           '获取 CAPTCHA 配置失败 (from /settings/captcha):',
-          error.response?.data?.message || error.message
+          extractErrorMessage(error, '获取 CAPTCHA 配置失败')
         );
         // Set a default disabled config on error to prevent blocking login UI
         this.publicCaptchaConfig = {
@@ -387,7 +388,7 @@ export const useAuthStore = defineStore('auth', {
     },
 
     // --- Passkey Actions ---
-    async loginWithPasskey(username: string, assertionResponse: any) {
+    async loginWithPasskey(username: string, assertionResponse: unknown) {
       this.isLoading = true;
       this.error = null;
       this.loginRequires2FA = false; // Passkey login bypasses traditional 2FA
@@ -408,11 +409,11 @@ export const useAuthStore = defineStore('auth', {
         }
         window.location.href = '/'; // 跳转到根路径并刷新
         return { success: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Passkey 登录失败:', err);
         this.isAuthenticated = false;
         this.user = null;
-        this.error = err.response?.data?.message || err.message || 'Passkey 登录时发生未知错误。';
+        this.error = extractErrorMessage(err, '');
         return { success: false, error: this.error };
       } finally {
         this.isLoading = false;
@@ -425,16 +426,16 @@ export const useAuthStore = defineStore('auth', {
       try {
         const response = await apiClient.post('/auth/passkey/registration-options', { username });
         return response.data; // Returns FIDO2 creation options
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('获取 Passkey 注册选项失败:', err);
-        this.error = err.response?.data?.message || err.message || '获取 Passkey 注册选项失败。';
+        this.error = extractErrorMessage(err, '');
         throw new Error(this.error ?? '获取 Passkey 注册选项失败。');
       } finally {
         this.isLoading = false;
       }
     },
 
-    async registerPasskey(username: string, registrationResponse: any) {
+    async registerPasskey(username: string, registrationResponse: unknown) {
       this.isLoading = true;
       this.error = null;
       try {
@@ -445,9 +446,9 @@ export const useAuthStore = defineStore('auth', {
         console.info('Passkey 注册成功');
         // Optionally, refresh user data or passkeys list if applicable
         return { success: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Passkey 注册失败:', err);
-        this.error = err.response?.data?.message || err.message || 'Passkey 注册失败。';
+        this.error = extractErrorMessage(err, '');
         throw new Error(this.error ?? 'Passkey 注册失败。');
       } finally {
         this.isLoading = false;
@@ -486,9 +487,9 @@ export const useAuthStore = defineStore('auth', {
           name: pk.name,
         }));
         console.info('Passkeys fetched and mapped successfully:', this.passkeys);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to fetch passkeys:', err);
-        this.error = err.response?.data?.message || err.message || 'Failed to load passkeys.';
+        this.error = extractErrorMessage(err, '');
         this.passkeys = null; // Clear passkeys on error
       } finally {
         this.passkeysLoading = false;
@@ -508,9 +509,9 @@ export const useAuthStore = defineStore('auth', {
         // Refresh the passkey list
         await this.fetchPasskeys();
         return { success: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`Failed to delete passkey ${credentialID}:`, err);
-        this.error = err.response?.data?.message || err.message || 'Failed to delete passkey.';
+        this.error = extractErrorMessage(err, '');
         throw new Error(this.error ?? 'Failed to delete passkey.');
       } finally {
         this.isLoading = false;
@@ -530,9 +531,9 @@ export const useAuthStore = defineStore('auth', {
         // Refresh the passkey list to show the new name
         await this.fetchPasskeys();
         return { success: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`Failed to update passkey ${credentialID} name:`, err);
-        this.error = err.response?.data?.message || err.message || 'Failed to update passkey name.';
+        this.error = extractErrorMessage(err, '');
         throw new Error(this.error ?? 'Failed to update passkey name.');
       } finally {
         // if using specific loading state: this.passkeyNameUpdateLoading = false;
@@ -554,10 +555,10 @@ export const useAuthStore = defineStore('auth', {
           `[AuthStore] Passkeys available for ${username || 'any user'}: ${this.hasPasskeysAvailable}`
         );
         return this.hasPasskeysAvailable;
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(
           'Failed to check if passkeys are configured:',
-          error.response?.data?.message || error.message
+          extractErrorMessage(error, 'Failed to check if passkeys are configured')
         );
         this.hasPasskeysAvailable = false; // Default to false on error
         return false;
@@ -583,7 +584,7 @@ export const useAuthStore = defineStore('auth', {
         // 校验 provider 值是否合法
         const provider = response.data.captchaConfig.provider;
         const validProviders = ['none', 'hcaptcha', 'recaptcha'] as const;
-        if (!validProviders.includes(provider as any)) {
+        if (!validProviders.includes(provider as (typeof validProviders)[number])) {
           throw new Error(`无效的 CAPTCHA provider: ${provider}`);
         }
 
