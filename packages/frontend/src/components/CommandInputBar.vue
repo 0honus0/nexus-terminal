@@ -149,12 +149,12 @@ const currentSessionCommandInput = computed({
 
 const sendCommand = () => {
   const command = currentSessionCommandInput.value; // 使用计算属性获取值
-  console.log(`[CommandInputBar] Sending command: ${command || '<Enter>'} `);
+  console.info(`[CommandInputBar] Sending command: ${command || '<Enter>'} `);
   emitWorkspaceEvent('terminal:sendCommand', { command });
 
   // 如果是空回车，并且有活动会话，则请求滚动到底部
   if (command.trim() === '' && activeSessionId.value) {
-    console.log(
+    console.info(
       `[CommandInputBar] Empty Enter detected. Requesting scroll to bottom for session: ${activeSessionId.value}`
     );
     emitWorkspaceEvent('terminal:scrollToBottomRequest', { sessionId: activeSessionId.value });
@@ -238,7 +238,7 @@ const handleCommandInputKeydown = (event: KeyboardEvent) => {
 
     if (selectedCommand !== undefined) {
       event.preventDefault();
-      console.log(
+      console.info(
         `[CommandInputBar] Enter detected with selection. Sending selected command: ${selectedCommand}`
       );
       emitWorkspaceEvent('terminal:sendCommand', { command: selectedCommand }); // 发送选中命令
@@ -280,7 +280,7 @@ const handleCommandInputKeydown = (event: KeyboardEvent) => {
     // 检查计算属性的值
     // Handle Ctrl+C when input is empty
     event.preventDefault();
-    console.log('[CommandInputBar] Ctrl+C detected with empty input. Sending SIGINT.');
+    console.info('[CommandInputBar] Ctrl+C detected with empty input. Sending SIGINT.');
     emitWorkspaceEvent('terminal:sendCommand', { command: '\x03' }); // Send ETX character (Ctrl+C)
   } else if (!event.altKey && event.key === 'Enter') {
     // Handle regular Enter key press - send current input (empty or not)
@@ -328,7 +328,7 @@ watch(
   () => focusSwitcherStore.activateTerminalSearchTrigger,
   () => {
     if (focusSwitcherStore.activateTerminalSearchTrigger > 0 && !isSearching.value) {
-      console.log('[CommandInputBar] Received terminal search activation trigger from store.');
+      console.info('[CommandInputBar] Received terminal search activation trigger from store.');
       toggleSearch(); // 调用组件内部的切换搜索方法来激活
     }
   }
@@ -410,7 +410,7 @@ const closeSuspendedSshSessionsModal = () => {
 // +++ Function to request opening the file manager modal via event bus +++
 const openFileManagerModal = () => {
   if (activeSessionId.value) {
-    console.log(
+    console.info(
       `[CommandInputBar] Emitting fileManager:openModalRequest for session: ${activeSessionId.value}`
     );
     emitWorkspaceEvent('fileManager:openModalRequest', { sessionId: activeSessionId.value });
@@ -423,7 +423,7 @@ const openFileManagerModal = () => {
 // +++ Function to request opening the file editor modal +++
 const openFileEditorModal = () => {
   if (activeSessionId.value) {
-    console.log(`[CommandInputBar] Triggering popup editor for session: ${activeSessionId.value}`);
+    console.info(`[CommandInputBar] Triggering popup editor for session: ${activeSessionId.value}`);
     fileEditorStore.triggerPopup('', activeSessionId.value); // Call store action directly
   } else {
     console.warn('[CommandInputBar] Cannot open file editor modal: No active session ID.');
@@ -433,7 +433,7 @@ const openFileEditorModal = () => {
 
 // +++ Handler for command execution from the modal +++
 const handleQuickCommandExecute = (command: string) => {
-  console.log(`[CommandInputBar] Executing quick command: ${command}`);
+  console.info(`[CommandInputBar] Executing quick command: ${command}`);
   emitWorkspaceEvent('terminal:sendCommand', { command }); // Emit the command to the parent
   closeQuickCommandsModal(); // Close the modal after selection
 };

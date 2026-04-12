@@ -62,12 +62,12 @@ watch(
       const allAvailableInputs = focusSwitcherStore.availableInputs; // 获取所有可用输入的基础信息
       const inputsMap = new Map(allAvailableInputs.map((input) => [input.id, input]));
 
-      console.log('[FocusSwitcherConfigurator] Loading full config from store...');
-      console.log(
+      console.info('[FocusSwitcherConfigurator] Loading full config from store...');
+      console.info(
         '[FocusSwitcherConfigurator] Store sequenceOrder:',
         JSON.stringify(currentSequenceOrder)
       );
-      console.log(
+      console.info(
         '[FocusSwitcherConfigurator] Store itemConfigs:',
         JSON.stringify(currentItemConfigs)
       );
@@ -94,15 +94,15 @@ watch(
       );
 
       hasChanges.value = false;
-      console.log(
+      console.info(
         '[FocusSwitcherConfigurator] Dialog opened. Loaded localSequence:',
         JSON.stringify(localSequence.value)
       );
-      console.log(
+      console.info(
         '[FocusSwitcherConfigurator] Loaded localItemConfigs:',
         JSON.stringify(localItemConfigs.value)
       );
-      console.log(
+      console.info(
         '[FocusSwitcherConfigurator] Original full config stored:',
         JSON.stringify(originalConfig.value)
       );
@@ -172,10 +172,10 @@ watch(
     const changed = JSON.stringify(currentFullConfig) !== JSON.stringify(comparableOriginalConfig);
 
     hasChanges.value = changed;
-    // console.log(`[FocusSwitcherConfigurator] Comparing:`);
-    // console.log("Current:", JSON.stringify(currentFullConfig));
-    // console.log("Original:", JSON.stringify(comparableOriginalConfig));
-    // console.log(`[FocusSwitcherConfigurator] Changes detected: ${changed}`);
+    // console.info(`[FocusSwitcherConfigurator] Comparing:`);
+    // console.info("Current:", JSON.stringify(currentFullConfig));
+    // console.info("Original:", JSON.stringify(comparableOriginalConfig));
+    // console.info(`[FocusSwitcherConfigurator] Changes detected: ${changed}`);
   },
   { deep: true }
 );
@@ -212,12 +212,12 @@ const saveConfiguration = () => {
     shortcuts: newShortcuts,
   };
 
-  console.log(
+  console.info(
     '[FocusSwitcherConfigurator] Saving full configuration:',
     JSON.stringify(fullConfigToSave)
   );
   focusSwitcherStore.updateConfiguration(fullConfigToSave); // 调用 Store 更新函数
-  console.log('[FocusSwitcherConfigurator] Configuration save process triggered.');
+  console.info('[FocusSwitcherConfigurator] Configuration save process triggered.');
   hasChanges.value = false;
   emit('close'); // 保存后关闭
 };
@@ -470,7 +470,7 @@ const captureShortcut = (event: KeyboardEvent, itemConfig: FocusItemConfig) => {
     itemConfig.shortcut = undefined; // 使用 undefined 清空
   } else {
     // 可选：如果按下非 Alt 组合键，可以清空或提示
-    // console.log('[FocusSwitcherConfigurator] Invalid shortcut combination.');
+    // console.info('[FocusSwitcherConfigurator] Invalid shortcut combination.');
   }
 };
 </script>

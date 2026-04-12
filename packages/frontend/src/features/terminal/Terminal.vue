@@ -116,10 +116,10 @@ const debouncedSaveFontSize = debounce(async (size: number) => {
   try {
     if (isMobile.value) {
       await appearanceStore.setTerminalFontSizeMobile(size);
-      console.log(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
+      console.info(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
     } else {
       await appearanceStore.setTerminalFontSize(size);
-      console.log(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
+      console.info(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
     }
   } catch (error) {
     console.error(`[Terminal ${props.sessionId}] Debounced font size save failed:`, error);
@@ -263,7 +263,7 @@ onMounted(() => {
         foldThreshold: 500,
       });
       term.loadAddon(outputEnhancerAddon);
-      console.log(
+      console.info(
         `[Terminal ${props.sessionId}] OutputEnhancerAddon 加载成功 (enabled: ${terminalOutputEnhancerEnabledBoolean.value})`
       );
     } catch (error) {
@@ -286,7 +286,7 @@ onMounted(() => {
         }
       });
       term.loadAddon(webglAddonInstance);
-      console.log(`[Terminal ${props.sessionId}] WebGL renderer enabled.`);
+      console.info(`[Terminal ${props.sessionId}] WebGL renderer enabled.`);
     } catch (e) {
       console.warn(
         `[Terminal ${props.sessionId}] WebGL addon failed to load, falling back to canvas/dom renderer:`,
@@ -297,7 +297,7 @@ onMounted(() => {
 
     term.open(terminalRef.value);
     isTerminalDomReady.value = true;
-    console.log(`[Terminal ${props.sessionId}] Xterm open() called.`);
+    console.info(`[Terminal ${props.sessionId}] Xterm open() called.`);
 
     fitAndEmitResizeNow(); // Use composable method
 
@@ -434,7 +434,7 @@ onMounted(() => {
           if (outputEnhancerAddon && outputEnhancerAddon.isEnabled()) {
             const expanded = outputEnhancerAddon.expandLastFold();
             if (!expanded) {
-              console.log('[Terminal] No folded content to expand');
+              console.info('[Terminal] No folded content to expand');
             }
           }
         }
@@ -454,7 +454,7 @@ onMounted(() => {
     watch(terminalOutputEnhancerEnabledBoolean, (newValue) => {
       if (outputEnhancerAddon) {
         outputEnhancerAddon.setEnabled(newValue);
-        console.log(`[Terminal ${props.sessionId}] OutputEnhancerAddon enabled: ${newValue}`);
+        console.info(`[Terminal ${props.sessionId}] OutputEnhancerAddon enabled: ${newValue}`);
       }
     });
 
