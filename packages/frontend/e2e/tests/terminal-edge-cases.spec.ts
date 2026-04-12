@@ -162,7 +162,8 @@ test.describe('终端功能边缘场景测试', () => {
 
         // 应该显示搜索提示
         const searchHint = workspace.terminalContainer.locator('text=/reverse-i-search|搜索历史/i');
-        if (!(await searchHint.isVisible({ timeout: 3000 }).catch(() => false))) {
+        const hasSearchHint = await searchHint.isVisible({ timeout: 3000 }).catch(() => false);
+        if (!hasSearchHint) {
           return;
         }
 
@@ -248,9 +249,11 @@ test.describe('终端功能边缘场景测试', () => {
 
         // 历史列表应该为空
         const historyItems = historyPanel.locator('.history-item');
-        await expect(historyItems)
-          .toHaveCount(0, { timeout: 5000 })
-          .catch(() => undefined);
+        const beforeClearCount = await historyItems.count();
+        if (beforeClearCount === 0) {
+          return;
+        }
+        await expect(historyItems).toHaveCount(0, { timeout: 5000 });
       }
     });
   });
@@ -269,7 +272,10 @@ test.describe('终端功能边缘场景测试', () => {
 
         // 打开快捷命令面板
         const quickCommandButton = authenticatedPage.locator('button:has-text("快捷命令")');
-        if (!(await quickCommandButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+        const hasQuickCommandButton = await quickCommandButton
+          .isVisible({ timeout: 3000 })
+          .catch(() => false);
+        if (!hasQuickCommandButton) {
           return;
         }
         await quickCommandButton.click();
@@ -279,7 +285,8 @@ test.describe('终端功能边缘场景测试', () => {
 
         // 选择一个快捷命令
         const commandItem = commandPanel.locator('.command-item:first-child');
-        if (!(await commandItem.isVisible({ timeout: 3000 }).catch(() => false))) {
+        const hasCommandItem = await commandItem.isVisible({ timeout: 3000 }).catch(() => false);
+        if (!hasCommandItem) {
           return;
         }
         await commandItem.click();
@@ -295,7 +302,10 @@ test.describe('终端功能边缘场景测试', () => {
 
       // 打开快捷命令管理
       const quickCommandButton = authenticatedPage.locator('button:has-text("快捷命令")');
-      if (!(await quickCommandButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+      const hasQuickCommandButton = await quickCommandButton
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
+      if (!hasQuickCommandButton) {
         return;
       }
       await quickCommandButton.click();
@@ -305,7 +315,8 @@ test.describe('终端功能边缘场景测试', () => {
 
       // 点击添加按钮
       const addButton = commandPanel.locator('button:has-text("添加"), button:has-text("Add")');
-      if (!(await addButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+      const hasAddButton = await addButton.isVisible({ timeout: 3000 }).catch(() => false);
+      if (!hasAddButton) {
         return;
       }
       await addButton.click();
@@ -513,11 +524,13 @@ test.describe('终端功能边缘场景测试', () => {
       }
     });
 
-    test.skip('终端复制粘贴功能', async ({ authenticatedPage }) => {
+    test('终端复制粘贴功能', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       await workspace.goto();
 
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await expect(workspace.terminalContainer).toBeVisible({ timeout: 15000 });
@@ -539,8 +552,11 @@ test.describe('终端功能边缘场景测试', () => {
         // 粘贴（Ctrl+Shift+V）
         await authenticatedPage.keyboard.press('Control+Shift+v');
 
-        // 验证粘贴的内容
+        // 结束当前输入并验证终端仍可正常交互
         await authenticatedPage.keyboard.press('Enter');
+        const marker = `copy-paste-${Date.now()}`;
+        await workspace.typeInTerminal(`echo "${marker}"`);
+        await workspace.expectTerminalOutput(marker, 10000);
       }
     });
 

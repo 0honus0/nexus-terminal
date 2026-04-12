@@ -1,15 +1,33 @@
 import { test, expect } from '../fixtures/auth.fixture';
 import { WorkspacePage } from '../pages/workspace.page';
 import { SFTP_TEST_DATA } from '../fixtures/test-data';
+import { Page } from '@playwright/test';
+
+async function connectFirstVisibleConnection(
+  page: Page,
+  workspace: WorkspacePage
+): Promise<boolean> {
+  const connectionItem = page.locator(
+    '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+  );
+  if (!(await connectionItem.isVisible({ timeout: 3000 }).catch(() => false))) {
+    return false;
+  }
+
+  await connectionItem.dblclick();
+  await expect(workspace.terminalContainer).toBeVisible({ timeout: 15000 });
+  return true;
+}
 
 test.describe('SFTP 操作测试', () => {
   test.describe('文件列表', () => {
-    test.skip('打开 SFTP 面板显示文件列表', async ({ authenticatedPage }) => {
+    test('打开 SFTP 面板显示文件列表', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       await workspace.goto();
 
       // 连接到服务器
-      await workspace.connectToServer('Test Server');
+      const connected = await connectFirstVisibleConnection(authenticatedPage, workspace);
+      expect(connected).toBeTruthy();
 
       // 打开 SFTP 面板
       await workspace.openSftpPanel();
@@ -19,16 +37,18 @@ test.describe('SFTP 操作测试', () => {
       await expect(fileList).toBeVisible();
     });
 
-    test.skip('可以导航到子目录', async ({ authenticatedPage }) => {
+    test('可以导航到子目录', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       await workspace.goto();
-      await workspace.connectToServer('Test Server');
+      const connected = await connectFirstVisibleConnection(authenticatedPage, workspace);
+      expect(connected).toBeTruthy();
       await workspace.openSftpPanel();
 
       // 双击目录进入
       const directory = authenticatedPage
         .locator('.sftp-item-directory, [data-type="directory"]')
         .first();
+      await expect(directory).toBeVisible({ timeout: 5000 });
       await directory.dblclick();
 
       // 面包屑应该更新

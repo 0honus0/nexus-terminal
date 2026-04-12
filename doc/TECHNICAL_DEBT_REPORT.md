@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 30 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 25 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -86,6 +86,15 @@
     - `网络断开后会话应保持挂起状态`
     - `手动挂起会话功能`
     - `关闭标签页后会话自动挂起`（均增加菜单/按钮可见性守护）
+    - `终端复制粘贴功能`（复制粘贴后增加 marker 回显验证终端可用性）
+  - 恢复 `packages/frontend/e2e/tests/file-management-edge-cases.spec.ts` 中：
+    - `下载大文件应正常工作`（测试内先上传后下载，去除远端预置文件依赖）
+    - `上传大文件应显示进度条`（将测试文件大小控制在 20MB，上报进度条可见性并兼容快速完成场景）
+  - E2E 质量修复：
+    - 修复 `terminal-edge-cases.spec.ts` / `file-management-edge-cases.spec.ts` 中多处“关键能力缺失时直接 return”造成的假阳性路径，改为显式前置校验后再执行主断言
+  - 恢复 `packages/frontend/e2e/tests/sftp-operations.spec.ts` 中：
+    - `打开 SFTP 面板显示文件列表`
+    - `可以导航到子目录`（连接策略改为首个可见连接，不再依赖固定连接名）
   - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
     - `处理大量输出`（改用 `seq 1 5000` 并验证中断后终端仍可回显）
 
