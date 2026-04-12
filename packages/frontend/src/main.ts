@@ -27,16 +27,16 @@ app.use(i18n); // 使用 i18n
   const appearanceStore = useAppearanceStore(pinia); // 提前实例化 AppearanceStore
 
   try {
-    console.log('[main.ts] 开始初始化应用...');
+    console.info('[main.ts] 开始初始化应用...');
 
     // 1. 立即挂载应用,不等待数据加载
     await router.isReady(); // 等待路由初始化完成
     app.mount('#app');
-    console.log('[main.ts] 应用已挂载,开始后台加载数据...');
+    console.info('[main.ts] 应用已挂载,开始后台加载数据...');
 
     // 2. 后台异步加载初始化数据 (使用新的统一API)
     await authStore.loadInitData();
-    console.log(
+    console.info(
       `[main.ts] 初始化数据加载完成: needsSetup=${authStore.needsSetup}, isAuthenticated=${authStore.isAuthenticated}`
     );
 
@@ -45,17 +45,17 @@ app.use(i18n); // 使用 i18n
 
     // 优先级1: 需要初始设置
     if (authStore.needsSetup && currentRoute.name !== 'Setup') {
-      console.log('[main.ts] 需要初始设置,重定向到 /setup');
+      console.info('[main.ts] 需要初始设置,重定向到 /setup');
       router.push({ name: 'Setup' });
     }
     // 优先级2: 已登录用户在登录页，重定向到仪表盘
     else if (!authStore.needsSetup && currentRoute.name === 'Login' && authStore.isAuthenticated) {
-      console.log('[main.ts] 已登录用户在登录页,重定向到仪表盘');
+      console.info('[main.ts] 已登录用户在登录页,重定向到仪表盘');
       router.push({ name: 'Dashboard' });
     }
     // 优先级3: 不需要设置但在设置页
     else if (!authStore.needsSetup && currentRoute.name === 'Setup') {
-      console.log('[main.ts] 不需要设置,从 /setup 重定向');
+      console.info('[main.ts] 不需要设置,从 /setup 重定向');
       router.push(authStore.isAuthenticated ? { name: 'Dashboard' } : { name: 'Login' });
     }
     // 优先级4: 未认证用户访问受保护页面
@@ -64,20 +64,20 @@ app.use(i18n); // 使用 i18n
       currentRoute.name !== 'Login' &&
       currentRoute.name !== 'Setup'
     ) {
-      console.log('[main.ts] 用户未认证,重定向到 /login');
+      console.info('[main.ts] 用户未认证,重定向到 /login');
       router.push({ name: 'Login' });
     }
 
     // 4. 如果用户已认证,加载用户特定数据
     if (!authStore.needsSetup && authStore.isAuthenticated) {
-      console.log('[main.ts] 用户已认证,加载设置和外观数据...');
+      console.info('[main.ts] 用户已认证,加载设置和外观数据...');
       const settingsStore = useSettingsStore(pinia);
       try {
         await Promise.all([
           settingsStore.loadInitialSettings(),
           appearanceStore.loadInitialAppearanceData(),
         ]);
-        console.log('[main.ts] 用户设置和外观数据加载完成。');
+        console.info('[main.ts] 用户设置和外观数据加载完成。');
       } catch (error) {
         console.error('[main.ts] 加载用户设置或外观数据失败:', error);
         // 加载失败也继续,可能使用默认值或显示错误
@@ -95,10 +95,10 @@ app.use(i18n); // 使用 i18n
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
-          console.log('SW registered: ', registration);
+          console.info('SW registered: ', registration);
         })
         .catch((registrationError) => {
-          console.log('SW registration failed: ', registrationError);
+          console.info('SW registration failed: ', registrationError);
         });
     });
   }
