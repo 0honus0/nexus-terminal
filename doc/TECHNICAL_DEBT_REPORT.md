@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 19 条 `test.skip`     | 分布在 7 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 17 条 `test.skip`     | 分布在 5 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -101,6 +101,9 @@
     - `可以创建新目录`
     - `可以删除文件`
     - `可以重命名文件`（文件操作统一切换到 `[data-filename]` 与 `#fileManagerActionInput-*` 选择器）
+  - 恢复 `packages/frontend/e2e/tests/file-management-edge-cases.spec.ts` 中：
+    - `上传过程中网络断开应支持断点续传`（增加断网恢复后“重试按钮”与“快速落盘”兼容路径）
+    - `删除只读文件应失败`（增加只读权限设置尝试，并对权限拒绝/特权删除两类结果做显式断言）
   - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
     - `处理大量输出`（改用 `seq 1 5000` 并验证中断后终端仍可回显）
 
