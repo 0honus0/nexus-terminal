@@ -43,22 +43,22 @@ const { t } = i18n.global;
 // 注意：此函数主要用于那些仍然需要 WebSocket 的操作 (如 resume, terminate)
 const getActiveWsManager = (): WsManagerInstance | null => {
   const firstSessionKey = sessions.value.size > 0 ? sessions.value.keys().next().value : null;
-  // console.log(`[getActiveWsManager] 尝试使用第一个会话 Key (如果存在): ${firstSessionKey}`);
+  // console.info(`[getActiveWsManager] 尝试使用第一个会话 Key (如果存在): ${firstSessionKey}`);
 
   if (firstSessionKey) {
     const session = sessions.value.get(firstSessionKey);
-    // console.log(`[getActiveWsManager]   第一个会话 (ID: ${firstSessionKey}): WS Manager 存在: ${!!session?.wsManager}, WS 已连接: ${session?.wsManager?.isConnected?.value}`);
+    // console.info(`[getActiveWsManager]   第一个会话 (ID: ${firstSessionKey}): WS Manager 存在: ${!!session?.wsManager}, WS 已连接: ${session?.wsManager?.isConnected?.value}`);
     if (session && session.wsManager && session.wsManager.isConnected.value) {
-      // console.log(`[getActiveWsManager] 使用第一个会话 (ID: ${firstSessionKey}) 的 WebSocket。`);
+      // console.info(`[getActiveWsManager] 使用第一个会话 (ID: ${firstSessionKey}) 的 WebSocket。`);
       return session.wsManager;
     }
   }
 
-  // console.log('[getActiveWsManager] 第一个会话的 WebSocket 不可用或不存在，开始遍历所有会话...');
+  // console.info('[getActiveWsManager] 第一个会话的 WebSocket 不可用或不存在，开始遍历所有会话...');
   for (const [sessionId, session] of sessions.value) {
-    // console.log(`[getActiveWsManager]   遍历中 - 检查会话 ID: ${sessionId}, WS Manager 存在: ${!!session.wsManager}, WS 已连接: ${session.wsManager?.isConnected?.value}`);
+    // console.info(`[getActiveWsManager]   遍历中 - 检查会话 ID: ${sessionId}, WS Manager 存在: ${!!session.wsManager}, WS 已连接: ${session.wsManager?.isConnected?.value}`);
     if (session.wsManager && session.wsManager.isConnected.value) {
-      // console.log(`[getActiveWsManager]   遍历成功，使用会话 (ID: ${sessionId}) 的 WebSocket。`);
+      // console.info(`[getActiveWsManager]   遍历成功，使用会话 (ID: ${sessionId}) 的 WebSocket。`);
       return session.wsManager;
     }
   }
@@ -345,9 +345,9 @@ export const resumeSshSession = async (suspendSessionId: string): Promise<void> 
       type: 'SSH_SUSPEND_RESUME_REQUEST',
       payload: { suspendSessionId, newFrontendSessionId },
     };
-    // console.log(`[${t('term.sshSuspend')}] resumeSshSession: 准备通过 wsManager (会话 ${newFrontendSessionId}) 发送消息: ${JSON.stringify(message)}`);
+    // console.info(`[${t('term.sshSuspend')}] resumeSshSession: 准备通过 wsManager (会话 ${newFrontendSessionId}) 发送消息: ${JSON.stringify(message)}`);
     wsManager.sendMessage(message);
-    // console.log(`[${t('term.sshSuspend')}] resumeSshSession: 已调用 wsManager.sendMessage 发送 SSH_SUSPEND_RESUME_REQ (挂起 ID: ${suspendSessionId}, 新前端ID: ${newFrontendSessionId})`);
+    // console.info(`[${t('term.sshSuspend')}] resumeSshSession: 已调用 wsManager.sendMessage 发送 SSH_SUSPEND_RESUME_REQ (挂起 ID: ${suspendSessionId}, 新前端ID: ${newFrontendSessionId})`);
 
     // 后续流程由 handleSshSuspendResumedNotif 处理
     // 它会使用 newFrontendSessionId，并将 isResuming 标记设置到这个会话上。
@@ -782,7 +782,7 @@ const handleSshOutputCachedChunk = (payload: SshOutputCachedChunkPayload): void 
       }
       console.info('[SSH Suspend Frontend] Received cached chunk data (buffering):', payload.data);
       session.pendingOutput.push(payload.data);
-      // console.log(`[${t('term.sshSuspend')}] (会话: ${payload.frontendSessionId}) 终端实例未就绪，已暂存数据块 (长度: ${payload.data.length})。当前暂存块数: ${session.pendingOutput.length}`);
+      // console.info(`[${t('term.sshSuspend')}] (会话: ${payload.frontendSessionId}) 终端实例未就绪，已暂存数据块 (长度: ${payload.data.length})。当前暂存块数: ${session.pendingOutput.length}`);
     }
 
     // isLastChunk 逻辑应该在数据被处理（写入或暂存）后执行

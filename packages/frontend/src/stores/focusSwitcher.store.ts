@@ -87,10 +87,10 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
   // +++ 修改：从后端加载配置（包括快捷键） +++
   async function loadConfigurationFromBackend() {
     const apiUrl = '/api/v1/settings/focus-switcher-sequence'; // 假设 API 端点不变，但返回结构改变
-    // console.log(`[FocusSwitcherStore] Attempting to load full configuration (sequence & shortcuts) from backend via: ${apiUrl}`);
+    // console.info(`[FocusSwitcherStore] Attempting to load full configuration (sequence & shortcuts) from backend via: ${apiUrl}`);
     try {
       const response = await fetch(apiUrl);
-      // console.log(`[FocusSwitcherStore] Received response from ${apiUrl}. Status: ${response.status}`);
+      // console.info(`[FocusSwitcherStore] Received response from ${apiUrl}. Status: ${response.status}`);
 
       if (!response.ok) {
         console.error(`[FocusSwitcherStore] HTTP error from ${apiUrl}. Status: ${response.status}`);
@@ -99,7 +99,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
       // *** 假设后端返回 FocusSwitcherFullConfig 结构 ***
       const loadedFullConfig: FocusSwitcherFullConfig = await response.json();
-      // console.log(`[FocusSwitcherStore] Raw JSON received from backend:`, JSON.stringify(loadedFullConfig));
+      // console.info(`[FocusSwitcherStore] Raw JSON received from backend:`, JSON.stringify(loadedFullConfig));
 
       // --- 验证和设置 ---
       const availableIds = new Set(availableInputs.value.map((input) => input.id));
@@ -110,7 +110,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
         loadedFullConfig.sequence.every((id) => typeof id === 'string' && availableIds.has(id))
       ) {
         sequenceOrder.value = loadedFullConfig.sequence;
-        // console.log('[FocusSwitcherStore] Successfully loaded and set sequenceOrder:', JSON.stringify(sequenceOrder.value));
+        // console.info('[FocusSwitcherStore] Successfully loaded and set sequenceOrder:', JSON.stringify(sequenceOrder.value));
       } else {
         console.warn(
           '[FocusSwitcherStore] Invalid or missing sequence in loaded config. Resetting to empty array.'
@@ -143,7 +143,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
           }
         }
         itemConfigs.value = validConfigs;
-        // console.log('[FocusSwitcherStore] Successfully loaded and set itemConfigs:', JSON.stringify(itemConfigs.value));
+        // console.info('[FocusSwitcherStore] Successfully loaded and set itemConfigs:', JSON.stringify(itemConfigs.value));
       } else {
         console.warn(
           '[FocusSwitcherStore] Invalid or missing shortcuts in loaded config. Resetting to empty object.'
@@ -157,20 +157,20 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
       );
       sequenceOrder.value = [];
       itemConfigs.value = {};
-      // console.log('[FocusSwitcherStore] Reset sequenceOrder and itemConfigs due to loading error.');
+      // console.info('[FocusSwitcherStore] Reset sequenceOrder and itemConfigs due to loading error.');
     }
   }
 
   async function saveConfigurationToBackend() {
     const apiUrl = '/api/v1/settings/focus-switcher-sequence'; // 假设 API 端点不变，但接受结构改变
-    // console.log(`[FocusSwitcherStore] Attempting to save full configuration (sequence & shortcuts) to backend via PUT: ${apiUrl}`);
+    // console.info(`[FocusSwitcherStore] Attempting to save full configuration (sequence & shortcuts) to backend via PUT: ${apiUrl}`);
     try {
       // *** 构造 FocusSwitcherFullConfig 结构发送给后端 ***
       const configToSave: FocusSwitcherFullConfig = {
         sequence: sequenceOrder.value,
         shortcuts: itemConfigs.value,
       };
-      // console.log('[FocusSwitcherStore] Full configuration data to save:', JSON.stringify(configToSave));
+      // console.info('[FocusSwitcherStore] Full configuration data to save:', JSON.stringify(configToSave));
       const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
@@ -179,7 +179,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
         },
         body: JSON.stringify(configToSave), // *** 发送包含 sequence 和 shortcuts 的对象 ***
       });
-      // console.log(`[FocusSwitcherStore] Received response from PUT ${apiUrl}. Status: ${response.status}`);
+      // console.info(`[FocusSwitcherStore] Received response from PUT ${apiUrl}. Status: ${response.status}`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -193,7 +193,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
       }
 
       const result = await response.json();
-      // console.log('[FocusSwitcherStore] Configuration successfully saved to backend. Response message:', result.message);
+      // console.info('[FocusSwitcherStore] Configuration successfully saved to backend. Response message:', result.message);
     } catch (error) {
       console.error(
         `[FocusSwitcherStore] Failed to save configuration to backend (${apiUrl}):`,
@@ -205,17 +205,17 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
   function triggerTerminalSearchActivation() {
     activateTerminalSearchTrigger.value++;
-    // console.log('[FocusSwitcherStore] Triggering Terminal search activation.');
+    // console.info('[FocusSwitcherStore] Triggering Terminal search activation.');
   }
 
   function triggerFileManagerSearchActivation() {
     activateFileManagerSearchTrigger.value++;
-    // console.log('[FocusSwitcherStore] Triggering FileManager search activation.');
+    // console.info('[FocusSwitcherStore] Triggering FileManager search activation.');
   }
 
   function toggleConfigurator(visible?: boolean) {
     isConfiguratorVisible.value = visible === undefined ? !isConfiguratorVisible.value : visible;
-    // console.log(`[FocusSwitcherStore] Configurator visibility set to: ${isConfiguratorVisible.value}`);
+    // console.info(`[FocusSwitcherStore] Configurator visibility set to: ${isConfiguratorVisible.value}`);
   }
 
   // --- 移除旧的 loadConfiguration ---
@@ -234,13 +234,13 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
   // +++ 修改：更新完整配置（包括顺序和所有快捷键） +++
   function updateConfiguration(newFullConfig: FocusSwitcherFullConfig) {
-    // console.log('[FocusSwitcherStore] updateConfiguration called with new full configuration:', JSON.stringify(newFullConfig));
+    // console.info('[FocusSwitcherStore] updateConfiguration called with new full configuration:', JSON.stringify(newFullConfig));
     const availableIds = new Set(availableInputs.value.map((input) => input.id));
 
     // 更新 sequenceOrder (过滤无效 ID)
     if (Array.isArray(newFullConfig?.sequence)) {
       sequenceOrder.value = newFullConfig.sequence.filter((id) => availableIds.has(id));
-      // console.log('[FocusSwitcherStore] sequenceOrder updated locally to:', JSON.stringify(sequenceOrder.value));
+      // console.info('[FocusSwitcherStore] sequenceOrder updated locally to:', JSON.stringify(sequenceOrder.value));
     } else {
       console.warn(
         '[FocusSwitcherStore] Invalid sequence provided in updateConfiguration. Keeping existing sequence.'
@@ -266,7 +266,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
         }
       }
       itemConfigs.value = validConfigs;
-      // console.log('[FocusSwitcherStore] itemConfigs updated locally to:', JSON.stringify(itemConfigs.value));
+      // console.info('[FocusSwitcherStore] itemConfigs updated locally to:', JSON.stringify(itemConfigs.value));
     } else {
       console.warn(
         '[FocusSwitcherStore] Invalid shortcuts provided in updateConfiguration. Keeping existing configs.'
@@ -291,7 +291,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
     const actions = registeredActions.value.get(id) || [];
     actions.push(action);
     registeredActions.value.set(id, actions);
-    // console.log(`[FocusSwitcherStore] Registered focus action for ID: ${id}. Total actions for this ID: ${actions.length}`);
+    // console.info(`[FocusSwitcherStore] Registered focus action for ID: ${id}. Total actions for this ID: ${actions.length}`);
 
     // 返回一个用于注销此特定动作的函数
     const unregister = () => {
@@ -300,11 +300,11 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
         const index = currentActions.indexOf(action);
         if (index > -1) {
           currentActions.splice(index, 1);
-          // console.log(`[FocusSwitcherStore] Unregistered a focus action for ID: ${id}. Remaining actions: ${currentActions.length}`);
+          // console.info(`[FocusSwitcherStore] Unregistered a focus action for ID: ${id}. Remaining actions: ${currentActions.length}`);
           // 如果数组为空，可以从 Map 中移除该 ID
           if (currentActions.length === 0) {
             registeredActions.value.delete(id);
-            // console.log(`[FocusSwitcherStore] Removed ID ${id} from registeredActions map as it has no more actions.`);
+            // console.info(`[FocusSwitcherStore] Removed ID ${id} from registeredActions map as it has no more actions.`);
           }
         } else {
           console.warn(
@@ -324,7 +324,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
   // 修改：统一的聚焦目标 Action，现在迭代 Map 中的动作数组
   async function focusTarget(id: string): Promise<boolean> {
-    // console.log(`[FocusSwitcherStore] Attempting to focus target ID: ${id}`);
+    // console.info(`[FocusSwitcherStore] Attempting to focus target ID: ${id}`);
     const actions = registeredActions.value.get(id);
 
     if (!actions || actions.length === 0) {
@@ -332,7 +332,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
       return false;
     }
 
-    // console.log(`[FocusSwitcherStore] Found ${actions.length} action(s) for ID: ${id}. Iterating...`);
+    // console.info(`[FocusSwitcherStore] Found ${actions.length} action(s) for ID: ${id}. Iterating...`);
 
     for (const action of actions) {
       try {
@@ -341,15 +341,15 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
         if (result === true) {
           // 如果动作返回 true，表示成功聚焦，停止迭代并返回 true
-          // console.log(`[FocusSwitcherStore] Successfully focused ${id} via one of its actions.`);
+          // console.info(`[FocusSwitcherStore] Successfully focused ${id} via one of its actions.`);
           return true;
         }
         if (result === false) {
           // 如果动作返回 false，表示尝试但失败，记录日志并继续下一个动作
-          // console.log(`[FocusSwitcherStore] An action for ${id} returned false (failed). Trying next action if available.`);
+          // console.info(`[FocusSwitcherStore] An action for ${id} returned false (failed). Trying next action if available.`);
         } else if (result === undefined) {
           // 如果动作返回 undefined，表示跳过（例如非活动实例），记录日志并继续下一个动作
-          // console.log(`[FocusSwitcherStore] An action for ${id} returned undefined (skipped). Trying next action if available.`);
+          // console.info(`[FocusSwitcherStore] An action for ${id} returned undefined (skipped). Trying next action if available.`);
         }
         // 如果 result 是其他值，也视为跳过或未处理
       } catch (error) {
@@ -359,7 +359,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
     }
 
     // 如果遍历完所有动作都没有成功聚焦 (没有返回 true)
-    // console.log(`[FocusSwitcherStore] All actions for ${id} executed, but none returned true. Focus failed.`);
+    // console.info(`[FocusSwitcherStore] All actions for ${id} executed, but none returned true. Focus failed.`);
     // 尝试激活搜索框（如果适用），这里的逻辑可能需要重新审视，
     // 因为激活应该由返回 false 的动作内部触发，或者由调用 focusTarget 的地方处理
     if (id === 'fileManagerSearch') {
@@ -445,9 +445,9 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
   // --- Initialization ---
   // Store 创建时自动从后端加载配置
-  // console.log('[FocusSwitcherStore] Initializing store and scheduling loadConfigurationFromBackend...'); // 使用新名称
+  // console.info('[FocusSwitcherStore] Initializing store and scheduling loadConfigurationFromBackend...'); // 使用新名称
   nextTick(() => {
-    // console.log('[FocusSwitcherStore] nextTick triggered, calling loadConfigurationFromBackend.'); // 使用新名称
+    // console.info('[FocusSwitcherStore] nextTick triggered, calling loadConfigurationFromBackend.'); // 使用新名称
     loadConfigurationFromBackend(); // 调用重命名后的加载函数
   });
 
