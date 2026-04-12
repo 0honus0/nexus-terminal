@@ -25,39 +25,42 @@ export interface NewPasskey {
   backed_up?: boolean;
 }
 
+type PasskeyDbRow = Omit<Passkey, 'backed_up' | 'created_at' | 'updated_at' | 'last_used_at'> & {
+  backed_up: number | boolean;
+  created_at: number | string;
+  updated_at: number | string;
+  last_used_at: number | string | null;
+};
+
+const toNumber = (value: number | string): number =>
+  typeof value === 'string' ? parseInt(value, 10) : value;
+
+const toNullableNumber = (value: number | string | null): number | null => {
+  if (value === null) return null;
+  return toNumber(value);
+};
+
 // Helper to convert DB result (0/1) to boolean for backed_up field
-function mapPasskeyResult(dbResult: any): Passkey | null {
+function mapPasskeyResult(dbResult: PasskeyDbRow | null | undefined): Passkey | null {
   if (!dbResult) return null;
   return {
     ...dbResult,
     backed_up: !!dbResult.backed_up, // Ensure boolean
     transports: dbResult.transports, // Already string or null
-    created_at:
-      typeof dbResult.created_at === 'string'
-        ? parseInt(dbResult.created_at, 10)
-        : dbResult.created_at,
-    last_used_at:
-      dbResult.last_used_at && typeof dbResult.last_used_at === 'string'
-        ? parseInt(dbResult.last_used_at, 10)
-        : dbResult.last_used_at,
-    updated_at:
-      typeof dbResult.updated_at === 'string'
-        ? parseInt(dbResult.updated_at, 10)
-        : dbResult.updated_at,
+    created_at: toNumber(dbResult.created_at),
+    last_used_at: toNullableNumber(dbResult.last_used_at),
+    updated_at: toNumber(dbResult.updated_at),
   };
 }
 
-function mapPasskeyResults(dbResults: any[]): Passkey[] {
+function mapPasskeyResults(dbResults: PasskeyDbRow[]): Passkey[] {
   return dbResults.map((row) => ({
     ...row,
     backed_up: !!row.backed_up,
     transports: row.transports,
-    created_at: typeof row.created_at === 'string' ? parseInt(row.created_at, 10) : row.created_at,
-    last_used_at:
-      row.last_used_at && typeof row.last_used_at === 'string'
-        ? parseInt(row.last_used_at, 10)
-        : row.last_used_at,
-    updated_at: typeof row.updated_at === 'string' ? parseInt(row.updated_at, 10) : row.updated_at,
+    created_at: toNumber(row.created_at),
+    last_used_at: toNullableNumber(row.last_used_at),
+    updated_at: toNumber(row.updated_at),
   }));
 }
 
@@ -103,21 +106,21 @@ export class PasskeyRepository {
   async getPasskeyById(id: number): Promise<Passkey | null> {
     const db = await getDbInstance();
     const sql = 'SELECT * FROM passkeys WHERE id = ?';
-    const result = await getDb<any>(db, sql, [id]);
+    const result = await getDb<PasskeyDbRow>(db, sql, [id]);
     return mapPasskeyResult(result);
   }
 
   async getPasskeyByCredentialId(credentialId: string): Promise<Passkey | null> {
     const db = await getDbInstance();
     const sql = 'SELECT * FROM passkeys WHERE credential_id = ?';
-    const result = await getDb<any>(db, sql, [credentialId]);
+    const result = await getDb<PasskeyDbRow>(db, sql, [credentialId]);
     return mapPasskeyResult(result);
   }
 
   async getPasskeysByUserId(userId: number): Promise<Passkey[]> {
     const db = await getDbInstance();
     const sql = 'SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at DESC';
-    const results = await allDb<any>(db, sql, [userId]);
+    const results = await allDb<PasskeyDbRow>(db, sql, [userId]);
     // Log the raw results from the database before mapping
     // console.info(`[PasskeyRepository] Raw passkeys for user ${userId}:`, JSON.stringify(results, null, 2));
     return mapPasskeyResults(results);
@@ -164,7 +167,7 @@ export class PasskeyRepository {
   async getFirstPasskey(): Promise<Passkey | null> {
     const db = await getDbInstance();
     const sql = 'SELECT * FROM passkeys LIMIT 1';
-    const result = await getDb<any>(db, sql);
+    const result = await getDb<PasskeyDbRow>(db, sql);
     return mapPasskeyResult(result);
   }
 }

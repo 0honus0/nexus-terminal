@@ -33,7 +33,7 @@ const REDACTED_PLACEHOLDER = '[REDACTED]';
  * P1-5+: 增强的敏感信息脱敏函数
  * 支持：1) 对象 key 脱敏 2) 字符串内容脱敏 3) 循环引用保护 4) 深度限制 5) 大小限制
  */
-function redactSensitiveData(value: any, depth = 0, seen = new WeakSet()): any {
+function redactSensitiveData(value: unknown, depth = 0, seen = new WeakSet()): unknown {
   // 深度限制（防止栈溢出）
   const MAX_DEPTH = 10;
   const MAX_KEYS = 100;
@@ -89,7 +89,8 @@ function redactSensitiveData(value: any, depth = 0, seen = new WeakSet()): any {
 
   if (isPlainObject) {
     seen.add(value);
-    const redacted: any = {};
+    const objectValue = value as Record<string, unknown>;
+    const redacted: Record<string, unknown> = {};
     try {
       const keys = Object.keys(value);
       // 大小限制（防止超大对象）
@@ -105,7 +106,7 @@ function redactSensitiveData(value: any, depth = 0, seen = new WeakSet()): any {
           if (isSensitive) {
             redacted[key] = REDACTED_PLACEHOLDER;
           } else {
-            redacted[key] = redactSensitiveData(value[key], depth + 1, seen);
+            redacted[key] = redactSensitiveData(objectValue[key], depth + 1, seen);
           }
         } catch (err) {
           // Getter 异常保护
@@ -134,7 +135,7 @@ function redactSensitiveData(value: any, depth = 0, seen = new WeakSet()): any {
 /**
  * P1-5: 脱敏所有日志参数
  */
-function redactLogArgs(args: any[]): any[] {
+function redactLogArgs(args: unknown[]): unknown[] {
   return args.map((arg) => redactSensitiveData(arg));
 }
 
@@ -208,31 +209,31 @@ export const installConsoleLogging = (): void => {
   };
 
   // P1-5: 重写 console 方法，添加日志等级过滤 + 敏感信息脱敏
-  console.debug = (...args: any[]) => {
+  console.debug = (...args: unknown[]) => {
     if (shouldLog('debug')) {
       const redactedArgs = redactLogArgs(args);
       originalConsole.debug(formatTimestamp(), '[DEBUG]', ...redactedArgs);
     }
   };
-  console.log = (...args: any[]) => {
+  console.log = (...args: unknown[]) => {
     if (shouldLog('info')) {
       const redactedArgs = redactLogArgs(args);
       originalConsole.log(formatTimestamp(), ...redactedArgs);
     }
   };
-  console.info = (...args: any[]) => {
+  console.info = (...args: unknown[]) => {
     if (shouldLog('info')) {
       const redactedArgs = redactLogArgs(args);
       originalConsole.info(formatTimestamp(), '[INFO]', ...redactedArgs);
     }
   };
-  console.warn = (...args: any[]) => {
+  console.warn = (...args: unknown[]) => {
     if (shouldLog('warn')) {
       const redactedArgs = redactLogArgs(args);
       originalConsole.warn(formatTimestamp(), '[WARN]', ...redactedArgs);
     }
   };
-  console.error = (...args: any[]) => {
+  console.error = (...args: unknown[]) => {
     if (shouldLog('error')) {
       const redactedArgs = redactLogArgs(args);
       originalConsole.error(formatTimestamp(), '[ERROR]', ...redactedArgs);
