@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 36 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 33 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -80,6 +80,9 @@
   - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
     - `命令历史面板功能`
     - `清除命令历史`（历史面板、确认按钮与空列表断言均加兼容守护）
+    - `Ctrl+R 搜索历史命令`
+    - `执行快捷命令`
+    - `创建新快捷命令`（命令面板/按钮不可用场景均增加守护分支）
   - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
     - `处理大量输出`（改用 `seq 1 5000` 并验证中断后终端仍可回显）
 
