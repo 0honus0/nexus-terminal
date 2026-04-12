@@ -84,13 +84,20 @@
   },
   "overrides": {
     "esbuild": "^0.25.0",
-    "tar": ">=7.5.8",
+    "tar": ">=7.5.13",
     "cookie": "^0.7.2",
     "tmp": "^0.2.5",
     "fast-xml-parser": ">=5.3.8",
     "basic-ftp": ">=5.2.0",
     "rollup": ">=4.58.1",
     "minimatch": ">=9.0.5",
+    "path-to-regexp": "8.4.2",
+    "defu": "^6.1.7",
+    "lodash": "^4.18.1",
+    "lodash-es": "^4.18.1",
+    "router": {
+      "path-to-regexp": "8.4.2"
+    },
     "eslint-plugin-import": {
       "minimatch": "^3.1.2"
     },

@@ -15,7 +15,7 @@
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
 | E2E 测试债务   | ✅ 0 条 `test.skip`      | 已完成回补清零（2026-04-12）                                   |
-| 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
+| 运行时安全债务 | 🟡 8 条漏洞              | `critical 0 / high 0 / moderate 3 / low 5`                     |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
 
@@ -42,6 +42,10 @@
   - `dompurify` → `^3.3.3`
   - `element-plus` → `^2.13.7`
   - 根依赖清理：移除未使用的 `plist`
+- 依赖安全收敛（2026-04-12）：
+  - 根 `overrides` 更新：`tar >=7.5.13`、`path-to-regexp 8.4.2`、`router/path-to-regexp 8.4.2`、`defu ^6.1.7`、`lodash ^4.18.1`、`lodash-es ^4.18.1`
+  - 审计结果收敛：运行时漏洞由 32 降至 8（`critical/high` 已清零）
+  - 运行时 direct high/critical 依赖：`none`
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。
@@ -130,7 +134,7 @@
 
 ### 本轮未闭环风险（继续跟踪）
 
-- 依赖审计仍有运行时 `critical/high` 风险，需按可升级性与兼容性逐批处理。
+- 运行时 `critical/high` 已清零，剩余中低危主要涉及 `nodemailer`、`vite` 与 `sqlite3` 的大版本升级评估。
 - E2E `skip` 已清零，需要保持新增用例默认非跳过并持续回归验证。
 - 源码 `any/console.log` 存量较大，需建立分模块治理节奏。
 
