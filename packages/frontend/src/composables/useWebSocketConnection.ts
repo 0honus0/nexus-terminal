@@ -289,19 +289,19 @@ export function createWebSocketConnectionManager(
       intentionalDisconnect = true;
       // 在关闭前移除监听器，防止旧的 onclose 干扰
       if (oldWs) {
-        console.log(`[WebSocket ${instanceSessionId}] 移除旧连接的事件监听器...`);
+        console.info(`[WebSocket ${instanceSessionId}] 移除旧连接的事件监听器...`);
         oldWs.onopen = null;
         oldWs.onmessage = null;
         oldWs.onerror = null;
         oldWs.onclose = null; // 阻止旧的 onclose 干扰
-        console.log(`[WebSocket ${instanceSessionId}] 关闭旧连接 (强制)...`);
+        console.info(`[WebSocket ${instanceSessionId}] 关闭旧连接 (强制)...`);
         oldWs.close(1000, '状态不一致，强制重连');
       }
       ws.value = null; // 清理 shallowRef 中的引用
       intentionalDisconnect = previousIntentionalDisconnect; // 恢复标记
-      console.log(`[WebSocket ${instanceSessionId}] 旧连接处理完毕。`);
+      console.info(`[WebSocket ${instanceSessionId}] 旧连接处理完毕。`);
     } else if (ws.value && ws.value.readyState === WebSocket.CLOSING) {
-      console.log(
+      console.info(
         `[WebSocket ${instanceSessionId}] 检测到旧连接正在关闭 (readyState: ${ws.value.readyState})。清理引用并继续创建新连接...`
       );
       ws.value = null; // 清理引用，让后续逻辑创建新的
@@ -317,11 +317,11 @@ export function createWebSocketConnectionManager(
       let secureUrl = url;
       if (window.location.protocol === 'https:') {
         secureUrl = url.replace(/^ws:/, 'wss:');
-        console.log(
+        console.info(
           `[WebSocket ${instanceSessionId}] HTTPS detected, upgrading WebSocket URL to: ${secureUrl}`
         );
       } else {
-        console.log(
+        console.info(
           `[WebSocket ${instanceSessionId}] HTTP detected, using WebSocket URL: ${secureUrl}`
         );
       }
@@ -391,7 +391,7 @@ export function createWebSocketConnectionManager(
               isSftpReady.value = false;
             }
           } else if (message.type === 'sftp_ready') {
-            console.log(`[WebSocket ${instanceSessionId}] SFTP 会话已就绪。`);
+            console.info(`[WebSocket ${instanceSessionId}] SFTP 会话已就绪。`);
             isSftpReady.value = true;
           }
           // --- 状态更新结束 ---

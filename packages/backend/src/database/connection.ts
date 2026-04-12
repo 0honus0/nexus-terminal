@@ -100,7 +100,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
   // 启用外键约束
   await runDb(db, 'PRAGMA foreign_keys = ON;');
 
-  console.log('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
+  console.info('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
 
   // 开始事务（用于表创建）
   await new Promise<void>((resolveTx, rejectTx) => {
@@ -129,7 +129,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
           console.error('[DB Init] 提交数据库初始化事务失败:', commitErr);
           rejectCommit(commitErr);
         } else {
-          console.log('[DB Init] 数据库初始化事务提交成功');
+          console.info('[DB Init] 数据库初始化事务提交成功');
           resolveCommit();
         }
       });
@@ -170,7 +170,7 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
             await runDatabaseInitializations(db);
             // +++ 运行数据库迁移 +++
             await runMigrations(db);
-            console.log('[数据库] 初始化和迁移完成。');
+            console.info('[数据库] 初始化和迁移完成。');
             resolve(db);
           } catch (initError: unknown) {
             console.error('[数据库] 连接后初始化失败，正在关闭连接...');
@@ -189,14 +189,14 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
 
 process.on('SIGINT', async () => {
   if (dbInstancePromise) {
-    console.log('[DB] 收到 SIGINT，尝试关闭数据库连接...');
+    console.info('[DB] 收到 SIGINT，尝试关闭数据库连接...');
     try {
       const db = await dbInstancePromise;
       db.close((err) => {
         if (err) {
           console.error('[DB] 关闭数据库时出错:', err.message);
         } else {
-          console.log('[DB] 数据库连接已关闭。');
+          console.info('[DB] 数据库连接已关闭。');
         }
         process.exit(err ? 1 : 0);
       });
@@ -205,7 +205,7 @@ process.on('SIGINT', async () => {
       process.exit(1);
     }
   } else {
-    console.log('[DB] 收到 SIGINT，但数据库连接从未初始化或已失败。');
+    console.info('[DB] 收到 SIGINT，但数据库连接从未初始化或已失败。');
     process.exit(0);
   }
 });

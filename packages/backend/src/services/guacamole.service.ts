@@ -8,14 +8,14 @@ const REMOTE_GATEWAY_API_BASE =
     ? process.env.REMOTE_GATEWAY_API_BASE_LOCAL || 'http://localhost:9090'
     : process.env.REMOTE_GATEWAY_API_BASE_DOCKER || 'http://remote-gateway:9090';
 
-console.log(`[GuacamoleService] DEPLOYMENT_MODE: ${process.env.DEPLOYMENT_MODE}`);
-console.log(
+console.info(`[GuacamoleService] DEPLOYMENT_MODE: ${process.env.DEPLOYMENT_MODE}`);
+console.info(
   `[GuacamoleService] Using Remote Gateway API Base (Local): ${process.env.REMOTE_GATEWAY_API_BASE_LOCAL}`
 );
-console.log(
+console.info(
   `[GuacamoleService] Using Remote Gateway API Base (Docker): ${process.env.REMOTE_GATEWAY_API_BASE_DOCKER}`
 );
-console.log(`[GuacamoleService] Effective Remote Gateway API Base: ${REMOTE_GATEWAY_API_BASE}`);
+console.info(`[GuacamoleService] Effective Remote Gateway API Base: ${REMOTE_GATEWAY_API_BASE}`);
 
 interface TokenResponse {
   token: string;
@@ -87,7 +87,7 @@ export const getRemoteDesktopToken = async (
   };
 
   const tokenUrl = `${REMOTE_GATEWAY_API_BASE}/api/remote-desktop/token`;
-  console.log(
+  console.info(
     `[GuacamoleService:getRemoteDesktopToken] Calling Remote Gateway API: ${tokenUrl} for protocol ${protocol}, connection ${connection.id}`
   );
 
@@ -108,7 +108,7 @@ export const getRemoteDesktopToken = async (
       );
       throw new Error(`从 ${protocol.toUpperCase()} 后端获取令牌失败。`);
     }
-    console.log(
+    console.info(
       `[GuacamoleService:getRemoteDesktopToken] Received Guacamole token from ${protocol.toUpperCase()} backend for connection ${connection.id}`
     );
     return response.data.token;

@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **日志治理（第十七批，并行降级执行）**：`packages/backend/src/websocket/utils.ts`、`packages/backend/src/database/schema.registry.ts`、`packages/backend/src/connections/connection.service.ts` 将 21 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 414 降至 393
   - **日志治理（第十八批，并行降级执行）**：`packages/frontend/src/components/RemoteDesktopModal.vue`、`packages/frontend/src/main.ts`、`packages/frontend/src/i18n.ts` 将 33 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 393 降至 360
   - **日志治理（第十九批，并行降级执行）**：`packages/frontend/src/components/FocusSwitcherConfigurator.vue`、`packages/frontend/src/components/CommandInputBar.vue`、`packages/frontend/src/features/terminal/Terminal.vue` 将 28 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 360 降至 332
+  - **日志治理（第二十批，并行降级执行）**：`packages/backend/src/services/guacamole.service.ts`、`packages/backend/src/database/connection.ts`、`packages/frontend/src/composables/useWebSocketConnection.ts` 将 19 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 332 降至 313
   - **E2E 回补（第一批）**：恢复 `ssh-connection.spec.ts` 中 4 个用例（命令执行、快捷键、多标签、关闭标签）
   - **E2E 回补（第二批）**：恢复 `auth.spec.ts` 中 2 个用例（2FA 输入框展示、Passkey 按钮展示），通过接口 mock 去除环境依赖
   - **E2E 回补（第三批）**：恢复 `auth-edge-cases.spec.ts` 中 4 个用例（2FA 过期验证码、2FA 格式验证、2FA 连续失败、登录速率限制），并修正 `TEST_USER` 引用来源
