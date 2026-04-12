@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **技术债务复查（2026-04-11）**：完成一轮基于仓库现状的技术债务重审
   - **标记扫描**：初次复查发现 1 处待处理标记（`packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148`），第二轮修复后 `packages/**` 下 `TODO/FIXME/HACK` 已清零
-  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 44 个 `test.skip`，需分批恢复或明确豁免理由
+  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 41 个 `test.skip`，需分批恢复或明确豁免理由
   - **文档一致性**：`doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md` 已同步到最新统计口径
   - **文档同步修复**：已更新 `doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md`，修正“债务清零”与当前存量口径冲突
   - **类型忽略修复**：清理关键后端路径 `@ts-ignore`（`transfers.controller.ts`、`websocket/upgrade.ts`、`sftp-utils.ts`、`sftp.service.ts`）
@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **E2E 回补（第八批）**：恢复 `file-management-edge-cases.spec.ts` 的“重命名文件为已存在的名称应失败”，并将错误断言兼容中英文文案
   - **E2E 回补（第九批）**：恢复 `file-management-edge-cases.spec.ts` 中 2 个预览用例（文本文件预览、二进制文件预览提示），并补齐测试内文件创建/上传步骤
   - **E2E 回补（第十批）**：恢复 `terminal-edge-cases.spec.ts` 的“处理大量输出”，改为 `seq` 输出并用中断后 marker 回显验证终端可用性
+  - **E2E 回补（第十一批）**：恢复 `file-management-edge-cases.spec.ts` 的“上传同名文件应提示覆盖确认”和“批量删除文件”，并增强覆盖确认弹窗与删除确认按钮的兼容断言
+  - **E2E 回补（第十二批）**：恢复 `file-management-edge-cases.spec.ts` 的“批量下载文件”，补齐测试内多文件上传前置并兼容下载压缩包扩展名
 
 ### Security
 
