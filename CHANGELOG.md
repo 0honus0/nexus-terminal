@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **技术债务复查（2026-04-11）**：完成一轮基于仓库现状的技术债务重审
   - **标记扫描**：初次复查发现 1 处待处理标记（`packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148`），第二轮修复后 `packages/**` 下 `TODO/FIXME/HACK` 已清零
-  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 56 个 `test.skip`，需分批恢复或明确豁免理由
+  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 50 个 `test.skip`，需分批恢复或明确豁免理由
   - **文档一致性**：`doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md` 已同步到最新统计口径
   - **文档同步修复**：已更新 `doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md`，修正“债务清零”与当前存量口径冲突
   - **类型忽略修复**：清理关键后端路径 `@ts-ignore`（`transfers.controller.ts`、`websocket/upgrade.ts`、`sftp-utils.ts`、`sftp.service.ts`）
@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **E2E 回补（第二批）**：恢复 `auth.spec.ts` 中 2 个用例（2FA 输入框展示、Passkey 按钮展示），通过接口 mock 去除环境依赖
   - **E2E 回补（第三批）**：恢复 `auth-edge-cases.spec.ts` 中 4 个用例（2FA 过期验证码、2FA 格式验证、2FA 连续失败、登录速率限制），并修正 `TEST_USER` 引用来源
   - **E2E 回补（第四批）**：恢复 2 个 2FA 用例（`auth.spec.ts` 的“2FA 成功登录”、`auth-edge-cases.spec.ts` 的“2FA 会话过期”），并通过接口 mock 稳定成功/失败分支
+  - **E2E 回补（第五批）**：恢复 `terminal-edge-cases.spec.ts` 中 5 个用例（键盘切换标签、鼠标切换标签、标签拖拽排序、终端字体大小调整、终端清屏功能），并将脆弱选择器调整为兼容 `data-testid` 选择器
+  - **E2E 回补（第六批）**：恢复 `terminal-edge-cases.spec.ts` 的“处理长时间运行的命令”，改为 `Ctrl+C` 后验证终端继续可用（marker 回显）
 
 ### Security
 

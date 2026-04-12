@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 56 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 50 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -57,6 +57,14 @@
   - 继续恢复 2 个 2FA 用例：
     - `auth.spec.ts`：`输入正确的 2FA 码成功登录`（mock `/api/v1/auth/login`、`/api/v1/auth/login/2fa`、`/api/v1/auth/init`）
     - `auth-edge-cases.spec.ts`：`2FA 正确验证码但会话已过期`（mock `/api/v1/auth/login/2fa` 返回会话过期错误）
+  - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中 5 个用例：
+    - `键盘快捷键切换标签`
+    - `鼠标点击切换标签`
+    - `标签拖拽排序`
+    - `终端字体大小调整`
+    - `终端清屏功能`
+  - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
+    - `处理长时间运行的命令`（执行 `sleep` 后 `Ctrl+C` 中断，验证 marker 回显）
 
 ### 本轮未闭环风险（继续跟踪）
 
