@@ -21,10 +21,10 @@ const CORS_ALLOW_ALL = process.env.CORS_ALLOW_ALL === 'true'; // 开发模式可
 const REMOTE_GATEWAY_API_TOKEN = (process.env.REMOTE_GATEWAY_API_TOKEN || '').trim();
 
 // --- 启动时生成内存加密密钥 ---
-console.log('[Remote Gateway] 正在为此会话生成新的内存加密密钥...');
+console.info('[Remote Gateway] 正在为此会话生成新的内存加密密钥...');
 const ENCRYPTION_KEY_STRING = crypto.randomBytes(32).toString('hex');
 const ENCRYPTION_KEY_BUFFER = Buffer.from(ENCRYPTION_KEY_STRING, 'hex');
-console.log('[Remote Gateway] 内存加密密钥已生成。');
+console.info('[Remote Gateway] 内存加密密钥已生成。');
 
 // 构建 CORS 允许的来源列表
 const allowedOrigins: string[] = [FRONTEND_URL, MAIN_BACKEND_URL];
@@ -38,9 +38,9 @@ if (CORS_ALLOWED_ORIGINS) {
 }
 
 if (CORS_ALLOW_ALL) {
-  console.log(`[Remote Gateway] ⚠️ CORS 允许所有来源（开发模式）`);
+  console.info(`[Remote Gateway] ⚠️ CORS 允许所有来源（开发模式）`);
 } else {
-  console.log(`[Remote Gateway] CORS 允许的来源: ${allowedOrigins.join(', ')}`);
+  console.info(`[Remote Gateway] CORS 允许的来源: ${allowedOrigins.join(', ')}`);
 }
 
 if (process.env.NODE_ENV === 'production' && !REMOTE_GATEWAY_API_TOKEN) {
@@ -80,11 +80,11 @@ const clientOptions = {
 let guacServer: any;
 
 try {
-  console.log(
+  console.info(
     `[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`
   );
   guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions);
-  console.log(`[Remote Gateway] GuacamoleLite 初始化成功。`);
+  console.info(`[Remote Gateway] GuacamoleLite 初始化成功。`);
 
   if (guacServer.on) {
     guacServer.on('error', (error: Error) => {
@@ -92,11 +92,11 @@ try {
     });
     guacServer.on('connection', (client: any) => {
       const clientId = client.id || '未知客户端ID';
-      console.log(`[Remote Gateway] Guacd 连接事件触发。客户端 ID: ${clientId}`);
+      console.info(`[Remote Gateway] Guacd 连接事件触发。客户端 ID: ${clientId}`);
 
       if (client && typeof client.on === 'function') {
         client.on('disconnect', (reason: string) => {
-          console.log(
+          console.info(
             `[Remote Gateway] Guacd 连接断开。客户端 ID: ${clientId}, 原因: ${reason || '未知'}`
           );
         });
@@ -112,21 +112,21 @@ try {
 }
 
 apiServer.listen(REMOTE_GATEWAY_API_PORT, () => {
-  console.log(`[Remote Gateway] API 服务器正在监听端口 ${REMOTE_GATEWAY_API_PORT}`);
-  console.log(
+  console.info(`[Remote Gateway] API 服务器正在监听端口 ${REMOTE_GATEWAY_API_PORT}`);
+  console.info(
     `[Remote Gateway] Guacamole WebSocket 服务器应在端口 ${REMOTE_GATEWAY_WS_PORT} 上运行 (由 GuacamoleLite 管理)`
   );
 });
 
 const gracefulShutdown = (signal: string) => {
-  console.log(`[Remote Gateway] 收到 ${signal} 信号。正在优雅地关闭...`);
+  console.info(`[Remote Gateway] 收到 ${signal} 信号。正在优雅地关闭...`);
 
   let guacClosed = false;
   let apiClosed = false;
 
   const tryExit = () => {
     if (guacClosed && apiClosed) {
-      console.log('[Remote Gateway] 所有服务器已关闭。正在退出。');
+      console.info('[Remote Gateway] 所有服务器已关闭。正在退出。');
       process.exit(0);
     }
   };
@@ -135,21 +135,21 @@ const gracefulShutdown = (signal: string) => {
     if (err) {
       console.error('[Remote Gateway] 关闭 API 服务器时出错:', err);
     } else {
-      console.log('[Remote Gateway] API 服务器已关闭。');
+      console.info('[Remote Gateway] API 服务器已关闭。');
     }
     apiClosed = true;
     tryExit();
   });
 
   if (typeof guacServer !== 'undefined' && guacServer && typeof guacServer.close === 'function') {
-    console.log('[Remote Gateway] 正在关闭 Guacamole 服务器...');
+    console.info('[Remote Gateway] 正在关闭 Guacamole 服务器...');
     guacServer.close(() => {
-      console.log('[Remote Gateway] Guacamole 服务器已关闭。');
+      console.info('[Remote Gateway] Guacamole 服务器已关闭。');
       guacClosed = true;
       tryExit();
     });
   } else {
-    console.log('[Remote Gateway] Guacamole 服务器未运行或不支持 close() 方法。');
+    console.info('[Remote Gateway] Guacamole 服务器未运行或不支持 close() 方法。');
     guacClosed = true;
     tryExit();
   }

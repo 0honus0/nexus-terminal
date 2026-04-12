@@ -20,7 +20,7 @@ const ensurePresetHtmlThemesDirExists = async () => {
   } catch (error: unknown) {
     // 目录不存在，创建它
     await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
-    console.log(
+    console.info(
       `[AppearanceService] Created preset html-themes directory at ${PRESET_HTML_THEMES_DIR}`
     );
   }
@@ -35,7 +35,7 @@ const ensureUserCustomHtmlThemesDirExists = async () => {
   } catch (error: unknown) {
     // 目录不存在，创建它
     await fs.mkdir(USER_CUSTOM_HTML_THEMES_DIR, { recursive: true });
-    console.log(
+    console.info(
       `[AppearanceService] Created user custom_html_theme directory at ${USER_CUSTOM_HTML_THEMES_DIR}`
     );
   }
@@ -85,7 +85,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
         console.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeIdNum}`);
         throw new Error(`指定的终端主题 ID 不存在: ${themeIdNum}`);
       }
-      console.log(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
+      console.info(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
     } catch (e: unknown) {
       console.error(
         `[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`,
@@ -98,7 +98,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
     settingsDto.activeTerminalThemeId === null
   ) {
     // 处理显式设置为 null (表示重置为默认/无用户主题)
-    console.log(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
+    console.info(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
     // 仓库层会处理 null
   }
 
@@ -248,7 +248,7 @@ export const removePageBackground = async (): Promise<boolean> => {
 
     try {
       await fs.unlink(absolutePath);
-      console.log(`[AppearanceService] 已删除页面背景文件: ${absolutePath}`);
+      console.info(`[AppearanceService] 已删除页面背景文件: ${absolutePath}`);
     } catch (error: unknown) {
       // 如果文件不存在或其他删除错误，记录日志但继续执行以清空数据库记录
       const err = error as any;
@@ -261,7 +261,7 @@ export const removePageBackground = async (): Promise<boolean> => {
       }
     }
   } else {
-    console.log('[AppearanceService] 没有页面背景文件路径需要删除。');
+    console.info('[AppearanceService] 没有页面背景文件路径需要删除。');
   }
 
   // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
@@ -283,7 +283,7 @@ export const removeTerminalBackground = async (): Promise<boolean> => {
 
     try {
       await fs.unlink(absolutePath);
-      console.log(`[AppearanceService] 已删除终端背景文件: ${absolutePath}`);
+      console.info(`[AppearanceService] 已删除终端背景文件: ${absolutePath}`);
     } catch (error: unknown) {
       const err = error as any;
       if (err.code === 'ENOENT') {
@@ -294,7 +294,7 @@ export const removeTerminalBackground = async (): Promise<boolean> => {
       }
     }
   } else {
-    console.log('[AppearanceService] 没有终端背景文件路径需要删除。');
+    console.info('[AppearanceService] 没有终端背景文件路径需要删除。');
   }
 
   // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
@@ -465,7 +465,7 @@ export const createUserCustomHtmlTheme = async (
       }
     }
     await fs.writeFile(filePath, content, 'utf-8');
-    console.log(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 创建成功。`);
+    console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 创建成功。`);
   } catch (error: unknown) {
     console.error(`[AppearanceService] 创建用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
     throw error; // 重新抛出原始错误或包装后的错误
@@ -497,7 +497,7 @@ export const updateUserCustomHtmlTheme = async (
       throw accessError;
     }
     await fs.writeFile(filePath, content, 'utf-8');
-    console.log(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 更新成功。`);
+    console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 更新成功。`);
   } catch (error: unknown) {
     console.error(`[AppearanceService] 更新用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
     throw error;
@@ -515,7 +515,7 @@ export const deleteUserCustomHtmlTheme = async (themeName: string): Promise<void
   try {
     await ensureUserCustomHtmlThemesDirExists(); // 确保目录存在
     await fs.unlink(filePath);
-    console.log(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 删除成功。`);
+    console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 删除成功。`);
   } catch (error: unknown) {
     console.error(`[AppearanceService] 删除用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
     const err = error as any;
@@ -621,7 +621,7 @@ export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null): 
     }
 
     await updateSettings({ remoteHtmlPresetsUrl: finalUrl });
-    console.log(`[AppearanceService] 远程 HTML 主题仓库链接更新为: ${finalUrl}`);
+    console.info(`[AppearanceService] 远程 HTML 主题仓库链接更新为: ${finalUrl}`);
   } catch (error: unknown) {
     console.error('[AppearanceService] 更新远程 HTML 主题仓库链接失败:', error);
     throw error; // 重新抛出，让控制器处理
@@ -691,7 +691,7 @@ export const listRemoteHtmlPresets = async (
   const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${repoPath}?ref=${ref}`;
 
   try {
-    console.log(`[AppearanceService] 正在从 GitHub API 获取远程主题列表: ${apiUrl}`);
+    console.info(`[AppearanceService] 正在从 GitHub API 获取远程主题列表: ${apiUrl}`);
     const response = await axios.get(apiUrl, {
       headers: { Accept: 'application/vnd.github.v3+json' },
       // 对于公共仓库，通常不需要 token
@@ -704,7 +704,7 @@ export const listRemoteHtmlPresets = async (
           name: item.name,
           downloadUrl: item.download_url, // GitHub API 通常会提供 download_url
         }));
-      console.log(`[AppearanceService] 成功获取 ${htmlFiles.length} 个远程 HTML 主题。`);
+      console.info(`[AppearanceService] 成功获取 ${htmlFiles.length} 个远程 HTML 主题。`);
       return htmlFiles;
     }
     console.error(
@@ -771,7 +771,7 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
   }
 
   try {
-    console.log(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
+    console.info(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
     const response = await axios.get(fileUrl, {
       responseType: 'text', // 确保获取的是文本内容
       maxRedirects: 0, // 禁止重定向 (SSRF 防护)
@@ -779,7 +779,7 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
     });
 
     if (response.status === 200 && typeof response.data === 'string') {
-      console.log(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
+      console.info(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
       return response.data;
     }
     console.error(

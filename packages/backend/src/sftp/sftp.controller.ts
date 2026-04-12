@@ -36,7 +36,7 @@ export const downloadFile = async (
     return;
   }
 
-  console.log(`SFTP 下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
+  console.info(`SFTP 下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
 
   // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
   let targetState: ClientState | null = null;
@@ -47,12 +47,12 @@ export const downloadFile = async (
     return;
   }
 
-  console.log(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
+  console.info(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
   for (const [sessionId, state] of clientStates.entries()) {
     // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
     if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
       targetState = state;
-      console.log(`SFTP 下载：找到匹配的会话 (Session ID: ${sessionId})。`);
+      console.info(`SFTP 下载：找到匹配的会话 (Session ID: ${sessionId})。`);
       break;
     }
   }
@@ -108,10 +108,10 @@ export const downloadFile = async (
 
     // 监听响应对象的 close 事件，确保流被正确关闭 (虽然 pipe 通常会处理)
     res.on('close', () => {
-      console.log(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
+      console.info(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
     });
 
-    console.log(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);
+    console.info(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);
   } catch (error: unknown) {
     console.error(`SFTP 下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
@@ -148,7 +148,7 @@ export const downloadDirectory = async (
     return;
   }
 
-  console.log(`SFTP 文件夹下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
+  console.info(`SFTP 文件夹下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
 
   // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
   let targetState: ClientState | null = null;
@@ -159,14 +159,14 @@ export const downloadDirectory = async (
     return;
   }
 
-  console.log(
+  console.info(
     `SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`
   );
   for (const [sessionId, state] of clientStates.entries()) {
     // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
     if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
       targetState = state;
-      console.log(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
+      console.info(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
       break;
     }
   }
@@ -284,7 +284,7 @@ export const downloadDirectory = async (
     // 5. 完成归档
     await archive.finalize();
 
-    console.log(`SFTP 文件夹下载完成 (用户 ${userId}, 路径 ${remotePath})`);
+    console.info(`SFTP 文件夹下载完成 (用户 ${userId}, 路径 ${remotePath})`);
   } catch (error: unknown) {
     console.error(`SFTP 文件夹下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
@@ -410,7 +410,7 @@ export const handleCompressRequest = async (
 
   const state = clientStates.get(sessionId);
 
-  console.log(`[WS SFTP Compress ${sessionId}] Received request (ID: ${requestId}).`);
+  console.info(`[WS SFTP Compress ${sessionId}] Received request (ID: ${requestId}).`);
 
   if (!state || !state.sshClient) {
     console.warn(`[WS SFTP Compress ${sessionId}] SSH client not ready (ID: ${requestId})`);
@@ -454,7 +454,7 @@ export const handleCompressRequest = async (
       return;
   }
 
-  console.log(`[WS SFTP Compress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+  console.info(`[WS SFTP Compress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
 
   // --- 执行命令 ---
   try {
@@ -483,11 +483,13 @@ export const handleCompressRequest = async (
 
       stream.on('close', (code: number | null) => {
         exitCode = code;
-        console.log(
+        console.info(
           `[WS SFTP Compress ${sessionId}] Command finished with code ${exitCode} (ID: ${requestId}). Stderr length: ${stderrData.length}`
         );
         if (exitCode === 0 && !isErrorInStdErr(stderrData)) {
-          console.log(`[WS SFTP Compress ${sessionId}] Compression successful (ID: ${requestId}).`);
+          console.info(
+            `[WS SFTP Compress ${sessionId}] Compression successful (ID: ${requestId}).`
+          );
           const successPayload: SftpCompressSuccessPayload = {
             message: '压缩成功',
             requestId,
@@ -548,7 +550,7 @@ export const handleDecompressRequest = async (
 
   const state = clientStates.get(sessionId);
 
-  console.log(
+  console.info(
     `[WS SFTP Decompress ${sessionId}] Received request for ${archivePath} (ID: ${requestId}).`
   );
 
@@ -589,7 +591,9 @@ export const handleDecompressRequest = async (
     return;
   }
 
-  console.log(`[WS SFTP Decompress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+  console.info(
+    `[WS SFTP Decompress ${sessionId}] Executing command: ${command} (ID: ${requestId})`
+  );
 
   // --- 执行命令 ---
   try {
@@ -618,11 +622,11 @@ export const handleDecompressRequest = async (
 
       stream.on('close', (code: number | null) => {
         exitCode = code;
-        console.log(
+        console.info(
           `[WS SFTP Decompress ${sessionId}] Command finished with code ${exitCode} (ID: ${requestId}). Stderr length: ${stderrData.length}`
         );
         if (exitCode === 0 && !isErrorInStdErr(stderrData)) {
-          console.log(
+          console.info(
             `[WS SFTP Decompress ${sessionId}] Decompression successful (ID: ${requestId}).`
           );
           const successPayload: SftpDecompressSuccessPayload = {
