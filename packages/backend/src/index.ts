@@ -70,11 +70,11 @@ if (rootConfigResult.error && (rootConfigResult.error as NodeJS.ErrnoException).
     `[ENV Init Early] Warning: Could not load root .env file from ${projectRootEnvPath}. Error: ${rootConfigResult.error.message}`
   );
 } else if (!rootConfigResult.error) {
-  console.log(
+  console.info(
     `[ENV Init Early] Loaded environment variables from root .env file: ${projectRootEnvPath}`
   );
 } else {
-  console.log(
+  console.info(
     `[ENV Init Early] Root .env file not found at ${projectRootEnvPath}, proceeding without it.`
   );
 }
@@ -92,7 +92,7 @@ if (
     `[ENV Init Early] Warning: Could not load data .env file from ${dataEnvPathGlobal}. Error: ${dataConfigResultGlobal.error.message}`
   );
 } else if (!dataConfigResultGlobal.error) {
-  console.log(
+  console.info(
     `[ENV Init Early] Loaded environment variables from data .env file: ${dataEnvPathGlobal}`
   );
 }
@@ -117,7 +117,7 @@ const initializeEnvironment = async () => {
 
   // 检查 ENCRYPTION_KEY (process.env should be populated by early loading)
   if (!process.env.ENCRYPTION_KEY) {
-    console.log('[ENV Init] ENCRYPTION_KEY 未设置，正在生成...');
+    console.info('[ENV Init] ENCRYPTION_KEY 未设置，正在生成...');
     const newEncryptionKey = crypto.randomBytes(32).toString('hex');
     process.env.ENCRYPTION_KEY = newEncryptionKey; // 更新当前进程环境
     keysToAppend += `\nENCRYPTION_KEY=${newEncryptionKey}`;
@@ -126,7 +126,7 @@ const initializeEnvironment = async () => {
 
   // 3. 检查 SESSION_SECRET
   if (!process.env.SESSION_SECRET) {
-    console.log('[ENV Init] SESSION_SECRET 未设置，正在生成...');
+    console.info('[ENV Init] SESSION_SECRET 未设置，正在生成...');
     const newSessionSecret = crypto.randomBytes(64).toString('hex');
     process.env.SESSION_SECRET = newSessionSecret; // 更新当前进程环境
     keysToAppend += `\nSESSION_SECRET=${newSessionSecret}`;
@@ -321,7 +321,7 @@ const port = process.env.PORT || 3001;
 const initializeDatabase = async () => {
   try {
     const db = await getDbInstance();
-    console.log('[Index] 正在检查用户数量...');
+    console.info('[Index] 正在检查用户数量...');
     const userCount = await new Promise<number>((resolve, reject) => {
       db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: { count: number }) => {
         if (err) {
@@ -331,7 +331,7 @@ const initializeDatabase = async () => {
         resolve(row.count);
       });
     });
-    console.log(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
+    console.info(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
   } catch (error) {
     console.error('数据库初始化或检查失败:', error);
     process.exit(1);
@@ -402,12 +402,12 @@ const startServer = () => {
           customSiteTitle: '星枢终端 API 文档',
         })
       );
-      console.log(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
+      console.info(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
     } catch (error) {
       console.warn('[Swagger] 文档依赖未安装，已跳过 /api-docs 挂载。', error);
     }
   } else {
-    console.log('[Swagger] 生产环境已禁用 API 文档');
+    console.info('[Swagger] 生产环境已禁用 API 文档');
   }
   // --- 结束 Swagger 文档路由 ---
 
@@ -449,7 +449,7 @@ const startServer = () => {
   // --- 结束错误处理中间件 ---
 
   server.listen(port, () => {
-    console.log(`后端服务器正在监听 http://localhost:${port}`);
+    console.info(`后端服务器正在监听 http://localhost:${port}`);
     initializeWebSocket(server, sessionMiddleware as RequestHandler); // Initialize existing WebSocket
   });
 };

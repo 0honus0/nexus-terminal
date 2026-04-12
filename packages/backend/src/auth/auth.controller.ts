@@ -91,7 +91,7 @@ export const generatePasskeyRegistrationOptionsHandler = async (
         console.error('[AuthController] 保存 session 失败:', err);
         return next(err);
       }
-      console.log(`[AuthController] Generated Passkey registration options for user ${username}`);
+      console.info(`[AuthController] Generated Passkey registration options for user ${username}`);
       res.json(options);
     });
   } catch (error: unknown) {
@@ -145,7 +145,7 @@ export const verifyPasskeyRegistrationHandler = async (
     if (verification.verified && verification.newPasskeyToSave) {
       await passkeyRepository.createPasskey(verification.newPasskeyToSave);
       const userIdNum = parseInt(userHandle, 10);
-      console.log(
+      console.info(
         `[AuthController] 用户 ${userHandle} 的 Passkey 注册成功并已保存。 CredentialID: ${verification.newPasskeyToSave.credential_id.substring(0, 8)}***`
       );
       auditLogService.logAction('PASSKEY_REGISTERED', {
@@ -205,7 +205,7 @@ export const generatePasskeyAuthenticationOptionsHandler = async (
         console.error('[AuthController] 保存 session 失败:', err);
         return next(err);
       }
-      console.log(
+      console.info(
         `[AuthController] Generated Passkey authentication options (username: ${username || 'any'})`
       );
       res.json(options);
@@ -272,7 +272,7 @@ export const verifyPasskeyAuthenticationHandler = async (
         return;
       }
 
-      console.log(
+      console.info(
         `[AuthController] 用户 ${user.username} (ID: ${user.id}) 通过 Passkey (ID: ***${verification.passkey.id.toString().substring(verification.passkey.id.toString().length - 4)}) 认证成功。`
       );
 
@@ -368,7 +368,7 @@ export const listUserPasskeysHandler = async (
 
   try {
     const passkeys = await passkeyService.listPasskeysByUserId(userId);
-    console.log(
+    console.info(
       `[AuthController] 用户 ${username} (ID: ${userId}) 获取了 Passkey 列表，数量: ${passkeys.length}`
     );
     res.status(200).json(passkeys);
@@ -406,7 +406,7 @@ export const deleteUserPasskeyHandler = async (
   try {
     const wasDeleted = await passkeyService.deletePasskey(userId, credentialID);
     if (wasDeleted) {
-      console.log(
+      console.info(
         `[AuthController] 用户 ${username} (ID: ${userId}) 成功删除了 Passkey (CredentialID: ${credentialID.substring(0, 8)}***)。`
       );
       auditLogService.logAction('PASSKEY_DELETED', {
@@ -480,7 +480,7 @@ export const updateUserPasskeyNameHandler = async (
 
   try {
     await passkeyService.updatePasskeyName(userId, credentialID, trimmedName);
-    console.log(
+    console.info(
       `[AuthController] 用户 ${username} (ID: ${userId}) 成功更新了 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 的名称为 "${trimmedName}"。`
     );
     auditLogService.logAction('PASSKEY_NAME_UPDATED', {
@@ -537,7 +537,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       try {
         const isCaptchaValid = await captchaService.verifyToken(captchaToken);
         if (!isCaptchaValid) {
-          console.log(`[AuthController] 登录尝试失败: CAPTCHA 验证失败 - ${username}`);
+          console.info(`[AuthController] 登录尝试失败: CAPTCHA 验证失败 - ${username}`);
           const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
           ipBlacklistService.recordFailedAttempt(clientIp);
           auditLogService.logAction('LOGIN_FAILURE', {
@@ -553,7 +553,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           res.status(401).json({ message: 'CAPTCHA 验证失败。' });
           return;
         }
-        console.log(`[AuthController] CAPTCHA 验证成功 - ${username}`);
+        console.info(`[AuthController] CAPTCHA 验证成功 - ${username}`);
       } catch (captchaError: unknown) {
         console.error(
           `[AuthController] CAPTCHA 验证过程中出错 (${username}):`,
@@ -563,7 +563,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         return;
       }
     } else {
-      console.log(`[AuthController] CAPTCHA 未启用，跳过验证 - ${username}`);
+      console.info(`[AuthController] CAPTCHA 未启用，跳过验证 - ${username}`);
     }
 
     const db = await getDbInstance();
@@ -574,7 +574,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     );
 
     if (!user) {
-      console.log(`登录尝试失败: 用户未找到 - ${username}`);
+      console.info(`登录尝试失败: 用户未找到 - ${username}`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.recordFailedAttempt(clientIp);
       auditLogService.logAction('LOGIN_FAILURE', {
@@ -594,7 +594,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     const isMatch = await comparePassword(password, user.hashed_password);
 
     if (!isMatch) {
-      console.log(`登录尝试失败: 密码错误 - ${username}`);
+      console.info(`登录尝试失败: 密码错误 - ${username}`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.recordFailedAttempt(clientIp);
       auditLogService.logAction('LOGIN_FAILURE', {
@@ -613,7 +613,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     // 检查是否启用了 2FA
     if (user.two_factor_secret) {
-      console.log(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
+      console.info(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
       // +++ Generate temporary token for 2FA verification
       const tempToken = crypto.randomBytes(SECURITY_CONFIG.TEMP_TOKEN_LENGTH).toString('hex');
       const pendingAuth: PendingAuth = {
@@ -641,15 +641,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
             return;
           }
           if (isDev) {
-            console.log(`[AuthController] 2FA pendingAuth 已保存到 session`);
+            console.info(`[AuthController] 2FA pendingAuth 已保存到 session`);
             const anyReq = req as any;
             const forwardedProto =
               typeof anyReq.get === 'function'
                 ? anyReq.get('X-Forwarded-Proto')
                 : anyReq.headers?.['x-forwarded-proto'];
-            console.log(`[AuthController] X-Forwarded-Proto: ${forwardedProto ?? ''}`);
-            console.log(`[AuthController] req.protocol: ${req.protocol}`);
-            console.log(`[AuthController] req.secure: ${req.secure}`);
+            console.info(`[AuthController] X-Forwarded-Proto: ${forwardedProto ?? ''}`);
+            console.info(`[AuthController] req.protocol: ${req.protocol}`);
+            console.info(`[AuthController] req.secure: ${req.secure}`);
           }
           res.status(200).json({
             message: '需要进行两步验证。',
@@ -659,7 +659,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         });
       });
     } else {
-      console.log(`登录成功 (无 2FA): ${username}`);
+      console.info(`登录成功 (无 2FA): ${username}`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.resetAttempts(clientIp);
       auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp });
@@ -760,9 +760,9 @@ export const verifyLogin2FA = async (
       return anyReq.headers?.[headerName];
     };
 
-    console.log(`[AuthController] verifyLogin2FA - Has pendingAuth: ${!!pendingAuth}`);
-    console.log(`[AuthController] verifyLogin2FA - Has tempToken: ${!!tempToken}`);
-    console.log(
+    console.info(`[AuthController] verifyLogin2FA - Has pendingAuth: ${!!pendingAuth}`);
+    console.info(`[AuthController] verifyLogin2FA - Has tempToken: ${!!tempToken}`);
+    console.info(
       `[AuthController] verifyLogin2FA - X-Forwarded-Proto: ${getHeaderValue('X-Forwarded-Proto') ?? ''}`
     );
   }
@@ -770,7 +770,7 @@ export const verifyLogin2FA = async (
   // +++ Validate pending authentication state and tempToken
   if (!pendingAuth || !tempToken) {
     if (isDev) {
-      console.log(
+      console.info(
         `[AuthController] verifyLogin2FA - FAILED: pendingAuth=${!!pendingAuth}, tempToken=${!!tempToken}`
       );
     }
@@ -818,7 +818,7 @@ export const verifyLogin2FA = async (
     });
 
     if (verified) {
-      console.log(`用户 ${user.username} 2FA 验证成功。`);
+      console.info(`用户 ${user.username} 2FA 验证成功。`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.resetAttempts(clientIp);
       auditLogService.logAction('LOGIN_SUCCESS', {
@@ -863,7 +863,7 @@ export const verifyLogin2FA = async (
         });
       });
     } else {
-      console.log(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
+      console.info(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.recordFailedAttempt(clientIp);
       auditLogService.logAction('LOGIN_FAILURE', {
@@ -929,7 +929,7 @@ export const changePassword = async (
 
     const isMatch = await comparePassword(currentPassword, user.hashed_password);
     if (!isMatch) {
-      console.log(`修改密码尝试失败: 当前密码错误 - 用户 ID ${userId}`);
+      console.info(`修改密码尝试失败: 当前密码错误 - 用户 ID ${userId}`);
       res.status(400).json({ message: '当前密码不正确。' });
       return;
     }
@@ -948,7 +948,7 @@ export const changePassword = async (
       throw new Error('未找到要更新的用户');
     }
 
-    console.log(`用户 ${userId} 密码已成功修改。`);
+    console.info(`用户 ${userId} 密码已成功修改。`);
     const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
     auditLogService.logAction('PASSWORD_CHANGED', { userId, ip: clientIp });
     notificationService.sendNotification('PASSWORD_CHANGED', { userId, ip: clientIp });
@@ -1063,7 +1063,7 @@ export const verifyAndActivate2FA = async (
         throw new Error('未找到要更新的用户');
       }
 
-      console.log(`用户 ${userId} 已成功激活两步验证。`);
+      console.info(`用户 ${userId} 已成功激活两步验证。`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       auditLogService.logAction('2FA_ENABLED', { userId, ip: clientIp });
       notificationService.sendNotification('2FA_ENABLED', { userId, ip: clientIp });
@@ -1072,7 +1072,7 @@ export const verifyAndActivate2FA = async (
 
       res.status(200).json({ message: '两步验证已成功激活！' });
     } else {
-      console.log(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
+      console.info(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
       res.status(400).json({ message: '验证码无效。' });
     }
   } catch (error: unknown) {
@@ -1130,7 +1130,7 @@ export const disable2FA = async (
       throw new Error('未找到要更新的用户');
     }
 
-    console.log(`用户 ${userId} 已成功禁用两步验证。`);
+    console.info(`用户 ${userId} 已成功禁用两步验证。`);
     const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
     auditLogService.logAction('2FA_DISABLED', { userId, ip: clientIp });
     notificationService.sendNotification('2FA_DISABLED', { userId, ip: clientIp });
@@ -1215,7 +1215,7 @@ export const setupAdmin = async (
     }
     const newUser = { id: result.lastID };
 
-    console.log(`初始账号 '${username}' (ID: ${newUser.id}) 已成功创建。`);
+    console.info(`初始账号 '${username}' (ID: ${newUser.id}) 已成功创建。`);
     const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
     auditLogService.logAction('ADMIN_SETUP_COMPLETE', {
       userId: newUser.id,
@@ -1247,7 +1247,7 @@ export const logout = (req: Request, res: Response): void => {
       console.error(`销毁用户 ${userId} (${username}) 的会话时出错:`, err);
       res.status(500).json({ message: '登出时发生服务器内部错误。' });
     } else {
-      console.log(`用户 ${userId} (${username}) 已成功登出。`);
+      console.info(`用户 ${userId} (${username}) 已成功登出。`);
       res.clearCookie('connect.sid');
       if (userId) {
         const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
@@ -1269,7 +1269,7 @@ export const getPublicCaptchaConfig = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    console.log('[AuthController] Received request for public CAPTCHA config.');
+    console.info('[AuthController] Received request for public CAPTCHA config.');
     const fullConfig = await settingsService.getCaptchaConfig();
 
     const publicConfig = {
@@ -1279,7 +1279,7 @@ export const getPublicCaptchaConfig = async (
       recaptchaSiteKey: fullConfig.recaptchaSiteKey,
     };
 
-    console.log('[AuthController] Sending public CAPTCHA config to client:', publicConfig);
+    console.info('[AuthController] Sending public CAPTCHA config to client:', publicConfig);
     res.status(200).json(publicConfig);
   } catch (error: unknown) {
     console.error('[AuthController] 获取公共 CAPTCHA 配置时出错:', error);
@@ -1343,7 +1343,7 @@ export const getInitData = async (
       captchaConfig,
     });
 
-    console.log(
+    console.info(
       `[AuthController] 初始化数据已发送: needsSetup=${needsSetup}, isAuthenticated=${isAuthenticated}`
     );
   } catch (error: unknown) {

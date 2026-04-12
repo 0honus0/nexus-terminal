@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **日志治理（第二批）**：`packages/backend/src/websocket/handlers/docker.handler.ts` 将 9 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1230 降至 1221
   - **日志治理（第三批）**：`packages/backend/src/websocket/handlers/ssh.handler.ts` 将 9 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1221 降至 1212
   - **日志治理（第四批）**：`packages/backend/src/websocket/handlers/sftp.handler.ts` 将 1 处信息级输出由 `console.log` 调整为 `console.info`，`console.log` 存量从 1212 降至 1211
+  - **日志治理（第五批）**：`packages/backend/src/index.ts` 与 `packages/backend/src/auth/auth.controller.ts` 将 44 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1211 降至 1167
   - **E2E 回补（第一批）**：恢复 `ssh-connection.spec.ts` 中 4 个用例（命令执行、快捷键、多标签、关闭标签）
   - **E2E 回补（第二批）**：恢复 `auth.spec.ts` 中 2 个用例（2FA 输入框展示、Passkey 按钮展示），通过接口 mock 去除环境依赖
   - **E2E 回补（第三批）**：恢复 `auth-edge-cases.spec.ts` 中 4 个用例（2FA 过期验证码、2FA 格式验证、2FA 连续失败、登录速率限制），并修正 `TEST_USER` 引用来源
