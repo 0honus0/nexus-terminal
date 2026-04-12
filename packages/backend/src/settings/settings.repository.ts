@@ -26,7 +26,7 @@ export const settingsRepository = {
   },
 
   async getSetting(key: string): Promise<string | null> {
-    // console.log(`[仓库] 尝试获取键为 ${key} 的设置`);
+    // console.info(`[仓库] 尝试获取键为 ${key} 的设置`);
     try {
       const db = await getDbInstance();
       const row = await getDbRow<{ value: string }>(
@@ -35,7 +35,7 @@ export const settingsRepository = {
         [key]
       );
       const value = row ? row.value : null;
-      // console.log(`[仓库] 找到键 ${key} 的值:`, value);
+      // console.info(`[仓库] 找到键 ${key} 的值:`, value);
       return value;
     } catch (err: unknown) {
       console.error(`[Repository] 获取设置项 ${key} 时出错:`, getErrorMessage(err));
@@ -68,12 +68,12 @@ export const settingsRepository = {
   },
 
   async deleteSetting(key: string): Promise<boolean> {
-    // console.log(`[仓库] 尝试删除键为 ${key} 的设置`);
+    // console.info(`[仓库] 尝试删除键为 ${key} 的设置`);
     const sql = 'DELETE FROM settings WHERE key = ?';
     try {
       const db = await getDbInstance();
       const result = await runDb(db, sql, [key]);
-      // console.log(`[仓库] 成功删除键为 ${key} 的设置。影响行数: ${result.changes}`);
+      // console.info(`[仓库] 成功删除键为 ${key} 的设置。影响行数: ${result.changes}`);
       return result.changes > 0;
     } catch (err: unknown) {
       console.error(`[Repository] 删除设置项 ${key} 时出错:`, getErrorMessage(err));
@@ -85,11 +85,11 @@ export const settingsRepository = {
   },
 
   async setMultipleSettings(settings: Record<string, string>): Promise<void> {
-    // console.log('[仓库] 调用 setMultipleSettings，参数:', JSON.stringify(settings));
+    // console.info('[仓库] 调用 setMultipleSettings，参数:', JSON.stringify(settings));
     const promises = Object.entries(settings).map(([key, value]) => this.setSetting(key, value));
     try {
       await Promise.all(promises);
-      // console.log('[仓库] setMultipleSettings 成功完成。');
+      // console.info('[仓库] setMultipleSettings 成功完成。');
     } catch (error) {
       console.error('[仓库] setMultipleSettings 失败:', error);
       throw ErrorFactory.databaseError('批量设置失败', '批量设置失败');

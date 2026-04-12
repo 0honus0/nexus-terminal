@@ -255,7 +255,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
 
       await runDb(db, sqlInsertOrIgnore, [entry.key, dbValue, nowSeconds, nowSeconds]);
     }
-    // console.log('[AppearanceRepo] 默认外观设置键值对检查完成。'); // 移除：信息不太关键
+    // console.info('[AppearanceRepo] 默认外观设置键值对检查完成。'); // 移除：信息不太关键
 
     // 确保键存在后，如果当前为 null，则尝试设置默认主题 ID
     await findAndSetDefaultThemeIdIfNull(db);
@@ -289,7 +289,7 @@ const findAndSetDefaultThemeIdIfNull = async (db: sqlite3.Database): Promise<voi
 
       if (defaultThemeRow) {
         const defaultThemeIdNum = defaultThemeRow.id;
-        // console.log(`[AppearanceRepo] activeTerminalThemeId 为 null，尝试设置为默认主题 ID: ${defaultThemeIdNum}`); // 移除：信息不太关键
+        // console.info(`[AppearanceRepo] activeTerminalThemeId 为 null，尝试设置为默认主题 ID: ${defaultThemeIdNum}`); // 移除：信息不太关键
         // 使用 INSERT OR REPLACE 更新设置
         const sqlReplace = `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value, updated_at) VALUES (?, ?, ?)`;
         await runDb(db, sqlReplace, [
@@ -323,7 +323,7 @@ export const getAppearanceSettings = async (): Promise<AppearanceSettings> => {
       `SELECT key, value, updated_at FROM ${TABLE_NAME}`
     );
     const mappedSettings = mapRowsToAppearanceSettings(rows); // 将键值对映射到设置对象
-    console.log(
+    console.info(
       `[AppearanceRepo LOG] 映射后的 terminalBackgroundEnabled 值: ${mappedSettings.terminalBackgroundEnabled}`
     ); // 添加映射后值的日志
     return mappedSettings;
@@ -433,12 +433,12 @@ const updateAppearanceSettingsInternal = async (
       }
 
       // 对每个键值对执行 INSERT OR REPLACE，使用映射后的 dbKey
-      console.log(
+      console.info(
         `[AppearanceRepo LOG] 准备更新/插入数据库键: '${dbKey}', 值: '${dbValue}' (来自 DTO 键: '${dtoKey}')`
       );
       const result = await runDb(db, sqlReplace, [dbKey, dbValue, nowSeconds]);
       if (result.changes > 0) {
-        console.log(`[AppearanceRepo LOG] 数据库键 '${dbKey}' 更新成功。`); // 添加成功日志
+        console.info(`[AppearanceRepo LOG] 数据库键 '${dbKey}' 更新成功。`); // 添加成功日志
         changesMade = true;
       }
     }

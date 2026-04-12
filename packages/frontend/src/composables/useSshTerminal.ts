@@ -199,17 +199,17 @@ export function createSshTerminalManager(
       currentSessionState.pendingOutput &&
       currentSessionState.pendingOutput.length > 0
     ) {
-      // console.log(`[会话 ${sessionId}][SSH终端模块] 发现 SessionState.pendingOutput，长度: ${currentSessionState.pendingOutput.length}。正在写入...`);
+      // console.info(`[会话 ${sessionId}][SSH终端模块] 发现 SessionState.pendingOutput，长度: ${currentSessionState.pendingOutput.length}。正在写入...`);
       currentSessionState.pendingOutput.forEach((data) => {
         term.write(data);
       });
       currentSessionState.pendingOutput = []; // 清空
-      // console.log(`[会话 ${sessionId}][SSH终端模块] SessionState.pendingOutput 处理完毕。`);
+      // console.info(`[会话 ${sessionId}][SSH终端模块] SessionState.pendingOutput 处理完毕。`);
       // 如果之前因为 pendingOutput 而将 isResuming 保持为 true，现在可以考虑更新
       if (currentSessionState.isResuming) {
         // 检查 isLastChunk 是否已收到 (这部分逻辑在 handleSshOutputCachedChunk 中，这里仅作标记清除)
         // 假设所有缓存块都已处理完毕
-        // console.log(`[会话 ${sessionId}][SSH终端模块] 所有 pendingOutput 已写入，清除 isResuming 标记。`);
+        // console.info(`[会话 ${sessionId}][SSH终端模块] 所有 pendingOutput 已写入，清除 isResuming 标记。`);
         currentSessionState.isResuming = false;
       }
     }
@@ -290,8 +290,8 @@ export function createSshTerminalManager(
     // 相关代码已移除
 
     // --- 添加前端日志 ---
-    // console.log(`[会话 ${sessionId}][SSH前端] 收到 ssh:output 原始 payload (解码前):`, payload);
-    // console.log(`[会话 ${sessionId}][SSH前端] 解码后的数据 (尝试写入):`, outputData);
+    // console.info(`[会话 ${sessionId}][SSH前端] 收到 ssh:output 原始 payload (解码前):`, payload);
+    // console.info(`[会话 ${sessionId}][SSH前端] 解码后的数据 (尝试写入):`, outputData);
     // --------------------
 
     // +++ 优化：区分小数据包（用户输入回显）和大数据包（服务器输出） +++
