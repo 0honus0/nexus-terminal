@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient, { AI_REQUEST_TIMEOUT_MS } from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 import type {
   AISession,
   AIMessage,
@@ -90,9 +91,9 @@ export const useAIStore = defineStore('ai', () => {
       } else {
         throw new Error('查询失败');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 发送查询失败:', err);
-      error.value = err.response?.data?.message || '发送查询失败';
+      error.value = extractErrorMessage(err, '发送查询失败');
       // 移除乐观更新的消息
       messages.value = messages.value.filter((m) => m.id !== userMsg.id);
     } finally {
@@ -124,9 +125,9 @@ export const useAIStore = defineStore('ai', () => {
             })) || [],
         }));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 获取会话列表失败:', err);
-      error.value = err.response?.data?.message || '获取会话列表失败';
+      error.value = extractErrorMessage(err, '获取会话列表失败');
     } finally {
       isLoading.value = false;
     }
@@ -149,9 +150,9 @@ export const useAIStore = defineStore('ai', () => {
           timestamp: new Date(m.timestamp),
         }));
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 加载会话详情失败:', err);
-      error.value = err.response?.data?.message || '加载会话详情失败';
+      error.value = extractErrorMessage(err, '加载会话详情失败');
     } finally {
       isLoading.value = false;
     }
@@ -174,9 +175,9 @@ export const useAIStore = defineStore('ai', () => {
       }
 
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 删除会话失败:', err);
-      error.value = err.response?.data?.message || '删除会话失败';
+      error.value = extractErrorMessage(err, '删除会话失败');
       return false;
     }
   };
@@ -212,9 +213,9 @@ export const useAIStore = defineStore('ai', () => {
           }));
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 获取健康摘要失败:', err);
-      error.value = err.response?.data?.message || '获取健康摘要失败';
+      error.value = extractErrorMessage(err, '获取健康摘要失败');
     } finally {
       isLoading.value = false;
     }
@@ -233,9 +234,9 @@ export const useAIStore = defineStore('ai', () => {
       if (response.data.success) {
         commandPatterns.value = response.data.analysis;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 获取命令模式分析失败:', err);
-      error.value = err.response?.data?.message || '获取命令模式分析失败';
+      error.value = extractErrorMessage(err, '获取命令模式分析失败');
     } finally {
       isLoading.value = false;
     }
@@ -256,9 +257,9 @@ export const useAIStore = defineStore('ai', () => {
         return response.data.deletedCount;
       }
       return 0;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AIStore] 清理会话失败:', err);
-      error.value = err.response?.data?.message || '清理会话失败';
+      error.value = extractErrorMessage(err, '清理会话失败');
       return 0;
     }
   };

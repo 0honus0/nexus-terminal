@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **质量门禁增强**：`.lintstagedrc.js` 对 `*.vue` 增加 `eslint --fix`；`audit.yml` 新增 high/critical 直连依赖摘要与 high 告警
   - **标记债务清零**：移除 E2E 剩余 TODO 标记，当前 `packages/**` 下 `TODO/FIXME/HACK` 为 0
   - **日志治理（最新）**：当前仅保留最新批次记录。第三十六批（并行降级执行，含子代理协作）在后端/前端共 38 个文件完成 47 处信息级输出降级（`console.log` -> `console.info`），`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 47 降至 0
-  - **类型治理（最新）**：当前仅保留最新批次记录。第五批在 `packages/frontend/src/components/style-customizer/StyleCustomizerTerminalTab.vue`、`packages/frontend/src/stores/notifications.store.ts` 完成 17 处 `: any/<any>/any[]` 收敛，`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 309 降至 292
+  - **类型治理（最新）**：当前仅保留最新批次记录。第六批在 `packages/frontend/src/stores/ai.store.ts`、`packages/frontend/src/stores/settings.store.ts` 完成 14 处 `: any/<any>/any[]` 收敛，`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 292 降至 278
   - **E2E 回补（最新）**：当前仅保留最新回补口径。最新为第二十八批（`remote-desktop.spec.ts` 7 个远程桌面用例），并已完成 E2E `test.skip` 清零（0）
 
 ### Security

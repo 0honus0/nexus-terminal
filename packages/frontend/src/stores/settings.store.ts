@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 import i18n, { setLocale, defaultLng, availableLocales } from '../i18n';
 import type { PaneName } from './layout.store';
 import { useAuthStore } from './auth.store';
@@ -87,16 +88,37 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // --- Actions ---
 
-  const getApiErrorMessage = (err: any, fallback: string): string => {
-    const status = err?.response?.status;
-    const data = err?.response?.data;
+  interface ApiErrorLike {
+    response?: {
+      status?: number;
+      data?: unknown;
+      headers?: unknown;
+    };
+    request?: unknown;
+    message?: string;
+  }
+
+  const getApiErrorMessage = (err: unknown, fallback: string): string => {
+    const apiErr = err as ApiErrorLike;
+    const status = apiErr.response?.status;
+    const data = apiErr.response?.data;
 
     if (typeof data === 'string' && data.trim()) {
       return data.trim();
     }
 
-    const messageFromObject = data?.message || data?.error?.message;
-    if (typeof messageFromObject === 'string' && messageFromObject.trim()) {
+    const dataObject =
+      typeof data === 'object' && data !== null
+        ? (data as { message?: unknown; error?: { message?: unknown } })
+        : null;
+    const messageFromObject =
+      typeof dataObject?.message === 'string'
+        ? dataObject.message
+        : typeof dataObject?.error?.message === 'string'
+          ? dataObject.error.message
+          : null;
+
+    if (messageFromObject && messageFromObject.trim()) {
       return messageFromObject.trim();
     }
 
@@ -104,7 +126,7 @@ export const useSettingsStore = defineStore('settings', () => {
       return '请求过于频繁，请稍后再试';
     }
 
-    return err?.message || fallback;
+    return extractErrorMessage(err, fallback);
   };
 
   /**
@@ -473,9 +495,9 @@ export const useSettingsStore = defineStore('settings', () => {
         ); // <-- 添加日志
         setLocale(defaultLng);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading general settings:', err); // <-- 修改日志
-      error.value = err.response?.data?.message || err.message || 'Failed to load settings';
+      error.value = getApiErrorMessage(err, 'Failed to load settings');
       // 出错时（例如未登录），根据浏览器语言设置回退语言
       const navigatorLang = navigator.language?.split('-')[0];
       // 错误时也尝试浏览器完整区域代码，然后主语言部分，最后默认
@@ -557,7 +579,7 @@ export const useSettingsStore = defineStore('settings', () => {
     };
 
     try {
-      let apiPromise: Promise<any>;
+      let apiPromise: Promise<unknown>;
       const endpoint = booleanEndpoints[key];
 
       if (endpoint && typeof value === 'boolean') {
@@ -621,20 +643,21 @@ export const useSettingsStore = defineStore('settings', () => {
           `[SettingsStore] updateSetting: Attempted to set invalid language '${value}'. Ignoring i18n update.`
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // +++ Enhanced error logging +++
       console.error(`[SettingsStore] Failed to update setting '${key}' via API. Error:`, err);
-      if (err.response) {
-        console.error('[SettingsStore] API Error Response Data:', err.response.data);
-        console.error('[SettingsStore] API Error Response Status:', err.response.status);
-        console.error('[SettingsStore] API Error Response Headers:', err.response.headers);
-      } else if (err.request) {
-        console.error('[SettingsStore] API Error Request:', err.request);
+      const apiErr = err as ApiErrorLike;
+      if (apiErr.response) {
+        console.error('[SettingsStore] API Error Response Data:', apiErr.response.data);
+        console.error('[SettingsStore] API Error Response Status:', apiErr.response.status);
+        console.error('[SettingsStore] API Error Response Headers:', apiErr.response.headers);
+      } else if (apiErr.request) {
+        console.error('[SettingsStore] API Error Request:', apiErr.request);
       } else {
-        console.error('[SettingsStore] API Error Message:', err.message);
+        console.error('[SettingsStore] API Error Message:', apiErr.message);
       }
       // Rethrow the error but maybe provide a more specific message if possible
-      throw new Error(err.response?.data?.message || `更新设置项 '${key}' 失败: ${err.message}`);
+      throw new Error(getApiErrorMessage(err, `更新设置项 '${key}' 失败`));
     }
   }
 
@@ -721,9 +744,9 @@ export const useSettingsStore = defineStore('settings', () => {
         ); // <-- 添加日志
         setLocale(languageUpdate);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('批量更新设置失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '批量更新设置失败');
+      throw new Error(getApiErrorMessage(err, '批量更新设置失败'));
     }
   }
 
@@ -832,7 +855,7 @@ export const useSettingsStore = defineStore('settings', () => {
         hcaptchaSecretKey: '***',
         recaptchaSecretKey: '***',
       }); // Mask secrets
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('加载 CAPTCHA 设置失败:', err);
       captchaError.value = getApiErrorMessage(err, '加载 CAPTCHA 设置失败');
       captchaSettings.value = null; // Reset on error
@@ -872,7 +895,7 @@ export const useSettingsStore = defineStore('settings', () => {
       authStore.publicCaptchaConfig = null; // 重置 authStore 的状态以允许重新获取
       await authStore.fetchCaptchaConfig(); // 让 authStore 立即获取最新的配置
       // -----------------------------------------
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('更新 CAPTCHA 设置失败:', err);
       captchaError.value = getApiErrorMessage(err, '更新 CAPTCHA 设置失败');
       throw new Error(captchaError.value); // Re-throw to allow component to handle UI feedback
