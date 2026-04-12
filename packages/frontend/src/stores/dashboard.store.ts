@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 export interface DashboardTimeRange {
   start: number; // unix seconds
@@ -136,9 +137,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
       const response = await apiClient.get<DashboardStats>(`/dashboard/stats${suffix}`);
       state.value.stats = response.data;
       state.value.lastUpdate = Date.now();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取仪表盘统计失败:', err);
-      state.value.error = err.response?.data?.message || '获取仪表盘统计失败';
+      state.value.error = extractErrorMessage(err, '获取仪表盘统计失败');
     } finally {
       state.value.isLoading = false;
     }
@@ -148,7 +149,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     try {
       const response = await apiClient.get<AssetHealth>('/dashboard/assets');
       state.value.assetHealth = response.data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取资产健康状态失败:', err);
     }
   };
@@ -166,7 +167,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         `/dashboard/timeline?${params.toString()}`
       );
       state.value.timeline = response.data.events;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取活动时间线失败:', err);
     }
   };
@@ -175,7 +176,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     try {
       const response = await apiClient.get<StorageStats>('/dashboard/storage');
       state.value.storage = response.data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取存储统计失败:', err);
     }
   };
@@ -196,7 +197,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       const response = await apiClient.get<SystemResources>('/dashboard/system');
       state.value.systemResources = response.data;
       pushSystemResourcesHistory(response.data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取系统资源失败:', err);
     }
   };

@@ -17,7 +17,7 @@
 | E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                                 |
 | 运行时安全债务 | 🟡 5 条漏洞           | `critical 0 / high 0 / moderate 0 / low 5`                                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）               |
-| any 类型债务   | ⚠️ 254 处             | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
+| any 类型债务   | ⚠️ 234 处             | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
 | 日志治理债务   | ✅ 0 处 `console.log` | 已完成第三十六批并行收敛（含子代理协作）                                     |
 
 ### 与历史口径差异
@@ -184,6 +184,9 @@
 - any 类型治理（第八批）：
   - `packages/frontend/src/stores/batch.store.ts`、`packages/frontend/src/components/FileManager.vue` 完成 12 处 `: any/<any>/any[]` 收敛
   - `any` 存量由 266 降至 254（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第九批）：
+  - `packages/frontend/src/stores/tags.store.ts`、`packages/frontend/src/stores/sshKeys.store.ts`、`packages/frontend/src/stores/favoritePaths.store.ts`、`packages/frontend/src/stores/dashboard.store.ts` 完成 20 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 254 降至 234（`backend/src + frontend/src + remote-gateway/src`）
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。

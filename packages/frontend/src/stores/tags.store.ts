@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 // 定义标签信息接口
 export interface TagInfo {
@@ -52,9 +53,9 @@ export const useTagsStore = defineStore('tags', () => {
       }
       error.value = null; // 清除错误
       return true; // 表示获取成功（即使数据未变）
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[TagsStore] Failed to fetch tags:', err);
-      error.value = err.response?.data?.message || err.message || '获取标签列表失败';
+      error.value = extractErrorMessage(err, '获取标签列表失败');
       // 保留缓存数据，仅设置错误状态
       return false; // 表示获取失败
     } finally {
@@ -74,9 +75,9 @@ export const useTagsStore = defineStore('tags', () => {
       localStorage.removeItem('tagsCache');
       await fetchTags(); // fetchTags 会处理获取和缓存更新
       return newTag; // 返回新标签信息
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to add tag:', err);
-      error.value = err.response?.data?.message || err.message || '添加标签失败';
+      error.value = extractErrorMessage(err, '添加标签失败');
       return null; // 返回 null 表示失败
     } finally {
       isLoading.value = false;
@@ -93,9 +94,9 @@ export const useTagsStore = defineStore('tags', () => {
       localStorage.removeItem('tagsCache');
       await fetchTags();
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to update tag:', err);
-      error.value = err.response?.data?.message || err.message || '更新标签失败';
+      error.value = extractErrorMessage(err, '更新标签失败');
       return false;
     } finally {
       isLoading.value = false;
@@ -112,9 +113,9 @@ export const useTagsStore = defineStore('tags', () => {
       localStorage.removeItem('tagsCache');
       await fetchTags();
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to delete tag:', err);
-      error.value = err.response?.data?.message || err.message || '删除标签失败';
+      error.value = extractErrorMessage(err, '删除标签失败');
       return false;
     } finally {
       isLoading.value = false;
@@ -142,9 +143,9 @@ export const useTagsStore = defineStore('tags', () => {
       // WorkspaceConnectionList 在模态框保存成功后会重新 fetchConnections。
 
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`Failed to update connections for tag ${tagId}:`, err);
-      error.value = err.response?.data?.message || err.message || '更新标签连接失败';
+      error.value = extractErrorMessage(err, '更新标签连接失败');
       return false;
     } finally {
       isLoading.value = false;
