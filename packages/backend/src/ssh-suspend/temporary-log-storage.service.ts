@@ -38,7 +38,7 @@ export class TemporaryLogStorageService {
   async ensureLogDirectoryExists(): Promise<void> {
     try {
       await fs.mkdir(LOG_DIRECTORY, { recursive: true });
-      // console.log(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
+      // console.info(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
     } catch (error) {
       console.error(`创建日志目录 '${LOG_DIRECTORY}' 失败:`, error);
       // 在实际应用中，这里可能需要更健壮的错误处理
@@ -75,7 +75,7 @@ export class TemporaryLogStorageService {
 
       if (stat && stat.size >= MAX_LOG_SIZE_BYTES) {
         // 文件过大，执行轮替策略：清空文件
-        console.log(
+        console.info(
           `日志文件 '${filePath}' 大小达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行轮替（清空）。`
         );
         await fs.writeFile(filePath, data, 'utf8'); // 清空并写入新数据
@@ -100,7 +100,7 @@ export class TemporaryLogStorageService {
       return data;
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        // console.log(`日志文件 '${filePath}' 不存在，返回空内容。`);
+        // console.info(`日志文件 '${filePath}' 不存在，返回空内容。`);
         return ''; // 文件不存在，通常意味着没有日志
       }
       console.error(`读取日志文件 '${filePath}' 失败:`, error);
@@ -116,7 +116,7 @@ export class TemporaryLogStorageService {
     const filePath = this.getLogFilePath(suspendSessionId);
     try {
       await fs.unlink(filePath);
-      // console.log(`日志文件 '${filePath}' 已成功删除。`);
+      // console.info(`日志文件 '${filePath}' 已成功删除。`);
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === 'ENOENT') {
         // console.warn(`尝试删除日志文件 '${filePath}' 时发现文件已不存在，操作忽略。`);

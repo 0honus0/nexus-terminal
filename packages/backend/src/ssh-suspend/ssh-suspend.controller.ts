@@ -54,7 +54,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.log(
+      console.info(
         `[SshSuspendController] terminateAndRemoveSession called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`
       );
 
@@ -102,7 +102,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.log(
+      console.info(
         `[SshSuspendController] removeSessionEntry called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`
       );
 
@@ -160,7 +160,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.log(
+      console.info(
         `[SshSuspendController] editSessionNameHttp called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}, newName: "${customName}"`
       );
 
@@ -211,7 +211,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.log(
+      console.info(
         `[SshSuspendController] exportSessionLog called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`
       );
 
