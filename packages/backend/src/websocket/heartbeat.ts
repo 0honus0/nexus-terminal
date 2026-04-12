@@ -52,7 +52,7 @@ export function initializeHeartbeat(
   // 这样可以确保移动端连接得到及时检查
   const checkInterval = Math.min(config.desktopInterval, config.mobileInterval);
 
-  console.log(`WebSocket 心跳配置:
+  console.info(`WebSocket 心跳配置:
   桌面端: 间隔 ${config.desktopInterval}ms, 容忍丢包 ${config.desktopMaxMissed} 次
   移动端: 间隔 ${config.mobileInterval}ms, 容忍丢包 ${config.mobileMaxMissed} 次
   检查间隔: ${checkInterval}ms`);
@@ -89,7 +89,7 @@ export function initializeHeartbeat(
 
         // 检查是否超过容忍度（递增后检查）
         if (extWs.missedPongCount > maxMissed) {
-          console.log(
+          console.info(
             `WebSocket 心跳检测：${clientType} 客户端 ${extWs.username} (会话: ${extWs.sessionId}) ` +
               `连续 ${extWs.missedPongCount} 次无响应（阈值: ${maxMissed}），正在终止...`
           );
@@ -119,7 +119,7 @@ export function initializeHeartbeat(
 
   // 当 WebSocket 服务器关闭时，清除心跳定时器
   wss.on('close', () => {
-    console.log('WebSocket 服务器正在关闭，清理心跳定时器...');
+    console.info('WebSocket 服务器正在关闭，清理心跳定时器...');
     clearInterval(heartbeatInterval);
     lastPingTime.clear();
   });

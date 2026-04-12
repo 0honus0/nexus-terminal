@@ -44,11 +44,11 @@ const menuStyle = computed(() => ({
 }));
 
 const handleAction = (item: MenuItem) => {
-  console.log(`[ContextMenu] handleAction called for item:`, JSON.stringify(item)); // + Log item
+  console.info(`[ContextMenu] handleAction called for item:`, JSON.stringify(item)); // + Log item
   if (!item.disabled && !item.isSeparator) {
-    console.log(`[ContextMenu] Inside handleAction, props.targetId is:`, props.targetId); // ++ Log prop value before emit
+    console.info(`[ContextMenu] Inside handleAction, props.targetId is:`, props.targetId); // ++ Log prop value before emit
     const payload = { action: item.action, targetId: props.targetId };
-    console.log(`[ContextMenu] Emitting menu-action with payload:`, JSON.stringify(payload)); // + Log emit payload
+    console.info(`[ContextMenu] Emitting menu-action with payload:`, JSON.stringify(payload)); // + Log emit payload
     emit('menu-action', payload);
     emit('close'); // 点击后自动关闭
   }

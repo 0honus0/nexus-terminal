@@ -143,7 +143,7 @@ const handleKeyDown = async (event: KeyboardEvent) => {
     } else if (!existingTag && allowCreate.value) {
       // Only create if allowed and not existing
       // 如果是新标签，则 emit 事件让父组件处理创建
-      console.log(`[TagInput] Emitting create-tag for: ${trimmedInput}`);
+      console.info(`[TagInput] Emitting create-tag for: ${trimmedInput}`);
       emit('create-tag', trimmedInput);
       // 父组件负责创建、更新 availableTags prop，然后 TagInput 会响应式更新
       // 父组件也负责将新创建的 tag ID 添加到 modelValue
@@ -175,11 +175,11 @@ const removeTagLocally = (tagToRemove: GenericTag) => {
 
 // 处理全局删除标签 (点击标签上的 'x' 图标) - Emit event
 const handleDeleteTagGlobally = (tagToDelete: GenericTag) => {
-  console.log(
+  console.info(
     `[TagInput] handleDeleteTagGlobally called for tag ID: ${tagToDelete.id}, Name: ${tagToDelete.name}`
   );
   // Emit event for parent to handle deletion confirmation and API call
-  console.log(`[TagInput] Emitting delete-tag with ID: ${tagToDelete.id}`);
+  console.info(`[TagInput] Emitting delete-tag with ID: ${tagToDelete.id}`);
   emit('delete-tag', tagToDelete.id);
   // Parent should handle confirmation, call store action, and update modelValue/availableTags
   // We might still want to remove it locally immediately for better UX,
