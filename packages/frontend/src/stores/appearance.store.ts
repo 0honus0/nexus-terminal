@@ -10,6 +10,7 @@ import {
   defaultUiTheme,
   darkUiTheme,
 } from '../features/appearance/config/default-themes';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 // Helper function to safely parse JSON
 export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultValue: T): T => {
@@ -309,9 +310,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       // 应用背景
       applyPageBackground();
       // 终端主题将由 Terminal 组件根据 activeTerminalThemeId 自动应用
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('加载外观数据失败:', err);
-      error.value = err.response?.data?.message || err.message || '加载外观数据失败';
+      error.value = extractErrorMessage(err, '加载外观数据失败');
       // 出错时应用默认值
       appearanceSettings.value = {}; // 清空可能不完整的设置
       allTerminalThemes.value = []; // 清空 allTerminalThemes
@@ -361,9 +362,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       if (updates.pageBackgroundImage !== undefined) applyPageBackground(); // 移除 pageBackgroundOpacity 检查
       // 终端相关设置由 Terminal 组件监听应用
       // 注意：terminalBackgroundEnabled 的应用逻辑在 Terminal 组件中处理
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('更新外观设置失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '更新外观设置失败');
+      throw new Error(extractErrorMessage(err, '更新外观设置失败'));
     }
   }
 
@@ -502,10 +503,10 @@ export const useAppearanceStore = defineStore('appearance', () => {
       await updateAppearanceSettings({ terminal_custom_html: html });
       // console.info('[AppearanceStore] Terminal custom HTML updated successfully.');
       // 可以在此调用 uiNotifications.store 来显示成功消息
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('设置终端自定义 HTML 失败:', err);
       // 可以在此调用 uiNotifications.store 来显示失败消息
-      throw new Error(err.response?.data?.message || err.message || '设置终端自定义 HTML 失败');
+      throw new Error(extractErrorMessage(err, '设置终端自定义 HTML 失败'));
     }
   }
 
@@ -551,9 +552,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await apiClient.post('/terminal-themes', { name, themeData }); // 使用 apiClient
       await loadInitialAppearanceData(); // 重新加载所有数据以更新列表
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('创建终端主题失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '创建终端主题失败');
+      throw new Error(extractErrorMessage(err, '创建终端主题失败'));
     }
   }
 
@@ -567,9 +568,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await apiClient.put(`/terminal-themes/${id}`, { name, themeData }); // 使用 apiClient
       await loadInitialAppearanceData(); // 重新加载所有数据以更新列表
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('更新终端主题失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '更新终端主题失败');
+      throw new Error(extractErrorMessage(err, '更新终端主题失败'));
     }
   }
 
@@ -599,9 +600,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         }
       }
       await loadInitialAppearanceData(); // 重新加载所有数据以更新列表
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('删除终端主题失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '删除终端主题失败');
+      throw new Error(extractErrorMessage(err, '删除终端主题失败'));
     }
   }
 
@@ -622,9 +623,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       await loadInitialAppearanceData(); // 重新加载所有数据以更新列表
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('导入终端主题失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '导入终端主题失败');
+      throw new Error(extractErrorMessage(err, '导入终端主题失败'));
     }
   }
 
@@ -656,9 +657,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('导出终端主题失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '导出终端主题失败');
+      throw new Error(extractErrorMessage(err, '导出终端主题失败'));
     }
   }
 
@@ -707,9 +708,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         `[AppearanceStore] Loaded data for theme ${themeId} is invalid or missing themeData.`
       );
       return null;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`加载终端主题 ${themeId} 数据失败:`, err);
-      error.value = err.response?.data?.message || err.message || `加载主题 ${themeId} 数据失败`;
+      error.value = extractErrorMessage(err, `加载主题 ${themeId} 数据失败`);
       return null; // 返回 null 表示加载失败
     }
   }
@@ -734,9 +735,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       appearanceSettings.value.pageBackgroundImage = response.data.filePath;
       applyPageBackground(); // 应用新背景
       return response.data.filePath;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('上传页面背景失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '上传页面背景失败');
+      throw new Error(extractErrorMessage(err, '上传页面背景失败'));
     }
   }
   /**
@@ -758,9 +759,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       appearanceSettings.value.terminalBackgroundImage = response.data.filePath;
       // 终端背景的应用由 Terminal 组件处理
       return response.data.filePath;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('上传终端背景失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '上传终端背景失败');
+      throw new Error(extractErrorMessage(err, '上传终端背景失败'));
     }
   }
 
@@ -773,9 +774,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       await apiClient.delete('/appearance/background/page');
       // 成功后再更新数据库记录
       await updateAppearanceSettings({ pageBackgroundImage: '' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('移除页面背景失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '移除页面背景失败');
+      throw new Error(extractErrorMessage(err, '移除页面背景失败'));
     }
   }
 
@@ -788,9 +789,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       await apiClient.delete('/appearance/background/terminal');
       // 成功后再更新数据库记录
       await updateAppearanceSettings({ terminalBackgroundImage: '' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('移除终端背景失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '移除终端背景失败');
+      throw new Error(extractErrorMessage(err, '移除终端背景失败'));
     }
   }
 
@@ -817,10 +818,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         '/appearance/html-presets/local'
       );
       localHtmlPresets.value = response.data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取本地 HTML 主题列表失败:', err);
-      htmlPresetError.value =
-        err.response?.data?.message || err.message || '获取本地 HTML 主题列表失败';
+      htmlPresetError.value = extractErrorMessage(err, '获取本地 HTML 主题列表失败');
       localHtmlPresets.value = [];
     } finally {
       isLoadingHtmlPresets.value = false;
@@ -833,9 +833,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         transformResponse: (res) => res,
       }); // Expecting plain text
       return response.data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`获取本地 HTML 主题 '${name}' 内容失败:`, err);
-      throw new Error(err.response?.data?.message || err.message || `获取主题 '${name}' 内容失败`);
+      throw new Error(extractErrorMessage(err, `获取主题 '${name}' 内容失败`));
     }
   }
 
@@ -843,9 +843,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await apiClient.post('/appearance/html-presets/local', { name, content });
       await fetchLocalHtmlPresets(); // Refresh list
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('创建本地 HTML 主题失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '创建本地 HTML 主题失败');
+      throw new Error(extractErrorMessage(err, '创建本地 HTML 主题失败'));
     }
   }
 
@@ -853,9 +853,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await apiClient.put(`/appearance/html-presets/local/${name}`, { content });
       // Optionally refresh list or update item if content is stored locally too
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`更新本地 HTML 主题 '${name}' 失败:`, err);
-      throw new Error(err.response?.data?.message || err.message || `更新主题 '${name}' 失败`);
+      throw new Error(extractErrorMessage(err, `更新主题 '${name}' 失败`));
     }
   }
 
@@ -863,9 +863,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await apiClient.delete(`/appearance/html-presets/local/${name}`);
       await fetchLocalHtmlPresets(); // Refresh list
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`删除本地 HTML 主题 '${name}' 失败:`, err);
-      throw new Error(err.response?.data?.message || err.message || `删除主题 '${name}' 失败`);
+      throw new Error(extractErrorMessage(err, `删除主题 '${name}' 失败`));
     }
   }
 
@@ -886,9 +886,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         // and for update: "成功后更新 store state".
         // So this action fetches and updates the store's reactive ref.
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取远程 HTML 主题仓库链接失败:', err);
-      htmlPresetError.value = err.response?.data?.message || err.message || '获取远程仓库链接失败';
+      htmlPresetError.value = extractErrorMessage(err, '获取远程仓库链接失败');
     } finally {
       isLoadingHtmlPresets.value = false;
     }
@@ -900,9 +900,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
       remoteHtmlPresetsRepositoryUrl.value = url; // Update local state on success
       // Persist this change in the main appearance settings object as well if needed
       await updateAppearanceSettings({ remoteHtmlPresetsUrl: url });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('更新远程 HTML 主题仓库链接失败:', err);
-      throw new Error(err.response?.data?.message || err.message || '更新远程仓库链接失败');
+      throw new Error(extractErrorMessage(err, '更新远程仓库链接失败'));
     }
   }
 
@@ -932,9 +932,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         { params }
       );
       remoteHtmlPresets.value = response.data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('获取远程 HTML 主题列表失败:', err);
-      htmlPresetError.value = err.response?.data?.message || err.message || '获取远程主题列表失败';
+      htmlPresetError.value = extractErrorMessage(err, '获取远程主题列表失败');
       remoteHtmlPresets.value = [];
     } finally {
       isLoadingHtmlPresets.value = false;
@@ -949,9 +949,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         transformResponse: (res) => res,
       });
       return response.data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`获取远程 HTML 主题内容 (URL: ${fileUrl}) 失败:`, err);
-      throw new Error(err.response?.data?.message || err.message || '获取远程主题内容失败');
+      throw new Error(extractErrorMessage(err, '获取远程主题内容失败'));
     }
   }
 

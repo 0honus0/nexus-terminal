@@ -5,6 +5,7 @@ import { useAppearanceStore } from '../../stores/appearance.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -137,8 +138,8 @@ const handleTerminalBgUpload = async (event: Event) => {
         message: t('styleCustomizer.terminalBgUploadSuccess'),
       });
       input.value = '';
-    } catch (error: any) {
-      const determinedErrorMessage = error.message || t('styleCustomizer.uploadFailed');
+    } catch (error: unknown) {
+      const determinedErrorMessage = extractErrorMessage(error, t('styleCustomizer.uploadFailed'));
       uploadError.value = determinedErrorMessage;
       notificationsStore.addNotification({ type: 'error', message: determinedErrorMessage });
       input.value = '';
@@ -153,11 +154,13 @@ const handleRemoveTerminalBg = async () => {
       type: 'success',
       message: t('styleCustomizer.terminalBgRemoved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('移除终端背景失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.removeBgFailed', { message: error.message }),
+      message: t('styleCustomizer.removeBgFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -167,12 +170,14 @@ const handleToggleTerminalBackground = async () => {
   localTerminalBackgroundEnabled.value = newValue;
   try {
     await appearanceStore.setTerminalBackgroundEnabled(newValue);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('更新终端背景启用状态失败:', error);
     localTerminalBackgroundEnabled.value = !newValue;
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.errorToggleTerminalBg', { message: error.message }),
+      message: t('styleCustomizer.errorToggleTerminalBg', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -192,11 +197,13 @@ const handleSaveTerminalBackgroundOverlayOpacity = async () => {
       type: 'success',
       message: t('styleCustomizer.terminalBgOverlayOpacitySaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存终端背景蒙版透明度失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.terminalBgOverlayOpacitySaveFailed', { message: error.message }),
+      message: t('styleCustomizer.terminalBgOverlayOpacitySaveFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -213,10 +220,12 @@ const handleApplyPreset = async (htmlContent: string) => {
       type: 'success',
       message: t('styleCustomizer.htmlPresetApplied'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.htmlPresetApplyFailed', { message: error.message }),
+      message: t('styleCustomizer.htmlPresetApplyFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -228,10 +237,12 @@ const handleResetCustomHtml = async () => {
       type: 'success',
       message: t('styleCustomizer.customHtmlResetSuccess', '自定义 HTML 已重置。'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.customHtmlResetFailed', { message: error.message }),
+      message: t('styleCustomizer.customHtmlResetFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -268,11 +279,11 @@ const handleEditPresetAsNew = async (preset: { name: string; type: 'preset' | 'c
     newPresetName.value = `${preset.name.replace(/\.html$/, '')}(1)`; // Default new name
     newPresetContent.value = content;
     showPresetEditor.value = true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.errorFetchingPresetContentForCopy', {
-        message: e.message,
+        message: extractErrorMessage(e, t('styleCustomizer.uploadFailed')),
         name: preset.name,
       }),
     });
@@ -316,10 +327,12 @@ const handleSaveLocalPreset = async () => {
           message: t('styleCustomizer.localPresetUpdated'),
         });
         showPresetEditor.value = false;
-      } catch (error: any) {
+      } catch (error: unknown) {
         notificationsStore.addNotification({
           type: 'error',
-          message: t('styleCustomizer.localPresetUpdateFailed', { message: error.message }),
+          message: t('styleCustomizer.localPresetUpdateFailed', {
+            message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+          }),
         });
       }
     } else {
@@ -338,11 +351,13 @@ const handleSaveLocalPreset = async () => {
           }),
         });
         showPresetEditor.value = false;
-      } catch (error: any) {
+      } catch (error: unknown) {
         // It's recommended to add this key to your i18n files, e.g., "Failed to rename local preset: {message}"
         notificationsStore.addNotification({
           type: 'error',
-          message: t('styleCustomizer.localPresetRenameFailed', { message: error.message }),
+          message: t('styleCustomizer.localPresetRenameFailed', {
+            message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+          }),
         });
       }
     }
@@ -358,10 +373,12 @@ const handleSaveLocalPreset = async () => {
       showPresetEditor.value = false;
       newPresetName.value = ''; // Clear fields for next new preset
       newPresetContent.value = '';
-    } catch (error: any) {
+    } catch (error: unknown) {
       notificationsStore.addNotification({
         type: 'error',
-        message: t('styleCustomizer.localPresetCreateFailed', { message: error.message }),
+        message: t('styleCustomizer.localPresetCreateFailed', {
+          message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+        }),
       });
     }
   }
@@ -379,10 +396,12 @@ const handleDeleteLocalPreset = async (name: string) => {
         type: 'success',
         message: t('styleCustomizer.localPresetDeleted'),
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       notificationsStore.addNotification({
         type: 'error',
-        message: t('styleCustomizer.localPresetDeleteFailed', { message: error.message }),
+        message: t('styleCustomizer.localPresetDeleteFailed', {
+          message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+        }),
       });
     }
   }
@@ -411,10 +430,12 @@ const handleSaveRemoteRepositoryUrl = async () => {
       if (remoteHtmlPresets.value?.length) remoteHtmlPresets.value = [];
       remoteSpecificLoading.value = false;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.remoteUrlSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.remoteUrlSaveFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
     remoteSpecificLoading.value = false; // Ensure loading indicator is off on error
   }
@@ -437,11 +458,13 @@ const handleLoadRemotePresets = async () => {
         message: t('styleCustomizer.remotePresetsLoaded'),
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // This catch might not be needed if store handles errors
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.remotePresetsLoadFailed', { message: error.message }),
+      message: t('styleCustomizer.remotePresetsLoadFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   } finally {
     remoteSpecificLoading.value = false;
@@ -453,10 +476,12 @@ const applyLocalPreset = async (presetName: string) => {
   try {
     const content = await getLocalHtmlPresetContent(presetName);
     await handleApplyPreset(content);
-  } catch (error: any) {
+  } catch (error: unknown) {
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.localPresetApplyFailed', { message: error.message }),
+      message: t('styleCustomizer.localPresetApplyFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -473,10 +498,12 @@ const applyRemotePreset = async (downloadUrl?: string) => {
   try {
     const content = await getRemoteHtmlPresetContent(downloadUrl);
     await handleApplyPreset(content);
-  } catch (error: any) {
+  } catch (error: unknown) {
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.remotePresetApplyFailed', { message: error.message }),
+      message: t('styleCustomizer.remotePresetApplyFailed', {
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
+      }),
     });
   }
 };
@@ -741,11 +768,11 @@ const filteredRemoteHtmlPresets = computed(() => {
                     try {
                       const content = await getLocalHtmlPresetContent(preset.name);
                       openEditPresetEditor({ name: preset.name, content });
-                    } catch (e: any) {
+                    } catch (e: unknown) {
                       notificationsStore.addNotification({
                         type: 'error',
                         message: t('styleCustomizer.errorFetchingPresetContentForEdit', {
-                          message: e.message,
+                          message: extractErrorMessage(e, t('styleCustomizer.uploadFailed')),
                         }),
                       });
                     }

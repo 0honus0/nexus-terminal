@@ -2,6 +2,7 @@ import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../../stores/settings.store';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 export function useWorkspaceSettings() {
   const settingsStore = useSettingsStore();
@@ -38,9 +39,12 @@ export function useWorkspaceSettings() {
       await settingsStore.updateSetting('showPopupFileEditor', valueToSave);
       popupEditorMessage.value = t('settings.popupEditor.success.saved');
       popupEditorSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新弹窗编辑器设置失败:', error);
-      popupEditorMessage.value = error.message || t('settings.popupEditor.error.saveFailed');
+      popupEditorMessage.value = extractErrorMessage(
+        error,
+        t('settings.popupEditor.error.saveFailed')
+      );
       popupEditorSuccess.value = false;
     } finally {
       popupEditorLoading.value = false;
@@ -62,9 +66,12 @@ export function useWorkspaceSettings() {
       await settingsStore.updateSetting('shareFileEditorTabs', valueToSave);
       shareTabsMessage.value = t('settings.shareEditorTabs.success.saved');
       shareTabsSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新共享编辑器标签页设置失败:', error);
-      shareTabsMessage.value = error.message || t('settings.shareEditorTabs.error.saveFailed');
+      shareTabsMessage.value = extractErrorMessage(
+        error,
+        t('settings.shareEditorTabs.error.saveFailed')
+      );
       shareTabsSuccess.value = false;
     } finally {
       shareTabsLoading.value = false;
@@ -86,9 +93,12 @@ export function useWorkspaceSettings() {
       await settingsStore.updateSetting('autoCopyOnSelect', valueToSave);
       autoCopyMessage.value = t('settings.autoCopyOnSelect.success.saved');
       autoCopySuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新自动复制设置失败:', error);
-      autoCopyMessage.value = error.message || t('settings.autoCopyOnSelect.error.saveFailed');
+      autoCopyMessage.value = extractErrorMessage(
+        error,
+        t('settings.autoCopyOnSelect.error.saveFailed')
+      );
       autoCopySuccess.value = false;
     } finally {
       autoCopyLoading.value = false;
@@ -112,10 +122,12 @@ export function useWorkspaceSettings() {
         'settings.workspace.success.sidebarPersistentSaved'
       );
       workspaceSidebarPersistentSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新侧边栏固定设置失败:', error);
-      workspaceSidebarPersistentMessage.value =
-        error.message || t('settings.workspace.error.sidebarPersistentSaveFailed');
+      workspaceSidebarPersistentMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.error.sidebarPersistentSaveFailed')
+      );
       workspaceSidebarPersistentSuccess.value = false;
     } finally {
       workspaceSidebarPersistentLoading.value = false;
@@ -142,10 +154,12 @@ export function useWorkspaceSettings() {
         '同步目标已保存'
       );
       commandInputSyncSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新命令输入同步目标失败:', error);
-      commandInputSyncMessage.value =
-        error.message || t('settings.commandInputSync.error.saveFailed', '保存同步目标失败');
+      commandInputSyncMessage.value = extractErrorMessage(
+        error,
+        t('settings.commandInputSync.error.saveFailed', '保存同步目标失败')
+      );
       commandInputSyncSuccess.value = false;
     } finally {
       commandInputSyncLoading.value = false;
@@ -169,11 +183,12 @@ export function useWorkspaceSettings() {
         '连接标签显示设置已保存'
       );
       showConnectionTagsSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新显示连接标签设置失败:', error);
-      showConnectionTagsMessage.value =
-        error.message ||
-        t('settings.workspace.error.showConnectionTagsSaveFailed', '保存连接标签显示设置失败');
+      showConnectionTagsMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.error.showConnectionTagsSaveFailed', '保存连接标签显示设置失败')
+      );
       showConnectionTagsSuccess.value = false;
     } finally {
       showConnectionTagsLoading.value = false;
@@ -197,14 +212,12 @@ export function useWorkspaceSettings() {
         '快捷指令标签显示设置已保存'
       );
       showQuickCommandTagsSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新显示快捷指令标签设置失败:', error);
-      showQuickCommandTagsMessage.value =
-        error.message ||
-        t(
-          'settings.workspace.error.showQuickCommandTagsSaveFailed',
-          '保存快捷指令标签显示设置失败'
-        );
+      showQuickCommandTagsMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.error.showQuickCommandTagsSaveFailed', '保存快捷指令标签显示设置失败')
+      );
       showQuickCommandTagsSuccess.value = false;
     } finally {
       showQuickCommandTagsLoading.value = false;
@@ -240,11 +253,12 @@ export function useWorkspaceSettings() {
         '终端回滚行数设置已保存。'
       );
       terminalScrollbackLimitSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新终端回滚行数设置失败:', error);
-      terminalScrollbackLimitMessage.value =
-        error.message ||
-        t('settings.terminalScrollback.error.saveFailed', '保存终端回滚行数设置失败。');
+      terminalScrollbackLimitMessage.value = extractErrorMessage(
+        error,
+        t('settings.terminalScrollback.error.saveFailed', '保存终端回滚行数设置失败。')
+      );
       terminalScrollbackLimitSuccess.value = false;
     } finally {
       terminalScrollbackLimitLoading.value = false;
@@ -269,11 +283,12 @@ export function useWorkspaceSettings() {
         '文件管理器删除确认设置已保存。'
       );
       fileManagerShowDeleteConfirmationSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新文件管理器删除确认设置失败:', error);
-      fileManagerShowDeleteConfirmationMessage.value =
-        error.message ||
-        t('settings.workspace.fileManagerDeleteConfirmError', '保存文件管理器删除确认设置失败。');
+      fileManagerShowDeleteConfirmationMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.fileManagerDeleteConfirmError', '保存文件管理器删除确认设置失败。')
+      );
       fileManagerShowDeleteConfirmationSuccess.value = false;
     } finally {
       fileManagerShowDeleteConfirmationLoading.value = false;
@@ -298,11 +313,12 @@ export function useWorkspaceSettings() {
         '终端右键粘贴设置已保存。'
       );
       terminalEnableRightClickPasteSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新终端右键粘贴设置失败:', error);
-      terminalEnableRightClickPasteMessage.value =
-        error.message ||
-        t('settings.workspace.terminalRightClickPasteError', '保存终端右键粘贴设置失败。');
+      terminalEnableRightClickPasteMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.terminalRightClickPasteError', '保存终端右键粘贴设置失败。')
+      );
       terminalEnableRightClickPasteSuccess.value = false;
     } finally {
       terminalEnableRightClickPasteLoading.value = false;
@@ -324,10 +340,12 @@ export function useWorkspaceSettings() {
       await settingsStore.updateSetting('showPopupFileManager', valueToSave);
       showPopupFileManagerMessage.value = t('settings.popupFileManager.success.saved');
       showPopupFileManagerSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新弹窗文件管理器设置失败:', error);
-      showPopupFileManagerMessage.value =
-        error.message || t('settings.popupFileManager.error.saveFailed');
+      showPopupFileManagerMessage.value = extractErrorMessage(
+        error,
+        t('settings.popupFileManager.error.saveFailed')
+      );
       showPopupFileManagerSuccess.value = false;
     } finally {
       showPopupFileManagerLoading.value = false;
@@ -349,14 +367,15 @@ export function useWorkspaceSettings() {
       await settingsStore.updateSetting('showStatusMonitorIpAddress', valueToSave);
       statusMonitorShowIpMessage.value = t('common.saved');
       statusMonitorShowIpSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to update status monitor IP display setting:', error);
-      statusMonitorShowIpMessage.value =
-        error.message ||
+      statusMonitorShowIpMessage.value = extractErrorMessage(
+        error,
         t(
           'settings.statusMonitorShowIp.error.saveFailed',
           'Failed to save status monitor IP display setting.'
-        ); //  需要添加相应的i18n键
+        )
+      ); //  需要添加相应的i18n键
       statusMonitorShowIpSuccess.value = false;
     } finally {
       statusMonitorShowIpLoading.value = false;
@@ -378,10 +397,12 @@ export function useWorkspaceSettings() {
       await settingsStore.updateSetting('terminalOutputEnhancerEnabled', valueToSave);
       terminalOutputEnhancerMessage.value = t('settings.terminalOutputEnhancer.success.saved');
       terminalOutputEnhancerSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新终端输出增强器设置失败:', error);
-      terminalOutputEnhancerMessage.value =
-        error.message || t('settings.terminalOutputEnhancer.error.saveFailed');
+      terminalOutputEnhancerMessage.value = extractErrorMessage(
+        error,
+        t('settings.terminalOutputEnhancer.error.saveFailed')
+      );
       terminalOutputEnhancerSuccess.value = false;
     } finally {
       terminalOutputEnhancerLoading.value = false;
