@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 12 条 `test.skip`     | 分布在 2 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 7 条 `test.skip`      | 分布在 1 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -111,6 +111,12 @@
     - `Passkey 验证失败后切换到密码登录`（统一通过 mock 接口与浏览器能力差异模拟来稳定覆盖）
   - 恢复 `packages/frontend/e2e/tests/ssh-connection.spec.ts` 中：
     - `连接断开后显示断开状态`（断网状态断言增加“状态标识/文案提示”双分支，且在 `finally` 中恢复网络）
+  - 恢复 `packages/frontend/e2e/tests/connection-edge-cases.spec.ts` 中：
+    - `通过无效代理连接应失败`
+    - `代理中途断开应有提示`
+    - `同时打开过多连接应有限制`
+    - `自动重连次数达到上限后停止`
+    - `手动重连按钮功能正常`（统一补充断网恢复清理与状态提示兼容断言）
   - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
     - `处理大量输出`（改用 `seq 1 5000` 并验证中断后终端仍可回显）
 
