@@ -51,10 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **依赖安全债务复查（2026-04-12）**：基于 npm 官方源重新执行审计并完成一轮 overrides 收敛
-  - `npm audit --registry=https://registry.npmjs.org --json`：总计 **19**（critical 0 / high 4 / moderate 10 / low 5）
-  - `npm audit --omit=dev --registry=https://registry.npmjs.org --json`：运行时依赖总计 **8**（critical 0 / high 0 / moderate 3 / low 5）
+  - `npm audit --registry=https://registry.npmjs.org --json`：总计 **18**（critical 0 / high 4 / moderate 9 / low 5）
+  - `npm audit --omit=dev --registry=https://registry.npmjs.org --json`：运行时依赖总计 **6**（critical 0 / high 0 / moderate 1 / low 5）
   - 已完成补丁升级：`axios -> ^1.15.0`、`multer -> ^2.1.1`、`express-rate-limit -> ^8.3.2`、`dompurify -> ^3.3.3`、`element-plus -> ^2.13.7`
+  - 已完成新增升级：`nodemailer -> ^8.0.5`（同步 `@types/nodemailer -> ^8.0.0`）
   - 已完成依赖清理：移除根依赖未使用的 `plist`
+  - 前端构建依赖归位：`@tailwindcss/vite` 与 `vite-plugin-monaco-editor` 迁移到 `devDependencies`
   - 已完成 overrides 收敛：`tar -> >=7.5.13`、`path-to-regexp -> 8.4.2`、`router/path-to-regexp -> 8.4.2`、`defu -> ^6.1.7`、`lodash -> ^4.18.1`、`lodash-es -> ^4.18.1`
   - 运行时 direct high/critical 依赖已清零（none）
 
