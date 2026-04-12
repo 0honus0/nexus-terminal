@@ -326,7 +326,7 @@ export async function handleDockerCommand(
     return;
   }
 
-  console.log(
+  console.info(
     `WebSocket: Processing command '${command}' for container '${containerId}' on session ${sessionId}...`
   );
   try {
@@ -363,7 +363,7 @@ export async function handleDockerCommand(
         });
         stream.on('close', (code: number | null) => {
           if (code === 0) {
-            console.log(
+            console.info(
               `WebSocket: 远程 Docker 命令 (${dockerCliCommand}) on session ${sessionId} 执行成功。`
             );
             resolve();
@@ -456,7 +456,7 @@ export async function handleDockerGetStats(
     return;
   }
 
-  console.log(
+  console.info(
     `WebSocket: Handling docker:get_stats for container ${cleanContainerId} in session ${sessionId}`
   );
   const command = `docker stats ${cleanContainerId} --no-stream --format '{{json .}}'`;
@@ -562,7 +562,7 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
     return;
   }
 
-  console.log(`WebSocket: 会话 ${sessionId} 正在启动 Docker 状态轮询...`);
+  console.info(`WebSocket: 会话 ${sessionId} 正在启动 Docker 状态轮询...`);
   let dockerPollIntervalMs = DEFAULT_DOCKER_STATUS_INTERVAL_SECONDS * 1000;
   try {
     const intervalSetting = await settingsService.getSetting('dockerStatusIntervalSeconds');
@@ -570,7 +570,7 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
       const intervalSeconds = parseInt(intervalSetting, 10);
       if (!Number.isNaN(intervalSeconds) && intervalSeconds >= 1) {
         dockerPollIntervalMs = intervalSeconds * 1000;
-        console.log(
+        console.info(
           `[Docker Polling] Using interval from settings: ${intervalSeconds}s (${dockerPollIntervalMs}ms) for session ${sessionId}`
         );
       } else {
@@ -579,7 +579,7 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
         );
       }
     } else {
-      console.log(
+      console.info(
         `[Docker Polling] No interval setting found. Using default ${dockerPollIntervalMs}ms for session ${sessionId}`
       );
     }
@@ -592,7 +592,7 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
   // Clear existing interval if any, to prevent multiple pollers for the same session
   if (state.dockerStatusIntervalId) {
     clearInterval(state.dockerStatusIntervalId);
-    console.log(
+    console.info(
       `[Docker Polling] Cleared existing Docker status interval for session ${sessionId}.`
     );
   }
@@ -600,7 +600,7 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
   const dockerIntervalId = setInterval(async () => {
     const currentState = clientStates.get(sessionId); // Re-fetch state in case it changed (e.g., disconnected)
     if (!currentState || currentState.ws.readyState !== WebSocket.OPEN || !currentState.sshClient) {
-      console.log(
+      console.info(
         `[Docker Polling] Session ${sessionId} no longer valid, WS closed, or SSH disconnected. Stopping poll.`
       );
       clearInterval(dockerIntervalId);
@@ -635,7 +635,7 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
   // Initial fetch
   const initialState = clientStates.get(sessionId);
   if (initialState && initialState.ws.readyState === WebSocket.OPEN && initialState.sshClient) {
-    console.log(`[Docker Initial Fetch] Fetching status for session ${sessionId}...`);
+    console.info(`[Docker Initial Fetch] Fetching status for session ${sessionId}...`);
     try {
       const statusPayload = await fetchRemoteDockerStatus(initialState);
       if (initialState.ws.readyState === WebSocket.OPEN) {
