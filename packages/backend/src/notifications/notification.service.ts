@@ -79,7 +79,7 @@ export class NotificationService {
   private async _testEmailSetting(
     config: EmailConfig
   ): Promise<{ success: boolean; message: string }> {
-    console.log('[通知测试 - 邮件] 开始测试...');
+    console.info('[通知测试 - 邮件] 开始测试...');
     if (!config.to || !config.smtpHost || !config.smtpPort || !config.from) {
       console.error('[通知测试 - 邮件] 缺少必要的配置。');
       return {
@@ -94,7 +94,7 @@ export class NotificationService {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-      console.log(`[通知测试 - 邮件] 使用语言: ${userLang}`);
+      console.info(`[通知测试 - 邮件] 使用语言: ${userLang}`);
     } catch (error: unknown) {
       console.error(`[通知测试 - 邮件] 获取语言设置时出错，使用默认 (${defaultLng}):`, error);
     }
@@ -142,11 +142,11 @@ export class NotificationService {
     };
 
     try {
-      console.log(
+      console.info(
         `[通知测试 - 邮件] 尝试通过 ${config.smtpHost}:${config.smtpPort} 发送测试邮件至 ${config.to}`
       );
       const info = await transporter.sendMail(mailOptions);
-      console.log(`[通知测试 - 邮件] 测试邮件发送成功: ${info.messageId}`);
+      console.info(`[通知测试 - 邮件] 测试邮件发送成功: ${info.messageId}`);
       return { success: true, message: '测试邮件发送成功！请检查收件箱。' };
     } catch (error: unknown) {
       console.error(`[通知测试 - 邮件] 发送测试邮件时出错:`, error);
@@ -160,7 +160,7 @@ export class NotificationService {
   private async _testWebhookSetting(
     config: WebhookConfig
   ): Promise<{ success: boolean; message: string }> {
-    console.log('[通知测试 - Webhook] 开始测试...');
+    console.info('[通知测试 - Webhook] 开始测试...');
     if (!config.url) {
       console.error('[通知测试 - Webhook] 缺少 URL。');
       return { success: false, message: '测试 Webhook 失败：缺少 URL。' };
@@ -172,7 +172,7 @@ export class NotificationService {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-      console.log(`[通知测试 - Webhook] 使用语言: ${userLang}`);
+      console.info(`[通知测试 - Webhook] 使用语言: ${userLang}`);
     } catch (error: unknown) {
       console.error(`[通知测试 - Webhook] 获取语言设置时出错，使用默认 (${defaultLng}):`, error);
     }
@@ -191,7 +191,7 @@ export class NotificationService {
       typeof testPayload.details === 'object' && testPayload.details?.message
         ? testPayload.details.message
         : 'Details 不是带有 message 属性的对象';
-    console.log(
+    console.info(
       `[通知测试 - Webhook] 测试负载已创建。翻译后的 details.message:`,
       translatedWebhookMessage
     );
@@ -233,9 +233,9 @@ export class NotificationService {
     };
 
     try {
-      console.log(`[通知测试 - Webhook] 发送测试 Webhook 到 ${config.url}`);
+      console.info(`[通知测试 - Webhook] 发送测试 Webhook 到 ${config.url}`);
       const response = await axios(requestConfig);
-      console.log(
+      console.info(
         `[通知测试 - Webhook] 测试 Webhook 成功发送到 ${config.url}。状态: ${response.status}`
       );
       return {
@@ -258,7 +258,7 @@ export class NotificationService {
   private async _testTelegramSetting(
     config: TelegramConfig
   ): Promise<{ success: boolean; message: string }> {
-    console.log('[通知测试 - Telegram] 开始测试...');
+    console.info('[通知测试 - Telegram] 开始测试...');
     if (!config.botToken || !config.chatId) {
       console.error('[通知测试 - Telegram] 缺少 botToken 或 chatId。');
       return {
@@ -273,7 +273,7 @@ export class NotificationService {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-      console.log(`[通知测试 - Telegram] 使用语言: ${userLang}`);
+      console.info(`[通知测试 - Telegram] 使用语言: ${userLang}`);
     } catch (error: unknown) {
       console.error(`[通知测试 - Telegram] 获取语言设置时出错，使用默认 (${defaultLng}):`, error);
     }
@@ -297,7 +297,7 @@ export class NotificationService {
       typeof testPayload.details === 'object' && testPayload.details?.message
         ? testPayload.details.message
         : 'Details is not an object with message property';
-    console.log(
+    console.info(
       `[Notification Test - Telegram] Test payload created. Final details.message in payload:`,
       messageFromPayload
     );
@@ -307,13 +307,13 @@ export class NotificationService {
       lng: userLang,
       defaultValue: `Fallback Template: *Nexus Terminal Test Notification*\nEvent: \`{event}\`\nTimestamp: {timestamp}\nDetails:\n\`\`\`\n{details}\n\`\`\``,
     });
-    console.log(
+    console.info(
       `[通知测试 - Telegram] 来自 i18n 的默认模板 (使用语言 '${userLang}', 键 '${templateKeyWithNamespace}'):`,
       defaultMessageTemplateFromI18n
     );
 
     const templateToUse = config.messageTemplate || defaultMessageTemplateFromI18n;
-    console.log(`[通知测试 - Telegram] 要渲染的模板:`, templateToUse);
+    console.info(`[通知测试 - Telegram] 要渲染的模板:`, templateToUse);
 
     const eventDisplayName = i18next.t(`event.${testPayload.event}`, {
       lng: userLang,
@@ -333,14 +333,14 @@ export class NotificationService {
       templateDataTelegramTest,
       defaultMessageTemplateFromI18n
     );
-    console.log(`[通知测试 - Telegram] 渲染的消息文本:`, messageText);
+    console.info(`[通知测试 - Telegram] 渲染的消息文本:`, messageText);
 
     let baseApiUrl = 'https://api.telegram.org';
     if (config.customDomain) {
       try {
         const url = new URL(config.customDomain);
         baseApiUrl = `${url.protocol}//${url.host}`;
-        console.log(`[通知测试 - Telegram] 使用自定义域名: ${baseApiUrl}`);
+        console.info(`[通知测试 - Telegram] 使用自定义域名: ${baseApiUrl}`);
       } catch (e: unknown) {
         console.warn(
           `[通知测试 - Telegram] 无效的自定义域名 URL: ${config.customDomain}。将回退到默认 Telegram API。(${getErrorMessage(e)})`
@@ -350,7 +350,7 @@ export class NotificationService {
     const telegramApiUrl = `${baseApiUrl}/bot${config.botToken}/sendMessage`;
 
     try {
-      console.log(`[通知测试 - Telegram] 发送测试 Telegram 消息到聊天 ID ${config.chatId}`);
+      console.info(`[通知测试 - Telegram] 发送测试 Telegram 消息到聊天 ID ${config.chatId}`);
       const response = await axios.post(
         telegramApiUrl,
         {
@@ -362,7 +362,7 @@ export class NotificationService {
       );
 
       if (response.data?.ok) {
-        console.log(`[通知测试 - Telegram] 测试 Telegram 消息发送成功。`);
+        console.info(`[通知测试 - Telegram] 测试 Telegram 消息发送成功。`);
         return { success: true, message: '测试 Telegram 消息发送成功！' };
       }
       console.error(`[通知测试 - Telegram] Telegram API 返回错误:`, response.data?.description);
@@ -409,7 +409,7 @@ export class NotificationService {
         isError(error) ? error.stack : undefined
       );
     }
-    console.log(`[通知] 事件 ${event} 使用语言 '${userLang}', 时区 '${userTimezone}'`);
+    console.info(`[通知] 事件 ${event} 使用语言 '${userLang}', 时区 '${userTimezone}'`);
 
     const payload: NotificationPayload = {
       event,
@@ -419,7 +419,7 @@ export class NotificationService {
 
     try {
       const applicableSettings = await this.repository.getEnabledByEvent(event);
-      console.log(`[通知] 找到 ${applicableSettings.length} 个适用于事件 ${event} 的设置`);
+      console.info(`[通知] 找到 ${applicableSettings.length} 个适用于事件 ${event} 的设置`);
 
       if (applicableSettings.length === 0) {
         return; // 此事件没有启用的设置
@@ -440,7 +440,7 @@ export class NotificationService {
       });
 
       await Promise.allSettled(sendPromises);
-      console.log(`[通知] 完成尝试发送事件 ${event} 的通知`);
+      console.info(`[通知] 完成尝试发送事件 ${event} 的通知`);
     } catch (error: unknown) {
       console.error(`[通知] 获取或处理事件 ${event} 的设置时出错:`, error);
     }
@@ -509,18 +509,18 @@ export class NotificationService {
     const isCustomTemplate = !!config.bodyTemplate;
 
     if (isCustomTemplate) {
-      console.log(
+      console.info(
         `[_sendWebhook] Original custom body template for event ${payload.event}:`,
         templateToRender
       );
 
       templateToRender = templateToRender.replace(/\{event\}/g, '{eventDisplay}');
-      console.log(
+      console.info(
         `[_sendWebhook] Pre-processed body template (replaced {event} with {eventDisplay}):`,
         templateToRender
       );
     } else {
-      console.log(
+      console.info(
         `[_sendWebhook] No custom body template found. Using default template for event ${payload.event}`
       );
     }
@@ -539,9 +539,9 @@ export class NotificationService {
     };
 
     try {
-      console.log(`[通知] 发送 Webhook 到 ${config.url} (事件: ${payload.event})`);
+      console.info(`[通知] 发送 Webhook 到 ${config.url} (事件: ${payload.event})`);
       const response = await axios(requestConfig);
-      console.log(`[通知] Webhook 成功发送到 ${config.url}。状态: ${response.status}`);
+      console.info(`[通知] Webhook 成功发送到 ${config.url}。状态: ${response.status}`);
     } catch (error: unknown) {
       const errorMessage =
         axios.isAxiosError(error) && error.response?.data
@@ -596,7 +596,7 @@ export class NotificationService {
     });
 
     const subject = eventDisplayName;
-    console.log(`[_sendEmail] Using fixed subject for event ${payload.event}: ${subject}`);
+    console.info(`[_sendEmail] Using fixed subject for event ${payload.event}: ${subject}`);
 
     const formattedTimestampForEmail = formatInTimeZone(
       new Date(payload.timestamp),
@@ -624,7 +624,7 @@ export class NotificationService {
         {} as Record<string, string>
       ),
     };
-    console.log(
+    console.info(
       `[_sendEmail] Prepared templateDataEmailBody for event ${payload.event}:`,
       templateDataEmailBody
     );
@@ -634,25 +634,25 @@ export class NotificationService {
 
     if (config.bodyTemplate) {
       let templateToRender = config.bodyTemplate;
-      console.log(
+      console.info(
         `[_sendEmail] Original custom body template for event ${payload.event}:`,
         templateToRender
       );
 
       templateToRender = templateToRender.replace(/\{event\}/g, '{eventDisplay}');
-      console.log(
+      console.info(
         `[_sendEmail] Pre-processed body template (replaced {event} with {eventDisplay}):`,
         templateToRender
       );
 
       body = this._renderTemplate(templateToRender, templateDataEmailBody, defaultBodyText);
     } else {
-      console.log(
+      console.info(
         `[_sendEmail] No custom body template found. Using default constructed body text for event ${payload.event}`
       );
       body = defaultBodyText;
     }
-    console.log(`[_sendEmail] Final email body for event ${payload.event}:\n${body}`);
+    console.info(`[_sendEmail] Final email body for event ${payload.event}:\n${body}`);
 
     const mailOptions: Mail.Options = {
       from: config.from,
@@ -662,11 +662,11 @@ export class NotificationService {
     };
 
     try {
-      console.log(
+      console.info(
         `[通知] 通过 ${config.smtpHost}:${config.smtpPort} 发送邮件至 ${config.to} (事件: ${payload.event}, 主题: ${subject})`
       );
       const info = await transporter.sendMail(mailOptions);
-      console.log(
+      console.info(
         `[通知] 邮件成功发送至 ${config.to} (设置 ID: ${setting.id})。消息 ID: ${info.messageId}`
       );
     } catch (error: unknown) {
@@ -683,10 +683,10 @@ export class NotificationService {
     userLang: string,
     userTimezone: string
   ): Promise<void> {
-    console.log(
+    console.info(
       `[_sendTelegram] Initiating for event: ${payload.event}, Setting ID: ${setting.id}, Lang: ${userLang}, Timezone: ${userTimezone}`
     );
-    console.log(`[_sendTelegram] Received payload:`, JSON.stringify(payload, null, 2));
+    console.info(`[_sendTelegram] Received payload:`, JSON.stringify(payload, null, 2));
     const config = setting.config as TelegramConfig;
     if (!config.botToken || !config.chatId) {
       console.error(`[通知] Telegram 设置 ID ${setting.id} 缺少 botToken 或 chatId。`);
@@ -707,7 +707,7 @@ export class NotificationService {
         detailsText = JSON.stringify(payload.details);
       }
     }
-    console.log(`[_sendTelegram] Formatted detailsText:`, detailsText);
+    console.info(`[_sendTelegram] Formatted detailsText:`, detailsText);
 
     const translatedEventName = i18next.t(`event.${payload.event}`, {
       lng: userLang,
@@ -723,19 +723,19 @@ export class NotificationService {
       ),
       details: detailsText,
     };
-    console.log(
+    console.info(
       `[_sendTelegram] Prepared templateData (NO escaping):`,
       JSON.stringify(templateData, null, 2)
     );
 
     let messageText = '';
     if (config.messageTemplate) {
-      console.log(`[_sendTelegram] Using custom template:`, config.messageTemplate);
+      console.info(`[_sendTelegram] Using custom template:`, config.messageTemplate);
       const fallbackForCustom = `Event: ${templateData.event}, Details: ${templateData.details}`;
       messageText = this._renderTemplate(config.messageTemplate, templateData, fallbackForCustom);
     } else {
       const i18nKey = `eventBody.${payload.event}`;
-      console.log(`[_sendTelegram] Using i18n template key:`, i18nKey);
+      console.info(`[_sendTelegram] Using i18n template key:`, i18nKey);
       const fallbackBody = `*Fallback Notification*\nEvent: ${templateData.event}\nTime: \`${templateData.timestamp}\`\nDetails: ${templateData.details}`;
       messageText = i18next.t(i18nKey, {
         lng: userLang,
@@ -743,14 +743,14 @@ export class NotificationService {
         defaultValue: fallbackBody,
       });
     }
-    console.log(`[_sendTelegram] Final message text to send:`, messageText);
+    console.info(`[_sendTelegram] Final message text to send:`, messageText);
 
     let baseApiUrlSend = 'https://api.telegram.org';
     if (config.customDomain) {
       try {
         const url = new URL(config.customDomain);
         baseApiUrlSend = `${url.protocol}//${url.host}`;
-        console.log(`[_sendTelegram] 使用自定义域名: ${baseApiUrlSend} (事件: ${payload.event})`);
+        console.info(`[_sendTelegram] 使用自定义域名: ${baseApiUrlSend} (事件: ${payload.event})`);
       } catch (e: unknown) {
         console.warn(
           `[_sendTelegram] 无效的自定义域名 URL: ${config.customDomain} (事件: ${payload.event})。将回退到默认 Telegram API。(${getErrorMessage(e)})`
@@ -760,20 +760,20 @@ export class NotificationService {
     const telegramApiUrl = `${baseApiUrlSend}/bot${config.botToken}/sendMessage`;
 
     try {
-      console.log(`[通知] 发送 Telegram 消息到聊天 ID ${config.chatId} (事件: ${payload.event})`);
+      console.info(`[通知] 发送 Telegram 消息到聊天 ID ${config.chatId} (事件: ${payload.event})`);
       const requestBody = {
         chat_id: config.chatId,
         text: messageText,
         parse_mode: 'Markdown',
       };
-      console.log(
+      console.info(
         `[_sendTelegram] Sending request to Telegram API:`,
         JSON.stringify(requestBody, null, 2)
       );
       const response = await axios.post(telegramApiUrl, requestBody, {
         timeout: 10000,
       });
-      console.log(`[通知] Telegram 消息发送成功。响应 OK:`, response.data?.ok);
+      console.info(`[通知] Telegram 消息发送成功。响应 OK:`, response.data?.ok);
     } catch (error: unknown) {
       const errorMessage =
         axios.isAxiosError(error) && error.response?.data
