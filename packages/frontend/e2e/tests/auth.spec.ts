@@ -163,11 +163,32 @@ test.describe('Passkey 流程测试', () => {
     await expect(login.passkeyButton).toBeVisible();
   });
 
-  // Passkey 测试需要 WebAuthn 模拟，在 CI 环境中较复杂
-  test.skip('使用 Passkey 登录', async ({ loginPage }) => {
-    // 需要 Playwright 的 WebAuthn 模拟支持
+  test('使用 Passkey 登录失败时应显示错误', async ({ loginPage }) => {
+    // mock Passkey 可用状态
+    await loginPage.route('**/api/v1/auth/passkey/has-configured**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ hasPasskeys: true }),
+      });
+    });
+    // mock 认证选项接口失败，避免依赖真实 WebAuthn 设备
+    await loginPage.route('**/api/v1/auth/passkey/authentication-options', async (route) => {
+      await route.fulfill({
+        status: 504,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Passkey 认证超时，请重试。' }),
+      });
+    });
+
+    await loginPage.goto('/login');
+    await loginPage.waitForLoadState('networkidle');
+
     const login = new LoginPage(loginPage);
+    await expect(login.passkeyButton).toBeVisible();
     await login.clickPasskeyLogin();
-    // WebAuthn 流程...
+
+    await login.expectLoginFailure();
+    await expect(loginPage).toHaveURL(/\/login/);
   });
 });

@@ -313,38 +313,113 @@ test.describe('认证边缘场景测试', () => {
   });
 
   test.describe('Passkey 边缘场景', () => {
-    test.skip('Passkey 不可用时的降级处理', async ({ loginPage, context }) => {
+    test('Passkey 不可用时的降级处理', async ({ loginPage, context }) => {
       const login = new LoginPage(loginPage);
 
-      // 模拟 WebAuthn 不可用
+      // 模拟后端声明 Passkey 可用
+      await loginPage.route('**/api/v1/auth/passkey/has-configured**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ hasPasskeys: true }),
+        });
+      });
+      await loginPage.route('**/api/v1/auth/passkey/authentication-options', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ challenge: 'e2e-mock-challenge' }),
+        });
+      });
+
+      // 模拟浏览器 WebAuthn API 不可用
       await context.addInitScript(() => {
-        // @ts-expect-error - 删除 WebAuthn API
-        delete window.navigator.credentials;
+        const nav = window.navigator as Navigator & { credentials?: CredentialsContainer };
+        // @ts-expect-error - 测试中故意移除 WebAuthn 能力
+        nav.credentials = undefined;
       });
 
       await loginPage.reload();
+      await loginPage.waitForLoadState('networkidle');
 
-      // Passkey 按钮应该被隐藏或禁用
-      await expect(login.passkeyButton).not.toBeVisible();
+      // 降级策略：出现 Passkey 错误后仍可使用密码表单继续登录
+      await expect(login.passkeyButton).toBeVisible();
+      await login.clickPasskeyLogin();
+      await login.expectLoginFailure();
+      await expect(login.usernameInput).toBeVisible();
+      await expect(login.passwordInput).toBeVisible();
     });
 
-    test.skip('Passkey 验证超时处理', async ({ loginPage }) => {
+    test('Passkey 验证超时处理', async ({ loginPage }) => {
       const login = new LoginPage(loginPage);
+
+      await loginPage.route('**/api/v1/auth/passkey/has-configured**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ hasPasskeys: true }),
+        });
+      });
+      await loginPage.route('**/api/v1/auth/passkey/authentication-options', async (route) => {
+        await route.fulfill({
+          status: 504,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Passkey 验证超时' }),
+        });
+      });
+
+      await loginPage.goto('/login');
+      await loginPage.waitForLoadState('networkidle');
+      await expect(login.passkeyButton).toBeVisible();
       await login.clickPasskeyLogin();
 
-      // 等待超时（不进行任何操作）
-      await loginPage.waitForTimeout(30000);
-
-      // 应该显示超时错误
-      await expect(login.errorMessage).toBeVisible();
+      await login.expectLoginFailure();
+      await expect(login.errorMessage).toContainText(/超时|timeout|Passkey/i);
     });
 
-    test.skip('Passkey 验证失败后切换到密码登录', async ({ loginPage }) => {
+    test('Passkey 验证失败后切换到密码登录', async ({ loginPage, context }) => {
       const login = new LoginPage(loginPage);
-      await login.clickPasskeyLogin();
 
-      // 取消 Passkey 验证
-      await loginPage.keyboard.press('Escape');
+      await loginPage.route('**/api/v1/auth/passkey/has-configured**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ hasPasskeys: true }),
+        });
+      });
+      // 返回最小化选项，触发前端进入 WebAuthn 流程
+      await loginPage.route('**/api/v1/auth/passkey/authentication-options', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ challenge: 'e2e-mock-challenge' }),
+        });
+      });
+      // 模拟 WebAuthn 拒绝（例如用户取消）
+      await context.addInitScript(() => {
+        const nav = window.navigator as Navigator & { credentials?: CredentialsContainer };
+        const original = nav.credentials ?? {};
+        const mocked = {
+          ...original,
+          get: async () => {
+            throw new DOMException(
+              'The operation either timed out or was not allowed.',
+              'NotAllowedError'
+            );
+          },
+        };
+        Object.defineProperty(window.navigator, 'credentials', {
+          configurable: true,
+          writable: true,
+          value: mocked,
+        });
+      });
+
+      await loginPage.goto('/login');
+      await loginPage.waitForLoadState('networkidle');
+      await expect(login.passkeyButton).toBeVisible();
+      await login.clickPasskeyLogin();
+      await login.expectLoginFailure();
 
       // 应该能够切换回密码登录
       await expect(login.usernameInput).toBeVisible();
