@@ -245,18 +245,18 @@ onMounted(() => {
 });
 
 const handleCreateTag = async (tagName: string) => {
-  console.log(`[QuickCmdForm] Received create-tag event for: ${tagName}`);
+  console.info(`[QuickCmdForm] Received create-tag event for: ${tagName}`);
   if (!tagName || tagName.trim().length === 0) return;
-  console.log(`[QuickCmdForm] Calling quickCommandTagsStore.addTag...`);
+  console.info(`[QuickCmdForm] Calling quickCommandTagsStore.addTag...`);
   const newTag = await quickCommandTagsStore.addTag(tagName.trim());
   if (newTag && !formData.tagIds.includes(newTag.id)) {
-    console.log(`[QuickCmdForm] New tag created (ID: ${newTag.id}), adding to selection.`);
+    console.info(`[QuickCmdForm] New tag created (ID: ${newTag.id}), adding to selection.`);
     formData.tagIds.push(newTag.id);
   }
 };
 
 const handleDeleteTag = async (tagId: number) => {
-  console.log(`[QuickCmdForm] Received delete-tag event for ID: ${tagId}`);
+  console.info(`[QuickCmdForm] Received delete-tag event for ID: ${tagId}`);
   const tagToDelete = quickCommandTagsStore.tags.find((t) => t.id === tagId);
   if (!tagToDelete) return;
 
@@ -264,7 +264,7 @@ const handleDeleteTag = async (tagId: number) => {
     message: t('tags.prompts.confirmDelete', { name: tagToDelete.name }),
   });
   if (confirmed) {
-    console.log(`[QuickCmdForm] Calling quickCommandTagsStore.deleteTag...`);
+    console.info(`[QuickCmdForm] Calling quickCommandTagsStore.deleteTag...`);
     const success = await quickCommandTagsStore.deleteTag(tagId);
     if (success) {
       // 如果删除成功，TagInput的availableTags将会更新，
@@ -272,7 +272,7 @@ const handleDeleteTag = async (tagId: number) => {
       // 如果该标签已被选中，我们还需要从本地的formData.tagIds中移除它。
       const index = formData.tagIds.indexOf(tagId);
       if (index > -1) {
-        console.log(`[QuickCmdForm] Removing deleted tag ID ${tagId} from selection.`);
+        console.info(`[QuickCmdForm] Removing deleted tag ID ${tagId} from selection.`);
         formData.tagIds.splice(index, 1);
       }
     } else {
@@ -390,7 +390,7 @@ const handleExecute = () => {
     return;
   }
 
-  console.log(
+  console.info(
     `[QuickCmdForm] Executing processed command: "${processedCommand}" on session ${activeSessionId}`
   );
   emitWorkspaceEvent('quickCommand:executeProcessed', {

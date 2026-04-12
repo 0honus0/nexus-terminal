@@ -337,7 +337,7 @@ const toggleGroup = (groupName: string) => {
 // 处理单击连接 (左键/Enter) - 使用 session store 处理连接请求
 const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent) => {
   if (event instanceof MouseEvent && event.button !== 0) {
-    console.log(
+    console.info(
       `[WkspConnList] DEBUG: handleConnect called with non-left click (button: ${event.button}). Ignoring.`
     );
     return;
@@ -363,14 +363,14 @@ const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent)
 
 // 显示右键菜单
 const showContextMenu = (event: MouseEvent, connection: ConnectionInfo) => {
-  console.log(
+  console.info(
     `[WkspConnList] showContextMenu (右键) called for ID: ${connection.id}. Event:`,
     event
   );
   event.preventDefault(); // 再次确保阻止默认行为
   event.stopPropagation(); // 阻止事件冒泡
   event.stopImmediatePropagation(); // 尝试更强力地阻止事件链
-  console.log('[WkspConnList] Right-click default prevented and propagation stopped.');
+  console.info('[WkspConnList] Right-click default prevented and propagation stopped.');
   contextTargetConnection.value = connection;
   contextMenuPosition.value = { x: event.clientX, y: event.clientY };
   contextMenuVisible.value = true;
@@ -403,7 +403,7 @@ const showContextMenu = (event: MouseEvent, connection: ConnectionInfo) => {
 
       // 更新位置
       if (finalX !== contextMenuPosition.value.x || finalY !== contextMenuPosition.value.y) {
-        console.log(
+        console.info(
           `[WkspConnList] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
         );
         contextMenuPosition.value = { x: finalX, y: finalY };
@@ -428,7 +428,7 @@ const handleMenuAction = async (action: 'add' | 'edit' | 'delete' | 'clone') => 
   closeContextMenu(); // 先关闭菜单
 
   if (action === 'add') {
-    console.log(
+    console.info(
       '[WorkspaceConnectionList] handleMenuAction called with action: add. Emitting request-add-connection...'
     );
     // router.push('/connections/add'); // 改为触发事件
@@ -511,7 +511,7 @@ const showTagContextMenu = (
 
       // 更新位置
       if (finalX !== tagContextMenuPosition.value.x || finalY !== tagContextMenuPosition.value.y) {
-        console.log(
+        console.info(
           `[WkspConnList] Adjusting tag context menu position: (${tagContextMenuPosition.value.x}, ${tagContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
         );
         tagContextMenuPosition.value = { x: finalX, y: finalY };
@@ -687,7 +687,7 @@ onBeforeUnmount(() => {
   // 调用存储的注销函数
   if (unregisterFocusAction) {
     unregisterFocusAction();
-    console.log(`[WkspConnList] Unregistered focus action on unmount.`);
+    console.info(`[WkspConnList] Unregistered focus action on unmount.`);
   }
   unregisterFocusAction = null;
 });

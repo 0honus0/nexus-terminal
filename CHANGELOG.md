@@ -19,54 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **测试残留清理**：移除调试测试文件 `packages/backend/src/connections/crypto-mock-debug.test.ts`
   - **质量门禁增强**：`.lintstagedrc.js` 对 `*.vue` 增加 `eslint --fix`；`audit.yml` 新增 high/critical 直连依赖摘要与 high 告警
   - **标记债务清零**：移除 E2E 剩余 TODO 标记，当前 `packages/**` 下 `TODO/FIXME/HACK` 为 0
-  - **日志治理（第一批）**：`packages/backend/src/websocket/handlers/rdp.handler.ts` 将 12 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1242 降至 1230
-  - **日志治理（第二批）**：`packages/backend/src/websocket/handlers/docker.handler.ts` 将 9 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1230 降至 1221
-  - **日志治理（第三批）**：`packages/backend/src/websocket/handlers/ssh.handler.ts` 将 9 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1221 降至 1212
-  - **日志治理（第四批）**：`packages/backend/src/websocket/handlers/sftp.handler.ts` 将 1 处信息级输出由 `console.log` 调整为 `console.info`，`console.log` 存量从 1212 降至 1211
-  - **日志治理（第五批）**：`packages/backend/src/index.ts` 与 `packages/backend/src/auth/auth.controller.ts` 将 44 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1211 降至 1167
-  - **日志治理（第六批，并行）**：`packages/backend/src/settings/settings.service.ts`、`packages/backend/src/sftp/sftp.service.ts`、`packages/backend/src/notifications/notification.service.ts` 将 142 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1167 降至 1025
-  - **日志治理（第七批，并行降级执行）**：`packages/frontend/src/stores/layout.store.ts`、`packages/frontend/src/components/FileManager.vue`、`packages/frontend/src/stores/settings.store.ts` 将 124 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 1025 降至 901
-  - **日志治理（第八批，并行降级执行）**：`packages/frontend/src/stores/session/actions/sshSuspendActions.ts`、`packages/frontend/src/composables/useSftpActions.ts`、`packages/frontend/src/views/WorkspaceView.vue` 将 99 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 901 降至 802
-  - **日志治理（第九批，并行降级执行）**：`packages/frontend/src/stores/session/actions/sessionActions.ts` 与 `packages/frontend/src/stores/fileEditor.store.ts` 将 55 处信息级输出由 `console.log` 统一调整为 `console.info`，`packages/frontend/src/stores/focusSwitcher.store.ts` 仅剩注释日志，`console.log` 存量从 802 降至 747
-  - **日志治理（第十批，并行降级执行）**：`packages/backend/src/ssh-suspend/ssh-suspend.service.ts`、`packages/backend/src/websocket/connection.ts`、`packages/backend/src/services/ssh.service.ts` 将 66 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 747 降至 681
-  - **日志治理（第十一批，并行降级执行）**：`packages/frontend/src/components/LayoutConfigurator.vue`、`packages/frontend/src/composables/useSshTerminal.ts`、`packages/frontend/src/App.vue` 将 59 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 681 降至 622
-  - **日志治理（第十二批，并行降级执行）**：`packages/frontend/src/stores/auth.store.ts`、`packages/frontend/src/components/TerminalTabBar.vue`、`packages/backend/src/websocket/upgrade.ts` 将 57 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 622 降至 565
-  - **日志治理（第十三批，并行降级执行）**：`packages/frontend/src/stores/appearance.store.ts`、`packages/frontend/src/composables/file-manager/useFileManagerDragAndDrop.ts`、`packages/frontend/src/stores/session/actions/editorActions.ts` 将 44 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 565 降至 521
-  - **日志治理（第十四批，并行降级执行）**：`packages/backend/src/sftp/sftp.controller.ts`、`packages/backend/src/appearance/appearance.service.ts`、`packages/remote-gateway/src/server.ts` 将 49 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 521 降至 472
-  - **日志治理（第十五批，并行降级执行）**：`packages/backend/src/settings/settings.controller.ts`、`packages/backend/src/auth/captcha.service.ts`、`packages/frontend/src/composables/useFileUploader.ts` 将 28 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 472 降至 444
-  - **日志治理（第十六批，并行降级执行）**：`packages/backend/src/database/migrations.ts`、`packages/backend/src/connections/connection.repository.ts`、`packages/backend/src/notifications/notification.processor.service.ts` 将 30 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 444 降至 414
-  - **日志治理（第十七批，并行降级执行）**：`packages/backend/src/websocket/utils.ts`、`packages/backend/src/database/schema.registry.ts`、`packages/backend/src/connections/connection.service.ts` 将 21 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 414 降至 393
-  - **日志治理（第十八批，并行降级执行）**：`packages/frontend/src/components/RemoteDesktopModal.vue`、`packages/frontend/src/main.ts`、`packages/frontend/src/i18n.ts` 将 33 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 393 降至 360
-  - **日志治理（第十九批，并行降级执行）**：`packages/frontend/src/components/FocusSwitcherConfigurator.vue`、`packages/frontend/src/components/CommandInputBar.vue`、`packages/frontend/src/features/terminal/Terminal.vue` 将 28 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 360 降至 332
-  - **日志治理（第二十批，并行降级执行）**：`packages/backend/src/services/guacamole.service.ts`、`packages/backend/src/database/connection.ts`、`packages/frontend/src/composables/useWebSocketConnection.ts` 将 19 处信息级输出由 `console.log` 统一调整为 `console.info`，`console.log` 存量从 332 降至 313
-  - **E2E 回补（第一批）**：恢复 `ssh-connection.spec.ts` 中 4 个用例（命令执行、快捷键、多标签、关闭标签）
-  - **E2E 回补（第二批）**：恢复 `auth.spec.ts` 中 2 个用例（2FA 输入框展示、Passkey 按钮展示），通过接口 mock 去除环境依赖
-  - **E2E 回补（第三批）**：恢复 `auth-edge-cases.spec.ts` 中 4 个用例（2FA 过期验证码、2FA 格式验证、2FA 连续失败、登录速率限制），并修正 `TEST_USER` 引用来源
-  - **E2E 回补（第四批）**：恢复 2 个 2FA 用例（`auth.spec.ts` 的“2FA 成功登录”、`auth-edge-cases.spec.ts` 的“2FA 会话过期”），并通过接口 mock 稳定成功/失败分支
-  - **E2E 回补（第五批）**：恢复 `terminal-edge-cases.spec.ts` 中 5 个用例（键盘切换标签、鼠标切换标签、标签拖拽排序、终端字体大小调整、终端清屏功能），并将脆弱选择器调整为兼容 `data-testid` 选择器
-  - **E2E 回补（第六批）**：恢复 `terminal-edge-cases.spec.ts` 的“处理长时间运行的命令”，改为 `Ctrl+C` 后验证终端继续可用（marker 回显）
-  - **E2E 回补（第七批）**：恢复 `file-management-edge-cases.spec.ts` 中 2 个用例（UTF-8 文件上传、特殊字符搜索），并补齐“先上传再搜索”的稳定前置步骤
-  - **E2E 回补（第八批）**：恢复 `file-management-edge-cases.spec.ts` 的“重命名文件为已存在的名称应失败”，并将错误断言兼容中英文文案
-  - **E2E 回补（第九批）**：恢复 `file-management-edge-cases.spec.ts` 中 2 个预览用例（文本文件预览、二进制文件预览提示），并补齐测试内文件创建/上传步骤
-  - **E2E 回补（第十批）**：恢复 `terminal-edge-cases.spec.ts` 的“处理大量输出”，改为 `seq` 输出并用中断后 marker 回显验证终端可用性
-  - **E2E 回补（第十一批）**：恢复 `file-management-edge-cases.spec.ts` 的“上传同名文件应提示覆盖确认”和“批量删除文件”，并增强覆盖确认弹窗与删除确认按钮的兼容断言
-  - **E2E 回补（第十二批）**：恢复 `file-management-edge-cases.spec.ts` 的“批量下载文件”，补齐测试内多文件上传前置并兼容下载压缩包扩展名
-  - **E2E 回补（第十三批）**：恢复 `file-management-edge-cases.spec.ts` 的“取消正在进行的传输”，增加取消按钮可见性守护以降低环境波动
-  - **E2E 回补（第十四批）**：恢复 `file-management-edge-cases.spec.ts` 的“上传失败后可重试”，增加错误提示与重试按钮可见性守护，兼容不同上传完成路径
-  - **E2E 回补（第十五批）**：恢复 `file-management-edge-cases.spec.ts` 的“访问无权限目录应显示错误”，增加权限差异守护以兼容 root/非 root 测试环境
-  - **E2E 回补（第十六批）**：恢复 `terminal-edge-cases.spec.ts` 的“命令历史面板功能”和“清除命令历史”，补充面板/按钮可见性守护并增强确认按钮兼容性
-  - **E2E 回补（第十七批）**：恢复 `terminal-edge-cases.spec.ts` 的“Ctrl+R 搜索历史命令”“执行快捷命令”“创建新快捷命令”，为面板/按钮不可用场景增加守护分支
-  - **E2E 回补（第十八批）**：恢复 `terminal-edge-cases.spec.ts` 的 3 个会话挂起相关用例（断网挂起、手动挂起、关闭标签页自动挂起），并增加菜单/按钮可见性守护
-  - **E2E 回补（第十九批）**：恢复 `terminal-edge-cases.spec.ts` 的“终端复制粘贴功能”，并补充复制/粘贴后终端可用性断言（marker 回显）
-  - **E2E 回补（第二十批）**：恢复 `file-management-edge-cases.spec.ts` 的“下载大文件应正常工作”，改为测试内先上传后下载，去除对远端预置文件依赖
-  - **E2E 质量修复（第二十一批）**：修复多处“关键功能缺失时直接 return 导致假阳性”的路径，补充前置可见性断言；并恢复 `file-management-edge-cases.spec.ts` 的“上传大文件应显示进度条”
-  - **E2E 回补（第二十二批）**：恢复 `sftp-operations.spec.ts` 的 2 个基础用例（打开 SFTP 面板、导航子目录），去除硬编码连接名并改为首个可见连接策略
-  - **E2E 回补（第二十三批）**：恢复 `sftp-operations.spec.ts` 的 6 个文件操作用例（上传、上传进度、下载、新建目录、删除、重命名），统一切换到 `[data-filename]` 与 `#fileManagerActionInput-*` 选择器，并补齐上传造数前置步骤
-  - **E2E 回补（第二十四批）**：恢复 `file-management-edge-cases.spec.ts` 中 2 个用例（上传中断后恢复、删除只读文件），补齐断网恢复与权限差异分支断言，进一步减少环境相关假阳性
-  - **E2E 回补（第二十五批）**：恢复 `auth.spec.ts` 与 `auth-edge-cases.spec.ts` 中 4 个 Passkey 场景用例，统一改为可复现的 mock 路径，覆盖“能力缺失降级、超时提示、失败回退密码登录”分支
-  - **E2E 回补（第二十六批）**：恢复 `ssh-connection.spec.ts` 的“连接断开后显示断开状态”，改为首个可见连接策略并补充断网恢复 `finally` 清理
-  - **E2E 回补（第二十七批）**：恢复 `connection-edge-cases.spec.ts` 中 5 个连接治理用例（无效代理失败、代理断开提示、并发连接限制、重连上限、手动重连），统一补充断网恢复与兼容状态断言
-  - **E2E 回补（第二十八批）**：恢复 `remote-desktop.spec.ts` 中 7 个远程桌面用例（RDP/VNC 连接、快速连接、鼠标/键盘交互、全屏模式），补齐“连接成功或失败提示”双路径断言并完成 E2E `skip` 清零
+  - **日志治理（最新）**：当前仅保留最新批次记录。第二十一批（并行降级执行）在 `packages/frontend/src/components/WorkspaceConnectionList.vue`、`packages/frontend/src/components/NotificationSettingForm.vue`、`packages/frontend/src/components/AddEditQuickCommandForm.vue` 完成 21 处信息级输出降级（`console.log` -> `console.info`），存量由 313 降至 292
+  - **E2E 回补（最新）**：当前仅保留最新回补口径。最新为第二十八批（`remote-desktop.spec.ts` 7 个远程桌面用例），并已完成 E2E `test.skip` 清零（0）
 
 ### Security
 

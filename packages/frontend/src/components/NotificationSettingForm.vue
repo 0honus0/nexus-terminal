@@ -462,9 +462,9 @@ const props = defineProps({
 const emit = defineEmits(['save', 'cancel']);
 
 const store = useNotificationsStore();
-console.log('[NotificationSettingForm] Setup started.'); // Log setup start
+console.info('[NotificationSettingForm] Setup started.'); // Log setup start
 const { t } = useI18n();
-console.log('[NotificationSettingForm] useI18n initialized.'); // Log i18n init
+console.info('[NotificationSettingForm] useI18n initialized.'); // Log i18n init
 const formError = ref<string | null>(null);
 const headerError = ref<string | null>(null);
 const testError = ref<string | null>(null);
@@ -572,7 +572,7 @@ const webhookHeadersString = ref('{}'); // For textarea binding
 watch(
   () => props.initialData,
   (newData) => {
-    console.log('[NotificationSettingForm] Watch initialData triggered. New data:', newData); // Log initialData change
+    console.info('[NotificationSettingForm] Watch initialData triggered. New data:', newData); // Log initialData change
     if (newData) {
       Object.assign(formData, newData);
       // Populate specific config refs based on channel type
@@ -623,7 +623,7 @@ watch(
     testError.value = null; // Reset test error
     testResult.value = null; // Reset test result
     testingNotification.value = false; // Reset testing state
-    console.log(
+    console.info(
       '[NotificationSettingForm] Form data initialized/updated from initialData. Current channel_type:',
       formData.channel_type
     ); // Log after init/update
@@ -635,7 +635,7 @@ watch(
 watch(
   () => formData.channel_type,
   (newType, oldType) => {
-    console.log(
+    console.info(
       `[NotificationSettingForm] Watch channel_type changed from ${oldType} to ${newType}`
     ); // Log channel type change
     if (newType !== oldType && !isEditing.value) {
@@ -693,7 +693,7 @@ watch(
 const getEventDisplayName = (event: NotificationEvent): string => {
   // Use i18n key, fallback to formatted name if key not found
   const i18nKey = `settings.notifications.events.${event}`;
-  console.log(`[NotificationSettingForm] Translating event display name for key: ${i18nKey}`); // Log event key translation attempt
+  console.info(`[NotificationSettingForm] Translating event display name for key: ${i18nKey}`); // Log event key translation attempt
   const translated = t(i18nKey);
   // If translation returns the key itself, it means translation is missing
   if (translated === i18nKey) {
@@ -707,7 +707,7 @@ const getEventDisplayName = (event: NotificationEvent): string => {
 };
 
 const handleSubmit = async () => {
-  console.log('[NotificationSettingForm] handleSubmit called.'); // Log submit start
+  console.info('[NotificationSettingForm] handleSubmit called.'); // Log submit start
   formError.value = null;
   if (headerError.value) return; // Don't submit if headers are invalid
 
