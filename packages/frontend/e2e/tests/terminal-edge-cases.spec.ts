@@ -392,26 +392,29 @@ test.describe('终端功能边缘场景测试', () => {
       }
     });
 
-    test.skip('处理大量输出', async ({ authenticatedPage }) => {
+    test('处理大量输出', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       await workspace.goto();
 
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await expect(workspace.terminalContainer).toBeVisible({ timeout: 15000 });
 
-        // 执行产生大量输出的命令
-        await workspace.typeInTerminal('cat /var/log/syslog');
-        await authenticatedPage.waitForTimeout(3000);
+        // 执行环境无关的大量输出命令
+        await workspace.typeInTerminal('seq 1 5000');
+        await authenticatedPage.waitForTimeout(1500);
 
         // 终端应该仍然响应
         await workspace.terminalContainer.click();
         await authenticatedPage.keyboard.press('Control+c');
 
         // 验证终端没有卡死
-        await workspace.typeInTerminal('echo "still alive"');
-        await workspace.expectTerminalOutput('still alive');
+        const marker = `still-alive-${Date.now()}`;
+        await workspace.typeInTerminal(`echo "${marker}"`);
+        await workspace.expectTerminalOutput(marker, 10000);
       }
     });
 

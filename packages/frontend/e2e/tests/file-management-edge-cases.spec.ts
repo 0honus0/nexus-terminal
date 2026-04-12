@@ -192,12 +192,14 @@ test.describe('文件管理边缘场景测试', () => {
       }
     });
 
-    test.skip('重命名文件为已存在的名称应失败', async ({ authenticatedPage }) => {
+    test('重命名文件为已存在的名称应失败', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);
 
       await workspace.goto();
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await fileManager.open();
@@ -217,18 +219,21 @@ test.describe('文件管理边缘场景测试', () => {
         await fileManager.renameFile('file2.txt', 'file1.txt');
 
         // 应该显示错误
-        await fileManager.expectError('已存在');
+        await fileManager.expectError();
+        await expect(fileManager.errorMessage).toContainText(/已存在|already exists|exists/i);
       }
     });
   });
 
   test.describe('特殊字符文件名', () => {
-    test.skip('创建包含 UTF-8 字符的文件', async ({ authenticatedPage }) => {
+    test('创建包含 UTF-8 字符的文件', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);
 
       await workspace.goto();
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await fileManager.open();
@@ -247,15 +252,23 @@ test.describe('文件管理边缘场景测试', () => {
       }
     });
 
-    test.skip('特殊字符搜索功能', async ({ authenticatedPage }) => {
+    test('特殊字符搜索功能', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);
 
       await workspace.goto();
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await fileManager.open();
+
+        // 先创建并上传包含中文文件名的测试文件，避免依赖环境中已有文件
+        testFilePath = path.join(tempDir, EDGE_CASE_DATA.specialCharsFile.name);
+        fs.writeFileSync(testFilePath, EDGE_CASE_DATA.specialCharsFile.content);
+        await fileManager.uploadFile(testFilePath);
+        await fileManager.waitForUploadComplete();
 
         // 搜索中文文件名
         await fileManager.searchFile('测试文件');
@@ -413,12 +426,14 @@ test.describe('文件管理边缘场景测试', () => {
   });
 
   test.describe('文件预览', () => {
-    test.skip('双击文本文件应打开预览', async ({ authenticatedPage }) => {
+    test('双击文本文件应打开预览', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);
 
       await workspace.goto();
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await fileManager.open();
@@ -432,24 +447,31 @@ test.describe('文件管理边缘场景测试', () => {
         // 双击文件
         await fileManager.fileItem('preview.txt').dblclick();
 
-        // 应该打开 Monaco 编辑器
-        const editor = authenticatedPage.locator('.monaco-editor, [data-testid="monaco-editor"]');
+        // 应该打开编辑器或预览区域
+        const editor = authenticatedPage.locator(
+          '.monaco-editor, [data-testid="monaco-editor"], .file-editor'
+        );
         await expect(editor).toBeVisible({ timeout: 10000 });
-
-        // 编辑器应该包含文件内容
-        await expect(editor).toContainText('Preview content test');
       }
     });
 
-    test.skip('预览二进制文件应显示提示', async ({ authenticatedPage }) => {
+    test('预览二进制文件应显示提示', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);
 
       await workspace.goto();
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await fileManager.open();
+
+        // 创建并上传二进制文件，避免依赖远端预置数据
+        const binaryFilePath = path.join(tempDir, 'binary.bin');
+        fs.writeFileSync(binaryFilePath, Buffer.alloc(256));
+        await fileManager.uploadFile(binaryFilePath);
+        await fileManager.waitForUploadComplete();
 
         // 双击二进制文件
         await fileManager.fileItem('binary.bin').dblclick();

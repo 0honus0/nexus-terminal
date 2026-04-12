@@ -14,7 +14,7 @@
 | 类别           | 当前状态                 | 说明                                                           |
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ⚠️ 50 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
+| E2E 测试债务   | ⚠️ 44 条 `test.skip`     | 分布在 8 个测试文件，需分批恢复/豁免                           |
 | 运行时安全债务 | 🔴 32 条漏洞             | `critical 0 / high 20 / moderate 10 / low 2`                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
@@ -65,6 +65,14 @@
     - `终端清屏功能`
   - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
     - `处理长时间运行的命令`（执行 `sleep` 后 `Ctrl+C` 中断，验证 marker 回显）
+  - 恢复 `packages/frontend/e2e/tests/file-management-edge-cases.spec.ts` 中：
+    - `创建包含 UTF-8 字符的文件`
+    - `特殊字符搜索功能`（测试内先上传中文文件名文件，再执行搜索）
+    - `重命名文件为已存在的名称应失败`（错误断言兼容中英文文案）
+    - `双击文本文件应打开预览`
+    - `预览二进制文件应显示提示`（测试内创建并上传 `binary.bin`）
+  - 恢复 `packages/frontend/e2e/tests/terminal-edge-cases.spec.ts` 中：
+    - `处理大量输出`（改用 `seq 1 5000` 并验证中断后终端仍可回显）
 
 ### 本轮未闭环风险（继续跟踪）
 
