@@ -24,7 +24,7 @@ const initAuditLogsTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createAuditLogsIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.log('[DB Init] 审计日志索引创建完成。');
+  console.info('[DB Init] 审计日志索引创建完成。');
 };
 
 /**
@@ -34,7 +34,7 @@ const initBatchTasksTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createBatchTasksIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.log('[DB Init] 批量任务索引创建完成。');
+  console.info('[DB Init] 批量任务索引创建完成。');
 };
 
 /**
@@ -44,7 +44,7 @@ const initBatchSubTasksTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createBatchSubTasksIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.log('[DB Init] 批量子任务索引创建完成。');
+  console.info('[DB Init] 批量子任务索引创建完成。');
 };
 
 /**
@@ -54,7 +54,7 @@ const initAISessionsTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createAISessionsIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.log('[DB Init] AI会话索引创建完成。');
+  console.info('[DB Init] AI会话索引创建完成。');
 };
 
 /**
@@ -64,7 +64,7 @@ const initAIMessagesTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createAIMessagesIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.log('[DB Init] AI消息索引创建完成。');
+  console.info('[DB Init] AI消息索引创建完成。');
 };
 
 /**
@@ -75,7 +75,7 @@ const initTerminalThemesTable = async (db: Database): Promise<void> => {
   // Pass the db instance to the repository function
   // Note: This might require modifying initializePresetThemes if it doesn't accept db
   await terminalThemeRepository.initializePresetThemes(db, presetTerminalThemes);
-  console.log('[DB Init] 预设主题初始化检查完成。');
+  console.info('[DB Init] 预设主题初始化检查完成。');
 };
 
 /**
@@ -86,7 +86,7 @@ const initAppearanceSettingsTable = async (db: Database): Promise<void> => {
   // Pass the db instance to the repository function
   // Note: This might require modifying ensureDefaultSettingsExist if it doesn't accept db
   await appearanceRepository.ensureDefaultSettingsExist(db);
-  console.log('[DB Init] 外观设置初始化检查完成。');
+  console.info('[DB Init] 外观设置初始化检查完成。');
 };
 
 // --- Table Definitions Registry ---

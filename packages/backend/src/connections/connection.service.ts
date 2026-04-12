@@ -83,7 +83,7 @@ export const createConnection = async (
     'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'
   > & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
 
-  console.log('[Service:createConnection] Received input:', JSON.stringify(input, null, 2)); // Log input
+  console.info('[Service:createConnection] Received input:', JSON.stringify(input, null, 2)); // Log input
 
   // 0. 处理和验证 jump_chain
   const processedJumpChain = await _validateAndProcessJumpChain(input.jump_chain, input.proxy_id);
@@ -214,7 +214,7 @@ export const createConnection = async (
   if (finalConnectionData.ssh_key_id === null) {
     delete (finalConnectionData as any).ssh_key_id; // Adjust based on repository function signature if needed
   }
-  console.log(
+  console.info(
     '[Service:createConnection] Data being passed to ConnectionRepository.createConnection:',
     JSON.stringify(finalConnectionData, null, 2)
   ); // Log data before saving
@@ -478,7 +478,7 @@ export const updateConnection = async (
   let updatedFieldsForAudit: string[] = []; // 跟踪审计日志的字段
   if (hasNonTagChanges) {
     updatedFieldsForAudit = Object.keys(dataToUpdate); // 在更新调用之前获取字段
-    console.log(
+    console.info(
       `[Service:updateConnection] Data being passed to ConnectionRepository.updateConnection for ID ${id}:`,
       JSON.stringify(dataToUpdate, null, 2)
     ); // ADD THIS LOG
@@ -541,7 +541,7 @@ export const getConnectionWithDecryptedCredentials = async (
   // 1. 获取完整的连接数据（包含加密字段和可能的 ssh_key_id）
   const fullConnectionDbRow = await ConnectionRepository.findFullConnectionById(id);
   if (!fullConnectionDbRow) {
-    console.log(`[Service:getConnWithDecrypt] Connection not found for ID: ${id}`);
+    console.info(`[Service:getConnWithDecrypt] Connection not found for ID: ${id}`);
     return null;
   }
   // Convert DbRow to the stricter FullConnectionData type expected by the service/types file
@@ -582,7 +582,7 @@ export const getConnectionWithDecryptedCredentials = async (
     else if (fullConnection.auth_method === 'key') {
       if (fullConnection.ssh_key_id) {
         // +++ If using ssh_key_id, fetch and decrypt the stored key +++
-        console.log(
+        console.info(
           `[Service:getConnWithDecrypt] Connection ${id} uses stored SSH key ID: ${fullConnection.ssh_key_id}. Fetching key...`
         );
         const storedKeyDetails = await SshKeyService.getDecryptedSshKeyById(
@@ -597,7 +597,7 @@ export const getConnectionWithDecryptedCredentials = async (
         }
         decryptedPrivateKey = storedKeyDetails.privateKey;
         decryptedPassphrase = storedKeyDetails.passphrase;
-        console.log(
+        console.info(
           `[Service:getConnWithDecrypt] Successfully fetched and decrypted stored SSH key ${fullConnection.ssh_key_id} for connection ${id}.`
         );
       } else if (fullConnection.encrypted_private_key) {
@@ -628,7 +628,7 @@ export const getConnectionWithDecryptedCredentials = async (
     // 其他解密错误（如加密密钥变更）记录日志并继续，返回 undefined 凭证
   }
 
-  console.log(
+  console.info(
     `[Service:getConnWithDecrypt] Returning data for ID: ${id}, Auth Method: ${fullConnection.auth_method}`
   );
   return {
