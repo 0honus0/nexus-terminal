@@ -6,6 +6,7 @@ import { useConnectionsStore } from '../stores/connections.store';
 import Guacamole from 'guacamole-common-js';
 import apiClient from '../utils/apiClient';
 import { ConnectionInfo } from '../stores/connections.store';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -53,6 +54,11 @@ let hasDragged = false;
 
 const MIN_MODAL_WIDTH = 1024;
 const MIN_MODAL_HEIGHT = 768;
+
+interface GuacamoleStatus {
+  code?: string | number;
+  message?: string;
+}
 
 // Dynamically construct WebSocket URL based on environment
 let backendBaseUrl: string;
@@ -115,7 +121,7 @@ const handleConnection = async () => {
 
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
 
-    tunnel.onerror = (status: any) => {
+    tunnel.onerror = (status: GuacamoleStatus) => {
       const errorMessage = status.message || 'Unknown tunnel error';
       const errorCode = status.code || 'N/A';
       statusMessage.value = `${t('remoteDesktopModal.errors.tunnelError')} (${errorCode}): ${errorMessage}`;
@@ -185,7 +191,7 @@ const handleConnection = async () => {
           | 'error';
     };
 
-    guacClient.value.onerror = (status: any) => {
+    guacClient.value.onerror = (status: GuacamoleStatus) => {
       const errorMessage = status.message || 'Unknown client error';
       statusMessage.value = `${t('remoteDesktopModal.errors.clientError')}: ${errorMessage}`;
       connectionStatus.value = 'error';
@@ -193,8 +199,9 @@ const handleConnection = async () => {
     };
 
     guacClient.value.connect('');
-  } catch (error: any) {
-    statusMessage.value = `${t('remoteDesktopModal.errors.connectionFailed')}: ${error.response?.data?.message || error.message || String(error)}`;
+  } catch (error: unknown) {
+    const message = extractErrorMessage(error, String(error));
+    statusMessage.value = `${t('remoteDesktopModal.errors.connectionFailed')}: ${message}`;
     connectionStatus.value = 'error';
     disconnectGuacamole();
   }
@@ -216,7 +223,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
         currentClipboardText.substring(0, 50) + (currentClipboardText.length > 50 ? '...' : '')
       );
     }
-  } catch (err) {
+  } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
       // console.info('[RemoteDesktopModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
     } else {
@@ -325,13 +332,13 @@ const setupInputListeners = () => {
               '[RemoteDesktopModal] Received clipboard from RDP and wrote to host:',
               text.substring(0, 50) + (text.length > 50 ? '...' : '')
             );
-          } catch (err) {
+          } catch (err: unknown) {
             console.warn('[RemoteDesktopModal] Could not write to host clipboard:', err);
           }
         };
       }
     };
-  } catch (inputError) {
+  } catch (inputError: unknown) {
     console.error('Error setting up input listeners:', inputError); // 添加错误日志
     statusMessage.value = t('remoteDesktopModal.errors.inputError');
   }
@@ -347,7 +354,7 @@ const removeInputListeners = () => {
         displayEl.style.cursor = 'default';
         displayEl.removeEventListener('focus', trySyncClipboardOnDisplayFocus);
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn(
         'Could not reset cursor or remove listeners on display element during listener removal:',
         e

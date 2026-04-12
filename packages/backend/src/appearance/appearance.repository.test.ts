@@ -5,6 +5,8 @@ import { findThemeById } from '../terminal-themes/terminal-theme.repository';
 import { defaultUiTheme } from '../config/default-themes';
 import { getAppearanceSettings, updateAppearanceSettings } from './appearance.repository';
 
+type RunDbCall = [unknown, string, unknown[]];
+
 vi.mock('../database/connection', () => ({
   getDbInstance: vi.fn().mockResolvedValue({}),
   runDb: vi.fn(),
@@ -71,9 +73,9 @@ describe('appearance.repository', () => {
       } as any);
 
       expect(ok).toBe(true);
-      const calls = (runDb as any).mock.calls.map((c: any[]) => c[2]);
-      const keys = calls.map((args: any[]) => args[0]);
-      const values = calls.map((args: any[]) => args[1]);
+      const calls = vi.mocked(runDb).mock.calls.map((call) => (call as RunDbCall)[2]);
+      const keys = calls.map((args) => args[0]);
+      const values = calls.map((args) => args[1]);
       expect(keys).toContain('remote_html_presets_url');
       expect(values).toContain('https://github.com/u/r/tree/main/themes');
       expect(keys).toContain('terminalBackgroundEnabled');

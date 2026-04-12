@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'; // Added com
 import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store'; // 请确认此路径是否正确
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 interface Props {
   visible: boolean;
@@ -17,7 +18,7 @@ const connectionsStore = useConnectionsStore();
 // 注意: 此函数假设 'connectionsStore.connections' 是一个包含连接对象的数组，
 // 每个对象至少有 'id' 和 'name' 属性。请根据实际 store 结构调整。
 const getConnectionName = (connectionId: number): string => {
-  const connection = connectionsStore.connections?.find((c: any) => c.id === connectionId);
+  const connection = connectionsStore.connections?.find((c) => c.id === connectionId);
   if (connection && connection.name) {
     return connection.name;
   }
@@ -140,12 +141,12 @@ const fetchTransferTasks = async () => {
       }
       return task;
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to fetch transfer tasks:', error);
-    errorLoading.value =
-      error.response?.data?.message ||
-      error.message ||
-      t('transferProgressModal.error.unknown', '未知错误');
+    errorLoading.value = extractErrorMessage(
+      error,
+      t('transferProgressModal.error.unknown', '未知错误')
+    );
   } finally {
     isLoading.value = false;
   }
@@ -180,7 +181,7 @@ const formatDate = (dateInput: string | Date): string => {
       minute: '2-digit',
       second: '2-digit',
     });
-  } catch (e) {
+  } catch (_error: unknown) {
     return String(dateInput);
   }
 };
@@ -274,7 +275,7 @@ const handleCancelTask = async (taskId: string) => {
 
     // 立即刷新一次列表，或者等待下一次轮询
     fetchTransferTasks();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Failed to cancel task ${taskId}:`, error);
   }
 };

@@ -14,6 +14,14 @@ import type {
   TelegramConfig,
 } from '../types/notification.types';
 
+interface I18nOptions {
+  defaultValue?: string;
+}
+
+interface AxiosLikeError {
+  isAxiosError?: boolean;
+}
+
 // 使用 vi.hoisted 确保 mock 函数在提升时可用
 const {
   mockRepository,
@@ -40,7 +48,7 @@ const {
   mockAxios: vi.fn(),
   mockAxiosPost: vi.fn(),
   mockGetSetting: vi.fn(),
-  mockI18nT: vi.fn((key: string, options?: any) => options?.defaultValue || key),
+  mockI18nT: vi.fn((key: string, options?: I18nOptions) => options?.defaultValue || key),
   mockFormatInTimeZone: vi.fn(
     (date: Date, tz: string, format: string) => '2024-01-01T12:00:00+08:00'
   ),
@@ -58,7 +66,7 @@ vi.mock('nodemailer', () => ({
 vi.mock('axios', () => ({
   default: Object.assign(mockAxios, {
     post: mockAxiosPost,
-    isAxiosError: (error: any): boolean => error?.isAxiosError === true,
+    isAxiosError: (error: AxiosLikeError): boolean => error?.isAxiosError === true,
   }),
 }));
 
@@ -82,7 +90,7 @@ vi.mock('date-fns-tz', () => ({
 
 describe('NotificationService', () => {
   let service: NotificationService;
-  let mockTransporter: any;
+  let mockTransporter: { sendMail: ReturnType<typeof vi.fn> };
 
   const mockEmailConfig: EmailConfig = {
     to: 'test@example.com',

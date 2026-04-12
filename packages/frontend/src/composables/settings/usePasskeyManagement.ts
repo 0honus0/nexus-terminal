@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { startRegistration } from '@simplewebauthn/browser';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../../stores/auth.store';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 export function usePasskeyManagement() {
   const authStore = useAuthStore();
@@ -41,19 +42,20 @@ export function usePasskeyManagement() {
       passkeyMessage.value = t('settings.passkey.success.registered');
       passkeySuccess.value = true;
       await authStore.fetchPasskeys();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Passkey 注册失败:', error);
+      const maybeError = error as { name?: string; message?: string };
       if (
-        error.name === 'InvalidStateError' ||
-        error.message.includes('cancelled') ||
-        error.message.includes('excludeCredentials')
+        maybeError.name === 'InvalidStateError' ||
+        maybeError.message?.includes('cancelled') ||
+        maybeError.message?.includes('excludeCredentials')
       ) {
         passkeyMessage.value = t('settings.passkey.error.registrationCancelledOrExists'); // 您可能需要添加或修改此翻译
       } else {
-        passkeyMessage.value =
-          error.response?.data?.message ||
-          error.message ||
-          t('settings.passkey.error.registrationFailed');
+        passkeyMessage.value = extractErrorMessage(
+          error,
+          t('settings.passkey.error.registrationFailed')
+        );
       }
       passkeySuccess.value = false;
     } finally {
@@ -88,12 +90,12 @@ export function usePasskeyManagement() {
       passkeySuccess.value = true;
       await authStore.fetchPasskeys();
       cancelEditPasskeyName();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`更新 Passkey ${credentialID} 名称失败:`, error);
-      passkeyMessage.value =
-        error.response?.data?.message ||
-        error.message ||
-        t('settings.passkey.error.nameUpdateFailed', '更新 Passkey 名称失败。');
+      passkeyMessage.value = extractErrorMessage(
+        error,
+        t('settings.passkey.error.nameUpdateFailed', '更新 Passkey 名称失败。')
+      );
       passkeySuccess.value = false;
     } finally {
       passkeyEditLoadingStates[credentialID] = false;
@@ -127,12 +129,12 @@ export function usePasskeyManagement() {
       passkeyMessage.value = t('settings.passkey.success.deleted');
       passkeySuccess.value = true;
       // authStore.fetchPasskeys() is usually called within deletePasskey in the store
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`删除 Passkey ${credentialID} 失败:`, error);
-      passkeyDeleteError.value =
-        error.response?.data?.message ||
-        error.message ||
-        t('settings.passkey.error.deleteFailedGeneral');
+      passkeyDeleteError.value = extractErrorMessage(
+        error,
+        t('settings.passkey.error.deleteFailedGeneral')
+      );
       passkeySuccess.value = false;
     } finally {
       passkeyDeleteLoadingStates[credentialID] = false;
@@ -146,8 +148,8 @@ export function usePasskeyManagement() {
       return !Number.isNaN(date.getTime())
         ? date.toLocaleString()
         : t('statusMonitor.notAvailable', 'N/A');
-    } catch (e) {
-      console.error('Error formatting date:', e);
+    } catch (error: unknown) {
+      console.error('Error formatting date:', error);
       return t('statusMonitor.notAvailable', 'N/A');
     }
   };

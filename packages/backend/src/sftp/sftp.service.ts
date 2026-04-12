@@ -1281,7 +1281,7 @@ export class SftpService {
       `[SFTP ${sessionId}] Received copy request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`
     );
 
-    const copiedItemsDetails: any[] = []; // Store details of successfully copied items
+    const copiedItemsDetails: FileListItem[] = []; // Store details of successfully copied items
     let firstError: Error | null = null;
 
     try {
@@ -1390,7 +1390,7 @@ export class SftpService {
       `[SFTP ${sessionId}] Received move request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`
     );
 
-    const movedItemsDetails: any[] = [];
+    const movedItemsDetails: FileListItem[] = [];
     let firstError: Error | null = null;
 
     try {
@@ -1673,7 +1673,7 @@ export class SftpService {
   }
 
   // +++ 辅助方法 - 格式化 Stats 为 FileListItem +++
-  private formatStatsToFileListItem(itemPath: string, stats: Stats): any {
+  private formatStatsToFileListItem(itemPath: string, stats: Stats): FileListItem {
     return {
       filename: pathModule.basename(itemPath),
       longname: '', // stat doesn't provide longname, maybe generate a basic one?

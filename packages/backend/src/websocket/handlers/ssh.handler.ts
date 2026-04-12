@@ -27,6 +27,20 @@ interface SilentExecPayload {
   suppressTerminalPrompt?: boolean;
 }
 
+interface SshConnectPayload {
+  connectionId?: string | number;
+  cols?: number;
+  rows?: number;
+  term?: string;
+}
+
+type SshInputPayload = string | { data?: string };
+
+interface SshResizePayload {
+  cols?: number;
+  rows?: number;
+}
+
 const MAX_SILENT_OUTPUT_SIZE = 64 * 1024;
 const MAX_SILENT_LINE_BUFFER_SIZE = 16 * 1024;
 const TERMINAL_LINE_KILL_CONTROL = '\u0015';
@@ -491,7 +505,7 @@ export function handleSshExecSilent(
 export async function handleSshConnect(
   ws: AuthenticatedWebSocket,
   request: Request,
-  payload: any
+  payload: SshConnectPayload
 ): Promise<void> {
   const { sessionId } = ws;
   const existingState = sessionId ? clientStates.get(sessionId) : undefined;
@@ -516,13 +530,22 @@ export async function handleSshConnect(
   if (ws.readyState === WebSocket.OPEN)
     ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' }));
 
+  const dbConnectionIdAsNumber = parseInt(String(dbConnectionId), 10);
+  if (Number.isNaN(dbConnectionIdAsNumber)) {
+    console.error(`WebSocket: 无效的 dbConnectionId '${dbConnectionId}' (非数字)，无法建立连接。`);
+    if (ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' }));
+    ws.close(1008, 'Invalid Connection ID');
+    return;
+  }
+
   const clientIp = (request as any).clientIpAddress || 'unknown';
   let connInfo: SshService.DecryptedConnectionDetails | null = null;
 
   try {
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' }));
-    connInfo = await SshService.getConnectionDetails(dbConnectionId);
+    connInfo = await SshService.getConnectionDetails(dbConnectionIdAsNumber);
 
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
@@ -532,18 +555,6 @@ export async function handleSshConnect(
 
     const newSessionId = uuidv4();
     ws.sessionId = newSessionId; // Assign new sessionId to the WebSocket
-
-    const dbConnectionIdAsNumber = parseInt(dbConnectionId, 10);
-    if (Number.isNaN(dbConnectionIdAsNumber)) {
-      console.error(
-        `WebSocket: 无效的 dbConnectionId '${dbConnectionId}' (非数字)，无法创建会话 ${newSessionId}。`
-      );
-      if (ws.readyState === WebSocket.OPEN)
-        ws.send(JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' }));
-      sshClient.end();
-      ws.close(1008, 'Invalid Connection ID');
-      return;
-    }
 
     const newState: ClientState = {
       ws,
@@ -783,7 +794,7 @@ export async function handleSshConnect(
   }
 }
 
-export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
+export function handleSshInput(ws: AuthenticatedWebSocket, payload: SshInputPayload): void {
   const { sessionId } = ws;
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 
@@ -803,7 +814,7 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
   }
 }
 
-export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void {
+export function handleSshResize(ws: AuthenticatedWebSocket, payload: SshResizePayload): void {
   const { sessionId } = ws;
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 

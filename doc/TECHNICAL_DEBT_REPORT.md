@@ -17,7 +17,7 @@
 | E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                                 |
 | 运行时安全债务 | 🟡 5 条漏洞           | `critical 0 / high 0 / moderate 0 / low 5`                                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）               |
-| any 类型债务   | ⚠️ 175 处             | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
+| any 类型债务   | ⚠️ 116 处             | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
 | 日志治理债务   | ✅ 0 处 `console.log` | 已完成第三十六批并行收敛（含子代理协作）                                     |
 
 ### 与历史口径差异
@@ -193,6 +193,12 @@
 - any 类型治理（第十一批，并行子代理失败后主线程接管）：
   - `packages/frontend/src/components/NotificationSettingForm.vue`、`packages/frontend/src/views/ConnectionsView.vue`、`packages/frontend/src/stores/quickCommandTags.store.ts`、`packages/frontend/src/stores/proxies.store.ts`、`packages/frontend/src/stores/pathHistory.store.ts`、`packages/frontend/src/stores/commandHistory.store.ts`、`packages/frontend/src/components/VncModal.vue`、`packages/frontend/src/stores/session/actions/sshSuspendActions.ts`、`packages/frontend/src/composables/useAddConnectionForm.ts`、`packages/frontend/src/composables/settings/useSystemSettings.ts`、`packages/frontend/src/composables/settings/useIpBlacklist.ts` 完成 48 处 `: any/<any>/any[]` 收敛
   - `any` 存量由 223 降至 175（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十二批，并行子代理 + 主线程协作）：
+  - `packages/backend/src/connections/connection.repository.ts`、`packages/backend/src/websocket/handlers/sftp.handler.ts`、`packages/frontend/src/components/style-customizer/StyleCustomizerUiTab.vue`、`packages/frontend/src/composables/settings/useIpBlacklist.test.ts`、`packages/frontend/src/composables/settings/useTwoFactorAuth.ts`、`packages/frontend/src/composables/useDockerManager.test.ts`、`packages/frontend/src/composables/useSftpActions.test.ts`、`packages/frontend/src/composables/useSshTerminal.test.ts`、`packages/frontend/src/stores/fileEditor.store.ts` 完成 32 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 175 降至 143（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十三批，并行子代理 + 主线程接管）：
+  - `packages/backend/src/appearance/appearance.repository.test.ts`、`packages/backend/src/database/connection.ts`、`packages/backend/src/notifications/notification.service.test.ts`、`packages/backend/src/sftp/sftp.service.ts`、`packages/backend/src/websocket/handlers/ssh.handler.ts`、`packages/frontend/src/components/FileEditorOverlay.test.ts`、`packages/frontend/src/components/RemoteDesktopModal.vue`、`packages/frontend/src/components/TransferProgressModal.vue`、`packages/frontend/src/composables/settings/usePasskeyManagement.ts` 完成 27 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 143 降至 116（`backend/src + frontend/src + remote-gateway/src`）
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。

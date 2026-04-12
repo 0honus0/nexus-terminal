@@ -83,7 +83,7 @@ const mockAppearanceStore = {
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (key: string, args?: any) => {
+    t: (key: string, args?: { filename?: string }) => {
       if (key === 'editor.unsavedChanges.message' && args?.filename) {
         return `文件 "${args.filename}" 有未保存的更改。确定要丢弃这些更改吗？`;
       }
@@ -93,10 +93,10 @@ vi.mock('vue-i18n', () => ({
 }));
 
 vi.mock('pinia', async () => {
-  const actual = await vi.importActual<any>('pinia');
+  const actual = await vi.importActual<typeof import('pinia')>('pinia');
   return {
     ...actual,
-    storeToRefs: (store: any) => store,
+    storeToRefs: <T extends object>(store: T) => store,
   };
 });
 
