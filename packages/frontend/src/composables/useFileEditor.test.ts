@@ -72,7 +72,7 @@ describe('useFileEditor', () => {
     });
 
     it('应成功打开 UTF-8 文件', async () => {
-      const testContent = 'console.log("Hello World");';
+      const testContent = 'console.info("Hello World");';
       mockSftpReadFile.mockResolvedValue({
         content: testContent,
         encoding: 'utf8',

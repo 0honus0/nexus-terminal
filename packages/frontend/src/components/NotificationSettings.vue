@@ -196,7 +196,7 @@ const closeForm = () => {
 
 // 保存回调：表单组件内部已处理 store 更新，此处仅需关闭表单
 const handleSave = (savedSetting: NotificationSetting) => {
-  console.log('Setting saved:', savedSetting);
+  console.info('Setting saved:', savedSetting);
   closeForm();
 };
 </script>

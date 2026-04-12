@@ -338,7 +338,7 @@ export class SftpUploadManager {
       return;
     }
 
-    console.log(`[SFTP Upload ${uploadId}] Cancelling upload for ${uploadState.remotePath}`);
+    console.info(`[SFTP Upload ${uploadId}] Cancelling upload for ${uploadState.remotePath}`);
     this.cancelUploadInternal(uploadId, 'User cancelled');
     state.ws.send(JSON.stringify({ type: 'sftp:upload:cancelled', payload: { uploadId } }));
   }

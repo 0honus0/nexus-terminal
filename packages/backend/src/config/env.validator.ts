@@ -346,11 +346,11 @@ export function validateEnvironment(): EnvironmentConfig {
 export function printEnvironmentConfig(config: EnvironmentConfig): void {
   const sensitiveKeys: Set<keyof EnvironmentConfig> = new Set(['ENCRYPTION_KEY', 'SESSION_SECRET']);
 
-  console.log('[Env Validator] 环境变量配置:');
+  console.info('[Env Validator] 环境变量配置:');
   for (const [key, value] of Object.entries(config)) {
     const displayValue = sensitiveKeys.has(key as keyof EnvironmentConfig)
       ? '***REDACTED***'
       : value;
-    console.log(`  ${key}: ${displayValue}`);
+    console.info(`  ${key}: ${displayValue}`);
   }
 }

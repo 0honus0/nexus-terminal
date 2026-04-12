@@ -58,7 +58,7 @@ class EventService extends EventEmitter {
       timestamp: new Date(),
     };
     this.emit(eventType, fullPayload);
-    console.log(`Event emitted: ${eventType}`, fullPayload); // 日志记录，方便调试
+    console.info(`Event emitted: ${eventType}`, fullPayload); // 日志记录，方便调试
   }
 
   /**

@@ -1698,7 +1698,7 @@ watch(showExternalDropOverlay, (isVisible) => {
     // 蒙版隐藏时重置高度
     if (dropOverlayRef.value) {
       dropOverlayRef.value.style.height = ''; // 移除内联样式
-      // console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Overlay hidden. Resetting height.`);
+      // console.info(`[FileManager ${props.sessionId}-${props.instanceId}] Overlay hidden. Resetting height.`);
     }
   }
 });

@@ -12,7 +12,7 @@ try {
   dynamicSupportedLngs = entries
     .filter((dirent) => dirent.isFile() && dirent.name.endsWith('.json'))
     .map((dirent) => dirent.name.replace('.json', '')); // Extract lang code from filename
-  console.log('[i18next] 动态检测到的语言:', dynamicSupportedLngs);
+  console.info('[i18next] 动态检测到的语言:', dynamicSupportedLngs);
 } catch (err) {
   console.error('[i18next] 读取 locales 目录时出错:', err);
   dynamicSupportedLngs = ['en-US']; // Fallback
@@ -50,7 +50,7 @@ const i18nInitializationPromise = new Promise<void>((resolve, reject) => {
         i18nInitialized = false; // Mark as not initialized on error
         return reject(err); // Reject the promise on error
       }
-      console.log('[i18next] 初始化完成。已加载语言:', Object.keys(i18next.store.data || {})); // Safe access to store.data
+      console.info('[i18next] 初始化完成。已加载语言:', Object.keys(i18next.store.data || {})); // Safe access to store.data
       i18nInitialized = true; // Mark as initialized
       resolve(); // Resolve the promise on success
     }

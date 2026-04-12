@@ -51,7 +51,7 @@ onUnmounted(() => {
 onMounted(() => {
   // 监听 terminal:sendCommand 事件以关闭模态框
   onWorkspaceEvent('terminal:sendCommand', () => {
-    console.log('[QuickCommandsModal] Received terminal:sendCommand event, closing modal.');
+    console.info('[QuickCommandsModal] Received terminal:sendCommand event, closing modal.');
     closeModal();
   });
 });

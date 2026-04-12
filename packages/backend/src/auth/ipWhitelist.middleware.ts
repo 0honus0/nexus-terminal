@@ -31,7 +31,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
 
     // 检查是否是本地开发环境的 IP
     if (LOCAL_IPS.includes(requestIpString)) {
-      console.log(`允许来自本地开发环境 (${requestIpString}) 的访问。`);
+      console.info(`允许来自本地开发环境 (${requestIpString}) 的访问。`);
       return next();
     }
 

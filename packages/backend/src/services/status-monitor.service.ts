@@ -61,7 +61,7 @@ export class StatusMonitorService {
     try {
       const intervalSeconds = await settingsService.getStatusMonitorIntervalSeconds();
       intervalMs = intervalSeconds * 1000;
-      console.log(
+      console.info(
         `[StatusMonitor ${sessionId}] 使用配置的轮询间隔: ${intervalSeconds} 秒 (${intervalMs}ms)`
       );
     } catch (error) {

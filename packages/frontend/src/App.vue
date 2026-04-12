@@ -142,7 +142,7 @@ const handleAltKeyDown = async (event: KeyboardEvent) => {
   if (event.key === 'Alt' && !event.repeat) {
     isAltPressed.value = true;
     altShortcutKey.value = null;
-    // console.log('[App] Alt key pressed down.');
+    // console.info('[App] Alt key pressed down.');
   } else if (isAltPressed.value && !['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
     // 如果 Alt 正被按住，且按下了非修饰键 (移除 !shortcutTriggeredInKeyDown 检查)
     let key = event.key;

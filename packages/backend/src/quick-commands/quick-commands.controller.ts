@@ -239,7 +239,7 @@ export const assignTagToCommands = async (
 
   try {
     // 调用 Service 函数处理批量分配
-    console.log(
+    console.info(
       `[Controller] assignTagToCommands: Received commandIds: ${JSON.stringify(commandIds)}, tagId: ${tagId}`
     );
     await QuickCommandsService.assignTagToCommands(commandIds, tagId);

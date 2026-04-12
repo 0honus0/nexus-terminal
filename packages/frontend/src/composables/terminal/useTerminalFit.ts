@@ -31,7 +31,7 @@ export function useTerminalFit(
   const debouncedEmitResize = debounce((term: Terminal) => {
     if (term && isActive.value) {
       const dimensions = { cols: term.cols, rows: term.rows };
-      console.log(`[Terminal ${sessionId}] Debounced resize emit:`, dimensions);
+      console.info(`[Terminal ${sessionId}] Debounced resize emit:`, dimensions);
       emitWorkspaceEvent('terminal:resize', { sessionId, dims: dimensions });
       try {
         term.refresh(0, term.rows - 1);

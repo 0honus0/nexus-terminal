@@ -72,7 +72,7 @@ export class AuditLogRepository {
 
       if (total > MAX_LOG_ENTRIES) {
         const logsToDelete = total - MAX_LOG_ENTRIES;
-        console.log(
+        console.info(
           `[审计日志] 日志数量 (${total}) 超过限制 (${MAX_LOG_ENTRIES})。正在删除 ${logsToDelete} 条最旧的记录。`
         );
         await runDb(db, deleteSql, [logsToDelete]);
@@ -92,7 +92,7 @@ export class AuditLogRepository {
     try {
       const db = await getDbInstance();
       const result = await runDb(db, sql, []);
-      console.log(`[审计日志] 已删除所有审计日志，共 ${result.changes} 条记录。`);
+      console.info(`[审计日志] 已删除所有审计日志，共 ${result.changes} 条记录。`);
       return result.changes;
     } catch (err: unknown) {
       console.error(`[审计日志] 删除所有日志时出错: ${getErrorMessage(err)}`);

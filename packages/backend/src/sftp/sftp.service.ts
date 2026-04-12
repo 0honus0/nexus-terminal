@@ -1568,7 +1568,7 @@ export class SftpService {
     try {
       // 1. 尝试直接 stat 目录
       await this.getStats(sftp, normalizedPath);
-      // console.log(`[SFTP Util] Directory already exists: ${normalizedPath}`);
+      // console.info(`[SFTP Util] Directory already exists: ${normalizedPath}`);
       // 目录已存在
     } catch (statError: unknown) {
       const statErrCode = (statError as any)?.code;

@@ -244,7 +244,7 @@ onMounted(async () => {
 
   if (editorRef.value) {
     const langExt = await getLanguageExtension(props.language);
-    console.log(
+    console.info(
       '[CodeMirrorMobileEditor DEBUG] onMounted - Initial language:',
       props.language,
       'Fetched langExt:',

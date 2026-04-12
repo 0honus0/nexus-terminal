@@ -25,7 +25,7 @@ export const ipBlacklistCheckMiddleware = async (
     // 首先检查 IP 黑名单功能是否启用
     const isEnabled = await settingsService.isIpBlacklistEnabled();
     if (!isEnabled) {
-      // console.log('[IP Blacklist Check] 功能已禁用，跳过检查。');
+      // console.info('[IP Blacklist Check] 功能已禁用，跳过检查。');
       return next(); // 功能禁用，直接放行
     }
 

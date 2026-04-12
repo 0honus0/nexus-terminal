@@ -155,11 +155,11 @@ export const assignTagToCommands = async (commandIds: number[], tagId: number): 
 
     // 调用 Repository 函数执行批量关联
     // 注意：这里需要导入 QuickCommandTagRepository
-    console.log(
+    console.info(
       `[Service] assignTagToCommands: Calling repo with commandIds: ${JSON.stringify(commandIds)}, tagId: ${tagId}`
     );
     await QuickCommandTagRepository.addTagToCommands(commandIds, tagId);
-    console.log(`[Service] assignTagToCommands: Repo call finished for tag ${tagId}.`); // +++ 修改日志 +++
+    console.info(`[Service] assignTagToCommands: Repo call finished for tag ${tagId}.`); // +++ 修改日志 +++
     // 可以在这里添加额外的业务逻辑，例如发送事件通知等
   } catch (error: unknown) {
     console.error(

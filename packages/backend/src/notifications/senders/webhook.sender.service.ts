@@ -38,7 +38,7 @@ class WebhookSenderService implements INotificationSender {
     }
 
     try {
-      console.log(`[WebhookSender] Sending ${requestMethod} notification to webhook URL: ${url}`);
+      console.info(`[WebhookSender] Sending ${requestMethod} notification to webhook URL: ${url}`);
 
       let requestData: any;
       const requestParams: any = undefined;
@@ -75,7 +75,7 @@ class WebhookSenderService implements INotificationSender {
       });
 
       if (response.status >= 200 && response.status < 300) {
-        console.log(
+        console.info(
           `[WebhookSender] Successfully sent notification to webhook. Status: ${response.status}`
         );
       } else {

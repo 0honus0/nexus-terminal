@@ -197,7 +197,7 @@ const handleSendToClick = () => {
 };
 
 const handleFilesSent = (payload: any) => {
-  console.log('Files to send (from FileManagerContextMenu):', payload);
+  console.info('Files to send (from FileManagerContextMenu):', payload);
   // 实际发送逻辑可以后续添加或委派
 };
 

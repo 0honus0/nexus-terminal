@@ -72,7 +72,7 @@ onMounted(initializeEditableState);
 watch(
   () => appearanceSettings.value.customUiTheme,
   () => {
-    console.log('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
+    console.info('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
     initializeEditableState();
   },
   { deep: true }

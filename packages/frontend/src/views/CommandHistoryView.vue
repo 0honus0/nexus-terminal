@@ -346,7 +346,7 @@ const showCommandHistoryContextMenu = (event: MouseEvent, entry: CommandHistoryE
         finalX !== commandHistoryContextMenuPosition.value.x ||
         finalY !== commandHistoryContextMenuPosition.value.y
       ) {
-        console.log(
+        console.info(
           `[CommandHistoryView] Adjusting command history context menu position: (${commandHistoryContextMenuPosition.value.x}, ${commandHistoryContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
         );
         commandHistoryContextMenuPosition.value = { x: finalX, y: finalY };

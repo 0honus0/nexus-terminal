@@ -77,9 +77,9 @@ class EmailSenderService implements INotificationSender {
         html: body,
       };
 
-      console.log(`[EmailSender] Sending email notification to: ${to} with subject: "${subject}"`);
+      console.info(`[EmailSender] Sending email notification to: ${to} with subject: "${subject}"`);
       const info = await transporter.sendMail(mailOptions);
-      console.log(`[EmailSender] Email sent successfully. Message ID: ${info.messageId}`);
+      console.info(`[EmailSender] Email sent successfully. Message ID: ${info.messageId}`);
     } catch (error: unknown) {
       console.error(`[EmailSender] Error sending email notification to ${to}:`, error);
 

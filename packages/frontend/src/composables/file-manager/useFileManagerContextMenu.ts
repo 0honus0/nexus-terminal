@@ -424,7 +424,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
         // Update the position state if adjustments were made
         if (finalX !== contextMenuPosition.value.x || finalY !== contextMenuPosition.value.y) {
-          console.log(
+          console.info(
             `[useFileManagerContextMenu] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
           );
           contextMenuPosition.value = { x: finalX, y: finalY };

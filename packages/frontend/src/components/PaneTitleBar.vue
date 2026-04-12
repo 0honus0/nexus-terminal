@@ -19,7 +19,7 @@ const layoutStore = useLayoutStore();
 
 // --- Methods ---
 const closePane = () => {
-  console.log(`[PaneTitleBar] Requesting to close pane: ${props.paneName}`);
+  console.info(`[PaneTitleBar] Requesting to close pane: ${props.paneName}`);
 };
 </script>
 

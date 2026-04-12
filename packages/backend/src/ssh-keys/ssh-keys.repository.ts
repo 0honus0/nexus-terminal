@@ -38,7 +38,7 @@ export const createSshKey = async (data: CreateSshKeyData): Promise<number> => {
         '创建 SSH 密钥后未能获取有效的 lastID'
       );
     }
-    console.log(`Repository: SSH 密钥创建成功，ID: ${result.lastID}`);
+    console.info(`Repository: SSH 密钥创建成功，ID: ${result.lastID}`);
     return result.lastID;
   } catch (err: unknown) {
     // Catch potential errors from helpers
@@ -127,7 +127,7 @@ export const updateSshKey = async (id: number, data: UpdateSshKeyData): Promise<
     ); // Type assertion for index signature
 
   if (Object.keys(fieldsToUpdate).length === 0) {
-    console.log(`Repository: 更新 SSH 密钥 ${id} 时没有提供有效字段。`);
+    console.info(`Repository: 更新 SSH 密钥 ${id} 时没有提供有效字段。`);
     return true; // 没有字段需要更新
   }
 

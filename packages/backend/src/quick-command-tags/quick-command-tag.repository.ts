@@ -190,7 +190,7 @@ export const addTagToCommands = async (commandIds: number[], tagId: number): Pro
     }
     await stmt.finalize(); // 完成批量插入
     await runDb(db, 'COMMIT');
-    console.log(
+    console.info(
       `[Repo] addTagToCommands: 成功将标签 ${tagId} 关联到 ${commandIds.length} 个指令。`
     );
   } catch (err: unknown) {

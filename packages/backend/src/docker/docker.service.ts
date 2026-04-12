@@ -206,7 +206,7 @@ export class DockerService {
         throw new Error(`Unsupported Docker command: ${command}`);
     }
 
-    console.log(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log
+    console.info(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log
     try {
       const { stdout, stderr } = await execAsync(dockerCliCommand, {
         timeout: this.commandTimeout,
@@ -220,7 +220,7 @@ export class DockerService {
           throw new Error(`Docker command failed: ${stderr}`);
         }
       }
-      console.log(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, {
+      console.info(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, {
         stdout,
       }); // Use console.log
     } catch (error: unknown) {

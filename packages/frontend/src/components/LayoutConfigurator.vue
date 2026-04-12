@@ -169,7 +169,7 @@ const isModified = computed(() => {
   // Return true if either layout or sidebars differ from the original
   const modified =
     currentLayoutJson !== originalLayoutJson || currentSidebarJson !== originalSidebarJson;
-  // console.log(`[LayoutConfigurator] isModified computed: ${modified}`); // Debug log
+  // console.info(`[LayoutConfigurator] isModified computed: ${modified}`); // Debug log
   return modified;
 });
 

@@ -11,13 +11,13 @@
 
 ### 当前债务总览
 
-| 类别           | 当前状态               | 说明                                                           |
-| -------------- | ---------------------- | -------------------------------------------------------------- |
-| 代码标记债务   | ✅ 0 条                | 已清零（2026-04-11 第二轮修复）                                |
-| E2E 测试债务   | ✅ 0 条 `test.skip`    | 已完成回补清零（2026-04-12）                                   |
-| 运行时安全债务 | 🟡 5 条漏洞            | `critical 0 / high 0 / moderate 0 / low 5`                     |
-| 类型安全债务   | 🟡 3 条 `@ts-*` 忽略   | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
-| 日志治理债务   | ⚠️ 47 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
+| 类别           | 当前状态              | 说明                                                           |
+| -------------- | --------------------- | -------------------------------------------------------------- |
+| 代码标记债务   | ✅ 0 条               | 已清零（2026-04-11 第二轮修复）                                |
+| E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                   |
+| 运行时安全债务 | 🟡 5 条漏洞           | `critical 0 / high 0 / moderate 0 / low 5`                     |
+| 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
+| 日志治理债务   | ✅ 0 处 `console.log` | 已完成第三十六批并行收敛（含子代理协作）                       |
 
 ### 与历史口径差异
 
@@ -155,6 +155,10 @@
 - 日志治理（第三十五批，并行降级执行）：
   - `packages/frontend/src/stores/layout.store.ts`、`packages/frontend/src/composables/useSidebarResize.ts`、`packages/frontend/src/composables/terminal/useNL2CMD.ts`、`packages/frontend/src/components/LayoutNodeEditor.vue`、`packages/frontend/src/components/ConnectionList.vue` 内信息级输出统一由 `console.log` 调整为 `console.info`
   - `console.log` 存量由 57 降至 47（`backend/src + frontend/src + remote-gateway/src`）
+- 日志治理（第三十六批，并行降级执行，含子代理协作）：
+  - 后端/前端共 38 个文件完成 `console.log` 到 `console.info` 的机械替换（含注释中的调试文本替换）
+  - 覆盖模块：`audit`、`quick-commands`、`status-monitor`、`notifications sender`、`docker`、`i18n`、`ssh-keys`、`layout/session`、`file-manager`、`terminal`、`command-history` 等
+  - `console.log` 存量由 47 降至 0（`backend/src + frontend/src + remote-gateway/src`）
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。

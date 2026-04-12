@@ -62,9 +62,9 @@ export const settingsService = {
    * @returns 返回包含所有设置项的键值对记录
    */
   async getAllSettings(): Promise<Record<string, string>> {
-    // console.log('[Service] Calling repository.getAllSettings...');
+    // console.info('[Service] Calling repository.getAllSettings...');
     const settingsArray = await settingsRepository.getAllSettings();
-    // console.log('[Service] Got settings array from repository:', JSON.stringify(settingsArray));
+    // console.info('[Service] Got settings array from repository:', JSON.stringify(settingsArray));
     const settingsRecord: Record<string, string> = {};
     settingsArray.forEach((setting) => {
       settingsRecord[setting.key] = setting.value;

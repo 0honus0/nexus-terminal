@@ -500,7 +500,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
   async function setTerminalCustomHTML(html: string | null) {
     try {
       await updateAppearanceSettings({ terminal_custom_html: html });
-      // console.log('[AppearanceStore] Terminal custom HTML updated successfully.');
+      // console.info('[AppearanceStore] Terminal custom HTML updated successfully.');
       // 可以在此调用 uiNotifications.store 来显示成功消息
     } catch (err: any) {
       console.error('设置终端自定义 HTML 失败:', err);

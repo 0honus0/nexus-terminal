@@ -41,7 +41,7 @@ const offWorkspaceEvent = useWorkspaceEventOff(); // 获取取消订阅函数
 
 // 定义事件处理函数
 const handleSuspendedSessionActionCompleted = () => {
-  console.log(
+  console.info(
     '[SuspendedSshSessionsModal] Received suspendedSession:actionCompleted event, closing modal.'
   );
   closeModal();
