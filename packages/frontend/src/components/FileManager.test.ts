@@ -99,7 +99,7 @@ const {
     mockPathHistoryState: {
       historyList: [],
       selectedIndex: mockRef(-1),
-      filteredHistory: mockRef<any[]>([]),
+      filteredHistory: mockRef<unknown[]>([]),
       fetchHistory: vi.fn(),
       setSearchTerm: vi.fn(),
       resetSelection: vi.fn(),
@@ -112,16 +112,16 @@ const {
       showNotification: vi.fn(),
     },
     mockUploaderState: {
-      uploads: mockRef<any[]>([]),
+      uploads: mockRef<unknown[]>([]),
       startFileUpload: vi.fn(),
       cancelUpload: vi.fn(),
     },
     mockContextMenuState: {
       contextMenuVisible: mockRef(false),
       contextMenuPosition: mockRef({ x: 0, y: 0 }),
-      contextMenuItems: mockRef<any[]>([]),
-      contextMenuRef: mockRef<any>(null),
-      contextTargetItem: mockRef<any>(null),
+      contextMenuItems: mockRef<unknown[]>([]),
+      contextMenuRef: mockRef<unknown>(null),
+      contextTargetItem: mockRef<unknown>(null),
       showContextMenu: vi.fn(),
       hideContextMenu: vi.fn(),
       handleContextMenuAction: vi.fn(),
@@ -219,7 +219,7 @@ vi.mock('pinia', async (importOriginal) => {
   const { computed: vueComputed } = await import('vue');
   return {
     ...actual,
-    storeToRefs: (store: any) => {
+    storeToRefs: (store: Record<string, unknown>) => {
       // 根据 store 类型返回适当的 refs
       if (store.showPopupFileEditorBoolean !== undefined) {
         // settings store

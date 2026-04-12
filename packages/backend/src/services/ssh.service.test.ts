@@ -344,7 +344,10 @@ describe('SSH Service', () => {
       };
 
       let capturedCallback: ((responses: string[]) => void) | null = null;
-      mockClient.connect.mockImplementation(function (this: MockSshClient, config: any) {
+      mockClient.connect.mockImplementation(function (
+        this: MockSshClient,
+        config: { keyboardInteractive?: (...args: unknown[]) => void }
+      ) {
         // 保存回调函数以便后续测试
         if (config.keyboardInteractive) {
           setTimeout(() => {
@@ -412,7 +415,7 @@ describe('SSH Service', () => {
 
       const mockStream = new EventEmitter();
       let clientCount = 0;
-      let finalClientKeyboardInteractive: any = null;
+      let finalClientKeyboardInteractive: unknown = null;
 
       (Client as any).mockImplementation(() => {
         clientCount++;
@@ -428,7 +431,10 @@ describe('SSH Service', () => {
           });
         } else {
           // 最终目标客户端 - 检查 keyboardInteractive 配置
-          client.connect.mockImplementation(function (this: MockSshClient, config: any) {
+          client.connect.mockImplementation(function (
+            this: MockSshClient,
+            config: { keyboardInteractive?: (...args: unknown[]) => void }
+          ) {
             finalClientKeyboardInteractive = config.keyboardInteractive;
             setTimeout(() => this.emit('ready'), 10);
           });
@@ -773,9 +779,11 @@ describe('SSH Service', () => {
   describe('openShell', () => {
     it('应成功打开 Shell 通道', async () => {
       const mockStream = new EventEmitter();
-      mockClient.shell.mockImplementation((callback: any) => {
-        callback(null, mockStream);
-      });
+      mockClient.shell.mockImplementation(
+        (callback: (err: Error | null, stream?: EventEmitter) => void) => {
+          callback(null, mockStream);
+        }
+      );
 
       const result = await openShell(mockClient as any);
 
@@ -784,9 +792,11 @@ describe('SSH Service', () => {
     });
 
     it('打开 Shell 失败时应抛出错误', async () => {
-      mockClient.shell.mockImplementation((callback: any) => {
-        callback(new Error('Shell error'));
-      });
+      mockClient.shell.mockImplementation(
+        (callback: (err: Error | null, stream?: EventEmitter) => void) => {
+          callback(new Error('Shell error'));
+        }
+      );
 
       await expect(openShell(mockClient as any)).rejects.toThrow('打开 Shell 失败: Shell error');
     });
