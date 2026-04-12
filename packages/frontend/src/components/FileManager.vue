@@ -94,7 +94,7 @@ const initializeSftpManager = (sessionId: string, instanceId: string) => {
     // throw new Error(`[FileManager ${sessionId}-${instanceId}] Failed to get or create SFTP manager instance.`);
   } else {
     currentSftpManager.value = manager;
-    console.log(`[FileManager ${sessionId}-${instanceId}] SFTP Manager initialized/retrieved.`);
+    console.info(`[FileManager ${sessionId}-${instanceId}] SFTP Manager initialized/retrieved.`);
   }
 };
 
@@ -601,7 +601,7 @@ const handleItemAction = (item: FileListItem) => {
     if (currentSftpManager.value.isLoading.value) {
       return;
     }
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Symbolic link clicked: ${itemPath}. Attempting to resolve with sftp:realpath...`
     );
 
@@ -775,7 +775,7 @@ const toggleMultiSelectMode = () => {
   if (!isMultiSelectMode.value) {
     clearSelection(); // 退出多选模式时清空选择
   }
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Multi-select mode: ${isMultiSelectMode.value ? 'enabled' : 'disabled'}`
   );
 };
@@ -962,7 +962,7 @@ const handleCopy = () => {
   );
   clipboardState.value = { hasContent: true, operation: 'copy' };
   clipboardSourceBaseDir.value = manager.currentPath.value; // 记录源目录
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Copied to clipboard:`,
     clipboardSourcePaths.value
   );
@@ -977,7 +977,7 @@ const handleCut = () => {
   );
   clipboardState.value = { hasContent: true, operation: 'cut' };
   clipboardSourceBaseDir.value = manager.currentPath.value; // 记录源目录
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Cut to clipboard:`,
     clipboardSourcePaths.value
   );
@@ -997,7 +997,7 @@ const handlePaste = () => {
   const sources = clipboardSourcePaths.value;
   const sourceBaseDir = clipboardSourceBaseDir.value; // 获取源目录
 
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Pasting items. Operation: ${operation}, Sources: ${sources.join(', ')}, Destination: ${destinationDir}`
   );
 
@@ -1068,7 +1068,7 @@ const triggerDownload = (items: FileListItem[]) => {
       item.filename
     );
     const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&remotePath=${encodeURIComponent(downloadPath)}`;
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`
     );
 
@@ -1123,7 +1123,7 @@ const triggerDownloadDirectory = (item: FileListItem) => {
   // 定义新的后端 API 端点 URL (稍后实现)
   const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&remotePath=${encodeURIComponent(directoryPath)}`;
 
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Attempting directory download for ${item.filename}: ${downloadUrl}`
   );
 
@@ -1153,7 +1153,7 @@ const triggerDownloadDirectory = (item: FileListItem) => {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(link.href); // 释放对象 URL
-        console.log(
+        console.info(
           `[FileManager ${props.sessionId}-${props.instanceId}] Directory download triggered for: ${filename}`
         );
       } else {
@@ -1194,7 +1194,7 @@ const handleCompress = (items: FileListItem[], format: CompressFormat) => {
     uiNotificationsStore.showError(t('fileManager.errors.sftpManagerUnavailable'));
     return;
   }
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Requesting compression for ${items.length} items, format: ${format}`
   );
   // 调用 SFTP 管理器上的新方法 (将在 useSftpActions.ts 中实现)
@@ -1209,7 +1209,7 @@ const handleDecompress = (item: FileListItem) => {
     uiNotificationsStore.showError(t('fileManager.errors.sftpManagerUnavailable'));
     return;
   }
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Requesting decompression for item: ${item.filename}`
   );
   // 调用 SFTP 管理器上的新方法 (将在 useSftpActions.ts 中实现)
@@ -1226,7 +1226,7 @@ const handleCopyPath = async (item: FileListItem) => {
   try {
     await navigator.clipboard.writeText(fullPath);
     // 可选：显示成功通知
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Copied path to clipboard: ${fullPath}`
     );
     uiNotificationsStore.showSuccess(
@@ -1378,7 +1378,7 @@ const saveLayoutSettings = () => {
   // 确保 colWidths.value 是普通对象，而不是 Proxy
   const widthsToSave = JSON.parse(JSON.stringify(colWidths.value));
   // +++ 日志：记录保存的值 +++
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Triggering saveLayoutSettings: multiplier=${rowSizeMultiplier.value}, widths=${JSON.stringify(widthsToSave)}`
   );
   settingsStore.updateFileManagerLayoutSettings(rowSizeMultiplier.value, widthsToSave);
@@ -1398,7 +1398,7 @@ watchEffect(() => {
   const storeWidths = fileManagerColWidthsObject.value;
 
   // +++ 日志：记录从 store 获取的值 +++
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] watchEffect triggered. Store values: multiplier=${storeMultiplier}, widths=${JSON.stringify(storeWidths)}`
   );
 
@@ -1410,17 +1410,17 @@ watchEffect(() => {
     const storeWidthsString = JSON.stringify(storeWidths);
 
     // +++ 日志：记录当前值和 store 值，以及是否更新 +++
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Comparing values: Current Multiplier=${currentMultiplier}, Store Multiplier=${storeMultiplier}. Update needed: ${storeMultiplier !== currentMultiplier}`
     );
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Comparing values: Current Widths=${currentWidthsString}, Store Widths=${storeWidthsString}. Update needed: ${storeWidthsString !== currentWidthsString}`
     );
 
     // 仅在值不同时更新，避免不必要的重渲染和潜在的循环更新
     if (storeMultiplier !== currentMultiplier) {
       rowSizeMultiplier.value = storeMultiplier;
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Row size multiplier updated from store: ${storeMultiplier}`
       );
     }
@@ -1438,13 +1438,13 @@ watchEffect(() => {
         }
       }
       colWidths.value = updatedWidths; // 赋值更新后的对象
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Column widths updated from store: ${JSON.stringify(updatedWidths)}`
       );
     }
   } else {
     // +++ 日志：记录等待 store 加载 +++
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Waiting for valid layout settings from store... Store Multiplier=${storeMultiplier}, Store Widths Keys=${Object.keys(storeWidths).length}`
     );
   }
@@ -1475,7 +1475,7 @@ watchEffect((onCleanup) => {
     !currentSftpManager.value.isLoading.value &&
     !currentSftpManager.value.initialLoadDone.value
   ) {
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Connection ready for manager, fetching initial path for the first time (isLoading: ${currentSftpManager.value.isLoading.value}, initialLoadDone: ${currentSftpManager.value.initialLoadDone.value}).`
     );
     // isFetchingInitialPath 状态移除, 使用 isLoading 状态
@@ -1493,7 +1493,7 @@ watchEffect((onCleanup) => {
           // 修改：检查 currentSftpManager 是否存在
           if (!currentSftpManager.value) return;
           const absolutePath = payload.absolutePath;
-          console.log(
+          console.info(
             `[FileManager ${props.sessionId}-${props.instanceId}] Received initial absolute path for '.': ${absolutePath}. Loading directory.`
           );
           // 修改：添加 ?. 访问 loadDirectory 和 setInitialLoadDone
@@ -1521,7 +1521,7 @@ watchEffect((onCleanup) => {
       }
     );
 
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Sending initial sftp:realpath request (ID: ${requestId}) for path: ${requestedPath}`
     );
     wsSend({ type: 'sftp:realpath', requestId: requestId, payload: { path: requestedPath } });
@@ -1543,7 +1543,7 @@ watchEffect((onCleanup) => {
     // 连接恢复，并且之前已经加载过 (initialLoadDone is true)
     // 显式地重新加载管理器中记录的当前路径，以防内部状态被重置
     const pathBeforeReconnect = currentSftpManager.value.currentPath.value;
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Connection re-established. Explicitly reloading previous path: ${pathBeforeReconnect}`
     );
     // 检查是否正在加载，避免并发请求
@@ -1552,7 +1552,7 @@ watchEffect((onCleanup) => {
       // 主要目的是确保视图与管理器状态同步到重连前的路径
       currentSftpManager.value.loadDirectory(pathBeforeReconnect, false);
     } else {
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] SFTP manager is currently loading, skipping explicit path reload on reconnect.`
       );
     }
@@ -1561,7 +1561,7 @@ watchEffect((onCleanup) => {
     // 检查 manager 的 initialLoadDone
     // 连接丢失，不需要重置 initialLoadDone，因为我们希望在重连时恢复状态
     // 只需要清理监听器
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Connection lost (was previously loaded).`
     );
     // clearSelection(); // 可以在连接丢失时不清空选择，看产品需求
@@ -1581,7 +1581,7 @@ watch(
     // 检查是否是当前活动会话的此实例（如果需要区分实例）
     // 目前假设搜索触发器对会话内的所有 FileManager 生效
     if (newValue > (oldValue ?? 0) && props.sessionId === sessionStore.activeSessionId) {
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Received search activation trigger for active session.`
       );
       activateSearch(); // 调用组件内部的激活搜索方法
@@ -1620,13 +1620,13 @@ onMounted(() => {
   // 注册搜索框聚焦动作
   const focusSearchActionWrapper = async (): Promise<boolean | undefined> => {
     if (props.sessionId === sessionStore.activeSessionId) {
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Executing search focus action for active session.`
       );
       closePathHistory(); // Close path history if open
       return focusSearchInput();
     } else {
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Search focus action skipped for inactive session.`
       );
       return undefined;
@@ -1640,14 +1640,14 @@ onMounted(() => {
   // 注册路径编辑框聚焦动作
   const focusPathActionWrapper = async (): Promise<boolean | undefined> => {
     if (props.sessionId === sessionStore.activeSessionId) {
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Executing path edit focus action for active session.`
       );
       // startPathEdit 本身不是 async，但注册时需要包装成 async 以匹配类型
       startPathEdit(); // 调用暴露的方法
       return true;
     } else {
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] Path edit focus action skipped for inactive session.`
       );
       return undefined;
@@ -1664,7 +1664,7 @@ onBeforeUnmount(() => {
   // 注销搜索框动作
   if (unregisterSearchFocusAction) {
     unregisterSearchFocusAction();
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Unregistered search focus action on unmount.`
     );
   }
@@ -1673,7 +1673,7 @@ onBeforeUnmount(() => {
   // 注销路径编辑框动作
   if (unregisterPathFocusAction) {
     unregisterPathFocusAction();
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Unregistered path edit focus action on unmount.`
     );
   }
@@ -1749,7 +1749,7 @@ const stopResize = () => {
     document.body.style.userSelect = '';
     // +++ 在调整结束后保存列宽 +++
     // +++ 日志：记录触发保存 +++
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] stopResize triggered saveLayoutSettings.`
     );
     saveLayoutSettings();
@@ -1805,7 +1805,7 @@ const navigateToPath = async (path: string) => {
     return;
   }
 
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] 尝试导航到新路径: ${trimmedPath}`
   );
   try {
@@ -1977,7 +1977,7 @@ const sendCdCommandToTerminal = () => {
   // 添加换行符以模拟按下 Enter 键执行命令
   const command = `cd ${escapedPath}\n`;
 
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Sending command to terminal: ${command.trim()}`
   );
   try {
@@ -2158,7 +2158,7 @@ const openPopupEditor = () => {
     // 可以添加 UI 通知
     return;
   }
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Triggering popup editor without specific file.`
   );
   fileEditorStore.triggerPopup('', props.sessionId); // 修复：使用空字符串触发空编辑器
@@ -2174,7 +2174,7 @@ const handleWheel = (event: WheelEvent) => {
     rowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2)); // 保留两位小数避免浮点数问题
     if (rowSizeMultiplier.value !== oldMultiplier) {
       // +++ 日志：记录触发保存 +++
-      console.log(
+      console.info(
         `[FileManager ${props.sessionId}-${props.instanceId}] handleWheel triggered saveLayoutSettings.`
       );
       saveLayoutSettings();
@@ -2186,7 +2186,7 @@ const handleWheel = (event: WheelEvent) => {
 const focusSearchInput = (): boolean => {
   // 检查当前会话是否激活，防止后台实例响应
   if (props.sessionId !== sessionStore.activeSessionId) {
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Ignoring focus request for inactive session.`
     );
     return false;
@@ -2198,7 +2198,7 @@ const focusSearchInput = (): boolean => {
     nextTick(() => {
       if (searchInputRef.value) {
         searchInputRef.value.focus();
-        console.log(
+        console.info(
           `[FileManager ${props.sessionId}-${props.instanceId}] Search activated and input focused.`
         );
       } else {
@@ -2210,7 +2210,7 @@ const focusSearchInput = (): boolean => {
     return true; // 假设会成功
   } else if (searchInputRef.value) {
     searchInputRef.value.focus();
-    console.log(
+    console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Search already active, input focused.`
     );
     return true;
@@ -2229,7 +2229,7 @@ const handleOpenEditorClick = () => {
     uiNotificationsStore.showError(t('fileManager.errors.missingSessionId'));
     return;
   }
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Triggering popup editor directly.`
   );
   fileEditorStore.triggerPopup('', props.sessionId); // 修复：传递空字符串而不是 null
@@ -2238,7 +2238,7 @@ const handleOpenEditorClick = () => {
 // +++ Favorite Paths Modal Logic +++
 const toggleFavoritePathsModal = () => {
   showFavoritePathsModal.value = !showFavoritePathsModal.value;
-  console.log(
+  console.info(
     `[FileManager ${props.sessionId}-${props.instanceId}] Toggled FavoritePathsModal. Visible: ${showFavoritePathsModal.value}`
   );
 };
