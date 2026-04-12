@@ -204,7 +204,7 @@ export class SshSuspendService extends EventEmitter {
     channel.on('data', (data: Buffer) => {
       const currentDetails = userSessions.get(suspendSessionId);
       if (currentDetails?.backendSshStatus === 'hanging') {
-        // console.log(`[SshSuspendService DEBUG] channel.on('data') for suspendSessionId=${suspendSessionId}: Writing to log ${logIdentifier}`);
+        // console.info(`[SshSuspendService DEBUG] channel.on('data') for suspendSessionId=${suspendSessionId}: Writing to log ${logIdentifier}`);
         this.logStorageService.writeToLog(logIdentifier, data.toString('utf-8')).catch((err) => {
           console.error(
             `[SshSuspendService ERROR] channel.on('data') for suspendSessionId=${suspendSessionId}, log=${logIdentifier}: Failed to write to log:`,
@@ -212,7 +212,7 @@ export class SshSuspendService extends EventEmitter {
           );
         });
       } else {
-        // console.log(`[SshSuspendService DEBUG] channel.on('data') for suspendSessionId=${suspendSessionId}: Backend status is ${currentDetails?.backendSshStatus}, not writing to log.`);
+        // console.info(`[SshSuspendService DEBUG] channel.on('data') for suspendSessionId=${suspendSessionId}: Backend status is ${currentDetails?.backendSshStatus}, not writing to log.`);
       }
     });
 
@@ -367,7 +367,7 @@ export class SshSuspendService extends EventEmitter {
     connectionName: string;
     originalConnectionId: string;
   } | null> {
-    // console.log(`[SshSuspendService][用户: ${userId}] resumeSession 调用，suspendSessionId: ${suspendSessionId}`);
+    // console.info(`[SshSuspendService][用户: ${userId}] resumeSession 调用，suspendSessionId: ${suspendSessionId}`);
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
@@ -375,7 +375,7 @@ export class SshSuspendService extends EventEmitter {
       // console.warn(`[SshSuspendService][用户: ${userId}] resumeSession: 未找到挂起的会话 ${suspendSessionId}。`);
       return null;
     }
-    // console.log(`[SshSuspendService][用户: ${userId}] resumeSession: 找到会话 ${suspendSessionId}，状态: ${session.backendSshStatus}`);
+    // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 找到会话 ${suspendSessionId}，状态: ${session.backendSshStatus}`);
 
     if (session.backendSshStatus !== 'hanging') {
       // console.warn(`[SshSuspendService][用户: ${userId}] resumeSession: 会话 ${suspendSessionId} 状态不为 'hanging' (当前: ${session.backendSshStatus})，无法恢复。`);
@@ -384,7 +384,7 @@ export class SshSuspendService extends EventEmitter {
 
     // 停止监听旧通道事件
     this.removeChannelListeners(session.channel, session.sshClient);
-    // console.log(`[SshSuspendService][用户: ${userId}] resumeSession: 已移除会话 ${suspendSessionId} 的旧监听器。`);
+    // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 已移除会话 ${suspendSessionId} 的旧监听器。`);
 
     let logData = '';
     try {
@@ -403,17 +403,17 @@ export class SshSuspendService extends EventEmitter {
     const { sshClient, channel, connectionName, connectionId: originalConnectionId } = session;
 
     userSessions.delete(suspendSessionId);
-    // console.log(`[SshSuspendService][用户: ${userId}] resumeSession: 已从内存中删除挂起会话 ${suspendSessionId} 的记录。`);
+    // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 已从内存中删除挂起会话 ${suspendSessionId} 的记录。`);
     try {
       // 删除以 session.tempLogPath (logIdentifier) 命名的日志文件
       await this.logStorageService.deleteLog(session.tempLogPath);
-      // console.log(`[SshSuspendService][用户: ${userId}] resumeSession: 已删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath})。`);
+      // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 已删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath})。`);
     } catch (error) {
       // console.warn(`[SshSuspendService][用户: ${userId}] resumeSession: 删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath}) 失败:`, error);
       // 日志删除失败不应阻止恢复流程继续
     }
 
-    // console.log(`[SshSuspendService][用户: ${userId}] resumeSession: 挂起会话 ${suspendSessionId} 准备返回恢复数据。`);
+    // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 挂起会话 ${suspendSessionId} 准备返回恢复数据。`);
     return {
       sshClient,
       channel,

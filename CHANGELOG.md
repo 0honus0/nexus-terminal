@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **测试残留清理**：移除调试测试文件 `packages/backend/src/connections/crypto-mock-debug.test.ts`
   - **质量门禁增强**：`.lintstagedrc.js` 对 `*.vue` 增加 `eslint --fix`；`audit.yml` 新增 high/critical 直连依赖摘要与 high 告警
   - **标记债务清零**：移除 E2E 剩余 TODO 标记，当前 `packages/**` 下 `TODO/FIXME/HACK` 为 0
-  - **日志治理（最新）**：当前仅保留最新批次记录。第二十六批（并行降级执行）在 `packages/frontend/src/stores/focusSwitcher.store.ts`、`packages/backend/src/websocket/connection.ts`、`packages/frontend/src/stores/session/actions/sshSuspendActions.ts` 完成 46 处信息级输出降级（`console.log` -> `console.info`），存量由 220 降至 174
+  - **日志治理（最新）**：当前仅保留最新批次记录。第二十七批（并行降级执行）在 `packages/frontend/src/composables/file-manager/useFileManagerDragAndDrop.ts`、`packages/backend/src/ssh-suspend/ssh-suspend.service.ts`、`packages/frontend/src/components/LayoutRenderer.vue` 完成 23 处信息级输出降级（`console.log` -> `console.info`），存量由 174 降至 151
   - **E2E 回补（最新）**：当前仅保留最新回补口径。最新为第二十八批（`remote-desktop.spec.ts` 7 个远程桌面用例），并已完成 E2E `test.skip` 清零（0）
 
 ### Security

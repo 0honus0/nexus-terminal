@@ -302,11 +302,11 @@ const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string
       JSON.parse(JSON.stringify(props.layoutNode))
     );
   }
-  // console.log(`[LayoutRenderer DEBUG] handlePaneResize triggered for node ID: ${props.layoutNode?.id}, direction: ${props.layoutNode?.direction ?? 'N/A'}`); // Use optional chaining for safety
-  // console.log('[LayoutRenderer DEBUG] Splitpanes resized event object:', eventData);
+  // console.info(`[LayoutRenderer DEBUG] handlePaneResize triggered for node ID: ${props.layoutNode?.id}, direction: ${props.layoutNode?.direction ?? 'N/A'}`); // Use optional chaining for safety
+  // console.info('[LayoutRenderer DEBUG] Splitpanes resized event object:', eventData);
   const paneSizes = eventData.panes; // 从事件对象中提取 panes 数组
 
-  // console.log('[LayoutRenderer DEBUG] Extracted paneSizes:', paneSizes); // 打印提取出的数组
+  // console.info('[LayoutRenderer DEBUG] Extracted paneSizes:', paneSizes); // 打印提取出的数组
 
   // +++ Use optional chaining for safety +++
   if (props.layoutNode?.type === 'container' && props.layoutNode?.children) {
@@ -325,11 +325,11 @@ const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string
     }));
 
     // +++ 调用 store action 前的日志 +++
-    // console.log(`[LayoutRenderer DEBUG] Calling layoutStore.updateNodeSizes for node ID: ${props.layoutNode.id} with sizes:`, JSON.parse(JSON.stringify(childrenSizes)));
+    // console.info(`[LayoutRenderer DEBUG] Calling layoutStore.updateNodeSizes for node ID: ${props.layoutNode.id} with sizes:`, JSON.parse(JSON.stringify(childrenSizes)));
     // 调用 store action 来更新节点大小
     layoutStore.updateNodeSizes(props.layoutNode.id, childrenSizes);
   } else {
-    // console.log(`[LayoutRenderer DEBUG] handlePaneResize ignored for node ID: ${props.layoutNode.id} (type: ${props.layoutNode.type})`);
+    // console.info(`[LayoutRenderer DEBUG] handlePaneResize ignored for node ID: ${props.layoutNode.id} (type: ${props.layoutNode.type})`);
   }
 };
 
@@ -431,7 +431,7 @@ onMounted(() => {
     handleRef: leftResizeHandleRef,
     side: 'left',
     onResizeEnd: (newWidth) => {
-      console.log(`Left sidebar resize ended. New width: ${newWidth}px`);
+      console.info(`Left sidebar resize ended. New width: ${newWidth}px`);
       // +++ Update specific pane width +++
       if (activeLeftSidebarPane.value) {
         settingsStore.updateSidebarPaneWidth(activeLeftSidebarPane.value, `${newWidth}px`);
@@ -445,7 +445,7 @@ onMounted(() => {
     handleRef: rightResizeHandleRef,
     side: 'right',
     onResizeEnd: (newWidth) => {
-      console.log(`Right sidebar resize ended. New width: ${newWidth}px`);
+      console.info(`Right sidebar resize ended. New width: ${newWidth}px`);
       // +++ Update specific pane width +++
       if (activeRightSidebarPane.value) {
         settingsStore.updateSidebarPaneWidth(activeRightSidebarPane.value, `${newWidth}px`);

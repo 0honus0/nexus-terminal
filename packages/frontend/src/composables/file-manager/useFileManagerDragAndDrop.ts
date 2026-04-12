@@ -53,10 +53,10 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     const isExternalFileDrag = event.dataTransfer?.types.includes('Files') ?? false;
     if (isConnected.value && isExternalFileDrag && !draggedItem.value) {
       // 确保不是内部拖拽触发
-      // console.log("[DragDrop] External file drag entered container.");
+      // console.info("[DragDrop] External file drag entered container.");
       showExternalDropOverlay.value = true; // 显示蒙版
     } else if (draggedItem.value) {
-      // console.log("[DragDrop] Internal item drag entered container area.");
+      // console.info("[DragDrop] Internal item drag entered container area.");
       // 内部拖拽进入容器但不在行上，可能需要处理效果，但不显示蒙版
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; // 默认在容器空白处无效
     }
@@ -145,16 +145,16 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     const container = event.currentTarget as HTMLElement;
     // 检查是否真的离开了容器边界
     if (!target || !container.contains(target)) {
-      // console.log("[DragDrop] Drag left container boundary.");
+      // console.info("[DragDrop] Drag left container boundary.");
       if (showExternalDropOverlay.value) {
-        // console.log("[DragDrop] Hiding external drop overlay due to leaving container.");
+        // console.info("[DragDrop] Hiding external drop overlay due to leaving container.");
         showExternalDropOverlay.value = false; // 隐藏蒙版
       }
       // isDraggingOver.value = false; // 不再使用
       dragOverTarget.value = null; // 清除行高亮
       stopAutoScroll(); // 停止滚动
     } else {
-      // console.log("[DragDrop] Drag left fired but still inside container.");
+      // console.info("[DragDrop] Drag left fired but still inside container.");
       // 鼠标仍在容器内（可能移到了子元素上），不隐藏蒙版或清除状态
       // 但如果是内部拖拽移到了非行区域，需要清除行高亮
       if (draggedItem.value) {
@@ -237,7 +237,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
   // 因为外部 drop 由蒙版处理，内部 drop 由行处理并阻止冒泡。
   // 保留一个空的或只做清理的函数以防万一。
   const handleDrop = (event: DragEvent) => {
-    // console.log("[DragDrop] Container drop event triggered (should be rare).");
+    // console.info("[DragDrop] Container drop event triggered (should be rare).");
     // 清理所有状态以防异常情况
     showExternalDropOverlay.value = false;
     draggedItem.value = null; // 清理内部拖拽状态
@@ -249,12 +249,12 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
   const handleDragStart = (item: FileListItem) => {
     if (item.filename === '..') return;
-    // console.log(`[DragDrop] Drag Start: ${item.filename}`);
+    // console.info(`[DragDrop] Drag Start: ${item.filename}`);
     draggedItem.value = item;
   };
 
   const handleDragEnd = () => {
-    // console.log(`[DragDrop] Drag End`);
+    // console.info(`[DragDrop] Drag End`);
     draggedItem.value = null;
     dragOverTarget.value = null;
     stopAutoScroll();
