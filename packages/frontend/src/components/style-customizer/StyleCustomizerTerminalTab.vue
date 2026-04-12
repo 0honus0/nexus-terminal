@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import type { ITheme } from 'xterm';
 import type { TerminalTheme } from '../../types/terminal-theme.types';
 import { defaultXtermTheme } from '../../features/appearance/config/default-themes';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 import TerminalPreview from './TerminalPreview.vue';
 
 const { t } = useI18n();
@@ -139,11 +140,13 @@ const handleSaveTerminalFont = async () => {
       type: 'success',
       message: t('styleCustomizer.terminalFontSaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存终端字体失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.terminalFontSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.terminalFontSaveFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -163,11 +166,13 @@ const handleSaveTerminalFontSize = async () => {
       type: 'success',
       message: t('styleCustomizer.terminalFontSizeSaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存终端字体大小失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.terminalFontSizeSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.terminalFontSizeSaveFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -181,11 +186,13 @@ const handleSaveTerminalTextStroke = async () => {
       type: 'success',
       message: t('styleCustomizer.textStrokeSettingsSaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存文字描边设置失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.textStrokeSettingsSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.textStrokeSettingsSaveFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -205,11 +212,13 @@ const handleSaveTerminalTextShadow = async () => {
       type: 'success',
       message: t('styleCustomizer.textShadowSettingsSaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存文字阴影设置失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.textShadowSettingsSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.textShadowSettingsSaveFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -238,11 +247,13 @@ const handleApplyTheme = async (theme: TerminalTheme) => {
       type: 'success',
       message: t('styleCustomizer.setActiveThemeSuccess', { themeName: theme.name }),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('应用终端主题失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.setActiveThemeFailed', { message: error.message }),
+      message: t('styleCustomizer.setActiveThemeFailed', {
+        message: extractErrorMessage(error, ''),
+      }),
     });
   }
 };
@@ -320,9 +331,9 @@ const handleEditTheme = async (theme: TerminalTheme) => {
       editableTerminalThemeString.value = '';
     }
     emit('update:isEditingTheme', true);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('编辑主题失败 (加载数据时):', error);
-    saveThemeError.value = error.message || t('styleCustomizer.errorEditThemeFailed');
+    saveThemeError.value = extractErrorMessage(error, t('styleCustomizer.errorEditThemeFailed'));
     emit('update:isEditingTheme', false);
     emit('update:editingTheme', null);
   }
@@ -367,9 +378,9 @@ const handleSaveEditingTheme = async () => {
     emit('update:editingTheme', null);
     editableTerminalThemeString.value = '';
     terminalThemeParseError.value = null;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存终端主题失败:', error);
-    saveThemeError.value = error.message || t('styleCustomizer.themeSaveFailed');
+    saveThemeError.value = extractErrorMessage(error, t('styleCustomizer.themeSaveFailed'));
   }
 };
 
@@ -436,9 +447,9 @@ const handleTerminalThemeStringChange = () => {
     }
     const updatedTheme = { ...props.editingTheme, themeData: parsedThemeData };
     emit('update:editingTheme', updatedTheme);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('解析终端主题配置失败:', error);
-    let errorMessage = error.message || t('styleCustomizer.errorInvalidJsonConfig');
+    let errorMessage = extractErrorMessage(error, t('styleCustomizer.errorInvalidJsonConfig'));
     if (error instanceof SyntaxError) {
       errorMessage = `${t('styleCustomizer.errorJsonSyntax')}: ${error.message}`;
     }
@@ -454,11 +465,11 @@ const handleDeleteTheme = async (theme: TerminalTheme) => {
       type: 'success',
       message: t('styleCustomizer.themeDeletedSuccess'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('删除终端主题失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.themeDeleteFailed', { message: error.message }),
+      message: t('styleCustomizer.themeDeleteFailed', { message: extractErrorMessage(error, '') }),
     });
   }
 };
