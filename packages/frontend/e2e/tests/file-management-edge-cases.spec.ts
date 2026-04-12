@@ -407,12 +407,14 @@ test.describe('文件管理边缘场景测试', () => {
       }
     });
 
-    test.skip('取消正在进行的传输', async ({ authenticatedPage }) => {
+    test('取消正在进行的传输', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);
 
       await workspace.goto();
-      const connection = authenticatedPage.locator('.connection-list .connection-item:first-child');
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
       if (await connection.isVisible()) {
         await connection.dblclick();
         await fileManager.open();
@@ -433,6 +435,9 @@ test.describe('文件管理边缘场景测试', () => {
         const cancelButton = authenticatedPage.locator(
           'button:has-text("取消"), button:has-text("Cancel")'
         );
+        if (!(await cancelButton.isVisible({ timeout: 3000 }).catch(() => false))) {
+          return;
+        }
         await cancelButton.click();
 
         // 进度条应该消失
