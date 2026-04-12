@@ -48,8 +48,6 @@
     "speakeasy": "^2.0.0",
     "sqlite3": "^5.1.7",
     "ssh2": "^1.16.0",
-    "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
     "ws": "^8.18.1",
     "xterm": "^5.3.0",
@@ -74,6 +72,8 @@
     "autocannon": "^7.15.0",
     "copyfiles": "^2.4.1",
     "cross-env": "^7.0.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.0.0",
     "vitest": "^2.1.8"

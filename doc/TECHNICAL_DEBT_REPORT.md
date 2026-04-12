@@ -15,7 +15,7 @@
 | -------------- | ------------------------ | -------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条                  | 已清零（2026-04-11 第二轮修复）                                |
 | E2E 测试债务   | ✅ 0 条 `test.skip`      | 已完成回补清零（2026-04-12）                                   |
-| 运行时安全债务 | 🟡 6 条漏洞              | `critical 0 / high 0 / moderate 1 / low 5`                     |
+| 运行时安全债务 | 🟡 5 条漏洞              | `critical 0 / high 0 / moderate 0 / low 5`                     |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
 | 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
 
@@ -46,7 +46,8 @@
   - 根 `overrides` 更新：`tar >=7.5.13`、`path-to-regexp 8.4.2`、`router/path-to-regexp 8.4.2`、`defu ^6.1.7`、`lodash ^4.18.1`、`lodash-es ^4.18.1`
   - 后端通知依赖升级：`nodemailer ^8.0.5`、`@types/nodemailer ^8.0.0`
   - 前端构建依赖归位：`@tailwindcss/vite`、`vite-plugin-monaco-editor` 调整至 `devDependencies`
-  - 审计结果收敛：运行时漏洞由 32 降至 6（`critical/high` 已清零）
+  - 审计结果收敛：运行时漏洞由 32 降至 5（`critical/high/moderate` 已清零）
+  - Swagger 文档依赖去运行时化：`swagger-jsdoc`、`swagger-ui-express` 改为仅非生产环境按需加载
   - 运行时 direct high/critical 依赖：`none`
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
@@ -136,7 +137,7 @@
 
 ### 本轮未闭环风险（继续跟踪）
 
-- 运行时 `critical/high` 已清零，剩余中低危主要集中在 `sqlite3` 依赖链与 `brace-expansion` 单点漏洞。
+- 运行时 `critical/high/moderate` 已清零，剩余仅 `sqlite3` 依赖链 low 风险 5 条。
 - E2E `skip` 已清零，需要保持新增用例默认非跳过并持续回归验证。
 - 源码 `any/console.log` 存量较大，需建立分模块治理节奏。
 

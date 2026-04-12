@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs'; // fs is needed for early env loading if data/.env is checked
 
 import express = require('express');
-import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import http from 'http';
 
 import crypto from 'crypto';
@@ -44,8 +44,6 @@ import dashboardRoutes from './services/dashboard.routes';
 import { initializeWebSocket } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
-import swaggerUi from 'swagger-ui-express';
-import { swaggerSpec } from './config/swagger.config';
 import {
   validateEnvironment,
   printEnvironmentConfig,
@@ -55,6 +53,8 @@ import {
 import './services/event.service';
 import './notifications/notification.processor.service';
 import './notifications/notification.dispatcher.service';
+
+type SwaggerConfigModule = typeof import('./config/swagger.config');
 
 // 统一安装 console 时间戳前缀 + 日志等级过滤（尽量早执行）
 installConsoleLogging();
@@ -386,15 +386,26 @@ const startServer = () => {
   // --- OpenAPI/Swagger 文档路由（工具链：API 文档） ---
   // 仅在非生产环境启用 Swagger 文档，避免暴露 API 结构
   if (!isProd) {
-    app.use('/api-docs', swaggerUi.serve);
-    app.get(
-      '/api-docs',
-      swaggerUi.setup(swaggerSpec, {
-        customCss: '.swagger-ui .topbar { display: none }',
-        customSiteTitle: '星枢终端 API 文档',
-      })
-    );
-    console.log(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
+    try {
+      // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+      const swaggerUi = require('swagger-ui-express') as typeof import('swagger-ui-express');
+      // eslint-disable-next-line global-require
+      const swaggerConfig = require('./config/swagger.config') as SwaggerConfigModule;
+      const { buildSwaggerSpec } = swaggerConfig;
+      const swaggerSpec = buildSwaggerSpec();
+
+      app.use('/api-docs', swaggerUi.serve);
+      app.get(
+        '/api-docs',
+        swaggerUi.setup(swaggerSpec, {
+          customCss: '.swagger-ui .topbar { display: none }',
+          customSiteTitle: '星枢终端 API 文档',
+        })
+      );
+      console.log(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
+    } catch (error) {
+      console.warn('[Swagger] 文档依赖未安装，已跳过 /api-docs 挂载。', error);
+    }
   } else {
     console.log('[Swagger] 生产环境已禁用 API 文档');
   }

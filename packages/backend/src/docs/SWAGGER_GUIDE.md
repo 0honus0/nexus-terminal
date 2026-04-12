@@ -247,7 +247,9 @@ router.post('/example', exampleController);
 
 ```typescript
 import swaggerUi from 'swagger-ui-express';
-import { swaggerSpec } from './config/swagger.config';
+import { buildSwaggerSpec } from './config/swagger.config';
+
+const swaggerSpec = buildSwaggerSpec();
 
 app.use('/api-docs', swaggerUi.serve);
 app.get(

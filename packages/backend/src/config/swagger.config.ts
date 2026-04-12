@@ -3,9 +3,7 @@
  * 定义 API 文档的基本信息和规范
  */
 
-import swaggerJsdoc from 'swagger-jsdoc';
-
-const options: swaggerJsdoc.Options = {
+const options = {
   definition: {
     openapi: '3.0.0',
     info: {
@@ -185,4 +183,11 @@ const options: swaggerJsdoc.Options = {
   ],
 };
 
-export const swaggerSpec = swaggerJsdoc(options);
+// 仅在开发环境按需构建 Swagger 文档，避免生产环境引入不必要运行时依赖
+export const buildSwaggerSpec = () => {
+  // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+  const swaggerJsdoc = require('swagger-jsdoc') as (
+    opts: typeof options
+  ) => Record<string, unknown>;
+  return swaggerJsdoc(options);
+};
