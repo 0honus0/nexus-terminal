@@ -181,7 +181,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         const parsedState = JSON.parse(storedState);
         if (typeof parsedState === 'object' && parsedState !== null) {
           expandedGroups.value = parsedState;
-          console.log('[QuickCmdStore] Loaded expanded groups state from localStorage.');
+          console.info('[QuickCmdStore] Loaded expanded groups state from localStorage.');
           return;
         }
       }
@@ -279,7 +279,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
     // 2. 后台获取最新数据
     isLoading.value = true;
     try {
-      console.log(`[QuickCmdStore] Fetching latest commands from server...`);
+      console.info(`[QuickCmdStore] Fetching latest commands from server...`);
       // 不再发送 sortBy 参数
       const response = await apiClient.get<QuickCommandFE[]>('/quick-commands');
       // 确保返回的数据包含 tagIds 数组和 variables 对象
@@ -293,7 +293,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       // 3. 对比并更新
       const currentDataString = JSON.stringify(quickCommandsList.value);
       if (currentDataString !== freshDataString) {
-        console.log('[QuickCmdStore] Commands data changed, updating state and cache.');
+        console.info('[QuickCmdStore] Commands data changed, updating state and cache.');
         quickCommandsList.value = freshData;
         localStorage.setItem(cacheKey, freshDataString); // 更新缓存
       } else {
@@ -313,7 +313,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
   // 清除快捷指令列表缓存
   const clearQuickCommandsCache = () => {
     localStorage.removeItem('quickCommandsListCache');
-    console.log('[QuickCmdStore] Cleared quick commands list cache.');
+    console.info('[QuickCmdStore] Cleared quick commands list cache.');
   };
 
   // 添加快捷指令 (发送 tagIds 和 variables)
@@ -467,7 +467,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
           tagId,
         });
         if (response.data.success) {
-          console.log(
+          console.info(
             `[Store] Successfully assigned tag ${tagId} to ${commandIds.length} commands via API.`
           );
 
@@ -491,7 +491,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
               );
             }
           });
-          console.log(
+          console.info(
             `[Store] Manually updated tagIds for ${updatedCount} commands in local state.`
           );
 

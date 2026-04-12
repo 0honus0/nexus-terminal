@@ -88,11 +88,11 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
   const registerStatusHandlers = () => {
     // 防止重复注册
     if (unregisterUpdate || unregisterError) {
-      console.log(`[会话 ${sessionId}][状态监控模块] 处理器已注册，跳过。`);
+      console.info(`[会话 ${sessionId}][状态监控模块] 处理器已注册，跳过。`);
       return;
     }
     if (isConnected.value) {
-      console.log(`[会话 ${sessionId}][状态监控模块] 注册状态消息处理器。`);
+      console.info(`[会话 ${sessionId}][状态监控模块] 注册状态消息处理器。`);
       unregisterUpdate = onMessage('status_update', handleStatusUpdate);
       unregisterError = onMessage('status:error', handleStatusError);
     } else {
@@ -102,7 +102,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
 
   const unregisterAllStatusHandlers = () => {
     if (unregisterUpdate || unregisterError) {
-      console.log(`[会话 ${sessionId}][状态监控模块] 注销状态消息处理器。`);
+      console.info(`[会话 ${sessionId}][状态监控模块] 注销状态消息处理器。`);
       unregisterUpdate?.();
       unregisterError?.();
       unregisterUpdate = null;
@@ -112,7 +112,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
 
   // 监听连接状态变化以自动注册/注销处理器
   watch(isConnected, (newValue, oldValue) => {
-    console.log(`[会话 ${sessionId}][状态监控模块] 连接状态变化: ${oldValue} -> ${newValue}`);
+    console.info(`[会话 ${sessionId}][状态监控模块] 连接状态变化: ${oldValue} -> ${newValue}`);
     if (newValue) {
       // 只有当状态监视器在布局中时才注册处理器
       const layoutStore = useLayoutStore();
@@ -121,7 +121,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
         // 连接成功后，可以考虑请求一次初始状态（如果后端支持）
         // sendMessage({ type: 'status:update', sessionId });
       } else {
-        console.log(`[会话 ${sessionId}][状态监控模块] 状态监视器不在布局中，跳过注册处理器。`);
+        console.info(`[会话 ${sessionId}][状态监控模块] 状态监视器不在布局中，跳过注册处理器。`);
       }
     } else {
       unregisterAllStatusHandlers();
@@ -137,7 +137,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
   // --- 清理函数 ---
   const cleanup = () => {
     unregisterAllStatusHandlers();
-    console.log(`[会话 ${sessionId}][状态监控模块] 已清理。`);
+    console.info(`[会话 ${sessionId}][状态监控模块] 已清理。`);
   };
 
   // --- 暴露接口 ---

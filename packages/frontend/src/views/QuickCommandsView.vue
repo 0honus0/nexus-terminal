@@ -494,10 +494,10 @@ watchEffect(() => {
   if (storeVal && typeof storeVal === 'number' && storeVal > 0) {
     if (quickCommandRowSizeMultiplier.value !== storeVal) {
       quickCommandRowSizeMultiplier.value = storeVal;
-      // console.log(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
+      // console.info(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
     }
   } else {
-    // console.log(`[QuickCmdView] No valid row size multiplier in store for QuickCommands, using default: ${quickCommandRowSizeMultiplier.value}`);
+    // console.info(`[QuickCmdView] No valid row size multiplier in store for QuickCommands, using default: ${quickCommandRowSizeMultiplier.value}`);
   }
 });
 
@@ -509,7 +509,7 @@ const handleWheel = (event: WheelEvent) => {
   quickCommandRowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2));
 
   if (quickCommandRowSizeMultiplier.value !== oldMultiplier) {
-    // console.log(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
+    // console.info(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
     // 假设 settingsStore 有一个名为 updateQuickCommandRowSizeMultiplier 的 action
     if (settingsStore.updateQuickCommandRowSizeMultiplier) {
       settingsStore.updateQuickCommandRowSizeMultiplier(quickCommandRowSizeMultiplier.value);
@@ -846,7 +846,7 @@ const finishEditingTag = async () => {
   try {
     if (currentEditingId === 'untagged') {
       // --- Create new tag and assign commands ---
-      console.log(`[QuickCmdView] Creating new tag: ${newName}`);
+      console.info(`[QuickCmdView] Creating new tag: ${newName}`);
       const newTag = await quickCommandTagsStore.addTag(newName);
       if (newTag) {
         operationSuccess = true;
@@ -855,10 +855,10 @@ const finishEditingTag = async () => {
         const commandIdsToAssign = untaggedGroup ? untaggedGroup.commands.map((c) => c.id) : [];
 
         if (commandIdsToAssign.length > 0) {
-          console.log(
+          console.info(
             `[QuickCmdView] Assigning ${commandIdsToAssign.length} commands to new tag ID: ${newTag.id}`
           );
-          console.log(
+          console.info(
             `[QuickCmdView] Command IDs to assign: ${JSON.stringify(commandIdsToAssign)}`
           );
           // Call the store action to assign commands to the new tag
@@ -868,7 +868,7 @@ const finishEditingTag = async () => {
           );
           if (assignSuccess) {
             // Success/Error Notifications and list refresh are handled within the store action
-            console.log(`[QuickCmdView] assignCommandsToTagAction reported success.`);
+            console.info(`[QuickCmdView] assignCommandsToTagAction reported success.`);
           } else {
             console.error(`[QuickCmdView] assignCommandsToTagAction reported failure.`);
             // Optionally show a specific error here if the store action doesn't cover all cases
@@ -899,7 +899,7 @@ const finishEditingTag = async () => {
       if (originalTagName === newName) {
         operationSuccess = true; // No change needed
       } else {
-        console.log(
+        console.info(
           `[QuickCmdView] Updating tag ID ${currentEditingId} from "${originalTagName}" to "${newName}"`
         );
         const updateResult = await quickCommandTagsStore.updateTag(currentEditingId, newName);
@@ -967,7 +967,7 @@ const showQuickCommandContextMenu = (event: MouseEvent, command: QuickCommandFE)
         finalX !== quickCommandContextMenuPosition.value.x ||
         finalY !== quickCommandContextMenuPosition.value.y
       ) {
-        console.log(
+        console.info(
           `[QuickCmdView] Adjusting quick command context menu position: (${quickCommandContextMenuPosition.value.x}, ${quickCommandContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
         );
         quickCommandContextMenuPosition.value = { x: finalX, y: finalY };
