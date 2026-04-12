@@ -17,7 +17,7 @@
 | E2E 测试债务   | ✅ 0 条 `test.skip`     | 已完成回补清零（2026-04-12）                                   |
 | 运行时安全债务 | 🟡 5 条漏洞             | `critical 0 / high 0 / moderate 0 / low 5`                     |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略    | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
-| 日志治理债务   | ⚠️ 121 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
+| 日志治理债务   | ⚠️ 107 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
 
 ### 与历史口径差异
 
@@ -137,6 +137,9 @@
 - 日志治理（第二十九批，并行降级执行）：
   - `packages/backend/src/settings/settings.repository.ts`、`packages/backend/src/appearance/appearance.repository.ts`、`packages/frontend/src/composables/useSshTerminal.ts` 内信息级输出统一由 `console.log` 调整为 `console.info`
   - `console.log` 存量由 137 降至 121（`backend/src + frontend/src + remote-gateway/src`）
+- 日志治理（第三十批，并行降级执行）：
+  - `packages/frontend/src/components/MonacoEditor.vue`、`packages/frontend/src/components/FileEditorContainer.vue`、`packages/frontend/src/views/LoginView.vue` 内信息级输出统一由 `console.log` 调整为 `console.info`
+  - `console.log` 存量由 121 降至 107（`backend/src + frontend/src + remote-gateway/src`）
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。

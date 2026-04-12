@@ -30,12 +30,12 @@ const recaptchaWidget = ref<InstanceType<typeof VueRecaptcha> | null>(null); // 
 
 // --- CAPTCHA Event Handlers ---
 const handleCaptchaVerified = (token: string) => {
-  // console.log('CAPTCHA verified, token:', token);
+  // console.info('CAPTCHA verified, token:', token);
   captchaToken.value = token;
   captchaError.value = null; // Clear error on successful verification
 };
 const handleCaptchaExpired = () => {
-  // console.log('CAPTCHA expired');
+  // console.info('CAPTCHA expired');
   captchaToken.value = null;
 };
 const handleCaptchaError = (errorDetails: any) => {
@@ -44,7 +44,7 @@ const handleCaptchaError = (errorDetails: any) => {
   captchaError.value = t('login.error.captchaLoadFailed');
 };
 const resetCaptchaWidget = () => {
-  // console.log('Resetting CAPTCHA widget...');
+  // console.info('Resetting CAPTCHA widget...');
   captchaToken.value = null;
   // Reset hCaptcha if it exists
   hcaptchaWidget.value?.reset();
@@ -90,7 +90,7 @@ const handleSubmit = async () => {
 
 // Fetch CAPTCHA config and check passkey availability on component mount
 onMounted(async () => {
-  // console.log('[LoginView] Component mounted, calling fetchCaptchaConfig and checkHasPasskeysConfigured...');
+  // console.info('[LoginView] Component mounted, calling fetchCaptchaConfig and checkHasPasskeysConfigured...');
   authStore.fetchCaptchaConfig();
   // Check if passkeys are available for login (uses the new public endpoint)
   // Optionally pass username if needed: await authStore.checkHasPasskeysConfigured(credentials.username);
