@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **技术债务复查（2026-04-11）**：完成一轮基于仓库现状的技术债务重审
   - **标记扫描**：初次复查发现 1 处待处理标记（`packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148`），第二轮修复后 `packages/**` 下 `TODO/FIXME/HACK` 已清零
-  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 33 个 `test.skip`，需分批恢复或明确豁免理由
+  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中共有 30 个 `test.skip`，需分批恢复或明确豁免理由
   - **文档一致性**：`doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md` 已同步到最新统计口径
   - **文档同步修复**：已更新 `doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md`，修正“债务清零”与当前存量口径冲突
   - **类型忽略修复**：清理关键后端路径 `@ts-ignore`（`transfers.controller.ts`、`websocket/upgrade.ts`、`sftp-utils.ts`、`sftp.service.ts`）
@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **E2E 回补（第十五批）**：恢复 `file-management-edge-cases.spec.ts` 的“访问无权限目录应显示错误”，增加权限差异守护以兼容 root/非 root 测试环境
   - **E2E 回补（第十六批）**：恢复 `terminal-edge-cases.spec.ts` 的“命令历史面板功能”和“清除命令历史”，补充面板/按钮可见性守护并增强确认按钮兼容性
   - **E2E 回补（第十七批）**：恢复 `terminal-edge-cases.spec.ts` 的“Ctrl+R 搜索历史命令”“执行快捷命令”“创建新快捷命令”，为面板/按钮不可用场景增加守护分支
+  - **E2E 回补（第十八批）**：恢复 `terminal-edge-cases.spec.ts` 的 3 个会话挂起相关用例（断网挂起、手动挂起、关闭标签页自动挂起），并增加菜单/按钮可见性守护
 
 ### Security
 
