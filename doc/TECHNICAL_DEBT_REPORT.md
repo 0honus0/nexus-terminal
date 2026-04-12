@@ -17,7 +17,7 @@
 | E2E 测试债务   | ✅ 0 条 `test.skip`      | 已完成回补清零（2026-04-12）                                   |
 | 运行时安全债务 | 🟡 5 条漏洞              | `critical 0 / high 0 / moderate 0 / low 5`                     |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略     | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`） |
-| 日志治理债务   | ⚠️ 1250 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
+| 日志治理债务   | ⚠️ 1230 处 `console.log` | `backend/src + frontend/src + remote-gateway/src`              |
 
 ### 与历史口径差异
 
@@ -49,6 +49,9 @@
   - 审计结果收敛：运行时漏洞由 32 降至 5（`critical/high/moderate` 已清零）
   - Swagger 文档依赖去运行时化：`swagger-jsdoc`、`swagger-ui-express` 改为仅非生产环境按需加载
   - 运行时 direct high/critical 依赖：`none`
+- 日志治理（第一批）：
+  - `packages/backend/src/websocket/handlers/rdp.handler.ts` 内信息级输出统一由 `console.log` 调整为 `console.info`
+  - `console.log` 存量由 1242 降至 1230（`backend/src + frontend/src + remote-gateway/src`）
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。
