@@ -35,12 +35,12 @@ class NotificationProcessorService extends EventEmitter {
 
   private async initialize(): Promise<void> {
     try {
-      console.log('[NotificationProcessor] 等待 i18n 初始化...');
+      console.info('[NotificationProcessor] 等待 i18n 初始化...');
       await i18nInitializationPromise;
-      console.log('[NotificationProcessor] i18n 初始化完成。正在注册事件监听器...');
+      console.info('[NotificationProcessor] i18n 初始化完成。正在注册事件监听器...');
       this.registerEventListeners();
       this.isInitialized = true;
-      console.log('[NotificationProcessor] 初始化完成。');
+      console.info('[NotificationProcessor] 初始化完成。');
     } catch (error) {
       console.error('[NotificationProcessor] 因 i18n 错误导致初始化失败:', error);
     }
@@ -71,7 +71,7 @@ class NotificationProcessorService extends EventEmitter {
         });
       });
     });
-    console.log('[NotificationProcessor] 已注册监听器。');
+    console.info('[NotificationProcessor] 已注册监听器。');
   }
 
   private async processStandardEvent(eventType: AppEventType, payload: AppEventPayload) {
@@ -79,12 +79,12 @@ class NotificationProcessorService extends EventEmitter {
       console.warn(`[NotificationProcessor] 在初始化完成前收到事件 ${eventType}。跳过处理。`);
       return;
     }
-    console.log(`[NotificationProcessor] 收到标准事件: ${eventType}`, payload);
+    console.info(`[NotificationProcessor] 收到标准事件: ${eventType}`, payload);
     const eventKey = eventType as NotificationEvent; // 类型转换，假设 AppEventType 和 NotificationEvent 对应
 
     try {
       const applicableSettings = await this.repository.getEnabledByEvent(eventKey);
-      console.log(
+      console.info(
         `[NotificationProcessor] 找到 ${applicableSettings.length} 个适用于事件 ${eventKey} 的设置`
       );
 
@@ -125,7 +125,7 @@ class NotificationProcessorService extends EventEmitter {
       console.warn(`[NotificationProcessor] 在初始化完成前收到测试事件。跳过处理。`);
       return;
     }
-    console.log(`[NotificationProcessor] 收到测试事件`, payload);
+    console.info(`[NotificationProcessor] 收到测试事件`, payload);
     const { testTargetConfig, testTargetChannelType } = payload.details || {};
 
     if (!testTargetConfig || !testTargetChannelType) {
@@ -186,7 +186,7 @@ class NotificationProcessorService extends EventEmitter {
 
       if (processedNotification) {
         this.emit('sendNotification', processedNotification);
-        console.log(
+        console.info(
           `[NotificationProcessor] 正在为 ${setting.channel_type} 发送 sendNotification (设置 ID: ${setting.id}, 事件: ${eventType})`
         );
       }

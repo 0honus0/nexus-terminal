@@ -206,7 +206,7 @@ export const createConnection = async (
     'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'
   >
 ): Promise<number> => {
-  console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
+  console.info('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
   const now = Math.floor(Date.now() / 1000);
   const sql = `
         INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, force_keyboard_interactive, created_at, updated_at)
@@ -214,7 +214,7 @@ export const createConnection = async (
 
   const jumpChainStringified =
     data.jump_chain && data.jump_chain.length > 0 ? JSON.stringify(data.jump_chain) : null;
-  console.log(
+  console.info(
     `[Repository:createConnection] jump_chain input: ${JSON.stringify(data.jump_chain)}, stringified to: ${jumpChainStringified}`
   );
 
@@ -237,8 +237,8 @@ export const createConnection = async (
     now,
     now,
   ];
-  console.log('[Repository:createConnection] SQL:', sql);
-  console.log('[Repository:createConnection] Params:', JSON.stringify(params, null, 2));
+  console.info('[Repository:createConnection] SQL:', sql);
+  console.info('[Repository:createConnection] Params:', JSON.stringify(params, null, 2));
   try {
     const db = await getDbInstance();
     const result = await runDb(db, sql, params);
@@ -260,7 +260,7 @@ export const updateConnection = async (
   id: number,
   data: Partial<Omit<FullConnectionData, 'id' | 'created_at' | 'last_connected_at' | 'tag_ids'>>
 ): Promise<boolean> => {
-  console.log(
+  console.info(
     `[Repository:updateConnection] Received data for ID ${id}:`,
     JSON.stringify(data, null, 2)
   );
@@ -285,7 +285,7 @@ export const updateConnection = async (
       const jumpChainValue = value as number[] | null;
       const jumpChainStringified =
         jumpChainValue && jumpChainValue.length > 0 ? JSON.stringify(jumpChainValue) : null;
-      console.log(
+      console.info(
         `[Repository:updateConnection] jump_chain input for ID ${id}: ${JSON.stringify(jumpChainValue)}, stringified to: ${jumpChainStringified}`
       );
       params.push(jumpChainStringified);
@@ -304,8 +304,8 @@ export const updateConnection = async (
 
   params.push(id);
   const sql = `UPDATE connections SET ${setClauses} WHERE id = ?`;
-  console.log(`[Repository:updateConnection] SQL for ID ${id}:`, sql);
-  console.log(
+  console.info(`[Repository:updateConnection] SQL for ID ${id}:`, sql);
+  console.info(
     `[Repository:updateConnection] Params for ID ${id}:`,
     JSON.stringify(params, null, 2)
   );
@@ -417,7 +417,9 @@ export const updateConnectionTags = async (
     console.error(`Repository: 更新连接 ${connectionId} 的标签关联事务出错:`, getErrorMessage(err));
     try {
       await runDb(db, 'ROLLBACK');
-      console.log(`Repository: Transaction rolled back for connection ${connectionId} tag update.`);
+      console.info(
+        `Repository: Transaction rolled back for connection ${connectionId} tag update.`
+      );
     } catch (rollbackErr: unknown) {
       console.error(
         `Repository: 回滚连接 ${connectionId} 的标签更新事务失败:`,
