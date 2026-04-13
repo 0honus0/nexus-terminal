@@ -80,9 +80,11 @@
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
     "sqlite3": "^6.0.1",
+    "vite": "^6.4.2",
     "vue-eslint-parser": "^10.2.0"
   },
   "overrides": {
+    "vite": "^6.4.2",
     "esbuild": "^0.25.0",
     "tar": ">=7.5.13",
     "cookie": "^0.7.2",

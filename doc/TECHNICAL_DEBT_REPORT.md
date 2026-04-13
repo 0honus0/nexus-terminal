@@ -15,6 +15,7 @@
 | -------------- | --------------------- | ---------------------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条               | 已清零（2026-04-11 第二轮修复）                                              |
 | E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                                 |
+| 全量安全债务   | ✅ 0 条漏洞           | `critical 0 / high 0 / moderate 0 / low 0`                                   |
 | 运行时安全债务 | ✅ 0 条漏洞           | `critical 0 / high 0 / moderate 0 / low 0`                                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）               |
 | any 类型债务   | ✅ 0 处               | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
@@ -56,9 +57,10 @@
   - 通过 `npm audit fix --omit=dev --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org` 收敛 lockfile
   - 运行时审计结果：`npm audit --omit=dev --registry=https://registry.npmjs.org --json` 为 **0**（critical/high/moderate/low 全清零）
 - 依赖安全收敛（2026-04-13 第三轮）：
-  - 通过 `npm audit fix --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org` 继续收敛全量依赖风险
-  - 全量审计结果：`npm audit --registry=https://registry.npmjs.org --json` 为 **7 moderate / 0 high / 0 critical**
-  - 剩余集中在 `vite` / `vitest` 工具链的跨主版本升级路径，需单独做兼容迁移批次
+  - 完成工具链升级：`vite -> ^6.4.2`、`@vitejs/plugin-vue -> ^5.2.4`、`vitest/@vitest/* -> ^3.2.4`
+  - 后端与网关补充 `devDependencies.vite: ^6.4.2`，根 `devDependencies` 同步 `vite: ^6.4.2`
+  - 锁文件按 CI 口径（npm 10.8.2）重建：`npx -y npm@10.8.2 install --legacy-peer-deps --ignore-scripts`
+  - 全量审计结果：`npm audit --registry=https://registry.npmjs.org --json` 为 **0**（critical/high/moderate/low 全清零）
 - 日志治理（第一批）：
   - `packages/backend/src/websocket/handlers/rdp.handler.ts` 内信息级输出统一由 `console.log` 调整为 `console.info`
   - `console.log` 存量由 1242 降至 1230（`backend/src + frontend/src + remote-gateway/src`）
