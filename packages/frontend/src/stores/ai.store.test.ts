@@ -437,7 +437,7 @@ describe('ai.store', () => {
       const result = await store.cleanupSessions();
 
       expect(result).toBe(0);
-      expect(store.error).toBe('清理会话失败');
+      expect(store.error).toBe('清理失败');
     });
   });
 

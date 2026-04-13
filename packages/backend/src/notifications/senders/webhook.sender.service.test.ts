@@ -329,14 +329,14 @@ describe('WebhookSenderService', () => {
 
   describe('响应状态处理', () => {
     it('2xx 状态码应视为成功', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       for (const status of [200, 201, 202, 204, 299]) {
         mockAxios.mockResolvedValueOnce({ status, data: {} });
         await webhookSenderService.send(mockNotification);
       }
 
-      // 每次发送会调用 2 次 console.log：发送前 + 成功后
+      // 每次发送会调用 2 次 console.info：发送前 + 成功后
       expect(consoleSpy).toHaveBeenCalledTimes(10);
       consoleSpy.mockRestore();
     });
@@ -530,7 +530,7 @@ describe('WebhookSenderService', () => {
 
   describe('日志记录', () => {
     it('发送前应记录请求信息', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       await webhookSenderService.send(mockNotification);
 
@@ -541,7 +541,7 @@ describe('WebhookSenderService', () => {
     });
 
     it('成功后应记录状态码', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       mockAxios.mockResolvedValue({ status: 201, data: { created: true } });
 
       await webhookSenderService.send(mockNotification);

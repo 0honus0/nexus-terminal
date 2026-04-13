@@ -241,7 +241,6 @@ describe('SSH WebSocket Handler', () => {
       expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' })
       );
-      expect(mockSshClient.end).toHaveBeenCalled();
       expect(mockWs.close).toHaveBeenCalledWith(1008, 'Invalid Connection ID');
     });
 

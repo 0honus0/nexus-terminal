@@ -220,7 +220,7 @@ describe('TelegramSenderService', () => {
     });
 
     it('应正确处理成功响应', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       mockPost.mockResolvedValue({
         data: { ok: true, result: { message_id: 456 } },
       });

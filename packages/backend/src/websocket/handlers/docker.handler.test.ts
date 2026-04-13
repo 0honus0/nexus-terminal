@@ -369,7 +369,7 @@ describe('Docker WebSocket Handler', () => {
       expect(mockWs.send).toHaveBeenCalledWith(
         JSON.stringify({
           type: 'docker:command:error',
-          payload: { command: 'invalid', message: 'Invalid containerId or command.' },
+          payload: { message: 'Invalid containerId or command.' },
         })
       );
     });

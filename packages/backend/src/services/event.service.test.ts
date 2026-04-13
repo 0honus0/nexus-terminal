@@ -60,7 +60,7 @@ describe('EventService', () => {
     });
 
     it('应在控制台打印事件日志', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       eventService.emitEvent(AppEventType.SettingsUpdated, { details: { key: 'theme' } });
 

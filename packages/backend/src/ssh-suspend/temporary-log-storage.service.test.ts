@@ -101,7 +101,7 @@ describe('TemporaryLogStorageService', () => {
       mockFs.stat.mockResolvedValue({ size: 100 * 1024 * 1024 });
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       await service.writeToLog('session-456', 'new data after rotation');
 
       expect(mockFs.writeFile).toHaveBeenCalledWith(

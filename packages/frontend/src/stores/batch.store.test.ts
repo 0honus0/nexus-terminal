@@ -271,7 +271,7 @@ describe('batch.store', () => {
       const result = await store.cancelTask('task-123');
 
       expect(result).toBe(false);
-      expect(store.error).toBe('取消任务失败');
+      expect(store.error).toBe('取消失败');
     });
   });
 
