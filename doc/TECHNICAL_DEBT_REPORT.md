@@ -55,6 +55,10 @@
   - 根 `overrides` 新增：`@tootallnate/once -> ^3.0.1`
   - 通过 `npm audit fix --omit=dev --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org` 收敛 lockfile
   - 运行时审计结果：`npm audit --omit=dev --registry=https://registry.npmjs.org --json` 为 **0**（critical/high/moderate/low 全清零）
+- 依赖安全收敛（2026-04-13 第三轮）：
+  - 通过 `npm audit fix --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org` 继续收敛全量依赖风险
+  - 全量审计结果：`npm audit --registry=https://registry.npmjs.org --json` 为 **7 moderate / 0 high / 0 critical**
+  - 剩余集中在 `vite` / `vitest` 工具链的跨主版本升级路径，需单独做兼容迁移批次
 - 日志治理（第一批）：
   - `packages/backend/src/websocket/handlers/rdp.handler.ts` 内信息级输出统一由 `console.log` 调整为 `console.info`
   - `console.log` 存量由 1242 降至 1230（`backend/src + frontend/src + remote-gateway/src`）
@@ -341,6 +345,7 @@
 - 运行时漏洞已清零（`critical/high/moderate/low = 0`），后续保持月度审计与版本漂移监控。
 - E2E `skip` 已清零，需要保持新增用例默认非跳过并持续回归验证。
 - 源码 `any` 已按扫描口径清零（`backend/src + frontend/src + remote-gateway/src`）。
+- 全量审计（含 dev）仍有 7 条 moderate（`vite/vitest` 升级链路），需在独立升级批次中处理。
 
 ---
 

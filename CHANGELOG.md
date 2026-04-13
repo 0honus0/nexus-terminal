@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 根 `overrides` 新增：`@tootallnate/once -> ^3.0.1`
   - 执行：`npm audit fix --omit=dev --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org`
   - 复查：`npm audit --omit=dev --registry=https://registry.npmjs.org --json` => **0**（critical/high/moderate/low 全部清零）
+- **依赖安全债务复查（2026-04-13 第三轮）**：全量审计（含 dev）继续收敛
+  - 执行：`npm audit fix --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org`
+  - 复查：`npm audit --registry=https://registry.npmjs.org --json` => **7 moderate / 0 high / 0 critical**
+  - 剩余主要来自工具链主版本升级链路：`vite` / `vitest` 相关（需跨大版本迁移，未在本批直接强升）
 
 ### Added
 
