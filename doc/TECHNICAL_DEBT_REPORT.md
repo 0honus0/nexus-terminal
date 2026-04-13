@@ -15,7 +15,7 @@
 | -------------- | --------------------- | ---------------------------------------------------------------------------- |
 | 代码标记债务   | ✅ 0 条               | 已清零（2026-04-11 第二轮修复）                                              |
 | E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                                 |
-| 运行时安全债务 | 🟡 5 条漏洞           | `critical 0 / high 0 / moderate 0 / low 5`                                   |
+| 运行时安全债务 | ✅ 0 条漏洞           | `critical 0 / high 0 / moderate 0 / low 0`                                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）               |
 | any 类型债务   | ✅ 0 处               | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
 | 日志治理债务   | ✅ 0 处 `console.log` | 已完成第三十六批并行收敛（含子代理协作）                                     |
@@ -23,7 +23,7 @@
 ### 与历史口径差异
 
 - 历史“24/24 技术债务清零”仅覆盖当时 TODO/FIXME 清理批次，不等于当前无存量债务。
-- 目前债务以“测试跳过、运行时漏洞、类型忽略、日志治理”为主，需要持续治理。
+- 目前债务主要为“自动生成声明文件中的类型忽略”与持续回归维护。
 
 ### 2026-04-11 已落地修复
 
@@ -50,6 +50,11 @@
   - 审计结果收敛：运行时漏洞由 32 降至 5（`critical/high/moderate` 已清零）
   - Swagger 文档依赖去运行时化：`swagger-jsdoc`、`swagger-ui-express` 改为仅非生产环境按需加载
   - 运行时 direct high/critical 依赖：`none`
+- 依赖安全收敛（2026-04-13 第二轮）：
+  - 版本口径对齐：根与后端 `sqlite3` 统一到 `^6.0.1`
+  - 根 `overrides` 新增：`@tootallnate/once -> ^3.0.1`
+  - 通过 `npm audit fix --omit=dev --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org` 收敛 lockfile
+  - 运行时审计结果：`npm audit --omit=dev --registry=https://registry.npmjs.org --json` 为 **0**（critical/high/moderate/low 全清零）
 - 日志治理（第一批）：
   - `packages/backend/src/websocket/handlers/rdp.handler.ts` 内信息级输出统一由 `console.log` 调整为 `console.info`
   - `console.log` 存量由 1242 降至 1230（`backend/src + frontend/src + remote-gateway/src`）
@@ -333,7 +338,7 @@
 
 ### 本轮未闭环风险（继续跟踪）
 
-- 运行时 `critical/high/moderate` 已清零，剩余仅 `sqlite3` 依赖链 low 风险 5 条。
+- 运行时漏洞已清零（`critical/high/moderate/low = 0`），后续保持月度审计与版本漂移监控。
 - E2E `skip` 已清零，需要保持新增用例默认非跳过并持续回归验证。
 - 源码 `any` 已按扫描口径清零（`backend/src + frontend/src + remote-gateway/src`）。
 

@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 已完成 Swagger 文档依赖去运行时化：`swagger-jsdoc`、`swagger-ui-express` 调整到后端 `devDependencies`，并改为仅非生产环境按需加载
   - 已消除运行时 `brace-expansion` moderate（`npm audit --omit=dev` 不再包含 `moderate`）
   - 运行时 direct high/critical 依赖已清零（none）
+- **依赖安全债务复查（2026-04-13 第二轮）**：继续收敛运行时 low 漏洞并完成清零
+  - 根与后端 `sqlite3` 版本口径统一：`^5.1.7 -> ^6.0.1`
+  - 根 `overrides` 新增：`@tootallnate/once -> ^3.0.1`
+  - 执行：`npm audit fix --omit=dev --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org`
+  - 复查：`npm audit --omit=dev --registry=https://registry.npmjs.org --json` => **0**（critical/high/moderate/low 全部清零）
 
 ### Added
 
