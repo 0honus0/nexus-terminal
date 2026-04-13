@@ -334,9 +334,10 @@ test.describe('认证边缘场景测试', () => {
 
       // 模拟浏览器 WebAuthn API 不可用
       await context.addInitScript(() => {
-        const nav = window.navigator as Navigator & { credentials?: CredentialsContainer };
-        // @ts-expect-error - 测试中故意移除 WebAuthn 能力
-        nav.credentials = undefined;
+        Object.defineProperty(window.navigator, 'credentials', {
+          configurable: true,
+          value: undefined,
+        });
       });
 
       await loginPage.reload();

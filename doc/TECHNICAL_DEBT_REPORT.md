@@ -238,6 +238,13 @@
   - 后端：`packages/backend/src/index.ts`、`packages/backend/src/audit/audit.controller.ts`、`packages/backend/src/connections/connections.routes.ts`、`packages/backend/src/transfers/transfers.service.ts`、`packages/backend/src/websocket/state.ts`、`packages/backend/src/audit/audit.service.test.ts`、`packages/backend/src/auth/auth.controller.test.ts`、`packages/backend/src/notifications/notification.processor.service.test.ts`、`packages/backend/src/ai-ops/nl2cmd.controller.test.ts`、`packages/backend/src/quick-command-tags/quick-command-tag.repository.test.ts`、`packages/backend/src/services/guacamole.service.ts`、`packages/backend/src/passkey/passkey.service.ts`、`packages/backend/src/services/dashboard.service.ts`、`packages/backend/src/services/event.service.ts`、`packages/backend/src/websocket/connection.ts`、`packages/backend/src/appearance/appearance.repository.ts`、`packages/backend/src/websocket/types.ts`、`packages/backend/src/connections/connection.service.ts`、`packages/backend/src/notifications/notification.service.ts`
   - `any` 存量由 33 降至 0（`backend/src + frontend/src + remote-gateway/src`）
   - 收口说明：`packages/frontend/src/types/websocket.types.ts` 将动态索引签名由显式 `any` 改为 `MessagePayload` 别名，在不改变运行时行为的前提下完成口径清零
+- 类型忽略治理（第二十六批，主线程收敛）：
+  - 清理非生成文件中的 `@ts-*` 忽略 2 处：
+    - `packages/frontend/vite.config.ts`（移除 `@ts-ignore`，改为显式类型收敛）
+    - `packages/frontend/e2e/tests/auth-edge-cases.spec.ts`（移除 `@ts-expect-error`，改为 `Object.defineProperty` 模拟 WebAuthn 不可用）
+  - 当前 `@ts-*` 仅剩自动生成声明文件 3 处：
+    - `packages/frontend/src/components.d.ts`
+    - `packages/frontend/src/auto-imports.d.ts`（含 1 处生成代码注释 `@ts-ignore`）
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。

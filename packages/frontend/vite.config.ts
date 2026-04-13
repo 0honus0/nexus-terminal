@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type PluginOption } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 import tailwindcss from '@tailwindcss/vite';
@@ -8,13 +8,16 @@ import Components from 'unplugin-vue-components/vite';
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers';
 import { fileURLToPath, URL } from 'node:url';
 
+const monacoPluginFactory = (
+  monacoEditorPlugin as unknown as { default: (options?: Record<string, unknown>) => unknown }
+).default;
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     tailwindcss(),
-    // @ts-ignore because the plugin type might not perfectly match Vite's expected PluginOption type
-    (monacoEditorPlugin as any).default({}),
+    monacoPluginFactory({}) as PluginOption,
     AutoImport({
       resolvers: [ElementPlusResolver()],
       imports: ['vue', 'vue-router', 'pinia'], // 自动导入 Vue 相关函数

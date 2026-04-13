@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **标记债务清零**：移除 E2E 剩余 TODO 标记，当前 `packages/**` 下 `TODO/FIXME/HACK` 为 0
   - **日志治理（最新）**：当前仅保留最新批次记录。第三十六批（并行降级执行，含子代理协作）在后端/前端共 38 个文件完成 47 处信息级输出降级（`console.log` -> `console.info`），`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 47 降至 0
   - **类型治理（最新）**：当前仅保留最新批次记录。第二十五批（主线程并行收敛）在前后端 31 个文件完成 32 处 `: any/<any>/any[]` 收敛（覆盖测试、会话动作、通知、连接、WebSocket、审计与远程桌面相关模块），`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 33 降至 0；并将 `packages/frontend/src/types/websocket.types.ts` 的动态索引签名改为 `MessagePayload` 别名以完成口径清零
+  - **类型忽略治理（最新）**：清理非生成文件中的 `@ts-*` 忽略 2 处（`packages/frontend/vite.config.ts`、`packages/frontend/e2e/tests/auth-edge-cases.spec.ts`），当前仅剩自动生成声明文件口径 3 处（`src/components.d.ts`、`src/auto-imports.d.ts`）
   - **E2E 回补（最新）**：当前仅保留最新回补口径。最新为第二十八批（`remote-desktop.spec.ts` 7 个远程桌面用例），并已完成 E2E `test.skip` 清零（0）
 
 ### Security
