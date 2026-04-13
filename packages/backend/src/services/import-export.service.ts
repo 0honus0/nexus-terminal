@@ -500,7 +500,8 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
         console.warn(`Service: 处理导入连接 "${connData.name || '未知'}" 时出错: ${connErrMsg}`);
       }
     }
-    let insertedResults: { connectionId: number; originalData: any }[] = [];
+    let insertedResults: Awaited<ReturnType<typeof ConnectionRepository.bulkInsertConnections>> =
+      [];
     if (connectionsToInsert.length > 0) {
       insertedResults = await ConnectionRepository.bulkInsertConnections(db, connectionsToInsert);
       successCount = insertedResults.length;
@@ -510,7 +511,9 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
     for (const result of insertedResults) {
       const originalTagIds = result.originalData?.tag_ids;
       if (Array.isArray(originalTagIds) && originalTagIds.length > 0) {
-        const validTagIds = originalTagIds.filter((id: any) => typeof id === 'number' && id > 0);
+        const validTagIds = originalTagIds.filter(
+          (id: unknown): id is number => typeof id === 'number' && id > 0
+        );
         if (validTagIds.length > 0) {
           const tagPromises = validTagIds.map((tagId) =>
             runDb(db, insertTagSql, [result.connectionId, tagId]).catch((tagError) => {

@@ -283,12 +283,14 @@ describe('MonacoEditor.vue', () => {
 
       const instance = getLastEditorInstance();
       // 找到保存动作并执行 run 方法
-      const addActionCall = instance.addAction.mock.calls.find(
-        (call: any[]) => call[0].id === 'save-file'
-      );
+      const addActionCall = instance.addAction.mock.calls.find((call: unknown[]) => {
+        const action = call[0] as { id?: string } | undefined;
+        return action?.id === 'save-file';
+      });
       expect(addActionCall).toBeDefined();
 
-      addActionCall[0].run();
+      const saveAction = addActionCall?.[0] as { run?: () => void } | undefined;
+      saveAction?.run?.();
 
       expect(wrapper.emitted('request-save')).toBeTruthy();
     });

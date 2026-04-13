@@ -118,8 +118,8 @@ export const updateProxy = async (
   id: number,
   data: Partial<Omit<ProxyData, 'id' | 'created_at'>>
 ): Promise<boolean> => {
-  const fieldsToUpdate: { [key: string]: any } = { ...data };
-  const params: any[] = [];
+  const fieldsToUpdate: Record<string, unknown> = { ...data };
+  const params: unknown[] = [];
   delete fieldsToUpdate.id;
   delete fieldsToUpdate.created_at;
 

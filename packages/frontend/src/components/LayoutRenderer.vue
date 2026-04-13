@@ -24,6 +24,7 @@ import { useAppearanceStore } from '../stores/appearance.store'; // +++ Import a
 import { useSidebarResize } from '../composables/useSidebarResize';
 import { storeToRefs } from 'pinia';
 import DOMPurify from 'dompurify'; // +++ 导入 DOMPurify 进行 HTML 消毒 +++
+import type { FileTab } from '../stores/session/types';
 
 // --- Props ---
 const props = defineProps({
@@ -44,7 +45,7 @@ const props = defineProps({
   },
   // *** 接收编辑器相关 props ***
   editorTabs: {
-    type: Array as PropType<any[]>, // 使用 any[] 简化，或导入具体类型
+    type: Array as PropType<FileTab[]>,
     default: () => [],
   },
   activeEditorTabId: {
@@ -293,7 +294,9 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
 
 // --- Methods ---
 // 处理 Splitpanes 大小调整事件
-const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string]: any }> }) => {
+const handlePaneResize = (eventData: {
+  panes: Array<{ size: number } & Record<string, unknown>>;
+}) => {
   // +++ 更详细的日志 +++
   // +++ Log the entire layoutNode object if ID is undefined +++
   if (props.layoutNode && typeof props.layoutNode.id === 'undefined') {

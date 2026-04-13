@@ -54,7 +54,7 @@ function createMockActiveSession(
   options: {
     connectionStatus?: 'connecting' | 'connected' | 'disconnected' | 'error';
     statusMessage?: string;
-    containers?: any[];
+    containers?: unknown[];
     isLoading?: boolean;
     error?: string | null;
     isDockerAvailable?: boolean;

@@ -333,11 +333,12 @@ export const saveFileInSession = async (
         tab.saveStatus = 'idle';
       }
     }, 2000);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(`[EditorActions] 保存文件 ${tab.filePath} (会话 ${sessionId}) 失败:`, err);
     tab.isSaving = false;
     tab.saveStatus = 'error';
-    tab.saveError = `${t('fileManager.errors.saveFailed')}: ${err.message || err}`;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    tab.saveError = `${t('fileManager.errors.saveFailed')}: ${errMsg}`;
     setTimeout(() => {
       if (tab.saveStatus === 'error') {
         tab.saveStatus = 'idle';
@@ -391,12 +392,13 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
     console.info(
       `[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用新编码 "${newEncoding}" 解码完成。`
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(
       `[EditorActions] 使用编码 "${newEncoding}" 在前端解码文件 ${tab.filePath} (会话 ${sessionId}) 失败:`,
       err
     );
-    tab.loadingError = `前端解码失败 (编码: ${newEncoding}): ${err.message || err}`;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    tab.loadingError = `前端解码失败 (编码: ${newEncoding}): ${errMsg}`;
   }
 };
 

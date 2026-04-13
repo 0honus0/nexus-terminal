@@ -46,12 +46,50 @@ export interface DockerManagerDependencies {
   sendMessage: (message: WebSocketMessage) => void;
   onMessage: (
     type: string,
-    handler: (payload: any, fullMessage?: WebSocketMessage) => void
+    handler: (payload: unknown, fullMessage?: WebSocketMessage) => void
   ) => () => void;
   isConnected: ComputedRef<boolean>;
   // We might need isSshReady or similar if Docker commands depend on SSH being fully ready
   // For now, isConnected might suffice, assuming WS connection implies SSH readiness for Docker
 }
+
+interface DockerStatusUpdatePayload {
+  available: boolean;
+  containers?: DockerContainer[];
+}
+
+interface DockerStatusErrorPayload {
+  message?: string;
+}
+
+const asObjectRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+
+const parseDockerStatusUpdatePayload = (payload: unknown): DockerStatusUpdatePayload | null => {
+  const record = asObjectRecord(payload);
+  if (!record || typeof record.available !== 'boolean') {
+    return null;
+  }
+
+  const containers = Array.isArray(record.containers)
+    ? (record.containers as DockerContainer[])
+    : undefined;
+  return {
+    available: record.available,
+    containers,
+  };
+};
+
+const parseDockerStatusErrorPayload = (payload: unknown): DockerStatusErrorPayload => {
+  const record = asObjectRecord(payload);
+  if (!record) {
+    return {};
+  }
+
+  return {
+    message: typeof record.message === 'string' ? record.message : undefined,
+  };
+};
 
 /**
  * Creates a Docker manager instance for a specific session.
@@ -63,7 +101,7 @@ export interface DockerManagerDependencies {
 export function createDockerManager(
   sessionId: string,
   wsDeps: DockerManagerDependencies,
-  i18n: { t: (key: string, params?: any) => string }
+  i18n: { t: (key: string, params?: unknown) => string }
 ) {
   const { sendMessage, onMessage, isConnected } = wsDeps;
   const { t } = i18n; // Use the passed i18n instance
@@ -125,11 +163,12 @@ export function createDockerManager(
     const unsubStatus = onMessage('docker:status:update', (payload, message) => {
       if (message?.sessionId && message.sessionId !== sessionId) return; // Ignore messages for other sessions
       isLoading.value = false;
+      const statusPayload = parseDockerStatusUpdatePayload(payload);
 
-      if (payload && typeof payload.available === 'boolean') {
-        isDockerAvailable.value = payload.available;
-        if (payload.available && Array.isArray(payload.containers)) {
-          containers.value = payload.containers as DockerContainer[];
+      if (statusPayload) {
+        isDockerAvailable.value = statusPayload.available;
+        if (statusPayload.available && Array.isArray(statusPayload.containers)) {
+          containers.value = statusPayload.containers;
           error.value = null;
 
           // Clean up expansion state
@@ -153,7 +192,7 @@ export function createDockerManager(
           containers.value = [];
           error.value = null;
           expandedContainerIds.value.clear();
-          if (refreshInterval && !payload.available) {
+          if (refreshInterval && !statusPayload.available) {
             clearInterval(refreshInterval);
             refreshInterval = null;
           }
@@ -172,7 +211,8 @@ export function createDockerManager(
       if (message?.sessionId && message.sessionId !== sessionId) return;
       console.error(`[DockerManager ${sessionId}] Received docker:status:error`, payload);
       isLoading.value = false;
-      error.value = payload?.message || t('dockerManager.error.fetchFailed');
+      const statusErrorPayload = parseDockerStatusErrorPayload(payload);
+      error.value = statusErrorPayload.message || t('dockerManager.error.fetchFailed');
       isDockerAvailable.value = false;
       containers.value = [];
       expandedContainerIds.value.clear();

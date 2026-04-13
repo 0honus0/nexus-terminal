@@ -102,7 +102,7 @@ const actionTypeMappings: Record<string, AuditLogActionType[]> = {
 };
 
 const countAuditLogs = async (
-  db: any,
+  db: Awaited<ReturnType<typeof getDbInstance>>,
   timeRange: TimeRange,
   actionTypes: string[]
 ): Promise<number> => {

@@ -47,7 +47,7 @@ export function useDataManagement() {
         '导出成功。文件已开始下载。'
       );
       exportConnectionsSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('导出连接失败:', error);
       let message = t('settings.exportConnections.error', '导出连接时发生错误。');
       if (isAxiosError(error) && error.response && error.response.data) {
@@ -67,7 +67,7 @@ export function useDataManagement() {
         } else if (error.response.data && typeof error.response.data.message === 'string') {
           message = error.response.data.message;
         }
-      } else if (error.message) {
+      } else if (error instanceof Error && error.message) {
         message = error.message;
       }
       exportConnectionsMessage.value = message;

@@ -40,8 +40,8 @@ class WebhookSenderService implements INotificationSender {
     try {
       console.info(`[WebhookSender] Sending ${requestMethod} notification to webhook URL: ${url}`);
 
-      let requestData: any;
-      const requestParams: any = undefined;
+      let requestData: unknown;
+      const requestParams: Record<string, string> | undefined = undefined;
 
       if (['POST', 'PUT', 'PATCH'].includes(requestMethod)) {
         if (finalHeaders['Content-Type']?.toLowerCase().includes('application/json')) {

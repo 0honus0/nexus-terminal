@@ -14,6 +14,21 @@ import {
   SftpDecompressSuccessPayload,
   SftpDecompressErrorPayload,
 } from '../websocket/types'; // Import payload types
+
+interface SftpDirectoryEntry {
+  filename: string;
+  attrs: Stats;
+}
+
+const getErrorCode = (error: unknown): string | undefined => {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+
+  return undefined;
+};
+
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
  */
@@ -239,14 +254,10 @@ export const downloadDirectory = async (
       dirPath: string,
       archivePath: string
     ) => {
-      // 使用导入的 SFTPWrapper
-      // 移除 list 的显式类型注解 FileEntry[]，让 TypeScript 推断
-      const entries = await new Promise<any[]>((resolve, reject) => {
-        // 使用 any[] 作为 Promise 类型，或更具体的推断类型
+      // 使用局部结构类型约束 readdir 返回值，避免 any 泄漏。
+      const entries = await new Promise<SftpDirectoryEntry[]>((resolve, reject) => {
         sftp.readdir(dirPath, (err: Error | undefined, list) => {
-          // 移除 list 的类型注解
           if (err) return reject(err);
-          // 可以在这里检查 list 的结构，但暂时依赖推断
           resolve(list);
         });
       });
@@ -288,10 +299,9 @@ export const downloadDirectory = async (
   } catch (error: unknown) {
     console.error(`SFTP 文件夹下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
-      const err = error as any;
       const errMsg = getErrorMessage(error);
       // 统一使用 ErrorFactory，不暴露内部错误细节
-      if (err.code === 'ENOENT' || errMsg?.includes('No such file')) {
+      if (getErrorCode(error) === 'ENOENT' || errMsg?.includes('No such file')) {
         next(ErrorFactory.notFound('远程目录未找到'));
       } else {
         next(ErrorFactory.internalError('处理文件夹下载请求失败'));
@@ -312,7 +322,7 @@ const sendWebSocketError = (
   type: string,
   message: string,
   requestId: string,
-  details?: any
+  details?: unknown
 ) => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type, payload: { error: message, details, requestId } }));

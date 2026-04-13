@@ -158,7 +158,7 @@ describe('AI Settings Store', () => {
     });
 
     it('应该在测试期间设置 isTesting 状态', async () => {
-      let resolvePromise: (value: any) => void;
+      let resolvePromise: (value: { data: { success: boolean } }) => void;
       const promise = new Promise((resolve) => {
         resolvePromise = resolve;
       });

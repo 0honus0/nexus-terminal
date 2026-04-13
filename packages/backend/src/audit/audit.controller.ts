@@ -54,7 +54,7 @@ export class AuditController {
 
       // 解析 details 字段从 JSON 字符串到对象（如果需要）
       const logsWithParsedDetails = result.logs.map((log) => {
-        let parsedDetails: any = null;
+        let parsedDetails: unknown = null;
         if (log.details) {
           try {
             parsedDetails = JSON.parse(log.details);

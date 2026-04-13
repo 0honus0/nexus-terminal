@@ -130,9 +130,10 @@ export function useNL2CMD() {
         ElMessage.error(errorMsg);
         return null;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[NL2CMD] 生成命令失败:', error);
-      const errorMsg = error.response?.data?.error || error.message || '生成命令失败';
+      const err = error as { response?: { data?: { error?: string } }; message?: string };
+      const errorMsg = err.response?.data?.error || err.message || '生成命令失败';
       ElMessage.error(errorMsg);
       return null;
     } finally {

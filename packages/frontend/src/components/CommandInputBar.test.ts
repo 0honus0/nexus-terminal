@@ -10,7 +10,7 @@ import CommandInputBar from './CommandInputBar.vue';
 
 // Mock vue-i18n
 vi.mock('vue-i18n', async () => {
-  const actual = await vi.importActual<any>('vue-i18n');
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n');
   return {
     ...actual,
     useI18n: () => ({ t: (key: string, fallback?: string) => fallback || key }),

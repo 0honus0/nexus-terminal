@@ -17,7 +17,11 @@ vi.mock('./nl2cmd.service', () => ({
 }));
 
 // 创建 mock 请求和响应对象
-function createMockRequest(options: { body?: any; session?: any; params?: any }): Request {
+function createMockRequest(options: {
+  body?: Record<string, unknown>;
+  session?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+}): Request {
   return {
     body: options.body || {},
     session: options.session || { userId: 1 },

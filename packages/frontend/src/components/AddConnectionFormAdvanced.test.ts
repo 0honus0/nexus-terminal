@@ -116,8 +116,14 @@ describe('AddConnectionFormAdvanced.vue', () => {
   let wrapper: VueWrapper;
   const mockAddJumpHost = vi.fn();
   const mockRemoveJumpHost = vi.fn();
+  type AdvancedFormData = ReturnType<typeof createMockFormData>;
+  type AdvancedExtraProps = Partial<{
+    advancedConnectionMode: 'proxy' | 'jump';
+    isEditMode: boolean;
+  }> &
+    Record<string, unknown>;
 
-  const createComponent = (formData: any, extraProps?: Record<string, any>) => {
+  const createComponent = (formData: AdvancedFormData, extraProps?: AdvancedExtraProps) => {
     // 直接构建完整的 props 对象，避免展开运算符问题
     return mount(AddConnectionFormAdvanced, {
       props: {

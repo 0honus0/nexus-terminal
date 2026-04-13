@@ -11,7 +11,7 @@ export interface SshTerminalDependencies {
   sendMessage: (message: WebSocketMessage) => void;
   onMessage: (
     type: string,
-    handler: (payload: any, fullMessage?: WebSocketMessage) => void
+    handler: (payload: unknown, fullMessage?: WebSocketMessage) => void
   ) => () => void;
   isConnected: ComputedRef<boolean>;
 }
@@ -170,7 +170,7 @@ export function createSshTerminalManager(
   };
 
   // 辅助函数：获取终端消息文本
-  const getTerminalText = (key: string, params?: Record<string, any>): string => {
+  const getTerminalText = (key: string, params?: Record<string, unknown>): string => {
     // 确保 i18n key 存在，否则返回原始 key
     const translationKey = `workspace.terminal.${key}`;
     const translated = t(translationKey, params || {});

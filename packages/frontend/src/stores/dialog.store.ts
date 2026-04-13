@@ -10,7 +10,7 @@ interface DialogState {
   cancelText?: string;
   isLoading: boolean;
   resolvePromise?: (value: boolean) => void;
-  rejectPromise?: (reason?: any) => void;
+  rejectPromise?: (reason?: unknown) => void;
 }
 
 export const useDialogStore = defineStore('dialog', () => {

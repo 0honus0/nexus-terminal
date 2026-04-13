@@ -114,7 +114,10 @@ const onTouchEnd = (event: TouchEvent) => {
     lastPinchDistance = 0;
   }
 };
-const createEditorState = (doc: string, languageExtension: any) => {
+const createEditorState = (
+  doc: string,
+  languageExtension: Parameters<typeof languageCompartment.of>[0]
+) => {
   return EditorState.create({
     doc,
     extensions: [

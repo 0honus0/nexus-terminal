@@ -421,6 +421,7 @@ import {
   defineExpose,
   watch,
   watchEffect,
+  type ComponentPublicInstance,
 } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
@@ -812,12 +813,25 @@ const focusSearchInput = (): boolean => {
 defineExpose({ focusSearchInput });
 
 // +++ Methods for inline tag editing +++
-const setTagInputRef = (el: any, id: string | number) => {
-  if (el) {
-    tagInputRefs.value.set(id, el as HTMLInputElement);
-  } else {
-    tagInputRefs.value.delete(id);
+const setTagInputRef = (el: Element | ComponentPublicInstance | null, id: string | number) => {
+  let inputEl: HTMLInputElement | null = null;
+  if (el instanceof HTMLInputElement) {
+    inputEl = el;
+  } else if (
+    el &&
+    typeof el === 'object' &&
+    '$el' in el &&
+    (el as { $el?: unknown }).$el instanceof HTMLInputElement
+  ) {
+    inputEl = (el as { $el: HTMLInputElement }).$el;
   }
+
+  if (inputEl) {
+    tagInputRefs.value.set(id, inputEl);
+    return;
+  }
+
+  tagInputRefs.value.delete(id);
 };
 
 const startEditingTag = (tagId: number | null, currentName: string) => {
@@ -918,7 +932,7 @@ const finishEditingTag = async () => {
         // updateTag failure handled in store
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[QuickCmdView] Error during finishEditingTag:', error);
     uiNotificationsStore.showError(t('common.unexpectedError'));
   } finally {

@@ -82,7 +82,17 @@ vi.mock('../user/user.repository', () => ({
 describe('Auth Controller - Security Fixes', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
-  let mockSession: any;
+  let mockSession: {
+    regenerate: (callback: (err?: Error) => void) => void;
+    save: (callback: (err?: Error) => void) => void;
+    userId?: number;
+    username?: string;
+    requiresTwoFactor?: boolean;
+    pendingAuth?: unknown;
+    currentChallenge?: unknown;
+    rememberMe?: boolean;
+    cookie: { maxAge?: number };
+  };
 
   beforeEach(() => {
     // 重置所有 mocks
@@ -110,7 +120,7 @@ describe('Auth Controller - Security Fixes', () => {
       ip: '127.0.0.1',
       socket: {
         remoteAddress: '127.0.0.1',
-      } as any,
+      } as unknown as Request['socket'],
     };
 
     // 创建模拟的 Response

@@ -8,6 +8,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { nextTick, defineComponent, h } from 'vue';
 import LayoutRenderer from './LayoutRenderer.vue';
 import type { LayoutNode, PaneName } from '../stores/layout.store';
+import type { FileTab } from '../stores/session/types';
 
 // 创建 mock ref 的辅助函数
 function mockRef<T>(value: T): { value: T; __v_isRef: true } {
@@ -31,7 +32,7 @@ const {
     activeSession: null,
   },
   mockFileEditorStore: {
-    orderedTabs: [] as any[],
+    orderedTabs: [] as FileTab[],
     activeTabId: null as string | null,
   },
   mockSettingsStore: {
@@ -86,22 +87,25 @@ vi.mock('pinia', async (importOriginal) => {
   const actual = await importOriginal<typeof import('pinia')>();
   return {
     ...actual,
-    storeToRefs: (store: any) => {
+    storeToRefs: <T extends object>(store: T) => {
       // 根据 store 类型返回适当的 refs
-      if (store.sessions !== undefined) {
+      const sessionCandidate = store as { sessions?: unknown };
+      if (sessionCandidate.sessions !== undefined) {
         // session store
         return {
           activeSession: mockRef(mockSessionStore.activeSession),
         };
       }
-      if (store.orderedTabs !== undefined) {
+      const editorCandidate = store as { orderedTabs?: unknown };
+      if (editorCandidate.orderedTabs !== undefined) {
         // fileEditor store
         return {
           orderedTabs: mockRef(mockFileEditorStore.orderedTabs),
           activeTabId: mockRef(mockFileEditorStore.activeTabId),
         };
       }
-      if (store.getSidebarPaneWidth !== undefined) {
+      const settingsCandidate = store as { getSidebarPaneWidth?: unknown };
+      if (settingsCandidate.getSidebarPaneWidth !== undefined) {
         // settings store
         return {
           workspaceSidebarPersistentBoolean: mockRef(
@@ -110,7 +114,8 @@ vi.mock('pinia', async (importOriginal) => {
           getSidebarPaneWidth: mockRef(mockSettingsStore.getSidebarPaneWidth),
         };
       }
-      if (store.terminalBackgroundImage !== undefined) {
+      const appearanceCandidate = store as { terminalBackgroundImage?: unknown };
+      if (appearanceCandidate.terminalBackgroundImage !== undefined) {
         // appearance store
         return {
           terminalBackgroundImage: mockRef(mockAppearanceStore.terminalBackgroundImage),
@@ -121,7 +126,8 @@ vi.mock('pinia', async (importOriginal) => {
           terminalCustomHTML: mockRef(mockAppearanceStore.terminalCustomHTML),
         };
       }
-      if (store.sidebarPanes !== undefined) {
+      const layoutCandidate = store as { sidebarPanes?: unknown };
+      if (layoutCandidate.sidebarPanes !== undefined) {
         // layout store
         return {
           sidebarPanes: mockRef(mockLayoutStore.sidebarPanes),
@@ -384,7 +390,25 @@ describe('LayoutRenderer.vue', () => {
     });
 
     it('应接受 editorTabs prop', () => {
-      const tabs = [{ id: 'tab-1', name: 'test.ts' }];
+      const tabs: FileTab[] = [
+        {
+          id: 'tab-1',
+          sessionId: 'session-1',
+          filePath: '/tmp/test.ts',
+          filename: 'test.ts',
+          content: '',
+          originalContent: '',
+          rawContentBase64: null,
+          language: 'typescript',
+          selectedEncoding: 'utf-8',
+          isLoading: false,
+          loadingError: null,
+          isSaving: false,
+          saveStatus: 'idle',
+          saveError: null,
+          isModified: false,
+        },
+      ];
       const wrapper = shallowMount(LayoutRenderer, {
         props: {
           layoutNode: createPaneNode('editor'),

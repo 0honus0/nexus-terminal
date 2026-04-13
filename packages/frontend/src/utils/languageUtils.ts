@@ -8,16 +8,26 @@ const languages = {
   'ja-JP': jaJP,
 };
 
+interface TranslationMap {
+  [key: string]: string | TranslationMap;
+}
+
+type TranslationNode = string | TranslationMap;
+
 export function getTranslation(key: string, locale: string = 'zh-CN'): string {
   const keys = key.split('.');
-  let current: any = languages[locale as keyof typeof languages] || languages['zh-CN'];
+  const localeDict =
+    (languages[locale as keyof typeof languages] as TranslationNode | undefined) ||
+    languages['zh-CN'];
+  let current: TranslationNode | undefined = localeDict;
 
   for (const k of keys) {
-    current = current[k];
-    if (!current) {
+    if (!current || typeof current !== 'object' || !(k in current)) {
       return key;
     }
+    current = (current as TranslationMap)[k];
+    if (!current) return key;
   }
 
-  return current;
+  return typeof current === 'string' ? current : key;
 }

@@ -288,6 +288,28 @@ const clonePane = (paneName: PaneName): LayoutNode => {
   };
 };
 
+type DraggableChangeEvent = {
+  added?: {
+    element?: unknown;
+    newIndex?: number;
+  };
+  moved?: {
+    element?: unknown;
+    oldIndex?: number;
+    newIndex?: number;
+  };
+  removed?: {
+    element?: unknown;
+    oldIndex?: number;
+  };
+};
+
+type DraggableEndEvent = {
+  to?: EventTarget | null;
+  from?: EventTarget | null;
+  oldIndex?: number;
+};
+
 // Handle updates from LayoutNodeEditor (for main layout)
 const handleNodeUpdate = (updatedNode: LayoutNode) => {
   console.info('[LayoutConfigurator] Received node update from editor:', updatedNode);
@@ -382,7 +404,7 @@ const removeSidebarPane = (side: 'left' | 'right', index: number) => {
 };
 
 // Handler for vuedraggable end event to ensure changes flag is set and handle added items
-const onDraggableChange = (event: any, side: 'left' | 'right') => {
+const onDraggableChange = (event: DraggableChangeEvent, side: 'left' | 'right') => {
   // Add side parameter
   console.info(`[LayoutConfigurator] Draggable change event detected on ${side} sidebar:`, event);
 
@@ -397,13 +419,17 @@ const onDraggableChange = (event: any, side: 'left' | 'right') => {
       targetList &&
       typeof addedElement === 'object' &&
       addedElement !== null &&
-      addedElement.type === 'pane' &&
-      typeof addedElement.component === 'string'
+      'type' in addedElement &&
+      'component' in addedElement &&
+      (addedElement as { type?: unknown }).type === 'pane' &&
+      typeof (addedElement as { component?: unknown }).component === 'string' &&
+      typeof addedIndex === 'number'
     ) {
       // Replace the added LayoutNode object with its component name (PaneName)
-      targetList.splice(addedIndex, 1, addedElement.component);
+      const addedPaneName = (addedElement as { component: PaneName }).component;
+      targetList.splice(addedIndex, 1, addedPaneName);
       console.info(
-        `[LayoutConfigurator] Replaced added LayoutNode at index ${addedIndex} on ${side} sidebar with PaneName: ${addedElement.component}`
+        `[LayoutConfigurator] Replaced added LayoutNode at index ${addedIndex} on ${side} sidebar with PaneName: ${addedPaneName}`
       );
     } else {
       console.info(
@@ -419,7 +445,7 @@ const onDraggableChange = (event: any, side: 'left' | 'right') => {
 };
 
 // Handle drag end from the available panes list
-const handleAvailablePaneDragEnd = (event: any) => {
+const handleAvailablePaneDragEnd = (event: DraggableEndEvent) => {
   // Check if the item was dropped into a different list
   if (event.to !== event.from) {
     const paneName =

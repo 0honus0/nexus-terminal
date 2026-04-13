@@ -20,6 +20,7 @@ import { useFileEditorStore, type FileTab } from '../stores/fileEditor.store';
 import { useCommandHistoryStore } from '../stores/commandHistory.store';
 import type { Terminal as XtermTerminal } from 'xterm';
 import type { ISearchOptions } from '@xterm/addon-search';
+import type { SearchAddon } from '@xterm/addon-search';
 import {
   useWorkspaceEventSubscriber,
   useWorkspaceEventOff,
@@ -451,7 +452,7 @@ const handleTerminalResize = (payload: {
 const handleTerminalReady = (payload: {
   sessionId: string;
   terminal: XtermTerminal;
-  searchAddon: any | null;
+  searchAddon: SearchAddon | null;
 }) => {
   // --- 使用重命名的 XtermTerminal ---
   console.info(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload); // *** 添加 Payload 日志 ***

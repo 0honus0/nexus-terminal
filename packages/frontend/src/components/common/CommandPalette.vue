@@ -214,7 +214,7 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 };
 
-const execute = (item: any) => {
+const execute = (item: CommandItem) => {
   Promise.resolve()
     .then(() => item.action())
     .catch((error) => {

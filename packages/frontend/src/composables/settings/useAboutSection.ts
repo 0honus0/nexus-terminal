@@ -56,7 +56,7 @@ export function useAboutSection() {
       } else {
         throw new Error('Invalid API response format');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
           // 404 是正常情况（仓库还没有 release），使用 warn 级别

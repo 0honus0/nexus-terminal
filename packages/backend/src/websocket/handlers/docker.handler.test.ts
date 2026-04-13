@@ -81,29 +81,31 @@ function setupExecMockImmediate(
   responses: Array<{ stdout?: string; stderr?: string; error?: Error; code?: number }>
 ) {
   let callIndex = 0;
-  sshClient.exec.mockImplementation((_cmd: string, _opts: any, callback: Function) => {
-    const response = responses[callIndex] || { stdout: '', stderr: '' };
-    callIndex++;
+  sshClient.exec.mockImplementation(
+    (_cmd: string, _opts: unknown, callback: (error: Error | null, stream: unknown) => void) => {
+      const response = responses[callIndex] || { stdout: '', stderr: '' };
+      callIndex++;
 
-    if (response.error) {
-      callback(response.error, null);
-      return;
+      if (response.error) {
+        callback(response.error, null);
+        return;
+      }
+
+      const stream = new MockExecStream();
+      callback(null, stream);
+
+      // 使用 process.nextTick 而不是 setTimeout，确保立即执行
+      process.nextTick(() => {
+        if (response.stdout) {
+          stream.emit('data', Buffer.from(response.stdout));
+        }
+        if (response.stderr) {
+          stream.stderr.emit('data', Buffer.from(response.stderr));
+        }
+        stream.emit('close', response.code ?? 0);
+      });
     }
-
-    const stream = new MockExecStream();
-    callback(null, stream);
-
-    // 使用 process.nextTick 而不是 setTimeout，确保立即执行
-    process.nextTick(() => {
-      if (response.stdout) {
-        stream.emit('data', Buffer.from(response.stdout));
-      }
-      if (response.stderr) {
-        stream.stderr.emit('data', Buffer.from(response.stderr));
-      }
-      stream.emit('close', response.code ?? 0);
-    });
-  });
+  );
 }
 
 describe('Docker WebSocket Handler', () => {

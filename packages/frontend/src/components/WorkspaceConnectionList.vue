@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, defineExpose, watch, nextTick } from 'vue';
+import {
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  defineExpose,
+  watch,
+  nextTick,
+  type ComponentPublicInstance,
+} from 'vue';
 import { storeToRefs } from 'pinia';
 import { useVirtualList } from '@vueuse/core';
 
@@ -123,13 +132,25 @@ const editedTagName = ref(''); // 存储 input 中的临时名称
 const tagInputRefs = ref(new Map<string | number, HTMLInputElement | null>()); // Map to store refs
 
 // Function to set refs in the map
-const setTagInputRef = (el: any, id: string | number) => {
-  if (el) {
-    tagInputRefs.value.set(id, el as HTMLInputElement);
-  } else {
-    // Clean up the ref when the element is unmounted
-    tagInputRefs.value.delete(id);
+const setTagInputRef = (el: Element | ComponentPublicInstance | null, id: string | number) => {
+  let inputEl: HTMLInputElement | null = null;
+  if (el instanceof HTMLInputElement) {
+    inputEl = el;
+  } else if (
+    el &&
+    typeof el === 'object' &&
+    '$el' in el &&
+    (el as { $el?: unknown }).$el instanceof HTMLInputElement
+  ) {
+    inputEl = (el as { $el: HTMLInputElement }).$el;
   }
+
+  if (!inputEl) {
+    tagInputRefs.value.delete(id);
+    return;
+  }
+
+  tagInputRefs.value.set(id, inputEl);
 };
 
 // 计算属性：过滤并按标签分组连接 (仅在 showConnectionTagsBoolean 为 true 时使用)
@@ -840,7 +861,7 @@ const finishEditingTag = async () => {
         // If updateResult is false, updateTag failed (e.g., name exists), notification handled by store. operationSuccess remains false.
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 捕获这两个流程中未被 store action 捕获的意外错误
     console.error('Error during finishEditingTag:', error);
     uiNotificationsStore.addNotification({ message: t('common.unexpectedError'), type: 'error' });

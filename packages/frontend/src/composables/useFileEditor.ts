@@ -126,9 +126,10 @@ export function useFileEditor(
         editingFileEncoding.value = 'utf8';
       }
       isEditorLoading.value = false;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`[文件编辑器模块] 读取文件 ${filePath} 失败:`, err);
-      editorError.value = `${t('fileManager.errors.readFileFailed')}: ${err.message || err}`;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      editorError.value = `${t('fileManager.errors.readFileFailed')}: ${errMsg}`;
       editingFileContent.value = `// ${editorError.value}`; // 在编辑器中显示错误
       isEditorLoading.value = false;
     }
@@ -165,11 +166,12 @@ export function useFileEditor(
           saveStatus.value = 'idle';
         }
       }, 2000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`[文件编辑器模块] 保存文件 ${editingFilePath.value} 失败:`, err);
       isSaving.value = false;
       saveStatus.value = 'error';
-      saveError.value = `${t('fileManager.errors.saveFailed')}: ${err.message || err}`;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      saveError.value = `${t('fileManager.errors.saveFailed')}: ${errMsg}`;
 
       // 错误提示显示时间长一些
       setTimeout(() => {

@@ -17,9 +17,9 @@ export function useTerminalFit(
   let lastResizeObserverHeight = 0;
   const RESIZE_THRESHOLD = 0.5;
 
-  const debounce = (func: Function, delay: number) => {
+  const debounce = <TArgs extends unknown[]>(func: (...args: TArgs) => void, delay: number) => {
     let timeoutId: number | null = null;
-    return (...args: any[]) => {
+    return (...args: TArgs) => {
       if (timeoutId !== null) clearTimeout(timeoutId);
       timeoutId = window.setTimeout(() => {
         func(...args);

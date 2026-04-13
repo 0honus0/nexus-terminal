@@ -52,7 +52,7 @@ export const getRemoteDesktopToken = async (
     throw new Error(`${protocol.toUpperCase()} 连接使用密码认证，但密码解密失败或未提供密码。`);
   }
 
-  const connectionConfig: any = {
+  const connectionConfig: Record<string, string> = {
     hostname: connection.host,
     port: connection.port.toString(),
     width: String(width || 1024), // 提供默认值

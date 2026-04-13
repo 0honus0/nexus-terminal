@@ -21,8 +21,10 @@ import { AppEventType } from '../services/event.service';
 const { mockRepository, mockEventService, mockI18nT } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
   const { EventEmitter: EE } = require('events');
-  const eventEmitter = new EE() as any;
-  eventEmitter.onEvent = vi.fn((eventType: string, callback: Function) => {
+  const eventEmitter = new EE() as EventEmitter & {
+    onEvent: (eventType: string, callback: (...args: unknown[]) => void) => void;
+  };
+  eventEmitter.onEvent = vi.fn((eventType: string, callback: (...args: unknown[]) => void) => {
     eventEmitter.on(eventType, callback);
   });
 
@@ -31,7 +33,7 @@ const { mockRepository, mockEventService, mockI18nT } = vi.hoisted(() => {
       getEnabledByEvent: vi.fn(),
     },
     mockEventService: eventEmitter,
-    mockI18nT: vi.fn((key: string, options?: any) => {
+    mockI18nT: vi.fn((key: string, options?: { defaultValue?: string }) => {
       const translations: Record<string, string> = {
         'event.LOGIN_SUCCESS': '登录成功',
         'event.LOGIN_FAILED': '登录失败',

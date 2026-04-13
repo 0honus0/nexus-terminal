@@ -36,8 +36,8 @@ export enum AppEventType {
 export interface AppEventPayload {
   userId?: number; // 事件关联的用户 ID（如果适用）
   timestamp: Date; // 事件发生的时间戳
-  details?: Record<string, any>; // 事件相关的具体数据
-  [key: string]: any; // 允许其他任意属性
+  details?: Record<string, unknown>; // 事件相关的具体数据
+  [key: string]: unknown; // 允许其他任意属性
 }
 
 class EventService extends EventEmitter {

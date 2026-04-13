@@ -6,6 +6,45 @@ import { getErrorMessage } from '../../utils/AppError';
 
 const DEFAULT_DOCKER_STATUS_INTERVAL_SECONDS = 2;
 
+type DockerCommandAction = 'start' | 'stop' | 'restart' | 'remove';
+
+interface DockerCommandPayload {
+  containerId?: string;
+  command?: DockerCommandAction;
+}
+
+interface DockerStatsPayload {
+  containerId?: string;
+}
+
+const parseDockerCommandPayload = (payload: unknown): DockerCommandPayload => {
+  if (typeof payload !== 'object' || payload === null) {
+    return {};
+  }
+
+  const data = payload as Record<string, unknown>;
+  const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+  const command =
+    data.command === 'start' ||
+    data.command === 'stop' ||
+    data.command === 'restart' ||
+    data.command === 'remove'
+      ? data.command
+      : undefined;
+
+  return { containerId, command };
+};
+
+const parseDockerStatsPayload = (payload: unknown): DockerStatsPayload => {
+  if (typeof payload !== 'object' || payload === null) {
+    return {};
+  }
+
+  const data = payload as Record<string, unknown>;
+  const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+  return { containerId };
+};
+
 export async function fetchRemoteDockerStatus(
   state: ClientState
 ): Promise<{ available: boolean; containers: DockerContainer[] }> {
@@ -289,8 +328,9 @@ export async function handleDockerGetStatus(
 export async function handleDockerCommand(
   ws: AuthenticatedWebSocket,
   sessionId: string | undefined,
-  payload: any
+  payload: unknown
 ): Promise<void> {
+  const commandPayload = parseDockerCommandPayload(payload);
   const state = sessionId ? clientStates.get(sessionId) : undefined;
   if (!state || !state.sshClient) {
     console.warn(
@@ -300,12 +340,12 @@ export async function handleDockerCommand(
       ws.send(
         JSON.stringify({
           type: 'docker:command:error',
-          payload: { command: payload?.command, message: 'SSH connection not active.' },
+          payload: { command: commandPayload.command, message: 'SSH connection not active.' },
         })
       );
     return;
   }
-  const { containerId, command } = payload || {};
+  const { containerId, command } = commandPayload;
   if (
     !containerId ||
     typeof containerId !== 'string' ||
@@ -407,7 +447,7 @@ export async function handleDockerCommand(
 export async function handleDockerGetStats(
   ws: AuthenticatedWebSocket,
   sessionId: string | undefined,
-  payload: any
+  payload: unknown
 ): Promise<void> {
   const state = sessionId ? clientStates.get(sessionId) : undefined;
   if (!state || !state.sshClient) {
@@ -418,12 +458,16 @@ export async function handleDockerGetStats(
       ws.send(
         JSON.stringify({
           type: 'docker:stats:error',
-          payload: { containerId: payload?.containerId, message: 'SSH connection not active.' },
+          payload: {
+            containerId: parseDockerStatsPayload(payload).containerId,
+            message: 'SSH connection not active.',
+          },
         })
       );
     return;
   }
-  if (!payload || !payload.containerId) {
+  const { containerId } = parseDockerStatsPayload(payload);
+  if (!containerId) {
     console.warn(
       `WebSocket: Invalid payload for docker:get_stats in session ${sessionId}:`,
       payload
@@ -432,13 +476,11 @@ export async function handleDockerGetStats(
       ws.send(
         JSON.stringify({
           type: 'docker:stats:error',
-          payload: { containerId: payload?.containerId, message: 'Missing containerId.' },
+          payload: { containerId, message: 'Missing containerId.' },
         })
       );
     return;
   }
-
-  const { containerId } = payload;
 
   // 净化 containerId，仅允许安全字符（命令注入防护）
   const cleanContainerId = containerId.replace(/[^a-zA-Z0-9_-]/g, '');

@@ -591,7 +591,7 @@ export class TransfersService {
       let timeoutHandle: NodeJS.Timeout | null = null;
       let sftpSession: SFTPWrapper | null = null; // To ensure sftp.end() can be called in timeout
 
-      const cleanupAndReject = (errMsg: string, errObj?: any) => {
+      const cleanupAndReject = (errMsg: string, errObj?: unknown) => {
         if (timeoutHandle) clearTimeout(timeoutHandle);
         sftpSession?.end();
         reject(new Error(errMsg));

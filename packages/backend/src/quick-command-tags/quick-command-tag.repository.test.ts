@@ -217,9 +217,10 @@ describe('Quick Command Tag Repository', () => {
       await setCommandTagAssociations(1, []);
 
       // 应执行 DELETE 但不执行 INSERT
-      const deleteCalls = (runDb as any).mock.calls.filter((call: any[]) =>
-        call[1]?.includes?.('DELETE')
-      );
+      const deleteCalls = (runDb as any).mock.calls.filter((call: unknown[]) => {
+        const sql = call[1] as { includes?: (keyword: string) => boolean } | undefined;
+        return sql?.includes?.('DELETE');
+      });
       expect(deleteCalls.length).toBeGreaterThan(0);
     });
 

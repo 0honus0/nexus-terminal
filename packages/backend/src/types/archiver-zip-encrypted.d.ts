@@ -5,7 +5,7 @@ declare module 'archiver' {
     zlib?: { level: number };
   }
 
-  function registerFormat(format: string, module: any): void;
+  function registerFormat(format: string, module: unknown): void;
   function create(format: string, options: ArchiverOptions): Archiver;
 
   interface Archiver extends NodeJS.EventEmitter {
@@ -13,7 +13,7 @@ declare module 'archiver' {
     on(event: 'error', listener: (err: Error) => void): this;
     on(event: 'warning', listener: (err: Error) => void): this; // 添加 'warning' 事件
     pipe(destination: NodeJS.WritableStream): NodeJS.WritableStream; // 添加 pipe 方法
-    append(data: any, options: { name: string }): void;
+    append(data: unknown, options: { name: string }): void;
     finalize(): Promise<void>;
     destroyed?: boolean; // 添加 destroyed 属性
     abort(): this; // 添加 abort 方法

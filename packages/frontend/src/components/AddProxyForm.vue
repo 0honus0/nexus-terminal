@@ -19,6 +19,7 @@ const proxiesStore = useProxiesStore();
 const tagsStore = useTagsStore(); // 获取标签 store 实例
 const { isLoading, error: proxyStoreError } = storeToRefs(proxiesStore); // 重命名 error 避免冲突
 const { isLoading: isTagLoading, error: tagStoreError } = storeToRefs(tagsStore); // 获取标签状态
+type ProxyPayload = Parameters<typeof proxiesStore.addProxy>[0];
 
 // 表单数据模型
 const initialFormData = {
@@ -90,7 +91,7 @@ const handleSubmit = async () => {
   }
 
   // 构建要发送的数据
-  const dataToSend: any = {
+  const dataToSend: ProxyPayload = {
     name: formData.name,
     type: formData.type,
     host: formData.host,

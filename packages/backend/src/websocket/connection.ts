@@ -111,7 +111,7 @@ export function initializeConnectionHandler(
     } else {
       // Standard SSH/SFTP/Docker connection
       ws.on('message', async (message: RawData) => {
-        let parsedMessage: any;
+        let parsedMessage: unknown;
         try {
           parsedMessage = JSON.parse(message.toString());
         } catch (e) {
@@ -152,13 +152,17 @@ export function initializeConnectionHandler(
             // SSH Cases
             case 'ssh:connect':
               // Pass the original Express request object for IP and session
-              await handleSshConnect(ws, request, payload);
+              await handleSshConnect(
+                ws,
+                request,
+                payload as Parameters<typeof handleSshConnect>[2]
+              );
               break;
             case 'ssh:input':
-              handleSshInput(ws, payload);
+              handleSshInput(ws, payload as Parameters<typeof handleSshInput>[1]);
               break;
             case 'ssh:resize':
-              handleSshResize(ws, payload);
+              handleSshResize(ws, payload as Parameters<typeof handleSshResize>[1]);
               break;
             case 'ssh:exec_silent':
               handleSshExecSilent(ws, payload, requestId);
@@ -190,18 +194,26 @@ export function initializeConnectionHandler(
             case 'sftp:move':
             case 'sftp:compress':
             case 'sftp:decompress':
-              await handleSftpOperation(ws, type, payload, requestId);
+              await handleSftpOperation(
+                ws,
+                type,
+                payload as Parameters<typeof handleSftpOperation>[2],
+                requestId
+              );
               break;
 
             // SFTP Upload Cases
             case 'sftp:upload:start':
-              handleSftpUploadStart(ws, payload);
+              handleSftpUploadStart(ws, payload as Parameters<typeof handleSftpUploadStart>[1]);
               break;
             case 'sftp:upload:chunk':
-              await handleSftpUploadChunk(ws, payload);
+              await handleSftpUploadChunk(
+                ws,
+                payload as Parameters<typeof handleSftpUploadChunk>[1]
+              );
               break;
             case 'sftp:upload:cancel':
-              handleSftpUploadCancel(ws, payload);
+              handleSftpUploadCancel(ws, payload as Parameters<typeof handleSftpUploadCancel>[1]);
               break;
 
             // --- SSH Suspend Cases ---

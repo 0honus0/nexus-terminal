@@ -14,8 +14,7 @@ export type MessagePayload = any;
 export interface WebSocketMessage {
   type: string; // 消息类型
   payload?: MessagePayload; // 消息负载
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any; // 允许其他属性，如 requestId, encoding 等
+  [key: string]: MessagePayload; // 允许其他属性，如 requestId, encoding 等
 }
 
 // --- SSH Silent Exec 消息类型 ---

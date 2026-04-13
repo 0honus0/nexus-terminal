@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { AuditLogEntry, AuditLogApiResponse, AuditLogActionType } from '../types/server.types';
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 export const useAuditLogStore = defineStore('auditLog', () => {
   const logs = ref<AuditLogEntry[]>([]);
@@ -62,7 +63,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
     isLoading.value = true; // 标记正在获取（或后台获取）
     const offset = (page - 1) * limit;
     try {
-      const params: Record<string, any> = {
+      const params: Record<string, string | number> = {
         limit,
         offset,
         ...(searchTerm && { search: searchTerm }),
@@ -98,9 +99,9 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         totalLogs.value = freshTotal;
       }
       error.value = null; // 清除错误
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[AuditLogStore] Error fetching audit logs:', err);
-      error.value = err.response?.data?.message || '获取审计日志失败';
+      error.value = extractErrorMessage(err, '获取审计日志失败');
       // 如果是仪表盘请求失败，保留缓存数据；否则清空
       if (!isDashboardRequest) {
         logs.value = [];

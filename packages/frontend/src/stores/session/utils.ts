@@ -100,11 +100,12 @@ export const decodeRawContent = (rawContentBase64: string, encoding: string): st
     );
     const decoder = new TextDecoder('utf-8');
     return decoder.decode(buffer);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       `[SessionUtils decodeRawContent] Error decoding content with encoding "${encoding}":`,
       error
     );
-    return `// Error decoding content: ${error.message}`; // 返回错误信息
+    const message = error instanceof Error ? error.message : String(error);
+    return `// Error decoding content: ${message}`; // 返回错误信息
   }
 };

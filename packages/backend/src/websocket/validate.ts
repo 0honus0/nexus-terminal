@@ -1,15 +1,42 @@
 import { z } from 'zod';
 import { messageSchemaRegistry, SupportedMessageType } from './schemas';
 
+type ValidatedWebSocketMessage = {
+  type: string;
+  payload?: unknown;
+  requestId?: string;
+};
+
 /**
  * WebSocket 消息校验结果
  */
-export interface ValidationResult {
-  success: boolean;
-  data?: any;
-  error?: string;
-  errorDetails?: z.ZodIssue[];
-}
+export type ValidationResult =
+  | {
+      success: true;
+      data: ValidatedWebSocketMessage;
+    }
+  | {
+      success: false;
+      error: string;
+      errorDetails?: z.ZodIssue[];
+    };
+
+const toValidatedWebSocketMessage = (value: unknown): ValidatedWebSocketMessage | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.type !== 'string') {
+    return null;
+  }
+
+  return {
+    type: record.type,
+    payload: record.payload,
+    requestId: typeof record.requestId === 'string' ? record.requestId : undefined,
+  };
+};
 
 /**
  * 统一的 WebSocket 消息校验函数
@@ -17,7 +44,7 @@ export interface ValidationResult {
  * @param message 原始消息对象（已 JSON 解析）
  * @returns 校验结果
  */
-export function validateWebSocketMessage(message: any): ValidationResult {
+export function validateWebSocketMessage(message: unknown): ValidationResult {
   // 1. 基础结构校验：必须有 type 字段
   if (!message || typeof message !== 'object') {
     return {
@@ -26,7 +53,8 @@ export function validateWebSocketMessage(message: any): ValidationResult {
     };
   }
 
-  const { type } = message;
+  const record = message as Record<string, unknown>;
+  const { type } = record;
 
   if (!type || typeof type !== 'string') {
     return {
@@ -48,9 +76,17 @@ export function validateWebSocketMessage(message: any): ValidationResult {
 
   try {
     const validatedData = schema.parse(message);
+    const messageEnvelope = toValidatedWebSocketMessage(validatedData);
+    if (!messageEnvelope) {
+      return {
+        success: false,
+        error: '消息校验失败：缺少有效的 type 字段',
+      };
+    }
+
     return {
       success: true,
-      data: validatedData,
+      data: messageEnvelope,
     };
   } catch (error) {
     if (error instanceof z.ZodError) {

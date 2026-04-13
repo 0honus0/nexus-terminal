@@ -8,7 +8,7 @@ import { useLayoutStore } from '../stores/layout.store';
 export interface StatusMonitorDependencies {
   onMessage: (
     type: string,
-    handler: (payload: any, fullMessage?: WebSocketMessage) => void
+    handler: (payload: unknown, fullMessage?: WebSocketMessage) => void
   ) => () => void;
   isConnected: ComputedRef<boolean>;
 }

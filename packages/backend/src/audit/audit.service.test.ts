@@ -15,14 +15,23 @@ vi.mock('./audit.repository', () => ({
 }));
 
 describe('AuditLogService', () => {
+  type MockAuditRepository = {
+    addLog: ReturnType<typeof vi.fn>;
+    getLogs: ReturnType<typeof vi.fn>;
+  };
+
   let service: AuditLogService;
-  let mockRepository: any;
+  let mockRepository: MockAuditRepository;
 
   beforeEach(() => {
     vi.clearAllMocks();
     service = new AuditLogService();
     // 获取 mock 的 repository 实例
-    mockRepository = (AuditLogRepository as any).mock.results[0].value;
+    mockRepository = (
+      AuditLogRepository as unknown as {
+        mock: { results: Array<{ value: MockAuditRepository }> };
+      }
+    ).mock.results[0].value;
   });
 
   afterEach(() => {

@@ -82,8 +82,9 @@ export function useCaptchaSettings() {
       // Clear secret key fields from the form after successful save
       captchaForm.hcaptchaSecretKey = '';
       captchaForm.recaptchaSecretKey = '';
-    } catch (error: any) {
-      captchaMessage.value = error.message || t('settings.captcha.error.saveFailed');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '';
+      captchaMessage.value = errorMessage || t('settings.captcha.error.saveFailed');
       captchaSuccess.value = false;
     } finally {
       captchaLoading.value = false;

@@ -1,6 +1,7 @@
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import apiClient from '../../utils/apiClient';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 export function useAuditSettings() {
   const { t } = useI18n();
@@ -43,12 +44,12 @@ export function useAuditSettings() {
         '最大保留条数已保存'
       );
       auditLogMaxEntriesSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新审计日志最大保留条数失败:', error);
-      auditLogMaxEntriesMessage.value =
-        error.response?.data?.message ||
-        error.message ||
-        t('settings.auditLog.error.maxEntriesSaveFailed', '保存失败');
+      auditLogMaxEntriesMessage.value = extractErrorMessage(
+        error,
+        t('settings.auditLog.error.maxEntriesSaveFailed', '保存失败')
+      );
       auditLogMaxEntriesSuccess.value = false;
     } finally {
       auditLogMaxEntriesLoading.value = false;
@@ -84,10 +85,12 @@ export function useAuditSettings() {
       deleteAuditLogsSuccess.value = true;
       showDeleteConfirm.value = false;
       await fetchAuditLogCount();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('删除审计日志失败:', error);
-      deleteAuditLogsMessage.value =
-        error.response?.data?.message || t('settings.auditLog.error.deleteFailed', '删除失败');
+      deleteAuditLogsMessage.value = extractErrorMessage(
+        error,
+        t('settings.auditLog.error.deleteFailed', '删除失败')
+      );
       deleteAuditLogsSuccess.value = false;
     } finally {
       deleteAuditLogsLoading.value = false;

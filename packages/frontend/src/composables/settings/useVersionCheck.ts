@@ -46,7 +46,7 @@ export function useVersionCheck() {
       } else {
         throw new Error('Empty VERSION');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
           console.warn('暂无可用的发布版本');

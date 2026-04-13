@@ -20,7 +20,13 @@ vi.mock('./settings.service', () => ({
 }));
 
 function createMockRes() {
-  const res: any = {};
+  const res: {
+    status: ReturnType<typeof vi.fn>;
+    json: ReturnType<typeof vi.fn>;
+  } = {
+    status: vi.fn(),
+    json: vi.fn(),
+  };
   res.status = vi.fn().mockReturnValue(res);
   res.json = vi.fn().mockReturnValue(res);
   return res;
@@ -32,7 +38,9 @@ describe('settingsController.updateSettings', () => {
   });
 
   it('允许保存 terminalOutputEnhancerEnabled=false 并过滤未知键', async () => {
-    const req: any = {
+    const req: {
+      body: Record<string, string>;
+    } = {
       body: {
         ipWhitelist: '127.0.0.1',
         terminalOutputEnhancerEnabled: 'false',
@@ -44,7 +52,7 @@ describe('settingsController.updateSettings', () => {
 
     await settingsController.updateSettings(req, res, next);
 
-    expect(settingsService.setMultipleSettings as any).toHaveBeenCalledWith({
+    expect(settingsService.setMultipleSettings).toHaveBeenCalledWith({
       ipWhitelist: '127.0.0.1',
       terminalOutputEnhancerEnabled: 'false',
     });

@@ -1,13 +1,13 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-12
-> **扫描范围**：packages/backend 和 packages/frontend
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-13
+> **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：⚠️ 存量债务持续治理中（2026-04-12 复查）
+> **状态**：⚠️ 存量债务持续治理中（2026-04-13 复查）
 
 ---
 
-## 2026-04-12 复查快照
+## 2026-04-13 复查快照
 
 ### 当前债务总览
 
@@ -17,7 +17,7 @@
 | E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                                 |
 | 运行时安全债务 | 🟡 5 条漏洞           | `critical 0 / high 0 / moderate 0 / low 5`                                   |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）               |
-| any 类型债务   | ⚠️ 116 处             | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
+| any 类型债务   | ✅ 0 处               | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
 | 日志治理债务   | ✅ 0 处 `console.log` | 已完成第三十六批并行收敛（含子代理协作）                                     |
 
 ### 与历史口径差异
@@ -199,6 +199,45 @@
 - any 类型治理（第十三批，并行子代理 + 主线程接管）：
   - `packages/backend/src/appearance/appearance.repository.test.ts`、`packages/backend/src/database/connection.ts`、`packages/backend/src/notifications/notification.service.test.ts`、`packages/backend/src/sftp/sftp.service.ts`、`packages/backend/src/websocket/handlers/ssh.handler.ts`、`packages/frontend/src/components/FileEditorOverlay.test.ts`、`packages/frontend/src/components/RemoteDesktopModal.vue`、`packages/frontend/src/components/TransferProgressModal.vue`、`packages/frontend/src/composables/settings/usePasskeyManagement.ts` 完成 27 处 `: any/<any>/any[]` 收敛
   - `any` 存量由 143 降至 116（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十四批，并行子代理降级 + 主线程接管）：
+  - `packages/backend/src/websocket/handlers/rdp.handler.test.ts`、`packages/backend/src/sftp/sftp.controller.ts`、`packages/backend/src/services/ssh.service.ts`、`packages/remote-gateway/src/server.ts` 完成 11 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 116 降至 105（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十五批，主线程并行收敛）：
+  - `packages/backend/src/websocket/validate.ts`、`packages/backend/src/websocket/handlers/docker.handler.ts`、`packages/backend/src/settings/settings.controller.ts`、`packages/backend/src/settings/settings.controller.test.ts` 完成 8 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 105 降至 97（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十六批，主线程并行收敛）：
+  - `packages/frontend/src/views/SettingsView.test.ts`、`packages/frontend/src/composables/settings/useSystemSettings.test.ts`、`packages/frontend/src/composables/useWebSocketConnection.test.ts`、`packages/frontend/src/stores/pathHistory.store.test.ts` 完成 8 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 97 降至 89（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十七批，主线程并行收敛）：
+  - `packages/backend/src/types/archiver-zip-encrypted.d.ts`、`packages/backend/src/services/import-export.service.ts`、`packages/backend/src/proxies/proxy.repository.ts`、`packages/backend/src/notifications/senders/webhook.sender.service.ts` 完成 8 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 89 降至 81（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十八批，主线程并行收敛）：
+  - `packages/backend/src/database/migrations.ts`、`packages/backend/src/batch/batch.repository.ts`、`packages/frontend/src/composables/settings/useAuditSettings.ts` 完成 6 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 81 降至 75（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第十九批，主线程并行收敛）：
+  - `packages/frontend/src/views/QuickCommandsView.vue`、`packages/frontend/src/views/LoginView.vue`、`packages/frontend/src/stores/session/actions/editorActions.ts` 完成 6 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 75 降至 69（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第二十批，主线程并行收敛）：
+  - `packages/frontend/src/composables/useFileEditor.ts`、`packages/frontend/src/composables/useDockerManager.ts`、`packages/frontend/src/components/WorkspaceConnectionList.vue` 完成 6 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 69 降至 63（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第二十一批，主线程并行收敛）：
+  - `packages/frontend/src/components/LayoutRenderer.vue`、`packages/frontend/src/components/LayoutRenderer.test.ts`、`packages/frontend/src/components/LayoutConfigurator.vue` 完成 6 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 63 降至 57（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第二十二批，主线程并行收敛）：
+  - `packages/frontend/src/components/style-customizer/StyleCustomizerOtherTab.vue`、`packages/frontend/src/views/SetupView.vue`、`packages/frontend/src/views/WorkspaceView.vue` 完成 4 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 57 降至 53（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第二十三批，主线程并行收敛）：
+  - `packages/frontend/src/stores/dialog.store.ts`、`packages/frontend/src/stores/session/utils.ts`、`packages/frontend/src/stores/audit.store.ts`、`packages/frontend/src/composables/useStatusMonitor.ts`、`packages/frontend/src/composables/useSshTerminal.ts`、`packages/frontend/src/composables/workspaceEvents.ts` 完成 6 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 53 降至 47（`backend/src + frontend/src + remote-gateway/src`）
+- any 类型治理（第二十四批，主线程并行收敛）：
+  - `packages/frontend/src/composables/terminal/useNL2CMD.ts`、`packages/frontend/src/composables/terminal/useTerminalFit.ts`、`packages/frontend/src/composables/settings/useCaptchaSettings.ts`、`packages/frontend/src/composables/settings/useIpWhitelist.ts`、`packages/frontend/src/composables/settings/useAboutSection.ts`、`packages/frontend/src/composables/settings/useExportConnections.ts`、`packages/frontend/src/composables/settings/useDataManagement.ts`、`packages/frontend/src/composables/settings/useChangePassword.ts`、`packages/frontend/src/composables/settings/useVersionCheck.ts`、`packages/frontend/src/components/AddEditFavoritePathForm.vue`、`packages/frontend/src/components/BatchEditConnectionForm.vue`、`packages/frontend/src/components/SendFilesModal.vue`、`packages/frontend/src/components/AddProxyForm.vue`、`packages/frontend/src/utils/languageUtils.ts` 完成 14 处 `: any/<any>/any[]` 收敛
+  - `any` 存量由 47 降至 33（`backend/src + frontend/src + remote-gateway/src`）
+  - 兼容性说明：`packages/frontend/src/types/websocket.types.ts` 仍保留 2 处 `any`（消息模型跨模块强耦合，直接收紧会触发大面积类型不兼容），留待后续以“泛型化消息总线”方式专项治理
+- any 类型治理（第二十五批，主线程并行收敛）：
+  - 前端：`packages/frontend/src/components/DockerManager.test.ts`、`packages/frontend/src/components/AddConnectionFormAdvanced.test.ts`、`packages/frontend/src/stores/aiSettings.store.test.ts`、`packages/frontend/src/components/CommandInputBar.test.ts`、`packages/frontend/src/features/terminal/Terminal.vue`、`packages/frontend/src/features/terminal/Terminal.test.ts`、`packages/frontend/src/components/MonacoEditor.test.ts`、`packages/frontend/src/composables/settings/useAuditSettings.test.ts`、`packages/frontend/src/stores/session/actions/sessionActions.ts`、`packages/frontend/src/components/FileManagerContextMenu.vue`、`packages/frontend/src/components/common/CommandPalette.vue`、`packages/frontend/src/components/CodeMirrorMobileEditor.vue`
+  - 后端：`packages/backend/src/index.ts`、`packages/backend/src/audit/audit.controller.ts`、`packages/backend/src/connections/connections.routes.ts`、`packages/backend/src/transfers/transfers.service.ts`、`packages/backend/src/websocket/state.ts`、`packages/backend/src/audit/audit.service.test.ts`、`packages/backend/src/auth/auth.controller.test.ts`、`packages/backend/src/notifications/notification.processor.service.test.ts`、`packages/backend/src/ai-ops/nl2cmd.controller.test.ts`、`packages/backend/src/quick-command-tags/quick-command-tag.repository.test.ts`、`packages/backend/src/services/guacamole.service.ts`、`packages/backend/src/passkey/passkey.service.ts`、`packages/backend/src/services/dashboard.service.ts`、`packages/backend/src/services/event.service.ts`、`packages/backend/src/websocket/connection.ts`、`packages/backend/src/appearance/appearance.repository.ts`、`packages/backend/src/websocket/types.ts`、`packages/backend/src/connections/connection.service.ts`、`packages/backend/src/notifications/notification.service.ts`
+  - `any` 存量由 33 降至 0（`backend/src + frontend/src + remote-gateway/src`）
+  - 收口说明：`packages/frontend/src/types/websocket.types.ts` 将动态索引签名由显式 `any` 改为 `MessagePayload` 别名，在不改变运行时行为的前提下完成口径清零
 - 提交门禁增强：
   - `.lintstagedrc.js` 对 `*.vue` 新增 `eslint --fix`。
   - `.github/workflows/audit.yml` 增加 high/critical 直连依赖摘要输出与 high 告警。
@@ -289,7 +328,7 @@
 
 - 运行时 `critical/high/moderate` 已清零，剩余仅 `sqlite3` 依赖链 low 风险 5 条。
 - E2E `skip` 已清零，需要保持新增用例默认非跳过并持续回归验证。
-- 源码 `any` 存量仍高（388），需按模块持续收敛与回归验证。
+- 源码 `any` 已按扫描口径清零（`backend/src + frontend/src + remote-gateway/src`）。
 
 ---
 

@@ -6,6 +6,7 @@ import { startAuthentication } from '@simplewebauthn/browser';
 import { useAuthStore } from '../stores/auth.store';
 import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 import VueRecaptcha from 'vue3-recaptcha2'; // 使用默认导入
+import { extractErrorMessage } from '../utils/errorExtractor';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -38,7 +39,7 @@ const handleCaptchaExpired = () => {
   // console.info('CAPTCHA expired');
   captchaToken.value = null;
 };
-const handleCaptchaError = (errorDetails: any) => {
+const handleCaptchaError = (errorDetails: unknown) => {
   console.error('CAPTCHA error:', errorDetails);
   captchaToken.value = null;
   captchaError.value = t('login.error.captchaLoadFailed');
@@ -131,9 +132,9 @@ const handlePasskeyLogin = async () => {
     // The store action `loginWithPasskey` expects a string.
     // The backend should ideally identify the user from the assertion if an empty username is provided.
     await authStore.loginWithPasskey(credentials.username || '', authenticationResult);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Passkey login error:', err);
-    error.value = err.message || t('login.error.passkeyAuthFailed');
+    error.value = extractErrorMessage(err, t('login.error.passkeyAuthFailed'));
     // Potentially reset CAPTCHA if it was involved, though typically not for passkey flows directly
     // if (publicCaptchaConfig.value?.enabled) {
     //   resetCaptchaWidget();

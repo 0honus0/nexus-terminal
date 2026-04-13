@@ -196,7 +196,7 @@ const handleSendToClick = () => {
   emit('close-request');
 };
 
-const handleFilesSent = (payload: any) => {
+const handleFilesSent = (payload: unknown) => {
   console.info('Files to send (from FileManagerContextMenu):', payload);
   // 实际发送逻辑可以后续添加或委派
 };

@@ -126,7 +126,16 @@ class NotificationProcessorService extends EventEmitter {
       return;
     }
     console.info(`[NotificationProcessor] 收到测试事件`, payload);
-    const { testTargetConfig, testTargetChannelType } = payload.details || {};
+    const detailsRecord =
+      payload.details && typeof payload.details === 'object'
+        ? (payload.details as Record<string, unknown>)
+        : {};
+    const testTargetConfig = detailsRecord.testTargetConfig as
+      | NotificationChannelConfig
+      | undefined;
+    const testTargetChannelType = detailsRecord.testTargetChannelType as
+      | NotificationChannelType
+      | undefined;
 
     if (!testTargetConfig || !testTargetChannelType) {
       console.error(

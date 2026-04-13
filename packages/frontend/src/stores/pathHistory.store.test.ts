@@ -62,7 +62,7 @@ describe('pathHistory.store', () => {
     });
 
     await store.fetchHistory();
-    expect(store.historyList.map((e: any) => e.id)).toEqual([2, 1]);
+    expect(store.historyList.map((e) => e.id)).toEqual([2, 1]);
     expect(store.isLoading).toBe(false);
     expect(store.error).toBeNull();
   });
@@ -82,7 +82,7 @@ describe('pathHistory.store', () => {
 
     (apiClient.delete as any).mockResolvedValueOnce(undefined);
     await store.deletePath(1);
-    expect(store.historyList.map((e: any) => e.id)).toEqual([2]);
+    expect(store.historyList.map((e) => e.id)).toEqual([2]);
     expect(uiNotificationsStoreMock.showSuccess).toHaveBeenCalled();
   });
 

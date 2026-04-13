@@ -39,10 +39,10 @@ vi.mock('vue-i18n', () => ({
 }));
 
 vi.mock('pinia', async () => {
-  const actual = await vi.importActual<any>('pinia');
+  const actual = await vi.importActual<typeof import('pinia')>('pinia');
   return {
     ...actual,
-    storeToRefs: (store: any) => store,
+    storeToRefs: <T extends object>(store: T) => store,
   };
 });
 

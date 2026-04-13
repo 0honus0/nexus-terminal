@@ -21,6 +21,31 @@ import { setLogLevel as setRuntimeLogLevel, type LogLevel } from '../logging/log
 const auditLogService = new AuditLogService();
 const notificationService = new NotificationService();
 
+type FocusShortcutConfig = {
+  shortcut?: string;
+};
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item: unknown) => typeof item === 'string');
+
+const isFocusShortcutConfig = (value: unknown): value is FocusShortcutConfig => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  if (!('shortcut' in value)) {
+    return true;
+  }
+
+  const shortcut = (value as { shortcut?: unknown }).shortcut;
+  return shortcut === undefined || typeof shortcut === 'string';
+};
+
+const isShortcutRecord = (value: unknown): value is Record<string, FocusShortcutConfig> =>
+  typeof value === 'object' &&
+  value !== null &&
+  Object.values(value).every((shortcut: unknown) => isFocusShortcutConfig(shortcut));
+
 export const settingsController = {
   /**
    * 获取外观设置
@@ -168,15 +193,10 @@ export const settingsController = {
           typeof fullConfig === 'object' &&
           fullConfig !== null &&
           Array.isArray(fullConfig.sequence) &&
-          fullConfig.sequence.every((item: any) => typeof item === 'string') &&
+          isStringArray(fullConfig.sequence) &&
           typeof fullConfig.shortcuts === 'object' &&
           fullConfig.shortcuts !== null &&
-          Object.values(fullConfig.shortcuts).every(
-            (sc: any) =>
-              typeof sc === 'object' &&
-              sc !== null &&
-              (sc.shortcut === undefined || typeof sc.shortcut === 'string')
-          )
+          isShortcutRecord(fullConfig.shortcuts)
         )
       ) {
         console.warn('[SettingsController] 收到无效的完整焦点配置格式:', fullConfig);

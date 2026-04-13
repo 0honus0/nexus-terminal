@@ -210,7 +210,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
   // 定义默认键值对以确保存在
   const defaultEntries: Array<{
     key: keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>;
-    value: any;
+    value: unknown;
   }> = [
     { key: 'customUiTheme', value: defaults.customUiTheme },
     { key: 'activeTerminalThemeId', value: null }, // 以 null 开始

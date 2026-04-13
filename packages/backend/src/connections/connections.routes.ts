@@ -44,7 +44,7 @@ router.get('/export', exportConnections);
 router.post(
   '/import',
   (req: Request, res: Response, next: NextFunction) => {
-    upload.single('connectionsFile')(req, res, (err: any) => {
+    upload.single('connectionsFile')(req, res, (err: unknown) => {
       if ((req as any).fileValidationError) {
         return res.status(400).json({ message: (req as any).fileValidationError });
       }

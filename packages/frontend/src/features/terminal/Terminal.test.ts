@@ -163,9 +163,9 @@ vi.mock('pinia', async (importOriginal) => {
   const actual = await importOriginal<typeof import('pinia')>();
   return {
     ...actual,
-    storeToRefs: (store: any) => {
+    storeToRefs: <T extends object>(store: T) => {
       // Return appropriate refs based on which store is being used
-      if (store.setTerminalFontSize) {
+      if ('setTerminalFontSize' in store) {
         // appearance store
         return mockAppearanceState;
       }

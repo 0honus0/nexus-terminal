@@ -55,7 +55,7 @@ export function unregisterUserSocket(userId: number, ws: AuthenticatedWebSocket)
  * @param message 要发送的消息对象（将自动序列化为 JSON）
  * @returns 成功发送的连接数
  */
-export function broadcastToUser(userId: number, message: any): number {
+export function broadcastToUser(userId: number, message: unknown): number {
   const sockets = userSockets.get(userId);
   if (!sockets || sockets.size === 0) {
     console.warn(`[WebSocket 广播] 用户 ${userId} 没有活动连接，消息未发送。`);

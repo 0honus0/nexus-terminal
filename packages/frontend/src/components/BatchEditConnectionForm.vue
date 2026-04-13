@@ -38,6 +38,7 @@ const uiNotificationsStore = useUiNotificationsStore();
 const proxiesStore = useProxiesStore();
 const tagsStore = useTagsStore();
 const sshKeysStore = useSshKeysStore();
+type UpdateConnectionPayload = Parameters<typeof connectionsStore.updateConnection>[1];
 
 const internalVisible = ref(props.visible);
 const isLoading = ref(false);
@@ -99,7 +100,7 @@ const handleSave = async () => {
     return;
   }
 
-  const updatesToApply: Partial<ConnectionInfo> = {};
+  const updatesToApply: UpdateConnectionPayload = {};
 
   if (enablePortEdit.value && formData.value.port !== undefined) {
     if (formData.value.port === null || String(formData.value.port).trim() === '') {
@@ -120,7 +121,8 @@ const handleSave = async () => {
         formData.value.username === null ? undefined : formData.value.username;
     }
     if (formData.value.password !== undefined) {
-      (updatesToApply as any).password = formData.value.password;
+      updatesToApply.password =
+        formData.value.password === null ? undefined : formData.value.password;
     }
     if (formData.value.ssh_key_id !== undefined) {
       updatesToApply.ssh_key_id = formData.value.ssh_key_id;
@@ -153,7 +155,7 @@ const handleSave = async () => {
   try {
     let successCount = 0;
     for (const id of props.connectionIds) {
-      const success = await connectionsStore.updateConnection(id, updatesToApply as ConnectionInfo);
+      const success = await connectionsStore.updateConnection(id, updatesToApply);
       if (success) successCount++;
     }
 
@@ -165,9 +167,10 @@ const handleSave = async () => {
       emit('saved');
     }
     emit('update:visible', false);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Batch update error:', error);
-    uiNotificationsStore.addNotification({ message: error.message, type: 'error' });
+    const errorMessage = error instanceof Error ? error.message : 'Batch update failed';
+    uiNotificationsStore.addNotification({ message: errorMessage, type: 'error' });
   } finally {
     isLoading.value = false;
   }

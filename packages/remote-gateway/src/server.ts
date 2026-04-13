@@ -77,30 +77,48 @@ const clientOptions = {
   connectionDefaultSettings: {},
 };
 
-let guacServer: any;
+type UnknownEventHandler = (...args: unknown[]) => void;
+
+interface GuacServerLike {
+  on?: (event: string, handler: UnknownEventHandler) => void;
+  close?: (callback: () => void) => void;
+}
+
+interface GuacClientLike {
+  id?: string;
+  on?: (event: string, handler: UnknownEventHandler) => void;
+}
+
+const isGuacClientLike = (value: unknown): value is GuacClientLike =>
+  typeof value === 'object' && value !== null;
+
+let guacServer: GuacServerLike | null = null;
 
 try {
   console.info(
     `[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`
   );
-  guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions);
+  const server = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions) as GuacServerLike;
+  guacServer = server;
   console.info(`[Remote Gateway] GuacamoleLite 初始化成功。`);
 
-  if (guacServer.on) {
-    guacServer.on('error', (error: Error) => {
+  if (server.on) {
+    server.on('error', (error: unknown) => {
       console.error(`[Remote Gateway] GuacamoleLite 服务器错误:`, error);
     });
-    guacServer.on('connection', (client: any) => {
-      const clientId = client.id || '未知客户端ID';
+    server.on('connection', (client: unknown) => {
+      const safeClient = isGuacClientLike(client) ? client : undefined;
+      const clientId = typeof safeClient?.id === 'string' ? safeClient.id : '未知客户端ID';
       console.info(`[Remote Gateway] Guacd 连接事件触发。客户端 ID: ${clientId}`);
 
-      if (client && typeof client.on === 'function') {
-        client.on('disconnect', (reason: string) => {
+      if (safeClient && typeof safeClient.on === 'function') {
+        safeClient.on('disconnect', (reason: unknown) => {
+          const reasonText = typeof reason === 'string' ? reason : '未知';
           console.info(
-            `[Remote Gateway] Guacd 连接断开。客户端 ID: ${clientId}, 原因: ${reason || '未知'}`
+            `[Remote Gateway] Guacd 连接断开。客户端 ID: ${clientId}, 原因: ${reasonText}`
           );
         });
-        client.on('error', (err: Error) => {
+        safeClient.on('error', (err: unknown) => {
           console.error(`[Remote Gateway] Guacd 客户端错误。客户端 ID: ${clientId}, 错误:`, err);
         });
       }

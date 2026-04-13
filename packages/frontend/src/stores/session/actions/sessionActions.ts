@@ -141,9 +141,14 @@ export const openNewSession = (
   // +++ 在连接前设置 ssh:connected 处理器以更新 sessionId +++
   const originalFrontendSessionIdForHandler = newSessionId; // 仅用于日志与首次兜底查找
 
+  interface SshConnectedPayload {
+    sessionId: string;
+    connectionId: number | string;
+  }
+
   const unregisterConnectedHandler = wsManager.onMessage(
     'ssh:connected',
-    (connectedPayload: any) => {
+    (connectedPayload: SshConnectedPayload) => {
       const backendSID = connectedPayload.sessionId as string;
       const backendCID = String(connectedPayload.connectionId);
 

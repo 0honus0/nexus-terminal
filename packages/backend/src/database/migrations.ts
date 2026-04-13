@@ -21,6 +21,14 @@ interface Migration {
   check?: (db: Database) => Promise<boolean>; // 可选的前置检查函数
 }
 
+interface TableInfoColumn {
+  name: string;
+}
+
+interface TableCreateSqlRow {
+  sql: string | null;
+}
+
 // 辅助函数：检查表是否存在
 const tableExists = async (db: Database, tableName: string): Promise<boolean> => {
   return new Promise((resolve, reject) => {
@@ -42,7 +50,7 @@ const columnExists = async (
   columnName: string
 ): Promise<boolean> => {
   return new Promise((resolve, reject) => {
-    db.all(`PRAGMA table_info(${tableName})`, (err, columns: any[]) => {
+    db.all(`PRAGMA table_info(${tableName})`, (err, columns: TableInfoColumn[]) => {
       if (err) reject(err);
       else resolve(columns.some((col) => col.name === columnName));
     });
@@ -55,7 +63,7 @@ const getTableCreateSQL = async (db: Database, tableName: string): Promise<strin
     db.get(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
       [tableName],
-      (err, row: any) => {
+      (err, row: TableCreateSqlRow) => {
         if (err) reject(err);
         else resolve(row ? row.sql : null);
       }

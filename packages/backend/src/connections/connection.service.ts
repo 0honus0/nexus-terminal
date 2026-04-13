@@ -502,7 +502,10 @@ export const updateConnection = async (
   // 5. 如果进行了任何更改，则记录审计操作
   if (hasNonTagChanges || input.tag_ids !== undefined) {
     // Add type to audit log if it was updated
-    const auditDetails: any = { connectionId: id, updatedFields: updatedFieldsForAudit };
+    const auditDetails: Record<string, unknown> = {
+      connectionId: id,
+      updatedFields: updatedFieldsForAudit,
+    };
     if (dataToUpdate.type) {
       auditDetails.newType = dataToUpdate.type;
     }

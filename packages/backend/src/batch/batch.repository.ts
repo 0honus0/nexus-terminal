@@ -195,7 +195,7 @@ export const updateTaskStatus = async (
   const db = await getDbInstance();
   const now = Math.floor(Date.now() / 1000);
   const setClauses: string[] = ['status = ?', 'updated_at = ?'];
-  const values: any[] = [status, now];
+  const values: unknown[] = [status, now];
 
   if (updates.overallProgress !== undefined) {
     setClauses.push('overall_progress = ?');
@@ -255,7 +255,7 @@ export const updateSubTaskStatus = async (
 ): Promise<void> => {
   const db = await getDbInstance();
   const setClauses: string[] = ['status = ?', 'progress = ?'];
-  const values: any[] = [status, progress];
+  const values: unknown[] = [status, progress];
 
   if (updates.exitCode !== undefined) {
     setClauses.push('exit_code = ?');

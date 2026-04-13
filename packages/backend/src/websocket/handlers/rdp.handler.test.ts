@@ -8,9 +8,23 @@ import WebSocket from 'ws';
 
 import { handleRdpProxyConnection } from './rdp.handler';
 import { AuthenticatedWebSocket } from '../types';
+import { Request } from 'express';
+
+type MockRdpWs = EventEmitter & {
+  readyState: number;
+  send: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+};
+
+type RdpProxyRequest = Request & {
+  clientIpAddress?: string;
+  rdpToken?: string;
+  rdpWidth?: string;
+  rdpHeight?: string;
+};
 
 // 存储 mock RDP WebSocket 实例的引用
-let capturedRdpWs: any = null;
+let capturedRdpWs: MockRdpWs | null = null;
 
 // Mock ws module for RDP WebSocket connection
 vi.mock('ws', async (importOriginal) => {
@@ -18,7 +32,7 @@ vi.mock('ws', async (importOriginal) => {
 
   // 创建 mock 构造函数并保留静态常量
   const MockWebSocket = vi.fn().mockImplementation(() => {
-    const mockRdpWs = new EventEmitter() as any;
+    const mockRdpWs = new EventEmitter() as MockRdpWs;
     mockRdpWs.readyState = 1; // WebSocket.OPEN = 1
     mockRdpWs.send = vi.fn();
     mockRdpWs.close = vi.fn();
@@ -60,19 +74,19 @@ function createMockWebSocket(
 }
 
 // Helper to create mock Request
-function createMockRequest(overrides: any = {}): any {
+function createMockRequest(overrides: Partial<RdpProxyRequest> = {}): RdpProxyRequest {
   return {
     clientIpAddress: '127.0.0.1',
     rdpToken: 'valid-rdp-token',
     rdpWidth: '1920',
     rdpHeight: '1080',
     ...overrides,
-  };
+  } as RdpProxyRequest;
 }
 
 describe('RDP WebSocket Handler', () => {
   let mockWs: AuthenticatedWebSocket;
-  let mockRequest: any;
+  let mockRequest: RdpProxyRequest;
 
   beforeEach(() => {
     vi.clearAllMocks();

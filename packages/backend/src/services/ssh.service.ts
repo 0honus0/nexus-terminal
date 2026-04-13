@@ -346,7 +346,7 @@ const _establishDirectSshConnection = (
     (connectConfig as any).authMethod = 'keyboard-interactive';
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (connectConfig as any).keyboardInteractive = (
-      _ctx: any,
+      _ctx: unknown,
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
@@ -544,7 +544,7 @@ function _prepareConnectConfigForHop(
     (config as any).authMethod = 'keyboard-interactive';
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (config as any).keyboardInteractive = (
-      _ctx: any,
+      _ctx: unknown,
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
@@ -638,7 +638,7 @@ async function _establishConnectionViaJumpChainRecursive(
         (finalConnectConfig as any).authMethod = 'keyboard-interactive';
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (finalConnectConfig as any).keyboardInteractive = (
-          _ctx: any,
+          _ctx: unknown,
           messages: string[],
           finish: (responses: string[]) => void
         ) => {

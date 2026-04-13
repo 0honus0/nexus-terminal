@@ -484,6 +484,10 @@ export class NotificationService {
 
     const translatedDetails = this._translatePayloadDetails(payload.details, userLang);
     const translatedPayload = { ...payload, details: translatedDetails };
+    const translatedDetailsRecord =
+      translatedPayload.details && typeof translatedPayload.details === 'object'
+        ? (translatedPayload.details as Record<string, unknown>)
+        : null;
 
     const defaultBody = JSON.stringify(translatedPayload, null, 2);
     const defaultBodyTemplate = `Default: JSON payload. Use {event}, {timestamp}, {details}.`;
@@ -499,8 +503,8 @@ export class NotificationService {
       ),
 
       details:
-        typeof translatedPayload.details === 'object' && translatedPayload.details?.message
-          ? translatedPayload.details.message
+        translatedDetailsRecord && typeof translatedDetailsRecord.message === 'string'
+          ? translatedDetailsRecord.message
           : typeof translatedPayload.details === 'string'
             ? translatedPayload.details
             : JSON.stringify(translatedPayload.details || {}, null, 2),
@@ -783,37 +787,44 @@ export class NotificationService {
     }
   }
 
-  private _translatePayloadDetails(details: any, lng: string): any {
+  private _translatePayloadDetails(details: unknown, lng: string): unknown {
     if (!details || typeof details !== 'object') {
       return details;
     }
 
-    if (details.testResult === 'success' && details.connectionName) {
+    const detailsRecord = details as Record<string, unknown>;
+    const testResult = detailsRecord.testResult;
+    const connectionName =
+      typeof detailsRecord.connectionName === 'string' ? detailsRecord.connectionName : undefined;
+    const detailError = typeof detailsRecord.error === 'string' ? detailsRecord.error : undefined;
+    const updatedKeys = Array.isArray(detailsRecord.updatedKeys) ? detailsRecord.updatedKeys : null;
+
+    if (testResult === 'success' && connectionName) {
       return {
-        ...details,
+        ...detailsRecord,
         message: i18next.t('connection.testSuccess', {
           lng,
-          name: details.connectionName,
-          defaultValue: `Connection test successful for '${details.connectionName}'!`,
+          name: connectionName,
+          defaultValue: `Connection test successful for '${connectionName}'!`,
         }),
       };
     }
-    if (details.testResult === 'failed' && details.connectionName && details.error) {
+    if (testResult === 'failed' && connectionName && detailError) {
       return {
-        ...details,
+        ...detailsRecord,
         message: i18next.t('connection.testFailed', {
           lng,
-          name: details.connectionName,
-          error: details.error,
-          defaultValue: `Connection test failed for '${details.connectionName}': ${details.error}`,
+          name: connectionName,
+          error: detailError,
+          defaultValue: `Connection test failed for '${connectionName}': ${detailError}`,
         }),
       };
     }
 
-    if (details.updatedKeys && Array.isArray(details.updatedKeys)) {
-      if (details.updatedKeys.includes('ipWhitelist')) {
+    if (updatedKeys) {
+      if (updatedKeys.includes('ipWhitelist')) {
         return {
-          ...details,
+          ...detailsRecord,
           message: i18next.t('settings.ipWhitelistUpdated', {
             lng,
             defaultValue: 'IP Whitelist updated successfully.',
@@ -821,7 +832,7 @@ export class NotificationService {
         };
       }
       return {
-        ...details,
+        ...detailsRecord,
         message: i18next.t('settings.updated', {
           lng,
           defaultValue: 'Settings updated successfully.',

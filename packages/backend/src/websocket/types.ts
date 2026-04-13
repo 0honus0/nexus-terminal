@@ -370,7 +370,7 @@ export interface SftpBaseRequest {
     | 'sftp:move'
     | 'sftp:compress'
     | 'sftp:decompress';
-  payload: any; // 不同操作的 payload 结构各异
+  payload: unknown; // 不同操作的 payload 结构各异
   requestId?: string;
 }
 

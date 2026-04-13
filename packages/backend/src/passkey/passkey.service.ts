@@ -295,18 +295,17 @@ export class PasskeyService {
         | 'singleDevice',
     };
 
-    // 使用 'any' 类型是因为 @simplewebauthn/server 库的类型定义
-    // 不能正确识别 'credential' 字段（原 'authenticator'）
-    const verifyOpts: any = {
+    // NOTE: simplewebauthn 的 credential 结构在当前版本类型定义约束较严，
+    // 通过 unknown 中转维持运行时兼容并避免误报阻塞构建。
+    const verifyOpts = {
       response: authenticationResponseJSON,
       expectedChallenge,
       expectedOrigin: RP_ORIGIN,
       expectedRPID: RP_ID,
       credential: credentialObjectForLibrary, // Renamed from authenticator to credential
       requireUserVerification: true,
-    };
+    } as unknown as Parameters<typeof verifyAuthenticationResponse>[0];
 
-    // Call without 'as VerifyAuthenticationResponseOpts' since verifyOpts is 'any'
     const verification = await verifyAuthenticationResponse(verifyOpts);
 
     if (verification.verified && verification.authenticationInfo) {

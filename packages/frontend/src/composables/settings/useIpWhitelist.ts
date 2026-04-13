@@ -29,9 +29,10 @@ export function useIpWhitelist() {
       await settingsStore.updateSetting('ipWhitelist', ipWhitelistInput.value.trim());
       ipWhitelistMessage.value = t('settings.ipWhitelist.success.saved');
       ipWhitelistSuccess.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新 IP 白名单失败:', error);
-      ipWhitelistMessage.value = error.message || t('settings.ipWhitelist.error.saveFailed');
+      const errorMessage = error instanceof Error ? error.message : '';
+      ipWhitelistMessage.value = errorMessage || t('settings.ipWhitelist.error.saveFailed');
       ipWhitelistSuccess.value = false;
     } finally {
       ipWhitelistLoading.value = false;

@@ -88,10 +88,11 @@ const handleSubmit = async () => {
     }
     emit('saveSuccess');
     closeModal();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving favorite path:', error);
+    const errMsg = error instanceof Error ? error.message : '';
     errorMessage.value =
-      error.message ||
+      errMsg ||
       t('favoritePaths.addEditForm.errors.genericSaveError', 'Failed to save favorite path.');
     // Notification is usually handled by the store, but we can show a local error too.
   } finally {

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAppearanceStore } from '../../stores/appearance.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
+import { extractErrorMessage } from '../../utils/errorExtractor';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -58,11 +59,13 @@ const handleSaveEditorFontSize = async () => {
       type: 'success',
       message: t('styleCustomizer.editorFontSizeSaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存编辑器字体大小失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.editorFontSizeSaveFailed', { message: error.message }),
+      message: t('styleCustomizer.editorFontSizeSaveFailed', {
+        message: extractErrorMessage(error, t('common.unknownError', '未知错误')),
+      }),
     });
   }
 };
@@ -75,11 +78,13 @@ const handleSaveEditorFontFamily = async () => {
       type: 'success',
       message: t('styleCustomizer.editorFontFamilySaved'),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('保存编辑器字体失败:', error);
     notificationsStore.addNotification({
       type: 'error',
-      message: t('styleCustomizer.editorFontFamilySaveFailed', { message: error.message }),
+      message: t('styleCustomizer.editorFontFamilySaveFailed', {
+        message: extractErrorMessage(error, t('common.unknownError', '未知错误')),
+      }),
     });
   }
 };
