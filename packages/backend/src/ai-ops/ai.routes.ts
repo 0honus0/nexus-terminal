@@ -26,7 +26,7 @@ const conditionalAiLimiter = async (req: Request, res: Response, next: NextFunct
       return next();
     }
     return aiLimiter(req, res, next);
-  } catch (error) {
+  } catch {
     // 获取配置失败时，默认应用速率限制
     return aiLimiter(req, res, next);
   }

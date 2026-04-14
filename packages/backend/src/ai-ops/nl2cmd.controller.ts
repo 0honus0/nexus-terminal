@@ -13,11 +13,13 @@ import {
 import * as NL2CMDService from './nl2cmd.service';
 import { NL2CMDRequest, AIProviderConfig, AISettings } from './nl2cmd.types';
 
+type SessionWithUserId = Request['session'] & { userId?: number };
+
 /**
  * 获取当前用户 ID
  */
 function getUserId(req: Request): number | null {
-  return (req.session as any)?.userId ?? null;
+  return (req.session as SessionWithUserId | undefined)?.userId ?? null;
 }
 
 /**

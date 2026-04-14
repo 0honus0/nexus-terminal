@@ -7,11 +7,13 @@ import { Request, Response } from 'express';
 import * as AIService from './ai.service';
 import { AIQueryRequest } from './ai.types';
 
+type SessionWithUserId = Request['session'] & { userId?: number };
+
 /**
  * 获取当前用户 ID
  */
 function getUserId(req: Request): number | null {
-  return (req.session as any)?.userId ?? null;
+  return (req.session as SessionWithUserId | undefined)?.userId ?? null;
 }
 
 /**

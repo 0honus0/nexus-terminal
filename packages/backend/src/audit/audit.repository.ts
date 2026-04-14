@@ -14,7 +14,7 @@ export class AuditLogRepository {
    */
   async addLog(
     actionType: AuditLogActionType,
-    details?: Record<string, any> | string | null
+    details?: Record<string, unknown> | string | null
   ): Promise<void> {
     const timestamp = Math.floor(Date.now() / 1000);
     let detailsString: string | null = null;

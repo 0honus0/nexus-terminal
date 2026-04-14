@@ -81,10 +81,9 @@ export const useFavoritePathsStore = defineStore('favoritePaths', {
       this.isInitialized = true;
       await this.fetchFavoritePaths(t);
     },
-    async fetchFavoritePaths(t: (key: string, defaultMessage: string) => string) {
+    async fetchFavoritePaths(_t: (key: string, defaultMessage: string) => string) {
       this.isLoading = true;
       this.error = null;
-      const notificationsStore = useUiNotificationsStore();
       try {
         // Fetch all paths, sorting will be done locally
         const response = await apiClient.get<FavoritePathItem[]>('/favorite-paths');

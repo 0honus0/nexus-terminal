@@ -114,7 +114,7 @@ describe('AI Service', () => {
       };
       (AIRepository.createSession as any).mockResolvedValueOnce(newSession);
 
-      const result = await getOrCreateSession(1);
+      await getOrCreateSession(1);
 
       expect(AIRepository.createSession).toHaveBeenCalledWith('mock-uuid-1234', 1, '新对话');
     });

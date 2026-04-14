@@ -15,7 +15,7 @@ export class AuditLogService {
    */
   async logAction(
     actionType: AuditLogActionType,
-    details?: Record<string, any> | string | null
+    details?: Record<string, unknown> | string | null
   ): Promise<void> {
     // 在这里可以添加额外的逻辑，例如：
     // - 检查是否需要记录此类型的日志 (基于配置)

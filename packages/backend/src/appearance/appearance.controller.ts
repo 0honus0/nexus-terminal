@@ -7,6 +7,14 @@ import { UpdateAppearanceDto } from '../types/appearance.types';
 import * as appearanceService from './appearance.service';
 import { getErrorMessage } from '../utils/AppError';
 
+const getErrorCode = (error: unknown): string | undefined => {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' ? code : undefined;
+};
+
 // --- 背景图片上传配置 (保持不变) ---
 const backgroundStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -178,8 +186,7 @@ export const getBackgroundFileController = async (
       }
     });
   } catch (error: unknown) {
-    const err = error as any;
-    if (err.code === 'ENOENT') {
+    if (getErrorCode(error) === 'ENOENT') {
       console.warn(`[AppearanceController] 请求的背景文件未找到: ${filename}`);
       res.status(404).json({ message: '文件未找到' });
     } else {

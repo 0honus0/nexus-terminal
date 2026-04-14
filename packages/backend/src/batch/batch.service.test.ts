@@ -13,7 +13,6 @@ import {
   cleanupOldTasks,
 } from './batch.service';
 import * as BatchRepository from './batch.repository';
-import * as SshService from '../services/ssh.service';
 import { broadcastToUser } from '../websocket/state';
 import * as ConnectionRepository from '../connections/connection.repository';
 import type { BatchTask, BatchExecPayload } from './batch.types';

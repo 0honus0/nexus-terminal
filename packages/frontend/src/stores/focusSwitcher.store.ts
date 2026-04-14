@@ -26,18 +26,6 @@ export interface FocusSwitcherFullConfig {
 
 // --- 移除 ConfigurableFocusableItem ---
 
-// Store State 接口
-interface FocusSwitcherState {
-  availableInputs: FocusableInput[]; // 所有可用项的基础信息 (无 focusAction)
-  sequenceOrder: string[]; // 顺序切换的 ID 列表
-  itemConfigs: Record<string, FocusItemConfig>; // 所有项目的配置 (id -> config)
-  isConfiguratorVisible: boolean;
-  activateFileManagerSearchTrigger: number;
-  activateTerminalSearchTrigger: number;
-  // 存储注册的聚焦动作
-  registeredActions: Map<string, Array<() => boolean | Promise<boolean | undefined>>>;
-}
-
 // --- 移除 localStorage Key ---
 // const LOCAL_STORAGE_KEY = 'focusSwitcherSequence';
 
@@ -192,7 +180,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
         );
       }
 
-      const result = await response.json();
+      await response.json();
       // console.info('[FocusSwitcherStore] Configuration successfully saved to backend. Response message:', result.message);
     } catch (error) {
       console.error(

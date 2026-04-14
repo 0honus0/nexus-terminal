@@ -9,11 +9,13 @@ import * as BatchService from './batch.service';
 import { BatchExecPayload } from './batch.types';
 import { ErrorFactory } from '../utils/AppError';
 
+type SessionWithUserId = Request['session'] & { userId?: number };
+
 /**
  * 获取当前用户 ID
  */
 function getUserId(req: Request): number {
-  const userId = (req.session as any)?.userId;
+  const userId = (req.session as SessionWithUserId | undefined)?.userId;
   if (!userId) {
     throw ErrorFactory.unauthorized('用户未登录');
   }

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
+// eslint-disable-next-line import/no-cycle -- 认证 API 客户端在运行时存在反向引用
 import apiClient from '../utils/apiClient';
+// eslint-disable-next-line import/no-cycle -- 路由守卫与认证状态存在运行时互相依赖
 import router from '../router';
 import { setLocale } from '../i18n';
 import { extractErrorMessage } from '../utils/errorExtractor';

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import apiClient from '../utils/apiClient';
 
 // 定义所有可用面板的名称
@@ -558,11 +558,12 @@ export const useLayoutStore = defineStore('layout', () => {
     }
 
     if (node.type === 'container' && node.children) {
-      const updatedChildren = node.children.map((child) =>
+      const currentChildren = node.children;
+      const updatedChildren = currentChildren.map((child) =>
         findAndUpdateNodeSize(child, nodeId, childrenSizes)
       );
       // 检查是否有子节点被更新
-      if (updatedChildren.some((child, index) => child !== node.children![index])) {
+      if (updatedChildren.some((child, index) => child !== currentChildren[index])) {
         return { ...node, children: updatedChildren.filter(Boolean) as LayoutNode[] };
       }
     }

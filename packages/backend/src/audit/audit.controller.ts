@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuditLogService } from './audit.service';
 import { AuditLogActionType } from '../types/audit.types';
-import { ErrorFactory } from '../utils/AppError';
 
 const auditLogService = new AuditLogService();
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import { MockSshServer, createMockSshClient, MockShellStream } from './mock-ssh-server';
 
@@ -134,9 +134,9 @@ describe('SSH 服务集成测试', () => {
       await new Promise((r) => setTimeout(r, 100));
 
       const stream = await new Promise<MockShellStream>((resolve, reject) => {
-        mockClient.shell((err: Error | null, stream: MockShellStream) => {
+        mockClient.shell((err: Error | null, shellStream: MockShellStream) => {
           if (err) reject(err);
-          else resolve(stream);
+          else resolve(shellStream);
         });
       });
 
