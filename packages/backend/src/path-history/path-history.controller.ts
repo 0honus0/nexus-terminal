@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import * as PathHistoryService from '../services/path-history.service';
-import { ErrorFactory } from '../utils/AppError';
 
 /**
  * 处理添加新路径历史记录的请求

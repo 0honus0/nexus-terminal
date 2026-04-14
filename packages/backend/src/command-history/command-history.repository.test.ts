@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
+import { runDb, getDb, allDb } from '../database/connection';
 import {
   upsertCommand,
   getAllCommands,

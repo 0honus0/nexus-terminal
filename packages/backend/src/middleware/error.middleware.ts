@@ -44,12 +44,14 @@ export const errorHandler = (
 
   // 技术细节（仅记录到日志，不返回给客户端）
   const technicalDetails = isAppError ? err.details : err.message;
+  type SessionWithUsername = Request['session'] & { username?: string };
+  const session = req.session as SessionWithUsername | undefined;
 
   // 记录错误日志（已经过 P1-5 敏感信息脱敏）
   if (severity === ErrorSeverity.HIGH || severity === ErrorSeverity.CRITICAL) {
     console.error(`[ErrorHandler] [${severity.toUpperCase()}] Request ID: ${requestId}`);
     console.error(`[ErrorHandler] Path: ${req.method} ${req.path}`);
-    console.error(`[ErrorHandler] User: ${(req.session as any)?.username || 'anonymous'}`);
+    console.error(`[ErrorHandler] User: ${session?.username || 'anonymous'}`);
     console.error(`[ErrorHandler] Error Code: ${errorCode}`);
     console.error(`[ErrorHandler] Message: ${userMessage}`);
     if (technicalDetails) {

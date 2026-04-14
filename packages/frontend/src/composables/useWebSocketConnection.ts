@@ -452,7 +452,7 @@ export function createWebSocketConnectionManager(
           scheduleReconnect();
         }
       };
-    } catch (err) {
+    } catch {
       connectionStatus.value = 'error';
       statusMessage.value = getStatusText('wsError');
       isSftpReady.value = false;

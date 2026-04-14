@@ -1,5 +1,6 @@
 import { Database } from 'sqlite3';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+// eslint-disable-next-line import/no-cycle -- 主题仓储复用连接封装，属受控初始化路径
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import {
   TerminalTheme,

@@ -80,5 +80,5 @@ export interface AuditLogEntry {
 // 用于创建日志条目的数据结构
 export interface AuditLogData {
   actionType: AuditLogActionType;
-  details?: Record<string, any> | string | null;
+  details?: Record<string, unknown> | string | null;
 }

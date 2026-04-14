@@ -3,7 +3,6 @@
  * 测试通知分发的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EventEmitter } from 'events';
 
 import {
   NotificationDispatcherService,

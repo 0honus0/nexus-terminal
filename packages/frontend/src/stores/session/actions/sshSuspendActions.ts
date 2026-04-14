@@ -16,6 +16,7 @@ import type {
   SshSuspendAutoTerminatedNotifPayload,
 } from '../../../types/websocket.types';
 import type { WsManagerInstance, SessionState } from '../types';
+// eslint-disable-next-line import/no-cycle -- 会话动作与挂起动作相互编排，属于受控循环
 import {
   activateSession as activateSessionAction,
   openNewSession,

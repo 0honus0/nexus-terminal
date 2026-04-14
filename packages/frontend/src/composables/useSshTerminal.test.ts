@@ -90,12 +90,15 @@ describe('useSshTerminal (createSshTerminalManager)', () => {
       if (!messageHandlers.has(type)) {
         messageHandlers.set(type, []);
       }
-      messageHandlers.get(type)!.push(handler);
+      const handlers = messageHandlers.get(type);
+      if (handlers) {
+        handlers.push(handler);
+      }
       return () => {
-        const handlers = messageHandlers.get(type);
-        if (handlers) {
-          const index = handlers.indexOf(handler);
-          if (index > -1) handlers.splice(index, 1);
+        const registeredHandlers = messageHandlers.get(type);
+        if (registeredHandlers) {
+          const index = registeredHandlers.indexOf(handler);
+          if (index > -1) registeredHandlers.splice(index, 1);
         }
       };
     });

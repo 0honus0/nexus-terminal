@@ -1,6 +1,5 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getErrorMessage } from '../utils/AppError';
 
 // 类型守卫：检查是否为带有 code 属性的 Node.js 系统错误
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

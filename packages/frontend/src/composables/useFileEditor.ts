@@ -1,4 +1,4 @@
-import { ref, readonly, type Ref } from 'vue';
+import { ref, readonly } from 'vue';
 import { useI18n } from 'vue-i18n';
 // 移除对 useSftpActions 的直接导入，因为方法是注入的
 // import { useSftpActions } from './useSftpActions';

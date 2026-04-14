@@ -67,11 +67,6 @@ function mapPasskeyResults(dbResults: PasskeyDbRow[]): Passkey[] {
 export class PasskeyRepository {
   async createPasskey(passkeyData: NewPasskey): Promise<Passkey> {
     const db = await getDbInstance();
-    const sql = `
-      INSERT INTO passkeys (user_id, credential_id, public_key, counter, transports, name, backed_up, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
-      RETURNING *
-    `;
     // Note: RETURNING * might not work as expected with the 'sqlite3' package's run method.
     // We'll do a SELECT after INSERT if needed, or rely on lastID and then select.
     // For simplicity with 'sqlite3', we'll insert then select.

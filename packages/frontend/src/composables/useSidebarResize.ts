@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, type Ref, watch } from 'vue'; // +++ Import watch +++
+import { ref, onUnmounted, type Ref, watch } from 'vue'; // +++ Import watch +++
 
 interface UseSidebarResizeOptions {
   sidebarRef: Ref<HTMLElement | null>;

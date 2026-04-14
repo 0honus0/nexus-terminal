@@ -417,11 +417,16 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await updateAppearanceSettings({ activeTerminalThemeId: idNum });
       console.info(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
-    } catch (error) {
+    } catch (updateError: unknown) {
       // 如果更新后端失败，回滚前端状态
-      console.error('[AppearanceStore] Failed to update backend activeTerminalThemeId:', error);
+      console.error(
+        '[AppearanceStore] Failed to update backend activeTerminalThemeId:',
+        updateError
+      );
       appearanceSettings.value.activeTerminalThemeId = previousActiveId; // 回滚到之前的数字 ID 或 null
-      throw new Error(`应用主题失败: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `应用主题失败: ${updateError instanceof Error ? updateError.message : String(updateError)}`
+      );
     }
   }
 

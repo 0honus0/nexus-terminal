@@ -3,7 +3,7 @@
  * 测试快捷指令模态框组件的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import QuickCommandsModal from './QuickCommandsModal.vue';
 

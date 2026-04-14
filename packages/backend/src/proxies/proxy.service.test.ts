@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import * as ProxyRepository from './proxy.repository';
-import { encrypt, decrypt } from '../utils/crypto';
+import { encrypt } from '../utils/crypto';
 import {
   getAllProxies,
   getProxyById,

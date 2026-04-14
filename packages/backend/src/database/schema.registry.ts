@@ -1,9 +1,11 @@
 import { Database } from 'sqlite3';
 import * as schemaSql from './schema';
+// eslint-disable-next-line import/no-cycle -- 仓储初始化流程与 schema 注册存在已知双向依赖
 import * as appearanceRepository from '../appearance/appearance.repository';
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
 import * as settingsRepository from '../settings/settings.repository';
 import { presetTerminalThemes } from '../config/preset-themes-definition';
+// eslint-disable-next-line import/no-cycle -- schema 初始化阶段依赖 connection 基础执行器
 import { runDb } from './connection';
 
 /**

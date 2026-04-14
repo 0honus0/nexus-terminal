@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as SshKeyService from './ssh-keys.service';
 import { CreateSshKeyInput, UpdateSshKeyInput } from './ssh-keys.service';
-import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { getErrorMessage } from '../utils/AppError';
 
 /**
  * 获取所有 SSH 密钥的名称列表 (GET /api/v1/ssh-keys)

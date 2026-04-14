@@ -94,7 +94,7 @@ export const useAISettingsStore = defineStore('aiSettings', () => {
     if (hasLoaded.value) return;
     try {
       await loadSettings();
-    } catch (error) {
+    } catch {
       console.warn('[AI Settings Store] ensureLoaded: 加载配置失败，将保持默认配置');
     }
   }

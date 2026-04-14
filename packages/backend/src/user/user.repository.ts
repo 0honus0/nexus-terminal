@@ -1,4 +1,4 @@
-import { getDbInstance, getDb, allDb } from '../database/connection';
+import { getDbInstance, getDb } from '../database/connection';
 
 export interface User {
   id: number;

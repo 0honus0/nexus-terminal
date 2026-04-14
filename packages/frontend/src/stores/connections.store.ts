@@ -109,7 +109,7 @@ export const useConnectionsStore = defineStore('connections', {
       this.isLoading = true;
       this.error = null;
       try {
-        const response = await apiClient.post<{ message: string; connection: ConnectionInfo }>(
+        await apiClient.post<{ message: string; connection: ConnectionInfo }>(
           '/connections',
           newConnectionData
         ); // 使用 apiClient

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as TagService from './tag.service';
 import { AuditLogService } from '../audit/audit.service';
-import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { getErrorMessage } from '../utils/AppError';
 
 const auditLogService = new AuditLogService();
 

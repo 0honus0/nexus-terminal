@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // 需要在测试前重置模块以获得新的 EventService 实例
-import eventService, { AppEventType, AppEventPayload } from './event.service';
+import eventService, { AppEventType } from './event.service';
 
 describe('EventService', () => {
   beforeEach(() => {

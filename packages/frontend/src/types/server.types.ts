@@ -132,7 +132,7 @@ export interface AuditLogEntry {
   id: number;
   timestamp: number; // Unix timestamp (seconds)
   action_type: AuditLogActionType;
-  details: Record<string, any> | { raw: string; parseError: boolean } | null; // Parsed JSON or raw string with error flag
+  details: Record<string, unknown> | { raw: string; parseError: boolean } | null; // Parsed JSON or raw string with error flag
 }
 
 // Structure for the API response when fetching logs

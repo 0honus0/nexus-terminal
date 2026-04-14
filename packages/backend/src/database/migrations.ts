@@ -372,10 +372,10 @@ export const runMigrations = (db: Database): Promise<void> => {
         // 步骤 2: 获取当前数据库版本 (已应用的最大迁移 ID)
         db.get(
           'SELECT MAX(id) as currentVersion FROM migrations',
-          (err, row: { currentVersion: number | null }) => {
-            if (err) {
-              console.error('[Migrations] 查询当前数据库版本失败:', err);
-              return reject(new Error(`查询当前数据库版本失败: ${err.message}`));
+          (queryErr, row: { currentVersion: number | null }) => {
+            if (queryErr) {
+              console.error('[Migrations] 查询当前数据库版本失败:', queryErr);
+              return reject(new Error(`查询当前数据库版本失败: ${queryErr.message}`));
             }
 
             const currentVersion = row?.currentVersion ?? 0; // 如果表为空或没有记录，则认为版本为 0

@@ -2,7 +2,6 @@ import { ref, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../../stores/settings.store';
-import apiClient from '../../utils/apiClient';
 
 // Define necessary types locally if not shared, or import from a shared types file
 export type CaptchaProvider = 'hcaptcha' | 'recaptcha' | 'none';

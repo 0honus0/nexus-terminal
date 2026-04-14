@@ -6,7 +6,7 @@ import { createI18n, Composer } from 'vue-i18n';
 const localeModules = import.meta.glob('./locales/*.json', { eager: true, import: 'default' });
 
 // 构建 messages 对象和可用语言列表
-const messages: Record<string, any> = {};
+const messages: Record<string, unknown> = {};
 const availableLocales: string[] = [];
 
 for (const path of Object.keys(localeModules)) {

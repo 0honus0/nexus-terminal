@@ -1,6 +1,5 @@
 import {
   settingsRepository,
-  Setting,
   getSidebarConfig as getSidebarConfigFromRepo,
   setSidebarConfig as setSidebarConfigInRepo,
   getCaptchaConfig as getCaptchaConfigFromRepo,

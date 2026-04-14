@@ -117,7 +117,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       return; // 不添加空命令
     }
     try {
-      const response = await apiClient.post<{ id: number }>('/command-history', {
+      await apiClient.post<{ id: number }>('/command-history', {
         command: command.trim(),
       }); // 使用 apiClient
       // 添加成功后，重新获取列表以保证顺序和 ID 正确

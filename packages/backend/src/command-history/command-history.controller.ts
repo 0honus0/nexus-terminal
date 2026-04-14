@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import * as CommandHistoryService from './command-history.service';
-import { ErrorFactory } from '../utils/AppError';
 
 /**
  * 处理添加新命令历史记录的请求

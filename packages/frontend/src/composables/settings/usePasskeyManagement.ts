@@ -1,4 +1,4 @@
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { startRegistration } from '@simplewebauthn/browser';
 import { storeToRefs } from 'pinia';

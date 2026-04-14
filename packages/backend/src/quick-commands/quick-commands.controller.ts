@@ -27,7 +27,7 @@ export const addQuickCommand = async (
   // 验证 tagIds (如果提供的话)
   if (
     tagIds !== undefined &&
-    (!Array.isArray(tagIds) || !tagIds.every((id) => typeof id === 'number'))
+    (!Array.isArray(tagIds) || !tagIds.every((tagId) => typeof tagId === 'number'))
   ) {
     res.status(400).json({ message: 'tagIds 必须是一个数字数组' });
     return;
@@ -109,7 +109,7 @@ export const updateQuickCommand = async (
   // 注意: tagIds 为 undefined 表示不更新标签，空数组 [] 表示清除所有标签
   if (
     tagIds !== undefined &&
-    (!Array.isArray(tagIds) || !tagIds.every((id) => typeof id === 'number'))
+    (!Array.isArray(tagIds) || !tagIds.every((tagId) => typeof tagId === 'number'))
   ) {
     res.status(400).json({ message: 'tagIds 必须是一个数字数组' });
     return;

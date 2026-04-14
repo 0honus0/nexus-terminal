@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
 import apiClient from '../utils/apiClient';
-import { useFavoritePathsStore, type FavoritePathItem } from './favoritePaths.store';
+import { useFavoritePathsStore } from './favoritePaths.store';
 
 const { uiNotificationsStoreMock } = vi.hoisted(() => {
   return {

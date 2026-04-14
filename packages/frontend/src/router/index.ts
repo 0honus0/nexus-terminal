@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+// eslint-disable-next-line import/no-cycle -- 路由守卫依赖鉴权状态，属于受控双向引用
 import { useAuthStore } from '../stores/auth.store'; // 导入 Auth Store
 
 // 路由配置

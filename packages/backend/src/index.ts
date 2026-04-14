@@ -99,7 +99,7 @@ if (
 
 // --- 全局错误处理 ---
 // 捕获未处理的 Promise Rejection
-process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+process.on('unhandledRejection', (reason: unknown, _promise: Promise<unknown>) => {
   console.error('---未处理的 Promise Rejection---');
   console.error('原因:', reason);
 });

@@ -1,4 +1,3 @@
-import { Database } from 'sqlite3';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 

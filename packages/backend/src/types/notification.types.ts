@@ -89,5 +89,5 @@ export interface RawNotificationSetting {
 export interface NotificationPayload {
   event: NotificationEvent;
   timestamp: number;
-  details?: Record<string, any> | string; // Contextual information about the event
+  details?: Record<string, unknown> | string; // Contextual information about the event
 }

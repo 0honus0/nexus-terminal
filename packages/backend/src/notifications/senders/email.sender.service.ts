@@ -1,8 +1,8 @@
 import nodemailer from 'nodemailer';
 import Mail from 'nodemailer/lib/mailer';
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
-import { INotificationSender } from '../notification.dispatcher.service';
-import { ProcessedNotification } from '../notification.processor.service';
+import type { INotificationSender } from '../notification.dispatcher.service';
+import type { ProcessedNotification } from '../notification.processor.service';
 import { EmailConfig } from '../../types/notification.types';
 import { settingsService } from '../../settings/settings.service';
 import { getErrorMessage } from '../../utils/AppError';

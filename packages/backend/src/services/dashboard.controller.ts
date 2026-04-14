@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import * as Service from './dashboard.service';
-import { ErrorFactory } from '../utils/AppError';
 
 const parseTimestampSeconds = (raw: unknown): number | null => {
   if (raw === undefined || raw === null) return null;

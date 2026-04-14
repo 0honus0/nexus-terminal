@@ -124,7 +124,7 @@ export const useSshKeysStore = defineStore('sshKeys', () => {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await apiClient.delete<{ message: string }>(`/ssh-keys/${id}`);
+      await apiClient.delete<{ message: string }>(`/ssh-keys/${id}`);
       // Remove the key from the local list
       sshKeys.value = sshKeys.value.filter((key) => key.id !== id);
       // uiNotificationsStore.addNotification({ message: response.data.message || 'SSH 密钥删除成功。', type: 'success' }); // Removed notification

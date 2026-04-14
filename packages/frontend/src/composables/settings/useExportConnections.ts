@@ -57,7 +57,7 @@ export function useExportConnections() {
           try {
             const errorJson = JSON.parse(await error.response.data.text());
             message = errorJson.message || message;
-          } catch (e) {
+          } catch {
             /* Blob not valid JSON */
           }
         } else if (typeof error.response.data === 'string') {

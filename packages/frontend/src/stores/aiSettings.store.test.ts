@@ -176,7 +176,10 @@ describe('AI Settings Store', () => {
 
       expect(store.isTesting).toBe(true);
 
-      resolvePromise!({ data: { success: true } });
+      if (!resolvePromise) {
+        throw new Error('resolvePromise should be initialized');
+      }
+      resolvePromise({ data: { success: true } });
       await testPromise;
 
       expect(store.isTesting).toBe(false);

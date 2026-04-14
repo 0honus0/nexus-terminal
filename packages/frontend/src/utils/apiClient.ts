@@ -1,4 +1,5 @@
 import axios from 'axios';
+// eslint-disable-next-line import/no-cycle -- API 拦截器需要读取鉴权状态，属受控循环依赖
 import { useAuthStore } from '../stores/auth.store';
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;

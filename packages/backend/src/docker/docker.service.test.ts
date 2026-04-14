@@ -13,8 +13,8 @@ vi.mock('child_process', () => ({
 
 // 使用 vi.hoisted 确保 mockExecAsync 在 mock 提升后仍然可用
 const { mockExecAsync } = vi.hoisted(() => {
-  const mockExecAsync = vi.fn();
-  return { mockExecAsync };
+  const mockExecAsyncFn = vi.fn();
+  return { mockExecAsync: mockExecAsyncFn };
 });
 
 // Mock promisify to return a mockable async function

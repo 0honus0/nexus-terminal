@@ -420,7 +420,10 @@ export async function handleDockerCommand(
 
     // Request a status update after a short delay
     setTimeout(() => {
-      const currentState = clientStates.get(sessionId!); // Re-fetch state as it might have changed
+      if (!sessionId) {
+        return;
+      }
+      const currentState = clientStates.get(sessionId); // Re-fetch state as it might have changed
       if (currentState && currentState.ws.readyState === WebSocket.OPEN) {
         currentState.ws.send(JSON.stringify({ type: 'request_docker_status_update' }));
       }

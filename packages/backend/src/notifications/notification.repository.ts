@@ -3,7 +3,6 @@ import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import {
   NotificationSetting,
   RawNotificationSetting,
-  NotificationChannelType,
   NotificationEvent,
   NotificationChannelConfig,
 } from '../types/notification.types';

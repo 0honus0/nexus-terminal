@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/terminal-theme.types';
 import * as terminalThemeService from './terminal-theme.service';
-import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { getErrorMessage } from '../utils/AppError';
 
 // 配置 multer 用于处理 JSON 文件上传 (导入)
 const upload = multer({

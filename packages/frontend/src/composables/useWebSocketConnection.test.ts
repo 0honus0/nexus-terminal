@@ -2,7 +2,7 @@
  * useWebSocketConnection Composable 单元测试
  * 测试 WebSocket 连接管理的核心业务逻辑
  */
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createWebSocketConnectionManager } from './useWebSocketConnection';
 
 // Mock vue-i18n

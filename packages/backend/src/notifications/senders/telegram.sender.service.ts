@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { INotificationSender } from '../notification.dispatcher.service';
-import { ProcessedNotification } from '../notification.processor.service';
+import type { INotificationSender } from '../notification.dispatcher.service';
+import type { ProcessedNotification } from '../notification.processor.service';
 import { TelegramConfig } from '../../types/notification.types';
 import { getErrorMessage } from '../../utils/AppError';
 

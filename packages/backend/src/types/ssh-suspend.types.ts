@@ -1,4 +1,4 @@
-import { Client, Channel, ClientChannel } from 'ssh2';
+import { Client, ClientChannel } from 'ssh2';
 
 /**
  * 后端 SSH 会话状态

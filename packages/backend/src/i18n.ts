@@ -43,7 +43,7 @@ const i18nInitializationPromise = new Promise<void>((resolve, reject) => {
         escapeValue: false,
       },
     },
-    (err, t) => {
+    (err, _t) => {
       // Init callback
       if (err) {
         console.error('[i18next] 初始化过程中出错:', err);

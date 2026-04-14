@@ -168,18 +168,18 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
   // --- 递归遍历文件树的辅助函数 ---
   const traverseFileTree = (item: FileSystemEntry, basePath = '') => {
-    const currentPath = basePath || '';
+    const traversalPath = basePath || '';
     if (item.isFile) {
       // 文件处理
       (item as FileSystemFileEntry).file(
         (file) => {
           // 调用上传函数，传递文件和相对路径
-          console.info(`[DragDrop] Uploading file: ${currentPath}${file.name}`);
-          onFileUpload(file, currentPath); // 传递相对路径
+          console.info(`[DragDrop] Uploading file: ${traversalPath}${file.name}`);
+          onFileUpload(file, traversalPath); // 传递相对路径
         },
         (err) => {
           console.error(
-            `[DragDrop] Error getting file from entry: ${currentPath}${item.name}`,
+            `[DragDrop] Error getting file from entry: ${traversalPath}${item.name}`,
             err
           );
         }

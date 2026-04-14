@@ -540,7 +540,6 @@ describe('SshSuspendService', () => {
   describe('Channel 事件处理', () => {
     it('channel close 事件应更新会话状态', async () => {
       const mockClient = createMockSshClient();
-      const mockChannel = createMockChannel();
       // 需要使用真实的 EventEmitter 来触发事件
       const realChannel = new EventEmitter() as any;
       realChannel.readable = true;

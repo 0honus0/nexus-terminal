@@ -4,7 +4,6 @@ import {
   runDb,
   getDb as getDbRow,
   allDb,
-  ErrorFactory,
 } from '../database/base.repository';
 
 // 定义 Tag 类型 (可以共享到 types 文件)

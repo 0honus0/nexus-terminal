@@ -1,4 +1,4 @@
-import { ref, createApp, h } from 'vue';
+import { createApp, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AlertDialog from '../components/common/AlertDialog.vue';
 
