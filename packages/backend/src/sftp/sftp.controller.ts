@@ -4,9 +4,10 @@ import * as archiver from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { clientStates } from '../websocket';
-import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import {
+  ClientState,
+  AuthenticatedWebSocket,
   SftpCompressRequestPayload,
   SftpDecompressRequestPayload,
   SftpCompressSuccessPayload,
@@ -85,11 +86,13 @@ export const downloadFile = async (
   try {
     // 获取文件状态以确定文件大小（可选，但有助于设置 Content-Length）
     const stats = await new Promise<import('ssh2').Stats>((resolve, reject) => {
-      // +++ 修正类型注解 +++
-      userSftpSession!.lstat(remotePath, (err: Error | undefined, stats: import('ssh2').Stats) => {
-        if (err) return reject(err);
-        resolve(stats);
-      });
+      userSftpSession.lstat(
+        remotePath,
+        (err: Error | undefined, fileStats: import('ssh2').Stats) => {
+          if (err) return reject(err);
+          resolve(fileStats);
+        }
+      );
     });
 
     if (!stats.isFile()) {
@@ -199,11 +202,13 @@ export const downloadDirectory = async (
   try {
     // 1. 验证路径是否为目录
     const stats = await new Promise<import('ssh2').Stats>((resolve, reject) => {
-      // +++ 修正类型注解 +++
-      userSftpSession!.lstat(remotePath, (err: Error | undefined, stats: import('ssh2').Stats) => {
-        if (err) return reject(err);
-        resolve(stats);
-      });
+      userSftpSession.lstat(
+        remotePath,
+        (err: Error | undefined, dirStats: import('ssh2').Stats) => {
+          if (err) return reject(err);
+          resolve(dirStats);
+        }
+      );
     });
 
     if (!stats.isDirectory()) {
@@ -432,9 +437,6 @@ export const handleCompressRequest = async (
     `[WS SFTP Compress ${sessionId}] Processing compress request (ID: ${requestId}). Sources: ${sources.join(', ')}, Dest: ${destinationArchiveName}, Format: ${format}, Dir: ${targetDirectory}`
   );
 
-  // 构建目标压缩包的完整路径 (使用 posix 风格)
-  const destinationArchivePath = path.posix.join(targetDirectory, destinationArchiveName);
-
   // --- 构建 Shell 命令 ---
   let command: string;
   // 确保源路径被正确引用，特别是包含空格或特殊字符时
@@ -479,11 +481,11 @@ export const handleCompressRequest = async (
       }
 
       let stderrData = '';
-      let stdoutData = ''; // Capture stdout for debugging if needed
+      let _stdoutData = ''; // Capture stdout for debugging if needed
       let exitCode: number | null = null;
 
       stream.on('data', (data: Buffer) => {
-        stdoutData += data.toString();
+        _stdoutData += data.toString();
         // console.debug(`[WS SFTP Compress ${sessionId}] stdout: ${data}`);
       });
       stream.stderr.on('data', (data: Buffer) => {
@@ -618,11 +620,11 @@ export const handleDecompressRequest = async (
       }
 
       let stderrData = '';
-      let stdoutData = '';
+      let _stdoutData = '';
       let exitCode: number | null = null;
 
       stream.on('data', (data: Buffer) => {
-        stdoutData += data.toString();
+        _stdoutData += data.toString();
         // console.debug(`[WS SFTP Decompress ${sessionId}] stdout: ${data}`);
       });
       stream.stderr.on('data', (data: Buffer) => {

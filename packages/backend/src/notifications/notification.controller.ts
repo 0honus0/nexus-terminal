@@ -4,10 +4,6 @@ import {
   NotificationSetting,
   NotificationChannelType,
   NotificationChannelConfig,
-  WebhookConfig,
-  EmailConfig,
-  TelegramConfig,
-  NotificationEvent,
 } from '../types/notification.types';
 // import { AuditLogService } from '../services/audit.service'; // Keep for now if other parts use it - Removed as eventService is used
 import { AppEventType, default as eventService } from '../services/event.service'; // Import event service
@@ -23,6 +19,20 @@ import { getErrorMessage } from '../utils/AppError';
 // Removed escapeTelegramMarkdownV2 helper function
 
 // const auditLogService = new AuditLogService(); // Removed as eventService is used
+
+type SessionWithUserId = {
+  userId?: unknown;
+};
+
+// 从 session 中安全提取 userId，避免直接使用 any。
+const getSessionUserId = (session: unknown): number | undefined => {
+  if (typeof session !== 'object' || session === null || !('userId' in session)) {
+    return undefined;
+  }
+
+  const { userId } = session as SessionWithUserId;
+  return typeof userId === 'number' ? userId : undefined;
+};
 
 export class NotificationController {
   private repository: NotificationSettingsRepository; // Use repository
@@ -61,7 +71,7 @@ export class NotificationController {
       // 记录审计日志 (Use event service)
       if (newSetting) {
         eventService.emitEvent(AppEventType.NotificationSettingCreated, {
-          userId: (req.session as any).userId, // Assuming userId is in session
+          userId: getSessionUserId(req.session), // Assuming userId is in session
           details: {
             settingId: newSetting.id,
             name: newSetting.name,
@@ -102,7 +112,7 @@ export class NotificationController {
         const updatedSetting = await this.repository.getById(id);
         // 记录审计日志 (Use event service)
         eventService.emitEvent(AppEventType.NotificationSettingUpdated, {
-          userId: (req.session as any).userId,
+          userId: getSessionUserId(req.session),
           details: { settingId: id, updatedFields: Object.keys(settingData) },
         });
         res.status(200).json(updatedSetting);
@@ -144,7 +154,7 @@ export class NotificationController {
       if (success) {
         // 记录审计日志 (Use event service)
         eventService.emitEvent(AppEventType.NotificationSettingDeleted, {
-          userId: (req.session as any).userId,
+          userId: getSessionUserId(req.session),
           details: {
             settingId: id,
             name: settingToDelete.name,
@@ -195,7 +205,7 @@ export class NotificationController {
 
       // Trigger the standard test event, passing the config to be used by the processor
       eventService.emitEvent(AppEventType.TestNotification, {
-        userId: (req.session as any).userId, // Optional: associate test with user
+        userId: getSessionUserId(req.session), // Optional: associate test with user
         details: {
           // Use i18next.t for i18n with interpolation
           message: i18next.t('notificationController.testMessageSaved', {
@@ -245,7 +255,7 @@ export class NotificationController {
     try {
       // Trigger the standard test event, passing the unsaved config to be used by the processor
       eventService.emitEvent(AppEventType.TestNotification, {
-        userId: (req.session as any).userId,
+        userId: getSessionUserId(req.session),
         details: {
           // Use i18next.t for i18n with interpolation
           message: i18next.t('notificationController.testMessageUnsaved', {
