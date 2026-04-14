@@ -11,19 +11,6 @@ import { getErrorMessage } from '../utils/AppError';
 const CONNECT_TIMEOUT = 20000; // 连接超时时间 (毫秒)
 const TEST_TIMEOUT = 15000; // 测试连接超时时间 (毫秒)
 
-interface JumpHostRawConfig {
-  id?: string | number; // Optional: an identifier for the hop from config
-  name?: string; // Optional: a name for the hop from config
-  host: string;
-  port: number;
-  username: string;
-  auth_method: 'password' | 'key';
-  encrypted_password?: string | null;
-  ssh_key_id?: number | null;
-  encrypted_private_key?: string | null;
-  encrypted_passphrase?: string | null;
-}
-
 export interface JumpHostDetail {
   id: string; // Unique ID for this hop instance (e.g., generated or from config)
   name?: string; // Optional name for logging
@@ -80,6 +67,7 @@ export const getConnectionDetails = async (
   const typedRawConnInfo = rawConnInfo as typeof rawConnInfo & {
     jump_chain?: string | null;
     proxy_type?: 'proxy' | 'jump' | null;
+    force_keyboard_interactive?: boolean;
   };
 
   try {
@@ -116,7 +104,7 @@ export const getConnectionDetails = async (
       proxy: null,
       jump_chain: undefined,
       connection_proxy_setting: typedRawConnInfo.proxy_type ?? null,
-      force_keyboard_interactive: (typedRawConnInfo as any).force_keyboard_interactive ?? false,
+      force_keyboard_interactive: typedRawConnInfo.force_keyboard_interactive ?? false,
     };
 
     if (fullConnInfo.auth_method === 'password' && rawConnInfo.encrypted_password) {
@@ -437,7 +425,7 @@ const _connectViaHttpProxy = (
 
     const req = http.request(reqOptions);
 
-    req.on('connect', (res, socket, head) => {
+    req.on('connect', (res, socket, _head) => {
       if (res.statusCode === 200) {
         resolve(socket);
       } else {
@@ -466,7 +454,10 @@ const _establishProxyConnection = async (
   connDetails: DecryptedConnectionDetails,
   timeout: number
 ): Promise<Client> => {
-  const proxy = connDetails.proxy!;
+  const proxy = connDetails.proxy;
+  if (!proxy) {
+    throw new Error(`Connection ${connDetails.name} has no proxy configuration.`);
+  }
 
   const sshClient = new Client();
   const baseConnectConfig: ConnectConfig = {
@@ -511,7 +502,7 @@ const _establishProxyConnection = async (
     );
     try {
       sshClient.end();
-    } catch (_e: unknown) {
+    } catch {
       /* ignore */
     }
     throw proxyError;
@@ -560,7 +551,7 @@ function _prepareConnectConfigForHop(
   }
 
   if (previousStream) {
-    config.sock = previousStream as any; // ssh2 types ClientChannel, but it's a Duplex stream
+    config.sock = previousStream as unknown as net.Socket; // ssh2 types ClientChannel, but it's a Duplex stream
   } else {
     config.host = hopDetail.host;
     config.port = hopDetail.port;
@@ -577,7 +568,7 @@ async function _establishConnectionViaJumpChainRecursive(
   activeClients: Client[], // Stores successfully connected intermediate clients for cleanup
   timeoutPerHop: number
 ): Promise<Client> {
-  return new Promise<Client>(async (resolveOuter, rejectOuter) => {
+  return new Promise<Client>((resolveOuter, rejectOuter) => {
     const cleanupAndReject = (error: Error, clientOnError?: Client) => {
       console.error(
         `SshService: JumpChainCleanupAndReject (Hop ${hopIndex + 1}) for ${finalTargetDetails.name}. Error: ${error.message}`
@@ -622,7 +613,7 @@ async function _establishConnectionViaJumpChainRecursive(
       const finalClient = new Client();
 
       const finalConnectConfig: ConnectConfig = {
-        sock: previousStream as any,
+        sock: previousStream as unknown as net.Socket,
         username: finalTargetDetails.username,
         password: finalTargetDetails.password,
         privateKey: finalTargetDetails.privateKey,
@@ -793,8 +784,6 @@ export const establishSshConnection = (
 ): Promise<Client> => {
   if (connDetails.connection_proxy_setting === 'jump') {
     if (connDetails.jump_chain && connDetails.jump_chain.length > 0) {
-      // Log details of each jump host
-      connDetails.jump_chain.forEach((hop, index) => {});
       return _establishConnectionViaJumpChainRecursive(
         0, // hopIndex
         null, // previousStream

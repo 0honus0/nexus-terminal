@@ -65,7 +65,12 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     let requestIp: ipaddr.IPv4 | ipaddr.IPv6 | null = null;
     try {
       requestIp = ipaddr.parse(requestIpString);
-    } catch (e: unknown) {
+    } catch {
+      console.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
+      return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
+    }
+
+    if (!requestIp) {
       console.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
       return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
     }
@@ -77,25 +82,25 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
         const range = ipaddr.parseCIDR(entry);
         // 使用 match 方法检查 IP 是否在范围内
         // 需要根据 IP 类型调用正确的 match 签名
-        if (requestIp!.kind() === 'ipv4' && range[0].kind() === 'ipv4') {
-          return (requestIp! as ipaddr.IPv4).match(range as [ipaddr.IPv4, number]);
+        if (requestIp.kind() === 'ipv4' && range[0].kind() === 'ipv4') {
+          return (requestIp as ipaddr.IPv4).match(range as [ipaddr.IPv4, number]);
         }
-        if (requestIp!.kind() === 'ipv6' && range[0].kind() === 'ipv6') {
+        if (requestIp.kind() === 'ipv6' && range[0].kind() === 'ipv6') {
           // 注意：IPv6 的 match 可能需要特殊处理，取决于 ipaddr.js 的具体实现和类型定义
           // 这里假设 IPv6 的 match 签名与 IPv4 类似，但可能需要调整
-          return (requestIp! as ipaddr.IPv6).match(range as [ipaddr.IPv6, number]);
+          return (requestIp as ipaddr.IPv6).match(range as [ipaddr.IPv6, number]);
         }
         // 如果 IP 类型和范围类型不匹配，则认为不匹配
         return false;
-      } catch (e1: unknown) {
+      } catch {
         // 如果解析 CIDR 失败，尝试解析为单个 IP 地址
         try {
           const allowedIp = ipaddr.parse(entry);
           // 比较地址是否相同
           return (
-            requestIp!.kind() === allowedIp.kind() && requestIp!.toString() === allowedIp.toString()
+            requestIp.kind() === allowedIp.kind() && requestIp.toString() === allowedIp.toString()
           );
-        } catch (e2: unknown) {
+        } catch {
           // 如果单个 IP 也解析失败，忽略此条目并记录警告
           console.warn(`无效的 IP 白名单条目: "${entry}"`);
           return false;
