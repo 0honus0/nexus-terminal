@@ -207,13 +207,7 @@ export class NotificationService {
       event: testPayload.event,
       eventDisplay: eventDisplayName,
       timestamp: new Date(testPayload.timestamp).toISOString(),
-
-      details:
-        typeof testPayload.details === 'object' && testPayload.details?.message
-          ? testPayload.details.message
-          : typeof testPayload.details === 'string'
-            ? testPayload.details
-            : JSON.stringify(testPayload.details || {}, null, 2),
+      details: this._formatTemplateDetails(testPayload.details),
     };
     const requestBody = this._renderTemplate(
       config.bodyTemplate || defaultBodyTemplate,
@@ -385,7 +379,7 @@ export class NotificationService {
 
   async sendNotification(
     event: NotificationEvent,
-    details?: Record<string, any> | string
+    details?: Record<string, unknown> | string
   ): Promise<void> {
     // console.info(`[通知] 事件触发: ${event}`, details || "");
 
@@ -484,10 +478,6 @@ export class NotificationService {
 
     const translatedDetails = this._translatePayloadDetails(payload.details, userLang);
     const translatedPayload = { ...payload, details: translatedDetails };
-    const translatedDetailsRecord =
-      translatedPayload.details && typeof translatedPayload.details === 'object'
-        ? (translatedPayload.details as Record<string, unknown>)
-        : null;
 
     const defaultBody = JSON.stringify(translatedPayload, null, 2);
     const defaultBodyTemplate = `Default: JSON payload. Use {event}, {timestamp}, {details}.`;
@@ -502,12 +492,7 @@ export class NotificationService {
         "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"
       ),
 
-      details:
-        translatedDetailsRecord && typeof translatedDetailsRecord.message === 'string'
-          ? translatedDetailsRecord.message
-          : typeof translatedPayload.details === 'string'
-            ? translatedPayload.details
-            : JSON.stringify(translatedPayload.details || {}, null, 2),
+      details: this._formatTemplateDetails(translatedPayload.details),
     };
     let templateToRender = config.bodyTemplate || defaultBodyTemplate;
     const isCustomTemplate = !!config.bodyTemplate;
@@ -587,7 +572,7 @@ export class NotificationService {
 
     const transporter = nodemailer.createTransport(transporterOptions);
 
-    const i18nOptions: Record<string, any> = { lng: userLang };
+    const i18nOptions: Record<string, unknown> = { lng: userLang };
     if (payload.details && typeof payload.details === 'object') {
       Object.assign(i18nOptions, payload.details);
     } else if (payload.details !== undefined) {
@@ -841,5 +826,18 @@ export class NotificationService {
     }
 
     return details;
+  }
+
+  private _formatTemplateDetails(details: unknown): string {
+    if (typeof details === 'string') {
+      return details;
+    }
+    if (details && typeof details === 'object') {
+      const detailsRecord = details as Record<string, unknown>;
+      if (typeof detailsRecord.message === 'string') {
+        return detailsRecord.message;
+      }
+    }
+    return JSON.stringify(details || {}, null, 2);
   }
 }

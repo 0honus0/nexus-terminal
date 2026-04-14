@@ -3,9 +3,9 @@
  * 测试连接列表组件的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
-import { createPinia, setActivePinia, defineStore } from 'pinia';
-import { ref, computed, reactive } from 'vue';
+import { mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import { ref } from 'vue';
 import ConnectionList from './ConnectionList.vue';
 import type { ConnectionInfo } from '../stores/connections.store';
 

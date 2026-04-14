@@ -1,6 +1,4 @@
-import { PortInfo, ClientState } from './types';
-import { SftpService } from '../sftp/sftp.service';
-import { StatusMonitorService } from '../services/status-monitor.service';
+import { PortInfo } from './types';
 import { auditLogService, clientStates, sftpService, statusMonitorService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 
@@ -111,7 +109,6 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         // 从 state 中“分离”SSH资源，防止后续意外关闭
         const sshClientToPass = state.sshClient;
         const channelToPass = state.sshShellStream;
-        state.sshClient = undefined as any; // 清除引用
         state.sshShellStream = undefined; // 清除引用
         state.isSuspendedByService = true; // 标记为已被服务接管（即使是尝试接管）
 

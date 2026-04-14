@@ -3,8 +3,16 @@ import { Request } from 'express';
 import { AuthenticatedWebSocket } from '../types';
 import { resetHeartbeat } from '../heartbeat'; // 导入新的心跳重置函数
 
+interface RdpProxyRequest extends Request {
+  clientIpAddress?: string;
+  rdpToken?: string;
+  rdpWidth?: string;
+  rdpHeight?: string;
+}
+
 export function handleRdpProxyConnection(ws: AuthenticatedWebSocket, request: Request): void {
-  const clientIp = (request as any).clientIpAddress || 'unknown';
+  const rdpRequest = request as RdpProxyRequest;
+  const clientIp = rdpRequest.clientIpAddress || 'unknown';
   console.info(
     `WebSocket：RDP 代理客户端 ${ws.username} (ID: ${ws.userId}, IP: ${clientIp}) 已连接。`
   );
@@ -15,9 +23,9 @@ export function handleRdpProxyConnection(ws: AuthenticatedWebSocket, request: Re
   });
 
   // Retrieve all necessary parameters passed from the upgrade handler
-  const { rdpToken } = request as any;
-  const rdpWidthStr = (request as any).rdpWidth; // Get as string first
-  const rdpHeightStr = (request as any).rdpHeight; // Get as string first
+  const { rdpToken } = rdpRequest;
+  const rdpWidthStr = rdpRequest.rdpWidth; // Get as string first
+  const rdpHeightStr = rdpRequest.rdpHeight; // Get as string first
 
   // --- 参数验证和 DPI 计算 ---
   if (!rdpToken || !rdpWidthStr || !rdpHeightStr) {

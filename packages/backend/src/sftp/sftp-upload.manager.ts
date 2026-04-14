@@ -63,6 +63,7 @@ export class SftpUploadManager {
       );
       return;
     }
+    const sftp = state.sftp;
     if (this.activeUploads.has(uploadId)) {
       console.warn(
         `[SFTP Upload ${uploadId}] Upload already in progress for session ${sessionId}.`
@@ -103,11 +104,11 @@ export class SftpUploadManager {
       try {
         if (!state.sftp) throw new Error('SFTP session is not available.');
         await new Promise<void>((resolve, reject) => {
-          state.sftp!.open(remotePath, 'w', (openErr, handle) => {
+          sftp.open(remotePath, 'w', (openErr, handle) => {
             if (openErr) {
               return reject(openErr);
             }
-            state.sftp!.close(handle, () => resolve());
+            sftp.close(handle, () => resolve());
           });
         });
       } catch (preCheckError: unknown) {
@@ -153,7 +154,7 @@ export class SftpUploadManager {
         const finalState = this.activeUploads.get(uploadId);
         if (finalState) {
           if (finalState.bytesWritten >= finalState.totalSize) {
-            state.sftp!.lstat(finalState.remotePath, (statErr, stats) => {
+            sftp.lstat(finalState.remotePath, (statErr, stats) => {
               if (statErr) {
                 console.error(`[SFTP Upload ${uploadId}] lstat after close failed:`, statErr);
                 state.ws.send(
@@ -349,6 +350,7 @@ export class SftpUploadManager {
   private cancelUploadInternal(uploadId: string, reason: string): void {
     const uploadState = this.activeUploads.get(uploadId);
     if (uploadState) {
+      console.info(`[SFTP Upload ${uploadId}] Cleaning upload state: ${reason}`);
       const currentStream = uploadState.stream;
       if (currentStream && !currentStream.destroyed) {
         if (!currentStream.writableEnded) {

@@ -20,7 +20,7 @@ export class TransfersController {
     this.cancelTransfer = this.cancelTransfer.bind(this); // +++ 绑定新方法 +++
   }
 
-  public async initiateTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async initiateTransfer(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       const userId = getSessionUserId(req);
       if (!userId) {
@@ -50,7 +50,7 @@ export class TransfersController {
     }
   }
 
-  public async getAllStatuses(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async getAllStatuses(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       const userId = getSessionUserId(req);
       if (!userId) {
@@ -68,7 +68,7 @@ export class TransfersController {
     }
   }
 
-  public async getTaskStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async getTaskStatus(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       const userId = getSessionUserId(req);
       if (!userId) {
@@ -102,7 +102,7 @@ export class TransfersController {
     }
   }
 
-  public async cancelTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async cancelTransfer(req: Request, res: Response, _next: NextFunction): Promise<void> {
     try {
       const userId = getSessionUserId(req);
       if (!userId) {

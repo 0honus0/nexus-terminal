@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as ProxyService from './proxy.service';
 import { AuditLogService } from '../audit/audit.service';
-import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { getErrorMessage } from '../utils/AppError';
 
 const auditLogService = new AuditLogService();
 
@@ -9,7 +9,12 @@ const sanitizeProxy = (
   proxy: ProxyService.ProxyData | null
 ): Partial<ProxyService.ProxyData> | null => {
   if (!proxy) return null;
-  const { encrypted_password, encrypted_private_key, encrypted_passphrase, ...sanitized } = proxy;
+  const {
+    encrypted_password: _encryptedPassword,
+    encrypted_private_key: _encryptedPrivateKey,
+    encrypted_passphrase: _encryptedPassphrase,
+    ...sanitized
+  } = proxy;
   return sanitized;
 };
 

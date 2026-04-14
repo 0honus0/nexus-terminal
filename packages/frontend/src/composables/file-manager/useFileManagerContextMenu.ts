@@ -1,4 +1,4 @@
-import { ref, nextTick, type Ref, type ComponentPublicInstance } from 'vue';
+import { ref, nextTick, type Ref } from 'vue';
 import { type useI18n } from 'vue-i18n';
 import type { FileListItem } from '../../types/sftp.types';
 import type FileManagerContextMenu from '../../components/FileManagerContextMenu.vue';
@@ -63,7 +63,6 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     selectedItems,
     lastClickedIndex,
     fileList,
-    currentPath,
     isConnected,
     isSftpReady,
     clipboardState, // +++ 解构剪贴板状态 +++
@@ -127,11 +126,11 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
       // Multi-selection menu
       const selectedFileItems = Array.from(selectedItems.value)
         .map((filename) => fileList.value.find((f) => f.filename === filename))
-        .filter((item): item is FileListItem => !!item); // 过滤掉未找到的项并确保类型
+        .filter((selectedItem): selectedItem is FileListItem => !!selectedItem); // 过滤掉未找到的项并确保类型
 
       const allFilesSelected =
         selectedFileItems.length === selectionSize &&
-        selectedFileItems.every((item) => item.attrs.isFile);
+        selectedFileItems.every((selectedItem) => selectedItem.attrs.isFile);
 
       menu = [
         // 调整顺序：剪切、复制优先
