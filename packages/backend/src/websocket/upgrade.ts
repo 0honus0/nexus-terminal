@@ -6,6 +6,21 @@ import { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket } from './types';
 import { SECURITY_CONFIG } from '../config/security.config';
 
+type UpgradeRequestMeta = {
+  clientIpAddress?: string;
+  isRdpProxy?: boolean;
+  rdpToken?: unknown;
+  rdpWidth?: unknown;
+  rdpHeight?: unknown;
+  rdpDpi?: unknown;
+};
+
+type UpgradeRequest = Request & UpgradeRequestMeta;
+
+function getUpgradeRequest(request: Request): UpgradeRequest {
+  return request as UpgradeRequest;
+}
+
 export function initializeUpgradeHandler(
   server: http.Server,
   wss: WebSocketServer,
@@ -113,6 +128,7 @@ export function initializeUpgradeHandler(
       console.info(
         `WebSocket 认证成功 (Path: ${pathname})：用户 ${request.session.username} (ID: ${request.session.userId})`
       );
+      const typedRequest = getUpgradeRequest(request);
 
       // --- 根据路径处理升级 ---
       // 本地调试用/rdp-proxy，nginx反代用/ws/rdp-proxy
@@ -124,13 +140,13 @@ export function initializeUpgradeHandler(
           extWs.userId = request.session.userId;
           extWs.username = request.session.username;
           // 传递必要信息给 connection 事件
-          (request as any).clientIpAddress = ipAddress;
-          (request as any).isRdpProxy = true; // 标记为 RDP 代理连接
+          typedRequest.clientIpAddress = ipAddress;
+          typedRequest.isRdpProxy = true; // 标记为 RDP 代理连接
           // 传递 RDP token 和其他参数
-          (request as any).rdpToken = parsedUrl.query.token;
-          (request as any).rdpWidth = parsedUrl.query.width;
-          (request as any).rdpHeight = parsedUrl.query.height;
-          (request as any).rdpDpi = parsedUrl.query.dpi;
+          typedRequest.rdpToken = parsedUrl.query.token;
+          typedRequest.rdpWidth = parsedUrl.query.width;
+          typedRequest.rdpHeight = parsedUrl.query.height;
+          typedRequest.rdpDpi = parsedUrl.query.dpi;
           wss.emit('connection', extWs, request);
         });
       } else {
@@ -140,8 +156,8 @@ export function initializeUpgradeHandler(
           const extWs = ws as AuthenticatedWebSocket;
           extWs.userId = request.session.userId;
           extWs.username = request.session.username;
-          (request as any).clientIpAddress = ipAddress;
-          (request as any).isRdpProxy = false; // 标记为非 RDP 代理连接
+          typedRequest.clientIpAddress = ipAddress;
+          typedRequest.isRdpProxy = false; // 标记为非 RDP 代理连接
           wss.emit('connection', extWs, request);
         });
       }

@@ -7,7 +7,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDbInstance, allDb, getDb } from '../database/connection';
 import {
   AISession,
-  AIMessage,
   AIQueryRequest,
   AIQueryResponse,
   AIInsight,
@@ -94,7 +93,7 @@ export async function processQuery(
 async function analyzeQuery(
   query: string,
   userId: number | string,
-  context?: AIQueryRequest['context']
+  _context?: AIQueryRequest['context']
 ): Promise<{
   response: string;
   insights: AIInsight[];
@@ -285,7 +284,7 @@ export async function getSystemHealthSummary(
  * @param userId 用户 ID，用于过滤该用户的命令历史
  */
 export async function analyzeCommandPatterns(
-  userId?: number | string
+  _userId?: number | string
 ): Promise<CommandPatternAnalysis> {
   const db = await getDbInstance();
   const now = Math.floor(Date.now() / 1000);
@@ -353,7 +352,7 @@ export async function analyzeCommandPatterns(
  * 分析安全事件
  * @param userId 用户 ID，用于过滤该用户的安全事件
  */
-async function analyzeSecurityEvents(userId?: number | string): Promise<AIInsight[]> {
+async function analyzeSecurityEvents(_userId?: number | string): Promise<AIInsight[]> {
   const db = await getDbInstance();
   const now = Math.floor(Date.now() / 1000);
   const oneDayAgo = now - SECONDS_24H;
@@ -507,18 +506,44 @@ async function analyzeConnectionStats(userId?: number | string): Promise<{
 
 // === 响应格式化函数 ===
 
+function getHealthStatusEmoji(status: SystemHealthSummary['overallStatus']): string {
+  if (status === 'healthy') {
+    return '✅';
+  }
+  if (status === 'warning') {
+    return '⚠️';
+  }
+  return '🚨';
+}
+
+function getHealthStatusText(status: SystemHealthSummary['overallStatus']): string {
+  if (status === 'healthy') {
+    return '健康';
+  }
+  if (status === 'warning') {
+    return '警告';
+  }
+  return '严重';
+}
+
+function getInsightSeverityIcon(severity: AIInsight['severity']): string {
+  if (severity === 'critical') {
+    return '🚨';
+  }
+  if (severity === 'high') {
+    return '⚠️';
+  }
+  if (severity === 'medium') {
+    return '📋';
+  }
+  return 'ℹ️';
+}
+
 function formatHealthSummaryResponse(health: SystemHealthSummary): string {
-  const statusEmoji =
-    health.overallStatus === 'healthy' ? '✅' : health.overallStatus === 'warning' ? '⚠️' : '🚨';
+  const statusEmoji = getHealthStatusEmoji(health.overallStatus);
 
   let response = `## 系统健康摘要 ${statusEmoji}\n\n`;
-  response += `**整体状态**: ${
-    health.overallStatus === 'healthy'
-      ? '健康'
-      : health.overallStatus === 'warning'
-        ? '警告'
-        : '严重'
-  }\n\n`;
+  response += `**整体状态**: ${getHealthStatusText(health.overallStatus)}\n\n`;
 
   response += `### 关键指标\n`;
   response += `- 活跃连接: ${health.activeConnections}\n`;
@@ -571,14 +596,7 @@ function formatSecurityResponse(insights: AIInsight[]): string {
   let response = `## 安全状态分析 🔒\n\n`;
 
   insights.forEach((insight) => {
-    const severityIcon =
-      insight.severity === 'critical'
-        ? '🚨'
-        : insight.severity === 'high'
-          ? '⚠️'
-          : insight.severity === 'medium'
-            ? '📋'
-            : 'ℹ️';
+    const severityIcon = getInsightSeverityIcon(insight.severity);
     response += `### ${severityIcon} ${insight.title}\n`;
     response += `${insight.description}\n`;
     if (insight.suggestedAction) {
