@@ -4,6 +4,15 @@ import { getErrorMessage } from '../utils/AppError';
 
 const execAsync = promisify(exec);
 
+const getExecErrorStderr = (error: unknown): string | undefined => {
+  if (typeof error !== 'object' || error === null || !('stderr' in error)) {
+    return undefined;
+  }
+
+  const { stderr } = error as { stderr?: unknown };
+  return typeof stderr === 'string' ? stderr : undefined;
+};
+
 // --- Interfaces (与前端 DockerManager.vue 中的定义保持一致) ---
 // 理想情况下，这些类型应该放在共享的 types 包中
 interface PortInfo {
@@ -61,7 +70,7 @@ export class DockerService {
       await execAsync('docker version', { timeout: 2000 }); // 5秒超时
       this.isDockerAvailableCache = true;
       return true;
-    } catch (error: unknown) {
+    } catch {
       this.isDockerAvailableCache = false;
       return false;
     }
@@ -108,9 +117,10 @@ export class DockerService {
         })
         .filter((container): container is DockerContainer => container !== null);
     } catch (error: unknown) {
+      const stderr = getExecErrorStderr(error);
       console.error('[DockerService] Failed to execute "docker ps"', {
         error: getErrorMessage(error),
-        stderr: (error as any)?.stderr,
+        stderr,
       });
       this.isDockerAvailableCache = false;
       return { available: false, containers: [] };
@@ -148,9 +158,10 @@ export class DockerService {
       });
     } catch (error: unknown) {
       // 获取 stats 失败不应阻止返回容器列表，只是 stats 会是 null
+      const stderr = getExecErrorStderr(error);
       console.warn('[DockerService] Failed to execute "docker stats"', {
         error: getErrorMessage(error),
-        stderr: (error as any)?.stderr,
+        stderr,
       });
     }
 
@@ -225,7 +236,7 @@ export class DockerService {
       }); // Use console.log
     } catch (error: unknown) {
       const errorMsg = getErrorMessage(error);
-      const stderr = (error as any)?.stderr;
+      const stderr = getExecErrorStderr(error);
       console.error(`[DockerService] Failed to execute command "${dockerCliCommand}"`, {
         error: errorMsg,
         stderr,

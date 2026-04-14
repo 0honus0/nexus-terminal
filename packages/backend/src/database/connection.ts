@@ -1,7 +1,6 @@
-import sqlite3, { OPEN_READWRITE, OPEN_CREATE } from 'sqlite3';
+import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
 import { getErrorMessage } from '../utils/AppError';
 
@@ -34,7 +33,7 @@ export const runDb = (
   params: unknown[] = []
 ): Promise<RunResult> => {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err: Error | null) {
+    db.run(sql, params, function runDbCallback(this: RunResult, err: Error | null) {
       if (err) {
         console.error(
           `[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`
@@ -86,6 +85,9 @@ export const allDb = <T = unknown>(
 };
 
 const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> => {
+  // eslint-disable-next-line import/no-cycle -- 懒加载 schema 定义用于初始化阶段，避免启动期强耦合
+  const { tableDefinitions } = await import('./schema.registry');
+
   // SQLite 性能优化配置（必须在事务外执行）
   // WAL 模式：提升并发读写性能 2-3 倍
   await runDb(db, 'PRAGMA journal_mode = WAL;');

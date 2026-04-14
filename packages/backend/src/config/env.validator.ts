@@ -277,6 +277,12 @@ export class EnvironmentValidationError extends Error {
 export function validateEnvironment(): EnvironmentConfig {
   const errors: string[] = [];
   const config: Partial<EnvironmentConfig> = {};
+  const setConfigValue = <K extends keyof EnvironmentConfig>(
+    key: K,
+    value: EnvironmentConfig[K]
+  ): void => {
+    config[key] = value;
+  };
 
   for (const [key, schema] of Object.entries(ENV_SCHEMA)) {
     const envKey = key as keyof EnvironmentConfig;
@@ -303,7 +309,7 @@ export function validateEnvironment(): EnvironmentConfig {
         );
         continue;
       }
-      (config as any)[envKey] = value;
+      setConfigValue(envKey, value as EnvironmentConfig[typeof envKey]);
     } else if (schema.type === 'number') {
       const numValue = parseInt(value, 10);
       if (Number.isNaN(numValue)) {
@@ -317,10 +323,10 @@ export function validateEnvironment(): EnvironmentConfig {
         continue;
       }
 
-      (config as any)[envKey] = numValue;
+      setConfigValue(envKey, numValue as EnvironmentConfig[typeof envKey]);
     } else if (schema.type === 'boolean') {
       const boolValue = value === 'true' || value === '1';
-      (config as any)[envKey] = boolValue;
+      setConfigValue(envKey, boolValue as EnvironmentConfig[typeof envKey]);
     } else {
       // string 类型
       // 自定义验证器
@@ -329,7 +335,7 @@ export function validateEnvironment(): EnvironmentConfig {
         continue;
       }
 
-      (config as any)[envKey] = value;
+      setConfigValue(envKey, value as EnvironmentConfig[typeof envKey]);
     }
   }
 
