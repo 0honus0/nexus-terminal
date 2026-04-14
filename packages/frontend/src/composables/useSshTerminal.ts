@@ -1,4 +1,4 @@
-import { ref, readonly, type Ref, ComputedRef } from 'vue';
+import { ref, readonly, type ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
 import type { Terminal } from '@xterm/xterm';
@@ -47,6 +47,10 @@ export function createSshTerminalManager(
   const FLUSH_INTERVAL_MS = 16; // 约 60fps，减少写入频率
   const IDLE_CALLBACK_TIMEOUT_MS = 50; // requestIdleCallback 超时
   const SMALL_DATA_THRESHOLD = 100; // 小数据包阈值（字节），用于识别用户输入
+  const idleWindow = window as Window &
+    typeof globalThis & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+    };
 
   // 合并 Uint8Array 数组为单个 Uint8Array
   const mergeUint8Arrays = (arrays: Uint8Array[]): Uint8Array => {
@@ -90,16 +94,16 @@ export function createSshTerminalManager(
         let uint8Batch: Uint8Array[] = [];
 
         const flushStrBatch = () => {
-          if (strBatch) {
-            terminalInstance.value!.write(strBatch);
+          const terminal = terminalInstance.value;
+          if (strBatch && terminal) {
+            terminal.write(strBatch);
             strBatch = '';
           }
         };
         const flushUint8Batch = () => {
-          if (uint8Batch.length > 0) {
-            terminalInstance.value!.write(
-              uint8Batch.length === 1 ? uint8Batch[0] : mergeUint8Arrays(uint8Batch)
-            );
+          const terminal = terminalInstance.value;
+          if (uint8Batch.length > 0 && terminal) {
+            terminal.write(uint8Batch.length === 1 ? uint8Batch[0] : mergeUint8Arrays(uint8Batch));
             uint8Batch = [];
           }
         };
@@ -136,8 +140,8 @@ export function createSshTerminalManager(
     const timeSinceLastFlush = performance.now() - lastFlushTime;
 
     // 如果距离上次刷新时间较短，使用 requestIdleCallback 延迟处理
-    if (timeSinceLastFlush < FLUSH_INTERVAL_MS && 'requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(
+    if (timeSinceLastFlush < FLUSH_INTERVAL_MS && idleWindow.requestIdleCallback) {
+      idleWindow.requestIdleCallback(
         (deadline: IdleDeadline) => {
           // 如果有空闲时间或超时，执行刷新
           if (deadline.timeRemaining() > 0 || deadline.didTimeout) {
@@ -295,12 +299,10 @@ export function createSshTerminalManager(
     // --------------------
 
     // +++ 优化：区分小数据包（用户输入回显）和大数据包（服务器输出） +++
-    const dataSize =
-      typeof outputData === 'string'
-        ? outputData.length
-        : outputData instanceof Uint8Array
-          ? outputData.length
-          : 0;
+    let dataSize = 0;
+    if (typeof outputData === 'string' || outputData instanceof Uint8Array) {
+      dataSize = outputData.length;
+    }
 
     // 小数据包（通常是用户输入回显）仅在缓冲队列为空时立即写入，否则进入队列保持顺序
     if (
@@ -540,7 +542,7 @@ export function createSshTerminalManager(
 }
 
 // 保留兼容旧代码的函数（将在完全迁移后移除）
-export function useSshTerminal(t: (key: string) => string) {
+export function useSshTerminal(_t: (key: string) => string) {
   console.warn(
     '⚠️ 使用已弃用的 useSshTerminal() 全局单例。请迁移到 createSshTerminalManager() 工厂函数。'
   );
@@ -552,11 +554,11 @@ export function useSshTerminal(t: (key: string) => string) {
     terminalInstance.value = term;
   };
 
-  const handleTerminalData = (data: string) => {
+  const handleTerminalData = (_data: string) => {
     console.warn('[SSH终端模块][旧] 收到终端数据，但使用了已弃用的单例模式，无法发送。');
   };
 
-  const handleTerminalResize = (dimensions: { cols: number; rows: number }) => {
+  const handleTerminalResize = (_dimensions: { cols: number; rows: number }) => {
     console.warn('[SSH终端模块][旧] 收到终端大小调整，但使用了已弃用的单例模式，无法发送。');
   };
 

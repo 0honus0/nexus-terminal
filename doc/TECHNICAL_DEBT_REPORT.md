@@ -1,9 +1,36 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-14
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-14（最新复查）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：✅ 非生成代码债务已清零（2026-04-14 复查）
+> **状态**：🟡 持续治理中（ESLint warning: 285，error: 0）
+
+---
+
+## 2026-04-14 复查快照（最新）
+
+### 当前债务总览（最新口径）
+
+| 类别      | 当前状态        | 说明                                                          |
+| --------- | --------------- | ------------------------------------------------------------- |
+| Lint 债务 | 🟡 285 warnings | `npm run -s lint -- --format json`（2026-04-14）              |
+| Lint 错误 | ✅ 0 errors     | 当前无阻断错误                                                |
+| 修复方式  | ✅ 并行批处理   | 子代理并行 + 主线程复核 + 分批提交                            |
+| 文档口径  | ✅ 已同步       | `CHANGELOG.md` 与本报告都改为“仅保留最新汇总，不记录每批流水” |
+
+### 本轮已落地批次（最新）
+
+- `e779756`：收敛 `notification.controller.ts`、`sftp.controller.ts`
+- `85df066`：收敛 `ssh-suspend.service.ts`、`websocket/connection.ts`
+- `2ee9fb0`：收敛 `ai.service.ts`、`websocket/upgrade.ts`
+- `95db60f`：收敛 `connection.service.ts`、`auth.controller.ts`
+
+### 剩余高优先文件（按 warning 数）
+
+- `packages/backend/src/notifications/notification.service.test.ts`（6）
+- `packages/backend/src/services/import-export.service.ts`（6）
+- `packages/backend/tests/integration/ssh/mock-ssh-server.ts`（6）
+- `packages/frontend/src/types/splitpanes.d.ts`（6）
 
 ---
 

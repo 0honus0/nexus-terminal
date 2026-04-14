@@ -63,18 +63,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
   const sshKeysStore = useSshKeysStore();
   const uiNotificationsStore = useUiNotificationsStore();
 
-  const {
-    isLoading: isConnLoading,
-    error: connStoreError,
-    connections,
-  } = storeToRefs(connectionsStore);
+  const { isLoading: isConnLoading, connections } = storeToRefs(connectionsStore);
   const { proxies, isLoading: isProxyLoading, error: proxyStoreError } = storeToRefs(proxiesStore);
   const { tags, isLoading: isTagLoading, error: tagStoreError } = storeToRefs(tagsStore);
-  const {
-    sshKeys,
-    isLoading: isSshKeyLoading,
-    error: sshKeyStoreError,
-  } = storeToRefs(sshKeysStore);
+  const { sshKeys, isLoading: isSshKeyLoading } = storeToRefs(sshKeysStore);
 
   // 表单数据模型
   const initialFormData = {
@@ -105,10 +97,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
   const isLoading = computed(
     () => isConnLoading.value || isProxyLoading.value || isTagLoading.value || isSshKeyLoading.value
   ); // +++ Include SSH Key loading +++
-  const storeError = computed(
-    () =>
-      connStoreError.value || proxyStoreError.value || tagStoreError.value || sshKeyStoreError.value
-  ); // +++ Include SSH Key error +++
 
   // 测试连接状态
   const testStatus = ref<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -246,7 +234,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
   watch(
     [() => formData.type, advancedConnectionMode],
-    ([newType, newAdvMode], [oldType, oldAdvMode]) => {
+    ([newType, newAdvMode]) => {
       if (newType === 'SSH') {
         if (newAdvMode === 'proxy') {
           formData.proxy_type = 'proxy';
@@ -395,7 +383,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     let password: string | null = null;
     let keyName: string | null = null;
     let proxyName: string | null = null;
-    let tags: string[] = [];
+    let scriptTags: string[] = [];
     let note: string | null = null;
 
     // 4. Parse optionsString
@@ -410,9 +398,9 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
         if (key === 'tags') {
           // Handle -tags, which can be followed by zero or more tags
-          tags = [];
+          scriptTags = [];
           while (i < args.length && !args[i].startsWith('-')) {
-            tags.push(args[i].replace(/^"|"$/g, '')); // Remove surrounding quotes
+            scriptTags.push(args[i].replace(/^"|"$/g, '')); // Remove surrounding quotes
             i++;
           }
           // No need to i++ here, the next loop iteration or outer loop handles it
@@ -434,7 +422,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
             password,
             keyName,
             proxyName,
-            tags,
+            tags: scriptTags,
             note,
             error: t('connections.form.scriptErrorMissingValueForKey', { key: arg }),
           };
@@ -454,7 +442,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                   password,
                   keyName,
                   proxyName,
-                  tags,
+                  tags: scriptTags,
                   note,
                   error: t('connections.form.scriptErrorInvalidType', { value: args[i] }),
                 };
@@ -480,7 +468,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                 password,
                 keyName,
                 proxyName,
-                tags,
+                tags: scriptTags,
                 note,
                 error: t('connections.form.scriptErrorUnknownOption', { option: arg }),
               };
@@ -496,7 +484,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           password,
           keyName,
           proxyName,
-          tags,
+          tags: scriptTags,
           note,
           error: t('connections.form.scriptErrorUnexpectedArgument', { argument: arg }),
         };
@@ -513,7 +501,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           password,
           keyName,
           proxyName,
-          tags,
+          tags: scriptTags,
           note,
           error: t('connections.form.scriptErrorMissingAuthForSsh'),
         };
@@ -528,7 +516,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           password,
           keyName,
           proxyName,
-          tags,
+          tags: scriptTags,
           note,
           error: t('connections.form.scriptErrorMissingPasswordForRdp'),
         };
@@ -541,7 +529,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           password,
           keyName,
           proxyName,
-          tags,
+          tags: scriptTags,
           note,
           error: t('connections.form.scriptErrorKeyNotApplicableForRdp'),
         };
@@ -555,7 +543,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           password,
           keyName,
           proxyName,
-          tags,
+          tags: scriptTags,
           note,
           error: t('connections.form.scriptErrorMissingPasswordForVnc'),
         };
@@ -568,14 +556,23 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           password,
           keyName,
           proxyName,
-          tags,
+          tags: scriptTags,
           note,
           error: t('connections.form.scriptErrorKeyNotApplicableForVnc'),
         };
       }
     }
 
-    return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note };
+    return {
+      type,
+      userHostPort: userHostPortPart,
+      name,
+      password,
+      keyName,
+      proxyName,
+      tags: scriptTags,
+      note,
+    };
   };
 
   // 处理表单提交
@@ -608,13 +605,16 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
       const [userHost, portStr] = parsed.userHostPort.split(':');
       const [username, host] = userHost.split('@');
-      const port = portStr
-        ? parseInt(portStr, 10)
-        : parsed.type === 'RDP'
-          ? 3389
-          : parsed.type === 'VNC'
-            ? 5900
-            : 22;
+      let defaultPort = 22;
+      let defaultPortLabel = '22';
+      if (parsed.type === 'RDP') {
+        defaultPort = 3389;
+        defaultPortLabel = '3389';
+      } else if (parsed.type === 'VNC') {
+        defaultPort = 5900;
+        defaultPortLabel = '5900';
+      }
+      const port = portStr ? parseInt(portStr, 10) : defaultPort;
 
       if (!username || !host) {
         uiNotificationsStore.showError(
@@ -627,8 +627,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         uiNotificationsStore.showError(
           t('connections.form.scriptErrorInvalidPort', {
             line,
-            port:
-              portStr || (parsed.type === 'RDP' ? '3389' : parsed.type === 'VNC' ? '5900' : '22'),
+            port: portStr || defaultPortLabel,
           })
         );
         allConnectionsValid = false;
