@@ -3,7 +3,7 @@
 > **生成时间**：2025-12-23 | **更新时间**：2026-04-14（最新复查）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：🟡 持续治理中（ESLint warning: 285，error: 0）
+> **状态**：🟡 持续治理中（ESLint warning: 251，error: 0）
 
 ---
 
@@ -13,7 +13,7 @@
 
 | 类别      | 当前状态        | 说明                                                          |
 | --------- | --------------- | ------------------------------------------------------------- |
-| Lint 债务 | 🟡 285 warnings | `npm run -s lint -- --format json`（2026-04-14）              |
+| Lint 债务 | 🟡 251 warnings | `npm run -s lint -- --format json`（2026-04-14）              |
 | Lint 错误 | ✅ 0 errors     | 当前无阻断错误                                                |
 | 修复方式  | ✅ 并行批处理   | 子代理并行 + 主线程复核 + 分批提交                            |
 | 文档口径  | ✅ 已同步       | `CHANGELOG.md` 与本报告都改为“仅保留最新汇总，不记录每批流水” |
@@ -24,6 +24,9 @@
 - `85df066`：收敛 `ssh-suspend.service.ts`、`websocket/connection.ts`
 - `2ee9fb0`：收敛 `ai.service.ts`、`websocket/upgrade.ts`
 - `95db60f`：收敛 `connection.service.ts`、`auth.controller.ts`
+- `e79bf61`：收敛 `notification.service.test.ts`、`import-export.service.ts`
+- `4473674`：收敛 `mock-ssh-server.ts`、`splitpanes.d.ts`
+- `b394c6a`：收敛 `nl2cmd.service.ts`、`passkey.service.ts`
 
 ### 剩余高优先文件（按 warning 数）
 

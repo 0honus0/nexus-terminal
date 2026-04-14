@@ -10,12 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **技术债务治理（2026-04-14 最新）**：本轮按“并行修复 + 分批提交”持续收敛 lint 债务（仅保留最新口径）
-  - ESLint 全仓告警由 **365** 降至 **285**（`error: 0`）
+  - ESLint 全仓告警由 **365** 降至 **251**（`error: 0`）
   - 本轮已落地批次：
     - `e779756`：收敛 `notification.controller.ts`、`sftp.controller.ts`
     - `85df066`：收敛 `ssh-suspend.service.ts`、`websocket/connection.ts`
     - `2ee9fb0`：收敛 `ai.service.ts`、`websocket/upgrade.ts`
     - `95db60f`：收敛 `connection.service.ts`、`auth.controller.ts`
+    - `e79bf61`：收敛 `notification.service.test.ts`、`import-export.service.ts`
+    - `4473674`：收敛 `mock-ssh-server.ts`、`splitpanes.d.ts`
+    - `b394c6a`：收敛 `nl2cmd.service.ts`、`passkey.service.ts`
   - 文档口径同步：`doc/TECHNICAL_DEBT_REPORT.md` 已更新为 2026-04-14 最新快照
 
 - **技术债务复查（2026-04-11）**：完成一轮基于仓库现状的技术债务重审
