@@ -4,14 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useConnectionsStore, type ConnectionInfo } from '../../connections.store';
 import { sessions, activeSessionId } from '../state';
 import { generateSessionId } from '../utils';
-import type {
-  SessionState,
-  SshTerminalInstance,
-  StatusMonitorInstance,
-  DockerManagerInstance,
-  SftpManagerInstance,
-  WsManagerInstance,
-} from '../types';
+import type { SessionState, SftpManagerInstance, WsManagerInstance } from '../types';
 
 import { createWebSocketConnectionManager } from '../../../composables/useWebSocketConnection';
 import {
@@ -26,7 +19,6 @@ import {
   createDockerManager,
   type DockerManagerDependencies,
 } from '../../../composables/useDockerManager';
-import { registerSshSuspendHandlers } from './sshSuspendActions';
 
 // --- 辅助函数 (特定于此模块的 actions) ---
 const findConnectionInfo = (
@@ -247,8 +239,18 @@ export const openNewSession = (
   // 确保只对 SSH 类型的连接注册 (虽然 wsManager 本身不包含类型信息，但 openNewSession 通常只为 SSH 调用)
   // 如果 connInfo 存在且类型为 SSH，则注册
   if (connInfo && connInfo.type === 'SSH') {
-    registerSshSuspendHandlers(wsManager);
-    console.info(`[SessionActions] 已为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器。`);
+    // eslint-disable-next-line import/no-cycle -- 运行期懒加载以降低静态循环依赖影响
+    void import('./sshSuspendActions')
+      .then(({ registerSshSuspendHandlers }) => {
+        registerSshSuspendHandlers(wsManager);
+        console.info(`[SessionActions] 已为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器。`);
+      })
+      .catch((error: unknown) => {
+        console.error(
+          `[SessionActions] 为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器失败:`,
+          error
+        );
+      });
   } else if (connInfo) {
     console.info(
       `[SessionActions] 会话 ${newSessionId} 类型为 ${connInfo.type}，不注册 SSH 挂起处理器。`

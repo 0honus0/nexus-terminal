@@ -76,7 +76,7 @@ function redactSensitiveData(value: unknown, depth = 0, seen = new WeakSet()): u
     seen.add(value);
     try {
       return value.map((item) => redactSensitiveData(item, depth + 1, seen));
-    } catch (err) {
+    } catch {
       return '[Array Processing Error]';
     }
   }
@@ -108,13 +108,13 @@ function redactSensitiveData(value: unknown, depth = 0, seen = new WeakSet()): u
           } else {
             redacted[key] = redactSensitiveData(objectValue[key], depth + 1, seen);
           }
-        } catch (err) {
+        } catch {
           // Getter 异常保护
           redacted[key] = '[Access Error]';
         }
       }
       return redacted;
-    } catch (err) {
+    } catch {
       return '[Object Processing Error]';
     }
   }

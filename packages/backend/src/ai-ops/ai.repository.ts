@@ -18,7 +18,7 @@ const rowToSession = (row: AISessionRow, messages: AIMessage[] = []): AISession 
 
 // 消息行数据转换为 AIMessage 对象
 const rowToMessage = (row: AIMessageRow): AIMessage => {
-  let metadata: Record<string, any> | undefined;
+  let metadata: Record<string, unknown> | undefined;
   if (row.metadata_json) {
     try {
       metadata = JSON.parse(row.metadata_json);
@@ -171,7 +171,7 @@ export const addMessage = async (
   sessionId: string,
   role: AIMessageRole,
   content: string,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<AIMessage> => {
   const db = await getDbInstance();
   const now = Math.floor(Date.now() / 1000);
@@ -304,7 +304,7 @@ export const cleanupOldSessions = async (
     [userId, ...keepIds]
   );
 
-  return (result as any).changes || 0;
+  return result.changes || 0;
 };
 
 /**

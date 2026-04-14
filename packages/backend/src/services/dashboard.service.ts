@@ -34,7 +34,7 @@ const getEffectiveTimeRange = (timeRange?: TimeRange): TimeRange => {
   return { start, end: nowSeconds };
 };
 
-const safeParseAuditDetails = (details: string | null): Record<string, any> | null => {
+const safeParseAuditDetails = (details: string | null): Record<string, unknown> | null => {
   if (!details) return null;
   try {
     const parsed = JSON.parse(details);
@@ -182,12 +182,12 @@ export const getDashboardStats = async (timeRange?: { start: number; end: number
     const hasSessionId = typeof sessionId === 'string' && sessionId.length > 0;
 
     const disconnectAt = hasSessionId ? disconnectBySessionId.get(sessionId) : undefined;
-    const endSeconds =
-      typeof disconnectAt === 'number' && disconnectAt >= e.timestamp
-        ? disconnectAt
-        : hasSessionId && clientStates.has(sessionId)
-          ? Math.min(nowSeconds, effectiveRange.end)
-          : effectiveRange.end;
+    let endSeconds = effectiveRange.end;
+    if (typeof disconnectAt === 'number' && disconnectAt >= e.timestamp) {
+      endSeconds = disconnectAt;
+    } else if (hasSessionId && clientStates.has(sessionId)) {
+      endSeconds = Math.min(nowSeconds, effectiveRange.end);
+    }
 
     const duration = Math.max(0, endSeconds - e.timestamp);
     durationSamples.push(duration);
@@ -582,9 +582,12 @@ export const getSystemResources = async (): Promise<{
   const dataDir = path.resolve(__dirname, '../../data');
   let diskUsed = 0;
   let diskTotal = 0;
+  type StatFsLike = { blocks: number; bsize: number; bfree: number };
+  type FsWithStatfsSync = typeof fs & { statfsSync?: (path: string) => StatFsLike };
+  const fsWithStatfsSync = fs as FsWithStatfsSync;
   try {
-    if (fs.existsSync(dataDir) && typeof (fs as any).statfsSync === 'function') {
-      const stat = (fs as any).statfsSync(dataDir);
+    if (fs.existsSync(dataDir) && typeof fsWithStatfsSync.statfsSync === 'function') {
+      const stat = fsWithStatfsSync.statfsSync(dataDir);
       diskTotal = stat.blocks * stat.bsize;
       const diskFree = stat.bfree * stat.bsize;
       diskUsed = Math.max(0, diskTotal - diskFree);

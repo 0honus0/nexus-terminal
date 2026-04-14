@@ -107,7 +107,7 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
           ? row.tag_ids_str
               .split(',')
               .map(Number)
-              .filter((id) => !Number.isNaN(id))
+              .filter((tagId) => !Number.isNaN(tagId))
           : [],
         jump_chain: jumpChainStr ? (JSON.parse(jumpChainStr) as number[]) : null,
         force_keyboard_interactive: Boolean(force_keyboard_interactive),
@@ -145,7 +145,7 @@ export const findConnectionByIdWithTags = async (
           ? row.tag_ids_str
               .split(',')
               .map(Number)
-              .filter((id) => !Number.isNaN(id))
+              .filter((tagId) => !Number.isNaN(tagId))
           : [],
         jump_chain: jumpChainStr ? (JSON.parse(jumpChainStr) as number[]) : null,
         force_keyboard_interactive: Boolean(force_keyboard_interactive),
@@ -193,7 +193,7 @@ export const findConnectionByName = async (name: string): Promise<ConnectionBase
     // Cast to ConnectionWithTagsRow to read jump_chain as string, then parse. It will now also have proxy_type
     const row = await getDbRow<ConnectionWithTagsRow>(db, sql, [name]);
     if (row) {
-      const { jump_chain: jumpChainStr, tag_ids_str, ...restOfRow } = row; // Exclude tag_ids_str as well for ConnectionBase
+      const { jump_chain: _jumpChainStr, tag_ids_str: _tagIdsStr, ...restOfRow } = row; // Exclude tag_ids_str as well for ConnectionBase
       return {
         ...restOfRow,
         // ConnectionBase does not have jump_chain, so we don't add it here.
