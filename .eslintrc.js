@@ -43,11 +43,13 @@ module.exports = {
     '@typescript-eslint/naming-convention': 'off', // 项目已有命名约定
     '@typescript-eslint/no-shadow': 'warn', // 降级为警告
     '@typescript-eslint/ban-ts-comment': 'warn', // 降级为警告
-    '@typescript-eslint/ban-types': 'warn', // 降级为警告
     '@typescript-eslint/no-loop-func': 'warn', // 降级为警告
+    '@typescript-eslint/no-empty-object-type': 'off', // ESLint9 + ts-eslint v8 迁移期兼容
     '@typescript-eslint/return-await': 'off', // 项目中有合理使用场景
     '@typescript-eslint/no-unused-expressions': 'off',
     '@typescript-eslint/no-var-requires': 'off', // 某些场景需要动态 require
+    '@typescript-eslint/no-require-imports': 'off', // 迁移期兼容 CommonJS require
+    '@typescript-eslint/no-unsafe-function-type': 'off', // 迁移期兼容 Function 类型
     // 禁用不存在的规则
     '@typescript-eslint/lines-between-class-members': 'off',
     '@typescript-eslint/no-throw-literal': 'off',
