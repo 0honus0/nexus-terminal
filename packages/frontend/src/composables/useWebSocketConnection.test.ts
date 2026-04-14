@@ -11,8 +11,9 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string, params?: Record<string, any>) => {
-        if (params) return `${key}:${JSON.stringify(params)}`;
+      t: (key: string, ...args: any[]) => {
+        const params = args[0];
+        if (params && typeof params === 'object') return `${key}:${JSON.stringify(params)}`;
         return key;
       },
     }),
@@ -91,7 +92,7 @@ class MockWebSocket {
 const OriginalWebSocket = global.WebSocket;
 
 describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
-  let mockT: (key: string, params?: Record<string, any>) => string;
+  let mockT: (key: string, ...args: any[]) => string;
   let createdWebSockets: MockWebSocket[];
   const createManager = (options?: {
     isResumeFlow?: boolean;
@@ -104,8 +105,9 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
     createdWebSockets = [];
 
     // 模拟 i18n 翻译函数
-    mockT = (key: string, params?: Record<string, any>) => {
-      if (params) return `${key}:${JSON.stringify(params)}`;
+    mockT = (key: string, ...args: any[]) => {
+      const params = args[0];
+      if (params && typeof params === 'object') return `${key}:${JSON.stringify(params)}`;
       return key;
     };
 

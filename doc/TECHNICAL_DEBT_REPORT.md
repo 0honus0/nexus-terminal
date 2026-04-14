@@ -17,7 +17,7 @@
 | E2E 测试债务   | ✅ 0 条 `test.skip`   | 已完成回补清零（2026-04-12）                                                 |
 | 全量安全债务   | ✅ 0 条漏洞           | `critical 0 / high 0 / moderate 0 / low 0`                                   |
 | 运行时安全债务 | ✅ 0 条漏洞           | `critical 0 / high 0 / moderate 0 / low 0`                                   |
-| 依赖弃用债务   | 🟡 1 项直连依赖       | 已完成 `xterm` -> `@xterm/xterm` 迁移；剩余 `vue-i18n@^9.14.4`（需升级 v11） |
+| 依赖弃用债务   | ✅ 0 项直连依赖       | 已完成 `xterm` 与 `vue-i18n` 升级迁移，当前无直连 deprecated 依赖            |
 | 类型安全债务   | 🟡 3 条 `@ts-*` 忽略  | 仅剩自动生成声明文件（`components.d.ts`、`auto-imports.d.ts`）               |
 | any 类型债务   | ✅ 0 处               | `: any / <any> / any[]`（`backend/src + frontend/src + remote-gateway/src`） |
 | 日志治理债务   | ✅ 0 处 `console.log` | 已完成第三十六批并行收敛（含子代理协作）                                     |
@@ -25,7 +25,7 @@
 ### 与历史口径差异
 
 - 历史“24/24 技术债务清零”仅覆盖当时 TODO/FIXME 清理批次，不等于当前无存量债务。
-- 目前债务主要为“自动生成声明文件中的类型忽略”和“`vue-i18n` 大版本迁移”，其余高频技术债务项已收敛。
+- 目前债务主要为“自动生成声明文件中的类型忽略”与持续回归维护，其余高频技术债务项已收敛。
 
 ### 2026-04-11 已落地修复
 
@@ -349,7 +349,7 @@
 - E2E `skip` 已清零，需要保持新增用例默认非跳过并持续回归验证。
 - 源码 `any` 已按扫描口径清零（`backend/src + frontend/src + remote-gateway/src`）。
 - 全量审计（含 dev）已清零（`critical/high/moderate/low = 0`），后续保持月度审计与版本漂移监控。
-- 依赖弃用治理已完成 `xterm-addon-web-links -> @xterm/addon-web-links` 与 `xterm -> @xterm/xterm`；当前剩余直连弃用依赖仅 `vue-i18n@^9.14.4`（v9 已进入维护终止期，需独立迁移到 v11）。
+- 依赖弃用治理已完成 `xterm-addon-web-links -> @xterm/addon-web-links`、`xterm -> @xterm/xterm` 与 `vue-i18n -> ^11`；当前直连依赖无 deprecated 项。
 
 ---
 
