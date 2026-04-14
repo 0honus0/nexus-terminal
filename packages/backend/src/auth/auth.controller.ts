@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { getErrorMessage } from '../utils/AppError';
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
-import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
+import { getDbInstance, runDb, getDb } from '../database/connection';
 import { hashPassword, comparePassword } from '../utils/crypto';
 import { NotificationService } from '../notifications/notification.service';
 import { AuditLogService } from '../audit/audit.service';
@@ -20,6 +20,43 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
+
+const getRequestHeaderValue = (req: Request, name: string): string | undefined => {
+  const headerFromGetter = typeof req.get === 'function' ? req.get(name) : undefined;
+  if (typeof headerFromGetter === 'string') {
+    return headerFromGetter;
+  }
+
+  const requestHeaders = (
+    req as unknown as {
+      headers?: Record<string, string | string[] | undefined>;
+    }
+  ).headers;
+  if (!requestHeaders) {
+    return undefined;
+  }
+
+  const rawHeader = requestHeaders[name.toLowerCase()];
+  if (Array.isArray(rawHeader)) {
+    return rawHeader[0];
+  }
+
+  return typeof rawHeader === 'string' ? rawHeader : undefined;
+};
+
+const getVerificationErrorMessage = (value: unknown): string | undefined => {
+  if (typeof value !== 'object' || value === null || !('error' in value)) {
+    return undefined;
+  }
+
+  const { error } = value as { error?: unknown };
+  if (typeof error !== 'object' || error === null || !('message' in error)) {
+    return undefined;
+  }
+
+  const { message } = error as { message?: unknown };
+  return typeof message === 'string' ? message : undefined;
+};
 
 export interface User {
   id: number;
@@ -166,7 +203,7 @@ export const verifyPasskeyRegistrationHandler = async (
       res.status(400).json({
         verified: false,
         message: 'Passkey 注册验证失败。',
-        error: (verification as any).error?.message || 'Unknown verification error',
+        error: getVerificationErrorMessage(verification) || 'Unknown verification error',
       });
     }
   } catch (error: unknown) {
@@ -642,11 +679,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           }
           if (isDev) {
             console.info(`[AuthController] 2FA pendingAuth 已保存到 session`);
-            const anyReq = req as any;
-            const forwardedProto =
-              typeof anyReq.get === 'function'
-                ? anyReq.get('X-Forwarded-Proto')
-                : anyReq.headers?.['x-forwarded-proto'];
+            const forwardedProto = getRequestHeaderValue(req, 'X-Forwarded-Proto');
             console.info(`[AuthController] X-Forwarded-Proto: ${forwardedProto ?? ''}`);
             console.info(`[AuthController] req.protocol: ${req.protocol}`);
             console.info(`[AuthController] req.secure: ${req.secure}`);
@@ -754,10 +787,7 @@ export const verifyLogin2FA = async (
   // +++ Debug logging for session diagnostics (dev only)
   if (isDev) {
     const getHeaderValue = (name: string): string | undefined => {
-      const anyReq = req as any;
-      if (typeof anyReq.get === 'function') return anyReq.get(name);
-      const headerName = name.toLowerCase();
-      return anyReq.headers?.[headerName];
+      return getRequestHeaderValue(req, name);
     };
 
     console.info(`[AuthController] verifyLogin2FA - Has pendingAuth: ${!!pendingAuth}`);
@@ -1302,7 +1332,7 @@ export const getInitData = async (
 
     // 1. 检查是否需要初始设置
     const userCountRow = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
-    const needsSetup = userCountRow ? userCountRow.count === 0 : true;
+    const requiresSetup = userCountRow ? userCountRow.count === 0 : true;
 
     // 2. 检查认证状态
     const { userId, username, requiresTwoFactor } = req.session;
@@ -1337,7 +1367,7 @@ export const getInitData = async (
 
     // 4. 返回统一的初始化数据
     res.status(200).json({
-      needsSetup,
+      needsSetup: requiresSetup,
       isAuthenticated,
       user,
       captchaConfig,

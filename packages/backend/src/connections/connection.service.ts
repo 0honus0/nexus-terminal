@@ -9,7 +9,6 @@ import {
   CreateConnectionInput,
   UpdateConnectionInput,
   FullConnectionData,
-  ConnectionWithTags as ConnectionWithTagsType, // Alias to avoid conflict with variable name
 } from '../types/connection.types';
 
 export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateConnectionInput };
@@ -140,9 +139,16 @@ export const createConnection = async (
   let authMethodForDb: 'password' | 'key' = 'password';
 
   if (connectionType === 'SSH') {
-    authMethodForDb = input.auth_method!; // Already validated above
+    const sshAuthMethod = input.auth_method;
+    if (sshAuthMethod !== 'password' && sshAuthMethod !== 'key') {
+      throw new Error('SSH 连接必须提供有效的认证方式 (password 或 key)。');
+    }
+    authMethodForDb = sshAuthMethod;
     if (input.auth_method === 'password') {
-      encryptedPassword = encrypt(input.password!);
+      if (!input.password) {
+        throw new Error('SSH 密码认证方式需要提供 password。');
+      }
+      encryptedPassword = encrypt(input.password);
       sshKeyIdToSave = null; // Password auth cannot use ssh_key_id
     } else {
       // auth_method is 'key'
@@ -158,7 +164,7 @@ export const createConnection = async (
         encryptedPassphrase = null;
       } else if (input.private_key) {
         // Encrypt the provided private key and passphrase
-        encryptedPrivateKey = encrypt(input.private_key!);
+        encryptedPrivateKey = encrypt(input.private_key);
         if (input.passphrase) {
           encryptedPassphrase = encrypt(input.passphrase);
         }
@@ -170,14 +176,20 @@ export const createConnection = async (
     }
   } else if (connectionType === 'RDP') {
     // RDP
-    encryptedPassword = encrypt(input.password!);
+    if (!input.password) {
+      throw new Error('RDP 连接需要提供 password。');
+    }
+    encryptedPassword = encrypt(input.password);
     // authMethodForDb remains 'password' for RDP
     encryptedPrivateKey = null;
     encryptedPassphrase = null;
     sshKeyIdToSave = null;
   } else {
     // VNC
-    encryptedPassword = encrypt(input.password!);
+    if (!input.password) {
+      throw new Error('VNC 连接需要提供 password。');
+    }
+    encryptedPassword = encrypt(input.password);
     authMethodForDb = 'password'; // VNC always uses password auth
     encryptedPrivateKey = null;
     encryptedPassphrase = null;
@@ -210,9 +222,9 @@ export const createConnection = async (
     force_keyboard_interactive: input.force_keyboard_interactive ?? false,
   };
   // Remove ssh_key_id property if it's null before logging/saving if repository expects exact type match without optional nulls
-  const finalConnectionData = { ...connectionData };
+  const finalConnectionData: Partial<ConnectionDataForRepo> = { ...connectionData };
   if (finalConnectionData.ssh_key_id === null) {
-    delete (finalConnectionData as any).ssh_key_id; // Adjust based on repository function signature if needed
+    delete finalConnectionData.ssh_key_id; // Adjust based on repository function signature if needed
   }
   console.info(
     '[Service:createConnection] Data being passed to ConnectionRepository.createConnection:',
