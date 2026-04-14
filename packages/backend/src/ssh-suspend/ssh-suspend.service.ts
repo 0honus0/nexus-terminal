@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   SuspendSessionDetails,
   SuspendedSessionsMap,
-  BackendSshStatus,
   SuspendedSessionInfo,
 } from '../types/ssh-suspend.types';
 import {
@@ -12,7 +11,6 @@ import {
   TemporaryLogStorageService,
   SessionMetadata,
 } from './temporary-log-storage.service';
-import { ClientState } from '../websocket/types';
 // clientStates 的直接访问已移除，因为takeOverMarkedSession现在从调用者接收所需信息
 
 /**
@@ -73,8 +71,8 @@ export class SshSuspendService extends EventEmitter {
 
       // 创建一个断开状态的会话记录（无 SSH 连接，仅保留元数据）
       const sessionDetails: SuspendSessionDetails = {
-        sshClient: null as any, // 断开的会话没有活跃的 SSH 连接
-        channel: null as any,
+        sshClient: null as unknown as Client, // 断开的会话没有活跃的 SSH 连接
+        channel: null as unknown as ClientChannel,
         tempLogPath: metadata.originalSessionId,
         connectionName: metadata.connectionName,
         connectionId: metadata.connectionId,
@@ -106,10 +104,12 @@ export class SshSuspendService extends EventEmitter {
    */
   private getUserSessions(userId: number): Map<string, SuspendSessionDetails> {
     // userId: string -> number
-    if (!this.suspendedSessions.has(userId)) {
-      this.suspendedSessions.set(userId, new Map<string, SuspendSessionDetails>());
+    let userSessions = this.suspendedSessions.get(userId);
+    if (!userSessions) {
+      userSessions = new Map<string, SuspendSessionDetails>();
+      this.suspendedSessions.set(userId, userSessions);
     }
-    return this.suspendedSessions.get(userId)!;
+    return userSessions;
   }
 
   /**
@@ -155,12 +155,12 @@ export class SshSuspendService extends EventEmitter {
       // SshSuspendService 不会管理这个“已经断开”的会话，但日志保留供用户清理。
       try {
         channel?.end();
-      } catch (e) {
+      } catch {
         /* ignore */
       }
       try {
         sshClient?.end();
-      } catch (e) {
+      } catch {
         /* ignore */
       }
       return null; // 无法接管
@@ -393,7 +393,7 @@ export class SshSuspendService extends EventEmitter {
       console.info(
         `[SshSuspendService][用户: ${userId}] resumeSession: 已读取挂起会话 ${suspendSessionId} (日志: ${session.tempLogPath}) 的数据，长度: ${logData.length}`
       );
-    } catch (error) {
+    } catch {
       // console.error(`[SshSuspendService][用户: ${userId}] resumeSession: 读取挂起会话 ${suspendSessionId} (日志: ${session.tempLogPath}) 失败:`, error);
       // 根据策略，读取日志失败可能也应该导致恢复失败
       return null;
@@ -408,7 +408,7 @@ export class SshSuspendService extends EventEmitter {
       // 删除以 session.tempLogPath (logIdentifier) 命名的日志文件
       await this.logStorageService.deleteLog(session.tempLogPath);
       // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 已删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath})。`);
-    } catch (error) {
+    } catch {
       // console.warn(`[SshSuspendService][用户: ${userId}] resumeSession: 删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath}) 失败:`, error);
       // 日志删除失败不应阻止恢复流程继续
     }

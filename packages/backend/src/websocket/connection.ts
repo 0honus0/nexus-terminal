@@ -3,13 +3,10 @@ import { Request } from 'express';
 import { getErrorMessage } from '../utils/AppError';
 import {
   AuthenticatedWebSocket,
-  SshSuspendStartRequest,
-  SshSuspendListRequest,
   SshSuspendResumeRequest,
   SshSuspendTerminateRequest,
   SshSuspendRemoveEntryRequest,
   // SshSuspendEditNameRequest, // Removed as it's now HTTP
-  SshSuspendStartedResponse,
   SshSuspendListResponse,
   SshSuspendResumedNotification,
   SshOutputCachedChunk,
@@ -52,6 +49,20 @@ import {
   handleSftpUploadCancel,
 } from './handlers/sftp.handler';
 
+type ConnectionRequestMeta = {
+  clientType?: unknown;
+  isRdpProxy?: unknown;
+  clientIpAddress?: unknown;
+};
+
+function getConnectionRequestMeta(request: Request): ConnectionRequestMeta {
+  return request as Request & ConnectionRequestMeta;
+}
+
+function isClientType(value: unknown): value is 'desktop' | 'mobile' {
+  return value === 'desktop' || value === 'mobile';
+}
+
 export function initializeConnectionHandler(
   wss: WebSocketServer,
   sshSuspendService: SshSuspendService,
@@ -65,18 +76,18 @@ export function initializeConnectionHandler(
 
     // 检测客户端类型（从请求头或查询参数）
     const userAgent = request.headers['user-agent'] || '';
-    const clientTypeParam = (request as any).clientType; // 可从前端显式传递
-
-    // 验证客户端类型参数（仅接受 'desktop' 或 'mobile'）
-    const validClientTypes: Array<'desktop' | 'mobile'> = ['desktop', 'mobile'];
+    const {
+      clientType: clientTypeParam,
+      isRdpProxy,
+      clientIpAddress,
+    } = getConnectionRequestMeta(request);
 
     // 规范化参数（去空格、小写）
     const normalizedClientType = clientTypeParam
       ? String(clientTypeParam).trim().toLowerCase()
       : null;
 
-    const isValidClientType =
-      normalizedClientType && validClientTypes.includes(normalizedClientType as any);
+    const isValidClientType = isClientType(normalizedClientType);
 
     // 记录被拒绝的客户端类型值（用于审计与灰度）
     if (clientTypeParam && !isValidClientType) {
@@ -89,8 +100,7 @@ export function initializeConnectionHandler(
       ? (normalizedClientType as 'desktop' | 'mobile')
       : detectClientType(userAgent);
 
-    const { isRdpProxy } = request as any;
-    const clientIp = (request as any).clientIpAddress || 'unknown'; // Preserved from upgrade handler
+    const clientIp = typeof clientIpAddress === 'string' ? clientIpAddress : 'unknown'; // Preserved from upgrade handler
 
     console.info(
       `WebSocket：客户端 ${ws.username} (ID: ${ws.userId}, IP: ${clientIp}, 类型: ${ws.clientType}, RDP Proxy: ${isRdpProxy}) 已连接。`
@@ -114,7 +124,7 @@ export function initializeConnectionHandler(
         let parsedMessage: unknown;
         try {
           parsedMessage = JSON.parse(message.toString());
-        } catch (e) {
+        } catch {
           console.error(`WebSocket：来自 ${ws.username} 的无效 JSON 消息:`, message.toString());
           if (ws.readyState === WebSocket.OPEN)
             ws.send(JSON.stringify({ type: 'error', payload: '无效的消息格式 (非 JSON)' }));
@@ -141,11 +151,6 @@ export function initializeConnectionHandler(
         // 使用已校验的消息数据
         const { type, payload, requestId } = validationResult.data;
         const { sessionId } = ws; // Get current WebSocket's session ID
-
-        // It's crucial to get the state associated with the current ws.sessionId
-        // For 'ssh:connect', ws.sessionId will be undefined initially, so state will be undefined.
-        // For other messages, ws.sessionId should exist if connection was successful.
-        const state = sessionId ? clientStates.get(sessionId) : undefined;
 
         try {
           switch (type) {
