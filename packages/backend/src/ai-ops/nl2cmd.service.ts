@@ -10,7 +10,6 @@
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import {
-  AIProvider,
   AIProviderConfig,
   NL2CMDRequest,
   NL2CMDResponse,
@@ -380,14 +379,14 @@ async function callOpenAIResponses(config: AIProviderConfig, prompt: string): Pr
 function isUnrecognizedRequestArgument(error: AxiosError, argumentName: string): boolean {
   if (error.response?.status !== 400) return false;
   const data = error.response?.data as unknown;
+  const dataObject =
+    typeof data === 'object' && data !== null
+      ? (data as { error?: { message?: unknown }; message?: unknown })
+      : undefined;
 
   const message =
-    (typeof data === 'object' && data !== null && 'error' in data
-      ? (data as any).error?.message
-      : undefined) ??
-    (typeof data === 'object' && data !== null && 'message' in data
-      ? (data as any).message
-      : undefined) ??
+    (typeof dataObject?.error?.message === 'string' ? dataObject.error.message : undefined) ??
+    (typeof dataObject?.message === 'string' ? dataObject.message : undefined) ??
     (typeof data === 'string' ? data : undefined);
 
   if (typeof message !== 'string') return false;
@@ -531,8 +530,12 @@ function buildErrorMessage(error: AxiosError): string {
         data,
       });
       errorMessage = 'API 请求频率超限或配额已耗尽，请稍后再试';
-      if (data && typeof data === 'object' && (data as any).error?.message) {
-        errorMessage += `: ${(data as any).error.message}`;
+      const rateLimitErrorObj =
+        typeof data === 'object' && data !== null
+          ? (data as { error?: { message?: unknown } })
+          : undefined;
+      if (typeof rateLimitErrorObj?.error?.message === 'string') {
+        errorMessage += `: ${rateLimitErrorObj.error.message}`;
       }
       break;
     case 500:

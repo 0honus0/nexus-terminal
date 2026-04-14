@@ -10,7 +10,6 @@ import type {
   GenerateRegistrationOptionsOpts,
   GenerateAuthenticationOptionsOpts,
   VerifyRegistrationResponseOpts,
-  VerifyAuthenticationResponseOpts,
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
@@ -19,7 +18,7 @@ import type {
   // We will rely on TypeScript's inference from the VerifiedRegistrationResponse/VerifiedAuthenticationResponse types.
 } from '@simplewebauthn/server';
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
-import { userRepository, User } from '../user/user.repository';
+import { userRepository } from '../user/user.repository';
 import { config } from '../config/app.config';
 import { getErrorMessage } from '../utils/AppError';
 
@@ -28,6 +27,22 @@ const RP_ORIGIN = config.rpOrigin;
 const RP_NAME = config.appName;
 
 const textEncoder = new TextEncoder();
+
+type RegistrationResponseEnvelope = {
+  registrationResponse?: unknown;
+};
+
+type RegistrationCredentialDetails = {
+  publicKey: Uint8Array;
+  id: string;
+  counter: number;
+  transports?: AuthenticatorTransportFuture[];
+};
+
+type RegistrationInfoLike = {
+  credential?: unknown;
+  credentialBackedUp?: unknown;
+};
 
 function base64UrlToUint8Array(base64urlString: string): Uint8Array {
   const base64 = base64urlString.replace(/-/g, '+').replace(/_/g, '/');
@@ -38,6 +53,40 @@ function base64UrlToUint8Array(base64urlString: string): Uint8Array {
     console.error('Failed to decode base64url string to Buffer:', base64urlString, e);
     throw new Error('Invalid base64url string for Buffer conversion');
   }
+}
+
+function getNestedRegistrationResponse(
+  value: RegistrationResponseJSON
+): RegistrationResponseJSON | undefined {
+  if (typeof value !== 'object' || value === null || !('registrationResponse' in value)) {
+    return undefined;
+  }
+
+  const { registrationResponse } = value as RegistrationResponseEnvelope;
+  return typeof registrationResponse === 'object' && registrationResponse !== null
+    ? (registrationResponse as RegistrationResponseJSON)
+    : undefined;
+}
+
+function getRegistrationCredentialDetails(value: unknown): {
+  credentialDetails: RegistrationCredentialDetails | undefined;
+  credentialBackedUp: boolean | undefined;
+} {
+  if (typeof value !== 'object' || value === null) {
+    return { credentialDetails: undefined, credentialBackedUp: undefined };
+  }
+
+  const regInfo = value as RegistrationInfoLike;
+  const { credentialBackedUp } = regInfo;
+  const credentialCandidate = regInfo.credential;
+
+  return {
+    credentialDetails:
+      typeof credentialCandidate === 'object' && credentialCandidate !== null
+        ? (credentialCandidate as RegistrationCredentialDetails)
+        : undefined,
+    credentialBackedUp: typeof credentialBackedUp === 'boolean' ? credentialBackedUp : undefined,
+  };
 }
 
 export class PasskeyService {
@@ -101,7 +150,7 @@ export class PasskeyService {
     }
 
     // The actual WebAuthn response is nested within the received object
-    const actualRegistrationResponse = (registrationResponseJSON as any).registrationResponse;
+    const actualRegistrationResponse = getNestedRegistrationResponse(registrationResponseJSON);
 
     // Add a check for the presence of credential ID before calling the library
     if (!actualRegistrationResponse || !actualRegistrationResponse.id) {
@@ -128,8 +177,7 @@ export class PasskeyService {
       // Based on the logs, credentialPublicKey, credentialID, counter, and transports
       // are nested within regInfo.credential.
       // credentialBackedUp is at the top level of regInfo.
-      const credentialDetails = (regInfo as any).credential;
-      const { credentialBackedUp } = regInfo as any; // This seems to be at the top level
+      const { credentialDetails, credentialBackedUp } = getRegistrationCredentialDetails(regInfo);
 
       if (
         !credentialDetails ||
