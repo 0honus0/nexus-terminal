@@ -1,5 +1,5 @@
 import * as ProxyRepository from './proxy.repository';
-import { encrypt, decrypt } from '../utils/crypto';
+import { encrypt } from '../utils/crypto';
 
 export interface ProxyData extends ProxyRepository.ProxyData {}
 
@@ -100,7 +100,6 @@ export const updateProxy = async (
 
   // 2. 准备更新数据
   const dataToUpdate: Partial<Omit<ProxyData, 'id' | 'created_at'>> = {};
-  let needsCredentialUpdate = false;
   const newAuthMethod = input.auth_method || currentProxy.auth_method;
 
   // 更新标准字段
@@ -113,7 +112,6 @@ export const updateProxy = async (
   // 处理认证方法更改或凭证更新
   if (input.auth_method && input.auth_method !== currentProxy.auth_method) {
     dataToUpdate.auth_method = input.auth_method;
-    needsCredentialUpdate = true;
     // 根据 *新* 认证方法加密新凭证
     if (input.auth_method === 'password') {
       if (input.password === undefined) throw new Error('切换到密码认证时需要提供 password。');
@@ -136,16 +134,13 @@ export const updateProxy = async (
     // 认证方法未更改，如果为当前方法提供了凭证，则更新凭证
     if (newAuthMethod === 'password' && input.password !== undefined) {
       dataToUpdate.encrypted_password = input.password ? encrypt(input.password) : null;
-      needsCredentialUpdate = true;
     } else if (newAuthMethod === 'key') {
       if (input.private_key !== undefined) {
         dataToUpdate.encrypted_private_key = input.private_key ? encrypt(input.private_key) : null;
         dataToUpdate.encrypted_passphrase = input.passphrase ? encrypt(input.passphrase) : null; // 一起更新密码短语
-        needsCredentialUpdate = true;
       } else if (input.passphrase !== undefined) {
         // 仅更新密码短语
         dataToUpdate.encrypted_passphrase = input.passphrase ? encrypt(input.passphrase) : null;
-        needsCredentialUpdate = true;
       }
     }
   }

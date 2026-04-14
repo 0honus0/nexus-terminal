@@ -13,7 +13,7 @@ export interface AIMessage {
   role: AIMessageRole;
   content: string;
   timestamp: Date;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // AI 会话
@@ -66,7 +66,7 @@ export interface AIInsight {
   severity: AIInsightSeverity;
   title: string;
   description: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
   actionable?: boolean;
   suggestedAction?: string;
   timestamp: Date;

@@ -3,7 +3,7 @@
  * 测试布局渲染器组件的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, shallowMount, config } from '@vue/test-utils';
+import { shallowMount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick, defineComponent, h } from 'vue';
 import LayoutRenderer from './LayoutRenderer.vue';

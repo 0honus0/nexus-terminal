@@ -340,7 +340,7 @@ export const cancelSubTasks = async (
     [reason, taskId]
   );
 
-  return (result as any).changes || 0;
+  return typeof result.changes === 'number' ? result.changes : 0;
 };
 
 /**
@@ -366,5 +366,5 @@ export const cleanupOldTasks = async (daysOld: number = 7): Promise<number> => {
     [cutoff]
   );
 
-  return (result as any).changes || 0;
+  return typeof result.changes === 'number' ? result.changes : 0;
 };

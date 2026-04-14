@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { getDbInstance, getDb, allDb } from '../database/connection';
+import { getDb } from '../database/connection';
 import { UserRepository, userRepository, User } from './user.repository';
 
 // Mock 数据库连接

@@ -249,8 +249,9 @@ describe('MonacoEditor.vue', () => {
       instance.getValue.mockReturnValue('new content');
       contentChangeCallback();
 
-      expect(wrapper.emitted('update:modelValue')).toBeTruthy();
-      expect(wrapper.emitted('update:modelValue')![0]).toEqual(['new content']);
+      const updateModelEvents = wrapper.emitted('update:modelValue');
+      expect(updateModelEvents).toBeTruthy();
+      expect(updateModelEvents?.[0]).toEqual(['new content']);
     });
 
     it('滚动变化时应发射 update:scrollPosition 事件', async () => {
@@ -268,10 +269,9 @@ describe('MonacoEditor.vue', () => {
       const scrollChangeCallback = instance.onDidScrollChange.mock.calls[0][0];
       scrollChangeCallback({});
 
-      expect(wrapper.emitted('update:scrollPosition')).toBeTruthy();
-      expect(wrapper.emitted('update:scrollPosition')![0]).toEqual([
-        { scrollTop: 100, scrollLeft: 50 },
-      ]);
+      const scrollPositionEvents = wrapper.emitted('update:scrollPosition');
+      expect(scrollPositionEvents).toBeTruthy();
+      expect(scrollPositionEvents?.[0]).toEqual([{ scrollTop: 100, scrollLeft: 50 }]);
     });
 
     it('保存动作应发射 request-save 事件', async () => {

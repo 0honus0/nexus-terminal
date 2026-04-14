@@ -24,10 +24,12 @@ export function registerUserSocket(userId: number, ws: AuthenticatedWebSocket): 
   if (!userSockets.has(userId)) {
     userSockets.set(userId, new Set());
   }
-  userSockets.get(userId)!.add(ws);
-  console.info(
-    `[WebSocket 状态] 用户 ${userId} 的连接已注册，当前连接数: ${userSockets.get(userId)!.size}`
-  );
+  const sockets = userSockets.get(userId);
+  if (!sockets) {
+    return;
+  }
+  sockets.add(ws);
+  console.info(`[WebSocket 状态] 用户 ${userId} 的连接已注册，当前连接数: ${sockets.size}`);
 }
 
 /**

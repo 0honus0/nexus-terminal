@@ -3,7 +3,6 @@ import { mount, VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import TerminalPreview from './TerminalPreview.vue';
 import { useAppearanceStore } from '../../stores/appearance.store';
-import { Terminal } from '@xterm/xterm';
 
 // Mock vue-i18n
 vi.mock('vue-i18n', () => ({
@@ -172,7 +171,7 @@ describe('TerminalPreview.vue', () => {
 
   describe('清理逻辑', () => {
     it('应该在卸载时清理资源', () => {
-      const wrapper = mount(TerminalPreview, {
+      const localWrapper = mount(TerminalPreview, {
         global: {
           plugins: [createPinia()],
           mocks: {
@@ -182,7 +181,7 @@ describe('TerminalPreview.vue', () => {
       });
 
       // 卸载组件不应抛出错误
-      expect(() => wrapper.unmount()).not.toThrow();
+      expect(() => localWrapper.unmount()).not.toThrow();
     });
   });
 });

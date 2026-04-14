@@ -21,6 +21,11 @@ interface TokenResponse {
   token: string;
 }
 
+type RdpConnectionWithExtras = ConnectionWithTags & {
+  rdp_security?: string;
+  rdp_ignore_cert?: boolean;
+};
+
 const REMOTE_GATEWAY_API_TOKEN = (process.env.REMOTE_GATEWAY_API_TOKEN || '').trim();
 
 /**
@@ -60,6 +65,7 @@ export const getRemoteDesktopToken = async (
   };
 
   if (protocol === 'rdp') {
+    const rdpConnection = connection as RdpConnectionWithExtras;
     if (!connection.username) {
       console.warn(
         `[GuacamoleService:getRemoteDesktopToken] RDP connection ${connection.id} is missing username.`
@@ -69,8 +75,8 @@ export const getRemoteDesktopToken = async (
     connectionConfig.username = connection.username || ''; // RDP 通常需要用户名
     connectionConfig.password = decryptedPassword || ''; // RDP 通常需要密码
     connectionConfig.dpi = dpi || '96';
-    connectionConfig.security = (connection as any).rdp_security || 'any';
-    connectionConfig.ignoreCert = String((connection as any).rdp_ignore_cert ?? true);
+    connectionConfig.security = rdpConnection.rdp_security || 'any';
+    connectionConfig.ignoreCert = String(rdpConnection.rdp_ignore_cert ?? true);
   } else if (protocol === 'vnc') {
     connectionConfig.password = decryptedPassword || ''; // VNC 通常需要密码
     if (connection.username) {

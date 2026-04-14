@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 
 import { TransfersService } from './transfers.service';
-import type { InitiateTransferPayload, TransferTask } from './transfers.types';
+import type { InitiateTransferPayload } from './transfers.types';
 
 // 使用 vi.hoisted 确保 mock 函数在提升时可用
 const mockUuid = vi.hoisted(() => ({
@@ -399,7 +399,7 @@ describe('TransfersService', () => {
       };
 
       // 通过创建任务来间接测试 buildSshConnectConfig
-      const task = await service.initiateNewTransfer(payload, 'user1');
+      await service.initiateNewTransfer(payload, 'user1');
 
       // 验证连接服务被调用
       expect(mockConnectionService.getConnectionWithDecryptedCredentials).toHaveBeenCalledWith(1);

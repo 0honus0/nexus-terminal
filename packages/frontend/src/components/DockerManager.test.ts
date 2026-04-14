@@ -5,7 +5,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { ref, computed } from 'vue';
 import DockerManager from './DockerManager.vue';
 
 // Use vi.hoisted to ensure mockActiveSession exists before mocks are processed

@@ -3,14 +3,9 @@
  * 测试连接配置导入导出的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PassThrough, Readable } from 'stream';
 import { EventEmitter } from 'events';
 
-import {
-  exportConnectionsAsEncryptedZip,
-  importConnections,
-  ImportResult,
-} from './import-export.service';
+import { exportConnectionsAsEncryptedZip, importConnections } from './import-export.service';
 
 // 使用 vi.hoisted 确保 mock 函数在提升时可用
 const mockConnectionRepo = vi.hoisted(() => ({

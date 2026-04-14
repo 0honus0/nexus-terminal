@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RepositoryUtils, RunResult } from './base.repository';
-import { ErrorFactory, AppError, getErrorMessage } from '../utils/AppError';
+import { ErrorFactory, AppError } from '../utils/AppError';
 import { ErrorCode } from '../types/error.types';
 
 // Mock database connection

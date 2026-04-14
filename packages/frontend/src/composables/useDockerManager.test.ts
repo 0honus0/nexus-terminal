@@ -102,7 +102,10 @@ describe('useDockerManager (createDockerManager)', () => {
       if (!messageHandlers.has(type)) {
         messageHandlers.set(type, []);
       }
-      messageHandlers.get(type)!.push(handler);
+      const handlersForType = messageHandlers.get(type);
+      if (handlersForType) {
+        handlersForType.push(handler);
+      }
       return () => {
         const handlers = messageHandlers.get(type);
         if (handlers) {
@@ -533,7 +536,7 @@ describe('useDockerManager (createDockerManager)', () => {
   describe('request_docker_status_update 消息处理', () => {
     it('应在收到更新请求时刷新状态', () => {
       mockIsConnected.value = true;
-      const manager = createDockerManager('session-1', createWsDeps(), mockI18n);
+      createDockerManager('session-1', createWsDeps(), mockI18n);
 
       mockSendMessage.mockClear();
 

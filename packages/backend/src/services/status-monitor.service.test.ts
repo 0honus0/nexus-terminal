@@ -4,7 +4,6 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { WebSocket } from 'ws';
 
 import { StatusMonitorService } from './status-monitor.service';
 
@@ -515,8 +514,7 @@ describe('StatusMonitorService', () => {
     it('命令执行超时应正确处理', async () => {
       const mockClient = createMockSshClient();
       mockClient.exec.mockImplementation(
-        (cmd: string, optionsOrCallback: unknown, callback?: Function) => {
-          const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+        (_cmd: string, _optionsOrCallback: unknown, _callback?: Function) => {
           // 模拟超时 - 不调用 callback
           // 实际测试中这会导致 Promise 永远 pending
           // 但服务应该有超时保护

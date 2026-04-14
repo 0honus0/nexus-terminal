@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
+import { runDb, getDb, allDb } from '../database/connection';
 import {
   findAllQuickCommandTags,
   findQuickCommandTagById,
@@ -17,11 +17,11 @@ import {
 
 // Mock 数据库连接
 const { mockPrepare } = vi.hoisted(() => {
-  const mockPrepare = vi.fn().mockReturnValue({
+  const mockPrepareFn = vi.fn().mockReturnValue({
     run: vi.fn().mockResolvedValue(undefined),
     finalize: vi.fn().mockResolvedValue(undefined),
   });
-  return { mockPrepare };
+  return { mockPrepare: mockPrepareFn };
 });
 
 vi.mock('../database/connection', () => ({

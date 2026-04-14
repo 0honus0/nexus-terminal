@@ -3,7 +3,6 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as aiRepository from './ai.repository';
-import type { AISession, AIMessage } from './ai.types';
 
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 
