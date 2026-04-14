@@ -1,8 +1,7 @@
-import { ref, readonly, watch, computed, type Ref, type ComputedRef } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { ref, readonly, watch, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../stores/settings.store';
-import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
+import type { WebSocketMessage } from '../types/websocket.types';
 import { useLayoutStore } from '../stores/layout.store';
 
 // --- Interfaces (Copied from DockerManager.vue) ---
@@ -291,7 +290,7 @@ export function createDockerManager(
   // Watch for connection changes to manage listeners and interval
   watch(
     isConnected,
-    (newIsConnected, oldIsConnected) => {
+    (newIsConnected) => {
       if (newIsConnected) {
         // 只有当Docker管理器在布局中时才设置监听器和定时器
         const layoutStore = useLayoutStore();

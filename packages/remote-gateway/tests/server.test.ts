@@ -1,12 +1,10 @@
-import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach } from 'vitest';
 import crypto from 'crypto';
 import http, { type Server } from 'http';
 import { createRemoteGatewayApiApp } from '../src/api';
 
 // 测试常量
 const ENCRYPTION_KEY = Buffer.alloc(32, 'test-encryption-key');
-const GUACD_HOST = 'localhost';
-const GUACD_PORT = 4822;
 
 describe('Remote Gateway 服务器测试', () => {
   const API_TOKEN = 'test-api-token';
@@ -73,8 +71,9 @@ describe('Remote Gateway 服务器测试', () => {
       });
 
       server = http.createServer(app);
+      const currentServer = server;
       await new Promise<void>((resolve) => {
-        server!.listen(0, '127.0.0.1', () => resolve());
+        currentServer.listen(0, '127.0.0.1', () => resolve());
       });
 
       const address = server.address();
@@ -85,9 +84,10 @@ describe('Remote Gateway 服务器测试', () => {
     };
 
     const stopServer = async (): Promise<void> => {
-      if (!server) return;
+      const currentServer = server;
+      if (!currentServer) return;
       await new Promise<void>((resolve, reject) => {
-        server!.close((err) => {
+        currentServer.close((err) => {
           if (err) return reject(err);
           resolve();
         });

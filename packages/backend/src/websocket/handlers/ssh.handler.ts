@@ -539,13 +539,17 @@ export async function handleSshConnect(
     return;
   }
 
-  const clientIp = (request as any).clientIpAddress || 'unknown';
+  const requestWithClientIp = request as Request & { clientIpAddress?: string };
+  const clientIp = requestWithClientIp.clientIpAddress || 'unknown';
   let connInfo: SshService.DecryptedConnectionDetails | null = null;
 
   try {
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' }));
     connInfo = await SshService.getConnectionDetails(dbConnectionIdAsNumber);
+    if (!connInfo) {
+      throw new Error(`未找到连接信息（ID: ${dbConnectionIdAsNumber}）`);
+    }
 
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
@@ -560,7 +564,7 @@ export async function handleSshConnect(
       ws,
       sshClient,
       dbConnectionId: dbConnectionIdAsNumber,
-      connectionName: connInfo!.name,
+      connectionName: connInfo.name,
       connectedAt: Math.floor(Date.now() / 1000),
       ipAddress: clientIp,
       isShellReady: false,
@@ -639,10 +643,10 @@ export async function handleSshConnect(
             ) {
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, processedOutput)
-                .catch((err) => {
+                .catch((writeLogError) => {
                   console.error(
                     `[SSH Handler] 写入标记会话 ${newSessionId} 的日志失败 (路径: ${currentState.suspendLogPath}):`,
-                    err
+                    writeLogError
                   );
                 });
             }
@@ -675,10 +679,10 @@ export async function handleSshConnect(
             ) {
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, `[STDERR] ${processedOutput}`)
-                .catch((err) => {
+                .catch((writeStderrLogError) => {
                   console.error(
                     `[SSH Handler] 写入标记会话 ${newSessionId} 的 STDERR 日志失败 (路径: ${currentState.suspendLogPath}):`,
-                    err
+                    writeStderrLogError
                   );
                 });
             }
@@ -712,7 +716,7 @@ export async function handleSshConnect(
             connectionId: dbConnectionIdAsNumber,
             sessionId: newSessionId,
             ip: newState.ipAddress,
-            connectionName: connInfo!.name,
+            connectionName: newState.connectionName,
           });
           notificationService.sendNotification('SSH_CONNECT_SUCCESS', {
             userId: ws.userId,

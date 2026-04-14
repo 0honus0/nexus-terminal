@@ -7,7 +7,6 @@ import { EventEmitter } from 'events';
 import { WebSocket } from 'ws';
 
 import { SftpService } from './sftp.service';
-import * as jschardet from 'jschardet';
 import * as iconv from 'iconv-lite';
 
 // Mock ClientState 和相关类型
@@ -86,12 +85,12 @@ vi.mock('jschardet', () => ({
 // Mock iconv-lite
 vi.mock('iconv-lite', () => ({
   default: {
-    decode: vi.fn((buffer: Buffer, encoding: string) => buffer.toString()),
-    encode: vi.fn((str: string, encoding: string) => Buffer.from(str)),
+    decode: vi.fn((buffer: Buffer, _encoding: string) => buffer.toString()),
+    encode: vi.fn((str: string, _encoding: string) => Buffer.from(str)),
     encodingExists: vi.fn(() => true),
   },
-  decode: vi.fn((buffer: Buffer, encoding: string) => buffer.toString()),
-  encode: vi.fn((str: string, encoding: string) => Buffer.from(str)),
+  decode: vi.fn((buffer: Buffer, _encoding: string) => buffer.toString()),
+  encode: vi.fn((str: string, _encoding: string) => Buffer.from(str)),
   encodingExists: vi.fn(() => true),
 }));
 
