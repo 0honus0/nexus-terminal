@@ -40,7 +40,7 @@
 
 ### 🏗️ 架构重构
 
-- **技术债务治理（持续进行）**：历史批次已完成 24/24 项清理；截至 2026-04-12 仍有存量债务（TODO 0 条、E2E `test.skip` 0 条、运行时漏洞 6 条）
+- **技术债务治理（持续进行）**：历史批次已完成 24/24 项清理；截至 2026-04-13 当前口径为（TODO 0 条、E2E `test.skip` 0 条、运行时漏洞 0 条、全量审计漏洞 0 条、直连弃用依赖 1 项 `vue-i18n@^9`）
 - **类型安全持续治理**：关键路径 `@ts-ignore` 已专项清理，`any` 与弱类型用法仍在分批收敛
 - **SFTP 模块拆分**：将 God Class 拆分为 UploadManager、ArchiveManager、Utils 等职责单一的子模块
 - **Repository 基类抽象**：统一 Repository 层错误处理与日志记录，15+ 文件受益
@@ -55,7 +55,8 @@
 
 ### 🔒 依赖安全
 
-- **高危漏洞修复**：主动修复 axios、qs、tar 等依赖的已知高危漏洞（CVE/GHSA）
+- **审计清零（2026-04-13）**：`npm audit --omit=dev` 与 `npm audit` 均为 0（critical/high/moderate/low 全清零）
+- **高危漏洞修复**：已完成 axios、qs、tar 等依赖的已知高危漏洞修复（CVE/GHSA）
 - **Dependabot 自动化**：配置自动依赖更新，持续监控安全风险
 - **依赖 overrides**：通过 npm overrides 强制使用安全版本
 

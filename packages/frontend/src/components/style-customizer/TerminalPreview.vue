@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue';
-import { Terminal } from 'xterm';
+import { Terminal } from '@xterm/xterm';
 import { useAppearanceStore } from '../../stores/appearance.store';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 
 const props = defineProps<{
   width?: string;

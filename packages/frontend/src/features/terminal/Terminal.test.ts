@@ -42,11 +42,11 @@ const mockTerminalInstance = {
   element: document.createElement('div'),
 };
 
-vi.mock('xterm', () => ({
+vi.mock('@xterm/xterm', () => ({
   Terminal: vi.fn(() => mockTerminalInstance),
 }));
 
-vi.mock('xterm-addon-web-links', () => ({
+vi.mock('@xterm/addon-web-links', () => ({
   WebLinksAddon: vi.fn(() => ({})),
 }));
 
@@ -228,7 +228,7 @@ describe('Terminal.vue', () => {
       await nextTick();
 
       // Terminal constructor should be called
-      const { Terminal: TerminalMock } = await import('xterm');
+      const { Terminal: TerminalMock } = await import('@xterm/xterm');
       expect(TerminalMock).toHaveBeenCalled();
     });
 
@@ -242,7 +242,7 @@ describe('Terminal.vue', () => {
 
       await nextTick();
 
-      const { Terminal: TerminalMock } = await import('xterm');
+      const { Terminal: TerminalMock } = await import('@xterm/xterm');
       expect(TerminalMock).toHaveBeenCalledWith(
         expect.objectContaining({
           fontSize: 16,
@@ -398,7 +398,7 @@ describe('Terminal.vue', () => {
 
       await nextTick();
 
-      const { Terminal: TerminalMock } = await import('xterm');
+      const { Terminal: TerminalMock } = await import('@xterm/xterm');
       expect(TerminalMock).toHaveBeenCalledWith(
         expect.objectContaining({
           scrollback: Infinity,
@@ -415,7 +415,7 @@ describe('Terminal.vue', () => {
 
       await nextTick();
 
-      const { Terminal: TerminalMock } = await import('xterm');
+      const { Terminal: TerminalMock } = await import('@xterm/xterm');
       expect(TerminalMock).toHaveBeenCalledWith(
         expect.objectContaining({
           scrollback: 5000,

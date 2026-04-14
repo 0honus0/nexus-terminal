@@ -3,7 +3,7 @@ import { mount, VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import TerminalPreview from './TerminalPreview.vue';
 import { useAppearanceStore } from '../../stores/appearance.store';
-import { Terminal } from 'xterm';
+import { Terminal } from '@xterm/xterm';
 
 // Mock vue-i18n
 vi.mock('vue-i18n', () => ({
@@ -14,7 +14,7 @@ vi.mock('vue-i18n', () => ({
 }));
 
 // Mock Xterm.js
-vi.mock('xterm', () => {
+vi.mock('@xterm/xterm', () => {
   const MockTerminal = vi.fn().mockImplementation(() => ({
     open: vi.fn(),
     clear: vi.fn(),

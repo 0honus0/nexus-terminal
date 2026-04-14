@@ -1,5 +1,5 @@
 import { onBeforeUnmount, nextTick, watch, type Ref } from 'vue';
-import type { Terminal } from 'xterm';
+import type { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useWorkspaceEventEmitter } from '../workspaceEvents';
 

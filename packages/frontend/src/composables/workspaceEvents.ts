@@ -1,6 +1,6 @@
 // packages/frontend/src/composables/workspaceEvents.ts
 import mitt from 'mitt';
-import type { Terminal as XtermTerminal } from 'xterm';
+import type { Terminal as XtermTerminal } from '@xterm/xterm';
 import type { SearchAddon } from '@xterm/addon-search';
 import type { ConnectionInfo } from '../stores/connections.store';
 

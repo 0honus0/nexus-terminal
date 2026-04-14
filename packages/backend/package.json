@@ -20,6 +20,7 @@
     "@types/multer": "^1.4.12",
     "@types/session-file-store": "^1.2.5",
     "@types/uuid": "^10.0.0",
+    "@xterm/xterm": "^5.5.0",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "archiver-zip-encrypted": "^2.0.0",
@@ -50,7 +51,6 @@
     "ssh2": "^1.16.0",
     "uuid": "^11.1.0",
     "ws": "^8.18.1",
-    "xterm": "^5.3.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {

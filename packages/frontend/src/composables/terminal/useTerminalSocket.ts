@@ -1,5 +1,5 @@
 import { watch, type Ref } from 'vue';
-import type { Terminal } from 'xterm';
+import type { Terminal } from '@xterm/xterm';
 import { useWorkspaceEventEmitter } from '../workspaceEvents';
 
 export function useTerminalSocket(

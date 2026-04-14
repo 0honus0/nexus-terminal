@@ -4,7 +4,7 @@
  * - 长输出折叠 & 快捷键展开
  */
 
-import type { ITerminalAddon, Terminal } from 'xterm';
+import type { ITerminalAddon, Terminal } from '@xterm/xterm';
 import {
   OutputProcessor,
   type OutputType,

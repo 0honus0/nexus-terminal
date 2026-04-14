@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch, nextTick } from 'vue';
-import type { ITheme } from 'xterm';
+import type { ITheme } from '@xterm/xterm';
 import apiClient from '../utils/apiClient';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import type { TerminalTheme } from '../types/terminal-theme.types';

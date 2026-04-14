@@ -47,11 +47,11 @@ export default defineConfig({
         manualChunks: {
           'monaco-editor': ['monaco-editor'],
           xterm: [
-            'xterm',
+            '@xterm/xterm',
             '@xterm/addon-fit',
             '@xterm/addon-search',
             '@xterm/addon-webgl',
-            'xterm-addon-web-links',
+            '@xterm/addon-web-links',
           ],
           guacamole: ['guacamole-common-js'],
           chart: ['chart.js', 'vue-chartjs'],

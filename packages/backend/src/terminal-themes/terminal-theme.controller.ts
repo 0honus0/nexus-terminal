@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import type { ITheme } from 'xterm';
+import type { ITheme } from '@xterm/xterm';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
