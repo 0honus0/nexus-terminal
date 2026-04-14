@@ -1,4 +1,4 @@
-import { Client, SFTPWrapper, Stats, WriteStream } from 'ssh2';
+import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import * as pathModule from 'path';
 import * as jschardet from 'jschardet';
@@ -7,16 +7,14 @@ import {
   ClientState,
   AuthenticatedWebSocket,
   SftpCompressRequestPayload,
-  SftpCompressSuccessPayload,
   SftpCompressErrorPayload,
   SftpDecompressRequestPayload,
-  SftpDecompressSuccessPayload,
   SftpDecompressErrorPayload,
 } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
 import { SftpUploadManager } from './sftp-upload.manager';
 import { SftpArchiveManager } from './sftp-archive.manager';
-import { SftpUtils, type FileListItem } from './sftp-utils';
+import type { FileListItem } from './sftp-utils';
 
 type MkdirWithRecursive = (
   path: string,
@@ -31,40 +29,13 @@ interface SftpDirEntry {
   attrs: Stats;
 }
 
-// 定义服务器状态的数据结构 (与前端 StatusMonitor.vue 匹配)
-// Note: This interface seems out of place here, but keeping it for now as it was in the original file.
-// Ideally, it should be in a shared types file.
-interface ServerStatus {
-  cpuPercent?: number;
-  memPercent?: number;
-  memUsed?: number; // MB
-  memTotal?: number; // MB
-  swapPercent?: number;
-  swapUsed?: number; // MB
-  swapTotal?: number; // MB
-  diskPercent?: number;
-  diskUsed?: number; // KB
-  diskTotal?: number; // KB
-  cpuModel?: string;
-  netRxRate?: number; // Bytes per second
-  netTxRate?: number; // Bytes per second
-  netInterface?: string;
-  osName?: string;
-  loadAvg?: number[]; // 系统平均负载 [1min, 5min, 15min]
-  timestamp: number; // 状态获取时间戳
-}
-
-// Interface for parsed network stats - Also seems out of place here.
-interface NetworkStats {
-  [interfaceName: string]: {
-    rx_bytes: number;
-    tx_bytes: number;
-  };
-}
-
-// Note: These constants seem related to StatusMonitorService, not SftpService.
-const DEFAULT_POLLING_INTERVAL = 1000;
-const previousNetStats = new Map<string, { rx: number; tx: number; timestamp: number }>();
+const getErrorCode = (error: unknown): string | undefined => {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+};
 
 export class SftpService {
   private clientStates: Map<string, ClientState>;
@@ -532,6 +503,7 @@ export class SftpService {
       );
       return;
     }
+    const { sftp } = state;
     // --- 修改：使用传入的 encoding 或默认 utf-8 ---
     const targetEncoding = encoding || 'utf-8';
     console.debug(
@@ -564,16 +536,16 @@ export class SftpService {
       // 获取文件当前权限
       let originalMode: number | undefined;
       try {
-        const stats = await new Promise<Stats>((resolve, reject) => {
-          state.sftp!.lstat(path, (err, stats) => {
+        const fileStats = await new Promise<Stats>((resolve, reject) => {
+          sftp.lstat(path, (err, lstatStats) => {
             if (err) {
               reject(err);
             } else {
-              resolve(stats);
+              resolve(lstatStats);
             }
           });
         });
-        originalMode = stats.mode;
+        originalMode = fileStats.mode;
         console.info(
           `[SFTP ${sessionId}] Retrieved original file mode for ${path}: ${originalMode.toString(8)} (ID: ${requestId})`
         );
@@ -588,7 +560,7 @@ export class SftpService {
       console.debug(`[SFTP ${sessionId}] Creating write stream for ${path} (ID: ${requestId})`);
       // 在创建写入流时设置文件权限
       const writeStreamOptions = originalMode !== undefined ? { mode: originalMode } : {};
-      const writeStream = state.sftp.createWriteStream(path, writeStreamOptions);
+      const writeStream = sftp.createWriteStream(path, writeStreamOptions);
       let errorOccurred = false;
 
       writeStream.on('error', (err: Error) => {
@@ -620,7 +592,7 @@ export class SftpService {
             );
           }
           // Get updated stats after writing
-          state.sftp!.lstat(path, (statErr, stats) => {
+          sftp.lstat(path, (statErr, stats) => {
             if (statErr) {
               console.error(
                 `[SFTP ${sessionId}] lstat after writefile ${path} failed (ID: ${requestId}):`,
@@ -704,9 +676,10 @@ export class SftpService {
       ); // Use specific error type
       return;
     }
+    const { sftp } = state;
     console.debug(`[SFTP ${sessionId}] Received mkdir request for ${path} (ID: ${requestId})`);
     try {
-      state.sftp.mkdir(path, (err) => {
+      sftp.mkdir(path, (err) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] mkdir ${path} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -722,7 +695,7 @@ export class SftpService {
             `[SFTP ${sessionId}] mkdir ${path} success (ID: ${requestId}). Fetching stats...`
           );
           // Get stats for the new directory
-          state.sftp!.lstat(path, (statErr, stats) => {
+          sftp.lstat(path, (statErr, stats) => {
             if (statErr) {
               console.error(
                 `[SFTP ${sessionId}] lstat after mkdir ${path} failed (ID: ${requestId}):`,
@@ -956,11 +929,12 @@ export class SftpService {
       ); // Use specific error type
       return;
     }
+    const { sftp } = state;
     console.debug(
       `[SFTP ${sessionId}] Received rename request ${oldPath} -> ${newPath} (ID: ${requestId})`
     );
     try {
-      state.sftp.rename(oldPath, newPath, (err) => {
+      sftp.rename(oldPath, newPath, (err) => {
         if (err) {
           console.error(
             `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} failed (ID: ${requestId}):`,
@@ -980,7 +954,7 @@ export class SftpService {
             `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} success (ID: ${requestId}). Fetching stats for new path...`
           );
           // Get stats for the new path
-          state.sftp!.lstat(newPath, (statErr, stats) => {
+          sftp.lstat(newPath, (statErr, stats) => {
             if (statErr) {
               console.error(
                 `[SFTP ${sessionId}] lstat after rename ${newPath} failed (ID: ${requestId}):`,
@@ -1056,11 +1030,12 @@ export class SftpService {
       ); // Use specific error type
       return;
     }
+    const { sftp } = state;
     console.debug(
       `[SFTP ${sessionId}] Received chmod request for ${path} to ${mode.toString(8)} (ID: ${requestId})`
     );
     try {
-      state.sftp.chmod(path, mode, (err) => {
+      sftp.chmod(path, mode, (err) => {
         if (err) {
           console.error(
             `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} failed (ID: ${requestId}):`,
@@ -1079,7 +1054,7 @@ export class SftpService {
             `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} success (ID: ${requestId}). Fetching updated stats...`
           );
           // Get updated stats after chmod
-          state.sftp!.lstat(path, (statErr, stats) => {
+          sftp.lstat(path, (statErr, stats) => {
             if (statErr) {
               console.error(
                 `[SFTP ${sessionId}] lstat after chmod ${path} failed (ID: ${requestId}):`,
@@ -1423,7 +1398,7 @@ export class SftpService {
             await this.getStats(sftp, newPath);
             targetExists = true;
           } catch (statErr: unknown) {
-            const statErrCode = (statErr as any)?.code;
+            const statErrCode = getErrorCode(statErr);
             const statErrMsg = getErrorMessage(statErr);
             if (!(statErrCode === 'ENOENT' || statErrMsg.includes('No such file'))) {
               // 如果 stat 失败不是因为 "No such file"，则抛出未知错误
@@ -1571,7 +1546,7 @@ export class SftpService {
       // console.info(`[SFTP Util] Directory already exists: ${normalizedPath}`);
       // 目录已存在
     } catch (statError: unknown) {
-      const statErrCode = (statError as any)?.code;
+      const statErrCode = getErrorCode(statError);
       const statErrMsg = getErrorMessage(statError);
       // 2. 如果 stat 失败，检查是否是 "No such file" 错误
       if (statErrCode === 'ENOENT' || statErrMsg.includes('No such file')) {
@@ -1596,7 +1571,7 @@ export class SftpService {
             });
           });
           // 递归创建成功
-        } catch (_recursiveMkdirError: unknown) {
+        } catch {
           // 4. 递归创建失败，回退到逐级创建
           const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
           if (parentDir && parentDir !== '/' && parentDir !== '.') {
@@ -1631,7 +1606,7 @@ export class SftpService {
               console.info(
                 `[SFTP Util] Directory ${normalizedPath} exists after iterative mkdir failure, likely created concurrently.`
               );
-            } catch (_finalStatError: unknown) {
+            } catch {
               // 如果最终检查也失败，则抛出原始的逐级创建错误
               throw iterativeMkdirError;
             }
@@ -1761,7 +1736,7 @@ export class SftpService {
               tryCommand(); // 尝试下一个检查命令
             }
           });
-          stream.stderr.on('data', (data: Buffer) => {
+          stream.stderr.on('data', (_data: Buffer) => {
             // console.debug(`[SFTP Command Check ${sessionId}] stderr for "${checkCmd}": ${data.toString()}`);
           });
           stream.on('error', (streamErr: Error) => {

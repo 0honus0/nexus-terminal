@@ -7,6 +7,17 @@ import { getConnectionWithDecryptedCredentials } from '../connections/connection
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
 import { getErrorMessage, isError } from '../utils/AppError';
 
+type SshClientWithSocketState = Client & {
+  _sock?: {
+    destroyed?: boolean;
+  };
+};
+
+function hasOpenClientSocket(client: Client): client is SshClientWithSocketState {
+  const clientWithSocket = client as SshClientWithSocketState;
+  return Boolean(clientWithSocket._sock && !clientWithSocket._sock.destroyed);
+}
+
 export class TransfersService {
   private transferTasks: Map<string, TransferTask> = new Map();
   private taskAbortControllers: Map<string, AbortController> = new Map(); // +++ 用于存储任务的 AbortController +++
@@ -174,6 +185,7 @@ export class TransfersService {
       const { connection: sourceConnection, ...sourceCredentials } = sourceConnectionResult;
 
       sourceSshClient = new Client();
+      const activeSourceSshClient = sourceSshClient;
       const sourceConnectConfig = this.buildSshConnectConfig(sourceConnection, sourceCredentials);
 
       await new Promise<void>((resolve, reject) => {
@@ -181,12 +193,12 @@ export class TransfersService {
           return reject(new DOMException('Transfer cancelled by user.', 'AbortError'));
 
         const onAbort = () => {
-          sourceSshClient?.end(); // 尝试关闭连接
+          activeSourceSshClient.end(); // 尝试关闭连接
           reject(new DOMException('Transfer cancelled by user.', 'AbortError'));
         };
         signal.addEventListener('abort', onAbort, { once: true });
 
-        sourceSshClient!
+        activeSourceSshClient
           .on('ready', () => {
             signal.removeEventListener('abort', onAbort);
             console.info(
@@ -297,7 +309,7 @@ export class TransfersService {
           await this.executeRemoteTransferOnSource(
             taskId,
             subTask.subTaskId,
-            sourceSshClient!,
+            activeSourceSshClient,
             sourceConnection,
             currentSourceItem,
             targetConnection,
@@ -354,6 +366,27 @@ export class TransfersService {
         };
         signal.addEventListener('abort', onAbortOverall, { once: true });
 
+        const handleSubTaskSettled = () => {
+          currentlyActiveSubTasks--;
+          if (signal.aborted && currentlyActiveSubTasks === 0) {
+            console.info(
+              `[TransfersService] Task ${taskId}: All active sub-tasks finished after main abort signal.`
+            );
+            signal.removeEventListener('abort', onAbortOverall);
+            resolveAllTasksCompleted(); // All active tasks completed/aborted after main signal
+            return;
+          }
+          if (currentSubTaskIndex < totalSubTasks && !signal.aborted) {
+            launchNextSubTaskIfPossible();
+          } else if (currentlyActiveSubTasks === 0) {
+            console.info(
+              `[TransfersService] Task ${taskId}: All ${totalSubTasks} sub-tasks have completed or been skipped after processing.`
+            );
+            signal.removeEventListener('abort', onAbortOverall);
+            resolveAllTasksCompleted();
+          }
+        };
+
         const launchNextSubTaskIfPossible = () => {
           if (signal.aborted) {
             // Check before launching new sub-tasks
@@ -389,26 +422,7 @@ export class TransfersService {
             const taskPromise = processSingleSubTaskWrapper(
               subTaskToProcess,
               capturedIndexForLog
-            ).finally(() => {
-              currentlyActiveSubTasks--;
-              if (signal.aborted && currentlyActiveSubTasks === 0) {
-                console.info(
-                  `[TransfersService] Task ${taskId}: All active sub-tasks finished after main abort signal.`
-                );
-                signal.removeEventListener('abort', onAbortOverall);
-                resolveAllTasksCompleted(); // All active tasks completed/aborted after main signal
-                return;
-              }
-              if (currentSubTaskIndex < totalSubTasks && !signal.aborted) {
-                launchNextSubTaskIfPossible();
-              } else if (currentlyActiveSubTasks === 0) {
-                console.info(
-                  `[TransfersService] Task ${taskId}: All ${totalSubTasks} sub-tasks have completed or been skipped after processing.`
-                );
-                signal.removeEventListener('abort', onAbortOverall);
-                resolveAllTasksCompleted();
-              }
-            });
+            ).finally(handleSubTaskSettled);
             subTaskExecutionPromises.push(taskPromise);
           }
           if (
@@ -514,7 +528,7 @@ export class TransfersService {
               resolve(null);
             }
           })
-          .stderr.on('data', (data: Buffer) => {});
+          .stderr.on('data', (_data: Buffer) => {});
       });
     });
   }
@@ -569,10 +583,10 @@ export class TransfersService {
                 resolve(null);
               }
             })
-            .stderr.on('data', (data: Buffer) => {});
+            .stderr.on('data', (_data: Buffer) => {});
         });
       });
-    } catch (_error: unknown) {
+    } catch {
       foundCommandPath = null; // Ensure it's null on error
     } finally {
       targetClient.end();
@@ -591,7 +605,7 @@ export class TransfersService {
       let timeoutHandle: NodeJS.Timeout | null = null;
       let sftpSession: SFTPWrapper | null = null; // To ensure sftp.end() can be called in timeout
 
-      const cleanupAndReject = (errMsg: string, errObj?: unknown) => {
+      const cleanupAndReject = (errMsg: string) => {
         if (timeoutHandle) clearTimeout(timeoutHandle);
         sftpSession?.end();
         reject(new Error(errMsg));
@@ -862,6 +876,15 @@ export class TransfersService {
       );
 
       // +++ Declare and initialize cmdOptions here +++
+      let sshPortOption: string | undefined;
+      if (targetConnection.port) {
+        if (commandTypeForLogic === 'scp') {
+          sshPortOption = `-P ${targetConnection.port}`;
+        } else if (commandTypeForLogic === 'rsync') {
+          sshPortOption = `-p ${targetConnection.port}`;
+        }
+      }
+
       const cmdOptions: {
         targetUserAndHost: string;
         sshPortOption?: string;
@@ -869,13 +892,7 @@ export class TransfersService {
         sshPassCommand?: string;
       } = {
         targetUserAndHost: `${targetConnection.username}@${targetConnection.host}`,
-        sshPortOption: targetConnection.port
-          ? commandTypeForLogic === 'scp'
-            ? `-P ${targetConnection.port}`
-            : commandTypeForLogic === 'rsync'
-              ? `-p ${targetConnection.port}`
-              : undefined
-          : undefined,
+        sshPortOption,
       };
       const subTaskToUpdate = this.transferTasks
         .get(taskId)
@@ -944,7 +961,7 @@ export class TransfersService {
                       );
                     }
                   })
-                  .on('data', (data: Buffer) => {})
+                  .on('data', (_data: Buffer) => {})
                   .stderr.on('data', (data: Buffer) => {
                     mkdirStderr += data.toString();
                   })
@@ -977,14 +994,10 @@ export class TransfersService {
         );
       } catch (mkdirError: unknown) {
         const mkdirErrMsg = getErrorMessage(mkdirError);
-        if (
-          targetClientForMkdir &&
-          (targetClientForMkdir as any)._sock &&
-          !(targetClientForMkdir as any)._sock.destroyed
-        ) {
+        if (hasOpenClientSocket(targetClientForMkdir)) {
           try {
             targetClientForMkdir.end();
-          } catch (_e: unknown) {
+          } catch {
             /* ignore */
           }
         }
@@ -1369,8 +1382,11 @@ export class TransfersService {
         case 'transferring':
         case 'connecting':
           inProgressCount++;
-          totalProgress +=
-            st.progress !== undefined ? st.progress : st.status === 'connecting' ? 5 : 0; // Small progress for connecting
+          if (st.progress !== undefined) {
+            totalProgress += st.progress;
+          } else if (st.status === 'connecting') {
+            totalProgress += 5; // Small progress for connecting
+          }
           break;
         case 'queued':
           queuedCount++;
