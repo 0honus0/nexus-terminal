@@ -19,16 +19,20 @@ import {
 
 const router = Router();
 
+interface ImportRequest extends Request {
+  fileValidationError?: string;
+}
+
 // 配置 multer 用于处理 JSON 文件上传 (存储在内存中)
 const storage = multer.memoryStorage(); // 将文件存储在内存中作为 Buffer
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 限制文件大小为 5MB
-  fileFilter: (req: Request, file, cb) => {
+  fileFilter: (req: ImportRequest, file, cb) => {
     if (file.mimetype === 'application/json') {
       cb(null, true);
     } else {
-      (req as any).fileValidationError = '只允许上传 JSON 文件！';
+      req.fileValidationError = '只允许上传 JSON 文件！';
       cb(null, false);
     }
   },
@@ -45,8 +49,9 @@ router.post(
   '/import',
   (req: Request, res: Response, next: NextFunction) => {
     upload.single('connectionsFile')(req, res, (err: unknown) => {
-      if ((req as any).fileValidationError) {
-        return res.status(400).json({ message: (req as any).fileValidationError });
+      const importReq = req as ImportRequest;
+      if (importReq.fileValidationError) {
+        return res.status(400).json({ message: importReq.fileValidationError });
       }
       if (err instanceof multer.MulterError) {
         return res.status(400).json({ message: `文件上传错误: ${err.message}` });

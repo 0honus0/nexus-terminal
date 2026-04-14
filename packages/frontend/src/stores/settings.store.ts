@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
-import i18n, { setLocale, defaultLng, availableLocales } from '../i18n';
+import { setLocale, defaultLng, availableLocales } from '../i18n';
 import type { PaneName } from './layout.store';
 import { useAuthStore } from './auth.store';
 import type { ConnectionInfo } from './connections.store';
@@ -111,12 +111,12 @@ export const useSettingsStore = defineStore('settings', () => {
       typeof data === 'object' && data !== null
         ? (data as { message?: unknown; error?: { message?: unknown } })
         : null;
-    const messageFromObject =
-      typeof dataObject?.message === 'string'
-        ? dataObject.message
-        : typeof dataObject?.error?.message === 'string'
-          ? dataObject.error.message
-          : null;
+    let messageFromObject: string | null = null;
+    if (typeof dataObject?.message === 'string') {
+      messageFromObject = dataObject.message;
+    } else if (typeof dataObject?.error?.message === 'string') {
+      messageFromObject = dataObject.error.message;
+    }
 
     if (messageFromObject && messageFromObject.trim()) {
       return messageFromObject.trim();
@@ -499,7 +499,6 @@ export const useSettingsStore = defineStore('settings', () => {
       console.error('Error loading general settings:', err); // <-- 修改日志
       error.value = getApiErrorMessage(err, 'Failed to load settings');
       // 出错时（例如未登录），根据浏览器语言设置回退语言
-      const navigatorLang = navigator.language?.split('-')[0];
       // 错误时也尝试浏览器完整区域代码，然后主语言部分，最后默认
       const navigatorLocale = navigator.language;
       const navigatorLangPart = navigatorLocale?.split('-')[0];

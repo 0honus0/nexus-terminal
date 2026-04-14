@@ -13,6 +13,14 @@ type MkdirWithRecursive = (
   callback: (err?: Error | undefined) => void
 ) => void;
 
+const getSftpErrorCode = (error: unknown): string | undefined => {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' ? code : undefined;
+};
+
 /** SFTP 目录条目 */
 export interface SftpDirEntry {
   filename: string;
@@ -120,7 +128,7 @@ export class SftpUtils {
     try {
       await SftpUtils.getStats(sftp, normalizedPath);
     } catch (statError: unknown) {
-      const statErrCode = (statError as any)?.code;
+      const statErrCode = getSftpErrorCode(statError);
       const statErrMsg = getErrorMessage(statError);
       if (statErrCode === 'ENOENT' || statErrMsg.includes('No such file')) {
         try {
@@ -134,7 +142,7 @@ export class SftpUtils {
               }
             });
           });
-        } catch (_recursiveMkdirError: unknown) {
+        } catch {
           const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
           if (parentDir && parentDir !== '/' && parentDir !== '.') {
             await SftpUtils.ensureDirectoryExists(sftp, parentDir);
@@ -155,7 +163,7 @@ export class SftpUtils {
               if (!finalStats.isDirectory()) {
                 throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
               }
-            } catch (_finalStatError: unknown) {
+            } catch {
               throw iterativeMkdirError;
             }
           }

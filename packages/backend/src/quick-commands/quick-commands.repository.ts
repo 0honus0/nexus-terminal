@@ -141,7 +141,7 @@ export const getAllQuickCommands = async (
           // 保持 parsedVariables 为 null
         }
       }
-      const { variables, ...restOfRow } = row; // 从 row 中移除原始的 string 类型的 variables
+      const { variables: _variables, ...restOfRow } = row; // 从 row 中移除原始的 string 类型的 variables
       return {
         ...restOfRow,
         variables: parsedVariables,
@@ -207,7 +207,7 @@ export const findQuickCommandById = async (
           // 保持 parsedVariables 为 null
         }
       }
-      const { variables, ...restOfRow } = row; // 从 row 中移除原始的 string 类型的 variables
+      const { variables: _variables, ...restOfRow } = row; // 从 row 中移除原始的 string 类型的 variables
       return {
         ...restOfRow,
         variables: parsedVariables,
@@ -215,7 +215,7 @@ export const findQuickCommandById = async (
           ? row.tag_ids_str
               .split(',')
               .map(Number)
-              .filter((id) => !Number.isNaN(id))
+              .filter((tagId) => !Number.isNaN(tagId))
           : [],
       };
     }

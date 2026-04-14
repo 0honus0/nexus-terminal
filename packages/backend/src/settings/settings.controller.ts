@@ -5,17 +5,12 @@ import { NotificationService } from '../notifications/notification.service';
 import { ipBlacklistService } from '../auth/ip-blacklist.service';
 import { exportConnectionsAsEncryptedZip } from '../services/import-export.service';
 import { getErrorMessage } from '../utils/AppError';
-import {
-  UpdateSidebarConfigDto,
-  UpdateCaptchaSettingsDto,
-  CaptchaSettings,
-} from '../types/settings.types';
-import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
+import { UpdateSidebarConfigDto, UpdateCaptchaSettingsDto } from '../types/settings.types';
+import { UpdateAppearanceDto } from '../types/appearance.types';
 import {
   getAppearanceSettings,
   updateAppearanceSettings as updateAppearanceSettingsInRepo,
 } from '../appearance/appearance.repository';
-import i18next from '../i18n';
 import { setLogLevel as setRuntimeLogLevel, type LogLevel } from '../logging/logger';
 
 const auditLogService = new AuditLogService();

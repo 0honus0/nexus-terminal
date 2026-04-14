@@ -212,7 +212,7 @@ class NotificationProcessorService extends EventEmitter {
     eventType: AppEventType,
     payload: AppEventPayload,
     translatedEvent: string, // The already translated event name (e.g., "登录成功")
-    lang: string
+    _lang: string
   ): ProcessedNotification | null {
     const baseInterpolationData = {
       event: translatedEvent,
@@ -232,7 +232,6 @@ class NotificationProcessorService extends EventEmitter {
     let subject: string | undefined;
     let body: string = '';
 
-    const genericSubject = `通知: {event}`;
     const genericEmailBody = `<p>事件: {event}</p><p>时间: {timestamp}</p><p>用户ID: {userId}</p><p>详情:</p><pre>{details}</pre>`;
     const genericWebhookBody = JSON.stringify({
       event: '{event}',
@@ -283,12 +282,14 @@ class NotificationProcessorService extends EventEmitter {
    * @param data 数据对象，例如 { name: "World" }
    * @returns 替换后的字符串
    */
-  private interpolate(template: string, data: Record<string, any>): string {
+  private interpolate(template: string, data: Record<string, unknown>): string {
     if (!template) return '';
     // 使用正则表达式全局替换 {key} 格式的占位符
     return template.replace(/\{(\w+)\}/g, (match, key) => {
       // 如果 data 中存在对应的 key，则返回值，否则返回原始匹配（例如 "{unknownKey}"）
-      return data.hasOwnProperty(key) && data[key] !== null && data[key] !== undefined
+      return Object.prototype.hasOwnProperty.call(data, key) &&
+        data[key] !== null &&
+        data[key] !== undefined
         ? String(data[key])
         : match;
     });

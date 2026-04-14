@@ -1,7 +1,8 @@
 import * as sqlite3 from 'sqlite3';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+// eslint-disable-next-line import/no-cycle -- 与 schema 侧运行期存在互相引用，当前阶段保持最小改动
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { SidebarConfig, LayoutNode, PaneName, CaptchaSettings } from '../types/settings.types';
+import { SidebarConfig, LayoutNode, CaptchaSettings } from '../types/settings.types';
 
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
@@ -57,7 +58,7 @@ export const settingsRepository = {
 
     try {
       const db = await getDbInstance();
-      const result = await runDb(db, sql, params);
+      await runDb(db, sql, params);
     } catch (err: unknown) {
       console.error(`[Repository] 设置设置项 ${key} 时出错:`, getErrorMessage(err));
       throw ErrorFactory.databaseError(

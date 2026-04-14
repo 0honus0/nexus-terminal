@@ -1,6 +1,5 @@
-import { ref, reactive, nextTick, onUnmounted, readonly, type Ref, watchEffect } from 'vue';
+import { reactive, nextTick, onUnmounted, type Ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { createWebSocketConnectionManager } from './useWebSocketConnection';
 import type { FileListItem } from '../types/sftp.types';
 import type { UploadItem } from '../types/upload.types';
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';

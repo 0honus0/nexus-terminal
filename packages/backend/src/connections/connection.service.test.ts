@@ -2,12 +2,11 @@
  * Connection Service 单元测试
  * 测试连接管理的核心业务逻辑
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // 导入被测模块和依赖
 import * as ConnectionRepository from './connection.repository';
 import * as SshKeyService from '../ssh-keys/ssh-keys.service';
-import { encrypt, decrypt } from '../utils/crypto';
 import {
   getAllConnections,
   getConnectionById,

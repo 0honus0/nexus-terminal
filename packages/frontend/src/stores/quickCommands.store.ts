@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
-import { useQuickCommandTagsStore, type QuickCommandTag } from './quickCommandTags.store';
+import { useQuickCommandTagsStore } from './quickCommandTags.store';
 
 // 定义前端使用的快捷指令接口 (包含 tagIds)
 export interface QuickCommandFE {
@@ -326,10 +326,12 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
   ): Promise<boolean> => {
     try {
       // 在请求体中包含 tagIds 和 variables
-      const response = await apiClient.post<{ message: string; command: QuickCommandFE }>(
-        '/quick-commands',
-        { name, command, tagIds, variables }
-      );
+      await apiClient.post<{ message: string; command: QuickCommandFE }>('/quick-commands', {
+        name,
+        command,
+        tagIds,
+        variables,
+      });
       // 后端现在返回完整的 command 对象，可以直接使用或触发刷新
       clearQuickCommandsCache(); // 清除缓存
       await fetchQuickCommands(); // 重新获取以确保数据同步
@@ -353,10 +355,12 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
   ): Promise<boolean> => {
     try {
       // 在请求体中包含 tagIds 和 variables (即使是 undefined 也要发送，让后端知道是否要更新)
-      const response = await apiClient.put<{ message: string; command: QuickCommandFE }>(
-        `/quick-commands/${id}`,
-        { name, command, tagIds, variables }
-      );
+      await apiClient.put<{ message: string; command: QuickCommandFE }>(`/quick-commands/${id}`, {
+        name,
+        command,
+        tagIds,
+        variables,
+      });
       // 后端现在返回完整的 command 对象
       clearQuickCommandsCache(); // 清除缓存
       await fetchQuickCommands(); // 重新获取以确保数据同步

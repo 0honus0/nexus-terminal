@@ -8,11 +8,6 @@ import { createPinia, setActivePinia } from 'pinia';
 import { ref, computed, nextTick } from 'vue';
 import FileManager from './FileManager.vue';
 
-// 创建 mock ref 的辅助函数 - 添加 __v_isRef 标记以便 Vue 模板正确解包
-function mockRef<T>(value: T): { value: T; __v_isRef: true } {
-  return { value, __v_isRef: true as const };
-}
-
 // Use vi.hoisted to ensure mock state exists before mocks are processed
 const {
   mockSftpManager,
@@ -216,7 +211,6 @@ vi.mock('../stores/uiNotifications.store', () => ({
 // Mock pinia storeToRefs
 vi.mock('pinia', async (importOriginal) => {
   const actual = await importOriginal<typeof import('pinia')>();
-  const { computed: vueComputed } = await import('vue');
   return {
     ...actual,
     storeToRefs: (store: Record<string, unknown>) => {
