@@ -1,8 +1,7 @@
-import { ref, readonly, reactive, computed, type Ref, type ComputedRef } from 'vue';
+import { ref, reactive, computed, type Ref, type ComputedRef } from 'vue';
 import type {
   FileListItem,
   FileAttributes,
-  EditorFileContent,
   SftpReadFileSuccessPayload,
   SftpReadFileRequestPayload,
 } from '../types/sftp.types';
@@ -64,7 +63,9 @@ const joinPath = (base: string, name: string): string => {
 };
 
 // Helper function
-const sortFiles = (a: FileListItem, b: FileListItem): number => {
+type SortableSftpEntry = Pick<FileListItem, 'filename' | 'attrs'>;
+
+const sortFiles = (a: SortableSftpEntry, b: SortableSftpEntry): number => {
   if (a.attrs.isDirectory && !b.attrs.isDirectory) return -1;
   if (!a.attrs.isDirectory && b.attrs.isDirectory) return 1;
   return a.filename.localeCompare(b.filename);
@@ -97,7 +98,7 @@ export function createSftpActionsManager(
   t: Function
 ): SftpManagerInstance {
   // Add explicit return type
-  const { sendMessage, onMessage, isConnected, isSftpReady } = wsDeps; // 使用注入的依赖
+  const { sendMessage, onMessage, isSftpReady } = wsDeps; // 使用注入的依赖
 
   // const fileList = ref<FileListItem[]>([]); // 不再直接使用 fileList ref
   const isLoading = ref<boolean>(false);
@@ -206,7 +207,6 @@ export function createSftpActionsManager(
         // Node not found among loaded children, or children were null
         if (createIfMissing) {
           // Create a placeholder node
-          const currentPath = `/${parts.slice(0, i).join('/')}`;
           const placeholderAttrs: FileAttributes = {
             // Basic directory attributes
             isDirectory: true,
@@ -234,7 +234,7 @@ export function createSftpActionsManager(
           }
           // Add and sort (optional, but good practice)
           currentNode.children.push(nextNode);
-          currentNode.children.sort((a, b) => sortFiles(a as any, b as any));
+          currentNode.children.sort(sortFiles);
           console.info(
             `[SFTP ${instanceSessionId}] findNodeByPath: Created placeholder node for ${part} under ${currentNode.filename}`
           );
@@ -576,7 +576,13 @@ export function createSftpActionsManager(
           archiveBaseName = parentFolderName;
         }
       }
-      const archiveName = `${archiveBaseName}.${format === 'targz' ? 'tar.gz' : format === 'tarbz2' ? 'tar.bz2' : format}`;
+      let archiveExtension: string = format;
+      if (format === 'targz') {
+        archiveExtension = 'tar.gz';
+      } else if (format === 'tarbz2') {
+        archiveExtension = 'tar.bz2';
+      }
+      const archiveName = `${archiveBaseName}.${archiveExtension}`;
 
       const destinationPath = joinPath(parentDir, archiveName);
 
@@ -750,7 +756,6 @@ export function createSftpActionsManager(
 
     // --- Merge Logic ---
     const existingChildren = targetNode.children || [];
-    const newChildrenMap = new Map(fileListPayload.map((item) => [item.filename, item]));
     const mergedChildren: FileTreeNode[] = [];
     const existingChildrenMap = new Map(existingChildren.map((node) => [node.filename, node]));
 
@@ -766,22 +771,27 @@ export function createSftpActionsManager(
         );
       } else {
         // Otherwise, create/update node based on new data
+        const shouldReusePlaceholderChildren =
+          existingNode && !existingNode.childrenLoaded && existingNode.children;
+        let children: FileTreeNode[] | null;
+        if (shouldReusePlaceholderChildren) {
+          children = existingNode.children;
+        } else if (newItemData.attrs.isDirectory) {
+          children = null;
+        } else {
+          children = [];
+        }
+        const childrenLoaded = shouldReusePlaceholderChildren
+          ? existingNode.childrenLoaded
+          : !newItemData.attrs.isDirectory;
         const newNode: FileTreeNode = reactive({
           // Ensure new nodes are reactive
           filename: newItemData.filename,
           longname: newItemData.longname,
           attrs: newItemData.attrs,
           // Preserve children if existingNode was a placeholder but somehow had children (edge case)
-          children:
-            existingNode && !existingNode.childrenLoaded && existingNode.children
-              ? existingNode.children
-              : newItemData.attrs.isDirectory
-                ? null
-                : [],
-          childrenLoaded:
-            existingNode && !existingNode.childrenLoaded && existingNode.children
-              ? existingNode.childrenLoaded // Preserve loaded status if reusing placeholder children
-              : !newItemData.attrs.isDirectory,
+          children,
+          childrenLoaded,
         });
         mergedChildren.push(newNode);
         if (existingNode && !existingNode.childrenLoaded) {
@@ -802,7 +812,7 @@ export function createSftpActionsManager(
     // We rely on the server list as the source of truth for existence.
 
     // Sort the merged children
-    mergedChildren.sort((a, b) => sortFiles(a as any, b as any));
+    mergedChildren.sort(sortFiles);
 
     // Update the target node's children and mark as loaded
     targetNode.children = mergedChildren;
@@ -920,7 +930,7 @@ export function createSftpActionsManager(
         let insertIndex = 0;
         while (
           insertIndex < parentNode.children.length &&
-          sortFiles(newNode as any, parentNode.children[insertIndex] as any) > 0
+          sortFiles(newNode, parentNode.children[insertIndex]) > 0
         ) {
           insertIndex++;
         }
@@ -981,7 +991,7 @@ export function createSftpActionsManager(
   };
 
   // 处理重命名成功
-  const onRenameSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
+  const onRenameSuccess = (payload: MessagePayload, _message: WebSocketMessage) => {
     // 后端现在发送 { oldPath: string, newPath: string, newItem: FileListItem | null }
     const renamePayload = payload as {
       oldPath: string;
@@ -1039,7 +1049,6 @@ export function createSftpActionsManager(
     const updatedItem = payload as FileListItem | null; // 后端现在会发送 FileListItem 或 null
     const targetPath = message.path;
     const parentPath = targetPath?.substring(0, targetPath.lastIndexOf('/')) || '/';
-    const filename = targetPath?.substring(targetPath.lastIndexOf('/') + 1);
 
     console.info(`[SFTP ${instanceSessionId}] 修改权限成功: ${targetPath}`);
 
@@ -1066,7 +1075,6 @@ export function createSftpActionsManager(
     const updatedItem = payload as FileListItem | null; // 后端现在会发送 FileListItem 或 null
     const filePath = message.path;
     const parentPath = filePath?.substring(0, filePath.lastIndexOf('/')) || '/';
-    const filename = filePath?.substring(filePath.lastIndexOf('/') + 1);
 
     console.info(`[SFTP ${instanceSessionId}] 写入文件成功: ${filePath}`);
 
@@ -1089,7 +1097,7 @@ export function createSftpActionsManager(
   };
 
   // +++ 处理复制成功 +++
-  const onCopySuccess = (payload: MessagePayload, message: WebSocketMessage) => {
+  const onCopySuccess = (payload: MessagePayload, _message: WebSocketMessage) => {
     // 后端应发送 { destination: string, items: FileListItem[] | null }
     const copyPayload = payload as { destination: string; items: FileListItem[] | null };
     const destinationDir = copyPayload.destination;
@@ -1133,7 +1141,7 @@ export function createSftpActionsManager(
   };
 
   // +++ 处理移动成功 +++
-  const onMoveSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
+  const onMoveSuccess = (payload: MessagePayload, _message: WebSocketMessage) => {
     // 后端应发送 { sources: string[], destination: string, items: FileListItem[] | null }
     const movePayload = payload as {
       sources: string[];
@@ -1288,7 +1296,7 @@ export function createSftpActionsManager(
   unregisterCallbacks.push(onMessage('sftp:move:error', onActionError));
 
   // +++ 处理命令未找到错误 +++
-  const onCommandNotFound = (payload: MessagePayload, message: WebSocketMessage) => {
+  const onCommandNotFound = (payload: MessagePayload, _message: WebSocketMessage) => {
     const {
       operation,
       command,

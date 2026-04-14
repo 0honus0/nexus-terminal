@@ -1,6 +1,6 @@
 import { Client } from 'ssh2';
 import { WebSocket } from 'ws';
-import { ClientState } from '../websocket';
+import { ClientState } from '../websocket/types';
 import { settingsService } from '../settings/settings.service';
 import { getErrorMessage } from '../utils/AppError';
 
@@ -64,7 +64,7 @@ export class StatusMonitorService {
       console.info(
         `[StatusMonitor ${sessionId}] 使用配置的轮询间隔: ${intervalSeconds} 秒 (${intervalMs}ms)`
       );
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[StatusMonitor ${sessionId}] 获取轮询间隔设置失败，将使用默认值 3000ms:`,
         error
@@ -147,7 +147,7 @@ export class StatusMonitorService {
         status.osName = nameMatch
           ? nameMatch[1]
           : (osReleaseOutput.match(/^NAME="?([^"]+)"?/m)?.[1] ?? 'Unknown');
-      } catch (err) {}
+      } catch {}
 
       try {
         let cpuModelOutput = '';
@@ -157,16 +157,16 @@ export class StatusMonitorService {
             "cat /proc/cpuinfo | grep 'model name' | head -n 1"
           );
           status.cpuModel = cpuModelOutput.match(/model name\s*:\s*(.*)/i)?.[1].trim();
-        } catch (procErr) {
+        } catch {
           try {
             cpuModelOutput = await this.executeSshCommand(sshClient, "lscpu | grep 'Model name:'");
             status.cpuModel = cpuModelOutput.match(/Model name:\s+(.*)/)?.[1].trim();
-          } catch (lscpuErr) {}
+          } catch {}
         }
         if (!status.cpuModel) {
           status.cpuModel = 'Unknown';
         }
-      } catch (err) {
+      } catch {
         status.cpuModel = 'Unknown';
       }
 
@@ -179,7 +179,7 @@ export class StatusMonitorService {
             freeCommand = 'free';
             isBusyBox = true;
           }
-        } catch (err) {
+        } catch {
           // 如果检查失败，默认使用 free -m
         }
         const freeOutput = await this.executeSshCommand(sshClient, freeCommand);
@@ -228,7 +228,7 @@ export class StatusMonitorService {
           status.swapUsed = 0;
           status.swapPercent = 0;
         }
-      } catch (err) {
+      } catch {
         /* 静默处理 */
       }
 
@@ -237,18 +237,17 @@ export class StatusMonitorService {
         let dfOutput: string;
         try {
           dfOutput = await this.executeSshCommand(sshClient, dfCommand);
-        } catch (errP) {
+        } catch {
           dfCommand = 'df -k /'; // 备用方案
           try {
             dfOutput = await this.executeSshCommand(sshClient, dfCommand);
-          } catch (errK) {
+          } catch {
             dfOutput = '';
           }
         }
 
         if (dfOutput) {
           const lines = dfOutput.split('\n');
-          let parsedDiskInfo = false;
           // 从第二行开始查找根挂载点信息 (跳过表头)
           for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
@@ -273,7 +272,6 @@ export class StatusMonitorService {
                     status.diskTotal = total; // KB
                     status.diskUsed = used; // KB
                     status.diskPercent = parseFloat(percentMatch[1]);
-                    parsedDiskInfo = true;
                     break;
                   }
                 }
@@ -281,7 +279,7 @@ export class StatusMonitorService {
             }
           }
         }
-      } catch (err) {
+      } catch {
         // 如果捕获到错误 (例如 executeSshCommand 内部的 Promise reject), disk* 字段将保持 undefined
       }
 
@@ -321,7 +319,7 @@ export class StatusMonitorService {
           // Failed to parse /proc/stat, set to undefined or keep previous? Let's use undefined.
           status.cpuPercent = undefined;
         }
-      } catch (err) {
+      } catch {
         // Failed to execute cat /proc/stat
         status.cpuPercent = undefined;
         // console.warn(`[StatusMonitor ${sessionId}] Failed to get CPU stats via /proc/stat:`, err);
@@ -334,7 +332,7 @@ export class StatusMonitorService {
         );
         if (match)
           status.loadAvg = [parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])];
-      } catch (err) {
+      } catch {
         /* 静默处理 */
       }
 
@@ -376,10 +374,10 @@ export class StatusMonitorService {
             /* 静默处理 */
           }
         }
-      } catch (err) {
+      } catch {
         /* 静默处理 */
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[StatusMonitor ${sessionId}] General error fetching server status:`, error);
     }
 
@@ -396,7 +394,7 @@ export class StatusMonitorService {
     try {
       // 将命令执行放入 try...catch
       output = await this.executeSshCommand(sshClient, 'cat /proc/net/dev');
-    } catch (error) {
+    } catch {
       // 如果命令失败，记录警告并返回 null
 
       return null;
@@ -416,7 +414,7 @@ export class StatusMonitorService {
         }
       }
       return Object.keys(stats).length > 0 ? stats : null;
-    } catch (parseError) {
+    } catch {
       return null;
     }
   }
@@ -436,7 +434,7 @@ export class StatusMonitorService {
       const interfaceName = output.trim();
       if (interfaceName) return interfaceName;
       // 如果 ip route 没返回有效接口名，也尝试 fallback
-    } catch (error) {
+    } catch {
       try {
         const netDevOutput = await this.executeSshCommand(sshClient, 'cat /proc/net/dev');
         const lines = netDevOutput.split('\n').slice(2);
@@ -446,7 +444,7 @@ export class StatusMonitorService {
             return iface;
           }
         }
-      } catch (fallbackError) {}
+      } catch {}
 
       return null;
     }
@@ -469,13 +467,13 @@ export class StatusMonitorService {
           return reject(new Error(`执行命令 '${command}' 失败: ${err.message}`));
         }
         stream
-          .on('close', (code: number, signal?: string) => {
+          .on('close', () => {
             resolve(output.trim());
           })
           .on('data', (data: Buffer) => {
             output += data.toString('utf8');
           })
-          .stderr.on('data', (data: Buffer) => {});
+          .stderr.on('data', () => {});
       });
     });
   }
@@ -532,7 +530,7 @@ export class StatusMonitorService {
       }
 
       return { total, idle };
-    } catch (e) {
+    } catch {
       // console.error("Error parsing /proc/stat:", e);
       return null;
     }

@@ -3,9 +3,9 @@
  * 测试命令输入栏组件的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import CommandInputBar from './CommandInputBar.vue';
 
 // Mock vue-i18n
@@ -121,6 +121,18 @@ vi.mock('../stores/fileEditor.store', () => ({
   useFileEditorStore: () => mockFileEditorStore,
 }));
 
+// 安全获取测试会话，避免使用非空断言
+const getRequiredMockSession = () => {
+  const session = mockSessionStore.sessions.get('session-1');
+  expect(session).toBeDefined();
+
+  if (!session) {
+    throw new Error('Expected session-1 to exist in mockSessionStore.sessions');
+  }
+
+  return session;
+};
+
 describe('CommandInputBar.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -208,7 +220,7 @@ describe('CommandInputBar.vue', () => {
 
   describe('命令发送', () => {
     it('按下 Enter 键应发送命令', async () => {
-      mockSessionStore.sessions.get('session-1')!.commandInputContent.value = 'ls -la';
+      getRequiredMockSession().commandInputContent.value = 'ls -la';
 
       const wrapper = mount(CommandInputBar);
       const input = wrapper.find('input[data-focus-id="commandInput"]');
@@ -221,7 +233,7 @@ describe('CommandInputBar.vue', () => {
     });
 
     it('空命令按 Enter 应请求滚动到底部', async () => {
-      mockSessionStore.sessions.get('session-1')!.commandInputContent.value = '';
+      getRequiredMockSession().commandInputContent.value = '';
 
       const wrapper = mount(CommandInputBar);
       const input = wrapper.find('input[data-focus-id="commandInput"]');
@@ -235,7 +247,7 @@ describe('CommandInputBar.vue', () => {
     });
 
     it('发送命令后应清空输入框', async () => {
-      mockSessionStore.sessions.get('session-1')!.commandInputContent.value = 'echo test';
+      getRequiredMockSession().commandInputContent.value = 'echo test';
 
       const wrapper = mount(CommandInputBar);
       const input = wrapper.find('input[data-focus-id="commandInput"]');
@@ -246,7 +258,7 @@ describe('CommandInputBar.vue', () => {
     });
 
     it('Ctrl+C 在空输入时应发送 SIGINT', async () => {
-      mockSessionStore.sessions.get('session-1')!.commandInputContent.value = '';
+      getRequiredMockSession().commandInputContent.value = '';
 
       const wrapper = mount(CommandInputBar);
       const input = wrapper.find('input[data-focus-id="commandInput"]');
@@ -265,7 +277,6 @@ describe('CommandInputBar.vue', () => {
         props: { isMobile: false },
       });
 
-      const searchButton = wrapper.find('.fa-search').element.closest('button');
       await wrapper.find('.fa-search').element.closest('button')?.click();
       await wrapper.vm.$nextTick();
 
@@ -307,7 +318,7 @@ describe('CommandInputBar.vue', () => {
       mockCommandInputSyncTarget.value = 'quickCommands';
 
       const wrapper = mount(CommandInputBar);
-      mockSessionStore.sessions.get('session-1')!.commandInputContent.value = 'test';
+      getRequiredMockSession().commandInputContent.value = 'test';
       await wrapper.vm.$nextTick();
 
       expect(mockQuickCommandsStore.setSearchTerm).toHaveBeenCalledWith('test');
@@ -317,7 +328,7 @@ describe('CommandInputBar.vue', () => {
       mockCommandInputSyncTarget.value = 'commandHistory';
 
       const wrapper = mount(CommandInputBar);
-      mockSessionStore.sessions.get('session-1')!.commandInputContent.value = 'history';
+      getRequiredMockSession().commandInputContent.value = 'history';
       await wrapper.vm.$nextTick();
 
       expect(mockCommandHistoryStore.setSearchTerm).toHaveBeenCalledWith('history');
@@ -577,7 +588,7 @@ describe('CommandInputBar.vue', () => {
 
   describe('焦点注册', () => {
     it('挂载时应注册焦点动作', () => {
-      const wrapper = mount(CommandInputBar);
+      mount(CommandInputBar);
 
       expect(mockFocusSwitcherStore.registerFocusAction).toHaveBeenCalledWith(
         'commandInput',

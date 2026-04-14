@@ -19,7 +19,6 @@ import {
 import * as ConnectionRepository from '../connections/connection.repository';
 import * as ProxyRepository from '../proxies/proxy.repository';
 import * as SshKeyService from '../ssh-keys/ssh-keys.service';
-import { decrypt } from '../utils/crypto';
 
 // Mock ssh2 Client
 class MockSshClient extends EventEmitter {
@@ -322,7 +321,7 @@ describe('SSH Service', () => {
         force_keyboard_interactive: true,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -344,7 +343,7 @@ describe('SSH Service', () => {
       };
 
       let capturedCallback: ((responses: string[]) => void) | null = null;
-      mockClient.connect.mockImplementation(function (
+      mockClient.connect.mockImplementation(function captureKeyboardInteractive(
         this: MockSshClient,
         config: { keyboardInteractive?: (...args: unknown[]) => void }
       ) {
@@ -375,7 +374,7 @@ describe('SSH Service', () => {
         force_keyboard_interactive: false,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -423,7 +422,7 @@ describe('SSH Service', () => {
 
         if (clientCount === 1) {
           // 跳板机客户端
-          client.connect.mockImplementation(function (this: MockSshClient) {
+          client.connect.mockImplementation(function handleJumpReady(this: MockSshClient) {
             setTimeout(() => this.emit('ready'), 10);
           });
           client.forwardOut.mockImplementation((srcHost, srcPort, dstHost, dstPort, callback) => {
@@ -431,7 +430,7 @@ describe('SSH Service', () => {
           });
         } else {
           // 最终目标客户端 - 检查 keyboardInteractive 配置
-          client.connect.mockImplementation(function (
+          client.connect.mockImplementation(function captureFinalKeyboardInteractive(
             this: MockSshClient,
             config: { keyboardInteractive?: (...args: unknown[]) => void }
           ) {
@@ -467,7 +466,7 @@ describe('SSH Service', () => {
     };
 
     it('应成功建立直接 SSH 连接', async () => {
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -497,7 +496,7 @@ describe('SSH Service', () => {
         passphrase: 'keypass',
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -513,7 +512,7 @@ describe('SSH Service', () => {
     });
 
     it('连接错误时应拒绝 Promise', async () => {
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleError(this: MockSshClient) {
         setTimeout(() => this.emit('error', new Error('Connection refused')), 10);
       });
 
@@ -537,7 +536,7 @@ describe('SSH Service', () => {
 
       const mockSocket = new EventEmitter();
       (SocksClient.createConnection as any).mockResolvedValue({ socket: mockSocket });
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -602,7 +601,7 @@ describe('SSH Service', () => {
       mockRequest.destroy = vi.fn();
 
       (http.request as any).mockReturnValue(mockRequest);
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -688,7 +687,7 @@ describe('SSH Service', () => {
         proxy: null,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -710,7 +709,7 @@ describe('SSH Service', () => {
         jump_chain: undefined,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -751,7 +750,7 @@ describe('SSH Service', () => {
 
         if (clientCount === 1) {
           // 跳板机客户端
-          client.connect.mockImplementation(function (this: MockSshClient) {
+          client.connect.mockImplementation(function handleJumpReady(this: MockSshClient) {
             setTimeout(() => this.emit('ready'), 10);
           });
           client.forwardOut.mockImplementation((srcHost, srcPort, dstHost, dstPort, callback) => {
@@ -759,7 +758,7 @@ describe('SSH Service', () => {
           });
         } else {
           // 最终目标客户端
-          client.connect.mockImplementation(function (this: MockSshClient) {
+          client.connect.mockImplementation(function handleTargetReady(this: MockSshClient) {
             setTimeout(() => this.emit('ready'), 10);
           });
         }
@@ -821,7 +820,7 @@ describe('SSH Service', () => {
 
     it('应成功测试连接并返回延迟', async () => {
       (ConnectionRepository.findFullConnectionById as any).mockResolvedValue(mockRawConnection);
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 50);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -834,7 +833,7 @@ describe('SSH Service', () => {
 
     it('测试连接失败时应抛出错误', async () => {
       (ConnectionRepository.findFullConnectionById as any).mockResolvedValue(mockRawConnection);
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleError(this: MockSshClient) {
         setTimeout(() => this.emit('error', new Error('Connection refused')), 10);
       });
 
@@ -850,7 +849,7 @@ describe('SSH Service', () => {
 
   describe('testUnsavedConnection', () => {
     it('应成功测试密码认证的未保存连接', async () => {
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 30);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -876,7 +875,7 @@ describe('SSH Service', () => {
     });
 
     it('应成功测试密钥认证的未保存连接', async () => {
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 20);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -904,7 +903,7 @@ describe('SSH Service', () => {
         privateKey: '-----BEGIN RSA STORED-----',
         passphrase: 'storedpass',
       });
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 20);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -954,7 +953,7 @@ describe('SSH Service', () => {
 
       const mockSocket = new EventEmitter();
       (SocksClient.createConnection as any).mockResolvedValue({ socket: mockSocket });
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 20);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -1010,7 +1009,7 @@ describe('SSH Service', () => {
     });
 
     it('连接失败时应抛出错误并清理连接', async () => {
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleError(this: MockSshClient) {
         setTimeout(() => this.emit('error', new Error('Auth failed')), 10);
       });
 
@@ -1043,7 +1042,7 @@ describe('SSH Service', () => {
         connection_proxy_setting: null,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);
@@ -1070,7 +1069,7 @@ describe('SSH Service', () => {
         connection_proxy_setting: null,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockRejectedValue(new Error('DB error'));
@@ -1094,7 +1093,7 @@ describe('SSH Service', () => {
         connection_proxy_setting: null,
       };
 
-      mockClient.connect.mockImplementation(function (this: MockSshClient) {
+      mockClient.connect.mockImplementation(function handleReady(this: MockSshClient) {
         setTimeout(() => this.emit('ready'), 10);
       });
       (ConnectionRepository.updateLastConnected as any).mockResolvedValue(undefined);

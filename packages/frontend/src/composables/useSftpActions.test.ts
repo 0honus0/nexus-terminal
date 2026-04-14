@@ -3,7 +3,7 @@
  * 测试 SFTP 文件操作管理的核心业务逻辑
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, computed, nextTick, type Ref } from 'vue';
+import { ref, computed, type Ref } from 'vue';
 import { createSftpActionsManager, type WebSocketDependencies } from './useSftpActions';
 
 // Mock vue-i18n
@@ -96,12 +96,15 @@ describe('useSftpActions (createSftpActionsManager)', () => {
       if (!messageHandlers.has(type)) {
         messageHandlers.set(type, []);
       }
-      messageHandlers.get(type)!.push(handler);
+      const handlers = messageHandlers.get(type);
+      if (handlers) {
+        handlers.push(handler);
+      }
       return () => {
-        const handlers = messageHandlers.get(type);
-        if (handlers) {
-          const index = handlers.indexOf(handler);
-          if (index > -1) handlers.splice(index, 1);
+        const currentHandlers = messageHandlers.get(type);
+        if (currentHandlers) {
+          const index = currentHandlers.indexOf(handler);
+          if (index > -1) currentHandlers.splice(index, 1);
         }
       };
     });
@@ -301,7 +304,6 @@ describe('useSftpActions (createSftpActionsManager)', () => {
       const manager = createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
 
       manager.loadDirectory('/home/user');
-      const oldRequestId = (mockSendMessage.mock.calls[0][0] as any).requestId;
 
       // 模拟一个过时的响应（不同的 requestId）
       triggerMessage('sftp:readdir:success', [createFileItem('stale.txt')], {
@@ -952,7 +954,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
     });
 
     it('sftp:copy:success 应显示成功通知', () => {
-      const manager = createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
+      createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
 
       triggerMessage('sftp:copy:success', { destination: '/home/user/backup', items: null }, {});
 
@@ -960,7 +962,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
     });
 
     it('sftp:move:success 应显示成功通知', () => {
-      const manager = createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
+      createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
 
       triggerMessage(
         'sftp:move:success',
@@ -974,7 +976,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
 
   describe('操作错误消息处理', () => {
     it('sftp:mkdir:error 应显示错误通知', () => {
-      const manager = createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
+      createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
 
       triggerMessage('sftp:mkdir:error', 'Permission denied', { type: 'sftp:mkdir:error' });
 
@@ -982,7 +984,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
     });
 
     it('sftp:copy:error 应显示错误通知', () => {
-      const manager = createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
+      createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
 
       triggerMessage('sftp:copy:error', 'Copy failed', { type: 'sftp:copy:error' });
 
@@ -990,7 +992,7 @@ describe('useSftpActions (createSftpActionsManager)', () => {
     });
 
     it('sftp:move:error 应显示错误通知', () => {
-      const manager = createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
+      createSftpActionsManager('session-1', currentPathRef, createWsDeps(), mockT);
 
       triggerMessage('sftp:move:error', 'Move failed', { type: 'sftp:move:error' });
 

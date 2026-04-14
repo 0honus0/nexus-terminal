@@ -1,19 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { ComposerTranslation } from 'vue-i18n';
 import { isAxiosError } from 'axios';
-import {
-  sessions,
-  suspendedSshSessions,
-  isLoadingSuspendedSessions,
-  activeSessionId,
-} from '../state';
+import { sessions, suspendedSshSessions, isLoadingSuspendedSessions } from '../state';
 import type {
   MessagePayload,
   SshMarkForSuspendReqMessage,
   SshUnmarkForSuspendReqMessage,
   SshSuspendResumeReqMessage,
-  SshSuspendTerminateReqMessage,
-  SshSuspendRemoveEntryReqMessage,
   SshMarkedForSuspendAckPayload,
   SshUnmarkedForSuspendAckPayload,
   SshSuspendListResponsePayload,
@@ -25,7 +17,6 @@ import type {
 } from '../../../types/websocket.types';
 import type { WsManagerInstance, SessionState } from '../types';
 import {
-  closeSession as closeSessionAction,
   activateSession as activateSessionAction,
   openNewSession,
   closeSession,
@@ -38,35 +29,6 @@ import apiClient from '../../../utils/apiClient';
 import { extractErrorMessage } from '../../../utils/errorExtractor';
 
 const { t } = i18n.global;
-
-// 辅助函数：获取一个可用的 WebSocket 管理器
-// 优先使用当前激活的会话，或者任意一个已连接的 SSH 会话
-// 注意：此函数主要用于那些仍然需要 WebSocket 的操作 (如 resume, terminate)
-const getActiveWsManager = (): WsManagerInstance | null => {
-  const firstSessionKey = sessions.value.size > 0 ? sessions.value.keys().next().value : null;
-  // console.info(`[getActiveWsManager] 尝试使用第一个会话 Key (如果存在): ${firstSessionKey}`);
-
-  if (firstSessionKey) {
-    const session = sessions.value.get(firstSessionKey);
-    // console.info(`[getActiveWsManager]   第一个会话 (ID: ${firstSessionKey}): WS Manager 存在: ${!!session?.wsManager}, WS 已连接: ${session?.wsManager?.isConnected?.value}`);
-    if (session && session.wsManager && session.wsManager.isConnected.value) {
-      // console.info(`[getActiveWsManager] 使用第一个会话 (ID: ${firstSessionKey}) 的 WebSocket。`);
-      return session.wsManager;
-    }
-  }
-
-  // console.info('[getActiveWsManager] 第一个会话的 WebSocket 不可用或不存在，开始遍历所有会话...');
-  for (const [sessionId, session] of sessions.value) {
-    // console.info(`[getActiveWsManager]   遍历中 - 检查会话 ID: ${sessionId}, WS Manager 存在: ${!!session.wsManager}, WS 已连接: ${session.wsManager?.isConnected?.value}`);
-    if (session.wsManager && session.wsManager.isConnected.value) {
-      // console.info(`[getActiveWsManager]   遍历成功，使用会话 (ID: ${sessionId}) 的 WebSocket。`);
-      return session.wsManager;
-    }
-  }
-
-  // console.warn('[getActiveWsManager] 遍历结束，仍未找到可用的 WebSocket 连接来发送 SSH 挂起相关请求。');
-  return null;
-};
 
 /**
  * 请求启动 SSH 会话挂起

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { MockSftpSession, MockSftpEntry, MockSftpStats } from '../ssh/mock-ssh-server';
 
 describe('SFTP 服务集成测试', () => {
@@ -11,9 +11,9 @@ describe('SFTP 服务集成测试', () => {
   describe('目录操作', () => {
     it('应该能够读取目录内容', async () => {
       const entries = await new Promise<MockSftpEntry[]>((resolve, reject) => {
-        sftpSession.readdir('/home/testuser', (err, entries) => {
+        sftpSession.readdir('/home/testuser', (err, readdirEntries) => {
           if (err) reject(err);
-          else resolve(entries || []);
+          else resolve(readdirEntries || []);
         });
       });
 
@@ -40,9 +40,10 @@ describe('SFTP 服务集成测试', () => {
 
       // 验证目录已创建
       const stats = await new Promise<MockSftpStats>((resolve, reject) => {
-        sftpSession.stat(newDirPath, (err, stats) => {
+        sftpSession.stat(newDirPath, (err, statResult) => {
           if (err) reject(err);
-          else resolve(stats!);
+          else if (!statResult) reject(new Error('Expected stat result for new directory'));
+          else resolve(statResult);
         });
       });
 
@@ -84,9 +85,10 @@ describe('SFTP 服务集成测试', () => {
       // 验证目录已删除
       await expect(
         new Promise<MockSftpStats>((resolve, reject) => {
-          sftpSession.stat(dirPath, (err, stats) => {
+          sftpSession.stat(dirPath, (err, statResult) => {
             if (err) reject(err);
-            else resolve(stats!);
+            else if (!statResult) reject(new Error('Expected stat result before delete check'));
+            else resolve(statResult);
           });
         })
       ).rejects.toThrow('ENOENT');
@@ -96,9 +98,10 @@ describe('SFTP 服务集成测试', () => {
   describe('文件操作', () => {
     it('应该能够获取文件状态', async () => {
       const stats = await new Promise<MockSftpStats>((resolve, reject) => {
-        sftpSession.stat('/home/testuser/test.txt', (err, stats) => {
+        sftpSession.stat('/home/testuser/test.txt', (err, statResult) => {
           if (err) reject(err);
-          else resolve(stats!);
+          else if (!statResult) reject(new Error('Expected stat result for existing file'));
+          else resolve(statResult);
         });
       });
 
@@ -112,9 +115,11 @@ describe('SFTP 服务集成测试', () => {
     it('应该对不存在的文件返回错误', async () => {
       await expect(
         new Promise<MockSftpStats>((resolve, reject) => {
-          sftpSession.stat('/nonexistent/file.txt', (err, stats) => {
+          sftpSession.stat('/nonexistent/file.txt', (err, statResult) => {
             if (err) reject(err);
-            else resolve(stats!);
+            else if (!statResult) {
+              reject(new Error('Unexpected empty stat result for missing file'));
+            } else resolve(statResult);
           });
         })
       ).rejects.toThrow('ENOENT');
@@ -125,18 +130,19 @@ describe('SFTP 服务集成测试', () => {
 
       // 打开文件
       const handle = await new Promise<Buffer>((resolve, reject) => {
-        sftpSession.open(filePath, 'r', (err, handle) => {
+        sftpSession.open(filePath, 'r', (err, openHandle) => {
           if (err) reject(err);
-          else resolve(handle!);
+          else if (!openHandle) reject(new Error('Expected file handle for read'));
+          else resolve(openHandle);
         });
       });
 
       // 读取内容
       const buffer = Buffer.alloc(1024);
       const bytesRead = await new Promise<number>((resolve, reject) => {
-        sftpSession.read(handle, buffer, 0, buffer.length, 0, (err, bytesRead) => {
+        sftpSession.read(handle, buffer, 0, buffer.length, 0, (err, readBytes) => {
           if (err) reject(err);
-          else resolve(bytesRead || 0);
+          else resolve(readBytes || 0);
         });
       });
 
@@ -159,9 +165,10 @@ describe('SFTP 服务集成测试', () => {
 
       // 打开/创建文件
       const handle = await new Promise<Buffer>((resolve, reject) => {
-        sftpSession.open(filePath, 'w', (err, handle) => {
+        sftpSession.open(filePath, 'w', (err, openHandle) => {
           if (err) reject(err);
-          else resolve(handle!);
+          else if (!openHandle) reject(new Error('Expected file handle for write'));
+          else resolve(openHandle);
         });
       });
 
@@ -184,9 +191,10 @@ describe('SFTP 服务集成测试', () => {
 
       // 验证文件已创建并有正确大小
       const stats = await new Promise<MockSftpStats>((resolve, reject) => {
-        sftpSession.stat(filePath, (err, stats) => {
+        sftpSession.stat(filePath, (err, statResult) => {
           if (err) reject(err);
-          else resolve(stats!);
+          else if (!statResult) reject(new Error('Expected stat result after write'));
+          else resolve(statResult);
         });
       });
 
@@ -197,9 +205,10 @@ describe('SFTP 服务集成测试', () => {
       // 先创建文件
       const filePath = '/home/testuser/todelete.txt';
       const handle = await new Promise<Buffer>((resolve, reject) => {
-        sftpSession.open(filePath, 'w', (err, handle) => {
+        sftpSession.open(filePath, 'w', (err, openHandle) => {
           if (err) reject(err);
-          else resolve(handle!);
+          else if (!openHandle) reject(new Error('Expected file handle for delete test'));
+          else resolve(openHandle);
         });
       });
 
@@ -228,9 +237,10 @@ describe('SFTP 服务集成测试', () => {
       // 验证文件已删除
       await expect(
         new Promise<MockSftpStats>((resolve, reject) => {
-          sftpSession.stat(filePath, (err, stats) => {
+          sftpSession.stat(filePath, (err, statResult) => {
             if (err) reject(err);
-            else resolve(stats!);
+            else if (!statResult) reject(new Error('Expected stat result before delete assertion'));
+            else resolve(statResult);
           });
         })
       ).rejects.toThrow('ENOENT');
@@ -250,9 +260,10 @@ describe('SFTP 服务集成测试', () => {
 
       // 验证新路径存在
       const newStats = await new Promise<MockSftpStats>((resolve, reject) => {
-        sftpSession.stat(newPath, (err, stats) => {
+        sftpSession.stat(newPath, (err, statResult) => {
           if (err) reject(err);
-          else resolve(stats!);
+          else if (!statResult) reject(new Error('Expected stat result for renamed file'));
+          else resolve(statResult);
         });
       });
       expect(newStats).toBeDefined();
@@ -260,9 +271,10 @@ describe('SFTP 服务集成测试', () => {
       // 验证旧路径不存在
       await expect(
         new Promise<MockSftpStats>((resolve, reject) => {
-          sftpSession.stat(oldPath, (err, stats) => {
+          sftpSession.stat(oldPath, (err, statResult) => {
             if (err) reject(err);
-            else resolve(stats!);
+            else if (!statResult) reject(new Error('Expected stat result for old path check'));
+            else resolve(statResult);
           });
         })
       ).rejects.toThrow('ENOENT');
@@ -277,21 +289,24 @@ describe('SFTP 服务集成测试', () => {
 
       // 打开文件
       const handle = await new Promise<Buffer>((resolve, reject) => {
-        sftpSession.open(filePath, 'w', (err, handle) => {
+        sftpSession.open(filePath, 'w', (err, openHandle) => {
           if (err) reject(err);
-          else resolve(handle!);
+          else if (!openHandle) reject(new Error('Expected file handle for chunk upload'));
+          else resolve(openHandle);
         });
       });
 
       // 分块写入
-      for (let i = 0; i < totalChunks; i++) {
-        const chunk = Buffer.alloc(chunkSize, i.toString().charCodeAt(0));
-        await new Promise<void>((resolve, reject) => {
-          sftpSession.write(handle, chunk, 0, chunkSize, i * chunkSize, (err) => {
+      const writeChunkAt = (position: number, chunkBuffer: Buffer) =>
+        new Promise<void>((resolve, reject) => {
+          sftpSession.write(handle, chunkBuffer, 0, chunkSize, position, (err) => {
             if (err) reject(err);
             else resolve();
           });
         });
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = Buffer.alloc(chunkSize, i.toString().charCodeAt(0));
+        await writeChunkAt(i * chunkSize, chunk);
       }
 
       // 关闭文件
@@ -304,9 +319,10 @@ describe('SFTP 服务集成测试', () => {
 
       // 验证文件大小
       const stats = await new Promise<MockSftpStats>((resolve, reject) => {
-        sftpSession.stat(filePath, (err, stats) => {
+        sftpSession.stat(filePath, (err, statResult) => {
           if (err) reject(err);
-          else resolve(stats!);
+          else if (!statResult) reject(new Error('Expected stat result after chunk upload'));
+          else resolve(statResult);
         });
       });
 
