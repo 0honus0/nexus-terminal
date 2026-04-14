@@ -61,9 +61,9 @@ export class MockSshConnection extends EventEmitter {
     return this._authenticated;
   }
 
-  openShell(callback: (err: Error | null, stream: MockShellStream) => void): void {
+  openShell(callback: (err: Error | null, stream: MockShellStream | null) => void): void {
     if (!this._authenticated) {
-      callback(new Error('Not authenticated'), null as any);
+      callback(new Error('Not authenticated'), null);
       return;
     }
     this._shellOpened = true;
@@ -71,9 +71,9 @@ export class MockSshConnection extends EventEmitter {
     setTimeout(() => callback(null, stream), 10);
   }
 
-  openSftp(callback: (err: Error | null, sftp: MockSftpSession) => void): void {
+  openSftp(callback: (err: Error | null, sftp: MockSftpSession | null) => void): void {
     if (!this._authenticated) {
-      callback(new Error('Not authenticated'), null as any);
+      callback(new Error('Not authenticated'), null);
       return;
     }
     const sftp = new MockSftpSession();
@@ -336,7 +336,7 @@ export class MockSshServer extends EventEmitter {
     if (!this._server) return null;
     const addr = this._server.address();
     if (typeof addr === 'string') return null;
-    return { host: this._options.host!, port: addr?.port || 0 };
+    return { host: this._options.host ?? '127.0.0.1', port: addr?.port || 0 };
   }
 
   async start(): Promise<{ host: string; port: number }> {
@@ -390,7 +390,7 @@ export class MockSshServer extends EventEmitter {
 /**
  * 创建 Mock SSH 客户端（用于替换 ssh2.Client）
  */
-export function createMockSshClient(serverAddress: { host: string; port: number }) {
+export function createMockSshClient(_serverAddress: { host: string; port: number }) {
   const client = new EventEmitter() as EventEmitter & {
     connect: ReturnType<typeof vi.fn>;
     shell: ReturnType<typeof vi.fn>;
@@ -401,7 +401,7 @@ export function createMockSshClient(serverAddress: { host: string; port: number 
 
   client._mockConnection = null;
 
-  client.connect = vi.fn().mockImplementation((config: any) => {
+  client.connect = vi.fn().mockImplementation((_config: unknown) => {
     // 模拟连接过程
     setTimeout(() => {
       client.emit('ready');
