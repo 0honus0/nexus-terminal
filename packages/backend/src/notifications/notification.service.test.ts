@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { NotificationService } from './notification.service';
 import * as nodemailer from 'nodemailer';
-import axios from 'axios';
 import type {
   NotificationSetting,
   EmailConfig,
@@ -26,7 +25,6 @@ interface AxiosLikeError {
 const {
   mockRepository,
   mockCreateTransport,
-  mockSendMail,
   mockAxios,
   mockAxiosPost,
   mockGetSetting,
@@ -50,7 +48,7 @@ const {
   mockGetSetting: vi.fn(),
   mockI18nT: vi.fn((key: string, options?: I18nOptions) => options?.defaultValue || key),
   mockFormatInTimeZone: vi.fn(
-    (date: Date, tz: string, format: string) => '2024-01-01T12:00:00+08:00'
+    (_date: Date, _tz: string, _format: string) => '2024-01-01T12:00:00+08:00'
   ),
 }));
 
@@ -650,7 +648,7 @@ describe('NotificationService', () => {
     it('获取语言设置失败时应使用默认值', async () => {
       mockGetSetting.mockRejectedValue(new Error('DB error'));
 
-      const result = await service.testSetting('email', mockEmailConfig);
+      await service.testSetting('email', mockEmailConfig);
 
       // 应该继续执行，使用默认语言
       expect(nodemailer.createTransport).toHaveBeenCalled();

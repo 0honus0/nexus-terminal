@@ -2,9 +2,9 @@ import archiver from 'archiver';
 import * as ConnectionRepository from '../connections/connection.repository';
 import * as ProxyRepository from '../proxies/proxy.repository';
 import * as TagService from '../tags/tag.service';
-import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { decrypt, getEncryptionKeyBuffer as getCryptoKeyBuffer } from '../utils/crypto';
-import { getAllDecryptedSshKeys, DecryptedSshKeyDetails } from '../ssh-keys/ssh-keys.service';
+import { getDbInstance, runDb, allDb } from '../database/connection';
+import { decrypt } from '../utils/crypto';
+import { getAllDecryptedSshKeys } from '../ssh-keys/ssh-keys.service';
 import { getErrorMessage } from '../utils/AppError';
 
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
@@ -267,9 +267,9 @@ export const exportConnectionsAsEncryptedZip = async (
         if (conn.auth_method === 'password' && conn.password) {
           line += ` -p ${escapeCliArgument(conn.password)}`;
         } else if (conn.auth_method === 'key') {
-          if (conn.ssh_key_id && fullSshKeysMap.has(conn.ssh_key_id)) {
-            const referencedKey = fullSshKeysMap.get(conn.ssh_key_id)!;
-            line += ` -k ${escapeCliArgument(referencedKey.name!)}`;
+          const referencedKey = conn.ssh_key_id ? fullSshKeysMap.get(conn.ssh_key_id) : undefined;
+          if (referencedKey && referencedKey.name) {
+            line += ` -k ${escapeCliArgument(referencedKey.name)}`;
             if (referencedKey.passphrase) {
               line += ` -passphrase ${escapeCliArgument(referencedKey.passphrase)}`;
             }
@@ -477,8 +477,10 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
         }
 
         // Prepare data for repository, ensuring correct auth_method for RDP
-        const authMethodForDb =
-          connData.type === 'RDP' || connData.type === 'VNC' ? 'password' : connData.auth_method!;
+        let authMethodForDb: 'password' | 'key' = 'password';
+        if (connData.type === 'SSH' && connData.auth_method === 'key') {
+          authMethodForDb = 'key';
+        }
         connectionsToInsert.push({
           name: connData.name,
           type: connData.type, // Add type
