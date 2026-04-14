@@ -12,12 +12,20 @@ const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
 
 const USER_CUSTOM_HTML_THEMES_DIR = path.join(__dirname, '../../data/custom_html_theme/');
 
+const getNodeErrorCode = (error: unknown): string | undefined => {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+};
+
 // 确保预设 html-themes 目录存在
 const ensurePresetHtmlThemesDirExists = async () => {
   // Renamed
   try {
     await fs.access(PRESET_HTML_THEMES_DIR);
-  } catch (error: unknown) {
+  } catch {
     // 目录不存在，创建它
     await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
     console.info(
@@ -32,7 +40,7 @@ ensurePresetHtmlThemesDirExists();
 const ensureUserCustomHtmlThemesDirExists = async () => {
   try {
     await fs.access(USER_CUSTOM_HTML_THEMES_DIR);
-  } catch (error: unknown) {
+  } catch {
     // 目录不存在，创建它
     await fs.mkdir(USER_CUSTOM_HTML_THEMES_DIR, { recursive: true });
     console.info(
@@ -251,8 +259,7 @@ export const removePageBackground = async (): Promise<boolean> => {
       console.info(`[AppearanceService] 已删除页面背景文件: ${absolutePath}`);
     } catch (error: unknown) {
       // 如果文件不存在或其他删除错误，记录日志但继续执行以清空数据库记录
-      const err = error as any;
-      if (err.code === 'ENOENT') {
+      if (getNodeErrorCode(error) === 'ENOENT') {
         console.warn(`[AppearanceService] 尝试删除页面背景文件但未找到: ${absolutePath}`);
       } else {
         console.error(`[AppearanceService] 删除页面背景文件时出错 (${absolutePath}):`, error);
@@ -285,8 +292,7 @@ export const removeTerminalBackground = async (): Promise<boolean> => {
       await fs.unlink(absolutePath);
       console.info(`[AppearanceService] 已删除终端背景文件: ${absolutePath}`);
     } catch (error: unknown) {
-      const err = error as any;
-      if (err.code === 'ENOENT') {
+      if (getNodeErrorCode(error) === 'ENOENT') {
         console.warn(`[AppearanceService] 尝试删除终端背景文件但未找到: ${absolutePath}`);
       } else {
         console.error(`[AppearanceService] 删除终端背景文件时出错 (${absolutePath}):`, error);
@@ -354,8 +360,7 @@ export const listPresetHtmlThemes = async (): Promise<Array<{ name: string; type
       .map((name) => ({ name, type: 'preset' as const })); // Add type
   } catch (error: unknown) {
     console.error('[AppearanceService] 列出预设 HTML 主题失败:', error);
-    const err = error as any;
-    if (err.code === 'ENOENT') {
+    if (getNodeErrorCode(error) === 'ENOENT') {
       // 目录不存在
       console.warn(`[AppearanceService] 预设 HTML 主题目录 (${PRESET_HTML_THEMES_DIR}) 未找到。`);
       return [];
@@ -378,8 +383,7 @@ export const getPresetHtmlThemeContent = async (themeName: string): Promise<stri
     return await fs.readFile(filePath, 'utf-8');
   } catch (error: unknown) {
     console.error(`[AppearanceService] 获取预设 HTML 主题 "${safeThemeName}" 内容失败:`, error);
-    const err = error as any;
-    if (err.code === 'ENOENT') {
+    if (getNodeErrorCode(error) === 'ENOENT') {
       throw new Error(`预设 HTML 主题 "${safeThemeName}" 未找到。`);
     }
     throw new Error(`无法获取预设 HTML 主题 "${safeThemeName}" 的内容。`);
@@ -403,8 +407,7 @@ export const listUserCustomHtmlThemes = async (): Promise<
       .map((name) => ({ name, type: 'custom' as const })); // Add type
   } catch (error: unknown) {
     console.error('[AppearanceService] 列出用户自定义 HTML 主题失败:', error);
-    const err = error as any;
-    if (err.code === 'ENOENT') {
+    if (getNodeErrorCode(error) === 'ENOENT') {
       console.warn(
         `[AppearanceService] 用户自定义 HTML 主题目录 (${USER_CUSTOM_HTML_THEMES_DIR}) 未找到。`
       );
@@ -430,8 +433,7 @@ export const getUserCustomHtmlThemeContent = async (themeName: string): Promise<
       `[AppearanceService] 获取用户自定义 HTML 主题 "${safeThemeName}" 内容失败:`,
       error
     );
-    const err = error as any;
-    if (err.code === 'ENOENT') {
+    if (getNodeErrorCode(error) === 'ENOENT') {
       throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 未找到。`);
     }
     throw new Error(`无法获取用户自定义 HTML 主题 "${safeThemeName}" 的内容。`);
@@ -458,9 +460,8 @@ export const createUserCustomHtmlTheme = async (
       // 文件已存在
       throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 已存在。`);
     } catch (accessError: unknown) {
-      const err = accessError as any;
       // 文件不存在,可以创建
-      if (err.code !== 'ENOENT') {
+      if (getNodeErrorCode(accessError) !== 'ENOENT') {
         throw accessError; // 其他 access 错误
       }
     }
@@ -490,8 +491,7 @@ export const updateUserCustomHtmlTheme = async (
     try {
       await fs.access(filePath);
     } catch (accessError: unknown) {
-      const err = accessError as any;
-      if (err.code === 'ENOENT') {
+      if (getNodeErrorCode(accessError) === 'ENOENT') {
         throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 未找到,无法更新。`);
       }
       throw accessError;
@@ -518,8 +518,7 @@ export const deleteUserCustomHtmlTheme = async (themeName: string): Promise<void
     console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 删除成功。`);
   } catch (error: unknown) {
     console.error(`[AppearanceService] 删除用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
-    const err = error as any;
-    if (err.code === 'ENOENT') {
+    if (getNodeErrorCode(error) === 'ENOENT') {
       throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 未找到,无法删除。`);
     }
     throw new Error(`无法删除用户自定义 HTML 主题 "${safeThemeName}"。`);

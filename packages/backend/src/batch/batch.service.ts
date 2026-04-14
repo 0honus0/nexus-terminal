@@ -63,7 +63,7 @@ export async function execCommandBatch(
       if (conn) {
         connectionNames.set(connId, conn.name || `连接 #${connId}`);
       }
-    } catch (e) {
+    } catch {
       connectionNames.set(connId, `连接 #${connId}`);
     }
   }
@@ -172,6 +172,43 @@ async function processTask(
     };
     signal.addEventListener('abort', onAbort, { once: true });
 
+    const handleSubTaskResult = (result: SubTaskResult) => {
+      switch (result) {
+        case 'completed':
+          completedCount++;
+          break;
+        case 'failed':
+          failedCount++;
+          break;
+        case 'cancelled':
+          cancelledCount++;
+          break;
+      }
+    };
+
+    const handleSubTaskFailure = () => {
+      failedCount++;
+    };
+
+    const handleSubTaskComplete = () => {
+      activeCount--;
+      updateOverallProgress(
+        taskId,
+        userId,
+        completedCount,
+        failedCount,
+        cancelledCount,
+        subTasks.length
+      );
+
+      if (currentIndex < subTasks.length && !signal.aborted) {
+        launchNext();
+      } else if (activeCount === 0) {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }
+    };
+
     const launchNext = () => {
       // 检查是否已取消
       if (signal.aborted) {
@@ -197,40 +234,9 @@ async function processTask(
 
         activeCount++;
         runSubTask(taskId, subTask, userId, payload, signal)
-          .then((result) => {
-            switch (result) {
-              case 'completed':
-                completedCount++;
-                break;
-              case 'failed':
-                failedCount++;
-                break;
-              case 'cancelled':
-                cancelledCount++;
-                break;
-            }
-          })
-          .catch(() => {
-            failedCount++;
-          })
-          .finally(() => {
-            activeCount--;
-            updateOverallProgress(
-              taskId,
-              userId,
-              completedCount,
-              failedCount,
-              cancelledCount,
-              subTasks.length
-            );
-
-            if (currentIndex < subTasks.length && !signal.aborted) {
-              launchNext();
-            } else if (activeCount === 0) {
-              signal.removeEventListener('abort', onAbort);
-              resolve();
-            }
-          });
+          .then(handleSubTaskResult)
+          .catch(handleSubTaskFailure)
+          .finally(handleSubTaskComplete);
       }
 
       // 如果没有更多任务且没有活动任务
@@ -441,7 +447,7 @@ async function runSubTask(
     if (sshClient) {
       try {
         sshClient.end();
-      } catch (e) {
+      } catch {
         // 忽略关闭错误
       }
     }
@@ -476,17 +482,17 @@ function executeCommand(
       }
     };
 
-    const terminateStream = (reason: string) => {
+    const terminateStream = () => {
       if (stream) {
         try {
           // 发送 SIGKILL 信号终止远端进程
           stream.signal('KILL');
-        } catch (e) {
+        } catch {
           // 某些情况下信号发送可能失败
         }
         try {
           stream.close();
-        } catch (e) {
+        } catch {
           // 忽略关闭错误
         }
       }
@@ -496,7 +502,7 @@ function executeCommand(
       if (!resolved) {
         resolved = true;
         cleanup();
-        terminateStream('abort');
+        terminateStream();
         resolve({ exitCode: -1, output, cancelled: true, timedOut: false });
       }
     };
@@ -507,7 +513,7 @@ function executeCommand(
       if (!resolved) {
         resolved = true;
         signal.removeEventListener('abort', onAbort);
-        terminateStream('timeout');
+        terminateStream();
         resolve({ exitCode: -1, output, cancelled: true, timedOut: true });
       }
     }, timeoutSeconds * 1000);
@@ -714,14 +720,19 @@ async function finalizeTask(
   });
 
   // 发送完成事件
-  const eventType =
-    finalStatus === 'completed'
-      ? 'batch:completed'
-      : finalStatus === 'failed'
-        ? 'batch:failed'
-        : finalStatus === 'cancelled'
-          ? 'batch:cancelled'
-          : 'batch:completed';
+  let eventType: BatchWsMessage['type'] = 'batch:completed';
+  if (finalStatus === 'failed') {
+    eventType = 'batch:failed';
+  } else if (finalStatus === 'cancelled') {
+    eventType = 'batch:cancelled';
+  }
+
+  let reason: string | undefined;
+  if (finalStatus === 'failed') {
+    reason = '部分或全部子任务执行失败';
+  } else if (finalStatus === 'cancelled') {
+    reason = '任务已取消';
+  }
 
   sendBatchEvent(userId, {
     type: eventType,
@@ -732,12 +743,7 @@ async function finalizeTask(
       completed,
       failed,
       cancelled,
-      reason:
-        finalStatus === 'failed'
-          ? '部分或全部子任务执行失败'
-          : finalStatus === 'cancelled'
-            ? '任务已取消'
-            : undefined,
+      reason,
     },
   });
 
