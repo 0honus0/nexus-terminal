@@ -62,10 +62,10 @@
 
 ### 1.5 Passkey 配置
 
-| 变量名      | 类型     | 必填 | 默认值                  | 描述                                             |
-| ----------- | -------- | ---- | ----------------------- | ------------------------------------------------ |
-| `RP_ID`     | `string` | 否   | `localhost`             | WebAuthn Relying Party ID (必须匹配生产环境域名) |
-| `RP_ORIGIN` | `string` | 否   | `http://localhost:5173` | WebAuthn Relying Party Origin (必须匹配前端地址) |
+| 变量名      | 类型     | 必填 | 默认值                  | 描述                                                                       |
+| ----------- | -------- | ---- | ----------------------- | -------------------------------------------------------------------------- |
+| `RP_ID`     | `string` | 否   | `localhost`             | WebAuthn Relying Party ID。支持逗号分隔多值，与 `RP_ORIGIN` 按顺序一一对应 |
+| `RP_ORIGIN` | `string` | 否   | `http://localhost:5173` | WebAuthn Relying Party Origin。支持逗号分隔多值，必须是完整 URL            |
 
 ### 1.6 跨域配置
 

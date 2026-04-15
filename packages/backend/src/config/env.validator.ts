@@ -162,13 +162,27 @@ const ENV_SCHEMA: Record<keyof EnvironmentConfig, EnvVarSchema> = {
     required: false,
     type: 'string',
     default: 'localhost',
+    validator: (value: string) => {
+      const rpIds = value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      return rpIds.length > 0;
+    },
+    errorMessage: 'RP_ID 必须是有效的域名，多个值请用逗号分隔',
   },
   RP_ORIGIN: {
     required: false,
     type: 'string',
     default: 'http://localhost:5173',
-    validator: (value: string) => /^https?:\/\/.+/.test(value),
-    errorMessage: 'RP_ORIGIN 必须是有效的 HTTP/HTTPS URL',
+    validator: (value: string) => {
+      const origins = value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      return origins.length > 0 && origins.every((origin) => /^https?:\/\/.+/.test(origin));
+    },
+    errorMessage: 'RP_ORIGIN 必须是有效的 HTTP/HTTPS URL，多个值请用逗号分隔',
   },
 
   // 跨域配置

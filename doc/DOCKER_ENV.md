@@ -26,10 +26,10 @@
 
 ### Passkey 认证配置
 
-| 变量名      | 默认值                  | 必填   | 描述                                           |
-| ----------- | ----------------------- | ------ | ---------------------------------------------- |
-| `RP_ID`     | `localhost`             | **是** | WebAuthn RP ID（生产环境必须改为你的域名）     |
-| `RP_ORIGIN` | `http://localhost:5173` | **是** | WebAuthn RP Origin（生产环境必须改为你的域名） |
+| 变量名      | 默认值                  | 必填   | 描述                                                            |
+| ----------- | ----------------------- | ------ | --------------------------------------------------------------- |
+| `RP_ID`     | `localhost`             | **是** | WebAuthn RP ID。支持逗号分隔多值，与 `RP_ORIGIN` 按顺序一一对应 |
+| `RP_ORIGIN` | `http://localhost:5173` | **是** | WebAuthn RP Origin。支持逗号分隔多值（完整 URL）                |
 
 ### 远程网关地址配置
 
@@ -133,8 +133,12 @@
 DEPLOYMENT_MODE=docker
 
 # Passkey 配置（生产环境必须修改）
+# 单域名
 RP_ID=yourdomain.com
 RP_ORIGIN=https://yourdomain.com
+# 多域名（RP_ID 与 RP_ORIGIN 顺序对应）
+# RP_ID=yourdomain.com,another-domain.net
+# RP_ORIGIN=https://yourdomain.com,https://another-domain.net
 
 # 远程网关地址
 REMOTE_GATEWAY_API_BASE_LOCAL=http://localhost:9090
@@ -267,9 +271,9 @@ services:
 
 ### 首次部署（生产环境）
 
-1. ✅ 修改 `.env` 中的 `RP_ID` 为你的域名
-2. ✅ 修改 `.env` 中的 `RP_ORIGIN` 为你的完整 URL
-3. ✅ 如需多域名支持，在 docker-compose.yml 中添加 `CORS_ALLOWED_ORIGINS`
+1. ✅ 修改 `.env` 中的 `RP_ID`（单域名）或 `RP_ID` 逗号分隔列表（多域名）
+2. ✅ 修改 `.env` 中的 `RP_ORIGIN`（单域名）或 `RP_ORIGIN` 逗号分隔列表（多域名）
+3. ✅ 如需多域名支持，确保 `ALLOWED_ORIGINS` / 反向代理 CORS 配置包含所有前端域名
 4. ✅ 启动服务：`docker compose up -d`
 
 ---

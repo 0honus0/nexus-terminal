@@ -236,7 +236,7 @@ docker compose up -d
 ### 其他
 
 1. **移动端可以通过双指手势放大缩小终端字体**
-2. 如需启用 Passkey 登录，请在 `.env` 文件中设置 `RP_ID` 和 `RP_ORIGIN` 环境变量。
+2. 如需启用 Passkey 登录，请在 `.env` 文件中设置 `RP_ID` 和 `RP_ORIGIN` 环境变量（支持逗号分隔多域名，按顺序一一对应）。
 
 ## 🔧 高级配置
 

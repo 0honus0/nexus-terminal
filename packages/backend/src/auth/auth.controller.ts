@@ -44,6 +44,32 @@ const getRequestHeaderValue = (req: Request, name: string): string | undefined =
   return typeof rawHeader === 'string' ? rawHeader : undefined;
 };
 
+const getSingleHeaderToken = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .find(Boolean);
+};
+
+const getPasskeyRequestOrigin = (req: Request): string | undefined => {
+  const originHeader = getSingleHeaderToken(getRequestHeaderValue(req, 'Origin'));
+  if (originHeader) {
+    return originHeader;
+  }
+
+  const forwardedProto = getSingleHeaderToken(getRequestHeaderValue(req, 'X-Forwarded-Proto'));
+  const forwardedHost = getSingleHeaderToken(getRequestHeaderValue(req, 'X-Forwarded-Host'));
+  const host = forwardedHost || getSingleHeaderToken(getRequestHeaderValue(req, 'Host'));
+  const protocol = forwardedProto || req.protocol;
+
+  if (!host || !protocol) {
+    return undefined;
+  }
+
+  return `${protocol}://${host}`;
+};
+
 const getVerificationErrorMessage = (value: unknown): string | undefined => {
   if (typeof value !== 'object' || value === null || !('error' in value)) {
     return undefined;
@@ -69,6 +95,7 @@ export interface User {
 interface ChallengeData {
   challenge: string;
   timestamp: number;
+  origin?: string;
 }
 
 // +++ Pending Authentication for 2FA Bypass Prevention
@@ -111,13 +138,20 @@ export const generatePasskeyRegistrationOptionsHandler = async (
   }
 
   try {
+    const requestOrigin = getPasskeyRequestOrigin(req);
+
     // PasskeyService's generateRegistrationOptions expects userId as number
-    const options = await passkeyService.generateRegistrationOptions(username, userId);
+    const options = await passkeyService.generateRegistrationOptions(
+      username,
+      userId,
+      requestOrigin
+    );
 
     // +++ Store challenge with timestamp for replay attack prevention
     req.session.currentChallenge = {
       challenge: options.challenge,
       timestamp: Date.now(),
+      origin: requestOrigin,
     };
     // The user.id from options is a Uint8Array. We need to store the original string userId for userHandle.
     req.session.passkeyUserHandle = userId.toString();
@@ -171,12 +205,14 @@ export const verifyPasskeyRegistrationHandler = async (
   }
 
   const expectedChallenge = challengeData.challenge;
+  const requestOrigin = challengeData.origin || getPasskeyRequestOrigin(req);
 
   try {
     const verification = await passkeyService.verifyRegistration(
       registrationResponse,
       expectedChallenge,
-      userHandle // userHandle is userId as string
+      userHandle, // userHandle is userId as string
+      requestOrigin
     );
 
     if (verification.verified && verification.newPasskeyToSave) {
@@ -223,13 +259,16 @@ export const generatePasskeyAuthenticationOptionsHandler = async (
   const { username } = req.body; // Can be initiated by username (if not logged in) or for currently logged-in user
 
   try {
+    const requestOrigin = getPasskeyRequestOrigin(req);
+
     // PasskeyService's generateAuthenticationOptions can optionally take a username
-    const options = await passkeyService.generateAuthenticationOptions(username);
+    const options = await passkeyService.generateAuthenticationOptions(username, requestOrigin);
 
     // +++ Store challenge with timestamp for replay attack prevention
     req.session.currentChallenge = {
       challenge: options.challenge,
       timestamp: Date.now(),
+      origin: requestOrigin,
     };
     // For authentication, userHandle is not strictly needed in session beforehand if RP ID is specific enough
     // or if allowCredentials is used. We'll clear any old one just in case.
@@ -288,12 +327,14 @@ export const verifyPasskeyAuthenticationHandler = async (
   }
 
   const expectedChallenge = challengeData.challenge;
+  const requestOrigin = challengeData.origin || getPasskeyRequestOrigin(req);
 
   try {
     // Pass the extracted authenticationResponseJSON to the service
     const verification = await passkeyService.verifyAuthentication(
       authenticationResponseJSON,
-      expectedChallenge
+      expectedChallenge,
+      requestOrigin
     );
 
     if (verification.verified && verification.userId && verification.passkey) {

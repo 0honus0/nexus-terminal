@@ -235,7 +235,7 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 ### Others
 
 1. **On mobile devices, you can zoom in or out on the terminal font using a two-finger gesture.**
-2. To enable Passkey login, set the `RP_ID` and `RP_ORIGIN` environment variables in the `.env` file.
+2. To enable Passkey login, set the `RP_ID` and `RP_ORIGIN` environment variables in `.env` (comma-separated multi-domain values are supported, paired by order).
 
 ## ⚠️ Notes
 
