@@ -47,6 +47,7 @@ scripts/*
 !scripts/validate-commit-msg.js
 !scripts/sync-locales.js
 !scripts/check-tech-debt.js
+!scripts/check-smart-quotes.js
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -175,6 +176,7 @@ dist-scripts/
 electron-app/node_modules/
 electron-app/dist_electron/
 
-# Husky git hooks
-.husky/
+# Husky git hooks（仅跟踪 pre-commit）
+.husky/*
+!.husky/pre-commit
 .ace-tool/

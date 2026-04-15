@@ -196,6 +196,13 @@ Closes #345"
 1. **Pre-commit Hook**：运行代码格式化和 Lint 检查
 2. **Commit-msg Hook**：先校验“可选 Emoji + Conventional + 中文 subject”，再由 Commitlint 做规则检查
 
+### Pre-commit 补充说明（2026-04-15）
+
+- **智能引号拦截**：`scripts/check-smart-quotes.js` 会检查暂存区代码文件中的 `‘ ’ “ ”`，命中即阻止提交，避免引号边界问题。
+- **安全格式化**：`lint-staged` 对暂存代码执行 `eslint --fix` 与 `prettier --write`，减少格式化噪音进入提交历史。
+- **质量总闸门**：pre-commit 在 `lint-staged` 后强制执行 `npm run -s quality:check`，统一覆盖 `debt:check`、前端 typecheck、零 warning lint 与 `format:check`。
+- **any 与噪音处理**：`debt:check` 持续拦截新增 `: any / <any> / any[]`，并过滤注释类噪音，避免无效告警干扰提交。
+
 ### 如果提交消息格式错误
 
 ```bash
@@ -222,7 +229,9 @@ $ git commit -m "✨ feat(connections): 添加连接分组功能"
 ## 配置文件
 
 - **Commitlint 配置**：`commitlint.config.js`
-- **Husky Hooks**：`.husky/commit-msg`
+- **Husky Hooks**：`.husky/pre-commit`、`.husky/commit-msg`
+- **Pre-commit 任务编排**：`.lintstagedrc.js`
+- **智能引号检查脚本**：`scripts/check-smart-quotes.js`
 - **规则扩展**：基于 `@commitlint/config-conventional`
 
 ---

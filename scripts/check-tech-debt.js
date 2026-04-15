@@ -83,9 +83,45 @@ function printSection(title, lines, max = 20) {
   }
 }
 
+function parseRipgrepLine(line) {
+  const firstColon = line.indexOf(':');
+  const secondColon = line.indexOf(':', firstColon + 1);
+  if (firstColon === -1 || secondColon === -1) {
+    return null;
+  }
+  return {
+    file: line.slice(0, firstColon),
+    lineNumber: line.slice(firstColon + 1, secondColon),
+    content: line.slice(secondColon + 1),
+  };
+}
+
+function isAnyNoiseLine(line) {
+  const parsed = parseRipgrepLine(line);
+  if (!parsed) {
+    return false;
+  }
+
+  const trimmed = parsed.content.trim();
+  return (
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('/*') ||
+    trimmed.startsWith('*/') ||
+    trimmed.startsWith('*') ||
+    /^eslint-(disable|enable)/.test(trimmed)
+  );
+}
+
+function normalizeMatches(check, lines) {
+  if (check.key !== 'any') {
+    return lines;
+  }
+  return lines.filter((line) => !isAnyNoiseLine(line));
+}
+
 function main() {
   const results = CHECKS.map((check) => {
-    const lines = runRipgrep(check.args);
+    const lines = normalizeMatches(check, runRipgrep(check.args));
     return { ...check, lines };
   });
 
