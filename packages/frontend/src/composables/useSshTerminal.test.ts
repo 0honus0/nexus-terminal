@@ -9,7 +9,7 @@ import { createSshTerminalManager, type SshTerminalDependencies } from './useSsh
 // Mock vue-i18n
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (key: string, ...args: any[]) => {
+    t: (key: string, ...args: unknown[]) => {
       const params = args[0];
       if (params && typeof params === 'object') return `${key}:${JSON.stringify(params)}`;
       return key;
@@ -57,7 +57,7 @@ describe('useSshTerminal (createSshTerminalManager)', () => {
   }
 
   // 模拟 i18n 翻译函数
-  const mockT = (key: string, ...args: any[]) => {
+  const mockT = (key: string, ...args: unknown[]) => {
     const params = args[0];
     if (params && typeof params === 'object') return `${key}:${JSON.stringify(params)}`;
     return key;

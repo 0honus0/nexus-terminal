@@ -11,19 +11,20 @@
 
 ### 当前债务总览（最新口径）
 
-| 类别                   | 当前状态      | 说明                                                                |
-| ---------------------- | ------------- | ------------------------------------------------------------------- |
-| Lint 债务              | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                    |
-| Lint 错误              | ✅ 0 errors   | 当前无阻断错误                                                      |
-| 修复方式               | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                  |
-| 文档口径               | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”       |
-| 下一类债务（新）       | ✅ 已完成     | Flat Config 已收敛为纯配置，旧链路（`.eslintrc.js` / 兼容层）已下线 |
-| Vue lint 覆盖          | ✅ 已完成     | `.vue` 已从忽略列表移除，88 个 SFC 文件纳入 lint（基础校验）        |
-| Vue 规则基线           | ✅ 已完成     | 已接入 `eslint-plugin-vue` `flat/essential`，并保持 lint 结果清零   |
-| 配置文件 lint 覆盖     | ✅ 已完成     | `*.config.ts` 已纳入 lint，9 个配置文件通过基础校验                 |
-| Vue 规则回收（第二批） | ✅ 已完成     | 三条规则已恢复启用，违规修复后保持 lint 清零                        |
-| Vue 规则回收（第三批） | ✅ 已完成     | `vue/no-side-effects-in-computed-properties` 已恢复启用             |
-| Vue 规则回收（第四批） | ✅ 已完成     | `vue/no-mutating-props` 严格模式已全量恢复启用（无临时豁免）        |
+| 类别                   | 当前状态      | 说明                                                                  |
+| ---------------------- | ------------- | --------------------------------------------------------------------- |
+| Lint 债务              | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                      |
+| Lint 错误              | ✅ 0 errors   | 当前无阻断错误                                                        |
+| 修复方式               | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                    |
+| 文档口径               | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”         |
+| 下一类债务（新）       | ✅ 已完成     | Flat Config 已收敛为纯配置，旧链路（`.eslintrc.js` / 兼容层）已下线   |
+| Vue lint 覆盖          | ✅ 已完成     | `.vue` 已从忽略列表移除，88 个 SFC 文件纳入 lint（基础校验）          |
+| Vue 规则基线           | ✅ 已完成     | 已接入 `eslint-plugin-vue` `flat/essential`，并保持 lint 结果清零     |
+| 配置文件 lint 覆盖     | ✅ 已完成     | `*.config.ts` 已纳入 lint，9 个配置文件通过基础校验                   |
+| Vue 规则回收（第二批） | ✅ 已完成     | 三条规则已恢复启用，违规修复后保持 lint 清零                          |
+| Vue 规则回收（第三批） | ✅ 已完成     | `vue/no-side-effects-in-computed-properties` 已恢复启用               |
+| Vue 规则回收（第四批） | ✅ 已完成     | `vue/no-mutating-props` 严格模式已全量恢复启用（无临时豁免）          |
+| 债务回归门禁           | ✅ 已完成     | 新增 `debt:check`（提交前 + CI），阻止 TODO/skip/console.log/any 回流 |
 
 ### 本轮最终结果（2026-04-15）
 
@@ -53,6 +54,7 @@
   - 规则回收：`vue/no-unused-vars`、`vue/use-v-on-exact`、`vue/multi-word-component-names` 已恢复启用并通过全量 lint
   - 规则回收：`vue/no-side-effects-in-computed-properties` 已恢复启用，修复 3 处计算属性副作用后通过全量 lint
   - 规则回收：`vue/no-mutating-props` 已以严格模式恢复启用，修复 2 处直接 prop 变更；`AddConnectionFormAuth.vue`、`AddConnectionFormBasicInfo.vue`、`AddConnectionFormAdvanced.vue` 均已完成 `emit patch` 改造并移除豁免
+  - 防回归治理：新增 `scripts/check-tech-debt.js` 与 `npm run debt:check`，并接入 `.lintstagedrc.js` 与 `.github/workflows/audit.yml`
 
 ---
 

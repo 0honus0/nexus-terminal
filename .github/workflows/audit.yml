@@ -32,6 +32,12 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Run technical debt regression gate
+        run: |
+          echo "## Technical Debt Regression Gate" >> "$GITHUB_STEP_SUMMARY"
+          npm run -s debt:check | tee /tmp/tech-debt-check.log
+          cat /tmp/tech-debt-check.log >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run npm audit
         run: |
           npm audit --audit-level=moderate || true
