@@ -158,7 +158,7 @@ describe('AI Settings Store', () => {
     });
 
     it('应该在测试期间设置 isTesting 状态', async () => {
-      let resolvePromise: (value: { data: { success: boolean } }) => void;
+      let resolvePromise!: (value: { data: { success: boolean } }) => void;
       const promise = new Promise((resolve) => {
         resolvePromise = resolve;
       });
@@ -175,10 +175,6 @@ describe('AI Settings Store', () => {
       });
 
       expect(store.isTesting).toBe(true);
-
-      if (!resolvePromise) {
-        throw new Error('resolvePromise should be initialized');
-      }
       resolvePromise({ data: { success: true } });
       await testPromise;
 

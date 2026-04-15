@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { isAxiosError } from 'axios';
+import type { Composer } from 'vue-i18n';
 import { sessions, suspendedSshSessions, isLoadingSuspendedSessions } from '../state';
 import type {
   MessagePayload,
@@ -29,7 +30,7 @@ import i18n from '../../../i18n';
 import apiClient from '../../../utils/apiClient';
 import { extractErrorMessage } from '../../../utils/errorExtractor';
 
-const { t } = i18n.global;
+const { t } = i18n.global as unknown as Composer;
 
 /**
  * 请求启动 SSH 会话挂起

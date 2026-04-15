@@ -1,12 +1,21 @@
 import { createI18n, Composer } from 'vue-i18n';
 
+// 这允许嵌套的翻译键，例如 'parent.child.grandchild'
+interface RecursiveStringRecord {
+  [key: string]: string | RecursiveStringRecord;
+}
+type MessageSchema = RecursiveStringRecord;
+
 // 动态导入 locales 目录下的所有 .json 文件
 // 使用 { eager: true } 确保同步加载，因为 i18n 实例需要在应用初始化时就绪
 // 使用 { import: 'default' } 直接获取模块的默认导出
-const localeModules = import.meta.glob('./locales/*.json', { eager: true, import: 'default' });
+const localeModules = import.meta.glob<MessageSchema>('./locales/*.json', {
+  eager: true,
+  import: 'default',
+});
 
 // 构建 messages 对象和可用语言列表
-const messages: Record<string, unknown> = {};
+const messages: Record<string, MessageSchema> = {};
 const availableLocales: string[] = [];
 
 for (const path of Object.keys(localeModules)) {
@@ -29,12 +38,6 @@ if (availableLocales.length === 0) {
 // 如果没有加载到文件，则使用空对象作为 fallback，避免运行时错误
 // 使用更通用的类型 Record<string, any> 来避免动态索引的类型推断问题
 // 尝试一个更具体的类型来帮助 TypeScript 推断，以解决深层实例化问题
-// 这允许嵌套的翻译键，例如 'parent.child.grandchild'
-interface RecursiveStringRecord {
-  [key: string]: string | RecursiveStringRecord;
-}
-type MessageSchema = RecursiveStringRecord;
-
 // 定义默认语言 (优先使用 'en-US'，如果不存在则使用第一个找到的语言)
 export const defaultLng = availableLocales.includes('en-US')
   ? 'en-US'
