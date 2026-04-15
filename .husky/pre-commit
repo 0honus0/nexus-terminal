@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -e
+
+npx lint-staged
+npm run -s quality:check
