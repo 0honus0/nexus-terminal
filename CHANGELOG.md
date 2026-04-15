@@ -14,44 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 本轮采用“子代理并行 + 主线程复核 + 分批提交”的持续收敛模式，已完成长尾文件治理
   - `doc/TECHNICAL_DEBT_REPORT.md` 已同步为最新口径，仅保留最终汇总，不记录批次流水
 
-- **下一类债务收敛完成（ESLint 纯 Flat Config）**：
-  - 已新增并启用 `eslint.config.js`（纯 Flat Config，不再依赖 `FlatCompat`）
-  - 已移除 `ESLINT_USE_FLAT_CONFIG=false`（`package.json` 与 `.lintstagedrc.js`）
-  - 已移除 `.eslintignore`，忽略规则统一并入 Flat Config
-  - 已下线 `.eslintrc.js` 与 `eslint.legacy-config.cjs` 兼容层
+- **下一类债务收敛完成（ESLint 全量治理）**：
+  - 已完成纯 Flat Config 迁移并移除旧链路（`ESLINT_USE_FLAT_CONFIG=false`、`.eslintignore`、`.eslintrc.js`、`eslint.legacy-config.cjs`）
+  - 已扩展 lint 覆盖到 `.vue` 与 `*.config.ts`（`88` 个 Vue SFC、`9` 个配置文件）
+  - 已接入并全量回收 `eslint-plugin-vue` 关键规则（含 `no-mutating-props` 严格模式）
+  - 已完成 `AddConnectionForm*` 子组件 `emit patch` 数据流改造，清零 `no-mutating-props` 临时豁免
   - 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
-  - 校验结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
-
-- **下一批债务推进（Vue lint 覆盖盲区清零）**：
-  - 已移除 `eslint.config.js` 中对 `**/*.vue` 的忽略
-  - 已为 Vue SFC 启用解析与基础校验（`vue-eslint-parser` + `prettier/prettier`）
-  - 已接入 `eslint-plugin-vue` `flat/essential` 规则集（按项目现状暂关闭 5 条高噪声规则）
-  - 全量结果：`88` 个 `.vue` 文件纳入 lint，`errors=0 / warnings=0`
-  - 文档同步：已确认 `@lhci/cli` 在 `test:lighthouse` 中为在用依赖，调整债务报告描述避免误删
-  - 依赖核查：`@types/splitpanes` 不在当前依赖树（`npm ls @types/splitpanes --depth=2` 为空）
-
-- **下一批债务推进（配置文件 lint 覆盖盲区清零）**：
-  - 已移除对 `**/*.config.ts` 的全局忽略
-  - 已为配置文件启用基础校验（`@typescript-eslint/parser` + `prettier/prettier`）
-  - 已纳入 `import` 插件，兼容 `import/no-extraneous-dependencies` 注释规则
-  - 全量结果：`9` 个 `*.config.ts` 文件纳入 lint，`errors=0 / warnings=0`
-
-- **下一批债务推进（Vue 规则回收第二批）**：
-  - 已完成 `vue/no-unused-vars`、`vue/use-v-on-exact`、`vue/multi-word-component-names` 三条规则回收
-  - 已修复 5 处对应违规（3 处未使用模板变量、1 处按键精确修饰、1 处组件命名）
-  - 全量结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
-
-- **下一批债务推进（Vue 规则回收第三批）**：
-  - 已回收 `vue/no-side-effects-in-computed-properties`
-  - 已修复 `StatusCharts.vue` 与 `WorkspaceConnectionList.vue` 中 3 处计算属性副作用
-  - 全量结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
-
-- **下一批债务推进（Vue 规则回收第四批）**：
-  - 已回收 `vue/no-mutating-props`（严格模式）
-  - 已修复 `TagInput.vue`、`StyleCustomizerTerminalTab.vue` 的 2 处直接 prop 变更
-  - 已完成 `AddConnectionFormAuth.vue`、`AddConnectionFormBasicInfo.vue`、`AddConnectionFormAdvanced.vue` 的 `emit patch` 改造
-  - `no-mutating-props` 已全量启用，无临时豁免
-  - 全量结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
+  - 校验结果：`npm run -s lint -- --format json` 持续为 `errors=0 / warnings=0`
 
 ### Security
 

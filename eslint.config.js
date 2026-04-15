@@ -231,7 +231,7 @@ module.exports = [
       ...vueEssentialRules,
       'vue/comment-directive': 'error',
       'vue/jsx-uses-vars': 'error',
-      // 项目存量代码风格：先关闭高噪声规则，后续分批治理
+      // 项目存量规则已完成分批回收，当前为全量启用状态
       'vue/no-mutating-props': 'error',
       'vue/no-side-effects-in-computed-properties': 'error',
       'vue/no-unused-vars': 'error',
