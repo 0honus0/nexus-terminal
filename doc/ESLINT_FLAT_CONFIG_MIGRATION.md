@@ -21,11 +21,24 @@
 4. ✅ `.eslintrc.js` 与 `eslint.legacy-config.cjs` 已下线
 5. ✅ 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
 6. ✅ 全量校验通过：`npm run -s lint -- --format json` => `errors=0 / warnings=0`
+7. ✅ Vue SFC 覆盖扩展完成：移除 `**/*.vue` 忽略，`88` 个 `.vue` 文件纳入 lint 基础校验
+8. ✅ 配置文件覆盖扩展完成：移除 `**/*.config.ts` 忽略，`9` 个配置文件纳入 lint 基础校验
 
 ### 第二阶段（已完成）
 
 1. ✅ 将 `eslint.config.js` 从兼容模式收敛为纯 Flat Config
 2. ✅ 下线 `eslint.legacy-config.cjs`，彻底消除兼容层
+
+### 第三阶段（已完成）
+
+1. ✅ 清理 Vue lint 覆盖盲区：`.vue` 不再被全局忽略
+2. ✅ 启用 `vue-eslint-parser` + `prettier/prettier` 作为 Vue SFC 基础校验
+3. ✅ 接入 `eslint-plugin-vue` `flat/essential` 基线规则（按项目现状暂关闭 5 条高噪声规则）
+
+### 第四阶段（已完成）
+
+1. ✅ 清理配置文件 lint 覆盖盲区：`*.config.ts` 不再被全局忽略
+2. ✅ 为配置文件启用基础校验（`@typescript-eslint/parser` + `prettier/prettier` + `import` 插件）
 
 ## 目标
 
@@ -52,6 +65,9 @@
 3. ✅ 全量校验：`npm run -s lint -- --format json`，总量保持 0。
 4. ✅ 清理兼容开关：去掉脚本中的 `ESLINT_USE_FLAT_CONFIG=false`。
 5. ✅ 纯 Flat Config 收敛：移除 `eslint.legacy-config.cjs` 依赖，改为原生 Flat 配置。
+6. ✅ Vue 覆盖扩展：`.vue` 文件纳入 lint 校验并保持 `errors=0 / warnings=0`。
+7. ✅ Vue 基线增强：`flat/essential` 已接入且保持 `errors=0 / warnings=0`。
+8. ✅ 配置文件覆盖扩展：`*.config.ts` 文件纳入 lint 校验并保持 `errors=0 / warnings=0`。
 
 ## 验收标准
 

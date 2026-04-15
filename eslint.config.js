@@ -2,6 +2,8 @@ const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const importPlugin = require('eslint-plugin-import');
 const prettierPlugin = require('eslint-plugin-prettier');
+const vuePlugin = require('eslint-plugin-vue');
+const vueParser = require('vue-eslint-parser');
 
 const ignores = [
   '**/node_modules/**',
@@ -22,8 +24,6 @@ const ignores = [
   '**/packages/frontend/public/sw.js',
   'packages/frontend/lighthouse.config.js',
   '**/packages/frontend/lighthouse.config.js',
-  '**/*.vue',
-  '**/*.config.ts',
   '**/tests/setup.ts',
   'eslint.legacy-config.cjs',
   '**/eslint.legacy-config.cjs',
@@ -163,6 +163,8 @@ const baseRules = {
   'prettier/prettier': 'error',
 };
 
+const vueEssentialRules = vuePlugin.configs['flat/essential'][2].rules;
+
 module.exports = [
   {
     ignores: [...new Set(ignores)],
@@ -174,6 +176,7 @@ module.exports = [
   },
   {
     files: ['**/*.ts'],
+    ignores: ['**/*.config.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -203,6 +206,56 @@ module.exports = [
     files: ['packages/frontend/e2e/**/*.ts'],
     rules: {
       'import/no-extraneous-dependencies': 'off',
+    },
+  },
+  {
+    // Vue SFC 最小覆盖：先启用解析与基础格式校验，后续再逐步收敛更严格规则
+    files: ['**/*.vue'],
+    languageOptions: {
+      parser: vueParser,
+      parserOptions: {
+        parser: tsParser,
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: ['./packages/*/tsconfig.eslint.json'],
+        tsconfigRootDir: __dirname,
+        extraFileExtensions: ['.vue'],
+      },
+    },
+    plugins: {
+      vue: vuePlugin,
+      prettier: prettierPlugin,
+    },
+    processor: 'vue/vue',
+    rules: {
+      ...vueEssentialRules,
+      'vue/comment-directive': 'error',
+      'vue/jsx-uses-vars': 'error',
+      // 项目存量代码风格：先关闭高噪声规则，后续分批治理
+      'vue/no-mutating-props': 'off',
+      'vue/no-side-effects-in-computed-properties': 'off',
+      'vue/no-unused-vars': 'off',
+      'vue/use-v-on-exact': 'off',
+      'vue/multi-word-component-names': 'off',
+      'prettier/prettier': 'error',
+    },
+  },
+  {
+    // 配置文件覆盖：纳入基础解析与格式校验（不启用类型感知规则）
+    files: ['**/*.config.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      import: importPlugin,
+      prettier: prettierPlugin,
+    },
+    rules: {
+      'prettier/prettier': 'error',
     },
   },
 ];

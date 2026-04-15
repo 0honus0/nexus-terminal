@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
   - 校验结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
 
+- **下一批债务推进（Vue lint 覆盖盲区清零）**：
+  - 已移除 `eslint.config.js` 中对 `**/*.vue` 的忽略
+  - 已为 Vue SFC 启用解析与基础校验（`vue-eslint-parser` + `prettier/prettier`）
+  - 已接入 `eslint-plugin-vue` `flat/essential` 规则集（按项目现状暂关闭 5 条高噪声规则）
+  - 全量结果：`88` 个 `.vue` 文件纳入 lint，`errors=0 / warnings=0`
+  - 文档同步：已确认 `@lhci/cli` 在 `test:lighthouse` 中为在用依赖，调整债务报告描述避免误删
+  - 依赖核查：`@types/splitpanes` 不在当前依赖树（`npm ls @types/splitpanes --depth=2` 为空）
+
+- **下一批债务推进（配置文件 lint 覆盖盲区清零）**：
+  - 已移除对 `**/*.config.ts` 的全局忽略
+  - 已为配置文件启用基础校验（`@typescript-eslint/parser` + `prettier/prettier`）
+  - 已纳入 `import` 插件，兼容 `import/no-extraneous-dependencies` 注释规则
+  - 全量结果：`9` 个 `*.config.ts` 文件纳入 lint，`errors=0 / warnings=0`
+
 ### Security
 
 - **依赖安全债务（最新口径）**：

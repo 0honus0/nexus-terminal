@@ -11,13 +11,16 @@
 
 ### 当前债务总览（最新口径）
 
-| 类别             | 当前状态      | 说明                                                                |
-| ---------------- | ------------- | ------------------------------------------------------------------- |
-| Lint 债务        | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                    |
-| Lint 错误        | ✅ 0 errors   | 当前无阻断错误                                                      |
-| 修复方式         | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                  |
-| 文档口径         | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”       |
-| 下一类债务（新） | ✅ 已完成     | Flat Config 已收敛为纯配置，旧链路（`.eslintrc.js` / 兼容层）已下线 |
+| 类别               | 当前状态      | 说明                                                                |
+| ------------------ | ------------- | ------------------------------------------------------------------- |
+| Lint 债务          | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                    |
+| Lint 错误          | ✅ 0 errors   | 当前无阻断错误                                                      |
+| 修复方式           | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                  |
+| 文档口径           | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”       |
+| 下一类债务（新）   | ✅ 已完成     | Flat Config 已收敛为纯配置，旧链路（`.eslintrc.js` / 兼容层）已下线 |
+| Vue lint 覆盖      | ✅ 已完成     | `.vue` 已从忽略列表移除，88 个 SFC 文件纳入 lint（基础校验）        |
+| Vue 规则基线       | ✅ 已完成     | 已接入 `eslint-plugin-vue` `flat/essential`，并保持 lint 结果清零   |
+| 配置文件 lint 覆盖 | ✅ 已完成     | `*.config.ts` 已纳入 lint，9 个配置文件通过基础校验                 |
 
 ### 本轮最终结果（2026-04-15）
 
@@ -41,6 +44,9 @@
   - `.eslintrc.js` 与 `eslint.legacy-config.cjs` 已下线（不再依赖 `FlatCompat`）
   - 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
   - 验证结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
+  - 覆盖扩展：`.vue` 已纳入 lint（`vue-eslint-parser` + `prettier/prettier`），`88` 个 SFC 文件为 `errors=0 / warnings=0`
+  - 基线增强：接入 `eslint-plugin-vue` `flat/essential`，并按项目现状临时关闭 5 条高噪声规则后保持 `errors=0 / warnings=0`
+  - 覆盖扩展：`*.config.ts` 已纳入 lint（基础校验），当前 `9` 个配置文件为 `errors=0 / warnings=0`
 
 ---
 
@@ -1066,6 +1072,8 @@ fi
 
 #### 2. ESLint 栈溢出漏洞
 
+> ✅ **闭环状态（2026-04-15）**：该项已完成治理，以下清单保留为历史执行记录。
+
 **CVE**: GHSA-p5wg-g6qr-c7cg
 **受影响包**: eslint@8.57.1 (已 EOL) + 6 个相关插件
 **根本原因**: ESLint < 9.26.0 存在循环引用对象序列化栈溢出
@@ -1074,17 +1082,18 @@ fi
 
 **修复方案**:
 
-- [ ] 创建独立分支 `chore/eslint-v9-migration`
-- [ ] 升级 ESLint 到 9.26.0+
-- [ ] 迁移配置到 Flat Config (eslint.config.js)
-- [ ] 升级 TypeScript ESLint 插件到 v8+
-- [ ] 更新 Airbnb 配置规则集
-- [ ] 修复所有新检查规则的 lint 错误
-- [ ] 验证 CI 流程和 VS Code 扩展兼容性
+- [x] 创建独立分支 `chore/eslint-v9-migration`
+- [x] 升级 ESLint 到 9.26.0+
+- [x] 迁移配置到 Flat Config (eslint.config.js)
+- [x] 升级 TypeScript ESLint 插件到 v8+
+- [x] 更新 Airbnb 配置规则集（已完成下线清理）
+- [x] 修复所有新检查规则的 lint 错误
+- [x] 验证 CI 流程和 VS Code 扩展兼容性
 
 **预计工作量**: 2-3 人天
 **计划时间**: 2026-03-31 (Q1 技术债务清理)
-**负责人**: 待分配
+**实际完成**: 2026-04-15
+**负责人**: 工程治理（并行修复）
 
 ---
 
@@ -1102,15 +1111,22 @@ fi
 **业务影响**: 无 (仅开发/测试工具)
 **风险等级**: 🟢 极低
 
+> ✅ **闭环状态（2026-04-15）**：该项已完成核查收敛，以下清单保留为历史执行记录。
+
 **修复方案**:
 
-- [ ] 审查并移除未使用的开发依赖 (@lhci/cli, lighthouse)
-- [ ] 验证 @types/splitpanes 的必要性
-- [ ] 清理过时的类型定义依赖
+- [x] 审查并移除未使用的开发依赖 (@lhci/cli, lighthouse)（已核实 `@lhci/cli` 被 `test:lighthouse` 使用，暂不移除）
+- [x] 验证 @types/splitpanes 的必要性（项目未安装 `@types/splitpanes`，改为本地 `splitpanes.d.ts` 维护）
+- [x] 清理过时的类型定义依赖（相关历史口径已收敛）
 
 **预计工作量**: 0.5 人天
 **计划时间**: 2026-06-30 (Q2 依赖清理)
 **负责人**: 待分配
+
+**补充说明（2026-04-15）**：
+
+- 已确认 `packages/frontend/package.json` 中 `test:lighthouse` 脚本仍依赖 `@lhci/cli`（`lhci autorun`），该依赖当前属于在用工具链。
+- `npm ls @types/splitpanes --depth=2` 结果为空，确认该类型包不在当前依赖树中。
 
 ---
 
