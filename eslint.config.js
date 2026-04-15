@@ -25,8 +25,6 @@ const ignores = [
   'packages/frontend/lighthouse.config.js',
   '**/packages/frontend/lighthouse.config.js',
   '**/tests/setup.ts',
-  'eslint.legacy-config.cjs',
-  '**/eslint.legacy-config.cjs',
   '.prettierrc.js',
   '**/.prettierrc.js',
   '.lintstagedrc.js',
