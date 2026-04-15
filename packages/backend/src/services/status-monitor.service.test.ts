@@ -231,10 +231,16 @@ describe('StatusMonitorService', () => {
       const mockWs = createMockWebSocket(1); // OPEN
 
       // 模拟 SSH 命令执行
-      mockClient.exec.mockImplementation((cmd: string, callback: Function) => {
-        const stream = createMockStream('test output');
-        callback(null, stream);
-      });
+      mockClient.exec.mockImplementation(
+        (_cmd: string, optionsOrCallback: unknown, callback?: Function) => {
+          const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+          if (!cb) {
+            return;
+          }
+          const stream = createMockStream('test output');
+          cb(null, stream);
+        }
+      );
 
       clientStates.set('session-send', {
         sshClient: mockClient,
@@ -249,6 +255,10 @@ describe('StatusMonitorService', () => {
       await vi.advanceTimersByTimeAsync(3000);
 
       expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('"type":"status_update"'));
+      expect(mockClient.exec).toHaveBeenCalled();
+      expect(mockClient.exec.mock.calls[0][1]).toMatchObject({
+        env: { LC_ALL: 'C' },
+      });
     });
 
     it('单个命令失败时仍应发送 status_update（内部有错误容忍）', async () => {
@@ -256,9 +266,15 @@ describe('StatusMonitorService', () => {
       const mockWs = createMockWebSocket(1);
 
       // 模拟命令执行失败 - 但服务内部会捕获这些错误并继续
-      mockClient.exec.mockImplementation((cmd: string, callback: Function) => {
-        callback(new Error('SSH exec failed'), null);
-      });
+      mockClient.exec.mockImplementation(
+        (_cmd: string, optionsOrCallback: unknown, callback?: Function) => {
+          const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+          if (!cb) {
+            return;
+          }
+          cb(new Error('SSH exec failed'), null);
+        }
+      );
 
       clientStates.set('session-error', {
         sshClient: mockClient,
