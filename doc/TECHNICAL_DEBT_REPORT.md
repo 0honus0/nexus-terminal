@@ -56,6 +56,18 @@
   - 规则回收：`vue/no-mutating-props` 已以严格模式恢复启用，修复 2 处直接 prop 变更；`AddConnectionFormAuth.vue`、`AddConnectionFormBasicInfo.vue`、`AddConnectionFormAdvanced.vue` 均已完成 `emit patch` 改造并移除豁免
   - 防回归治理：新增 `scripts/check-tech-debt.js` 与 `npm run debt:check`，并接入 `.lintstagedrc.js` 与 `.github/workflows/audit.yml`
 
+### 下一批待完成（下次续做）
+
+1. **WebSocket 消息总线泛型化（类型债务专项）**
+   - 目标：将 `packages/frontend/src/types/websocket.types.ts` 的 `MessagePayload` 从宽泛 `any` 逐步收敛为可判定的联合类型/泛型消息模型。
+   - 范围：`useWebSocketConnection.ts`、`useSftpActions.ts`、`useSshTerminal.ts`、`useStatusMonitor.ts`、`useFileUploader.ts`、`FileManager.vue` 及相关消息处理回调。
+   - 验收：`npm run -w @nexus-terminal/frontend -s typecheck` 通过，且不新增 `@ts-ignore`/`@ts-expect-error`。
+
+2. **质量门禁扩展到 Backend/Remote-Gateway 类型检查**
+   - 目标：在现有 `quality:check`（已含 debt + frontend typecheck + lint + format）基础上，纳入 backend 与 remote-gateway 的类型检查。
+   - 范围：补充根脚本（如 `typecheck:backend`、`typecheck:remote-gateway`）并接入 `quality:check`；必要时同步 `quality.yml` 说明。
+   - 验收：`npm run -s quality:check` 在本地与 CI 均稳定通过，出现类型回归时可直接阻断。
+
 ---
 
 ## 2026-04-13 复查快照
