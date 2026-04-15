@@ -533,7 +533,7 @@ const handleQuickCommandExecute = (command: string) => {
           'w-full': props.isMobile,
         }"
         data-focus-id="terminalSearch"
-        @keydown.enter.prevent="findNext"
+        @keydown.enter.exact.prevent="findNext"
         @keydown.shift.enter.prevent="findPrevious"
         @keydown.up.prevent="findPrevious"
         @keydown.down.prevent="findNext"

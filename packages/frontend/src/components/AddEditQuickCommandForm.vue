@@ -29,7 +29,7 @@
               {{ t('quickCommands.form.noVariables', '暂无变量。点击下方按钮添加。') }}
             </div>
             <div
-              v-for="(variable, index) in localVariables"
+              v-for="variable in localVariables"
               :key="variable.id"
               class="p-2.5 border border-border/40 rounded-lg bg-input/30 space-y-2"
             >

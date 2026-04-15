@@ -36,6 +36,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 已纳入 `import` 插件，兼容 `import/no-extraneous-dependencies` 注释规则
   - 全量结果：`9` 个 `*.config.ts` 文件纳入 lint，`errors=0 / warnings=0`
 
+- **下一批债务推进（Vue 规则回收第二批）**：
+  - 已完成 `vue/no-unused-vars`、`vue/use-v-on-exact`、`vue/multi-word-component-names` 三条规则回收
+  - 已修复 5 处对应违规（3 处未使用模板变量、1 处按键精确修饰、1 处组件命名）
+  - 全量结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
+
+- **下一批债务推进（Vue 规则回收第三批）**：
+  - 已回收 `vue/no-side-effects-in-computed-properties`
+  - 已修复 `StatusCharts.vue` 与 `WorkspaceConnectionList.vue` 中 3 处计算属性副作用
+  - 全量结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
+
+- **下一批债务推进（Vue 规则回收第四批）**：
+  - 已回收 `vue/no-mutating-props`（严格模式）
+  - 已修复 `TagInput.vue`、`StyleCustomizerTerminalTab.vue` 的 2 处直接 prop 变更
+  - 已完成 `AddConnectionFormAuth.vue`、`AddConnectionFormBasicInfo.vue`、`AddConnectionFormAdvanced.vue` 的 `emit patch` 改造
+  - `no-mutating-props` 已全量启用，无临时豁免
+  - 全量结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
+
 ### Security
 
 - **依赖安全债务（最新口径）**：

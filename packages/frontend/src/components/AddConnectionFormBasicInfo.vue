@@ -12,7 +12,15 @@ const props = defineProps<{
   };
 }>();
 
+const emit = defineEmits<{
+  (e: 'patch-form-data', patch: Partial<typeof props.formData>): void;
+}>();
+
 const { t } = useI18n();
+
+const patchFormData = (patch: Partial<typeof props.formData>) => {
+  emit('patch-form-data', patch);
+};
 
 // Tooltip state and refs for the host input
 const showHostTooltip = ref(false);
@@ -85,7 +93,8 @@ const handleHostIconMouseLeave = () => {
       <input
         type="text"
         id="conn-name"
-        v-model="props.formData.name"
+        :value="props.formData.name"
+        @input="patchFormData({ name: ($event.target as HTMLInputElement).value })"
         class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
       />
     </div>
@@ -97,7 +106,7 @@ const handleHostIconMouseLeave = () => {
       <div class="flex rounded-md shadow-sm">
         <button
           type="button"
-          @click="props.formData.type = 'SSH'"
+          @click="patchFormData({ type: 'SSH' })"
           :class="[
             'flex-1 px-3 py-2 border border-border text-sm font-medium focus:outline-none',
             props.formData.type === 'SSH'
@@ -110,7 +119,7 @@ const handleHostIconMouseLeave = () => {
         </button>
         <button
           type="button"
-          @click="props.formData.type = 'RDP'"
+          @click="patchFormData({ type: 'RDP' })"
           :class="[
             'flex-1 px-3 py-2 border-t border-b border-r border-border text-sm font-medium focus:outline-none -ml-px',
             props.formData.type === 'RDP'
@@ -122,7 +131,7 @@ const handleHostIconMouseLeave = () => {
         </button>
         <button
           type="button"
-          @click="props.formData.type = 'VNC'"
+          @click="patchFormData({ type: 'VNC' })"
           :class="[
             'flex-1 px-3 py-2 border border-border text-sm font-medium focus:outline-none -ml-px',
             props.formData.type === 'VNC'
@@ -154,7 +163,8 @@ const handleHostIconMouseLeave = () => {
         <input
           type="text"
           id="conn-host"
-          v-model="props.formData.host"
+          :value="props.formData.host"
+          @input="patchFormData({ host: ($event.target as HTMLInputElement).value })"
           required
           class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
         />
@@ -166,7 +176,12 @@ const handleHostIconMouseLeave = () => {
         <input
           type="number"
           id="conn-port"
-          v-model.number="props.formData.port"
+          :value="props.formData.port"
+          @input="
+            patchFormData({
+              port: Number(($event.target as HTMLInputElement).value || props.formData.port),
+            })
+          "
           required
           min="1"
           max="65535"

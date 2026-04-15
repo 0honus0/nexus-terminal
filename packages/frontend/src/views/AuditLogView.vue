@@ -96,7 +96,7 @@
         <div v-bind="containerProps" class="flex-grow overflow-auto custom-scrollbar">
           <div v-bind="wrapperProps">
             <div
-              v-for="{ data: log, index } in list"
+              v-for="{ data: log } in list"
               :key="log.id"
               class="flex border-b border-border hover:bg-header/50 text-sm py-4 px-4 items-start"
               :style="{ minHeight: '60px' }"

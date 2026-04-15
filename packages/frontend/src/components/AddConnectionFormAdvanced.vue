@@ -39,6 +39,16 @@ const emit = defineEmits<{
   (e: 'create-tag', tagName: string): void;
   (e: 'delete-tag', tagId: number): void;
   (e: 'update:advancedConnectionMode', mode: 'proxy' | 'jump'): void;
+  (
+    e: 'patch-form-data',
+    patch: Partial<{
+      proxy_id: number | null;
+      jump_chain: Array<number | null> | null;
+      tag_ids: number[];
+      notes: string;
+      force_keyboard_interactive: boolean;
+    }>
+  ): void;
 }>();
 
 const { t } = useI18n();
@@ -49,6 +59,40 @@ const handleCreateTagEvent = (tagName: string) => {
 
 const handleDeleteTagEvent = (tagId: number) => {
   emit('delete-tag', tagId);
+};
+
+const patchFormData = (
+  patch: Partial<{
+    proxy_id: number | null;
+    jump_chain: Array<number | null> | null;
+    tag_ids: number[];
+    notes: string;
+    force_keyboard_interactive: boolean;
+  }>
+) => {
+  emit('patch-form-data', patch);
+};
+
+const handleProxyIdChange = (value: string) => {
+  patchFormData({ proxy_id: value === '' ? null : Number(value) });
+};
+
+const handleJumpHostChange = (index: number, value: string) => {
+  const nextJumpChain = [...(props.formData.jump_chain ?? [])];
+  nextJumpChain[index] = value === '' ? null : Number(value);
+  patchFormData({ jump_chain: nextJumpChain });
+};
+
+const handleForceKeyboardInteractiveChange = (checked: boolean) => {
+  patchFormData({ force_keyboard_interactive: checked });
+};
+
+const handleTagIdsUpdate = (tagIds: number[]) => {
+  patchFormData({ tag_ids: tagIds });
+};
+
+const handleNotesInput = (value: string) => {
+  patchFormData({ notes: value });
 };
 
 const setConnectionMode = (mode: 'proxy' | 'jump') => {
@@ -114,7 +158,8 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
       >
       <select
         id="conn-proxy"
-        v-model="props.formData.proxy_id"
+        :value="props.formData.proxy_id ?? ''"
+        @change="handleProxyIdChange(($event.target as HTMLSelectElement).value)"
         class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary appearance-none bg-no-repeat bg-right pr-8"
         style="
           background-image: url(&quot;data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e&quot;);
@@ -157,7 +202,8 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
             >{{ t('connections.form.jumpHostLabel', '跳板机') }} {{ index + 1 }}:</span
           >
           <select
-            v-model="props.formData.jump_chain[index]"
+            :value="jumpHostId ?? ''"
+            @change="handleJumpHostChange(index, ($event.target as HTMLSelectElement).value)"
             class="flex-grow px-3 py-1.5 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary appearance-none bg-no-repeat bg-right pr-8"
             style="
               background-image: url(&quot;data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e&quot;);
@@ -253,7 +299,10 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
       <label class="relative inline-flex items-center cursor-pointer">
         <input
           type="checkbox"
-          v-model="props.formData.force_keyboard_interactive"
+          :checked="props.formData.force_keyboard_interactive"
+          @change="
+            handleForceKeyboardInteractiveChange(($event.target as HTMLInputElement).checked)
+          "
           class="sr-only peer"
         />
         <div
@@ -267,7 +316,8 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
         >{{ t('connections.form.tags') }} ({{ t('connections.form.optional') }})</label
       >
       <TagInput
-        v-model="props.formData.tag_ids"
+        :model-value="props.formData.tag_ids"
+        @update:model-value="handleTagIdsUpdate"
         :available-tags="props.tags"
         :allow-create="true"
         :allow-delete="true"
@@ -290,7 +340,8 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
       }}</label>
       <textarea
         id="conn-notes"
-        v-model="props.formData.notes"
+        :value="props.formData.notes"
+        @input="handleNotesInput(($event.target as HTMLTextAreaElement).value)"
         rows="3"
         class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
         :placeholder="t('connections.form.notesPlaceholder', '输入连接备注...')"

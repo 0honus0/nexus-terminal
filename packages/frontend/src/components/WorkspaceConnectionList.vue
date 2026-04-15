@@ -193,10 +193,6 @@ const filteredAndGroupedConnections = computed(() => {
           const groupName = tag.name;
           if (!groups[groupName]) {
             groups[groupName] = { connections: [], tagId: tag.id }; // 修改：存储 tagId
-            // Initialize expanded state only if not already set
-            if (expandedGroups.value[groupName] === undefined) {
-              expandedGroups.value[groupName] = true; // Default to expanded
-            }
           }
           // Avoid duplicates if a connection has multiple tags matching the search
           if (!groups[groupName].connections.some((c) => c.id === conn.id)) {
@@ -236,16 +232,24 @@ const filteredAndGroupedConnections = computed(() => {
 
   if (untagged.length > 0) {
     const untaggedGroupName = t('workspaceConnectionList.untagged');
-    // Initialize expanded state only if not already set
-    if (expandedGroups.value[untaggedGroupName] === undefined) {
-      expandedGroups.value[untaggedGroupName] = true; // Default to expanded
-    }
     // 未标记的分组没有 tagId
     result.push({ groupName: untaggedGroupName, connections: untagged, tagId: null });
   }
 
   return result;
 });
+
+watch(
+  filteredAndGroupedConnections,
+  (groups) => {
+    for (const group of groups) {
+      if (expandedGroups.value[group.groupName] === undefined) {
+        expandedGroups.value[group.groupName] = true;
+      }
+    }
+  },
+  { immediate: true }
+);
 
 // 计算属性，仅过滤，不分组 (用于 showConnectionTagsBoolean 为 false 时)
 const flatFilteredConnections = computed(() => {
@@ -1062,7 +1066,7 @@ const cancelEditingTag = () => {
           <div v-else-if="shouldUseVirtualList" v-bind="containerProps" class="h-full">
             <ul v-bind="wrapperProps" class="list-none p-0 m-0">
               <li
-                v-for="{ data: conn, index } in virtualList"
+                v-for="{ data: conn } in virtualList"
                 :key="conn.id"
                 class="group my-0.5 py-2 pr-3 pl-4 cursor-pointer flex items-center rounded-md whitespace-nowrap overflow-hidden text-ellipsis text-foreground hover:bg-primary/10 transition-colors duration-150"
                 :class="{ 'bg-primary/20 font-medium': conn.id === highlightedConnectionId }"

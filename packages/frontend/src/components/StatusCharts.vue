@@ -114,8 +114,33 @@ const cpuChartKey = ref(0);
 const memoryChartKey = ref(0);
 const networkChartKey = ref(0);
 
-const networkRateUnitIsMB = ref(false);
-const memoryUnitIsGB = ref(false);
+const memoryUnitIsGB = computed(() => {
+  const historyMB = currentMemUsedHistory.value;
+  const currentTotalMB = props.serverStatus?.memTotal ?? 0;
+  const historyPeakMB = Math.max(...historyMB.filter((v): v is number => v !== null), 0);
+  return currentTotalMB >= MB_TO_GB_THRESHOLD || historyPeakMB >= MB_TO_GB_THRESHOLD;
+});
+
+const networkRateUnitIsMB = computed(() => {
+  const historyRxBps = currentNetRxHistory.value;
+  const historyTxBps = currentNetTxHistory.value;
+  const currentRxKB = (props.serverStatus?.netRxRate ?? 0) / 1024;
+  const currentTxKB = (props.serverStatus?.netTxRate ?? 0) / 1024;
+  const historyPeakRxKB = Math.max(
+    ...historyRxBps.filter((v): v is number => v !== null).map((bps) => bps / 1024),
+    0
+  );
+  const historyPeakTxKB = Math.max(
+    ...historyTxBps.filter((v): v is number => v !== null).map((bps) => bps / 1024),
+    0
+  );
+  return (
+    currentRxKB >= KB_TO_MB_THRESHOLD ||
+    currentTxKB >= KB_TO_MB_THRESHOLD ||
+    historyPeakRxKB >= KB_TO_MB_THRESHOLD ||
+    historyPeakTxKB >= KB_TO_MB_THRESHOLD
+  );
+});
 
 // const networkChartTitle = ref('网络速度 (KB/s)'); // Will be replaced by i18n
 // const memoryChartTitle = ref('内存使用情况 (MB)'); // Will be replaced by i18n
@@ -172,11 +197,7 @@ const memoryChartData = computed(() => {
   const historyMB = currentMemUsedHistory.value;
   let displayData: (number | null)[];
 
-  // 检查是否需要转换为 GB (基于当前值或历史峰值)
-  const currentTotalMB = props.serverStatus?.memTotal ?? 0;
-  const historyPeakMB = Math.max(...historyMB.filter((v): v is number => v !== null), 0);
-  const requiresGB = currentTotalMB >= MB_TO_GB_THRESHOLD || historyPeakMB >= MB_TO_GB_THRESHOLD;
-  memoryUnitIsGB.value = requiresGB; // 更新单位标志
+  const requiresGB = memoryUnitIsGB.value;
 
   if (requiresGB) {
     displayData = historyMB.map((mb) =>
@@ -210,23 +231,7 @@ const networkChartData = computed(() => {
   let displayRxData: (number | null)[];
   let displayTxData: (number | null)[];
 
-  // 检查是否需要转换为 MB/s (基于当前值或历史峰值)
-  const currentRxKB = (props.serverStatus?.netRxRate ?? 0) / 1024;
-  const currentTxKB = (props.serverStatus?.netTxRate ?? 0) / 1024;
-  const historyPeakRxKB = Math.max(
-    ...historyRxBps.filter((v): v is number => v !== null).map((bps) => bps / 1024),
-    0
-  );
-  const historyPeakTxKB = Math.max(
-    ...historyTxBps.filter((v): v is number => v !== null).map((bps) => bps / 1024),
-    0
-  );
-  const requiresMB =
-    currentRxKB >= KB_TO_MB_THRESHOLD ||
-    currentTxKB >= KB_TO_MB_THRESHOLD ||
-    historyPeakRxKB >= KB_TO_MB_THRESHOLD ||
-    historyPeakTxKB >= KB_TO_MB_THRESHOLD;
-  networkRateUnitIsMB.value = requiresMB; // 更新单位标志
+  const requiresMB = networkRateUnitIsMB.value;
 
   const divisor = requiresMB ? 1024 * 1024 : 1024;
   const precision = requiresMB ? 2 : 1;

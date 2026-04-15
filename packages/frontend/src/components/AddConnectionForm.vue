@@ -56,6 +56,10 @@ const handleAdvancedConnectionModeUpdate = (newMode: 'proxy' | 'jump') => {
   advancedConnectionMode.value = newMode;
 };
 
+const handleFormDataPatch = (patch: Partial<typeof formData>) => {
+  Object.assign(formData, patch);
+};
+
 // Tooltip state and refs - Kept in component as it's purely view-related
 const showHostTooltip = ref(false);
 const hostTooltipStyle = ref({});
@@ -112,8 +116,15 @@ const handleHostIconMouseLeave = () => {
 
         <!-- Regular Form Sections (conditionally rendered) -->
         <template v-if="!isScriptModeActive">
-          <AddConnectionFormBasicInfo :form-data="formData" />
-          <AddConnectionFormAuth :form-data="formData" :is-edit-mode="isEditMode" />
+          <AddConnectionFormBasicInfo
+            :form-data="formData"
+            @patch-form-data="handleFormDataPatch"
+          />
+          <AddConnectionFormAuth
+            :form-data="formData"
+            :is-edit-mode="isEditMode"
+            @patch-form-data="handleFormDataPatch"
+          />
           <AddConnectionFormAdvanced
             :form-data="formData"
             :proxies="proxies"
@@ -129,6 +140,7 @@ const handleHostIconMouseLeave = () => {
             :remove-jump-host="removeJumpHost"
             @create-tag="handleCreateTag"
             @delete-tag="handleDeleteTag"
+            @patch-form-data="handleFormDataPatch"
           />
         </template>
 

@@ -36,13 +36,16 @@ const placeholder = computed(
 );
 const allowCreate = computed(() => props.allowCreate !== false); // Default true
 const allowDelete = computed(() => props.allowDelete !== false); // Default true
+const normalizeIds = (ids: number[]) => [...ids].sort((a, b) => a - b);
 
 // 监听 props.modelValue 的变化，同步到本地 selectedTagIds
 watch(
   () => props.modelValue,
   (newVal) => {
     // 只有在值确实不同的情况下才更新，避免无限循环
-    if (JSON.stringify(newVal.sort()) !== JSON.stringify(selectedTagIds.value.sort())) {
+    if (
+      JSON.stringify(normalizeIds(newVal)) !== JSON.stringify(normalizeIds(selectedTagIds.value))
+    ) {
       selectedTagIds.value = [...newVal];
     }
   },
@@ -54,7 +57,7 @@ watch(
   selectedTagIds,
   (newVal) => {
     // 只有在值确实不同的情况下才更新，避免无限循环
-    if (JSON.stringify(newVal.sort()) !== JSON.stringify(props.modelValue.sort())) {
+    if (JSON.stringify(normalizeIds(newVal)) !== JSON.stringify(normalizeIds(props.modelValue))) {
       emit('update:modelValue', [...newVal]);
     }
   },

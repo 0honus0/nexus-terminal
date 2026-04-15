@@ -33,12 +33,33 @@
 
 1. ✅ 清理 Vue lint 覆盖盲区：`.vue` 不再被全局忽略
 2. ✅ 启用 `vue-eslint-parser` + `prettier/prettier` 作为 Vue SFC 基础校验
-3. ✅ 接入 `eslint-plugin-vue` `flat/essential` 基线规则（按项目现状暂关闭 5 条高噪声规则）
+3. ✅ 接入 `eslint-plugin-vue` `flat/essential` 基线规则（存量规则分批回收）
 
 ### 第四阶段（已完成）
 
 1. ✅ 清理配置文件 lint 覆盖盲区：`*.config.ts` 不再被全局忽略
 2. ✅ 为配置文件启用基础校验（`@typescript-eslint/parser` + `prettier/prettier` + `import` 插件）
+
+### 第五阶段（已完成）
+
+1. ✅ 回收 `vue/no-unused-vars`
+2. ✅ 回收 `vue/use-v-on-exact`
+3. ✅ 回收 `vue/multi-word-component-names`
+4. ✅ 对应违规修复后，全量 lint 仍保持 `errors=0 / warnings=0`
+
+### 第六阶段（已完成）
+
+1. ✅ 回收 `vue/no-side-effects-in-computed-properties`
+2. ✅ 通过“计算属性纯化 + watch 外置副作用”修复 3 处违规
+3. ✅ 全量 lint 仍保持 `errors=0 / warnings=0`
+
+### 第七阶段（已完成）
+
+1. ✅ 回收 `vue/no-mutating-props`（严格模式）
+2. ✅ 修复 2 处直接 prop 变更（`TagInput.vue`、`StyleCustomizerTerminalTab.vue`）
+3. ✅ 完成 `AddConnectionFormAuth.vue`、`AddConnectionFormBasicInfo.vue`、`AddConnectionFormAdvanced.vue` 的 `emit patch` 改造
+4. ✅ 移除全部临时豁免，`vue/no-mutating-props` 全量启用
+5. ✅ 全量 lint 仍保持 `errors=0 / warnings=0`
 
 ## 目标
 
@@ -68,6 +89,9 @@
 6. ✅ Vue 覆盖扩展：`.vue` 文件纳入 lint 校验并保持 `errors=0 / warnings=0`。
 7. ✅ Vue 基线增强：`flat/essential` 已接入且保持 `errors=0 / warnings=0`。
 8. ✅ 配置文件覆盖扩展：`*.config.ts` 文件纳入 lint 校验并保持 `errors=0 / warnings=0`。
+9. ✅ Vue 规则回收第二批：3 条规则恢复启用并保持 `errors=0 / warnings=0`。
+10. ✅ Vue 规则回收第三批：`vue/no-side-effects-in-computed-properties` 已恢复启用并保持 `errors=0 / warnings=0`。
+11. ✅ Vue 规则回收第四批：`vue/no-mutating-props` 已以严格模式全量恢复启用（无临时豁免）并保持 `errors=0 / warnings=0`。
 
 ## 验收标准
 

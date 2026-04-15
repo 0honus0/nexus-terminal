@@ -15,7 +15,15 @@ const props = defineProps<{
   isEditMode: boolean; // To determine if fields are required
 }>();
 
+const emit = defineEmits<{
+  (e: 'patch-form-data', patch: Partial<typeof props.formData>): void;
+}>();
+
 const { t } = useI18n();
+
+const patchFormData = (patch: Partial<typeof props.formData>) => {
+  emit('patch-form-data', patch);
+};
 </script>
 
 <template>
@@ -31,7 +39,8 @@ const { t } = useI18n();
       <input
         type="text"
         id="conn-username"
-        v-model="props.formData.username"
+        :value="props.formData.username"
+        @input="patchFormData({ username: ($event.target as HTMLInputElement).value })"
         required
         class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
       />
@@ -46,7 +55,7 @@ const { t } = useI18n();
         <div class="flex rounded-md shadow-sm">
           <button
             type="button"
-            @click="props.formData.auth_method = 'password'"
+            @click="patchFormData({ auth_method: 'password' })"
             :class="[
               'flex-1 px-3 py-2 border border-border text-sm font-medium focus:outline-none',
               props.formData.auth_method === 'password'
@@ -59,7 +68,7 @@ const { t } = useI18n();
           </button>
           <button
             type="button"
-            @click="props.formData.auth_method = 'key'"
+            @click="patchFormData({ auth_method: 'key' })"
             :class="[
               'flex-1 px-3 py-2 border-t border-b border-r border-border text-sm font-medium focus:outline-none -ml-px',
               props.formData.auth_method === 'key'
@@ -80,7 +89,8 @@ const { t } = useI18n();
         <input
           type="password"
           id="conn-password"
-          v-model="props.formData.password"
+          :value="props.formData.password"
+          @input="patchFormData({ password: ($event.target as HTMLInputElement).value })"
           :required="props.formData.auth_method === 'password' && !isEditMode"
           autocomplete="new-password"
           class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
@@ -92,7 +102,10 @@ const { t } = useI18n();
           <label class="block text-sm font-medium text-text-secondary mb-1">{{
             t('connections.form.sshKey')
           }}</label>
-          <SshKeySelector v-model="props.formData.selected_ssh_key_id" />
+          <SshKeySelector
+            :model-value="props.formData.selected_ssh_key_id"
+            @update:model-value="(value) => patchFormData({ selected_ssh_key_id: value })"
+          />
         </div>
       </div>
     </template>
@@ -106,7 +119,8 @@ const { t } = useI18n();
         <input
           type="password"
           id="conn-password-rdp"
-          v-model="props.formData.password"
+          :value="props.formData.password"
+          @input="patchFormData({ password: ($event.target as HTMLInputElement).value })"
           :required="!isEditMode"
           autocomplete="new-password"
           class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
@@ -123,7 +137,8 @@ const { t } = useI18n();
         <input
           type="password"
           id="conn-password-vnc"
-          v-model="props.formData.vncPassword"
+          :value="props.formData.vncPassword"
+          @input="patchFormData({ vncPassword: ($event.target as HTMLInputElement).value })"
           :required="!isEditMode"
           autocomplete="new-password"
           class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"

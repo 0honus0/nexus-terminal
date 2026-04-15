@@ -25,6 +25,16 @@ const emit = defineEmits<{
   (e: 'update:editingTheme', value: TerminalTheme | null): void;
 }>();
 
+const editingThemeName = computed({
+  get: () => props.editingTheme?.name ?? '',
+  set: (value: string) => {
+    if (!props.editingTheme) {
+      return;
+    }
+    emit('update:editingTheme', { ...props.editingTheme, name: value });
+  },
+});
+
 const {
   allTerminalThemes,
   activeTerminalThemeId,
@@ -962,7 +972,7 @@ watch(
       <input
         type="text"
         id="editingThemeName"
-        v-model="editingTheme.name"
+        v-model="editingThemeName"
         required
         class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       />

@@ -16,6 +16,10 @@ import {
   useWorkspaceEventOff,
 } from '../../composables/workspaceEvents';
 
+defineOptions({
+  name: 'WorkspaceTerminal',
+});
+
 // Import extracted composables
 import { useTerminalFit } from '../../composables/terminal/useTerminalFit';
 import { useTerminalSocket } from '../../composables/terminal/useTerminalSocket';
