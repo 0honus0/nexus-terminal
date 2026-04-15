@@ -3,7 +3,7 @@
 > **生成时间**：2025-12-23 | **更新时间**：2026-04-15（最新复查）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：🟢 持续治理中（ESLint warning: 0，error: 0）
+> **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 第一阶段完成）
 
 ---
 
@@ -11,13 +11,13 @@
 
 ### 当前债务总览（最新口径）
 
-| 类别             | 当前状态      | 说明                                                                   |
-| ---------------- | ------------- | ---------------------------------------------------------------------- |
-| Lint 债务        | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                       |
-| Lint 错误        | ✅ 0 errors   | 当前无阻断错误                                                         |
-| 修复方式         | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                     |
-| 文档口径         | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”          |
-| 下一类债务（新） | 🟡 已启动     | `ESLintRCWarning`（`eslintrc` -> `eslint.config.js` Flat Config 迁移） |
+| 类别             | 当前状态      | 说明                                                                     |
+| ---------------- | ------------- | ------------------------------------------------------------------------ |
+| Lint 债务        | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                         |
+| Lint 错误        | ✅ 0 errors   | 当前无阻断错误                                                           |
+| 修复方式         | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                       |
+| 文档口径         | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”            |
+| 下一类债务（新） | 🟡 进行中     | Flat Config 第一阶段完成（兼容迁移已落地，进入 `.eslintrc.js` 下线阶段） |
 
 ### 本轮最终结果（2026-04-15）
 
@@ -30,13 +30,15 @@
   - `96960f8`：收敛 AI 审计与前端 store
   - `7b1e1bf`：清零剩余 warnings
 
-### 下一类债务启动记录（2026-04-15）
+### 下一类债务推进记录（2026-04-15）
 
 - 类别：ESLint Flat Config 迁移债务
-- 触发依据：全量 lint 已清零，但仍存在 `ESLintRCWarning` 迁移提示
+- 触发依据：全量 lint 已清零，需要消除旧配置链路并统一到 Flat Config
 - 已落地：
-  - 新增迁移跟踪文档 `doc/ESLINT_FLAT_CONFIG_MIGRATION.md`
-  - 明确迁移目标：移除 `ESLINT_USE_FLAT_CONFIG=false`，切换至 `eslint.config.js`
+  - 新增并启用 `eslint.config.js`（`FlatCompat` 承接旧规则）
+  - `package.json` 与 `.lintstagedrc.js` 已移除 `ESLINT_USE_FLAT_CONFIG=false`
+  - `.eslintignore` 已下线，忽略规则并入 `eslint.config.js`
+  - 验证结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
 
 ---
 

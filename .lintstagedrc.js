@@ -3,10 +3,10 @@ module.exports = {
   'packages/frontend/src/locales/*.json': ['node scripts/sync-locales.js --write --stage'],
 
   // TypeScript 和 JavaScript 文件
-  '*.{js,ts}': ['cross-env ESLINT_USE_FLAT_CONFIG=false eslint --fix', 'prettier --write'],
+  '*.{js,ts}': ['eslint --fix', 'prettier --write'],
 
   // Vue 文件：同时执行 eslint 与 prettier
-  '*.vue': ['cross-env ESLINT_USE_FLAT_CONFIG=false eslint --fix', 'prettier --write'],
+  '*.vue': ['eslint --fix', 'prettier --write'],
 
   // JSON、CSS、Markdown 等文件
   '*.{json,css,md}': ['prettier --write'],

@@ -14,10 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 本轮采用“子代理并行 + 主线程复核 + 分批提交”的持续收敛模式，已完成长尾文件治理
   - `doc/TECHNICAL_DEBT_REPORT.md` 已同步为最新口径，仅保留最终汇总，不记录批次流水
 
-- **下一类债务已启动**：
-  - 启动 `ESLint Flat Config` 迁移债务治理（当前仍存在 `ESLintRCWarning` 迁移提示）
-  - 新增迁移跟踪文档：`doc/ESLINT_FLAT_CONFIG_MIGRATION.md`
-  - 目标：迁移到 `eslint.config.js` 并移除 `ESLINT_USE_FLAT_CONFIG=false` 兼容开关
+- **下一类债务推进（ESLint Flat Config 第一阶段完成）**：
+  - 已新增并启用 `eslint.config.js`（Flat Config）
+  - 已移除 `ESLINT_USE_FLAT_CONFIG=false`（`package.json` 与 `.lintstagedrc.js`）
+  - 已移除 `.eslintignore`，忽略规则并入 Flat Config
+  - 校验结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
 
 ### Security
 
