@@ -235,7 +235,7 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 ### Others
 
 1. **On mobile devices, you can zoom in or out on the terminal font using a two-finger gesture.**
-2. To enable Passkey login, set the `RP_ID` and `RP_ORIGIN` environment variables in `.env` (comma-separated multi-domain values are supported, paired by order).
+2. To enable Passkey login, set `RP_ID` and `RP_ORIGIN` in `.env`. For "one passkey across multiple independent domains", use a single `RP_ID` with multiple `RP_ORIGIN` values and expose `/.well-known/webauthn`.
 
 ## ⚠️ Notes
 

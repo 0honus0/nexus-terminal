@@ -49,6 +49,7 @@ import {
   printEnvironmentConfig,
   EnvironmentValidationError,
 } from './config/env.validator';
+import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
 
 import './services/event.service';
 import './notifications/notification.processor.service';
@@ -227,11 +228,19 @@ app.use(
 );
 
 // 2. CORS - 跨域资源共享配置
-const allowedOrigins = process.env.ALLOWED_ORIGINS
+const baseAllowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
       .map((o) => o.trim())
       .filter(Boolean)
   : ['http://localhost:5173', 'http://localhost:18111'];
+
+const rpConfiguredOrigins = process.env.RP_ORIGIN
+  ? process.env.RP_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : [];
+
+const allowedOrigins = Array.from(new Set([...baseAllowedOrigins, ...rpConfiguredOrigins]));
 
 app.use(
   cors({
@@ -317,6 +326,39 @@ declare module 'express-session' {
 
 const port = process.env.PORT || 3001;
 
+const getFirstHeaderValue = (value?: string | string[]): string | undefined => {
+  if (!value) return undefined;
+
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  return rawValue
+    .split(',')
+    .map((item) => item.trim())
+    .find(Boolean);
+};
+
+const extractHostname = (value: string): string => {
+  return value.split(':')[0].toLowerCase();
+};
+
+const resolvePasskeyRpIdFromHost = (host: string): string | undefined => {
+  const normalizedHost = extractHostname(host);
+
+  const directRpIdMatch = config.passkeyRpConfigs.find((item) => item.rpId === normalizedHost);
+  if (directRpIdMatch) {
+    return directRpIdMatch.rpId;
+  }
+
+  const originHostMatch = config.passkeyRpConfigs.find((item) => {
+    try {
+      return new URL(item.rpOrigin).hostname.toLowerCase() === normalizedHost;
+    } catch {
+      return false;
+    }
+  });
+
+  return originHostMatch?.rpId;
+};
+
 // 初始化数据库
 const initializeDatabase = async () => {
   try {
@@ -382,6 +424,28 @@ const startServer = () => {
   });
   app.use(sessionMiddleware);
   // --- 结束会话中间件配置 ---
+
+  // --- WebAuthn Related Origins (.well-known/webauthn) ---
+  app.get('/.well-known/webauthn', (req: Request, res: Response) => {
+    const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
+    const host = forwardedHost || getFirstHeaderValue(req.headers.host);
+
+    if (!host) {
+      res.status(400).json({ origins: [] });
+      return;
+    }
+
+    const rpId = resolvePasskeyRpIdFromHost(host);
+    if (!rpId) {
+      res.status(404).json({ origins: [] });
+      return;
+    }
+
+    const origins = getPasskeyRelatedOriginsForRpId(rpId);
+
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.status(200).json({ origins });
+  });
 
   // --- OpenAPI/Swagger 文档路由（工具链：API 文档） ---
   // 仅在非生产环境启用 Swagger 文档，避免暴露 API 结构

@@ -29,10 +29,30 @@ const parseCsvEnvValue = (value: string | undefined): string[] => {
 const getHostnameFromOrigin = (origin: string): string | undefined => {
   try {
     const parsed = new URL(origin);
-    return parsed.hostname;
+    return parsed.hostname.toLowerCase();
   } catch {
     return undefined;
   }
+};
+
+const normalizeOrigin = (origin: string): string | undefined => {
+  try {
+    const parsed = new URL(origin);
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+};
+
+const originMatchesRpId = (origin: string, rpId: string): boolean => {
+  const host = getHostnameFromOrigin(origin);
+  const normalizedRpId = rpId.toLowerCase();
+
+  if (!host) {
+    return false;
+  }
+
+  return host === normalizedRpId || host.endsWith(`.${normalizedRpId}`);
 };
 
 const buildPasskeyRpConfigs = (): PasskeyRpConfig[] => {
@@ -42,12 +62,18 @@ const buildPasskeyRpConfigs = (): PasskeyRpConfig[] => {
   const rpOrigins = configuredRpOrigins.length > 0 ? configuredRpOrigins : [DEFAULT_RP_ORIGIN];
   const fallbackRpId = configuredRpIds[0] || DEFAULT_RP_ID;
 
-  const result = rpOrigins.map((rpOrigin, index) => {
-    const rpId = configuredRpIds[index] || getHostnameFromOrigin(rpOrigin) || fallbackRpId;
-    return { rpId, rpOrigin };
-  });
+  const useSingleRpIdForAllOrigins = configuredRpIds.length === 1;
 
-  return result;
+  return rpOrigins.map((rpOrigin, index) => {
+    const rpId = useSingleRpIdForAllOrigins
+      ? configuredRpIds[0]
+      : configuredRpIds[index] || getHostnameFromOrigin(rpOrigin) || fallbackRpId;
+
+    return {
+      rpId: (rpId || fallbackRpId).toLowerCase(),
+      rpOrigin,
+    };
+  });
 };
 
 const passkeyRpConfigs = buildPasskeyRpConfigs();
@@ -59,6 +85,34 @@ export const config: AppConfig = {
   passkeyRpConfigs,
   port: parseInt(process.env.PORT || '3000', 10),
 };
+
+export function getPasskeyRelatedOriginsForRpId(rpId: string): string[] {
+  if (!rpId) {
+    return [];
+  }
+
+  const normalizedRpId = rpId.toLowerCase();
+  const dedupedOrigins = new Set<string>();
+
+  config.passkeyRpConfigs.forEach((item) => {
+    if (item.rpId.toLowerCase() !== normalizedRpId) {
+      return;
+    }
+
+    const normalized = normalizeOrigin(item.rpOrigin);
+    if (!normalized) {
+      return;
+    }
+
+    if (originMatchesRpId(normalized, normalizedRpId)) {
+      return;
+    }
+
+    dedupedOrigins.add(normalized);
+  });
+
+  return Array.from(dedupedOrigins);
+}
 
 // Function to get a config value, though direct access is also possible
 export function getConfigValue<K extends keyof AppConfig>(key: K): AppConfig[K] {
