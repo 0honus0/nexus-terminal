@@ -620,7 +620,7 @@ export class TransfersService {
       client.sftp((err, sftp) => {
         sftpSession = sftp; // Store session for potential cleanup
         if (err) {
-          return cleanupAndReject(`SFTP session error for key upload: ${err.message}`, err);
+          return cleanupAndReject(`SFTP session error for key upload: ${err.message}`);
         }
         if (!sftp) {
           return cleanupAndReject(`SFTP session error: SFTP object is null.`);
@@ -628,10 +628,7 @@ export class TransfersService {
         const stream = sftp.createWriteStream(remotePath, { mode: 0o600 });
 
         stream.on('error', (writeErr: Error) => {
-          cleanupAndReject(
-            `Failed to write key to ${remotePath} on source: ${writeErr.message}`,
-            writeErr
-          );
+          cleanupAndReject(`Failed to write key to ${remotePath} on source: ${writeErr.message}`);
         });
 
         // Listen to 'close' instead of 'finish' for more reliability

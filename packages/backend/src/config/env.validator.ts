@@ -326,7 +326,7 @@ export function validateEnvironment(): EnvironmentConfig {
       setConfigValue(envKey, numValue as EnvironmentConfig[typeof envKey]);
     } else if (schema.type === 'boolean') {
       const boolValue = value === 'true' || value === '1';
-      setConfigValue(envKey, boolValue as EnvironmentConfig[typeof envKey]);
+      setConfigValue(envKey, boolValue as unknown as EnvironmentConfig[typeof envKey]);
     } else {
       // string 类型
       // 自定义验证器

@@ -288,7 +288,10 @@ export class NotificationService {
     testPayload.details = { message: translatedDetailsMessage };
 
     const messageFromPayload =
-      typeof testPayload.details === 'object' && testPayload.details?.message
+      typeof testPayload.details === 'object' &&
+      testPayload.details !== null &&
+      'message' in testPayload.details &&
+      typeof testPayload.details.message === 'string'
         ? testPayload.details.message
         : 'Details is not an object with message property';
     console.info(
