@@ -11,6 +11,17 @@ import { getErrorMessage } from '../utils/AppError';
 const CONNECT_TIMEOUT = 20000; // 连接超时时间 (毫秒)
 const TEST_TIMEOUT = 15000; // 测试连接超时时间 (毫秒)
 
+type KeyboardInteractiveHandler = (
+  _ctx: unknown,
+  messages: string[],
+  finish: (responses: string[]) => void
+) => void;
+
+interface KeyboardInteractiveConnectConfig extends ConnectConfig {
+  authMethod?: 'keyboard-interactive';
+  keyboardInteractive?: KeyboardInteractiveHandler;
+}
+
 export interface JumpHostDetail {
   id: string; // Unique ID for this hop instance (e.g., generated or from config)
   name?: string; // Optional name for logging
@@ -316,7 +327,7 @@ const _establishDirectSshConnection = (
   timeout: number
 ): Promise<Client> => {
   const sshClient = new Client();
-  const connectConfig: ConnectConfig = {
+  const connectConfig: KeyboardInteractiveConnectConfig = {
     host: connDetails.host,
     port: connDetails.port,
     username: connDetails.username,
@@ -330,10 +341,8 @@ const _establishDirectSshConnection = (
 
   // 如果强制使用键盘交互式认证，添加 keyboardInteractive 配置
   if (connDetails.force_keyboard_interactive) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (connectConfig as any).authMethod = 'keyboard-interactive';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (connectConfig as any).keyboardInteractive = (
+    connectConfig.authMethod = 'keyboard-interactive';
+    connectConfig.keyboardInteractive = (
       _ctx: unknown,
       messages: string[],
       finish: (responses: string[]) => void
@@ -516,7 +525,7 @@ function _prepareConnectConfigForHop(
   timeout: number,
   forceKeyboardInteractive?: boolean
 ): ConnectConfig {
-  const config: ConnectConfig = {
+  const config: KeyboardInteractiveConnectConfig = {
     username: hopDetail.username,
     readyTimeout: timeout,
     keepaliveInterval: 5000,
@@ -531,10 +540,8 @@ function _prepareConnectConfigForHop(
 
   // 如果强制使用键盘交互式认证，添加到跳板机配置
   if (forceKeyboardInteractive && hopDetail.auth_method === 'password') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (config as any).authMethod = 'keyboard-interactive';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (config as any).keyboardInteractive = (
+    config.authMethod = 'keyboard-interactive';
+    config.keyboardInteractive = (
       _ctx: unknown,
       messages: string[],
       finish: (responses: string[]) => void
@@ -612,7 +619,7 @@ async function _establishConnectionViaJumpChainRecursive(
 
       const finalClient = new Client();
 
-      const finalConnectConfig: ConnectConfig = {
+      const finalConnectConfig: KeyboardInteractiveConnectConfig = {
         sock: previousStream as unknown as net.Socket,
         username: finalTargetDetails.username,
         password: finalTargetDetails.password,
@@ -625,10 +632,8 @@ async function _establishConnectionViaJumpChainRecursive(
 
       // 如果强制使用键盘交互式认证，添加到最终目标配置
       if (finalTargetDetails.force_keyboard_interactive) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (finalConnectConfig as any).authMethod = 'keyboard-interactive';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (finalConnectConfig as any).keyboardInteractive = (
+        finalConnectConfig.authMethod = 'keyboard-interactive';
+        finalConnectConfig.keyboardInteractive = (
           _ctx: unknown,
           messages: string[],
           finish: (responses: string[]) => void

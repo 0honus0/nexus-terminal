@@ -47,8 +47,7 @@ export function useAlertDialog() {
 
       // Mount an app with i18n instance
       const i18n = useI18n();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (app._context.provides as any).i18n = i18n;
+      app._context.provides.i18n = i18n;
 
       app.mount(container);
     });
