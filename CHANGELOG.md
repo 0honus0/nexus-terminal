@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `doc/TECHNICAL_DEBT_REPORT.md` 已同步为最新口径，仅保留最终汇总，不记录批次流水
   - 新增 `debt:check` 回归门禁并接入提交前与 CI 扫描，阻止 TODO/`test.skip`/`console.log`/`any` 回流
   - 新增 `quality:check` 与 `quality.yml`，将“债务门禁 + 零告警 lint + 格式校验”统一为 PR 自动化检查
-  - 修复前端类型基线：`vue-tsc --noEmit` 当前通过（修复 i18n、SSH 挂起动作与 2 处测试类型错误）
+  - 修复前端类型基线：`vue-tsc --noEmit` 当前通过（修复 i18n、SSH 挂起动作与 2 处测试类型错误），并已纳入 `quality:check`
 
 - **下一类债务收敛完成（ESLint 全量治理）**：
   - 已完成纯 Flat Config 迁移并移除旧链路（`ESLINT_USE_FLAT_CONFIG=false`、`.eslintignore`、`.eslintrc.js`、`eslint.legacy-config.cjs`）

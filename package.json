@@ -31,7 +31,7 @@
     "lint": "eslint . --ext .js,.ts,.vue",
     "lint:fix": "eslint . --ext .js,.ts,.vue --fix",
     "debt:check": "node scripts/check-tech-debt.js",
-    "quality:check": "npm run -s debt:check && npm run -s lint -- --max-warnings=0 && npm run -s format:check",
+    "quality:check": "npm run -s debt:check && npm run -w @nexus-terminal/frontend -s typecheck && npm run -s lint -- --max-warnings=0 && npm run -s format:check",
     "i18n:locales:check": "node scripts/sync-locales.js --check",
     "i18n:locales:sync": "node scripts/sync-locales.js --write",
     "format": "prettier --write \"**/*.{js,ts,vue,json,css,md}\"",
