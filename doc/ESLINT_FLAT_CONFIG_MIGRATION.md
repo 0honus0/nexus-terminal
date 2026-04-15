@@ -11,20 +11,21 @@
 
 该提示说明项目仍依赖旧配置体系（`.eslintrc.js` + `ESLINT_USE_FLAT_CONFIG=false`），需要迁移至 Flat Config。
 
-## 当前进展（2026-04-15）
+## 当前进展（2026-04-15，已完成）
 
 ### 第一阶段（已完成）
 
-1. ✅ 新增并启用 `eslint.config.js`（使用 `FlatCompat` 承接现有规则，避免一次性重写）
+1. ✅ 新增并启用 `eslint.config.js`（最终收敛为纯 Flat Config）
 2. ✅ `package.json` 与 `.lintstagedrc.js` 已移除 `ESLINT_USE_FLAT_CONFIG=false`
 3. ✅ `.eslintignore` 已移除，忽略规则统一并入 `eslint.config.js`
-4. ✅ `.eslintrc.js` 已下线，迁移为 `eslint.legacy-config.cjs` 兼容配置
-5. ✅ 全量校验通过：`npm run -s lint -- --format json` => `errors=0 / warnings=0`
+4. ✅ `.eslintrc.js` 与 `eslint.legacy-config.cjs` 已下线
+5. ✅ 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
+6. ✅ 全量校验通过：`npm run -s lint -- --format json` => `errors=0 / warnings=0`
 
-### 第二阶段（进行中）
+### 第二阶段（已完成）
 
-1. 将 `eslint.config.js` 从兼容模式（`FlatCompat + eslint.legacy-config.cjs`）收敛为纯 Flat Config
-2. 下线 `eslint.legacy-config.cjs`，彻底消除兼容层
+1. ✅ 将 `eslint.config.js` 从兼容模式收敛为纯 Flat Config
+2. ✅ 下线 `eslint.legacy-config.cjs`，彻底消除兼容层
 
 ## 目标
 
@@ -35,7 +36,8 @@
 ## 范围
 
 - 根目录 lint 配置与脚本：
-  - `.eslintrc.js`
+  - `eslint.config.js`
+  - `.eslintrc.js`（历史文件，已下线）
   - `package.json`（`lint` 命令）
   - `.lintstagedrc.js`（如需）
 - 受影响 workspace：
@@ -49,7 +51,7 @@
 2. ✅ 分 workspace 校验：逐包验证无新增 warning/error。
 3. ✅ 全量校验：`npm run -s lint -- --format json`，总量保持 0。
 4. ✅ 清理兼容开关：去掉脚本中的 `ESLINT_USE_FLAT_CONFIG=false`。
-5. ⏳ 纯 Flat Config 收敛：移除 `eslint.legacy-config.cjs` 依赖，改为原生 Flat 配置。
+5. ✅ 纯 Flat Config 收敛：移除 `eslint.legacy-config.cjs` 依赖，改为原生 Flat 配置。
 
 ## 验收标准
 

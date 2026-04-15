@@ -14,12 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 本轮采用“子代理并行 + 主线程复核 + 分批提交”的持续收敛模式，已完成长尾文件治理
   - `doc/TECHNICAL_DEBT_REPORT.md` 已同步为最新口径，仅保留最终汇总，不记录批次流水
 
-- **下一类债务推进（ESLint Flat Config 第一阶段完成）**：
-  - 已新增并启用 `eslint.config.js`（Flat Config）
+- **下一类债务收敛完成（ESLint 纯 Flat Config）**：
+  - 已新增并启用 `eslint.config.js`（纯 Flat Config，不再依赖 `FlatCompat`）
   - 已移除 `ESLINT_USE_FLAT_CONFIG=false`（`package.json` 与 `.lintstagedrc.js`）
-  - 已移除 `.eslintignore`，忽略规则并入 Flat Config
-  - 已下线 `.eslintrc.js`，迁移为 `eslint.legacy-config.cjs` 兼容层
-  - 校验结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
+  - 已移除 `.eslintignore`，忽略规则统一并入 Flat Config
+  - 已下线 `.eslintrc.js` 与 `eslint.legacy-config.cjs` 兼容层
+  - 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
+  - 校验结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
 
 ### Security
 

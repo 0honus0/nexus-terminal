@@ -3,7 +3,7 @@
 > **生成时间**：2025-12-23 | **更新时间**：2026-04-15（最新复查）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 第一阶段完成）
+> **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
 
 ---
 
@@ -11,13 +11,13 @@
 
 ### 当前债务总览（最新口径）
 
-| 类别             | 当前状态      | 说明                                                                     |
-| ---------------- | ------------- | ------------------------------------------------------------------------ |
-| Lint 债务        | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                         |
-| Lint 错误        | ✅ 0 errors   | 当前无阻断错误                                                           |
-| 修复方式         | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                       |
-| 文档口径         | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”            |
-| 下一类债务（新） | 🟡 进行中     | Flat Config 第一阶段完成（兼容迁移已落地，进入 `.eslintrc.js` 下线阶段） |
+| 类别             | 当前状态      | 说明                                                                |
+| ---------------- | ------------- | ------------------------------------------------------------------- |
+| Lint 债务        | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                    |
+| Lint 错误        | ✅ 0 errors   | 当前无阻断错误                                                      |
+| 修复方式         | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                  |
+| 文档口径         | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”       |
+| 下一类债务（新） | ✅ 已完成     | Flat Config 已收敛为纯配置，旧链路（`.eslintrc.js` / 兼容层）已下线 |
 
 ### 本轮最终结果（2026-04-15）
 
@@ -35,10 +35,11 @@
 - 类别：ESLint Flat Config 迁移债务
 - 触发依据：全量 lint 已清零，需要消除旧配置链路并统一到 Flat Config
 - 已落地：
-  - 新增并启用 `eslint.config.js`（`FlatCompat` 承接旧规则）
+  - 新增并启用 `eslint.config.js`
   - `package.json` 与 `.lintstagedrc.js` 已移除 `ESLINT_USE_FLAT_CONFIG=false`
   - `.eslintignore` 已下线，忽略规则并入 `eslint.config.js`
-  - `.eslintrc.js` 已下线，迁移为 `eslint.legacy-config.cjs` 兼容配置
+  - `.eslintrc.js` 与 `eslint.legacy-config.cjs` 已下线（不再依赖 `FlatCompat`）
+  - 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
   - 验证结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
 
 ---
@@ -946,18 +947,21 @@ entries: any[]; // TODO: Define a proper type for blacklist entries
 ### 2. ESLint 规则配置
 
 ```javascript
-// .eslintrc.js
-module.exports = {
-  rules: {
-    'no-warning-comments': [
-      'warn',
-      {
-        terms: ['TODO', 'FIXME', 'HACK', 'XXX'],
-        location: 'start',
-      },
-    ],
+// eslint.config.js
+module.exports = [
+  {
+    files: ['**/*.ts'],
+    rules: {
+      'no-warning-comments': [
+        'warn',
+        {
+          terms: ['TODO', 'FIXME', 'HACK', 'XXX'],
+          location: 'start',
+        },
+      ],
+    },
   },
-};
+];
 ```
 
 ### 3. Git Hook 配置
