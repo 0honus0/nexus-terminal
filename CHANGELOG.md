@@ -9,115 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **技术债务治理（2026-04-14 最新）**：本轮按“并行修复 + 分批提交”持续收敛 lint 债务（仅保留最新口径）
-  - ESLint 全仓告警由 **365** 降至 **251**（`error: 0`）
-  - 本轮已落地批次：
-    - `e779756`：收敛 `notification.controller.ts`、`sftp.controller.ts`
-    - `85df066`：收敛 `ssh-suspend.service.ts`、`websocket/connection.ts`
-    - `2ee9fb0`：收敛 `ai.service.ts`、`websocket/upgrade.ts`
-    - `95db60f`：收敛 `connection.service.ts`、`auth.controller.ts`
-    - `e79bf61`：收敛 `notification.service.test.ts`、`import-export.service.ts`
-    - `4473674`：收敛 `mock-ssh-server.ts`、`splitpanes.d.ts`
-    - `b394c6a`：收敛 `nl2cmd.service.ts`、`passkey.service.ts`
-  - 文档口径同步：`doc/TECHNICAL_DEBT_REPORT.md` 已更新为 2026-04-14 最新快照
+- **技术债务治理（2026-04-15 最新）**：
+  - ESLint 全仓告警已清零：`TOTAL_WARNINGS = 0`（`npm run -s lint -- --format json`）
+  - 本轮采用“子代理并行 + 主线程复核 + 分批提交”的持续收敛模式，已完成长尾文件治理
+  - `doc/TECHNICAL_DEBT_REPORT.md` 已同步为最新口径，仅保留最终汇总，不记录批次流水
 
-- **技术债务复查（2026-04-11）**：完成一轮基于仓库现状的技术债务重审
-  - **标记扫描**：初次复查发现 1 处待处理标记（`packages/frontend/e2e/tests/file-management-edge-cases.spec.ts:148`），第二轮修复后 `packages/**` 下 `TODO/FIXME/HACK` 已清零
-  - **测试债务**：执行 `rg -n "\b(test|it)\.skip\(" packages/frontend/e2e/tests`，当前 E2E 用例中 `test.skip` 已清零（0）
-  - **文档一致性**：`doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md` 已同步到最新统计口径
-  - **文档同步修复**：已更新 `doc/TECHNICAL_DEBT_REPORT.md` 与 `README.md`，修正“债务清零”与当前存量口径冲突
-  - **类型忽略修复**：清理关键后端路径 `@ts-ignore`（`transfers.controller.ts`、`websocket/upgrade.ts`、`sftp-utils.ts`、`sftp.service.ts`）
-  - **前端类型补齐**：新增 `guacamole-common-js` 本地类型声明，移除 `RemoteDesktopModal.vue` 与 `VncModal.vue` 中全部 `@ts-ignore`
-  - **测试残留清理**：移除调试测试文件 `packages/backend/src/connections/crypto-mock-debug.test.ts`
-  - **质量门禁增强**：`.lintstagedrc.js` 对 `*.vue` 增加 `eslint --fix`；`audit.yml` 新增 high/critical 直连依赖摘要与 high 告警
-  - **标记债务清零**：移除 E2E 剩余 TODO 标记，当前 `packages/**` 下 `TODO/FIXME/HACK` 为 0
-  - **日志治理（最新）**：当前仅保留最新批次记录。第三十六批（并行降级执行，含子代理协作）在后端/前端共 38 个文件完成 47 处信息级输出降级（`console.log` -> `console.info`），`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 47 降至 0
-  - **类型治理（最新）**：当前仅保留最新批次记录。第二十五批（主线程并行收敛）在前后端 31 个文件完成 32 处 `: any/<any>/any[]` 收敛（覆盖测试、会话动作、通知、连接、WebSocket、审计与远程桌面相关模块），`packages/backend/src + packages/frontend/src + packages/remote-gateway/src` 存量由 33 降至 0；并将 `packages/frontend/src/types/websocket.types.ts` 的动态索引签名改为 `MessagePayload` 别名以完成口径清零
-  - **类型忽略治理（最新）**：清理非生成文件中的 `@ts-*` 忽略 2 处（`packages/frontend/vite.config.ts`、`packages/frontend/e2e/tests/auth-edge-cases.spec.ts`），当前仅剩自动生成声明文件口径 3 处（`src/components.d.ts`、`src/auto-imports.d.ts`）
-  - **E2E 回补（最新）**：当前仅保留最新回补口径。最新为第二十八批（`remote-desktop.spec.ts` 7 个远程桌面用例），并已完成 E2E `test.skip` 清零（0）
-  - **依赖弃用治理（最新）**：完成 `xterm-addon-web-links -> @xterm/addon-web-links`、`xterm -> @xterm/xterm`、`vue-i18n -> ^11`、`eslint -> ^9`（配套 `@typescript-eslint -> ^8.58.2`）迁移，当前直连弃用依赖为 0
+- **下一类债务已启动**：
+  - 启动 `ESLint Flat Config` 迁移债务治理（当前仍存在 `ESLintRCWarning` 迁移提示）
+  - 新增迁移跟踪文档：`doc/ESLINT_FLAT_CONFIG_MIGRATION.md`
+  - 目标：迁移到 `eslint.config.js` 并移除 `ESLINT_USE_FLAT_CONFIG=false` 兼容开关
 
 ### Security
 
-- **依赖安全债务复查（2026-04-12）**：基于 npm 官方源重新执行审计并完成一轮 overrides 收敛
-  - `npm audit --registry=https://registry.npmjs.org --json`：总计 **18**（critical 0 / high 4 / moderate 9 / low 5）
-  - `npm audit --omit=dev --registry=https://registry.npmjs.org --json`：运行时依赖总计 **5**（critical 0 / high 0 / moderate 0 / low 5）
-  - 已完成补丁升级：`axios -> ^1.15.0`、`multer -> ^2.1.1`、`express-rate-limit -> ^8.3.2`、`dompurify -> ^3.3.3`、`element-plus -> ^2.13.7`
-  - 已完成新增升级：`nodemailer -> ^8.0.5`（同步 `@types/nodemailer -> ^8.0.0`）
-  - 已完成依赖清理：移除根依赖未使用的 `plist`
-  - 前端构建依赖归位：`@tailwindcss/vite` 与 `vite-plugin-monaco-editor` 迁移到 `devDependencies`
-  - 已完成 overrides 收敛：`tar -> >=7.5.13`、`path-to-regexp -> 8.4.2`、`router/path-to-regexp -> 8.4.2`、`defu -> ^6.1.7`、`lodash -> ^4.18.1`、`lodash-es -> ^4.18.1`
-  - 已完成 Swagger 文档依赖去运行时化：`swagger-jsdoc`、`swagger-ui-express` 调整到后端 `devDependencies`，并改为仅非生产环境按需加载
-  - 已消除运行时 `brace-expansion` moderate（`npm audit --omit=dev` 不再包含 `moderate`）
-  - 运行时 direct high/critical 依赖已清零（none）
-- **依赖安全债务复查（2026-04-13 第二轮）**：继续收敛运行时 low 漏洞并完成清零
-  - 根与后端 `sqlite3` 版本口径统一：`^5.1.7 -> ^6.0.1`
-  - 根 `overrides` 新增：`@tootallnate/once -> ^3.0.1`
-  - 执行：`npm audit fix --omit=dev --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org`
-  - 复查：`npm audit --omit=dev --registry=https://registry.npmjs.org --json` => **0**（critical/high/moderate/low 全部清零）
-- **依赖安全债务复查（2026-04-13 第三轮）**：全量审计（含 dev）继续收敛
-  - 完成工具链升级收敛：`vite -> ^6.4.2`、`@vitejs/plugin-vue -> ^5.2.4`、`vitest/@vitest/* -> ^3.2.4`
-  - 为保证 workspace 一致解析，后端与网关补充 `devDependencies.vite: ^6.4.2`，根 `devDependencies` 同步 `vite: ^6.4.2`
-  - 锁文件按 CI 同口径重建：`npx -y npm@10.8.2 install --legacy-peer-deps --ignore-scripts`
-  - 复查：`npm audit --registry=https://registry.npmjs.org --json` => **0**（critical/high/moderate/low 全部清零）
-
-### Added
-
-- **统一缓存管理器 CacheManager**：提供类型安全的 localStorage 操作
-  - 新增 `packages/frontend/src/utils/cacheManager.ts`
-  - 支持版本控制、TTL 过期管理、缓存统计
-  - 导出 `CACHE_KEYS` 常量和 `CACHE_CONFIG` 配置，统一管理所有缓存项
-
-- **统一错误消息提取器**：消除重复的错误提取模式
-  - 新增 `packages/frontend/src/utils/errorExtractor.ts`
-  - 提供 `extractErrorMessage(err, fallback)` 函数，替代 8 处 `err.response?.data?.message || err.message || '...'` 重复代码
-
-- **ConnectionList 虚拟滚动**：扁平视图超过 50 个连接时自动启用
-  - 使用 `@vueuse/core` 的 `useVirtualList` 实现
-  - 修改 `packages/frontend/src/components/WorkspaceConnectionList.vue`
-
-### Changed
-
-- **connections.store 迁移至 CacheManager**：替换 8 处直接 localStorage 操作
-  - `fetchConnections()` 使用 `cacheManager.get/set` 替代手动 JSON 解析
-  - 6 处缓存清除统一使用 `cacheManager.remove(CACHE_KEYS.CONNECTIONS)`
-
-### Fixed
-
-- **LayoutRenderer 事件监听器泄漏**：`onBeforeUnmount` 中创建新函数引用导致事件无法正确注销
-  - 提取 `stabilizedResizeHandler` 为模块级变量，确保 mount/unmount 使用同一引用
-  - 修改 `packages/frontend/src/components/LayoutRenderer.vue`
-
-- **LayoutRenderer 无用 debug watcher**：移除 `sidebarPanes` 的 deep immediate watcher（日志已注释但 watcher 仍在运行）
-
-### Added
-
-- **BaseRepository 抽象基类**：统一 Repository 层错误处理与日志记录
-  - 新增 `packages/backend/src/database/base.repository.ts`
-  - 提供 `safeDbOperation` 包装方法，自动捕获数据库错误并转换为 `DatabaseError`
-  - 所有 Repository 继承此基类，消除重复的 try-catch 代码
-  - 统一日志格式：`[RepositoryName] Operation failed: {error}`
-
-- **SFTP 模块重构拆分**：将 God Class `SftpService` 拆分为职责单一的子模块
-  - 新增 `packages/backend/src/sftp/sftp-upload.manager.ts` - 文件上传管理器
-  - 新增 `packages/backend/src/sftp/sftp-archive.manager.ts` - 压缩/解压管理器
-  - 新增 `packages/backend/src/sftp/sftp-utils.ts` - 共享工具函数与类型
-  - 新增 `packages/backend/src/sftp/index.ts` - 模块导出入口
-  - `SftpService` 现作为门面类协调子模块
-
-- **WebSocket Handlers 测试覆盖**：新增 4 个测试文件
-  - `packages/backend/src/websocket/handlers/ssh.handler.test.ts`
-  - `packages/backend/src/websocket/handlers/sftp.handler.test.ts`
-  - `packages/backend/src/websocket/handlers/docker.handler.test.ts`
-  - `packages/backend/src/websocket/handlers/rdp.handler.test.ts`
-
-- **认证中间件测试覆盖**：新增 3 个测试文件
-  - `packages/backend/src/auth/auth.middleware.test.ts`
-  - `packages/backend/src/auth/ipWhitelist.middleware.test.ts`
-  - `packages/backend/src/auth/ipBlacklistCheck.middleware.test.ts`
-
-- **加密模块测试**：新增密钥轮换测试
-  - `packages/backend/src/utils/crypto.test.ts`
+- **依赖安全债务（最新口径）**：
+  - 全量与运行时审计均已清零（`critical/high/moderate/low = 0`）
+  - 维持月度审计与版本漂移监控策略
 
 ### Changed
 

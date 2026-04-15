@@ -1,39 +1,42 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-14（最新复查）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-15（最新复查）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
-> **状态**：🟡 持续治理中（ESLint warning: 251，error: 0）
+> **状态**：🟢 持续治理中（ESLint warning: 0，error: 0）
 
 ---
 
-## 2026-04-14 复查快照（最新）
+## 2026-04-15 复查快照（最新）
 
 ### 当前债务总览（最新口径）
 
-| 类别      | 当前状态        | 说明                                                          |
-| --------- | --------------- | ------------------------------------------------------------- |
-| Lint 债务 | 🟡 251 warnings | `npm run -s lint -- --format json`（2026-04-14）              |
-| Lint 错误 | ✅ 0 errors     | 当前无阻断错误                                                |
-| 修复方式  | ✅ 并行批处理   | 子代理并行 + 主线程复核 + 分批提交                            |
-| 文档口径  | ✅ 已同步       | `CHANGELOG.md` 与本报告都改为“仅保留最新汇总，不记录每批流水” |
+| 类别             | 当前状态      | 说明                                                                   |
+| ---------------- | ------------- | ---------------------------------------------------------------------- |
+| Lint 债务        | ✅ 0 warnings | `npm run -s lint -- --format json`（2026-04-15）                       |
+| Lint 错误        | ✅ 0 errors   | 当前无阻断错误                                                         |
+| 修复方式         | ✅ 并行批处理 | 子代理并行 + 主线程复核 + 分批提交                                     |
+| 文档口径         | ✅ 已同步     | `CHANGELOG.md` 与本报告已改为“仅保留最新汇总，不记录每批流水”          |
+| 下一类债务（新） | 🟡 已启动     | `ESLintRCWarning`（`eslintrc` -> `eslint.config.js` Flat Config 迁移） |
 
-### 本轮已落地批次（最新）
+### 本轮最终结果（2026-04-15）
 
-- `e779756`：收敛 `notification.controller.ts`、`sftp.controller.ts`
-- `85df066`：收敛 `ssh-suspend.service.ts`、`websocket/connection.ts`
-- `2ee9fb0`：收敛 `ai.service.ts`、`websocket/upgrade.ts`
-- `95db60f`：收敛 `connection.service.ts`、`auth.controller.ts`
-- `e79bf61`：收敛 `notification.service.test.ts`、`import-export.service.ts`
-- `4473674`：收敛 `mock-ssh-server.ts`、`splitpanes.d.ts`
-- `b394c6a`：收敛 `nl2cmd.service.ts`、`passkey.service.ts`
+- ESLint warnings：由 **251** 收敛至 **0**
+- ESLint errors：持续为 **0**
+- 工作区状态：已提交、无未暂存改动
+- 关键收敛提交：
+  - `df1b5c6`：收敛设置与快捷指令模块
+  - `2ed620f`：收敛测试与核心类型模块
+  - `96960f8`：收敛 AI 审计与前端 store
+  - `7b1e1bf`：清零剩余 warnings
 
-### 剩余高优先文件（按 warning 数）
+### 下一类债务启动记录（2026-04-15）
 
-- `packages/backend/src/notifications/notification.service.test.ts`（6）
-- `packages/backend/src/services/import-export.service.ts`（6）
-- `packages/backend/tests/integration/ssh/mock-ssh-server.ts`（6）
-- `packages/frontend/src/types/splitpanes.d.ts`（6）
+- 类别：ESLint Flat Config 迁移债务
+- 触发依据：全量 lint 已清零，但仍存在 `ESLintRCWarning` 迁移提示
+- 已落地：
+  - 新增迁移跟踪文档 `doc/ESLINT_FLAT_CONFIG_MIGRATION.md`
+  - 明确迁移目标：移除 `ESLINT_USE_FLAT_CONFIG=false`，切换至 `eslint.config.js`
 
 ---
 
