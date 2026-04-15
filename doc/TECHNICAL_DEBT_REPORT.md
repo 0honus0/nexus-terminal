@@ -38,6 +38,7 @@
   - 新增并启用 `eslint.config.js`（`FlatCompat` 承接旧规则）
   - `package.json` 与 `.lintstagedrc.js` 已移除 `ESLINT_USE_FLAT_CONFIG=false`
   - `.eslintignore` 已下线，忽略规则并入 `eslint.config.js`
+  - `.eslintrc.js` 已下线，迁移为 `eslint.legacy-config.cjs` 兼容配置
   - 验证结果：`npm run -s lint -- --format json` 为 `errors=0 / warnings=0`
 
 ---

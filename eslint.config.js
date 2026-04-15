@@ -1,6 +1,6 @@
 const { FlatCompat } = require('@eslint/eslintrc');
 
-const legacyConfig = require('./.eslintrc.js');
+const legacyConfig = require('./eslint.legacy-config.cjs');
 
 const compat = new FlatCompat({
   baseDirectory: __dirname,
@@ -29,8 +29,8 @@ const ignores = [
   '**/packages/frontend/lighthouse.config.js',
   '**/*.vue',
   '**/*.config.ts',
-  '.eslintrc.js',
-  '**/.eslintrc.js',
+  'eslint.legacy-config.cjs',
+  '**/eslint.legacy-config.cjs',
   '.prettierrc.js',
   '**/.prettierrc.js',
   '.lintstagedrc.js',

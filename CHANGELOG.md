@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 已新增并启用 `eslint.config.js`（Flat Config）
   - 已移除 `ESLINT_USE_FLAT_CONFIG=false`（`package.json` 与 `.lintstagedrc.js`）
   - 已移除 `.eslintignore`，忽略规则并入 Flat Config
+  - 已下线 `.eslintrc.js`，迁移为 `eslint.legacy-config.cjs` 兼容层
   - 校验结果：`npm run -s lint -- --format json` 仍为 `errors=0 / warnings=0`
 
 ### Security
