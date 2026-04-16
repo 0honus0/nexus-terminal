@@ -50,7 +50,7 @@ import {
   EnvironmentValidationError,
 } from './config/env.validator';
 import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
-import { getHostnameFromHostHeader, getSingleHeaderToken } from './utils/url';
+import { getHostnameFromHostHeader, getSingleHeaderToken, normalizeOrigin } from './utils/url';
 
 import './services/event.service';
 import './notifications/notification.processor.service';
@@ -241,14 +241,21 @@ const rpConfiguredOrigins = process.env.RP_ORIGIN
       .filter(Boolean)
   : [];
 
-const allowedOrigins = Array.from(new Set([...baseAllowedOrigins, ...rpConfiguredOrigins]));
+const allowedOrigins = Array.from(
+  new Set(
+    [...baseAllowedOrigins, ...rpConfiguredOrigins]
+      .map((origin) => normalizeOrigin(origin) || origin)
+      .filter(Boolean)
+  )
+);
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // 允许没有 origin 的请求（如 Postman、curl）
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+      const normalizedOrigin = normalizeOrigin(origin) || origin;
+      if (allowedOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
       // 返回 false 触发 CORS 错误（403），而非 Error（500）
