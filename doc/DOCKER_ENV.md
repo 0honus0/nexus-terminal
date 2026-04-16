@@ -26,10 +26,12 @@
 
 ### Passkey 认证配置
 
-| 变量名      | 默认值                  | 必填   | 描述                                           |
-| ----------- | ----------------------- | ------ | ---------------------------------------------- |
-| `RP_ID`     | `localhost`             | **是** | WebAuthn RP ID（生产环境必须改为你的域名）     |
-| `RP_ORIGIN` | `http://localhost:5173` | **是** | WebAuthn RP Origin（生产环境必须改为你的域名） |
+| 变量名      | 默认值                  | 必填   | 描述                                                                |
+| ----------- | ----------------------- | ------ | ------------------------------------------------------------------- |
+| `RP_ID`     | `localhost`             | **是** | WebAuthn RP ID。可单值（跨域共享 Passkey 推荐）或多值（按顺序映射） |
+| `RP_ORIGIN` | `http://localhost:5173` | **是** | WebAuthn RP Origin。支持逗号分隔多值（完整 URL）                    |
+
+> 若要实现“一个 Passkey 跨多个完全不同域名”，请使用单一 `RP_ID` + 多个 `RP_ORIGIN`，并确保 RP_ID 域名可访问 `/.well-known/webauthn`。
 
 ### 远程网关地址配置
 
@@ -133,8 +135,13 @@
 DEPLOYMENT_MODE=docker
 
 # Passkey 配置（生产环境必须修改）
+# 单域名
 RP_ID=yourdomain.com
 RP_ORIGIN=https://yourdomain.com
+# 一个 Passkey 跨多个独立域名（Related Origins）
+# RP_ID=yourdomain.com
+# RP_ORIGIN=https://yourdomain.com,https://another-domain.net
+# 并确保 https://yourdomain.com/.well-known/webauthn 可访问
 
 # 远程网关地址
 REMOTE_GATEWAY_API_BASE_LOCAL=http://localhost:9090
@@ -267,10 +274,11 @@ services:
 
 ### 首次部署（生产环境）
 
-1. ✅ 修改 `.env` 中的 `RP_ID` 为你的域名
-2. ✅ 修改 `.env` 中的 `RP_ORIGIN` 为你的完整 URL
-3. ✅ 如需多域名支持，在 docker-compose.yml 中添加 `CORS_ALLOWED_ORIGINS`
-4. ✅ 启动服务：`docker compose up -d`
+1. ✅ 修改 `.env` 中的 `RP_ID` 与 `RP_ORIGIN`
+2. ✅ 若希望“一个 Passkey 跨多域名”，使用单一 `RP_ID` + 多个 `RP_ORIGIN`
+3. ✅ 确保 RP_ID 域名可访问 `/.well-known/webauthn`
+4. ✅ 确保 `ALLOWED_ORIGINS` / 反向代理 CORS 配置包含所有前端域名
+5. ✅ 启动服务：`docker compose up -d`
 
 ---
 

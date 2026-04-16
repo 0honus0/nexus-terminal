@@ -48,9 +48,23 @@ vi.mock('@simplewebauthn/server', () => ({
 
 vi.mock('../config/app.config', () => ({
   config: {
-    rpId: 'localhost',
-    rpOrigin: 'http://localhost:3000',
+    rpId: 'primary.example.com',
+    rpOrigin: 'https://primary.example.com',
     appName: 'Nexus Terminal Test',
+    passkeyRpConfigs: [
+      {
+        rpId: 'primary.example.com',
+        rpOrigin: 'https://primary.example.com',
+        normalizedRpOrigin: 'https://primary.example.com',
+        rpOriginHostname: 'primary.example.com',
+      },
+      {
+        rpId: 'primary.example.com',
+        rpOrigin: 'https://secondary.example.net',
+        normalizedRpOrigin: 'https://secondary.example.net',
+        rpOriginHostname: 'secondary.example.net',
+      },
+    ],
   },
 }));
 
@@ -81,7 +95,7 @@ describe('PasskeyService', () => {
       mockPasskeyRepo.getPasskeysByUserId.mockResolvedValue([]);
       mockSimpleWebAuthn.generateRegistrationOptions.mockResolvedValue({
         challenge: 'challenge123',
-        rp: { name: 'Nexus Terminal Test', id: 'localhost' },
+        rp: { name: 'Nexus Terminal Test', id: 'primary.example.com' },
         user: { id: 'MQ', name: 'testuser', displayName: 'testuser' },
       });
 
@@ -91,10 +105,35 @@ describe('PasskeyService', () => {
       expect(mockSimpleWebAuthn.generateRegistrationOptions).toHaveBeenCalledWith(
         expect.objectContaining({
           rpName: 'Nexus Terminal Test',
-          rpID: 'localhost',
+          rpID: 'primary.example.com',
           userName: 'testuser',
         })
       );
+    });
+
+    it('应允许不同域名共享同一个 RP ID', async () => {
+      mockUserRepo.findUserById.mockResolvedValue(mockUser);
+      mockPasskeyRepo.getPasskeysByUserId.mockResolvedValue([]);
+      mockSimpleWebAuthn.generateRegistrationOptions.mockResolvedValue({
+        challenge: 'challenge123',
+      });
+
+      await service.generateRegistrationOptions('testuser', 1, 'https://secondary.example.net');
+
+      expect(mockSimpleWebAuthn.generateRegistrationOptions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rpID: 'primary.example.com',
+        })
+      );
+    });
+
+    it('多域名配置下未知来源应抛出错误', async () => {
+      mockUserRepo.findUserById.mockResolvedValue(mockUser);
+      mockPasskeyRepo.getPasskeysByUserId.mockResolvedValue([]);
+
+      await expect(
+        service.generateRegistrationOptions('testuser', 1, 'https://unknown.example.com')
+      ).rejects.toThrow('Passkey origin is not configured.');
     });
 
     it('用户不存在时应抛出错误', async () => {
@@ -172,6 +211,27 @@ describe('PasskeyService', () => {
       expect(result.newPasskeyToSave?.credential_id).toBe('new-credential-id');
     });
 
+    it('应使用请求来源域名作为验证期望值', async () => {
+      mockUserRepo.findUserById.mockResolvedValue(mockUser);
+      mockSimpleWebAuthn.verifyRegistrationResponse.mockResolvedValue({
+        verified: false,
+      });
+
+      await service.verifyRegistration(
+        mockRegistrationResponse as any,
+        'expected-challenge',
+        '1',
+        'https://secondary.example.net'
+      );
+
+      expect(mockSimpleWebAuthn.verifyRegistrationResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expectedOrigin: 'https://secondary.example.net',
+          expectedRPID: 'primary.example.com',
+        })
+      );
+    });
+
     it('无效的用户 handle 应抛出错误', async () => {
       await expect(
         service.verifyRegistration(mockRegistrationResponse as any, 'challenge', 'invalid')
@@ -210,13 +270,27 @@ describe('PasskeyService', () => {
       expect(result).toHaveProperty('challenge');
       expect(mockSimpleWebAuthn.generateAuthenticationOptions).toHaveBeenCalledWith(
         expect.objectContaining({
-          rpID: 'localhost',
+          rpID: 'primary.example.com',
           allowCredentials: expect.arrayContaining([
             expect.objectContaining({
               id: 'credential-123',
               type: 'public-key',
             }),
           ]),
+        })
+      );
+    });
+
+    it('跨域名认证时应继续使用共享 RP ID', async () => {
+      mockSimpleWebAuthn.generateAuthenticationOptions.mockResolvedValue({
+        challenge: 'auth-challenge',
+      });
+
+      await service.generateAuthenticationOptions(undefined, 'https://secondary.example.net');
+
+      expect(mockSimpleWebAuthn.generateAuthenticationOptions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rpID: 'primary.example.com',
         })
       );
     });
@@ -278,6 +352,28 @@ describe('PasskeyService', () => {
       expect(result.userId).toBe(1);
       expect(mockPasskeyRepo.updatePasskeyCounter).toHaveBeenCalledWith('credential-123', 1);
       expect(mockPasskeyRepo.updatePasskeyLastUsedAt).toHaveBeenCalledWith('credential-123');
+    });
+
+    it('应使用来源域名进行认证验证', async () => {
+      mockPasskeyRepo.getPasskeyByCredentialId.mockResolvedValue(mockPasskey);
+      mockSimpleWebAuthn.verifyAuthenticationResponse.mockResolvedValue({
+        verified: false,
+      });
+
+      await expect(
+        service.verifyAuthentication(
+          mockAuthResponse as any,
+          'challenge',
+          'https://secondary.example.net'
+        )
+      ).rejects.toThrow('Authentication failed.');
+
+      expect(mockSimpleWebAuthn.verifyAuthenticationResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expectedOrigin: 'https://secondary.example.net',
+          expectedRPID: 'primary.example.com',
+        })
+      );
     });
 
     it('缺少凭证 ID 时应抛出错误', async () => {

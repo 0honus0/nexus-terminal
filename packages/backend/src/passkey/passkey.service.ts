@@ -19,11 +19,10 @@ import type {
 } from '@simplewebauthn/server';
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository } from '../user/user.repository';
-import { config } from '../config/app.config';
+import { config, type PasskeyRpConfig } from '../config/app.config';
 import { getErrorMessage } from '../utils/AppError';
+import { getHostnameFromOrigin, normalizeOrigin } from '../utils/url';
 
-const RP_ID = config.rpId;
-const RP_ORIGIN = config.rpOrigin;
 const RP_NAME = config.appName;
 
 const textEncoder = new TextEncoder();
@@ -95,7 +94,50 @@ export class PasskeyService {
     private userRepo: typeof userRepository
   ) {}
 
-  async generateRegistrationOptions(username: string, userId: number) {
+  private getAvailableRpConfigs(): PasskeyRpConfig[] {
+    if (Array.isArray(config.passkeyRpConfigs) && config.passkeyRpConfigs.length > 0) {
+      return config.passkeyRpConfigs;
+    }
+
+    const normalizedRpOrigin = normalizeOrigin(config.rpOrigin);
+    const rpOriginHostname = getHostnameFromOrigin(config.rpOrigin);
+    if (!normalizedRpOrigin || !rpOriginHostname) {
+      throw new Error('Invalid passkey rp origin in runtime config.');
+    }
+
+    return [
+      {
+        rpId: config.rpId,
+        rpOrigin: config.rpOrigin,
+        normalizedRpOrigin,
+        rpOriginHostname,
+      },
+    ];
+  }
+
+  private resolveRpConfig(requestOrigin?: string): PasskeyRpConfig {
+    const rpConfigs = this.getAvailableRpConfigs();
+
+    if (!requestOrigin) {
+      return rpConfigs[0];
+    }
+
+    const normalizedRequestOrigin = normalizeOrigin(requestOrigin);
+    if (!normalizedRequestOrigin) {
+      throw new Error('Invalid passkey origin.');
+    }
+
+    const byExactOrigin = rpConfigs.find(
+      (item) => item.normalizedRpOrigin === normalizedRequestOrigin
+    );
+    if (byExactOrigin) {
+      return byExactOrigin;
+    }
+
+    throw new Error('Passkey origin is not configured.');
+  }
+
+  async generateRegistrationOptions(username: string, userId: number, requestOrigin?: string) {
     const user = await this.userRepo.findUserById(userId);
     if (!user || user.username !== username) {
       throw new Error('User not found or username mismatch');
@@ -115,9 +157,11 @@ export class PasskeyService {
         : undefined,
     }));
 
+    const rpConfig = this.resolveRpConfig(requestOrigin);
+
     const options: GenerateRegistrationOptionsOpts = {
       rpName: RP_NAME,
-      rpID: RP_ID,
+      rpID: rpConfig.rpId,
       userID: textEncoder.encode(userId.toString()),
       userName: username,
       userDisplayName: username,
@@ -138,7 +182,8 @@ export class PasskeyService {
   async verifyRegistration(
     registrationResponseJSON: RegistrationResponseJSON,
     expectedChallenge: string,
-    userHandleFromClient: string
+    userHandleFromClient: string,
+    requestOrigin?: string
   ): Promise<VerifiedRegistrationResponse & { newPasskeyToSave?: NewPasskey }> {
     const userId = parseInt(userHandleFromClient, 10);
     if (Number.isNaN(userId)) {
@@ -161,11 +206,13 @@ export class PasskeyService {
       throw new Error('Registration failed: Missing or malformed credential ID from client.');
     }
 
+    const rpConfig = this.resolveRpConfig(requestOrigin);
+
     const verifyOpts: VerifyRegistrationResponseOpts = {
       response: actualRegistrationResponse, // Use the nested object
       expectedChallenge,
-      expectedOrigin: RP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: rpConfig.rpOrigin,
+      expectedRPID: rpConfig.rpId,
       requireUserVerification: true,
     };
 
@@ -214,7 +261,7 @@ export class PasskeyService {
     return verification;
   }
 
-  async generateAuthenticationOptions(username?: string) {
+  async generateAuthenticationOptions(username?: string, requestOrigin?: string) {
     let allowCredentials:
       | { id: string; type: 'public-key'; transports?: AuthenticatorTransportFuture[] }[]
       | undefined;
@@ -233,8 +280,10 @@ export class PasskeyService {
       }
     }
 
+    const rpConfig = this.resolveRpConfig(requestOrigin);
+
     const options: GenerateAuthenticationOptionsOpts = {
-      rpID: RP_ID,
+      rpID: rpConfig.rpId,
       timeout: 60000,
       allowCredentials,
       userVerification: 'preferred',
@@ -246,7 +295,8 @@ export class PasskeyService {
 
   async verifyAuthentication(
     authenticationResponseJSON: AuthenticationResponseJSON,
-    expectedChallenge: string
+    expectedChallenge: string,
+    requestOrigin?: string
   ): Promise<VerifiedAuthenticationResponse & { passkey?: Passkey; userId?: number }> {
     // Decode and check authenticatorData length
     if (
@@ -345,11 +395,13 @@ export class PasskeyService {
 
     // NOTE: simplewebauthn 的 credential 结构在当前版本类型定义约束较严，
     // 通过 unknown 中转维持运行时兼容并避免误报阻塞构建。
+    const rpConfig = this.resolveRpConfig(requestOrigin);
+
     const verifyOpts = {
       response: authenticationResponseJSON,
       expectedChallenge,
-      expectedOrigin: RP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: rpConfig.rpOrigin,
+      expectedRPID: rpConfig.rpId,
       credential: credentialObjectForLibrary, // Renamed from authenticator to credential
       requireUserVerification: true,
     } as unknown as Parameters<typeof verifyAuthenticationResponse>[0];
@@ -412,7 +464,7 @@ export class PasskeyService {
       return passkeys.length > 0;
     }
     // 如果没有提供用户名，检查整个系统中是否存在任何 passkey
-    // 这对于“可发现凭证”场景可能有用，或者简单地检查系统是否启用了 passkey 功能
+    // 这对于"可发现凭证"场景可能有用，或者简单地检查系统是否启用了 passkey 功能
     const anyPasskey = await this.passkeyRepo.getFirstPasskey();
     return !!anyPasskey;
   }

@@ -62,10 +62,12 @@
 
 ### 1.5 Passkey 配置
 
-| 变量名      | 类型     | 必填 | 默认值                  | 描述                                             |
-| ----------- | -------- | ---- | ----------------------- | ------------------------------------------------ |
-| `RP_ID`     | `string` | 否   | `localhost`             | WebAuthn Relying Party ID (必须匹配生产环境域名) |
-| `RP_ORIGIN` | `string` | 否   | `http://localhost:5173` | WebAuthn Relying Party Origin (必须匹配前端地址) |
+| 变量名      | 类型     | 必填 | 默认值                  | 描述                                                                            |
+| ----------- | -------- | ---- | ----------------------- | ------------------------------------------------------------------------------- |
+| `RP_ID`     | `string` | 否   | `localhost`             | WebAuthn Relying Party ID。可单值（推荐：跨域共享 Passkey）或多值（按顺序映射） |
+| `RP_ORIGIN` | `string` | 否   | `http://localhost:5173` | WebAuthn Relying Party Origin。支持逗号分隔多值，必须是完整 URL                 |
+
+> 若希望“一个 Passkey 跨多个完全不同域名”，建议配置为：单一 `RP_ID` + 多个 `RP_ORIGIN`，并在 RP_ID 域名提供 `/.well-known/webauthn`。
 
 ### 1.6 跨域配置
 

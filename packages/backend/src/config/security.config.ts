@@ -24,10 +24,17 @@ const buildAllowedWsOrigins = (): string[] => {
   }
 
   // 如果设置了 RP_ORIGIN（Passkey 配置），也自动添加到白名单
-  // 这通常是生产环境的域名
-  const rpOrigin = process.env.RP_ORIGIN;
-  if (rpOrigin && !defaultOrigins.includes(rpOrigin)) {
-    defaultOrigins.push(rpOrigin);
+  // 支持逗号分隔的多域名配置
+  const rpOrigins = process.env.RP_ORIGIN
+    ? process.env.RP_ORIGIN.split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+
+  for (const rpOrigin of rpOrigins) {
+    if (!defaultOrigins.includes(rpOrigin)) {
+      defaultOrigins.push(rpOrigin);
+    }
   }
 
   return defaultOrigins;

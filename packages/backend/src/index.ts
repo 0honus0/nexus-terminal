@@ -49,6 +49,8 @@ import {
   printEnvironmentConfig,
   EnvironmentValidationError,
 } from './config/env.validator';
+import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
+import { getHostnameFromHostHeader, getSingleHeaderToken, normalizeOrigin } from './utils/url';
 
 import './services/event.service';
 import './notifications/notification.processor.service';
@@ -227,18 +229,33 @@ app.use(
 );
 
 // 2. CORS - 跨域资源共享配置
-const allowedOrigins = process.env.ALLOWED_ORIGINS
+const baseAllowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
       .map((o) => o.trim())
       .filter(Boolean)
   : ['http://localhost:5173', 'http://localhost:18111'];
+
+const rpConfiguredOrigins = process.env.RP_ORIGIN
+  ? process.env.RP_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : [];
+
+const allowedOrigins = Array.from(
+  new Set(
+    [...baseAllowedOrigins, ...rpConfiguredOrigins]
+      .map((origin) => normalizeOrigin(origin) || origin)
+      .filter(Boolean)
+  )
+);
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // 允许没有 origin 的请求（如 Postman、curl）
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+      const normalizedOrigin = normalizeOrigin(origin) || origin;
+      if (allowedOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
       // 返回 false 触发 CORS 错误（403），而非 Error（500）
@@ -317,6 +334,24 @@ declare module 'express-session' {
 
 const port = process.env.PORT || 3001;
 
+const resolvePasskeyRpIdFromHost = (host: string): string | undefined => {
+  const normalizedHost = getHostnameFromHostHeader(host);
+  if (!normalizedHost) {
+    return undefined;
+  }
+
+  const directRpIdMatch = config.passkeyRpConfigs.find((item) => item.rpId === normalizedHost);
+  if (directRpIdMatch) {
+    return directRpIdMatch.rpId;
+  }
+
+  const originHostMatch = config.passkeyRpConfigs.find(
+    (item) => item.rpOriginHostname === normalizedHost
+  );
+
+  return originHostMatch?.rpId;
+};
+
 // 初始化数据库
 const initializeDatabase = async () => {
   try {
@@ -382,6 +417,27 @@ const startServer = () => {
   });
   app.use(sessionMiddleware);
   // --- 结束会话中间件配置 ---
+
+  // --- WebAuthn Related Origins (.well-known/webauthn) ---
+  app.get('/.well-known/webauthn', (req: Request, res: Response) => {
+    const host = getSingleHeaderToken(req.get('host'));
+
+    if (!host) {
+      res.status(400).json({ origins: [] });
+      return;
+    }
+
+    const rpId = resolvePasskeyRpIdFromHost(host);
+    if (!rpId) {
+      res.status(404).json({ origins: [] });
+      return;
+    }
+
+    const origins = getPasskeyRelatedOriginsForRpId(rpId);
+
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.status(200).json({ origins });
+  });
 
   // --- OpenAPI/Swagger 文档路由（工具链：API 文档） ---
   // 仅在非生产环境启用 Swagger 文档，避免暴露 API 结构

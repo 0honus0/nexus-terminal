@@ -308,16 +308,16 @@ npm start
 
 ## 环境变量
 
-| 变量名           | 默认值      | 描述                                           |
-| ---------------- | ----------- | ---------------------------------------------- |
-| `PORT`           | 3001        | API 服务端口                                   |
-| `NODE_ENV`       | development | 运行环境                                       |
-| `ENCRYPTION_KEY` | (自动生成)  | 数据库敏感信息加密密钥（32字节 hex，支持轮换） |
-| `SESSION_SECRET` | (自动生成)  | 会话密钥                                       |
-| `GUACD_HOST`     | localhost   | Guacamole daemon 地址                          |
-| `GUACD_PORT`     | 4822        | Guacamole daemon 端口                          |
-| `RP_ID`          | -           | Passkey 认证的 RP ID                           |
-| `RP_ORIGIN`      | -           | Passkey 认证的 Origin                          |
+| 变量名           | 默认值      | 描述                                                               |
+| ---------------- | ----------- | ------------------------------------------------------------------ |
+| `PORT`           | 3001        | API 服务端口                                                       |
+| `NODE_ENV`       | development | 运行环境                                                           |
+| `ENCRYPTION_KEY` | (自动生成)  | 数据库敏感信息加密密钥（32字节 hex，支持轮换）                     |
+| `SESSION_SECRET` | (自动生成)  | 会话密钥                                                           |
+| `GUACD_HOST`     | localhost   | Guacamole daemon 地址                                              |
+| `GUACD_PORT`     | 4822        | Guacamole daemon 端口                                              |
+| `RP_ID`          | -           | Passkey RP ID。可单值（跨域共享 Passkey 推荐）或多值（按顺序映射） |
+| `RP_ORIGIN`      | -           | Passkey Origin，支持逗号分隔多值（完整 URL）                       |
 
 ### 安全配置常量（`src/config/security.config.ts`）
 
