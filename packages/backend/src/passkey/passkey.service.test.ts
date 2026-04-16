@@ -52,8 +52,18 @@ vi.mock('../config/app.config', () => ({
     rpOrigin: 'https://primary.example.com',
     appName: 'Nexus Terminal Test',
     passkeyRpConfigs: [
-      { rpId: 'primary.example.com', rpOrigin: 'https://primary.example.com' },
-      { rpId: 'primary.example.com', rpOrigin: 'https://secondary.example.net' },
+      {
+        rpId: 'primary.example.com',
+        rpOrigin: 'https://primary.example.com',
+        normalizedRpOrigin: 'https://primary.example.com',
+        rpOriginHostname: 'primary.example.com',
+      },
+      {
+        rpId: 'primary.example.com',
+        rpOrigin: 'https://secondary.example.net',
+        normalizedRpOrigin: 'https://secondary.example.net',
+        rpOriginHostname: 'secondary.example.net',
+      },
     ],
   },
 }));

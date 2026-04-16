@@ -1,9 +1,12 @@
 // Basic application configuration
 // In a real application, consider using a more robust config library like 'dotenv' or 'convict'
+import { getHostnameFromOrigin, normalizeOrigin } from '../utils/url';
 
 export interface PasskeyRpConfig {
   rpId: string;
   rpOrigin: string;
+  normalizedRpOrigin: string;
+  rpOriginHostname: string;
 }
 
 interface AppConfig {
@@ -26,52 +29,46 @@ const parseCsvEnvValue = (value: string | undefined): string[] => {
     .filter(Boolean);
 };
 
-const getHostnameFromOrigin = (origin: string): string | undefined => {
-  try {
-    const parsed = new URL(origin);
-    return parsed.hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
-};
-
-const normalizeOrigin = (origin: string): string | undefined => {
-  try {
-    const parsed = new URL(origin);
-    return parsed.origin;
-  } catch {
-    return undefined;
-  }
-};
-
-const originMatchesRpId = (origin: string, rpId: string): boolean => {
-  const host = getHostnameFromOrigin(origin);
+const originMatchesRpId = (originHost: string, rpId: string): boolean => {
   const normalizedRpId = rpId.toLowerCase();
-
-  if (!host) {
-    return false;
-  }
-
-  return host === normalizedRpId || host.endsWith(`.${normalizedRpId}`);
+  return originHost === normalizedRpId || originHost.endsWith(`.${normalizedRpId}`);
 };
 
 const buildPasskeyRpConfigs = (): PasskeyRpConfig[] => {
   const configuredRpIds = parseCsvEnvValue(process.env.RP_ID);
   const configuredRpOrigins = parseCsvEnvValue(process.env.RP_ORIGIN);
+  const hasConfiguredOrigins = configuredRpOrigins.length > 0;
 
-  const rpOrigins = configuredRpOrigins.length > 0 ? configuredRpOrigins : [DEFAULT_RP_ORIGIN];
+  if (
+    configuredRpIds.length > 1 &&
+    (!hasConfiguredOrigins || configuredRpIds.length !== configuredRpOrigins.length)
+  ) {
+    throw new Error(
+      `Invalid WebAuthn config: RP_ID and RP_ORIGIN must have the same number of entries when RP_ID provides multiple values (got RP_ID=${configuredRpIds.length}, RP_ORIGIN=${configuredRpOrigins.length}).`
+    );
+  }
+
+  const rpOrigins = hasConfiguredOrigins ? configuredRpOrigins : [DEFAULT_RP_ORIGIN];
   const fallbackRpId = configuredRpIds[0] || DEFAULT_RP_ID;
-
   const useSingleRpIdForAllOrigins = configuredRpIds.length === 1;
 
   return rpOrigins.map((rpOrigin, index) => {
-    const rpId = useSingleRpIdForAllOrigins
+    const normalizedRpOrigin = normalizeOrigin(rpOrigin);
+    const rpOriginHostname = getHostnameFromOrigin(rpOrigin);
+    if (!normalizedRpOrigin || !rpOriginHostname) {
+      throw new Error(`Invalid WebAuthn RP_ORIGIN value: "${rpOrigin}"`);
+    }
+
+    const rpIdCandidate = useSingleRpIdForAllOrigins
       ? configuredRpIds[0]
-      : configuredRpIds[index] || getHostnameFromOrigin(rpOrigin) || fallbackRpId;
+      : configuredRpIds[index] || rpOriginHostname || fallbackRpId;
+    const rpId = (rpIdCandidate || fallbackRpId).toLowerCase();
 
     return {
-      rpId: (rpId || fallbackRpId).toLowerCase(),
-      rpOrigin,
+      rpId,
+      rpOrigin: normalizedRpOrigin,
+      normalizedRpOrigin,
+      rpOriginHostname,
     };
   });
 };
@@ -99,16 +96,11 @@ export function getPasskeyRelatedOriginsForRpId(rpId: string): string[] {
       return;
     }
 
-    const normalized = normalizeOrigin(item.rpOrigin);
-    if (!normalized) {
+    if (originMatchesRpId(item.rpOriginHostname, normalizedRpId)) {
       return;
     }
 
-    if (originMatchesRpId(normalized, normalizedRpId)) {
-      return;
-    }
-
-    dedupedOrigins.add(normalized);
+    dedupedOrigins.add(item.normalizedRpOrigin);
   });
 
   return Array.from(dedupedOrigins);

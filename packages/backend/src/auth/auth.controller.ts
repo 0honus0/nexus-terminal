@@ -14,6 +14,7 @@ import { passkeyService } from '../passkey/passkey.service'; // +++ Passkey Serv
 import { passkeyRepository } from '../passkey/passkey.repository'; // +++ Passkey Repository
 import { userRepository } from '../user/user.repository'; // For passkey auth success
 import { SECURITY_CONFIG } from '../config/security.config';
+import { getSingleHeaderToken } from '../utils/url';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -44,24 +45,14 @@ const getRequestHeaderValue = (req: Request, name: string): string | undefined =
   return typeof rawHeader === 'string' ? rawHeader : undefined;
 };
 
-const getSingleHeaderToken = (value: string | undefined): string | undefined => {
-  if (!value) return undefined;
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .find(Boolean);
-};
-
 const getPasskeyRequestOrigin = (req: Request): string | undefined => {
   const originHeader = getSingleHeaderToken(getRequestHeaderValue(req, 'Origin'));
   if (originHeader) {
     return originHeader;
   }
 
-  const forwardedProto = getSingleHeaderToken(getRequestHeaderValue(req, 'X-Forwarded-Proto'));
-  const forwardedHost = getSingleHeaderToken(getRequestHeaderValue(req, 'X-Forwarded-Host'));
-  const host = forwardedHost || getSingleHeaderToken(getRequestHeaderValue(req, 'Host'));
-  const protocol = forwardedProto || req.protocol;
+  const host = getSingleHeaderToken(getRequestHeaderValue(req, 'Host'));
+  const protocol = req.protocol;
 
   if (!host || !protocol) {
     return undefined;

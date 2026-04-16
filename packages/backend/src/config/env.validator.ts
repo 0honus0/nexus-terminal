@@ -58,6 +58,28 @@ interface EnvVarSchema {
   errorMessage?: string;
 }
 
+const RP_ID_PATTERN =
+  /^(localhost|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/i;
+
+const isValidRpId = (rpId: string): boolean => {
+  const normalized = rpId.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (
+    normalized.includes('://') ||
+    normalized.includes('/') ||
+    normalized.includes('\\') ||
+    normalized.includes(':') ||
+    normalized.endsWith('.')
+  ) {
+    return false;
+  }
+
+  return RP_ID_PATTERN.test(normalized);
+};
+
 const ENV_SCHEMA: Record<keyof EnvironmentConfig, EnvVarSchema> = {
   // 核心配置
   NODE_ENV: {
@@ -167,7 +189,7 @@ const ENV_SCHEMA: Record<keyof EnvironmentConfig, EnvVarSchema> = {
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
-      return rpIds.length > 0;
+      return rpIds.length > 0 && rpIds.every((item) => isValidRpId(item));
     },
     errorMessage: 'RP_ID 必须是有效的域名，多个值请用逗号分隔',
   },

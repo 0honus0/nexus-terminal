@@ -50,6 +50,7 @@ import {
   EnvironmentValidationError,
 } from './config/env.validator';
 import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
+import { getHostnameFromHostHeader, getSingleHeaderToken } from './utils/url';
 
 import './services/event.service';
 import './notifications/notification.processor.service';
@@ -326,35 +327,20 @@ declare module 'express-session' {
 
 const port = process.env.PORT || 3001;
 
-const getFirstHeaderValue = (value?: string | string[]): string | undefined => {
-  if (!value) return undefined;
-
-  const rawValue = Array.isArray(value) ? value[0] : value;
-  return rawValue
-    .split(',')
-    .map((item) => item.trim())
-    .find(Boolean);
-};
-
-const extractHostname = (value: string): string => {
-  return value.split(':')[0].toLowerCase();
-};
-
 const resolvePasskeyRpIdFromHost = (host: string): string | undefined => {
-  const normalizedHost = extractHostname(host);
+  const normalizedHost = getHostnameFromHostHeader(host);
+  if (!normalizedHost) {
+    return undefined;
+  }
 
   const directRpIdMatch = config.passkeyRpConfigs.find((item) => item.rpId === normalizedHost);
   if (directRpIdMatch) {
     return directRpIdMatch.rpId;
   }
 
-  const originHostMatch = config.passkeyRpConfigs.find((item) => {
-    try {
-      return new URL(item.rpOrigin).hostname.toLowerCase() === normalizedHost;
-    } catch {
-      return false;
-    }
-  });
+  const originHostMatch = config.passkeyRpConfigs.find(
+    (item) => item.rpOriginHostname === normalizedHost
+  );
 
   return originHostMatch?.rpId;
 };
@@ -427,8 +413,7 @@ const startServer = () => {
 
   // --- WebAuthn Related Origins (.well-known/webauthn) ---
   app.get('/.well-known/webauthn', (req: Request, res: Response) => {
-    const forwardedHost = getFirstHeaderValue(req.headers['x-forwarded-host']);
-    const host = forwardedHost || getFirstHeaderValue(req.headers.host);
+    const host = getSingleHeaderToken(req.get('host'));
 
     if (!host) {
       res.status(400).json({ origins: [] });

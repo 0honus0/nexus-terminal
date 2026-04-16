@@ -21,18 +21,11 @@ import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository } from '../user/user.repository';
 import { config, type PasskeyRpConfig } from '../config/app.config';
 import { getErrorMessage } from '../utils/AppError';
+import { getHostnameFromOrigin, normalizeOrigin } from '../utils/url';
 
 const RP_NAME = config.appName;
 
 const textEncoder = new TextEncoder();
-
-const normalizeOrigin = (origin: string): string | null => {
-  try {
-    return new URL(origin).origin;
-  } catch {
-    return null;
-  }
-};
 
 type RegistrationResponseEnvelope = {
   registrationResponse?: unknown;
@@ -106,7 +99,20 @@ export class PasskeyService {
       return config.passkeyRpConfigs;
     }
 
-    return [{ rpId: config.rpId, rpOrigin: config.rpOrigin }];
+    const normalizedRpOrigin = normalizeOrigin(config.rpOrigin);
+    const rpOriginHostname = getHostnameFromOrigin(config.rpOrigin);
+    if (!normalizedRpOrigin || !rpOriginHostname) {
+      throw new Error('Invalid passkey rp origin in runtime config.');
+    }
+
+    return [
+      {
+        rpId: config.rpId,
+        rpOrigin: config.rpOrigin,
+        normalizedRpOrigin,
+        rpOriginHostname,
+      },
+    ];
   }
 
   private resolveRpConfig(requestOrigin?: string): PasskeyRpConfig {
@@ -122,14 +128,10 @@ export class PasskeyService {
     }
 
     const byExactOrigin = rpConfigs.find(
-      (item) => normalizeOrigin(item.rpOrigin) === normalizedRequestOrigin
+      (item) => item.normalizedRpOrigin === normalizedRequestOrigin
     );
     if (byExactOrigin) {
       return byExactOrigin;
-    }
-
-    if (rpConfigs.length === 1) {
-      return rpConfigs[0];
     }
 
     throw new Error('Passkey origin is not configured.');
