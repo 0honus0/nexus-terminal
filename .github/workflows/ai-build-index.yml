@@ -67,6 +67,29 @@ jobs:
             --manifest ai/index_manifest.json \
             --max-files "${AI_INDEX_MAX_FILES}" \
             --max-chunk-chars "${AI_INDEX_MAX_CHUNK_CHARS}"
+      - name: Probe embedding endpoint
+        if: env.AI_USE_TRUE_EMBEDDING == 'true'
+        shell: bash
+        env:
+          EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
+          EMBEDDING_BASE_URL: ${{ secrets.EMBEDDING_BASE_URL }}
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+        run: |
+          set -euo pipefail
+
+          echo "[probe] base_url=${EMBEDDING_BASE_URL}"
+          echo "[probe] final_url=${EMBEDDING_BASE_URL%/}/embeddings"
+          echo "[probe] model=${EMBEDDING_MODEL}"
+
+          HTTP_CODE=$(curl -sS -o /tmp/embed_probe_body.txt -w "%{http_code}" \
+            "${EMBEDDING_BASE_URL%/}/embeddings" \
+            -H "Authorization: Bearer ${EMBEDDING_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data "{\"model\":\"${EMBEDDING_MODEL}\",\"input\":[\"hello world\"]}" || true)
+
+          echo "[probe] http_code=${HTTP_CODE}"
+          echo "[probe] response_body:"
+          sed -n '1,120p' /tmp/embed_probe_body.txt || true
 
       - name: Build true embedding index
         if: env.AI_USE_TRUE_EMBEDDING == 'true'
