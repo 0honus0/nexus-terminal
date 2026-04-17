@@ -379,9 +379,9 @@ export interface SftpUploadStartRequest {
   type: 'sftp:upload:start';
   payload: {
     uploadId: string;
-    fileName: string;
-    fileSize: number;
-    targetPath: string;
+    remotePath: string;
+    size: number;
+    relativePath?: string;
   };
 }
 
@@ -390,8 +390,9 @@ export interface SftpUploadChunkRequest {
   type: 'sftp:upload:chunk';
   payload: {
     uploadId: string;
-    chunk: string; // Base64 编码的数据块
+    data: string; // Base64 编码的数据块
     chunkIndex: number;
+    isLast?: boolean;
   };
 }
 

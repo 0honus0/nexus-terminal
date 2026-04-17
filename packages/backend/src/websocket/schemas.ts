@@ -94,23 +94,79 @@ export const sftpBaseSchema = z.object({
 
 // --- SFTP 上传操作 Schema ---
 
+const sftpUploadIdSchema = z.string().min(1).max(100);
+const sftpUploadSizeSchema = z.number().int().nonnegative().max(10737418240); // 最大 10GB
+const sftpUploadPathSchema = z.string().min(1).max(4096); // Linux PATH_MAX
+const sftpUploadChunkDataSchema = z.string().max(2097152); // Base64 数据，限制不超过 2MB（允许空字符串用于零字节文件）
+
+const sftpUploadStartPayloadSchema = z
+  .union([
+    z.object({
+      // 当前前端协议
+      uploadId: sftpUploadIdSchema,
+      remotePath: sftpUploadPathSchema,
+      size: sftpUploadSizeSchema,
+      relativePath: z.string().max(4096).optional(),
+    }),
+    z.object({
+      // 兼容旧协议（历史字段）
+      uploadId: sftpUploadIdSchema,
+      fileName: z.string().min(1).max(1000),
+      fileSize: sftpUploadSizeSchema,
+      targetPath: sftpUploadPathSchema,
+    }),
+  ])
+  .transform((payload) => {
+    if ('remotePath' in payload) {
+      return payload;
+    }
+
+    return {
+      uploadId: payload.uploadId,
+      remotePath: payload.targetPath,
+      size: payload.fileSize,
+      relativePath: undefined as string | undefined,
+    };
+  });
+
 export const sftpUploadStartSchema = z.object({
   type: z.literal('sftp:upload:start'),
-  payload: z.object({
-    uploadId: z.string().min(1).max(100),
-    fileName: z.string().min(1).max(1000), // 文件名限制
-    fileSize: z.number().int().nonnegative().max(10737418240), // 最大 10GB
-    targetPath: z.string().min(1).max(4096), // Linux PATH_MAX
-  }),
+  payload: sftpUploadStartPayloadSchema,
 });
+
+const sftpUploadChunkPayloadSchema = z
+  .union([
+    z.object({
+      // 当前前端协议
+      uploadId: sftpUploadIdSchema,
+      data: sftpUploadChunkDataSchema,
+      chunkIndex: z.number().int().nonnegative(),
+      isLast: z.boolean().optional(),
+    }),
+    z.object({
+      // 兼容旧协议（历史字段）
+      uploadId: sftpUploadIdSchema,
+      chunk: sftpUploadChunkDataSchema,
+      chunkIndex: z.number().int().nonnegative(),
+      isLast: z.boolean().optional(),
+    }),
+  ])
+  .transform((payload) => {
+    if ('data' in payload) {
+      return payload;
+    }
+
+    return {
+      uploadId: payload.uploadId,
+      data: payload.chunk,
+      chunkIndex: payload.chunkIndex,
+      isLast: payload.isLast,
+    };
+  });
 
 export const sftpUploadChunkSchema = z.object({
   type: z.literal('sftp:upload:chunk'),
-  payload: z.object({
-    uploadId: z.string().min(1).max(100),
-    chunk: z.string().min(1).max(2097152), // Base64 字符串，限制不超过 2MB
-    chunkIndex: z.number().int().nonnegative(),
-  }),
+  payload: sftpUploadChunkPayloadSchema,
 });
 
 export const sftpUploadCancelSchema = z.object({
