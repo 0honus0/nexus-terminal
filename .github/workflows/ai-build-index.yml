@@ -95,8 +95,10 @@ jobs:
             --data "{\"model\":\"${EMBEDDING_MODEL}\",\"input\":[\"hello world\"]}" || true)
 
           echo "[probe-curl] http_code=${HTTP_CODE}"
-          echo "[probe-curl] response_body:"
-          sed -n '1,120p' /tmp/embed_probe_body.txt || true
+          if [[ ! "${HTTP_CODE}" =~ ^2[0-9][0-9]$ ]]; then
+            echo "[probe-curl] response_preview:"
+            sed -n '1,40p' /tmp/embed_probe_body.txt || true
+          fi
 
       - name: Probe embedding endpoint with Python
         if: env.AI_USE_TRUE_EMBEDDING == 'true'
@@ -126,20 +128,16 @@ jobs:
           }
 
           print(f"[probe-py] url={url}")
-          print(f"[probe-py] headers={{'Authorization': 'Bearer ***', 'Content-Type': headers['Content-Type'], 'Accept': headers['Accept'], 'User-Agent': headers['User-Agent']}}")
 
           req = urllib.request.Request(url, data=body, headers=headers, method='POST')
           try:
               with urllib.request.urlopen(req, timeout=60) as resp:
-                  text = resp.read().decode('utf-8', errors='replace')
+                  _ = resp.read()
                   print(f"[probe-py] status={getattr(resp, 'status', 'unknown')}")
-                  print(f"[probe-py] response_headers={dict(resp.headers.items())}")
-                  print(text[:1000])
           except urllib.error.HTTPError as e:
               text = e.read().decode('utf-8', errors='replace')
               print(f"[probe-py] status={e.code}")
-              print(f"[probe-py] response_headers={dict(e.headers.items()) if e.headers else {}}")
-              print(text[:2000])
+              print(text[:600])
               raise
           PY
 

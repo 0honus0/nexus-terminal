@@ -130,17 +130,6 @@ def build_keywords(text: str, limit: int = 120) -> List[str]:
     return out
 
 
-def _safe_headers(headers: Dict[str, str]) -> Dict[str, str]:
-    masked = dict(headers)
-    if "Authorization" in masked:
-        masked["Authorization"] = "Bearer ***"
-    return masked
-
-
-def _preview_text(text: str, max_chars: int = 300) -> str:
-    return text[:max_chars].replace("\n", "\\n")
-
-
 def _embed_request(base_url: str, api_key: str, model: str, texts: List[str], user_agent: str) -> List[List[float]]:
     url = f"{base_url.rstrip('/')}/embeddings"
     payload_obj = {
@@ -159,10 +148,6 @@ def _embed_request(base_url: str, api_key: str, model: str, texts: List[str], us
     print(f"[embed] model={model}")
     print(f"[embed] input_count={len(texts)}")
     print(f"[embed] payload_bytes={len(payload)}")
-    if texts:
-        print(f"[embed] first_text_len={len(texts[0])}")
-        print(f"[embed] first_text_preview={_preview_text(texts[0])}")
-    print(f"[embed] request_headers={_safe_headers(headers)}")
 
     req = urllib.request.Request(
         url,
@@ -175,16 +160,13 @@ def _embed_request(base_url: str, api_key: str, model: str, texts: List[str], us
         with urllib.request.urlopen(req, timeout=180) as resp:
             body = resp.read().decode("utf-8", errors="replace")
             print(f"[embed] status={getattr(resp, 'status', 'unknown')}")
-            print(f"[embed] response_headers={dict(resp.headers.items())}")
-            print(f"[embed] response_preview={body[:1000]}")
             data = json.loads(body)
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8", errors="replace")
         print(f"[embed] HTTPError status={e.code}")
         print(f"[embed] HTTPError reason={e.reason}")
         print(f"[embed] HTTPError url={url}")
-        print(f"[embed] HTTPError response_headers={dict(e.headers.items()) if e.headers else {}}")
-        print(f"[embed] HTTPError response_preview={err_body[:2000]}")
+        print(f"[embed] HTTPError response_preview={err_body[:600]}")
         raise
     except urllib.error.URLError as e:
         print(f"[embed] URLError reason={e.reason}")
