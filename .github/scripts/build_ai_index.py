@@ -9,6 +9,7 @@ import re
 import sys
 import time
 import urllib.request
+import urllib.error
 from typing import Dict, List, Tuple
 
 TEXT_EXTS = {
@@ -129,34 +130,65 @@ def build_keywords(text: str, limit: int = 120) -> List[str]:
     return out
 
 
-def embed_texts(base_url: str, api_key: str, model: str, texts: List[str]) -> List[List[float]]:
+def embed_texts(base_url: str, api_key: str, model: str, texts: list[str]) -> list[list[float]]:
     url = base_url.rstrip("/") + "/embeddings"
-    payload = json.dumps({
+
+    print(f"[embed] base_url={base_url}", file=sys.stderr)
+    print(f"[embed] final_url={url}", file=sys.stderr)
+    print(f"[embed] model={model}", file=sys.stderr)
+    print(f"[embed] batch_size={len(texts)}", file=sys.stderr)
+    if texts:
+        preview = texts[0][:200].replace("\n", "\\n")
+        print(f"[embed] first_text_len={len(texts[0])}", file=sys.stderr)
+        print(f"[embed] first_text_preview={preview}", file=sys.stderr)
+
+    payload_obj = {
         "model": model,
-        "input": texts
-    }).encode("utf-8")
+        "input": texts,
+    }
+    payload = json.dumps(payload_obj).encode("utf-8")
 
     req = urllib.request.Request(
         url,
         data=payload,
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
+            "Authorization": f"Bearer {api_key}",
         },
-        method="POST"
+        method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            print(f"[embed] http_status={getattr(resp, 'status', 'unknown')}", file=sys.stderr)
+            print(f"[embed] response_preview={body[:1000]}", file=sys.stderr)
+            data = json.loads(body)
+
+    except urllib.error.HTTPError as e:
+        err_body = ""
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = "<failed to read error body>"
+
+        print(f"[embed] http_error_status={e.code}", file=sys.stderr)
+        print(f"[embed] http_error_reason={e.reason}", file=sys.stderr)
+        print(f"[embed] http_error_body={err_body[:2000]}", file=sys.stderr)
+        raise
+
+    except Exception as e:
+        print(f"[embed] unexpected_error={repr(e)}", file=sys.stderr)
+        raise
 
     if "data" not in data or not isinstance(data["data"], list):
-        raise RuntimeError("Invalid embedding API response: missing data list")
+        raise RuntimeError(f"Invalid embedding API response: {json.dumps(data)[:2000]}")
 
     vectors = []
-    for item in data["data"]:
+    for idx, item in enumerate(data["data"]):
         vec = item.get("embedding")
         if not isinstance(vec, list):
-            raise RuntimeError("Invalid embedding API response: missing embedding")
+            raise RuntimeError(f"Invalid embedding item at index {idx}: {json.dumps(item)[:1000]}")
         vectors.append(vec)
 
     return vectors
