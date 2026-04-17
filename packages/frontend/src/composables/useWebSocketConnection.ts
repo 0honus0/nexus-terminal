@@ -364,18 +364,27 @@ export function createWebSocketConnectionManager(
         try {
           const rawData = event.data;
           const message: WebSocketMessage = JSON.parse(rawData.toString());
+          const normalizedType = typeof message.type === 'string' ? message.type.trim() : '';
 
-          // +++ 验证消息类型 +++
-          if (!ALLOWED_MESSAGE_TYPES.has(message.type)) {
-            console.warn(`[WebSocket ${instanceSessionId}] 收到未知消息类型: ${message.type}`);
+          if (!normalizedType) {
+            console.warn(`[WebSocket ${instanceSessionId}] 收到无效消息类型:`, message.type);
             return;
           }
 
+          // +++ 验证消息类型 +++
+          if (!ALLOWED_MESSAGE_TYPES.has(normalizedType)) {
+            console.warn(`[WebSocket ${instanceSessionId}] 收到未知消息类型: ${normalizedType}`);
+            return;
+          }
+
+          // 统一规范化 type，避免边界情况下的空白字符导致分发失败
+          message.type = normalizedType;
+
           // +++ 验证 Payload 结构 +++
-          const validator = payloadValidators[message.type];
+          const validator = payloadValidators[normalizedType];
           if (validator && !validator(message.payload)) {
             console.error(
-              `[WebSocket ${instanceSessionId}] 无效的 Payload 结构 (类型: ${message.type})`,
+              `[WebSocket ${instanceSessionId}] 无效的 Payload 结构 (类型: ${normalizedType})`,
               message.payload
             );
             return;

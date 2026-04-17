@@ -1,8 +1,5 @@
-const CACHE_NAME = 'nexus-terminal-cache-v1';
+const CACHE_NAME = 'nexus-terminal-cache-v2';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
   '/icons/icon-72x72.png',
   '/icons/icon-96x96.png',
   '/icons/icon-128x128.png',
@@ -20,9 +17,22 @@ self.addEventListener('install', (event) => {
       return cache.addAll(urlsToCache);
     })
   );
+  self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
+  const requestUrl = new URL(event.request.url);
+  const shouldBypassCache =
+    event.request.mode === 'navigate' ||
+    requestUrl.pathname === '/' ||
+    requestUrl.pathname === '/index.html' ||
+    requestUrl.pathname === '/manifest.json';
+
+  if (shouldBypassCache) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       if (response) {
@@ -46,4 +56,5 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  self.clients.claim();
 });

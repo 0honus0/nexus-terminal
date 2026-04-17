@@ -6,7 +6,7 @@
 <br>
 [中文](./README.md) | [English](./doc/README_EN.md)
 
-[docker-url]: https://hub.docker.com/r/heavrnl/nexus-terminal-frontend
+[docker-url]: https://ghcr.io/silentely/nexus-terminal-frontend
 
 </div>
 
@@ -116,6 +116,8 @@ mkdir ./nexus-terminal && cd ./nexus-terminal
 ```bash
 wget https://raw.githubusercontent.com/Silentely/nexus-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/Silentely/nexus-terminal/refs/heads/main/.env -O .env
 ```
+
+> 当前默认镜像仓库为 GitHub Container Registry（GHCR），命名空间：`ghcr.io/silentely`。
 
 > ⚠️ **注意：**
 >

@@ -348,6 +348,26 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       );
     });
 
+    it('应在消息类型带空白时仍分发 sftp:upload:ready 消息', () => {
+      const manager = createManager();
+      const handler = vi.fn();
+
+      manager.onMessage('sftp:upload:ready', handler);
+      manager.connect('ws://localhost:3001');
+      const ws = createdWebSockets[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: ' sftp:upload:ready ',
+        payload: { uploadId: 'upload-blank' },
+      });
+
+      expect(handler).toHaveBeenCalledWith(
+        { uploadId: 'upload-blank' },
+        expect.objectContaining({ type: 'sftp:upload:ready' })
+      );
+    });
+
     it('应分发 SSH_SUSPEND_RESUMED 消息', () => {
       const manager = createManager();
       const handler = vi.fn();
