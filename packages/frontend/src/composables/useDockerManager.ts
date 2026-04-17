@@ -227,12 +227,25 @@ export function createDockerManager(
       // Consider adding a transient commandError ref if needed.
     });
 
+    const unsubStatsError = onMessage('docker:stats:error', (payload, message) => {
+      if (message?.sessionId && message.sessionId !== sessionId) return;
+      console.error(`[DockerManager ${sessionId}] Received docker:stats:error`, payload);
+      const statsErrorPayload = parseDockerStatusErrorPayload(payload);
+      error.value = statsErrorPayload.message || t('dockerManager.error.fetchFailed');
+    });
+
     const unsubRequestUpdate = onMessage('request_docker_status_update', (payload, message) => {
       if (message?.sessionId && message.sessionId !== sessionId) return;
       requestDockerStatus(); // Trigger a status refresh immediately
     });
 
-    wsUnsubscribeHooks.push(unsubStatus, unsubStatusError, unsubCommandError, unsubRequestUpdate);
+    wsUnsubscribeHooks.push(
+      unsubStatus,
+      unsubStatusError,
+      unsubCommandError,
+      unsubStatsError,
+      unsubRequestUpdate
+    );
   };
 
   // Send command for a specific container via WebSocket

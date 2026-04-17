@@ -246,8 +246,7 @@ export function useFileUploader(
   };
 
   const onUploadError = (payload: MessagePayload, message: WebSocketMessage) => {
-    // 从 message 中获取 uploadId，因为 payload 此时是错误字符串
-    const { uploadId } = message;
+    const uploadId = message.uploadId || payload?.uploadId;
     if (!uploadId) {
       console.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:error with missing uploadId:`,
@@ -258,8 +257,15 @@ export function useFileUploader(
 
     const upload = uploads[uploadId];
     if (upload) {
-      const errorMessage =
-        typeof payload === 'string' ? payload : t('fileManager.errors.uploadFailed');
+      const errorMessage = (() => {
+        if (typeof payload === 'string') {
+          return payload;
+        }
+        if (typeof payload?.message === 'string' && payload.message.trim()) {
+          return payload.message;
+        }
+        return t('fileManager.errors.uploadFailed');
+      })();
       console.error(
         `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`,
         errorMessage

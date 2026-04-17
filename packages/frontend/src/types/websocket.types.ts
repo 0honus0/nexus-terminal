@@ -109,7 +109,7 @@ export interface SshUnmarkedForSuspendAckPayload {
   error?: string;
 }
 
-export interface SshSuspendStartedRespPayload {
+export interface SshSuspendStartedPayload {
   frontendSessionId: string;
   suspendSessionId: string;
   success: boolean;
@@ -120,7 +120,7 @@ export interface SshSuspendListResponsePayload {
   suspendSessions: SuspendedSshSession[];
 }
 
-export interface SshSuspendResumedNotifPayload {
+export interface SshSuspendResumedPayload {
   suspendSessionId: string;
   newFrontendSessionId: string;
   success: boolean;
@@ -133,26 +133,26 @@ export interface SshOutputCachedChunkPayload {
   isLastChunk: boolean;
 }
 
-export interface SshSuspendTerminatedRespPayload {
+export interface SshSuspendTerminatedPayload {
   suspendSessionId: string;
   success: boolean;
   error?: string;
 }
 
-export interface SshSuspendEntryRemovedRespPayload {
+export interface SshSuspendEntryRemovedPayload {
   suspendSessionId: string;
   success: boolean;
   error?: string;
 }
 
-export interface SshSuspendNameEditedRespPayload {
+export interface SshSuspendNameEditedPayload {
   suspendSessionId: string;
   success: boolean;
   customName?: string;
   error?: string;
 }
 
-export interface SshSuspendAutoTerminatedNotifPayload {
+export interface SshSuspendAutoTerminatedPayload {
   suspendSessionId: string;
   reason: string;
 }
@@ -209,9 +209,9 @@ export interface SshUnmarkedForSuspendAckMessage extends WebSocketMessage {
   payload: SshUnmarkedForSuspendAckPayload;
 }
 
-export interface SshSuspendStartedRespMessage extends WebSocketMessage {
+export interface SshSuspendStartedMessage extends WebSocketMessage {
   type: 'SSH_SUSPEND_STARTED';
-  payload: SshSuspendStartedRespPayload;
+  payload: SshSuspendStartedPayload;
 }
 
 export interface SshSuspendListResponseMessage extends WebSocketMessage {
@@ -219,9 +219,9 @@ export interface SshSuspendListResponseMessage extends WebSocketMessage {
   payload: SshSuspendListResponsePayload;
 }
 
-export interface SshSuspendResumedNotifMessage extends WebSocketMessage {
+export interface SshSuspendResumedMessage extends WebSocketMessage {
   type: 'SSH_SUSPEND_RESUMED';
-  payload: SshSuspendResumedNotifPayload;
+  payload: SshSuspendResumedPayload;
 }
 
 export interface SshOutputCachedChunkMessage extends WebSocketMessage {
@@ -229,24 +229,24 @@ export interface SshOutputCachedChunkMessage extends WebSocketMessage {
   payload: SshOutputCachedChunkPayload;
 }
 
-export interface SshSuspendTerminatedRespMessage extends WebSocketMessage {
+export interface SshSuspendTerminatedMessage extends WebSocketMessage {
   type: 'SSH_SUSPEND_TERMINATED';
-  payload: SshSuspendTerminatedRespPayload;
+  payload: SshSuspendTerminatedPayload;
 }
 
-export interface SshSuspendEntryRemovedRespMessage extends WebSocketMessage {
+export interface SshSuspendEntryRemovedMessage extends WebSocketMessage {
   type: 'SSH_SUSPEND_ENTRY_REMOVED';
-  payload: SshSuspendEntryRemovedRespPayload;
+  payload: SshSuspendEntryRemovedPayload;
 }
 
-export interface SshSuspendNameEditedRespMessage extends WebSocketMessage {
+export interface SshSuspendNameEditedMessage extends WebSocketMessage {
   type: 'SSH_SUSPEND_NAME_EDITED';
-  payload: SshSuspendNameEditedRespPayload;
+  payload: SshSuspendNameEditedPayload;
 }
 
-export interface SshSuspendAutoTerminatedNotifMessage extends WebSocketMessage {
+export interface SshSuspendAutoTerminatedMessage extends WebSocketMessage {
   type: 'SSH_SUSPEND_AUTO_TERMINATED';
-  payload: SshSuspendAutoTerminatedNotifPayload;
+  payload: SshSuspendAutoTerminatedPayload;
 }
 
 // Union type for all SSH Suspend related messages (optional, but can be useful)
@@ -263,13 +263,13 @@ export type SshSuspendC2SMessage =
 export type SshSuspendS2CMessage =
   | SshMarkedForSuspendAckMessage
   | SshUnmarkedForSuspendAckMessage
-  | SshSuspendStartedRespMessage
+  | SshSuspendStartedMessage
   | SshSuspendListResponseMessage
-  | SshSuspendResumedNotifMessage
+  | SshSuspendResumedMessage
   | SshOutputCachedChunkMessage
-  | SshSuspendTerminatedRespMessage
-  | SshSuspendEntryRemovedRespMessage
-  | SshSuspendNameEditedRespMessage
-  | SshSuspendAutoTerminatedNotifMessage;
+  | SshSuspendTerminatedMessage
+  | SshSuspendEntryRemovedMessage
+  | SshSuspendNameEditedMessage
+  | SshSuspendAutoTerminatedMessage;
 
 export type AllSshSuspendMessages = SshSuspendC2SMessage | SshSuspendS2CMessage;

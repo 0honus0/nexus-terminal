@@ -264,7 +264,7 @@ export function initializeConnectionHandler(
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
-                      type: 'SSH_SUSPEND_RESUMED_NOTIF',
+                      type: 'SSH_SUSPEND_RESUMED',
                       payload: {
                         suspendSessionId,
                         newFrontendSessionId,
@@ -395,14 +395,14 @@ export function initializeConnectionHandler(
 
                   const responseNotification: SshSuspendResumedNotification = {
                     // 确保变量名不冲突且类型正确
-                    type: 'SSH_SUSPEND_RESUMED_NOTIF', // 改回与前端和新类型定义一致
+                    type: 'SSH_SUSPEND_RESUMED',
                     payload: { suspendSessionId, newFrontendSessionId, success: true },
                   };
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify(responseNotification));
-                    // console.info(`[WebSocket Handler][${type}] 已发送 SSH_SUSPEND_RESUMED_NOTIF 给 ${newFrontendSessionId}。`);
+                    // console.info(`[WebSocket Handler][${type}] 已发送 SSH_SUSPEND_RESUMED 给 ${newFrontendSessionId}。`);
                   } else {
-                    // console.warn(`[WebSocket Handler][${type}] WebSocket 在发送 SSH_SUSPEND_RESUMED_NOTIF 前已关闭 (会话 ${newFrontendSessionId})。`);
+                    // console.warn(`[WebSocket Handler][${type}] WebSocket 在发送 SSH_SUSPEND_RESUMED 前已关闭 (会话 ${newFrontendSessionId})。`);
                   }
 
                   // 在成功恢复并通知前端后，调用 handleSshResumeSuccess 启动状态监控
@@ -416,7 +416,7 @@ export function initializeConnectionHandler(
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
-                      type: 'SSH_SUSPEND_RESUMED_NOTIF',
+                      type: 'SSH_SUSPEND_RESUMED',
                       payload: {
                         suspendSessionId,
                         newFrontendSessionId,
@@ -440,7 +440,7 @@ export function initializeConnectionHandler(
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
-                      type: 'SSH_SUSPEND_TERMINATED_RESP',
+                      type: 'SSH_SUSPEND_TERMINATED',
                       payload: { suspendSessionId, success: false, error: '用户认证失败' },
                     })
                   );
@@ -464,7 +464,7 @@ export function initializeConnectionHandler(
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
-                      type: 'SSH_SUSPEND_TERMINATED_RESP',
+                      type: 'SSH_SUSPEND_TERMINATED',
                       payload: {
                         suspendSessionId,
                         success: false,
@@ -487,7 +487,7 @@ export function initializeConnectionHandler(
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
-                      type: 'SSH_SUSPEND_ENTRY_REMOVED_RESP',
+                      type: 'SSH_SUSPEND_ENTRY_REMOVED',
                       payload: { suspendSessionId, success: false, error: '用户认证失败' },
                     })
                   );
@@ -511,7 +511,7 @@ export function initializeConnectionHandler(
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
-                      type: 'SSH_SUSPEND_ENTRY_REMOVED_RESP',
+                      type: 'SSH_SUSPEND_ENTRY_REMOVED',
                       payload: {
                         suspendSessionId,
                         success: false,
@@ -674,7 +674,7 @@ export function initializeConnectionHandler(
               const unmarkPayload = payload as SshUnmarkForSuspendRequest['payload'];
               const requestedSessionToUnmarkId = unmarkPayload.sessionId;
               const wsBoundSessionId = typeof ws.sessionId === 'string' ? ws.sessionId : '';
-              // 与标记逻辑一致：优先使用当前连接 SID，避免旧 SID 导致“会话不存在”。
+              // 与标记逻辑一致：优先使用当前连接 SID，避免旧 SID 导致"会话不存在"。
               const sessionToUnmarkId = wsBoundSessionId || requestedSessionToUnmarkId;
               console.info(
                 `[WebSocket Handler] Received SSH_UNMARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToUnmarkId}, RequestedSessionID: ${requestedSessionToUnmarkId}`
@@ -744,7 +744,7 @@ export function initializeConnectionHandler(
                 console.warn(
                   `[SSH_UNMARK_FOR_SUSPEND] 会话 ${sessionToUnmarkId} 并未被标记为待挂起。`
                 );
-                // 即使未标记，也回复成功，因为最终状态是“未标记”
+                // 即使未标记，也回复成功，因为最终状态是"未标记"
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -861,7 +861,7 @@ export function initializeConnectionHandler(
     (eventPayload: { userId: number; suspendSessionId: string; reason: string }) => {
       const { userId, suspendSessionId, reason } = eventPayload;
       console.info(
-        `[WebSocket 通知] 准备发送 SSH_SUSPEND_AUTO_TERMINATED_NOTIF 给用户 ${userId} 的会话 ${suspendSessionId}`
+        `[WebSocket 通知] 准备发送 SSH_SUSPEND_AUTO_TERMINATED 给用户 ${userId} 的会话 ${suspendSessionId}`
       );
 
       wss.clients.forEach((client) => {
@@ -876,7 +876,7 @@ export function initializeConnectionHandler(
           };
           wsClient.send(JSON.stringify(notification));
           console.info(
-            `[WebSocket 通知] 已发送 SSH_SUSPEND_AUTO_TERMINATED_NOTIF 给用户 ${userId} 的一个 WebSocket 连接 (会话 ${suspendSessionId})。`
+            `[WebSocket 通知] 已发送 SSH_SUSPEND_AUTO_TERMINATED 给用户 ${userId} 的一个 WebSocket 连接 (会话 ${suspendSessionId})。`
           );
         }
       });

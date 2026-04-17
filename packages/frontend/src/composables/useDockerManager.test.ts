@@ -364,6 +364,17 @@ describe('useDockerManager (createDockerManager)', () => {
     });
   });
 
+  describe('docker:stats:error 消息处理', () => {
+    it('应设置错误信息', () => {
+      mockIsConnected.value = true;
+      const manager = createDockerManager('session-1', createWsDeps(), mockI18n);
+
+      triggerMessage('docker:stats:error', { message: 'Stats failed' }, 'session-1');
+
+      expect(manager.error.value).toBe('Stats failed');
+    });
+  });
+
   describe('sendDockerCommand', () => {
     it('未连接时不应发送命令', () => {
       mockIsConnected.value = true;

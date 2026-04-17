@@ -118,7 +118,7 @@ export class StatusMonitorService {
       // console.warn(`[StatusMonitor] 获取会话 ${sessionId} 服务器状态失败:`, error);
       state.ws.send(
         JSON.stringify({
-          type: 'status_error',
+          type: 'status:error',
           payload: {
             connectionId: state.dbConnectionId,
             message: `获取状态失败: ${getErrorMessage(error)}`,

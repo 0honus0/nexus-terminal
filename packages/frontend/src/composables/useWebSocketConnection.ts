@@ -56,6 +56,7 @@ export function createWebSocketConnectionManager(
     'ssh:status',
     'ssh:exec_silent:result',
     'ssh:exec_silent:error',
+    'rdp:error',
     'terminal:data',
     'terminal:resize',
     // SFTP messages
@@ -93,19 +94,31 @@ export function createWebSocketConnectionManager(
     'sftp:compress:error',
     'sftp:decompress:success',
     'sftp:decompress:error',
+    'sftp:command_not_found',
+    'sftp:upload:ready',
+    'sftp:upload:success',
+    'sftp:upload:cancelled',
+    'sftp:upload:pause',
+    'sftp:upload:resume',
     'sftp:upload:start:ack',
     'sftp:upload:chunk:ack',
     'sftp:upload:complete',
     'sftp:upload:error',
+    'sftp_error',
     // Docker messages
     'docker:status:update',
     'docker:status:error',
     'docker:command:success',
     'docker:command:error',
     'docker:stats:update',
+    'docker:stats:error',
+    'request_docker_status_update',
     // Status monitor messages
     'status_update',
+    'status:error',
     // Batch operations (Phase 4)
+    'batch:started',
+    'batch:cancelled',
     'batch:subtask:update',
     'batch:overall',
     'batch:log',
@@ -382,7 +395,12 @@ export function createWebSocketConnectionManager(
               });
               isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
             }
-          } else if (message.type === 'ssh:error' || message.type === 'error') {
+          } else if (
+            message.type === 'ssh:error' ||
+            message.type === 'error' ||
+            message.type === 'sftp_error' ||
+            message.type === 'rdp:error'
+          ) {
             if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
               connectionStatus.value = 'error';
               let errorMsg = message.payload || '未知错误';

@@ -264,6 +264,20 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       expect(manager.isSftpReady.value).toBe(false);
     });
 
+    it('sftp_error 应更新为错误状态', () => {
+      const manager = createManager();
+
+      manager.connect('ws://localhost:3001');
+      const ws = createdWebSockets[0];
+      ws.simulateOpen();
+      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+
+      ws.simulateMessage({ type: 'sftp_error', payload: { message: 'SFTP failed' } });
+
+      expect(manager.connectionStatus.value).toBe('error');
+      expect(manager.isSftpReady.value).toBe(false);
+    });
+
     it('sftp_ready 应更新 SFTP 状态', () => {
       const manager = createManager();
 
@@ -312,6 +326,74 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       ws.simulateMessage({ type: 'unknown:type', payload: {} });
 
       expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('应分发 sftp:upload:ready 消息', () => {
+      const manager = createManager();
+      const handler = vi.fn();
+
+      manager.onMessage('sftp:upload:ready', handler);
+      manager.connect('ws://localhost:3001');
+      const ws = createdWebSockets[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'sftp:upload:ready',
+        payload: { uploadId: 'upload-1' },
+      });
+
+      expect(handler).toHaveBeenCalledWith(
+        { uploadId: 'upload-1' },
+        expect.objectContaining({ type: 'sftp:upload:ready' })
+      );
+    });
+
+    it('应分发 SSH_SUSPEND_RESUMED 消息', () => {
+      const manager = createManager();
+      const handler = vi.fn();
+
+      manager.onMessage('SSH_SUSPEND_RESUMED', handler);
+      manager.connect('ws://localhost:3001');
+      const ws = createdWebSockets[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'SSH_SUSPEND_RESUMED',
+        payload: {
+          suspendSessionId: 's-1',
+          newFrontendSessionId: 'f-1',
+          success: true,
+        },
+      });
+
+      expect(handler).toHaveBeenCalledWith(
+        {
+          suspendSessionId: 's-1',
+          newFrontendSessionId: 'f-1',
+          success: true,
+        },
+        expect.objectContaining({ type: 'SSH_SUSPEND_RESUMED' })
+      );
+    });
+
+    it('应分发 request_docker_status_update 消息', () => {
+      const manager = createManager();
+      const handler = vi.fn();
+
+      manager.onMessage('request_docker_status_update', handler);
+      manager.connect('ws://localhost:3001');
+      const ws = createdWebSockets[0];
+      ws.simulateOpen();
+
+      ws.simulateMessage({
+        type: 'request_docker_status_update',
+        payload: {},
+      });
+
+      expect(handler).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ type: 'request_docker_status_update' })
+      );
     });
   });
 

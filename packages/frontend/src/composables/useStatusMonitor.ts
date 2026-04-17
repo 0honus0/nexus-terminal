@@ -83,30 +83,30 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
 
   // --- 注册 WebSocket 消息处理器 ---
   let unregisterUpdate: (() => void) | null = null;
-  let unregisterError: (() => void) | null = null;
+  let unregisterErrorCurrent: (() => void) | null = null;
 
   const registerStatusHandlers = () => {
     // 防止重复注册
-    if (unregisterUpdate || unregisterError) {
+    if (unregisterUpdate || unregisterErrorCurrent) {
       console.info(`[会话 ${sessionId}][状态监控模块] 处理器已注册，跳过。`);
       return;
     }
     if (isConnected.value) {
       console.info(`[会话 ${sessionId}][状态监控模块] 注册状态消息处理器。`);
       unregisterUpdate = onMessage('status_update', handleStatusUpdate);
-      unregisterError = onMessage('status:error', handleStatusError);
+      unregisterErrorCurrent = onMessage('status:error', handleStatusError);
     } else {
       console.warn(`[会话 ${sessionId}][状态监控模块] WebSocket 未连接，无法注册状态处理器。`);
     }
   };
 
   const unregisterAllStatusHandlers = () => {
-    if (unregisterUpdate || unregisterError) {
+    if (unregisterUpdate || unregisterErrorCurrent) {
       console.info(`[会话 ${sessionId}][状态监控模块] 注销状态消息处理器。`);
       unregisterUpdate?.();
-      unregisterError?.();
+      unregisterErrorCurrent?.();
       unregisterUpdate = null;
-      unregisterError = null;
+      unregisterErrorCurrent = null;
     }
   };
 

@@ -475,6 +475,26 @@ describe('SFTP WebSocket Handler', () => {
         'base64data'
       );
     });
+
+    it('应允许零字节文件上传块（data 为空字符串）', async () => {
+      const { sftpService } = await import('../state');
+      mockWs.sessionId = 'test-session';
+      const state = createMockClientState(mockWs);
+      clientStates.set('test-session', state);
+
+      await handleSftpUploadChunk(mockWs, {
+        uploadId: 'upload-empty',
+        chunkIndex: 0,
+        data: '',
+      });
+
+      expect(sftpService.handleUploadChunk).toHaveBeenCalledWith(
+        'test-session',
+        'upload-empty',
+        0,
+        ''
+      );
+    });
   });
 
   describe('handleSftpUploadCancel', () => {
