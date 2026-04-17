@@ -192,6 +192,10 @@ jobs:
         if: env.AI_USE_EMBED_INDEX == 'true'
         id: retrieve_index
         shell: bash
+        env:
+          EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
+          EMBEDDING_BASE_URL: ${{ secrets.EMBEDDING_BASE_URL }}
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
         run: |
           set -euo pipefail
 
@@ -199,12 +203,25 @@ jobs:
             echo "index_missing=true" >> "$GITHUB_OUTPUT"
             : > .ai_runtime/index_context.txt
           else
-            python3 .github/scripts/retrieve_ai_context.py \
-              --index ai/index.jsonl \
-              --rewrite .ai_runtime/rewrite.json \
-              --issue .ai_runtime/issue.json \
-              --max-chars "${AI_MAX_CONTEXT_CHARS}" \
-              > .ai_runtime/index_context.txt
+            if [ -f ai/embeddings.jsonl ] && [ -n "${EMBEDDING_API_KEY}" ] && [ -n "${EMBEDDING_BASE_URL}" ] && [ -n "${EMBEDDING_MODEL}" ]; then
+              python3 .github/scripts/retrieve_ai_context.py \
+                --index ai/index.jsonl \
+                --embedding-index ai/embeddings.jsonl \
+                --embedding-api-key "${EMBEDDING_API_KEY}" \
+                --embedding-base-url "${EMBEDDING_BASE_URL}" \
+                --embedding-model "${EMBEDDING_MODEL}" \
+                --rewrite .ai_runtime/rewrite.json \
+                --issue .ai_runtime/issue.json \
+                --max-chars "${AI_MAX_CONTEXT_CHARS}" \
+                > .ai_runtime/index_context.txt
+            else
+              python3 .github/scripts/retrieve_ai_context.py \
+                --index ai/index.jsonl \
+                --rewrite .ai_runtime/rewrite.json \
+                --issue .ai_runtime/issue.json \
+                --max-chars "${AI_MAX_CONTEXT_CHARS}" \
+                > .ai_runtime/index_context.txt
+            fi
             echo "index_missing=false" >> "$GITHUB_OUTPUT"
           fi
 

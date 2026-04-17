@@ -11,15 +11,12 @@ on:
     paths:
       - 'README*'
       - 'CHANGELOG*'
+      - 'doc/**'
       - 'docs/**'
       - 'src/**'
       - 'lib/**'
       - 'app/**'
       - 'packages/**'
-      - '.github/scripts/build_ai_index.py'
-      - '.github/scripts/retrieve_ai_context.py'
-      - '.github/workflows/ai-build-index.yml'
-
 permissions:
   contents: write
 
@@ -72,7 +69,7 @@ jobs:
             --max-chunk-chars "${AI_INDEX_MAX_CHUNK_CHARS}"
 
       - name: Probe embedding endpoint with curl
-        if: env.AI_USE_TRUE_EMBEDDING == 'true'
+        if: env.AI_USE_TRUE_EMBEDDING == 'true' && github.event_name != 'push'
         shell: bash
         env:
           EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
@@ -101,7 +98,7 @@ jobs:
           fi
 
       - name: Probe embedding endpoint with Python
-        if: env.AI_USE_TRUE_EMBEDDING == 'true'
+        if: env.AI_USE_TRUE_EMBEDDING == 'true' && github.event_name != 'push'
         shell: bash
         env:
           EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
@@ -142,7 +139,7 @@ jobs:
           PY
 
       - name: Build true embedding index
-        if: env.AI_USE_TRUE_EMBEDDING == 'true'
+        if: env.AI_USE_TRUE_EMBEDDING == 'true' && github.event_name != 'push'
         env:
           EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
           EMBEDDING_BASE_URL: ${{ secrets.EMBEDDING_BASE_URL }}
