@@ -130,68 +130,60 @@ def build_keywords(text: str, limit: int = 120) -> List[str]:
     return out
 
 
-def embed_texts(base_url: str, api_key: str, model: str, texts: list[str]) -> list[list[float]]:
-    url = base_url.rstrip("/") + "/embeddings"
+import json
+import urllib.request
+import urllib.error
 
-    print(f"[embed] base_url={base_url}", file=sys.stderr)
-    print(f"[embed] final_url={url}", file=sys.stderr)
-    print(f"[embed] model={model}", file=sys.stderr)
-    print(f"[embed] batch_size={len(texts)}", file=sys.stderr)
-    if texts:
-        preview = texts[0][:200].replace("\n", "\\n")
-        print(f"[embed] first_text_len={len(texts[0])}", file=sys.stderr)
-        print(f"[embed] first_text_preview={preview}", file=sys.stderr)
-
-    payload_obj = {
+def embed_texts(texts, api_key, base_url, model):
+    url = f"{base_url.rstrip('/')}/embeddings"
+    payload = {
         "model": model,
         "input": texts,
     }
-    payload = json.dumps(payload_obj).encode("utf-8")
+    body = json.dumps(payload).encode("utf-8")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "nexus-terminal-ai-index/1.0",
+    }
 
     req = urllib.request.Request(
         url,
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
+        data=body,
+        headers=headers,
         method="POST",
     )
 
+    print(f"[embed] url={url}")
+    print(f"[embed] model={model}")
+    print(f"[embed] input_count={len(texts)}")
+    print(f"[embed] body_preview={body[:500].decode('utf-8', errors='replace')}")
+    print(f"[embed] headers={{'Content-Type': '{headers['Content-Type']}', 'Accept': '{headers['Accept']}', 'User-Agent': '{headers['User-Agent']}', 'Authorization': 'Bearer ***'}}")
+
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            print(f"[embed] http_status={getattr(resp, 'status', 'unknown')}", file=sys.stderr)
-            print(f"[embed] response_preview={body[:1000]}", file=sys.stderr)
-            data = json.loads(body)
-
+            resp_body = resp.read().decode("utf-8", errors="replace")
+            print(f"[embed] status={resp.status}")
+            print(f"[embed] response_preview={resp_body[:1000]}")
+            data = json.loads(resp_body)
     except urllib.error.HTTPError as e:
         err_body = ""
         try:
             err_body = e.read().decode("utf-8", errors="replace")
         except Exception:
-            err_body = "<failed to read error body>"
-
-        print(f"[embed] http_error_status={e.code}", file=sys.stderr)
-        print(f"[embed] http_error_reason={e.reason}", file=sys.stderr)
-        print(f"[embed] http_error_body={err_body[:2000]}", file=sys.stderr)
+            pass
+        print(f"[embed] HTTPError status={e.code}")
+        print(f"[embed] HTTPError reason={e.reason}")
+        print(f"[embed] HTTPError url={url}")
+        print(f"[embed] HTTPError response_preview={err_body[:2000]}")
         raise
-
     except Exception as e:
-        print(f"[embed] unexpected_error={repr(e)}", file=sys.stderr)
+        print(f"[embed] unexpected_error={type(e).__name__}: {e}")
         raise
 
-    if "data" not in data or not isinstance(data["data"], list):
-        raise RuntimeError(f"Invalid embedding API response: {json.dumps(data)[:2000]}")
-
-    vectors = []
-    for idx, item in enumerate(data["data"]):
-        vec = item.get("embedding")
-        if not isinstance(vec, list):
-            raise RuntimeError(f"Invalid embedding item at index {idx}: {json.dumps(item)[:1000]}")
-        vectors.append(vec)
-
-    return vectors
+    return [item["embedding"] for item in data["data"]]
 
 
 def main():
