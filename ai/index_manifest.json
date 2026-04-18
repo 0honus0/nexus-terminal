@@ -1,10 +1,10 @@
 {
   "version": 3,
-  "generated_at_unix": 1776440384,
+  "generated_at_unix": 1776485702,
   "repo_root": "/home/runner/work/nexus-terminal/nexus-terminal",
   "scanned_files": 554,
   "indexed_files": 554,
-  "chunks": 4107,
+  "chunks": 4108,
   "max_files": 1200,
   "max_chunk_chars": 1800,
   "embed_batch_size": 8,
