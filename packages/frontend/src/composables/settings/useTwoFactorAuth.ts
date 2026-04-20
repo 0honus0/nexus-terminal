@@ -4,6 +4,16 @@ import { useAuthStore } from '../../stores/auth.store';
 import apiClient from '../../utils/apiClient';
 import { extractErrorMessage } from '../../utils/errorExtractor';
 
+interface TimeSkewApiError {
+  response?: {
+    data?: {
+      code?: string;
+      skewSeconds?: number;
+      message?: string;
+    };
+  };
+}
+
 export function useTwoFactorAuth() {
   const authStore = useAuthStore();
   const { t } = useI18n();
@@ -70,10 +80,20 @@ export function useTwoFactorAuth() {
       await authStore.checkAuthStatus(); // Refresh user data
     } catch (error: unknown) {
       console.error('验证并激活 2FA 失败:', error);
-      twoFactorMessage.value = extractErrorMessage(
-        error,
-        t('settings.twoFactor.error.verificationFailed')
-      );
+      const apiError = error as TimeSkewApiError;
+      const errorCode = apiError?.response?.data?.code;
+      const skewSeconds = apiError?.response?.data?.skewSeconds;
+      if (errorCode === 'TIME_SKEW_DETECTED' && typeof skewSeconds === 'number') {
+        const minutes = Math.floor(skewSeconds / 60);
+        const seconds = skewSeconds % 60;
+        const skewText = minutes > 0 ? `${minutes} 分 ${seconds} 秒` : `${seconds} 秒`;
+        twoFactorMessage.value = `检测到设备时间与服务器存在约 ${skewText} 偏差，请开启系统自动校时（NTP）后重试。`;
+      } else {
+        twoFactorMessage.value = extractErrorMessage(
+          error,
+          t('settings.twoFactor.error.verificationFailed')
+        );
+      }
     } finally {
       twoFactorLoading.value = false;
     }

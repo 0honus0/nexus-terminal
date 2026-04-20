@@ -107,10 +107,10 @@ const buildTwoFactorOtpAuthUrl = (username: string, secret: string): string =>
     issuer: 'NexusTerminal',
   });
 
-// 允许最多 ±120 秒偏差（4 * 30 秒），用于兼容客户端设备轻微时钟漂移。
-const TOTP_VERIFY_WINDOW = 4;
-// 兜底窗口：用于兼容设备时钟严重漂移场景（±10 分钟）。
-const TOTP_RELAXED_WINDOW = 20;
+// 安全收紧：仅允许 ±30 秒（1 * 30 秒）时间窗口。
+const TOTP_VERIFY_WINDOW = 1;
+// 仅用于"时间偏差检测"的窗口，不用于放行登录/激活。
+const TOTP_SKEW_DETECT_WINDOW = 20;
 // 超过该阈值代表客户端时间明显漂移，记录告警便于排障。
 const TOTP_SKEW_WARN_THRESHOLD = 2;
 
@@ -926,27 +926,12 @@ export const verifyLogin2FA = async (
       return;
     }
 
-    let verificationDelta = speakeasy.totp.verifyDelta({
+    const verificationDelta = speakeasy.totp.verifyDelta({
       secret: user.two_factor_secret,
       encoding: 'base32',
       token: normalizedToken,
       window: TOTP_VERIFY_WINDOW,
     });
-
-    if (!verificationDelta) {
-      const relaxedDelta = speakeasy.totp.verifyDelta({
-        secret: user.two_factor_secret,
-        encoding: 'base32',
-        token: normalizedToken,
-        window: TOTP_RELAXED_WINDOW,
-      });
-      if (relaxedDelta) {
-        verificationDelta = relaxedDelta;
-        console.warn(
-          `[AuthController] 用户 ${user.username} 的 2FA 登录验证码在宽松窗口内通过（delta=${relaxedDelta.delta}），疑似客户端时间漂移。`
-        );
-      }
-    }
     const verified = verificationDelta !== undefined;
 
     if (verified) {
@@ -1010,6 +995,26 @@ export const verifyLogin2FA = async (
         });
       });
     } else {
+      const relaxedDelta = speakeasy.totp.verifyDelta({
+        secret: user.two_factor_secret,
+        encoding: 'base32',
+        token: normalizedToken,
+        window: TOTP_SKEW_DETECT_WINDOW,
+      });
+      if (relaxedDelta && Math.abs(relaxedDelta.delta) >= TOTP_SKEW_WARN_THRESHOLD) {
+        const skewSeconds = Math.abs(relaxedDelta.delta) * 30;
+        console.warn(
+          `[AuthController] 用户 ${user.username} 的 2FA 登录验证码存在明显时间偏差（delta=${relaxedDelta.delta}），建议校准客户端时间。`
+        );
+        res.status(401).json({
+          message: `验证码无效。检测到客户端时间与服务器存在约 ${skewSeconds} 秒偏差，请校准设备时间后重试。`,
+          code: 'TIME_SKEW_DETECTED',
+          skewSeconds,
+          delta: relaxedDelta.delta,
+        });
+        return;
+      }
+
       console.info(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.recordFailedAttempt(clientIp);
@@ -1224,27 +1229,12 @@ export const verifyAndActivate2FA = async (
     }
 
     const db = await getDbInstance();
-    let verificationDelta = speakeasy.totp.verifyDelta({
+    const verificationDelta = speakeasy.totp.verifyDelta({
       secret: effectiveSecret,
       encoding: 'base32',
       token: normalizedToken,
       window: TOTP_VERIFY_WINDOW,
     });
-
-    if (!verificationDelta) {
-      const relaxedDelta = speakeasy.totp.verifyDelta({
-        secret: effectiveSecret,
-        encoding: 'base32',
-        token: normalizedToken,
-        window: TOTP_RELAXED_WINDOW,
-      });
-      if (relaxedDelta) {
-        verificationDelta = relaxedDelta;
-        console.warn(
-          `[AuthController] 用户 ${userId} 的 2FA 激活验证码在宽松窗口内通过（delta=${relaxedDelta.delta}），疑似客户端时间漂移。`
-        );
-      }
-    }
     const verified = verificationDelta !== undefined;
 
     if (verified) {
@@ -1275,6 +1265,26 @@ export const verifyAndActivate2FA = async (
 
       res.status(200).json({ message: '两步验证已成功激活！' });
     } else {
+      const relaxedDelta = speakeasy.totp.verifyDelta({
+        secret: effectiveSecret,
+        encoding: 'base32',
+        token: normalizedToken,
+        window: TOTP_SKEW_DETECT_WINDOW,
+      });
+      if (relaxedDelta && Math.abs(relaxedDelta.delta) >= TOTP_SKEW_WARN_THRESHOLD) {
+        const skewSeconds = Math.abs(relaxedDelta.delta) * 30;
+        console.warn(
+          `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${relaxedDelta.delta}），建议校准客户端时间。`
+        );
+        res.status(400).json({
+          message: `验证码无效。检测到客户端时间与服务器存在约 ${skewSeconds} 秒偏差，请校准设备时间后重试。`,
+          code: 'TIME_SKEW_DETECTED',
+          skewSeconds,
+          delta: relaxedDelta.delta,
+        });
+        return;
+      }
+
       console.info(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
       res.status(400).json({ message: '验证码无效。' });
     }
