@@ -75,6 +75,22 @@ const getVerificationErrorMessage = (value: unknown): string | undefined => {
   return typeof message === 'string' ? message : undefined;
 };
 
+/**
+ * 规范化 TOTP 验证码输入：
+ * - 全角数字转半角
+ * - 去除空格与连字符
+ */
+const normalizeTotpToken = (token: unknown): string => {
+  if (typeof token !== 'string') {
+    return '';
+  }
+
+  return token
+    .replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/[\s-]/g, '')
+    .trim();
+};
+
 export interface User {
   id: number;
   username: string;
@@ -824,6 +840,7 @@ export const verifyLogin2FA = async (
 ): Promise<void> => {
   const { token, tempToken } = req.body; // +++ Accept tempToken from frontend
   const pendingAuth = req.session.pendingAuth as PendingAuth | undefined;
+  const normalizedToken = normalizeTotpToken(token);
 
   // +++ Debug logging for session diagnostics (dev only)
   if (isDev) {
@@ -861,8 +878,13 @@ export const verifyLogin2FA = async (
     return;
   }
 
-  if (!token) {
+  if (!normalizedToken) {
     res.status(400).json({ message: '验证码不能为空。' });
+    return;
+  }
+
+  if (!/^\d{6,8}$/.test(normalizedToken)) {
+    res.status(400).json({ message: '验证码格式无效。' });
     return;
   }
 
@@ -884,8 +906,9 @@ export const verifyLogin2FA = async (
     const verified = speakeasy.totp.verify({
       secret: user.two_factor_secret,
       encoding: 'base32',
-      token,
-      window: 1,
+      token: normalizedToken,
+      // 适度放宽时间窗口，降低客户端时钟轻微漂移导致的误判
+      window: 2,
     });
 
     if (verified) {
@@ -1078,14 +1101,19 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
       throw new Error('无法生成 OTP Auth URL');
     }
 
-    qrcode.toDataURL(secret.otpauth_url, (err, data_url) => {
-      if (err) {
-        console.error('生成二维码时出错:', err);
-        throw new Error('生成二维码失败');
+    const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url);
+
+    // 显式保存 session，确保 tempTwoFactorSecret 在 verify 阶段可见
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error(`[AuthController] 用户 ${userId} 保存临时 2FA 密钥到 session 失败:`, saveErr);
+        res.status(500).json({ message: '保存两步验证状态失败，请重试。' });
+        return;
       }
+
       res.json({
         secret: secret.base32,
-        qrCodeUrl: data_url,
+        qrCodeUrl,
       });
     });
   } catch (error: unknown) {
@@ -1105,6 +1133,7 @@ export const verifyAndActivate2FA = async (
   const { token } = req.body;
   const { userId } = req.session;
   const tempSecret = req.session.tempTwoFactorSecret;
+  const normalizedToken = normalizeTotpToken(token);
 
   if (!userId || req.session.requiresTwoFactor) {
     res.status(401).json({ message: '用户未认证或认证未完成。' });
@@ -1116,8 +1145,13 @@ export const verifyAndActivate2FA = async (
     return;
   }
 
-  if (!token) {
+  if (!normalizedToken) {
     res.status(400).json({ message: '验证码不能为空。' });
+    return;
+  }
+
+  if (!/^\d{6,8}$/.test(normalizedToken)) {
+    res.status(400).json({ message: '验证码格式无效。' });
     return;
   }
 
@@ -1126,8 +1160,9 @@ export const verifyAndActivate2FA = async (
     const verified = speakeasy.totp.verify({
       secret: tempSecret,
       encoding: 'base32',
-      token,
-      window: 1,
+      token: normalizedToken,
+      // 适度放宽时间窗口，降低客户端时钟轻微漂移导致的误判
+      window: 2,
     });
 
     if (verified) {
