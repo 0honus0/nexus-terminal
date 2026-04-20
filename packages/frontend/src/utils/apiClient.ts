@@ -40,11 +40,28 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     // 处理响应错误
-    console.error('Response error:', error.response || error.message);
+    const requestMethod = error.config?.method?.toUpperCase?.() ?? 'UNKNOWN';
+    const requestUrl = error.config?.url ?? 'unknown';
 
     if (error.response) {
-      const { status } = error.response;
+      const { status, statusText, headers } = error.response;
       const authStore = useAuthStore(); // 在需要时获取 store 实例
+      const contentType = headers?.['content-type'] ?? 'unknown';
+      const isHtmlResponse =
+        typeof error.response.data === 'string' &&
+        error.response.data.trimStart().startsWith('<!DOCTYPE html>');
+      let bodySnippet = error.response.data;
+      if (typeof error.response.data === 'string') {
+        bodySnippet = isHtmlResponse ? '[html body omitted]' : error.response.data.slice(0, 160);
+      }
+      console.error('[apiClient] Response error:', {
+        status,
+        statusText,
+        method: requestMethod,
+        url: requestUrl,
+        contentType,
+        data: bodySnippet,
+      });
 
       // 处理常见的 HTTP 错误状态码
       switch (status) {
@@ -71,16 +88,27 @@ apiClient.interceptors.response.use(
         case 500: // 服务器内部错误
           console.error('Internal server error.');
           break;
+        case 502: // 网关错误
+        case 503: // 服务不可用
+        case 504: // 网关超时
+          console.warn(
+            `[apiClient] Upstream service unavailable (${status}) for ${requestMethod} ${requestUrl}`
+          );
+          break;
         // 可以根据需要添加更多错误状态码的处理
         default:
-          console.error(`Unhandled error status: ${status}`);
+          console.error(
+            `[apiClient] Unhandled error status: ${status} (${requestMethod} ${requestUrl})`
+          );
       }
     } else if (error.request) {
       // 请求已发出，但没有收到响应 (例如网络问题)
-      console.error('Network error or no response received:', error.request);
+      console.error(
+        `[apiClient] Network error or no response received: ${requestMethod} ${requestUrl}`
+      );
     } else {
       // 发送请求时出了点问题
-      console.error('Error setting up request:', error.message);
+      console.error('[apiClient] Error setting up request:', error.message);
     }
 
     // 将错误继续抛出，以便调用方可以捕获并处理

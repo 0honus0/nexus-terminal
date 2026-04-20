@@ -14,6 +14,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
   LineElement,
   LinearScale,
   PointElement,
@@ -22,7 +23,16 @@ import {
   type ChartOptions,
 } from 'chart.js';
 
-ChartJS.register(Title, Tooltip, Legend, LineElement, LinearScale, PointElement, CategoryScale);
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  LineElement,
+  LinearScale,
+  PointElement,
+  CategoryScale
+);
 
 const props = defineProps<{
   history: Array<{
