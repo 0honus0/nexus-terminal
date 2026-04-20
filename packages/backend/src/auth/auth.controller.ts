@@ -107,6 +107,13 @@ const buildTwoFactorOtpAuthUrl = (username: string, secret: string): string =>
     issuer: 'NexusTerminal',
   });
 
+// 允许最多 ±120 秒偏差（4 * 30 秒），用于兼容客户端设备轻微时钟漂移。
+const TOTP_VERIFY_WINDOW = 4;
+// 兜底窗口：用于兼容设备时钟严重漂移场景（±10 分钟）。
+const TOTP_RELAXED_WINDOW = 20;
+// 超过该阈值代表客户端时间明显漂移，记录告警便于排障。
+const TOTP_SKEW_WARN_THRESHOLD = 2;
+
 export interface User {
   id: number;
   username: string;
@@ -919,15 +926,36 @@ export const verifyLogin2FA = async (
       return;
     }
 
-    const verified = speakeasy.totp.verify({
+    let verificationDelta = speakeasy.totp.verifyDelta({
       secret: user.two_factor_secret,
       encoding: 'base32',
       token: normalizedToken,
-      // 适度放宽时间窗口，降低客户端时钟轻微漂移导致的误判
-      window: 2,
+      window: TOTP_VERIFY_WINDOW,
     });
 
+    if (!verificationDelta) {
+      const relaxedDelta = speakeasy.totp.verifyDelta({
+        secret: user.two_factor_secret,
+        encoding: 'base32',
+        token: normalizedToken,
+        window: TOTP_RELAXED_WINDOW,
+      });
+      if (relaxedDelta) {
+        verificationDelta = relaxedDelta;
+        console.warn(
+          `[AuthController] 用户 ${user.username} 的 2FA 登录验证码在宽松窗口内通过（delta=${relaxedDelta.delta}），疑似客户端时间漂移。`
+        );
+      }
+    }
+    const verified = verificationDelta !== undefined;
+
     if (verified) {
+      const delta = verificationDelta?.delta ?? 0;
+      if (Math.abs(delta) > TOTP_SKEW_WARN_THRESHOLD) {
+        console.warn(
+          `[AuthController] 用户 ${user.username} 的 2FA 登录验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
+        );
+      }
       console.info(`用户 ${user.username} 2FA 验证成功。`);
       const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
       ipBlacklistService.resetAttempts(clientIp);
@@ -1196,15 +1224,36 @@ export const verifyAndActivate2FA = async (
     }
 
     const db = await getDbInstance();
-    const verified = speakeasy.totp.verify({
+    let verificationDelta = speakeasy.totp.verifyDelta({
       secret: effectiveSecret,
       encoding: 'base32',
       token: normalizedToken,
-      // 适度放宽时间窗口，降低客户端时钟轻微漂移导致的误判
-      window: 2,
+      window: TOTP_VERIFY_WINDOW,
     });
 
+    if (!verificationDelta) {
+      const relaxedDelta = speakeasy.totp.verifyDelta({
+        secret: effectiveSecret,
+        encoding: 'base32',
+        token: normalizedToken,
+        window: TOTP_RELAXED_WINDOW,
+      });
+      if (relaxedDelta) {
+        verificationDelta = relaxedDelta;
+        console.warn(
+          `[AuthController] 用户 ${userId} 的 2FA 激活验证码在宽松窗口内通过（delta=${relaxedDelta.delta}），疑似客户端时间漂移。`
+        );
+      }
+    }
+    const verified = verificationDelta !== undefined;
+
     if (verified) {
+      const delta = verificationDelta?.delta ?? 0;
+      if (Math.abs(delta) > TOTP_SKEW_WARN_THRESHOLD) {
+        console.warn(
+          `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
+        );
+      }
       const now = Math.floor(Date.now() / 1000);
       const result = await runDb(
         db,
