@@ -28,7 +28,7 @@ const ensurePresetHtmlThemesDirExists = async () => {
   } catch {
     // 目录不存在，创建它
     await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
-    console.info(
+    console.debug(
       `[AppearanceService] Created preset html-themes directory at ${PRESET_HTML_THEMES_DIR}`
     );
   }
@@ -43,7 +43,7 @@ const ensureUserCustomHtmlThemesDirExists = async () => {
   } catch {
     // 目录不存在，创建它
     await fs.mkdir(USER_CUSTOM_HTML_THEMES_DIR, { recursive: true });
-    console.info(
+    console.debug(
       `[AppearanceService] Created user custom_html_theme directory at ${USER_CUSTOM_HTML_THEMES_DIR}`
     );
   }

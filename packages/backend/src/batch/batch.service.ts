@@ -161,7 +161,7 @@ async function processTask(
 
   await new Promise<void>((resolve) => {
     const onAbort = () => {
-      console.info(`[BatchService] 任务 ${taskId} 收到取消信号。`);
+      console.debug(`[BatchService] 任务 ${taskId} 收到取消信号。`);
       taskCancelled = true;
       // 将所有 queued 状态的子任务标记为取消
       for (let i = currentIndex; i < subTasks.length; i++) {

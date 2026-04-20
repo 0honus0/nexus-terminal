@@ -102,7 +102,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
   // 启用外键约束
   await runDb(db, 'PRAGMA foreign_keys = ON;');
 
-  console.info('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
+  console.debug('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
 
   // 开始事务（用于表创建）
   await new Promise<void>((resolveTx, rejectTx) => {
@@ -131,7 +131,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
           console.error('[DB Init] 提交数据库初始化事务失败:', commitErr);
           rejectCommit(commitErr);
         } else {
-          console.info('[DB Init] 数据库初始化事务提交成功');
+          console.debug('[DB Init] 数据库初始化事务提交成功');
           resolveCommit();
         }
       });

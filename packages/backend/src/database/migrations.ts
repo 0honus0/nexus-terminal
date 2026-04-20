@@ -358,7 +358,7 @@ const definedMigrations: Migration[] = [
  */
 export const runMigrations = (db: Database): Promise<void> => {
   return new Promise((resolve, reject) => {
-    console.info('[Migrations] 开始检查和应用数据库迁移...');
+    console.debug('[Migrations] 开始检查和应用数据库迁移...');
 
     db.serialize(() => {
       // 步骤 1: 确保 migrations 表存在
@@ -367,7 +367,7 @@ export const runMigrations = (db: Database): Promise<void> => {
           console.error('[Migrations] 创建 migrations 表失败:', err);
           return reject(new Error(`创建 migrations 表失败: ${err.message}`));
         }
-        console.info('[Migrations] migrations 表已确保存在。');
+        console.debug('[Migrations] migrations 表已确保存在。');
 
         // 步骤 2: 获取当前数据库版本 (已应用的最大迁移 ID)
         db.get(
@@ -379,7 +379,7 @@ export const runMigrations = (db: Database): Promise<void> => {
             }
 
             const currentVersion = row?.currentVersion ?? 0; // 如果表为空或没有记录，则认为版本为 0
-            console.info(`[Migrations] 当前数据库版本: ${currentVersion}`);
+            console.debug(`[Migrations] 当前数据库版本: ${currentVersion}`);
 
             // 步骤 3: 确定需要应用的迁移
             const migrationsToApply = definedMigrations
@@ -387,11 +387,11 @@ export const runMigrations = (db: Database): Promise<void> => {
               .sort((a, b) => a.id - b.id); // 确保按 ID 升序应用
 
             if (migrationsToApply.length === 0) {
-              console.info('[Migrations] 数据库已是最新版本，无需迁移。');
+              console.debug('[Migrations] 数据库已是最新版本，无需迁移。');
               return resolve();
             }
 
-            console.info(
+            console.debug(
               `[Migrations] 发现 ${migrationsToApply.length} 个新迁移需要应用:`,
               migrationsToApply.map((m) => `  #${m.id}: ${m.name}`)
             );
@@ -420,16 +420,16 @@ export const runMigrations = (db: Database): Promise<void> => {
                   // 步骤 4.1: 执行前置检查 (如果存在)
                   let needsSqlExecution = true;
                   if (migration.check) {
-                    console.info(`[Migrations] 执行迁移 #${migration.id} 的前置检查...`);
+                    console.debug(`[Migrations] 执行迁移 #${migration.id} 的前置检查...`);
                     needsSqlExecution = await migration.check(db);
-                    console.info(
+                    console.debug(
                       `[Migrations] 迁移 #${migration.id} 前置检查结果: ${needsSqlExecution ? '需要执行 SQL' : '跳过 SQL 执行'}`
                     );
                   }
 
                   if (needsSqlExecution) {
                     // 步骤 4.2: 执行迁移 SQL
-                    console.info(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
+                    console.debug(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
                     await new Promise<void>((resolveSql, rejectSql) => {
                       db.exec(migration.sql, (execErr) => {
                         if (execErr) {
@@ -454,7 +454,7 @@ export const runMigrations = (db: Database): Promise<void> => {
                   }
 
                   // 步骤 4.3: 记录迁移到 migrations 表
-                  console.info(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表...`);
+                  console.debug(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表...`);
                   const insertSQL =
                     "INSERT INTO migrations (id, name, applied_at) VALUES (?, ?, strftime('%s', 'now'))";
                   await new Promise<void>((resolveInsert, rejectInsert) => {
@@ -472,7 +472,7 @@ export const runMigrations = (db: Database): Promise<void> => {
                   });
 
                   // 步骤 4.4: 提交事务
-                  console.info(`[Migrations] 提交迁移 #${migration.id} 事务...`);
+                  console.debug(`[Migrations] 提交迁移 #${migration.id} 事务...`);
                   await new Promise<void>((resolveCommit, rejectCommit) => {
                     db.run('COMMIT', (commitErr) => {
                       if (commitErr) {

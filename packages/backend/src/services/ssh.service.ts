@@ -268,11 +268,7 @@ const _setupSshClientListenersAndConnect = (
     const eventHandlers = {
       ready: async () => {
         const successMessage = `${logPrefix} SSH connection successful. Target: ${config.host || (config.sock ? 'stream-based' : 'unknown')}`;
-        if (isFinalClient) {
-          console.info(successMessage);
-        } else {
-          console.debug(successMessage);
-        }
+        console.debug(successMessage);
         client.removeListener('error', eventHandlers.error);
         client.removeListener('close', eventHandlers.close);
 
@@ -837,7 +833,7 @@ export const openShell = (sshClient: Client): Promise<ClientChannel> => {
         console.error(`SshService: 打开 Shell 失败:`, err);
         return reject(new Error(`打开 Shell 失败: ${err.message}`));
       }
-      console.info(`SshService: Shell 通道已打开。`);
+      console.debug(`SshService: Shell 通道已打开。`);
       resolve(stream);
     });
   });
@@ -850,7 +846,7 @@ export const openShell = (sshClient: Client): Promise<ClientChannel> => {
  * @throws Error 如果连接失败或配置错误
  */
 export const testConnection = async (connectionId: number): Promise<{ latency: number }> => {
-  console.info(`SshService: 测试连接 ${connectionId}...`);
+  console.debug(`SshService: 测试连接 ${connectionId}...`);
   let sshClient: Client | null = null;
   const startTime = Date.now();
   try {
@@ -858,7 +854,7 @@ export const testConnection = async (connectionId: number): Promise<{ latency: n
     sshClient = await establishSshConnection(connDetails, TEST_TIMEOUT);
     const endTime = Date.now();
     const latency = endTime - startTime;
-    console.info(`SshService: 测试连接 ${connectionId} 成功，延迟: ${latency}ms。`);
+    console.debug(`SshService: 测试连接 ${connectionId} 成功，延迟: ${latency}ms。`);
     return { latency };
   } catch (error: unknown) {
     console.error(`SshService: 测试连接 ${connectionId} 失败:`, error);
@@ -888,7 +884,7 @@ export const testUnsavedConnection = async (connectionConfig: {
   ssh_key_id?: number | null;
   proxy_id?: number | null;
 }): Promise<{ latency: number }> => {
-  console.info(
+  console.debug(
     `SshService: 测试未保存的连接到 ${connectionConfig.host}:${connectionConfig.port}...`
   );
   let sshClient: Client | null = null;
@@ -985,7 +981,7 @@ export const testUnsavedConnection = async (connectionConfig: {
 
     const endTime = Date.now();
     const latency = endTime - startTime;
-    console.info(
+    console.debug(
       `SshService: 测试未保存的连接到 ${connectionConfig.host}:${connectionConfig.port} 成功，延迟: ${latency}ms。`
     );
     return { latency };

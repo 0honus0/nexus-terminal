@@ -64,7 +64,7 @@ export class IpBlacklistService {
       }
       // 检查封禁时间是否已过
       if (entry.blocked_until && entry.blocked_until > Math.floor(Date.now() / 1000)) {
-        console.info(
+        console.debug(
           `[IP Blacklist] IP ${ip} 当前被封禁，直到 ${new Date(entry.blocked_until * 1000).toISOString()}`
         );
         return true; // 仍在封禁期内
@@ -90,7 +90,7 @@ export class IpBlacklistService {
     }
 
     if (LOCAL_IPS.includes(ip)) {
-      console.info(`[IP Blacklist] 检测到本地 IP ${ip} 登录失败，跳过黑名单处理。`);
+      console.debug(`[IP Blacklist] 检测到本地 IP ${ip} 登录失败，跳过黑名单处理。`);
       return;
     }
 
@@ -117,7 +117,7 @@ export class IpBlacklistService {
             `[IP Blacklist] IP ${ip} 登录失败次数达到 ${newAttempts} 次 (阈值 ${maxAttempts})，将被封禁 ${banDuration} 秒。`
           );
         } else if (newAttempts >= maxAttempts && entry.blocked_until) {
-          console.info(`[IP Blacklist] IP ${ip} 再次登录失败，当前已处于封禁状态。`);
+          console.debug(`[IP Blacklist] IP ${ip} 再次登录失败，当前已处于封禁状态。`);
         }
 
         await runDb(
@@ -184,7 +184,7 @@ export class IpBlacklistService {
     try {
       const db = await getDbInstance();
       await runDb(db, 'DELETE FROM ip_blacklist WHERE ip = ?', [ip]);
-      console.info(`[IP Blacklist] 已重置 IP ${ip} 的失败尝试记录。`);
+      console.debug(`[IP Blacklist] 已重置 IP ${ip} 的失败尝试记录。`);
     } catch (error: unknown) {
       console.error(`[IP Blacklist] 重置 IP ${ip} 尝试次数时出错:`, getErrorMessage(error));
     }
@@ -228,7 +228,7 @@ export class IpBlacklistService {
       const db = await getDbInstance();
       const result = await runDb(db, 'DELETE FROM ip_blacklist WHERE ip = ?', [ip]);
       if (result.changes > 0) {
-        console.info(`[IP Blacklist] 已从黑名单中删除 IP ${ip}。`);
+        console.debug(`[IP Blacklist] 已从黑名单中删除 IP ${ip}。`);
         return true;
       }
       console.warn(`[IP Blacklist] 尝试删除 IP ${ip}，但该 IP 不在黑名单中。`);

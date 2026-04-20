@@ -125,7 +125,7 @@ export function initializeUpgradeHandler(
         socket.destroy();
         return;
       }
-      console.info(
+      console.debug(
         `WebSocket 认证成功 (Path: ${pathname})：用户 ${request.session.username} (ID: ${request.session.userId})`
       );
       const typedRequest = getUpgradeRequest(request);
@@ -134,7 +134,7 @@ export function initializeUpgradeHandler(
       // 本地调试用/rdp-proxy，nginx反代用/ws/rdp-proxy
       if (pathname === '/rdp-proxy' || pathname === '/ws/rdp-proxy') {
         // RDP 代理路径 - 直接处理升级，连接逻辑在 'connection' 事件中处理
-        console.info(`WebSocket: Handling RDP proxy upgrade for user ${request.session.username}`);
+        console.debug(`WebSocket: Handling RDP proxy upgrade for user ${request.session.username}`);
         wss.handleUpgrade(request, socket, head, (ws) => {
           const extWs = ws as AuthenticatedWebSocket;
           extWs.userId = request.session.userId;
@@ -151,7 +151,7 @@ export function initializeUpgradeHandler(
         });
       } else {
         // 默认路径 (SSH, SFTP, Docker etc.) - 按原逻辑处理
-        console.info(`WebSocket: Handling standard upgrade for user ${request.session.username}`);
+        console.debug(`WebSocket: Handling standard upgrade for user ${request.session.username}`);
         wss.handleUpgrade(request, socket, head, (ws) => {
           const extWs = ws as AuthenticatedWebSocket;
           extWs.userId = request.session.userId;
