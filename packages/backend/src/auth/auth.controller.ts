@@ -91,6 +91,14 @@ const normalizeTotpToken = (token: unknown): string => {
     .trim();
 };
 
+const buildTwoFactorOtpAuthUrl = (username: string, secret: string): string =>
+  speakeasy.otpauthURL({
+    secret,
+    encoding: 'base32',
+    label: `NexusTerminal (${username})`,
+    issuer: 'NexusTerminal',
+  });
+
 export interface User {
   id: number;
   username: string;
@@ -1090,6 +1098,19 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
+    // 会话中已有临时密钥时直接复用，避免并发 setup 导致前端展示密钥与后端校验密钥不一致。
+    const sessionTempSecret = req.session.tempTwoFactorSecret;
+    if (sessionTempSecret) {
+      const qrCodeUrl = await qrcode.toDataURL(
+        buildTwoFactorOtpAuthUrl(username, sessionTempSecret)
+      );
+      res.json({
+        secret: sessionTempSecret,
+        qrCodeUrl,
+      });
+      return;
+    }
+
     const secret = speakeasy.generateSecret({
       length: 20,
       name: `NexusTerminal (${username})`,
@@ -1097,11 +1118,7 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
 
     req.session.tempTwoFactorSecret = secret.base32;
 
-    if (!secret.otpauth_url) {
-      throw new Error('无法生成 OTP Auth URL');
-    }
-
-    const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url);
+    const qrCodeUrl = await qrcode.toDataURL(buildTwoFactorOtpAuthUrl(username, secret.base32));
 
     // 显式保存 session，确保 tempTwoFactorSecret 在 verify 阶段可见
     req.session.save((saveErr) => {
@@ -1249,6 +1266,9 @@ export const disable2FA = async (
     const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
     auditLogService.logAction('2FA_DISABLED', { userId, ip: clientIp });
     notificationService.sendNotification('2FA_DISABLED', { userId, ip: clientIp });
+
+    // 禁用时清理临时密钥，避免后续重新启用时读取到陈旧状态。
+    delete req.session.tempTwoFactorSecret;
 
     res.status(200).json({ message: '两步验证已成功禁用。' });
   } catch (error: unknown) {
