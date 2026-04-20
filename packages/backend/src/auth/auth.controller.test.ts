@@ -38,6 +38,7 @@ vi.mock('speakeasy', () => ({
   default: {
     totp: {
       verify: vi.fn(),
+      verifyDelta: vi.fn(),
     },
   },
 }));
@@ -262,7 +263,7 @@ describe('Auth Controller - Security Fixes', () => {
         };
 
         (getDb as any).mockResolvedValueOnce(mockUser);
-        (speakeasy.totp.verify as any).mockReturnValueOnce(true);
+        (speakeasy.totp.verifyDelta as any).mockReturnValueOnce({ delta: 0 });
 
         const regenerateSpy = vi.spyOn(mockSession, 'regenerate');
 
@@ -544,7 +545,7 @@ describe('Auth Controller - Security Fixes', () => {
         };
 
         (getDb as any).mockResolvedValueOnce(mockUser);
-        (speakeasy.totp.verify as any).mockReturnValueOnce(true);
+        (speakeasy.totp.verifyDelta as any).mockReturnValueOnce({ delta: 0 });
 
         await authController.verifyLogin2FA(mockReq as Request, mockRes as Response);
 
