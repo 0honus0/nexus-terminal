@@ -93,7 +93,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
         console.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeIdNum}`);
         throw new Error(`指定的终端主题 ID 不存在: ${themeIdNum}`);
       }
-      console.info(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
+      console.debug(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
     } catch (e: unknown) {
       console.error(
         `[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`,
@@ -106,7 +106,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
     settingsDto.activeTerminalThemeId === null
   ) {
     // 处理显式设置为 null (表示重置为默认/无用户主题)
-    console.info(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
+    console.debug(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
     // 仓库层会处理 null
   }
 
@@ -268,7 +268,7 @@ export const removePageBackground = async (): Promise<boolean> => {
       }
     }
   } else {
-    console.info('[AppearanceService] 没有页面背景文件路径需要删除。');
+    console.debug('[AppearanceService] 没有页面背景文件路径需要删除。');
   }
 
   // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
@@ -300,7 +300,7 @@ export const removeTerminalBackground = async (): Promise<boolean> => {
       }
     }
   } else {
-    console.info('[AppearanceService] 没有终端背景文件路径需要删除。');
+    console.debug('[AppearanceService] 没有终端背景文件路径需要删除。');
   }
 
   // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
@@ -690,7 +690,7 @@ export const listRemoteHtmlPresets = async (
   const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${repoPath}?ref=${ref}`;
 
   try {
-    console.info(`[AppearanceService] 正在从 GitHub API 获取远程主题列表: ${apiUrl}`);
+    console.debug(`[AppearanceService] 正在从 GitHub API 获取远程主题列表: ${apiUrl}`);
     const response = await axios.get(apiUrl, {
       headers: { Accept: 'application/vnd.github.v3+json' },
       // 对于公共仓库，通常不需要 token
@@ -703,7 +703,7 @@ export const listRemoteHtmlPresets = async (
           name: item.name,
           downloadUrl: item.download_url, // GitHub API 通常会提供 download_url
         }));
-      console.info(`[AppearanceService] 成功获取 ${htmlFiles.length} 个远程 HTML 主题。`);
+      console.debug(`[AppearanceService] 成功获取 ${htmlFiles.length} 个远程 HTML 主题。`);
       return htmlFiles;
     }
     console.error(
@@ -770,7 +770,7 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
   }
 
   try {
-    console.info(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
+    console.debug(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
     const response = await axios.get(fileUrl, {
       responseType: 'text', // 确保获取的是文本内容
       maxRedirects: 0, // 禁止重定向 (SSRF 防护)
@@ -778,7 +778,7 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
     });
 
     if (response.status === 200 && typeof response.data === 'string') {
-      console.info(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
+      console.debug(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
       return response.data;
     }
     console.error(

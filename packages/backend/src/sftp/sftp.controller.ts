@@ -63,12 +63,12 @@ export const downloadFile = async (
     return;
   }
 
-  console.info(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
+  console.debug(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
   for (const [sessionId, state] of clientStates.entries()) {
     // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
     if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
       targetState = state;
-      console.info(`SFTP 下载：找到匹配的会话 (Session ID: ${sessionId})。`);
+      console.debug(`SFTP 下载：找到匹配的会话 (Session ID: ${sessionId})。`);
       break;
     }
   }
@@ -126,7 +126,7 @@ export const downloadFile = async (
 
     // 监听响应对象的 close 事件，确保流被正确关闭 (虽然 pipe 通常会处理)
     res.on('close', () => {
-      console.info(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
+      console.debug(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
     });
 
     console.info(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);
@@ -177,14 +177,14 @@ export const downloadDirectory = async (
     return;
   }
 
-  console.info(
+  console.debug(
     `SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`
   );
   for (const [sessionId, state] of clientStates.entries()) {
     // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
     if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
       targetState = state;
-      console.info(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
+      console.debug(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
       break;
     }
   }
@@ -466,7 +466,7 @@ export const handleCompressRequest = async (
       return;
   }
 
-  console.info(`[WS SFTP Compress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+  console.debug(`[WS SFTP Compress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
 
   // --- 执行命令 ---
   try {
@@ -495,7 +495,7 @@ export const handleCompressRequest = async (
 
       stream.on('close', (code: number | null) => {
         exitCode = code;
-        console.info(
+        console.debug(
           `[WS SFTP Compress ${sessionId}] Command finished with code ${exitCode} (ID: ${requestId}). Stderr length: ${stderrData.length}`
         );
         if (exitCode === 0 && !isErrorInStdErr(stderrData)) {
@@ -603,7 +603,7 @@ export const handleDecompressRequest = async (
     return;
   }
 
-  console.info(
+  console.debug(
     `[WS SFTP Decompress ${sessionId}] Executing command: ${command} (ID: ${requestId})`
   );
 
@@ -634,7 +634,7 @@ export const handleDecompressRequest = async (
 
       stream.on('close', (code: number | null) => {
         exitCode = code;
-        console.info(
+        console.debug(
           `[WS SFTP Decompress ${sessionId}] Command finished with code ${exitCode} (ID: ${requestId}). Stderr length: ${stderrData.length}`
         );
         if (exitCode === 0 && !isErrorInStdErr(stderrData)) {

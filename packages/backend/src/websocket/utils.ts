@@ -68,7 +68,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
 
   const state = clientStates.get(sessionId);
   if (state) {
-    console.info(
+    console.debug(
       `WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`
     );
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -91,7 +91,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       state.suspendLogPath &&
       state.ws.userId !== undefined
     ) {
-      console.info(
+      console.debug(
         `WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`
       );
       try {
@@ -106,7 +106,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
           customSuspendName: undefined, // 如果需要，可以从 state 或其他地方获取
         };
 
-        // 从 state 中“分离”SSH资源，防止后续意外关闭
+        // 从 state 中"分离"SSH资源，防止后续意外关闭
         const sshClientToPass = state.sshClient;
         const channelToPass = state.sshShellStream;
         state.sshShellStream = undefined; // 清除引用
@@ -151,7 +151,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       // 未标记挂起，也未被服务接管，执行常规关闭
       state.sshShellStream?.end();
       state.sshClient?.end();
-      console.info(`WebSocket: 会话 ${sessionId} 的 SSH 连接已关闭 (未标记挂起，未被服务接管)。`);
+      console.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已关闭 (未标记挂起，未被服务接管)。`);
       void auditLogService.logAction('SSH_DISCONNECT', {
         userId: state.ws.userId,
         username: state.ws.username,
@@ -163,13 +163,13 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       });
     } else if (state.isSuspendedByService) {
       // 已被服务接管（例如通过旧的 startSuspend 流程，或成功移交后），不在此处关闭
-      console.info(`WebSocket: 会话 ${sessionId} 的 SSH 连接已由挂起服务管理，跳过关闭。`);
+      console.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已由挂起服务管理，跳过关闭。`);
     }
 
     // 4. 清理 Docker 状态轮询定时器
     if (state.dockerStatusIntervalId) {
       clearInterval(state.dockerStatusIntervalId);
-      console.info(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
+      console.debug(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
     }
 
     // 5. 从状态 Map 中移除
@@ -180,7 +180,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       delete state.ws.sessionId;
     }
 
-    console.info(`WebSocket: 会话 ${sessionId} 已清理。`);
+    console.debug(`WebSocket: 会话 ${sessionId} 已清理。`);
   } else {
     // console.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
   }

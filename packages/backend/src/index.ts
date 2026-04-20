@@ -72,11 +72,11 @@ if (rootConfigResult.error && (rootConfigResult.error as NodeJS.ErrnoException).
     `[ENV Init Early] Warning: Could not load root .env file from ${projectRootEnvPath}. Error: ${rootConfigResult.error.message}`
   );
 } else if (!rootConfigResult.error) {
-  console.info(
+  console.debug(
     `[ENV Init Early] Loaded environment variables from root .env file: ${projectRootEnvPath}`
   );
 } else {
-  console.info(
+  console.debug(
     `[ENV Init Early] Root .env file not found at ${projectRootEnvPath}, proceeding without it.`
   );
 }
@@ -94,7 +94,7 @@ if (
     `[ENV Init Early] Warning: Could not load data .env file from ${dataEnvPathGlobal}. Error: ${dataConfigResultGlobal.error.message}`
   );
 } else if (!dataConfigResultGlobal.error) {
-  console.info(
+  console.debug(
     `[ENV Init Early] Loaded environment variables from data .env file: ${dataEnvPathGlobal}`
   );
 }
@@ -356,7 +356,7 @@ const resolvePasskeyRpIdFromHost = (host: string): string | undefined => {
 const initializeDatabase = async () => {
   try {
     const db = await getDbInstance();
-    console.info('[Index] 正在检查用户数量...');
+    console.debug('[Index] 正在检查用户数量...');
     const userCount = await new Promise<number>((resolve, reject) => {
       db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: { count: number }) => {
         if (err) {
@@ -366,7 +366,7 @@ const initializeDatabase = async () => {
         resolve(row.count);
       });
     });
-    console.info(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
+    console.debug(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
   } catch (error) {
     console.error('数据库初始化或检查失败:', error);
     process.exit(1);

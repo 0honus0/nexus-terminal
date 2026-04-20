@@ -23,7 +23,7 @@ export class CaptchaService {
     const captchaConfig = await settingsService.getCaptchaConfig();
 
     if (!captchaConfig.enabled) {
-      console.info('[CaptchaService] CAPTCHA 未启用，跳过验证。');
+      console.debug('[CaptchaService] CAPTCHA 未启用，跳过验证。');
       return true; // 未启用则视为验证通过
     }
 
@@ -39,7 +39,7 @@ export class CaptchaService {
         }
         return this._verifyReCaptcha(token, captchaConfig.recaptchaSecretKey);
       case 'none':
-        console.info('[CaptchaService] CAPTCHA 提供商设置为 "none"，跳过验证。');
+        console.debug('[CaptchaService] CAPTCHA 提供商设置为 "none"，跳过验证。');
         return true; // 提供商为 none 也视为通过
       default:
         console.error(`[CaptchaService] 未知的 CAPTCHA 提供商: ${captchaConfig.provider}`);
@@ -68,7 +68,7 @@ export class CaptchaService {
     // 使用一个固定的、已知的无效令牌或一个不太可能有效的测试令牌
     const testToken = 'static_test_token_for_credential_verification_NexusTerminal';
 
-    console.info(
+    console.debug(
       `[CaptchaService] 正在验证 ${provider} 凭据 (SiteKey: ${siteKey.substring(0, 5)}...)`
     );
 
@@ -104,7 +104,7 @@ export class CaptchaService {
     isCredentialVerification = false
   ): Promise<boolean> {
     const mode = isCredentialVerification ? '凭据' : '令牌';
-    console.info(`[CaptchaService] 正在验证 hCaptcha ${mode}...`);
+    console.debug(`[CaptchaService] 正在验证 hCaptcha ${mode}...`);
     try {
       const params = new URLSearchParams();
       params.append('secret', secretKey);
@@ -118,11 +118,11 @@ export class CaptchaService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      console.info(`[CaptchaService] hCaptcha ${mode}验证响应:`, response.data);
+      console.debug(`[CaptchaService] hCaptcha ${mode}验证响应:`, response.data);
       const errorCodes: string[] = response.data['error-codes'] || [];
 
       if (response.data && response.data.success === true) {
-        console.info(`[CaptchaService] hCaptcha ${mode}验证成功。`);
+        console.debug(`[CaptchaService] hCaptcha ${mode}验证成功。`);
         return true;
       }
       console.warn(
@@ -130,17 +130,17 @@ export class CaptchaService {
         errorCodes.join(', ') || '未知错误'
       );
       if (isCredentialVerification) {
-        // 对于凭据验证，如果错误不是关于密钥本身的，我们可能仍然认为密钥“可能”有效。
+        // 对于凭据验证，如果错误不是关于密钥本身的，我们可能仍然认为密钥"可能"有效。
         // 关键的错误代码是 'invalid-input-secret'。'invalid-sitekey' 也是一个明确的凭据错误。
         // 其他错误，如 'missing-input-response', 'invalid-input-response' 是关于测试令牌的，可以忽略。
         if (errorCodes.includes('invalid-input-secret') || errorCodes.includes('invalid-sitekey')) {
           throw new Error(`hCaptcha 凭据无效: ${errorCodes.join(', ')}`);
         }
-        // 如果没有明确的密钥错误，并且不是成功，对于凭据验证，这仍可能意味着密钥组合是“可查询的”
+        // 如果没有明确的密钥错误，并且不是成功，对于凭据验证，这仍可能意味着密钥组合是"可查询的"
         // 但为了更严格，我们也可以返回 false，或根据具体错误代码决定。
-        // 此处，如果不是特定的密钥错误，我们乐观地认为凭据本身“可能”没问题，只是测试令牌无效。
+        // 此处，如果不是特定的密钥错误，我们乐观地认为凭据本身"可能"没问题，只是测试令牌无效。
         // 然而，更安全的方式是，任何非 success 都视为凭据验证失败，除非 API 设计允许区分。
-        // 为了符合“校验成功才能保存”，这里如果 success 为 false，即使没有特定密钥错误，也应该返回 false
+        // 为了符合"校验成功才能保存"，这里如果 success 为 false，即使没有特定密钥错误，也应该返回 false
         // 或者抛出错误让上层决定。我们在此处抛出，由 verifyCredentials 捕获并返回 false.
         if (
           errorCodes.length > 0 &&
@@ -152,8 +152,8 @@ export class CaptchaService {
           if (errorCodes.includes('sitekey-secret-mismatch')) {
             throw new Error(`hCaptcha 凭据无效: sitekey 与 secret 不匹配`);
           }
-          // 如果是 'invalid-input-response' 这类关于测试令牌的错误，我们认为密钥“可能”是对的。
-          // 但前端期望布尔值，如果不是 success:true，这里就返回false，表示“未严格验证通过”
+          // 如果是 'invalid-input-response' 这类关于测试令牌的错误，我们认为密钥"可能"是对的。
+          // 但前端期望布尔值，如果不是 success:true，这里就返回false，表示"未严格验证通过"
           console.warn(
             `[CaptchaService] hCaptcha ${mode}验证失败，但错误可能与测试令牌有关而非密钥本身: ${errorCodes.join(', ')}`
           );
@@ -192,7 +192,7 @@ export class CaptchaService {
     isCredentialVerification = false
   ): Promise<boolean> {
     const mode = isCredentialVerification ? '凭据' : '令牌';
-    console.info(
+    console.debug(
       `[CaptchaService] 正在验证 Google reCAPTCHA ${mode}... (SiteKey: ${siteKey ? `${siteKey.substring(0, 5)}...` : 'N/A'})`
     );
     try {
@@ -206,11 +206,11 @@ export class CaptchaService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      console.info(`[CaptchaService] Google reCAPTCHA ${mode}验证响应:`, response.data);
+      console.debug(`[CaptchaService] Google reCAPTCHA ${mode}验证响应:`, response.data);
       const errorCodes: string[] = response.data['error-codes'] || [];
 
       if (response.data && response.data.success === true) {
-        console.info(`[CaptchaService] Google reCAPTCHA ${mode}验证成功。`);
+        console.debug(`[CaptchaService] Google reCAPTCHA ${mode}验证成功。`);
         return true;
       }
       console.warn(

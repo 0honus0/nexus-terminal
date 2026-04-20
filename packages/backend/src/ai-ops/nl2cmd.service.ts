@@ -590,11 +590,11 @@ export async function generateCommand(
     const prompt = buildNL2CMDPrompt(request);
 
     if (process.env.NODE_ENV === 'development') {
-      console.info('[NL2CMD Debug] Request:', {
+      console.debug('[NL2CMD Debug] Request:', {
         ...request,
         query: request.query.substring(0, 50) + (request.query.length > 50 ? '...' : ''),
       });
-      console.info('[NL2CMD Debug] Generated Prompt:', prompt);
+      console.debug('[NL2CMD Debug] Generated Prompt:', prompt);
     }
 
     // 调用 AI Provider
@@ -624,7 +624,7 @@ export async function generateCommand(
     const providerMs = Date.now() - providerStart;
 
     if (process.env.NODE_ENV === 'development') {
-      console.info('[NL2CMD Debug] Raw AI Output:', rawCommand);
+      console.debug('[NL2CMD Debug] Raw AI Output:', rawCommand);
     }
 
     const command = cleanCommandOutput(rawCommand);
@@ -649,7 +649,7 @@ export async function generateCommand(
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.info('[NL2CMD Debug] Cleaned Command:', command);
+      console.debug('[NL2CMD Debug] Cleaned Command:', command);
     }
 
     const warning = detectDangerousCommand(command);

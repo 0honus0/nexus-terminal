@@ -67,7 +67,7 @@ export interface DecryptedConnectionDetails {
 export const getConnectionDetails = async (
   connectionId: number
 ): Promise<DecryptedConnectionDetails> => {
-  console.info(`SshService: getConnectionDetails - 获取连接 ${connectionId} 的详细信息...`);
+  console.debug(`SshService: getConnectionDetails - 获取连接 ${connectionId} 的详细信息...`);
   const rawConnInfo = await ConnectionRepository.findFullConnectionById(connectionId);
 
   if (!rawConnInfo) {
@@ -226,7 +226,7 @@ export const getConnectionDetails = async (
             fullConnInfo.jump_chain.push(decryptedHop);
           }
         } else {
-          console.info(
+          console.debug(
             `SshService: Parsed jump_chain for connection ${connectionId} is empty or not an array after parsing.`
           );
         }
@@ -241,7 +241,7 @@ export const getConnectionDetails = async (
         );
       }
     } else {
-      console.info(
+      console.debug(
         `SshService: Connection ${connectionId} does not have jump_chain configuration in DB, or it is null/empty string.`
       );
     }
@@ -267,9 +267,12 @@ const _setupSshClientListenersAndConnect = (
 
     const eventHandlers = {
       ready: async () => {
-        console.info(
-          `${logPrefix} SSH connection successful. Target: ${config.host || (config.sock ? 'stream-based' : 'unknown')}`
-        );
+        const successMessage = `${logPrefix} SSH connection successful. Target: ${config.host || (config.sock ? 'stream-based' : 'unknown')}`;
+        if (isFinalClient) {
+          console.info(successMessage);
+        } else {
+          console.debug(successMessage);
+        }
         client.removeListener('error', eventHandlers.error);
         client.removeListener('close', eventHandlers.close);
 
@@ -314,7 +317,7 @@ const _setupSshClientListenersAndConnect = (
     client.on('error', eventHandlers.error);
     client.on('close', eventHandlers.close);
 
-    console.info(
+    console.debug(
       `${logPrefix} Attempting to connect... Config: host=${config.host}, port=${config.port}, user=${config.username}, sock=${!!config.sock}`
     );
     client.connect(config);
@@ -347,7 +350,7 @@ const _establishDirectSshConnection = (
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
-      console.info(
+      console.debug(
         `SshService: Keyboard interactive authentication requested for ${connDetails.name}. Messages: ${JSON.stringify(messages)}`
       );
       // 对于 TOTP/2FA，通常只有一个提示信息
@@ -546,7 +549,7 @@ function _prepareConnectConfigForHop(
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
-      console.info(
+      console.debug(
         `SshService: Keyboard interactive auth for jump host ${hopDetail.name}. Messages: ${JSON.stringify(messages)}`
       );
       if (hopDetail.password) {
@@ -638,7 +641,7 @@ async function _establishConnectionViaJumpChainRecursive(
           messages: string[],
           finish: (responses: string[]) => void
         ) => {
-          console.info(
+          console.debug(
             `SshService: Keyboard interactive auth for final target ${finalTargetDetails.name}. Messages: ${JSON.stringify(messages)}`
           );
           if (finalTargetDetails.password) {
@@ -673,7 +676,7 @@ async function _establishConnectionViaJumpChainRecursive(
     // Recursive step: Connect to the current jump host
     const currentJumpHostDetails = jumpChainDetails[hopIndex];
     const currentHopLogPrefix = `SshService: JumpHop[${hopIndex + 1}/${jumpChainDetails.length}] (${currentJumpHostDetails.name || currentJumpHostDetails.host}:${currentJumpHostDetails.port}) -> `;
-    console.info(
+    console.debug(
       `${currentHopLogPrefix}Connecting to jump host: ${currentJumpHostDetails.host}:${currentJumpHostDetails.port} (User: ${currentJumpHostDetails.username}, Auth: ${currentJumpHostDetails.auth_method}). PreviousStream exists: ${!!previousStream}`
     );
 
@@ -684,7 +687,7 @@ async function _establishConnectionViaJumpChainRecursive(
       timeoutPerHop,
       finalTargetDetails.force_keyboard_interactive
     );
-    console.info(
+    console.debug(
       `${currentHopLogPrefix}Prepared connect config for this hop: Host=${connectConfigForThisHop.host}, Port=${connectConfigForThisHop.port}, SockPresent=${!!connectConfigForThisHop.sock}`
     );
 
@@ -695,7 +698,7 @@ async function _establishConnectionViaJumpChainRecursive(
         currentHopClient.removeListener('close', currentHopHandlers.close);
         activeClients.push(currentHopClient); // Add to activeClients only AFTER successful connection
 
-        console.info(`${currentHopLogPrefix}Successfully connected.`);
+        console.debug(`${currentHopLogPrefix}Successfully connected.`);
 
         const isLastJumpHost = hopIndex === jumpChainDetails.length - 1;
         const nextTargetHost = isLastJumpHost
@@ -705,7 +708,7 @@ async function _establishConnectionViaJumpChainRecursive(
           ? finalTargetDetails.port
           : jumpChainDetails[hopIndex + 1].port;
 
-        console.info(
+        console.debug(
           `${currentHopLogPrefix}Attempting forwardOut to ${nextTargetHost}:${nextTargetPort}`
         );
         currentHopClient.forwardOut(
@@ -727,7 +730,7 @@ async function _establishConnectionViaJumpChainRecursive(
                 currentHopClient
               );
             }
-            console.info(
+            console.debug(
               `${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort} successful. Proceeding to next hop or target with new stream.`
             );
             _establishConnectionViaJumpChainRecursive(
@@ -769,7 +772,7 @@ async function _establishConnectionViaJumpChainRecursive(
     currentHopClient.on('error', currentHopHandlers.error);
     currentHopClient.on('close', currentHopHandlers.close);
 
-    console.info(
+    console.debug(
       `${currentHopLogPrefix}Attempting to connect. Config: host=${connectConfigForThisHop.host}, port=${connectConfigForThisHop.port}, user=${connectConfigForThisHop.username}, sock=${!!connectConfigForThisHop.sock}`
     );
     currentHopClient.connect(connectConfigForThisHop);
@@ -863,7 +866,7 @@ export const testConnection = async (connectionId: number): Promise<{ latency: n
   } finally {
     if (sshClient) {
       sshClient.end();
-      console.info(`SshService: 测试连接 ${connectionId} 的客户端已关闭。`);
+      console.debug(`SshService: 测试连接 ${connectionId} 的客户端已关闭。`);
     }
   }
 };
@@ -908,7 +911,7 @@ export const testUnsavedConnection = async (connectionConfig: {
     if (tempConnDetails.auth_method === 'password') {
       tempConnDetails.password = connectionConfig.password;
     } else if (connectionConfig.ssh_key_id) {
-      console.info(
+      console.debug(
         `SshService: Testing unsaved connection using stored SSH key ID: ${connectionConfig.ssh_key_id}...`
       );
       const storedKeyDetails = await SshKeyService.getDecryptedSshKeyById(
@@ -925,7 +928,7 @@ export const testUnsavedConnection = async (connectionConfig: {
     }
 
     if (connectionConfig.proxy_id) {
-      console.info(`SshService: 测试连接需要获取代理 ${connectionConfig.proxy_id} 的信息...`);
+      console.debug(`SshService: 测试连接需要获取代理 ${connectionConfig.proxy_id} 的信息...`);
       const rawProxyInfo = await ProxyRepository.findProxyById(connectionConfig.proxy_id);
       if (!rawProxyInfo) {
         throw new Error(`代理 ID ${connectionConfig.proxy_id} 未找到。`);
@@ -968,7 +971,7 @@ export const testUnsavedConnection = async (connectionConfig: {
             : undefined,
         };
         tempConnDetails.connection_proxy_setting = 'proxy'; // Ensure this is set
-        console.info(`SshService: 代理 ${connectionConfig.proxy_id} 信息获取并解密成功。`);
+        console.debug(`SshService: 代理 ${connectionConfig.proxy_id} 信息获取并解密成功。`);
       } catch (decryptError: unknown) {
         const decryptErrMsg = getErrorMessage(decryptError);
         console.error(`SshService: 处理代理 ${connectionConfig.proxy_id} 凭证失败:`, decryptError);
@@ -995,7 +998,7 @@ export const testUnsavedConnection = async (connectionConfig: {
   } finally {
     if (sshClient) {
       sshClient.end();
-      console.info(`SshService: 测试未保存连接的客户端已关闭。`);
+      console.debug(`SshService: 测试未保存连接的客户端已关闭。`);
     }
   }
 };

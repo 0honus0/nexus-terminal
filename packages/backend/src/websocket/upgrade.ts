@@ -28,7 +28,7 @@ export function initializeUpgradeHandler(
 ): void {
   server.on('upgrade', (request: Request, socket, head) => {
     // --- 添加详细日志：检查传入的请求头和 request.ip ---
-    console.info('[WebSocket Upgrade] Received upgrade request.');
+    console.debug('[WebSocket Upgrade] Received upgrade request.');
     // 安全日志：仅记录非敏感头部（避免泄露 cookie/authorization）
     const safeHeaders = {
       origin: request.headers.origin,
@@ -38,10 +38,10 @@ export function initializeUpgradeHandler(
       connection: request.headers.connection,
       host: request.headers.host,
     };
-    console.info('[WebSocket Upgrade] Safe Headers:', safeHeaders);
-    console.info(`[WebSocket Upgrade] Initial request.ip value: ${request.ip}`); // Express 尝试解析的 IP
-    console.info(`[WebSocket Upgrade] X-Real-IP Header: ${request.headers['x-real-ip']}`);
-    console.info(
+    console.debug('[WebSocket Upgrade] Safe Headers:', safeHeaders);
+    console.debug(`[WebSocket Upgrade] Initial request.ip value: ${request.ip}`); // Express 尝试解析的 IP
+    console.debug(`[WebSocket Upgrade] X-Real-IP Header: ${request.headers['x-real-ip']}`);
+    console.debug(
       `[WebSocket Upgrade] X-Forwarded-For Header: ${request.headers['x-forwarded-for']}`
     );
     // --- 结束添加日志 ---
@@ -64,7 +64,7 @@ export function initializeUpgradeHandler(
       const trimmedIp = rawIp.trim();
       // 使用 net.isIP() 验证：返回 4 (IPv4) 或 6 (IPv6)，0 表示无效
       if (net.isIP(trimmedIp)) {
-        console.info(`[WebSocket Upgrade] Valid IP from ${source}: ${trimmedIp}`);
+        console.debug(`[WebSocket Upgrade] Valid IP from ${source}: ${trimmedIp}`);
         return trimmedIp;
       } else {
         console.warn(
@@ -89,34 +89,34 @@ export function initializeUpgradeHandler(
       if (!ipAddress) {
         // 最后回退到 socket.remoteAddress（通常已是合法 IP）
         ipAddress = request.socket.remoteAddress;
-        console.info(`[WebSocket Upgrade] Using socket.remoteAddress: ${ipAddress}`);
+        console.debug(`[WebSocket Upgrade] Using socket.remoteAddress: ${ipAddress}`);
       }
     } else {
       // 开发环境直接使用 socket.remoteAddress，避免被欺骗
       ipAddress = request.socket.remoteAddress || request.ip;
-      console.info(`[WebSocket Upgrade] Development mode - using direct socket IP: ${ipAddress}`);
+      console.debug(`[WebSocket Upgrade] Development mode - using direct socket IP: ${ipAddress}`);
     }
 
     // 确保 ipAddress 不是 undefined 或空字符串，否则设为 'unknown'
     ipAddress = ipAddress || 'unknown';
-    console.info(`[WebSocket Upgrade] Determined IP Address: ${ipAddress}`);
+    console.debug(`[WebSocket Upgrade] Determined IP Address: ${ipAddress}`);
 
-    console.info(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
+    console.debug(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
 
     const noopResponse = {} as unknown as Parameters<RequestHandler>[1];
     sessionParser(request, noopResponse, () => {
       // --- Origin 校验 (CSWSH 防护) ---
       const { origin } = request.headers;
-      console.info(`[WebSocket Upgrade] Origin Header: ${origin}`);
+      console.debug(`[WebSocket Upgrade] Origin Header: ${origin}`);
 
       if (!origin || !SECURITY_CONFIG.ALLOWED_WS_ORIGINS.includes(origin)) {
         console.info(`[WebSocket Upgrade] REJECTED - Origin not in allowlist: ${origin}`);
-        console.info(`[WebSocket Upgrade] Allowed origins:`, SECURITY_CONFIG.ALLOWED_WS_ORIGINS);
+        console.debug(`[WebSocket Upgrade] Allowed origins:`, SECURITY_CONFIG.ALLOWED_WS_ORIGINS);
         socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
         socket.destroy();
         return;
       }
-      console.info(`[WebSocket Upgrade] Origin validation passed: ${origin}`);
+      console.debug(`[WebSocket Upgrade] Origin validation passed: ${origin}`);
 
       // --- 认证检查 ---
       if (!request.session || !request.session.userId) {

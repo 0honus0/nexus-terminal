@@ -112,7 +112,7 @@ export class SftpService {
   cleanupSftpSession(sessionId: string): void {
     const state = this.clientStates.get(sessionId);
     if (state?.sftp) {
-      console.info(`[SFTP] 正在清理 ${sessionId} 的 SFTP 会话...`);
+      console.debug(`[SFTP] 正在清理 ${sessionId} 的 SFTP 会话...`);
       state.sftp.end();
       state.sftp = undefined;
     }
@@ -306,7 +306,7 @@ export class SftpService {
       readStream.on('end', () => {
         if (errorOccurred) return;
 
-        console.info(
+        console.debug(
           `[SFTP ${sessionId}] readFile ${path} success, size: ${fileData.length} bytes (ID: ${requestId}). Processing content...`
         );
         let encodingUsed: string = 'utf-8'; // Default encoding
@@ -317,7 +317,7 @@ export class SftpService {
           if (requestedEncoding) {
             // 用户指定了编码
             encodingUsed = requestedEncoding;
-            console.info(
+            console.debug(
               `[SFTP ${sessionId}] Using requested encoding: ${encodingUsed} (ID: ${requestId})`
             );
             const normalizedEncoding = encodingUsed.toLowerCase().replace(/[^a-z0-9]/g, ''); // Normalize more aggressively
@@ -334,13 +334,13 @@ export class SftpService {
             }
           } else {
             // 自动检测编码
-            console.info(`[SFTP ${sessionId}] Detecting encoding for ${path} (ID: ${requestId})`);
+            console.debug(`[SFTP ${sessionId}] Detecting encoding for ${path} (ID: ${requestId})`);
             const detection = jschardet.detect(fileData);
             const detectedEncodingRaw = detection.encoding
               ? detection.encoding.toLowerCase()
               : 'utf-8'; // Default to utf-8 if detection fails
             const confidence = detection.confidence || 0;
-            console.info(
+            console.debug(
               `[SFTP ${sessionId}] Detected encoding: ${detectedEncodingRaw} (confidence: ${confidence})`
             );
 
@@ -352,12 +352,12 @@ export class SftpService {
             if (normalizedDetected === 'utf8' || normalizedDetected === 'ascii') {
               encodingUsed = 'utf-8';
               decodedContent = fileData.toString('utf8');
-              console.info(`[SFTP ${sessionId}] Decoded ${path} as UTF-8/ASCII.`);
+              console.debug(`[SFTP ${sessionId}] Decoded ${path} as UTF-8/ASCII.`);
             } else if (chineseEncodings.includes(normalizedDetected)) {
               // If detected as a common Chinese encoding, trust it and use gb18030 for broader compatibility
               encodingUsed = 'gb18030'; // Report gb18030 as used
               decodedContent = iconv.decode(fileData, encodingUsed);
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Decoded ${path} from detected Chinese encoding (${normalizedDetected}) as ${encodingUsed}.`
               );
             } else if (confidence < 0.9) {
@@ -377,18 +377,18 @@ export class SftpService {
                   if (iconv.encodingExists(normalizedDetected)) {
                     encodingUsed = normalizedDetected;
                     decodedContent = iconv.decode(fileData, encodingUsed);
-                    console.info(
+                    console.debug(
                       `[SFTP ${sessionId}] Falling back to decoding ${path} as originally detected ${encodingUsed}.`
                     );
                   } else {
                     encodingUsed = 'utf-8';
                     decodedContent = fileData.toString('utf8');
-                    console.info(`[SFTP ${sessionId}] Falling back to decoding ${path} as UTF-8.`);
+                    console.debug(`[SFTP ${sessionId}] Falling back to decoding ${path} as UTF-8.`);
                   }
                 } else {
                   encodingUsed = 'gb18030'; // Success with GB18030
                   decodedContent = tempContent;
-                  console.info(
+                  console.debug(
                     `[SFTP ${sessionId}] Decoded ${path} as ${encodingUsed} due to low confidence detection.`
                   );
                 }
@@ -400,20 +400,20 @@ export class SftpService {
                 if (iconv.encodingExists(normalizedDetected)) {
                   encodingUsed = normalizedDetected;
                   decodedContent = iconv.decode(fileData, encodingUsed);
-                  console.info(
+                  console.debug(
                     `[SFTP ${sessionId}] Falling back to decoding ${path} as originally detected ${encodingUsed}.`
                   );
                 } else {
                   encodingUsed = 'utf-8';
                   decodedContent = fileData.toString('utf8');
-                  console.info(`[SFTP ${sessionId}] Falling back to decoding ${path} as UTF-8.`);
+                  console.debug(`[SFTP ${sessionId}] Falling back to decoding ${path} as UTF-8.`);
                 }
               }
             } else if (iconv.encodingExists(normalizedDetected)) {
               // Higher confidence, non-Chinese, supported encoding
               encodingUsed = normalizedDetected;
               decodedContent = iconv.decode(fileData, encodingUsed);
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Decoded ${path} from ${encodingUsed} using iconv-lite (high confidence).`
               );
             } else {
@@ -450,7 +450,7 @@ export class SftpService {
         }
 
         // 发送 Base64 编码的原始数据和实际使用的编码
-        console.info(
+        console.debug(
           `[SFTP ${sessionId}] Sending raw content (Base64) and encoding used (${encodingUsed}) for ${path} (ID: ${requestId})`
         );
         state.ws.send(
@@ -514,7 +514,7 @@ export class SftpService {
       let buffer: Buffer;
       try {
         buffer = iconv.encode(data, targetEncoding);
-        console.info(
+        console.debug(
           `[SFTP ${sessionId}] Encoded content for ${path} using ${targetEncoding} (Buffer size: ${buffer.length})`
         );
       } catch (encodeError: unknown) {
@@ -546,7 +546,7 @@ export class SftpService {
           });
         });
         originalMode = fileStats.mode;
-        console.info(
+        console.debug(
           `[SFTP ${sessionId}] Retrieved original file mode for ${path}: ${originalMode.toString(8)} (ID: ${requestId})`
         );
       } catch (statError: unknown) {
@@ -583,11 +583,11 @@ export class SftpService {
       // Listen for the 'close' event which indicates the stream has finished writing and the file descriptor is closed.
       writeStream.on('close', () => {
         if (!errorOccurred) {
-          console.info(
+          console.debug(
             `[SFTP ${sessionId}] writefile ${path} stream closed successfully (ID: ${requestId}). Fetching updated stats...`
           );
           if (originalMode !== undefined) {
-            console.info(
+            console.debug(
               `[SFTP ${sessionId}] Set file mode for ${path} during creation: ${originalMode.toString(8)} (ID: ${requestId})`
             );
           }
@@ -622,7 +622,7 @@ export class SftpService {
                   isSymbolicLink: stats.isSymbolicLink(),
                 },
               };
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Sending writefile success with updated item for ${path} (ID: ${requestId})`
               );
               state.ws.send(
@@ -691,7 +691,7 @@ export class SftpService {
             })
           );
         } else {
-          console.info(
+          console.debug(
             `[SFTP ${sessionId}] mkdir ${path} success (ID: ${requestId}). Fetching stats...`
           );
           // Get stats for the new directory
@@ -726,7 +726,7 @@ export class SftpService {
                   isSymbolicLink: stats.isSymbolicLink(),
                 },
               };
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Sending mkdir success with new item for ${path} (ID: ${requestId})`
               );
               state.ws.send(
@@ -780,8 +780,8 @@ export class SftpService {
     const executeRmRfCommand = async () => {
       const command = `rm -rf '${path.replace(/'/g, "'\\''")}'`;
 
-      console.info(`[SSH Exec ${sessionId}] 尝试使用 rm -rf 命令删除 ${path} (ID: ${requestId})`);
-      console.info(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+      console.debug(`[SSH Exec ${sessionId}] 尝试使用 rm -rf 命令删除 ${path} (ID: ${requestId})`);
+      console.debug(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
 
       try {
         state.sshClient.exec(command, (err, stream) => {
@@ -809,7 +809,7 @@ export class SftpService {
 
           stream.on('close', (code: number | null, signal: string | null) => {
             if (code === 0) {
-              console.info(
+              console.debug(
                 `[SSH Exec ${sessionId}] rm -rf ${path} command executed successfully (ID: ${requestId})`
               );
               state.ws.send(JSON.stringify({ type: 'sftp:rmdir:success', path, requestId }));
@@ -888,7 +888,7 @@ export class SftpService {
             })
           );
         } else {
-          console.info(`[SFTP ${sessionId}] unlink ${path} success (ID: ${requestId})`);
+          console.debug(`[SFTP ${sessionId}] unlink ${path} success (ID: ${requestId})`);
           state.ws.send(JSON.stringify({ type: 'sftp:unlink:success', path, requestId })); // Send specific success type
         }
       });
@@ -950,7 +950,7 @@ export class SftpService {
             })
           );
         } else {
-          console.info(
+          console.debug(
             `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} success (ID: ${requestId}). Fetching stats for new path...`
           );
           // Get stats for the new path
@@ -984,7 +984,7 @@ export class SftpService {
                   isSymbolicLink: stats.isSymbolicLink(),
                 },
               };
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Sending rename success with new item for ${newPath} (ID: ${requestId})`
               );
               state.ws.send(
@@ -1050,7 +1050,7 @@ export class SftpService {
             })
           );
         } else {
-          console.info(
+          console.debug(
             `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} success (ID: ${requestId}). Fetching updated stats...`
           );
           // Get updated stats after chmod
@@ -1085,7 +1085,7 @@ export class SftpService {
                   isSymbolicLink: stats.isSymbolicLink(),
                 },
               };
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Sending chmod success with updated item for ${path} (ID: ${requestId})`
               );
               state.ws.send(
@@ -1145,7 +1145,7 @@ export class SftpService {
             })
           );
         } else {
-          console.info(
+          console.debug(
             `[SFTP ${sessionId}] realpath ${path} -> ${absPath} success (ID: ${requestId}). Fetching target type...`
           );
           // 再次检查 state 和 state.sftp 是否仍然有效，因为回调是异步的
@@ -1197,7 +1197,7 @@ export class SftpService {
               } else if (stats.isDirectory()) {
                 targetType = 'directory';
               }
-              console.info(
+              console.debug(
                 `[SFTP ${sessionId}] Target type for ${absPath} is ${targetType} (ID: ${requestId})`
               );
               state.ws.send(
@@ -1285,12 +1285,12 @@ export class SftpService {
         try {
           const stats = await this.getStats(sftp, sourcePath);
           if (stats.isDirectory()) {
-            console.info(
+            console.debug(
               `[SFTP ${sessionId}] Copying directory ${sourcePath} to ${destPath} (ID: ${requestId})`
             );
             await this.copyDirectoryRecursive(sftp, sourcePath, destPath);
           } else if (stats.isFile()) {
-            console.info(
+            console.debug(
               `[SFTP ${sessionId}] Copying file ${sourcePath} to ${destPath} (ID: ${requestId})`
             );
             await this.copyFile(sftp, sourcePath, destPath);
@@ -1414,7 +1414,7 @@ export class SftpService {
             throw new Error(`目标路径 ${pathModule.basename(newPath)} 已存在`);
           }
 
-          console.info(`[SFTP ${sessionId}] Moving ${oldPath} to ${newPath} (ID: ${requestId})`);
+          console.debug(`[SFTP ${sessionId}] Moving ${oldPath} to ${newPath} (ID: ${requestId})`);
           await this.performRename(sftp, oldPath, newPath); // Use helper for rename logic
 
           // Get stats of the *moved* item at the new location
@@ -1543,7 +1543,7 @@ export class SftpService {
     try {
       // 1. 尝试直接 stat 目录
       await this.getStats(sftp, normalizedPath);
-      // console.info(`[SFTP Util] Directory already exists: ${normalizedPath}`);
+      // console.debug(`[SFTP Util] Directory already exists: ${normalizedPath}`);
       // 目录已存在
     } catch (statError: unknown) {
       const statErrCode = getErrorCode(statError);
@@ -1565,7 +1565,7 @@ export class SftpService {
                 );
                 rejectMkdir(mkdirErr); // Reject to trigger fallback
               } else {
-                console.info(`[SFTP Util] Recursively created directory: ${normalizedPath}`);
+                console.debug(`[SFTP Util] Recursively created directory: ${normalizedPath}`);
                 resolveMkdir();
               }
             });
@@ -1586,7 +1586,7 @@ export class SftpService {
                   // 如果逐级创建也失败，则抛出错误
                   rejectMkdir(new Error(`创建目录失败 ${normalizedPath}: ${mkdirErr.message}`));
                 } else {
-                  console.info(`[SFTP Util] Iteratively created directory: ${normalizedPath}`);
+                  console.debug(`[SFTP Util] Iteratively created directory: ${normalizedPath}`);
                   resolveMkdir();
                 }
               });
@@ -1603,7 +1603,7 @@ export class SftpService {
                 throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
               }
               // 如果目录现在存在，则忽略错误
-              console.info(
+              console.debug(
                 `[SFTP Util] Directory ${normalizedPath} exists after iterative mkdir failure, likely created concurrently.`
               );
             } catch {
@@ -1707,7 +1707,7 @@ export class SftpService {
           return;
         }
         const checkCmd = checkCommands[currentCheckIndex];
-        console.info(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
+        console.debug(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
         state.sshClient.exec(checkCmd, (err, stream) => {
           if (err) {
             console.error(
@@ -1724,12 +1724,12 @@ export class SftpService {
           });
           stream.on('close', (code: number | null) => {
             if (code === 0 && output.trim() !== '') {
-              console.info(
+              console.debug(
                 `[SFTP Command Check ${sessionId}] Command '${commandName}' found using "${checkCmd}". Output: ${output.trim()}`
               );
               resolve(true);
             } else {
-              console.info(
+              console.debug(
                 `[SFTP Command Check ${sessionId}] Command '${commandName}' not found with "${checkCmd}" (code: ${code}, output: "${output.trim()}").`
               );
               currentCheckIndex++;
