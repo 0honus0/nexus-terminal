@@ -21,6 +21,25 @@ app.use(pinia); // 使用配置好的 Pinia 实例
 app.use(router); // 立即启用路由,不再等待初始化完成
 app.use(i18n); // 使用 i18n
 
+const setupWebManifestLink = async () => {
+  try {
+    const response = await fetch('/manifest.json', {
+      method: 'GET',
+      credentials: 'same-origin',
+      redirect: 'manual',
+    });
+    if (!response.ok || response.type === 'opaqueredirect') {
+      return;
+    }
+    const manifestLink = document.createElement('link');
+    manifestLink.rel = 'manifest';
+    manifestLink.href = '/manifest.json';
+    document.head.appendChild(manifestLink);
+  } catch {
+    // 在受保护网关场景中，manifest 可能被重定向到登录页，这里静默跳过以避免控制台噪音
+  }
+};
+
 // --- 应用初始化逻辑 (优化版:先挂载,后加载数据) ---
 (async () => {
   const authStore = useAuthStore(pinia); // 实例化 Auth Store
@@ -90,6 +109,7 @@ app.use(i18n); // 使用 i18n
   }
 
   // --- PWA Service Worker Registration ---
+  await setupWebManifestLink();
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker

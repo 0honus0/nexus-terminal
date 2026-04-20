@@ -7,6 +7,7 @@ import { useDashboardStore } from '../stores/dashboard.store';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import { useAuditLogStore } from '../stores/audit.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { useAuthStore } from '../stores/auth.store';
 import SessionDurationChart from '../components/dashboard/SessionDurationChart.vue';
 import SystemResourcesHistoryChart from '../components/dashboard/SystemResourcesHistoryChart.vue';
 
@@ -19,6 +20,7 @@ const dashboardStore = useDashboardStore();
 const connectionsStore = useConnectionsStore();
 const auditLogStore = useAuditLogStore();
 const uiNotifications = useUiNotificationsStore();
+const authStore = useAuthStore();
 
 const {
   stats,
@@ -31,6 +33,7 @@ const {
   isLoading,
 } = storeToRefs(dashboardStore);
 const { connections } = storeToRefs(connectionsStore);
+const { isInitCompleted, isAuthenticated } = storeToRefs(authStore);
 
 // State
 const showAddEditConnectionForm = ref(false);
@@ -38,6 +41,8 @@ const connectionToEdit = ref<ConnectionInfo | null>(null);
 const autoRefresh = ref(true);
 const refreshInterval = ref(30000);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+const hasInitializedDashboardData = ref(false);
+const isInitializingDashboardData = ref(false);
 
 // 统计卡片图标配置
 const statIconConfig = {
@@ -166,16 +171,40 @@ watch(refreshInterval, () => {
   startAutoRefresh();
 });
 
-onMounted(async () => {
+const initializeDashboardDataIfReady = async () => {
+  if (!isInitCompleted.value || !isAuthenticated.value || hasInitializedDashboardData.value) {
+    return;
+  }
+  if (isInitializingDashboardData.value) {
+    return;
+  }
+  isInitializingDashboardData.value = true;
   try {
     const initialRange = toSecondsRange(dateTimeRange.value);
     dashboardStore.setTimeRange(initialRange);
     await Promise.all([
       dashboardStore.fetchAllData(initialRange),
       connectionsStore.fetchConnections(),
-      auditLogStore.fetchLogs({ page: 1, limit: 10, sortOrder: 'desc', isDashboardRequest: true }),
+      auditLogStore.fetchLogs({
+        page: 1,
+        limit: 10,
+        sortOrder: 'desc',
+        isDashboardRequest: true,
+      }),
     ]);
+    hasInitializedDashboardData.value = true;
     startAutoRefresh();
+  } finally {
+    isInitializingDashboardData.value = false;
+  }
+};
+
+onMounted(async () => {
+  try {
+    await initializeDashboardDataIfReady();
+    if (!hasInitializedDashboardData.value) {
+      console.info('[Dashboard] 等待认证初始化完成后再加载数据。');
+    }
   } catch (error) {
     console.error('[Dashboard] 初始化失败:', error);
     uiNotifications.showError(
@@ -187,6 +216,18 @@ onMounted(async () => {
 onUnmounted(() => {
   stopAutoRefresh();
 });
+
+watch(
+  [isInitCompleted, isAuthenticated],
+  async () => {
+    try {
+      await initializeDashboardDataIfReady();
+    } catch (error) {
+      console.error('[Dashboard] 认证完成后初始化失败:', error);
+    }
+  },
+  { immediate: true }
+);
 
 const openAddConnectionForm = () => {
   connectionToEdit.value = null;
