@@ -57,7 +57,11 @@ export function useTwoFactorAuth() {
     twoFactorSuccess.value = false;
     twoFactorLoading.value = true;
     try {
-      await apiClient.post('/auth/2fa/verify', { token: verificationCode.value });
+      await apiClient.post('/auth/2fa/verify', {
+        token: verificationCode.value,
+        // 显式回传当前页面展示的密钥，避免并发 setup 导致会话临时密钥不一致。
+        secret: setupData.value.secret,
+      });
       twoFactorMessage.value = t('settings.twoFactor.success.activated');
       twoFactorSuccess.value = true;
       twoFactorEnabled.value = true;

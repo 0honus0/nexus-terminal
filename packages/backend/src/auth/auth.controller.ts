@@ -91,6 +91,14 @@ const normalizeTotpToken = (token: unknown): string => {
     .trim();
 };
 
+const normalizeBase32Secret = (secret: unknown): string => {
+  if (typeof secret !== 'string') {
+    return '';
+  }
+
+  return secret.replace(/[\s-]/g, '').trim().toUpperCase();
+};
+
 const buildTwoFactorOtpAuthUrl = (username: string, secret: string): string =>
   speakeasy.otpauthURL({
     secret,
@@ -1147,9 +1155,10 @@ export const verifyAndActivate2FA = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { token } = req.body;
+  const { token, secret: secretFromBody } = req.body as { token?: unknown; secret?: unknown };
   const { userId } = req.session;
-  const tempSecret = req.session.tempTwoFactorSecret;
+  const tempSecret = normalizeBase32Secret(req.session.tempTwoFactorSecret);
+  const providedSecret = normalizeBase32Secret(secretFromBody);
   const normalizedToken = normalizeTotpToken(token);
 
   if (!userId || req.session.requiresTwoFactor) {
@@ -1157,7 +1166,9 @@ export const verifyAndActivate2FA = async (
     return;
   }
 
-  if (!tempSecret) {
+  const effectiveSecret = providedSecret || tempSecret;
+
+  if (!effectiveSecret) {
     res.status(400).json({ message: '未找到临时密钥，请重新开始设置流程。' });
     return;
   }
@@ -1173,9 +1184,20 @@ export const verifyAndActivate2FA = async (
   }
 
   try {
+    if (providedSecret && tempSecret && providedSecret !== tempSecret) {
+      // 兼容并发/重复 setup 导致会话临时密钥与页面展示密钥不一致的场景。
+      console.warn(
+        `[AuthController] 用户 ${userId} 的 2FA 临时密钥与前端提交密钥不一致，优先使用前端提交密钥进行校验。`
+      );
+    }
+
+    if (providedSecret && req.session.tempTwoFactorSecret !== providedSecret) {
+      req.session.tempTwoFactorSecret = providedSecret;
+    }
+
     const db = await getDbInstance();
     const verified = speakeasy.totp.verify({
-      secret: tempSecret,
+      secret: effectiveSecret,
       encoding: 'base32',
       token: normalizedToken,
       // 适度放宽时间窗口，降低客户端时钟轻微漂移导致的误判
@@ -1187,7 +1209,7 @@ export const verifyAndActivate2FA = async (
       const result = await runDb(
         db,
         'UPDATE users SET two_factor_secret = ?, updated_at = ? WHERE id = ?',
-        [tempSecret, now, userId]
+        [effectiveSecret, now, userId]
       );
 
       if (result.changes === 0) {
