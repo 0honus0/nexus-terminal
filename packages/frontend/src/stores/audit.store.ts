@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import axios from 'axios';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { AuditLogEntry, AuditLogApiResponse, AuditLogActionType } from '../types/server.types';
 import { extractErrorMessage } from '../utils/errorExtractor';
@@ -100,8 +101,17 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       }
       error.value = null; // 清除错误
     } catch (err: unknown) {
-      console.error('[AuditLogStore] Error fetching audit logs:', err);
-      error.value = extractErrorMessage(err, '获取审计日志失败');
+      const statusCode = axios.isAxiosError(err) ? err.response?.status : undefined;
+      const isUpstreamUnavailable = statusCode === 502 || statusCode === 503 || statusCode === 504;
+      if (isDashboardRequest && isUpstreamUnavailable) {
+        console.warn(
+          `[AuditLogStore] Dashboard logs fetch skipped due to upstream unavailable (${statusCode}), using cache if present.`
+        );
+        error.value = null;
+      } else {
+        console.error('[AuditLogStore] Error fetching audit logs:', err);
+        error.value = extractErrorMessage(err, '获取审计日志失败');
+      }
       // 如果是仪表盘请求失败，保留缓存数据；否则清空
       if (!isDashboardRequest) {
         logs.value = [];

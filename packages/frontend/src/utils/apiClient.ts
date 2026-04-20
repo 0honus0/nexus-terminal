@@ -4,6 +4,14 @@ import { useAuthStore } from '../stores/auth.store';
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const AI_REQUEST_TIMEOUT_MS = 60_000;
+const TRANSIENT_UPSTREAM_STATUS_CODES = [502, 503, 504] as const;
+const ONE_SHOT_RETRY_DELAY_MS = 350;
+
+interface RetriableRequestConfig {
+  method?: string;
+  url?: string;
+  __retryCount?: number;
+}
 
 // 创建 axios 实例
 const apiClient = axios.create({
@@ -38,15 +46,30 @@ apiClient.interceptors.response.use(
     // 对响应数据做点什么
     return response;
   },
-  (error) => {
+  async (error) => {
     // 处理响应错误
     const requestMethod = error.config?.method?.toUpperCase?.() ?? 'UNKNOWN';
     const requestUrl = error.config?.url ?? 'unknown';
+    const rawRequestMethod = error.config?.method;
 
     if (error.response) {
       const { status, statusText, headers } = error.response;
       const authStore = useAuthStore(); // 在需要时获取 store 实例
       const contentType = headers?.['content-type'] ?? 'unknown';
+      const isUpstreamUnavailableStatus = TRANSIENT_UPSTREAM_STATUS_CODES.includes(
+        status as (typeof TRANSIENT_UPSTREAM_STATUS_CODES)[number]
+      );
+
+      // 对 GET 请求的瞬时上游错误做一次短延迟重试，减少偶发 502/503/504 带来的页面噪声
+      const requestConfig = error.config as RetriableRequestConfig | undefined;
+      const retryCount = Number(requestConfig?.__retryCount ?? 0);
+      const isGetRequest = rawRequestMethod?.toLowerCase?.() === 'get';
+      if (requestConfig && isGetRequest && isUpstreamUnavailableStatus && retryCount < 1) {
+        requestConfig.__retryCount = retryCount + 1;
+        await new Promise((resolve) => setTimeout(resolve, ONE_SHOT_RETRY_DELAY_MS));
+        return apiClient.request(requestConfig);
+      }
+
       const isHtmlResponse =
         typeof error.response.data === 'string' &&
         error.response.data.trimStart().startsWith('<!DOCTYPE html>');
@@ -54,14 +77,19 @@ apiClient.interceptors.response.use(
       if (typeof error.response.data === 'string') {
         bodySnippet = isHtmlResponse ? '[html body omitted]' : error.response.data.slice(0, 160);
       }
-      console.error('[apiClient] Response error:', {
+      const responseErrorPayload = {
         status,
         statusText,
         method: requestMethod,
         url: requestUrl,
         contentType,
         data: bodySnippet,
-      });
+      };
+      if (isUpstreamUnavailableStatus) {
+        console.warn('[apiClient] Response warning:', responseErrorPayload);
+      } else {
+        console.error('[apiClient] Response error:', responseErrorPayload);
+      }
 
       // 处理常见的 HTTP 错误状态码
       switch (status) {
