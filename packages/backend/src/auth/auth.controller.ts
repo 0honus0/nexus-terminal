@@ -751,9 +751,18 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           req.session.cookie.maxAge = undefined;
         }
 
-        res.status(200).json({
-          message: '登录成功。',
-          user: { id: user.id, username: user.username },
+        // 显式保存 session，避免紧邻请求读取到旧会话状态
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error('[AuthController] 登录后会话保存失败:', saveErr);
+            res.status(500).json({ message: '登录过程中发生错误，请重试。' });
+            return;
+          }
+
+          res.status(200).json({
+            message: '登录成功。',
+            user: { id: user.id, username: user.username },
+          });
         });
       });
     }
@@ -919,9 +928,18 @@ export const verifyLogin2FA = async (
           req.session.cookie.maxAge = undefined;
         }
 
-        res.status(200).json({
-          message: '登录成功。',
-          user: { id: user.id, username: user.username },
+        // 显式保存 session，避免登录完成后首个请求出现会话状态竞态
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error('[AuthController] 2FA 验证后会话保存失败:', saveErr);
+            res.status(500).json({ message: '登录完成失败，请重试。' });
+            return;
+          }
+
+          res.status(200).json({
+            message: '登录成功。',
+            user: { id: user.id, username: user.username },
+          });
         });
       });
     } else {
@@ -1406,7 +1424,7 @@ export const getInitData = async (
     });
 
     console.info(
-      `[AuthController] 初始化数据已发送: needsSetup=${needsSetup}, isAuthenticated=${isAuthenticated}`
+      `[AuthController] 初始化数据已发送: needsSetup=${requiresSetup}, isAuthenticated=${isAuthenticated}`
     );
   } catch (error: unknown) {
     console.error('[AuthController] 获取初始化数据时出错:', error);

@@ -176,7 +176,7 @@ dist-scripts/
 electron-app/node_modules/
 electron-app/dist_electron/
 
-# Husky git hooks（仅跟踪 pre-commit）
-.husky/*
-!.husky/pre-commit
+# Husky git hooks
+.husky/
 .ace-tool/
+.omx/
