@@ -8,6 +8,7 @@ permissions:
   contents: read
   issues: write
   pull-requests: read
+  contents: write
 
 concurrency:
   group: ai-issue-${{ github.event.issue.number }}
@@ -30,6 +31,7 @@ jobs:
       AI_MAX_DUP_CANDIDATES: ${{ vars.AI_MAX_DUP_CANDIDATES || '80' }}
       AI_MAX_PR_CANDIDATES: ${{ vars.AI_MAX_PR_CANDIDATES || '20' }}
       AI_MAX_COMMIT_CANDIDATES: ${{ vars.AI_MAX_COMMIT_CANDIDATES || '20' }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
@@ -60,6 +62,13 @@ jobs:
             "url": ${{ toJson(github.event.issue.html_url) }}
           }
           JSON
+
+      - name: Check workspace permissions
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          ls -ld "$GITHUB_WORKSPACE"
+          touch "$GITHUB_WORKSPACE/test_file" || echo "Cannot write!"
+          ls -l "$GITHUB_WORKSPACE/test_file" || true
 
       - name: Stage 1 - classify and rewrite query
         id: rewrite
