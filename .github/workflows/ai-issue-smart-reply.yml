@@ -5,10 +5,9 @@ on:
     types: [opened]
 
 permissions:
-  contents: read
+  contents: write
   issues: write
   pull-requests: read
-  contents: write
 
 concurrency:
   group: ai-issue-${{ github.event.issue.number }}
