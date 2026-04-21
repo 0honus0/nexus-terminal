@@ -20,6 +20,7 @@ const {
   mockUploaderState,
   mockContextMenuState,
   mockSelectionState,
+  mockUseFileManagerSelection,
   mockDragDropState,
   mockKeyboardNavState,
 } = vi.hoisted(() => {
@@ -90,6 +91,7 @@ const {
       }),
       showPopupFileEditorBoolean: mockRef(false),
       fileManagerShowDeleteConfirmationBoolean: mockRef(true),
+      fileManagerSingleClickOpenFileBoolean: mockRef(false),
     },
     mockPathHistoryState: {
       historyList: [],
@@ -125,8 +127,10 @@ const {
       selectedItems: mockRef(new Set<string>()),
       lastClickedIndex: mockRef(-1),
       handleItemClick: vi.fn(),
+      handleItemDoubleClick: vi.fn(),
       clearSelection: vi.fn(),
     },
+    mockUseFileManagerSelection: vi.fn(),
     mockDragDropState: {
       isDraggingOver: mockRef(false),
       showExternalDropOverlay: mockRef(false),
@@ -166,7 +170,7 @@ vi.mock('../composables/file-manager/useFileManagerContextMenu', () => ({
 
 // Mock useFileManagerSelection
 vi.mock('../composables/file-manager/useFileManagerSelection', () => ({
-  useFileManagerSelection: () => mockSelectionState,
+  useFileManagerSelection: (...args: unknown[]) => mockUseFileManagerSelection(...args),
 }));
 
 // Mock useFileManagerDragAndDrop
@@ -321,7 +325,10 @@ describe('FileManager.vue', () => {
     mockSftpManager.isLoading.value = false;
     mockSftpManager.error.value = null;
     mockSelectionState.selectedItems.value = new Set<string>();
+    mockUseFileManagerSelection.mockReset();
+    mockUseFileManagerSelection.mockReturnValue(mockSelectionState);
     mockSessionStore.getOrCreateSftpManager.mockReturnValue(mockSftpManager);
+    mockSettingsState.fileManagerSingleClickOpenFileBoolean.value = false;
   });
 
   afterEach(() => {
@@ -408,6 +415,41 @@ describe('FileManager.vue', () => {
         // handleItemClick 应被调用
         expect(mockOnItemAction).toHaveBeenCalled();
       }
+    });
+
+    it('双击文件行应调用双击处理器', async () => {
+      const wrapper = mount(FileManager, {
+        props: {
+          sessionId: 'session-1',
+          instanceId: 'instance-1',
+          dbConnectionId: 'conn-1',
+          wsDeps: createMockWsDeps(),
+        },
+      });
+
+      const rows = wrapper.findAll('.file-row');
+      const fileRow = rows.find((row) => row.text().includes('test.txt'));
+
+      if (fileRow) {
+        await fileRow.trigger('dblclick');
+        expect(mockSelectionState.handleItemDoubleClick).toHaveBeenCalled();
+      }
+    });
+
+    it('默认应传入目录单击/文件双击的动作回调', () => {
+      mount(FileManager, {
+        props: {
+          sessionId: 'session-1',
+          instanceId: 'instance-1',
+          dbConnectionId: 'conn-1',
+          wsDeps: createMockWsDeps(),
+        },
+      });
+
+      expect(mockUseFileManagerSelection).toHaveBeenCalled();
+      const firstCallArg = mockUseFileManagerSelection.mock.calls[0][0] as Record<string, unknown>;
+      expect(firstCallArg.onItemSingleClickAction).toBeTypeOf('function');
+      expect(firstCallArg.onItemDoubleClickAction).toBeTypeOf('function');
     });
 
     it('刷新按钮应调用 refresh', async () => {

@@ -18,6 +18,7 @@ export function useWorkspaceSettings() {
     showQuickCommandTagsBoolean,
     terminalScrollbackLimitNumber,
     fileManagerShowDeleteConfirmationBoolean,
+    fileManagerSingleClickOpenFileBoolean,
     terminalEnableRightClickPasteBoolean,
     showPopupFileManagerBoolean,
     statusMonitorShowIpBoolean,
@@ -295,6 +296,39 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- File Manager Single Click Open File ---
+  const fileManagerSingleClickOpenFileLocal = ref(false);
+  const fileManagerSingleClickOpenFileLoading = ref(false);
+  const fileManagerSingleClickOpenFileMessage = ref('');
+  const fileManagerSingleClickOpenFileSuccess = ref(false);
+
+  const handleUpdateFileManagerSingleClickOpenFile = async () => {
+    fileManagerSingleClickOpenFileLoading.value = true;
+    fileManagerSingleClickOpenFileMessage.value = '';
+    fileManagerSingleClickOpenFileSuccess.value = false;
+    try {
+      const valueToSave = fileManagerSingleClickOpenFileLocal.value ? 'true' : 'false';
+      await settingsStore.updateSetting('fileManagerSingleClickOpenFile', valueToSave);
+      fileManagerSingleClickOpenFileMessage.value = t(
+        'settings.workspace.fileManagerSingleClickOpenFileSuccess',
+        '文件管理器文件打开方式设置已保存。'
+      );
+      fileManagerSingleClickOpenFileSuccess.value = true;
+    } catch (error: unknown) {
+      console.error('更新文件管理器文件打开方式设置失败:', error);
+      fileManagerSingleClickOpenFileMessage.value = extractErrorMessage(
+        error,
+        t(
+          'settings.workspace.fileManagerSingleClickOpenFileError',
+          '保存文件管理器文件打开方式设置失败。'
+        )
+      );
+      fileManagerSingleClickOpenFileSuccess.value = false;
+    } finally {
+      fileManagerSingleClickOpenFileLoading.value = false;
+    }
+  };
+
   // --- Terminal Right Click Paste ---
   const terminalEnableRightClickPasteLocal = ref(true);
   const terminalEnableRightClickPasteLoading = ref(false);
@@ -474,6 +508,13 @@ export function useWorkspaceSettings() {
     { immediate: true }
   );
   watch(
+    fileManagerSingleClickOpenFileBoolean,
+    (newValue) => {
+      fileManagerSingleClickOpenFileLocal.value = newValue;
+    },
+    { immediate: true }
+  );
+  watch(
     terminalEnableRightClickPasteBoolean,
     (newValue) => {
       terminalEnableRightClickPasteLocal.value = newValue;
@@ -556,6 +597,11 @@ export function useWorkspaceSettings() {
     fileManagerShowDeleteConfirmationMessage,
     fileManagerShowDeleteConfirmationSuccess,
     handleUpdateFileManagerDeleteConfirmation,
+    fileManagerSingleClickOpenFileLocal,
+    fileManagerSingleClickOpenFileLoading,
+    fileManagerSingleClickOpenFileMessage,
+    fileManagerSingleClickOpenFileSuccess,
+    handleUpdateFileManagerSingleClickOpenFile,
 
     terminalEnableRightClickPasteLocal,
     terminalEnableRightClickPasteLoading,

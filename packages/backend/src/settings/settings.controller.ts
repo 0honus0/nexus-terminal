@@ -129,6 +129,7 @@ export const settingsController = {
         'layoutLocked', // +++ 布局锁定键 +++
         'terminalScrollbackLimit', // 终端回滚行数键
         'fileManagerShowDeleteConfirmation', // 文件管理器删除确认键
+        'fileManagerSingleClickOpenFile', // 文件管理器单击打开文件键
         'terminalEnableRightClickPaste', // 终端右键粘贴键
         'showStatusMonitorIpAddress', // 添加状态监视器IP显示键 (与服务层和前端统一)
         'terminalOutputEnhancerEnabled', // 终端输出增强器开关

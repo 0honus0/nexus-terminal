@@ -136,6 +136,7 @@ const {
   fileManagerColWidthsObject, // +++ 获取列宽 getter +++
   showPopupFileEditorBoolean, // +++ 获取弹窗设置状态 +++
   fileManagerShowDeleteConfirmationBoolean, // +++ 获取删除确认设置状态 +++
+  fileManagerSingleClickOpenFileBoolean,
 } = storeToRefs(settingsStore); // 使用 storeToRefs 保持响应性
 
 // --- UI 状态 Refs (Remain mostly the same) ---
@@ -795,11 +796,33 @@ const {
   selectedItems, // 使用 Composable 返回的 selectedItems
   lastClickedIndex, // 获取 lastClickedIndex 以传递给 ContextMenu
   handleItemClick: originalHandleItemClick, // 使用 Composable 返回的 handleItemClick
+  handleItemDoubleClick: originalHandleItemDoubleClick,
   clearSelection, // 获取清空选择的方法
 } = useFileManagerSelection({
   // 传递当前显示的列表 (已排序和过滤)
   displayedFileList: filteredFileList, // 现在 filteredFileList 已定义
-  onItemAction: handleItemAction, // 传递动作回调
+  // 目录保持单击进入；移动端保持原有单击打开/进入行为
+  onItemSingleClickAction: (item) => {
+    if (
+      props.isMobile ||
+      item.filename === '..' ||
+      item.attrs.isDirectory ||
+      fileManagerSingleClickOpenFileBoolean.value
+    ) {
+      handleItemAction(item);
+    }
+  },
+  // 桌面端非目录项改为双击打开（文件/符号链接等）
+  onItemDoubleClickAction: (item) => {
+    if (
+      !props.isMobile &&
+      !fileManagerSingleClickOpenFileBoolean.value &&
+      item.filename !== '..' &&
+      !item.attrs.isDirectory
+    ) {
+      handleItemAction(item);
+    }
+  },
 });
 
 // 自定义 handleItemClick 函数以支持移动端多选模式
@@ -818,6 +841,11 @@ const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect
     return;
   }
   originalHandleItemClick(event, item);
+};
+
+const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
+  if (props.isMobile) return;
+  originalHandleItemDoubleClick(event, item);
 };
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
@@ -1356,8 +1384,8 @@ const {
   // 修改：传递 manager 的 currentPath ref
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
   fileListContainerRef: fileListContainerRef,
-  // 当 Enter 键按下时，模拟鼠标单击
-  onEnterPress: (item) => handleItemClick(new MouseEvent('click'), item),
+  // Enter 保持原有行为：直接触发打开/进入动作
+  onEnterPress: (item) => handleItemAction(item),
   scrollTo: scrollToForKeyboardNavigation, // 传递虚拟滚动的 scrollTo 函数（键盘索引 -> 虚拟列表索引）
 });
 
@@ -2660,6 +2688,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
             @dragstart="handleDragStart(item)"
             @dragend="handleDragEnd"
             @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
+            @dblclick="handleItemDoubleClick($event, item)"
             :class="[
               { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
               {

@@ -538,6 +538,39 @@ test.describe('文件管理边缘场景测试', () => {
   });
 
   test.describe('文件预览', () => {
+    test('默认模式下单击文件不应打开，双击才应打开', async ({ authenticatedPage }) => {
+      const workspace = new WorkspacePage(authenticatedPage);
+      const fileManager = new FileManagerPage(authenticatedPage);
+
+      await workspace.goto();
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
+      if (await connection.isVisible()) {
+        await connection.dblclick();
+        await fileManager.open();
+
+        const filename = 'preview-click-mode.txt';
+        testFilePath = path.join(tempDir, filename);
+        fs.writeFileSync(testFilePath, 'Click mode test content');
+        await fileManager.uploadFile(testFilePath);
+        await fileManager.waitForUploadComplete();
+
+        const editorTab = authenticatedPage.locator('.file-editor-tabs .tab-item', {
+          hasText: filename,
+        });
+
+        await expect(editorTab).toHaveCount(0);
+
+        await fileManager.fileItem(filename).click();
+        await authenticatedPage.waitForTimeout(800);
+        await expect(editorTab).toHaveCount(0);
+
+        await fileManager.fileItem(filename).dblclick();
+        await expect(editorTab).toBeVisible({ timeout: 10000 });
+      }
+    });
+
     test('双击文本文件应打开预览', async ({ authenticatedPage }) => {
       const workspace = new WorkspacePage(authenticatedPage);
       const fileManager = new FileManagerPage(authenticatedPage);

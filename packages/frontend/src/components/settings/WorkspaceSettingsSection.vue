@@ -432,6 +432,58 @@
         </form>
       </div>
       <hr class="border-border/50" />
+      <!-- File Manager Open File Interaction -->
+      <div class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">
+          {{ $t('settings.workspace.fileManagerOpenFileModeTitle', '文件管理器文件打开方式') }}
+        </h3>
+        <form @submit.prevent="handleUpdateFileManagerSingleClickOpenFile" class="space-y-4">
+          <div class="flex items-center">
+            <input
+              type="checkbox"
+              id="fileManagerSingleClickOpenFile"
+              v-model="fileManagerSingleClickOpenFileLocal"
+              class="h-4 w-4 rounded border-border text-primary focus:ring-primary mr-2 cursor-pointer"
+            />
+            <label
+              for="fileManagerSingleClickOpenFile"
+              class="text-sm text-foreground cursor-pointer select-none"
+              >{{
+                $t(
+                  'settings.workspace.fileManagerSingleClickOpenFileLabel',
+                  '单击文件立即打开（关闭后改为双击打开）'
+                )
+              }}</label
+            >
+          </div>
+          <p class="text-xs text-text-secondary mt-1">
+            {{
+              $t(
+                'settings.workspace.fileManagerOpenFileModeDescription',
+                '目录始终保持单击进入；此设置仅影响“文件/符号链接”等非目录项的打开方式。'
+              )
+            }}
+          </p>
+          <div class="flex items-center justify-between pt-2">
+            <button
+              type="submit"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+            >
+              {{ $t('common.save') }}
+            </button>
+            <p
+              v-if="fileManagerSingleClickOpenFileMessage"
+              :class="[
+                'text-sm',
+                fileManagerSingleClickOpenFileSuccess ? 'text-success' : 'text-error',
+              ]"
+            >
+              {{ fileManagerSingleClickOpenFileMessage }}
+            </p>
+          </div>
+        </form>
+      </div>
+      <hr class="border-border/50" />
       <!-- Terminal Right Click Paste -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">
@@ -705,6 +757,10 @@ const {
   fileManagerShowDeleteConfirmationMessage,
   fileManagerShowDeleteConfirmationSuccess,
   handleUpdateFileManagerDeleteConfirmation,
+  fileManagerSingleClickOpenFileLocal,
+  fileManagerSingleClickOpenFileMessage,
+  fileManagerSingleClickOpenFileSuccess,
+  handleUpdateFileManagerSingleClickOpenFile,
   terminalEnableRightClickPasteLocal,
   terminalEnableRightClickPasteLoading,
   terminalEnableRightClickPasteMessage,
