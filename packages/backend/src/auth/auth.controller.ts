@@ -20,6 +20,14 @@ import {
   toPublicCaptchaConfig,
   resolveInitAuthState,
 } from './auth-init-data.utils';
+import {
+  completeAuthenticatedSession,
+  destroySessionAndRespondLogout,
+  recordLoginFailureAttempt,
+  recordLoginSuccessAttempt,
+  resolveRequestClientIp,
+  startPendingTwoFactorSession,
+} from './auth-main-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -651,18 +659,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         const isCaptchaValid = await captchaService.verifyToken(captchaToken);
         if (!isCaptchaValid) {
           console.debug(`[AuthController] 登录尝试失败: CAPTCHA 验证失败 - ${username}`);
-          const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-          ipBlacklistService.recordFailedAttempt(clientIp);
-          auditLogService.logAction('LOGIN_FAILURE', {
-            username,
-            reason: 'Invalid CAPTCHA token',
-            ip: clientIp,
-          });
-          notificationService.sendNotification('LOGIN_FAILURE', {
-            username,
-            reason: 'Invalid CAPTCHA token',
-            ip: clientIp,
-          });
+          const clientIp = resolveRequestClientIp(req);
+          recordLoginFailureAttempt(
+            { ipBlacklistService, auditLogService, notificationService },
+            {
+              username,
+              reason: 'Invalid CAPTCHA token',
+              clientIp,
+            }
+          );
           res.status(401).json({ message: 'CAPTCHA 验证失败。' });
           return;
         }
@@ -688,18 +693,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     if (!user) {
       console.debug(`登录尝试失败: 用户未找到 - ${username}`);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      ipBlacklistService.recordFailedAttempt(clientIp);
-      auditLogService.logAction('LOGIN_FAILURE', {
-        username,
-        reason: 'User not found',
-        ip: clientIp,
-      });
-      notificationService.sendNotification('LOGIN_FAILURE', {
-        username,
-        reason: 'User not found',
-        ip: clientIp,
-      });
+      const clientIp = resolveRequestClientIp(req);
+      recordLoginFailureAttempt(
+        { ipBlacklistService, auditLogService, notificationService },
+        {
+          username,
+          reason: 'User not found',
+          clientIp,
+        }
+      );
       res.status(401).json({ message: '无效的凭据。' });
       return;
     }
@@ -708,18 +710,15 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     if (!isMatch) {
       console.debug(`登录尝试失败: 密码错误 - ${username}`);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      ipBlacklistService.recordFailedAttempt(clientIp);
-      auditLogService.logAction('LOGIN_FAILURE', {
-        username,
-        reason: 'Invalid password',
-        ip: clientIp,
-      });
-      notificationService.sendNotification('LOGIN_FAILURE', {
-        username,
-        reason: 'Invalid password',
-        ip: clientIp,
-      });
+      const clientIp = resolveRequestClientIp(req);
+      recordLoginFailureAttempt(
+        { ipBlacklistService, auditLogService, notificationService },
+        {
+          username,
+          reason: 'Invalid password',
+          clientIp,
+        }
+      );
       res.status(401).json({ message: '无效的凭据。' });
       return;
     }
@@ -735,79 +734,18 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         username: user.username,
         expiresAt: Date.now() + SECURITY_CONFIG.PENDING_AUTH_TIMEOUT,
       };
-
-      // 重新生成 Session ID 防止会话固定攻击
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('会话重新生成失败:', err);
-          res.status(500).json({ message: '登录过程中发生错误，请重试。' });
-          return;
-        }
-        req.session.pendingAuth = pendingAuth;
-        req.session.rememberMe = rememberMe;
-
-        // 显式保存 session 以确保 pendingAuth 被持久化并设置 cookie
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('[AuthController] 2FA 认证状态保存失败:', saveErr);
-            res.status(500).json({ message: '登录过程中发生错误，请重试。' });
-            return;
-          }
-          if (isDev) {
-            console.debug(`[AuthController] 2FA pendingAuth 已保存到 session`);
-            const forwardedProto = getRequestHeaderValue(req, 'X-Forwarded-Proto');
-            console.debug(`[AuthController] X-Forwarded-Proto: ${forwardedProto ?? ''}`);
-            console.debug(`[AuthController] req.protocol: ${req.protocol}`);
-            console.debug(`[AuthController] req.secure: ${req.secure}`);
-          }
-          res.status(200).json({
-            message: '需要进行两步验证。',
-            requiresTwoFactor: true,
-            tempToken, // Frontend must include this in 2FA request
-          });
-        });
-      });
+      startPendingTwoFactorSession(req, res, { pendingAuth, rememberMe, isDev });
     } else {
       console.info(`登录成功 (无 2FA): ${username}`);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      ipBlacklistService.resetAttempts(clientIp);
-      auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp });
-      notificationService.sendNotification('LOGIN_SUCCESS', {
-        userId: user.id,
-        username,
-        ip: clientIp,
-      });
-
-      // 重新生成 Session ID 防止会话固定攻击
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('会话重新生成失败:', err);
-          res.status(500).json({ message: '登录过程中发生错误，请重试。' });
-          return;
-        }
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        req.session.requiresTwoFactor = false;
-
-        if (rememberMe) {
-          req.session.cookie.maxAge = SECURITY_CONFIG.SESSION_COOKIE_MAX_AGE;
-        } else {
-          req.session.cookie.maxAge = undefined;
-        }
-
-        // 显式保存 session，避免紧邻请求读取到旧会话状态
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('[AuthController] 登录后会话保存失败:', saveErr);
-            res.status(500).json({ message: '登录过程中发生错误，请重试。' });
-            return;
-          }
-
-          res.status(200).json({
-            message: '登录成功。',
-            user: { id: user.id, username: user.username },
-          });
-        });
+      const clientIp = resolveRequestClientIp(req);
+      recordLoginSuccessAttempt(
+        { ipBlacklistService, auditLogService, notificationService },
+        { userId: user.id, username, clientIp }
+      );
+      completeAuthenticatedSession(req, res, {
+        user: { id: user.id, username: user.username },
+        rememberMe,
+        saveErrorMessage: '登录过程中发生错误，请重试。',
       });
     }
   } catch (error: unknown) {
@@ -947,20 +885,11 @@ export const verifyLogin2FA = async (
         );
       }
       console.info(`用户 ${user.username} 2FA 验证成功。`);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      ipBlacklistService.resetAttempts(clientIp);
-      auditLogService.logAction('LOGIN_SUCCESS', {
-        userId: user.id,
-        username: user.username,
-        ip: clientIp,
-        twoFactor: true,
-      });
-      notificationService.sendNotification('LOGIN_SUCCESS', {
-        userId: user.id,
-        username: user.username,
-        ip: clientIp,
-        twoFactor: true,
-      });
+      const clientIp = resolveRequestClientIp(req);
+      recordLoginSuccessAttempt(
+        { ipBlacklistService, auditLogService, notificationService },
+        { userId: user.id, username: user.username, clientIp, twoFactor: true }
+      );
 
       // 保存 rememberMe 状态，因为 regenerate 会清空 session
       const { rememberMe } = req.session;
@@ -968,36 +897,10 @@ export const verifyLogin2FA = async (
       // +++ Clear pending authentication after successful verification
       delete req.session.pendingAuth;
 
-      // 重新生成 Session ID 防止会话固定攻击
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('2FA 验证后会话重新生成失败:', err);
-          res.status(500).json({ message: '登录完成失败，请重试。' });
-          return;
-        }
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        req.session.requiresTwoFactor = false;
-
-        if (rememberMe) {
-          req.session.cookie.maxAge = SECURITY_CONFIG.SESSION_COOKIE_MAX_AGE;
-        } else {
-          req.session.cookie.maxAge = undefined;
-        }
-
-        // 显式保存 session，避免登录完成后首个请求出现会话状态竞态
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('[AuthController] 2FA 验证后会话保存失败:', saveErr);
-            res.status(500).json({ message: '登录完成失败，请重试。' });
-            return;
-          }
-
-          res.status(200).json({
-            message: '登录成功。',
-            user: { id: user.id, username: user.username },
-          });
-        });
+      completeAuthenticatedSession(req, res, {
+        user: { id: user.id, username: user.username },
+        rememberMe,
+        saveErrorMessage: '登录完成失败，请重试。',
       });
     } else {
       const relaxedDelta = speakeasy.totp.verifyDelta({
@@ -1021,20 +924,16 @@ export const verifyLogin2FA = async (
       }
 
       console.debug(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      ipBlacklistService.recordFailedAttempt(clientIp);
-      auditLogService.logAction('LOGIN_FAILURE', {
-        userId: user.id,
-        username: user.username,
-        reason: 'Invalid 2FA token',
-        ip: clientIp,
-      });
-      notificationService.sendNotification('LOGIN_FAILURE', {
-        userId: user.id,
-        username: user.username,
-        reason: 'Invalid 2FA token',
-        ip: clientIp,
-      });
+      const clientIp = resolveRequestClientIp(req);
+      recordLoginFailureAttempt(
+        { ipBlacklistService, auditLogService, notificationService },
+        {
+          userId: user.id,
+          username: user.username,
+          reason: 'Invalid 2FA token',
+          clientIp,
+        }
+      );
       res.status(401).json({ message: '验证码无效。' });
     }
   } catch (error: unknown) {
@@ -1462,21 +1361,13 @@ export const setupAdmin = async (
 export const logout = (req: Request, res: Response): void => {
   const { userId } = req.session;
   const { username } = req.session;
-
-  req.session.destroy((err) => {
-    if (err) {
-      console.error(`销毁用户 ${userId} (${username}) 的会话时出错:`, err);
-      res.status(500).json({ message: '登出时发生服务器内部错误。' });
-    } else {
-      console.info(`用户 ${userId} (${username}) 已成功登出。`);
-      res.clearCookie('connect.sid');
-      if (userId) {
-        const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-        auditLogService.logAction('LOGOUT', { userId, username, ip: clientIp });
-        notificationService.sendNotification('LOGOUT', { userId, username, ip: clientIp });
-      }
-      res.status(200).json({ message: '已成功登出。' });
-    }
+  destroySessionAndRespondLogout(req, res, {
+    userId,
+    username,
+    onLogoutSuccess: (clientIp) => {
+      auditLogService.logAction('LOGOUT', { userId, username, ip: clientIp });
+      notificationService.sendNotification('LOGOUT', { userId, username, ip: clientIp });
+    },
   });
 };
 

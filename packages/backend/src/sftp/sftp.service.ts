@@ -12,6 +12,12 @@ import { SftpArchiveManager } from './sftp-archive.manager';
 import type { FileListItem } from './sftp-utils';
 import { getErrorCode } from './sftp-error.utils';
 import { detectAndDecodeSftpFileContent } from './sftp-encoding.utils';
+import {
+  executeMkdirPathOperation,
+  executeRenamePathOperation,
+  executeRmdirPathOperation,
+  executeUnlinkPathOperation,
+} from './sftp-path-operations';
 
 type MkdirWithRecursive = (
   path: string,
@@ -542,249 +548,17 @@ export class SftpService {
 
   /** 创建目录 */
   async mkdir(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 mkdir (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:mkdir:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      ); // Use specific error type
-      return;
-    }
-    const { sftp } = state;
-    console.debug(`[SFTP ${sessionId}] Received mkdir request for ${path} (ID: ${requestId})`);
-    try {
-      sftp.mkdir(path, (err) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] mkdir ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:mkdir:error',
-              path,
-              payload: `创建目录失败: ${err.message}`,
-              requestId,
-            })
-          );
-        } else {
-          console.debug(
-            `[SFTP ${sessionId}] mkdir ${path} success (ID: ${requestId}). Fetching stats...`
-          );
-          // Get stats for the new directory
-          sftp.lstat(path, (statErr, stats) => {
-            if (statErr) {
-              console.error(
-                `[SFTP ${sessionId}] lstat after mkdir ${path} failed (ID: ${requestId}):`,
-                statErr
-              );
-              // Send success anyway, but without item details
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:mkdir:success',
-                  path,
-                  payload: null,
-                  requestId,
-                })
-              );
-            } else {
-              const newItem = {
-                filename: path.substring(path.lastIndexOf('/') + 1),
-                longname: '', // lstat doesn't provide longname
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.debug(
-                `[SFTP ${sessionId}] Sending mkdir success with new item for ${path} (ID: ${requestId})`
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:mkdir:success',
-                  path,
-                  payload: newItem,
-                  requestId,
-                })
-              );
-            }
-          });
-        }
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] mkdir ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:mkdir:error',
-          path,
-          payload: `创建目录时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
+    await executeMkdirPathOperation(this.clientStates.get(sessionId), sessionId, path, requestId);
   }
 
   /** 删除目录 (强制递归) */
   async rmdir(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sshClient) {
-      console.warn(
-        `[SSH Exec] SSH 客户端未准备好，无法在 ${sessionId} 上执行 rmdir (ID: ${requestId})`
-      );
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:rmdir:error',
-          path,
-          payload: 'SSH 会话未就绪',
-          requestId,
-        })
-      );
-      return;
-    }
-    console.debug(`[SSH Exec ${sessionId}] Received rmdir request for ${path} (ID: ${requestId})`);
-
-    // 使用 rm -rf 命令删除目录（不使用 sudo 以避免权限提升风险）
-    const executeRmRfCommand = async () => {
-      const command = `rm -rf '${path.replace(/'/g, "'\\''")}'`;
-
-      console.debug(`[SSH Exec ${sessionId}] 尝试使用 rm -rf 命令删除 ${path} (ID: ${requestId})`);
-      console.debug(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
-
-      try {
-        state.sshClient.exec(command, (err, stream) => {
-          if (err) {
-            console.error(
-              `[SSH Exec ${sessionId}] Failed to start exec for rm -rf ${path} (ID: ${requestId}):`,
-              err
-            );
-            // 【安全修复】移除危险的自动 sudo 回退，直接返回错误
-            state.ws.send(
-              JSON.stringify({
-                type: 'sftp:rmdir:error',
-                path,
-                payload: `删除目录失败: rm -rf 命令执行失败: ${err.message}`,
-                requestId,
-              })
-            );
-            return;
-          }
-
-          let stderrOutput = '';
-          stream.stderr.on('data', (data: Buffer) => {
-            stderrOutput += data.toString();
-          });
-
-          stream.on('close', (code: number | null, signal: string | null) => {
-            if (code === 0) {
-              console.debug(
-                `[SSH Exec ${sessionId}] rm -rf ${path} command executed successfully (ID: ${requestId})`
-              );
-              state.ws.send(JSON.stringify({ type: 'sftp:rmdir:success', path, requestId }));
-            } else {
-              const errorMessage =
-                stderrOutput.trim() ||
-                `命令退出，代码: ${code ?? 'N/A'}${signal ? `, 信号: ${signal}` : ''}`;
-              console.error(
-                `[SSH Exec ${sessionId}] rm -rf ${path} command failed (ID: ${requestId}). Code: ${code}, Signal: ${signal}, Stderr: ${errorMessage}`
-              );
-              // 【安全修复】移除危险的自动 sudo 回退，直接返回错误
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:rmdir:error',
-                  path,
-                  payload: `删除目录失败: ${errorMessage}`,
-                  requestId,
-                })
-              );
-            }
-          });
-
-          stream.on('data', (data: Buffer) => {
-            console.debug(
-              `[SSH Exec ${sessionId}] rm -rf stdout (ID: ${requestId}): ${data.toString()}`
-            );
-          });
-        });
-      } catch (error: unknown) {
-        console.error(
-          `[SSH Exec ${sessionId}] rm -rf ${path} caught unexpected error during exec setup (ID: ${requestId}):`,
-          error
-        );
-        // 【安全修复】移除危险的自动 sudo 回退，直接返回错误
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:rmdir:error',
-            path,
-            payload: `删除目录失败: rm -rf 执行时发生意外错误: ${getErrorMessage(error)}`,
-            requestId,
-          })
-        );
-      }
-    };
-
-    // 执行 rm -rf 命令删除目录
-    executeRmRfCommand();
+    await executeRmdirPathOperation(this.clientStates.get(sessionId), sessionId, path, requestId);
   }
 
   /** 删除文件 */
   async unlink(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 unlink (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:unlink:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received unlink request for ${path} (ID: ${requestId})`);
-    try {
-      state.sftp.unlink(path, (err) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] unlink ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:unlink:error',
-              path,
-              payload: `删除文件失败: ${err.message}`,
-              requestId,
-            })
-          );
-        } else {
-          console.debug(`[SFTP ${sessionId}] unlink ${path} success (ID: ${requestId})`);
-          state.ws.send(JSON.stringify({ type: 'sftp:unlink:success', path, requestId })); // Send specific success type
-        }
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] unlink ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:unlink:error',
-          path,
-          payload: `删除文件时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
+    await executeUnlinkPathOperation(this.clientStates.get(sessionId), sessionId, path, requestId);
   }
 
   /** 重命名/移动文件或目录 */
@@ -794,104 +568,13 @@ export class SftpService {
     newPath: string,
     requestId: string
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 rename (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:rename:error',
-          oldPath,
-          newPath,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      ); // Use specific error type
-      return;
-    }
-    const { sftp } = state;
-    console.debug(
-      `[SFTP ${sessionId}] Received rename request ${oldPath} -> ${newPath} (ID: ${requestId})`
+    await executeRenamePathOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      oldPath,
+      newPath,
+      requestId
     );
-    try {
-      sftp.rename(oldPath, newPath, (err) => {
-        if (err) {
-          console.error(
-            `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} failed (ID: ${requestId}):`,
-            err
-          );
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:rename:error',
-              oldPath,
-              newPath,
-              payload: `重命名/移动失败: ${err.message}`,
-              requestId,
-            })
-          );
-        } else {
-          console.debug(
-            `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} success (ID: ${requestId}). Fetching stats for new path...`
-          );
-          // Get stats for the new path
-          sftp.lstat(newPath, (statErr, stats) => {
-            if (statErr) {
-              console.error(
-                `[SFTP ${sessionId}] lstat after rename ${newPath} failed (ID: ${requestId}):`,
-                statErr
-              );
-              // Send success anyway, but without item details
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:rename:success',
-                  payload: { oldPath, newPath, newItem: null },
-                  requestId,
-                })
-              );
-            } else {
-              const newItem = {
-                filename: newPath.substring(newPath.lastIndexOf('/') + 1),
-                longname: '', // lstat doesn't provide longname
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.debug(
-                `[SFTP ${sessionId}] Sending rename success with new item for ${newPath} (ID: ${requestId})`
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:rename:success',
-                  payload: { oldPath, newPath, newItem },
-                  requestId,
-                })
-              );
-            }
-          });
-        }
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:rename:error',
-          oldPath,
-          newPath,
-          payload: `重命名/移动时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
   }
 
   /** 修改文件/目录权限 */
