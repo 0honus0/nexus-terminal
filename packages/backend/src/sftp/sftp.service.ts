@@ -1,6 +1,5 @@
 import { SFTPWrapper, Stats } from 'ssh2';
 import * as pathModule from 'path';
-import * as iconv from 'iconv-lite';
 import {
   ClientState,
   SftpCompressRequestPayload,
@@ -11,13 +10,16 @@ import { SftpUploadManager } from './sftp-upload.manager';
 import { SftpArchiveManager } from './sftp-archive.manager';
 import type { FileListItem } from './sftp-utils';
 import { getErrorCode } from './sftp-error.utils';
-import { detectAndDecodeSftpFileContent } from './sftp-encoding.utils';
 import {
   executeMkdirPathOperation,
   executeRenamePathOperation,
   executeRmdirPathOperation,
   executeUnlinkPathOperation,
 } from './sftp-path-operations';
+import {
+  executeReadFileContentOperation,
+  executeWriteFileContentOperation,
+} from './sftp-file-content-operations';
 
 type MkdirWithRecursive = (
   path: string,
@@ -261,109 +263,13 @@ export class SftpService {
     requestId: string,
     requestedEncoding?: string
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readFile (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:readfile:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      );
-      return;
-    }
-    console.debug(
-      `[SFTP ${sessionId}] Received readFile request for ${path} (ID: ${requestId}, Requested Encoding: ${requestedEncoding ?? 'auto'})`
+    await executeReadFileContentOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      path,
+      requestId,
+      requestedEncoding
     );
-    try {
-      const readStream = state.sftp.createReadStream(path);
-      let fileData = Buffer.alloc(0);
-      let errorOccurred = false;
-
-      readStream.on('data', (chunk: Buffer) => {
-        fileData = Buffer.concat([fileData, chunk]);
-      });
-      readStream.on('error', (err: Error) => {
-        if (errorOccurred) return;
-        errorOccurred = true;
-        console.error(`[SFTP ${sessionId}] readFile ${path} stream error (ID: ${requestId}):`, err);
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:readfile:error',
-            path,
-            payload: `读取文件流错误: ${err.message}`,
-            requestId,
-          })
-        );
-      });
-      readStream.on('end', () => {
-        if (errorOccurred) return;
-
-        console.debug(
-          `[SFTP ${sessionId}] readFile ${path} success, size: ${fileData.length} bytes (ID: ${requestId}). Processing content...`
-        );
-        let encodingUsed = 'utf-8';
-        try {
-          const decodeResult = detectAndDecodeSftpFileContent({
-            fileData,
-            requestedEncoding,
-            sessionId,
-            remotePath: path,
-            requestId,
-          });
-          encodingUsed = decodeResult.encodingUsed;
-          console.debug(
-            `[SFTP ${sessionId}] Content decoding completed with encoding ${encodingUsed} (ID: ${requestId}).`
-          );
-        } catch (err: unknown) {
-          console.error(
-            `[SFTP ${sessionId}] Error detecting/decoding file content for ${path} (ID: ${requestId}):`,
-            err
-          );
-          const decodeError = `文件编码检测或转换失败: ${getErrorMessage(err)}`;
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:readfile:error',
-              path,
-              payload: decodeError,
-              requestId,
-            })
-          );
-          return; // Stop processing
-        }
-
-        // 发送 Base64 编码的原始数据和实际使用的编码
-        console.debug(
-          `[SFTP ${sessionId}] Sending raw content (Base64) and encoding used (${encodingUsed}) for ${path} (ID: ${requestId})`
-        );
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:readfile:success',
-            path,
-            payload: {
-              rawContentBase64: fileData.toString('base64'), // 发送 Base64 字符串
-              encodingUsed, // 发送实际使用的编码
-            },
-            requestId,
-          })
-        );
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] readFile ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:readfile:error',
-          path,
-          payload: `读取文件时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
   }
 
   /** 写入文件内容 (支持指定编码) */
@@ -375,175 +281,14 @@ export class SftpService {
     requestId: string,
     encoding?: string
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 writefile (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:writefile:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      );
-      return;
-    }
-    const { sftp } = state;
-    // --- 修改：使用传入的 encoding 或默认 utf-8 ---
-    const targetEncoding = encoding || 'utf-8';
-    console.debug(
-      `[SFTP ${sessionId}] Received writefile request for ${path} (ID: ${requestId}, Encoding: ${targetEncoding})`
+    await executeWriteFileContentOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      path,
+      data,
+      requestId,
+      encoding
     );
-    try {
-      // --- 修改：使用 iconv-lite 根据指定编码创建 Buffer ---
-      let buffer: Buffer;
-      try {
-        buffer = iconv.encode(data, targetEncoding);
-        console.debug(
-          `[SFTP ${sessionId}] Encoded content for ${path} using ${targetEncoding} (Buffer size: ${buffer.length})`
-        );
-      } catch (encodeError: unknown) {
-        console.error(
-          `[SFTP ${sessionId}] Failed to encode content for ${path} with encoding ${targetEncoding} (ID: ${requestId}):`,
-          encodeError
-        );
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:writefile:error',
-            path,
-            payload: `无效的编码或编码失败: ${targetEncoding}`,
-            requestId,
-          })
-        );
-        return;
-      }
-
-      // 获取文件当前权限
-      let originalMode: number | undefined;
-      try {
-        const fileStats = await new Promise<Stats>((resolve, reject) => {
-          sftp.lstat(path, (err, lstatStats) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(lstatStats);
-            }
-          });
-        });
-        originalMode = fileStats.mode;
-        console.debug(
-          `[SFTP ${sessionId}] Retrieved original file mode for ${path}: ${originalMode.toString(8)} (ID: ${requestId})`
-        );
-      } catch (statError: unknown) {
-        console.warn(
-          `[SFTP ${sessionId}] Could not retrieve original file mode for ${path} (ID: ${requestId}):`,
-          statError
-        );
-        // 如果文件不存在或其他错误，继续写入操作，不设置权限
-      }
-
-      console.debug(`[SFTP ${sessionId}] Creating write stream for ${path} (ID: ${requestId})`);
-      // 在创建写入流时设置文件权限
-      const writeStreamOptions = originalMode !== undefined ? { mode: originalMode } : {};
-      const writeStream = sftp.createWriteStream(path, writeStreamOptions);
-      let errorOccurred = false;
-
-      writeStream.on('error', (err: Error) => {
-        if (errorOccurred) return; // Prevent sending multiple errors
-        errorOccurred = true;
-        console.error(
-          `[SFTP ${sessionId}] writefile ${path} stream error (ID: ${requestId}):`,
-          err
-        );
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:writefile:error',
-            path,
-            payload: `写入文件流错误: ${err.message}`,
-            requestId,
-          })
-        );
-      });
-
-      // Listen for the 'close' event which indicates the stream has finished writing and the file descriptor is closed.
-      writeStream.on('close', () => {
-        if (!errorOccurred) {
-          console.debug(
-            `[SFTP ${sessionId}] writefile ${path} stream closed successfully (ID: ${requestId}). Fetching updated stats...`
-          );
-          if (originalMode !== undefined) {
-            console.debug(
-              `[SFTP ${sessionId}] Set file mode for ${path} during creation: ${originalMode.toString(8)} (ID: ${requestId})`
-            );
-          }
-          // Get updated stats after writing
-          sftp.lstat(path, (statErr, stats) => {
-            if (statErr) {
-              console.error(
-                `[SFTP ${sessionId}] lstat after writefile ${path} failed (ID: ${requestId}):`,
-                statErr
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:writefile:success',
-                  path,
-                  payload: null,
-                  requestId,
-                })
-              );
-            } else {
-              const updatedItem = {
-                filename: path.substring(path.lastIndexOf('/') + 1),
-                longname: '',
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.debug(
-                `[SFTP ${sessionId}] Sending writefile success with updated item for ${path} (ID: ${requestId})`
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:writefile:success',
-                  path,
-                  payload: updatedItem,
-                  requestId,
-                })
-              );
-            }
-          });
-        }
-      });
-
-      console.debug(
-        `[SFTP ${sessionId}] Writing ${buffer.length} bytes to ${path} (ID: ${requestId})`
-      );
-      writeStream.end(buffer); // Start writing and close the stream afterwards
-      console.debug(`[SFTP ${sessionId}] writefile ${path} end() called (ID: ${requestId})`);
-
-      // Success message is now sent in the 'close' event handler
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] writefile ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:writefile:error',
-          path,
-          payload: `写入文件时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
   }
 
   /** 创建目录 */

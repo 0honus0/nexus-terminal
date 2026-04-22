@@ -28,6 +28,13 @@ import {
   resolveRequestClientIp,
   startPendingTwoFactorSession,
 } from './auth-main-flow.utils';
+import {
+  completePasskeyAuthenticatedSession,
+  recordPasskeyAuthenticationFailure,
+  recordPasskeyAuthenticationSuccess,
+  recordTwoFactorDisabledEvent,
+  recordTwoFactorEnabledEvent,
+} from './auth-passkey-2fa-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -385,10 +392,14 @@ export const verifyPasskeyAuthenticationHandler = async (
       if (!user) {
         // This should ideally not happen if passkey verification was successful
         console.error(`[AuthController] Passkey 认证成功但未找到用户 ID: ${verification.userId}`);
-        auditLogService.logAction('PASSKEY_AUTH_FAILURE', {
-          credentialId: verification.passkey.credential_id,
-          reason: 'User not found after verification',
-        });
+        recordPasskeyAuthenticationFailure(
+          { auditLogService, notificationService },
+          {
+            req,
+            credentialId: verification.passkey.credential_id,
+            reason: 'User not found after verification',
+          }
+        );
         res.status(401).json({ verified: false, message: 'Passkey 认证失败：用户数据错误。' });
         return;
       }
@@ -396,77 +407,41 @@ export const verifyPasskeyAuthenticationHandler = async (
       console.info(
         `[AuthController] 用户 ${user.username} (ID: ${user.id}) 通过 Passkey (ID: ***${verification.passkey.id.toString().substring(verification.passkey.id.toString().length - 4)}) 认证成功。`
       );
-
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      auditLogService.logAction('PASSKEY_AUTH_SUCCESS', {
-        userId: user.id,
-        username: user.username,
-        credentialId: verification.passkey.credential_id,
-        ip: clientIp,
-      });
-      notificationService.sendNotification('LOGIN_SUCCESS', {
-        userId: user.id,
-        username: user.username,
-        ip: clientIp,
-        method: 'Passkey',
-      });
-
-      // 重新生成 Session ID 防止会话固定攻击
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('Passkey 认证后会话重新生成失败:', err);
-          res.status(500).json({ message: 'Passkey 认证成功但会话创建失败，请重试。' });
-          return;
+      recordPasskeyAuthenticationSuccess(
+        { auditLogService, notificationService },
+        {
+          req,
+          userId: user.id,
+          username: user.username,
+          credentialId: verification.passkey.credential_id,
         }
-
-        // Setup session similar to password login
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        req.session.requiresTwoFactor = false; // Passkey implies 2FA characteristics
-
-        if (rememberMe) {
-          req.session.cookie.maxAge = SECURITY_CONFIG.SESSION_COOKIE_MAX_AGE;
-        } else {
-          req.session.cookie.maxAge = undefined; // Session cookie
-        }
-
-        delete req.session.currentChallenge;
-        delete req.session.passkeyUserHandle;
-
-        res.status(200).json({
-          verified: true,
-          message: 'Passkey 认证成功。',
-          user: { id: user.id, username: user.username },
-        });
+      );
+      completePasskeyAuthenticatedSession(req, res, {
+        user: { id: user.id, username: user.username },
+        rememberMe,
       });
     } else {
       console.warn(`[AuthController] Passkey 认证验证失败:`, verification);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      auditLogService.logAction('PASSKEY_AUTH_FAILURE', {
-        credentialId: authenticationResponseJSON?.id || 'unknown', // Use the extracted object
-        reason: 'Verification failed',
-        ip: clientIp,
-      });
-      notificationService.sendNotification('PASSKEY_AUTH_FAILURE', {
-        credentialId: authenticationResponseJSON?.id || 'unknown',
-        reason: 'Verification failed',
-        ip: clientIp,
-      });
+      recordPasskeyAuthenticationFailure(
+        { auditLogService, notificationService },
+        {
+          req,
+          credentialId: authenticationResponseJSON?.id || 'unknown',
+          reason: 'Verification failed',
+        }
+      );
       res.status(401).json({ verified: false, message: 'Passkey 认证失败。' });
     }
   } catch (error: unknown) {
     console.error(`[AuthController] 验证 Passkey 认证时出错:`, error);
-    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-    auditLogService.logAction('PASSKEY_AUTH_FAILURE', {
-      credentialId: authenticationResponseJSON?.id || 'unknown',
-      reason: getErrorMessage(error) || 'Unknown error',
-      ip: clientIp,
-    });
-    notificationService.sendNotification('PASSKEY_AUTH_FAILURE', {
-      credentialId: authenticationResponseJSON?.id || 'unknown',
-      reason: getErrorMessage(error) || 'Unknown error',
-      ip: clientIp,
-    });
+    recordPasskeyAuthenticationFailure(
+      { auditLogService, notificationService },
+      {
+        req,
+        credentialId: authenticationResponseJSON?.id || 'unknown',
+        reason: getErrorMessage(error) || 'Unknown error',
+      }
+    );
     next(error);
   }
 };
@@ -1161,9 +1136,7 @@ export const verifyAndActivate2FA = async (
       }
 
       console.info(`用户 ${userId} 已成功激活两步验证。`);
-      const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-      auditLogService.logAction('2FA_ENABLED', { userId, ip: clientIp });
-      notificationService.sendNotification('2FA_ENABLED', { userId, ip: clientIp });
+      recordTwoFactorEnabledEvent({ auditLogService, notificationService }, { req, userId });
 
       delete req.session.tempTwoFactorSecret;
 
@@ -1248,9 +1221,7 @@ export const disable2FA = async (
     }
 
     console.info(`用户 ${userId} 已成功禁用两步验证。`);
-    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-    auditLogService.logAction('2FA_DISABLED', { userId, ip: clientIp });
-    notificationService.sendNotification('2FA_DISABLED', { userId, ip: clientIp });
+    recordTwoFactorDisabledEvent({ auditLogService, notificationService }, { req, userId });
 
     // 禁用时清理临时密钥，避免后续重新启用时读取到陈旧状态。
     delete req.session.tempTwoFactorSecret;
