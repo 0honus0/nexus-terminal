@@ -85,7 +85,6 @@ export const allDb = <T = unknown>(
 };
 
 const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> => {
-  // eslint-disable-next-line import/no-cycle -- 懒加载 schema 定义用于初始化阶段，避免启动期强耦合
   const { tableDefinitions } = await import('./schema.registry.js');
 
   // SQLite 性能优化配置（必须在事务外执行）

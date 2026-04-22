@@ -1,5 +1,4 @@
 import * as sqlite3 from 'sqlite3';
-// eslint-disable-next-line import/no-cycle -- 仓储层依赖连接封装，属受控初始化顺序
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { defaultUiTheme } from '../config/default-themes';

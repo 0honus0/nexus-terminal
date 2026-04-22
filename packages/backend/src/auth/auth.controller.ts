@@ -15,6 +15,7 @@ import { passkeyRepository } from '../passkey/passkey.repository'; // +++ Passke
 import { userRepository } from '../user/user.repository'; // For passkey auth success
 import { SECURITY_CONFIG } from '../config/security.config';
 import { getSingleHeaderToken } from '../utils/url';
+import { toPublicCaptchaConfig, resolveInitAuthState } from './auth-init-data.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -1487,13 +1488,7 @@ export const getPublicCaptchaConfig = async (
   try {
     console.debug('[AuthController] Received request for public CAPTCHA config.');
     const fullConfig = await settingsService.getCaptchaConfig();
-
-    const publicConfig = {
-      enabled: fullConfig.enabled,
-      provider: fullConfig.provider,
-      hcaptchaSiteKey: fullConfig.hcaptchaSiteKey,
-      recaptchaSiteKey: fullConfig.recaptchaSiteKey,
-    };
+    const publicConfig = toPublicCaptchaConfig(fullConfig);
 
     console.debug('[AuthController] Sending public CAPTCHA config to client:', publicConfig);
     res.status(200).json(publicConfig);
@@ -1521,35 +1516,11 @@ export const getInitData = async (
     const requiresSetup = userCountRow ? userCountRow.count === 0 : true;
 
     // 2. 检查认证状态
-    const { userId, username, requiresTwoFactor } = req.session;
-    let isAuthenticated = false;
-    let user: { id: number; username: string; isTwoFactorEnabled: boolean } | null = null;
-
-    if (userId && username && !requiresTwoFactor) {
-      const userRow = await getDb<{ two_factor_secret: string | null }>(
-        db,
-        'SELECT two_factor_secret FROM users WHERE id = ?',
-        [userId]
-      );
-
-      if (userRow) {
-        isAuthenticated = true;
-        user = {
-          id: userId,
-          username,
-          isTwoFactorEnabled: !!userRow.two_factor_secret,
-        };
-      }
-    }
+    const { isAuthenticated, user } = await resolveInitAuthState(db, req.session);
 
     // 3. 获取公共 CAPTCHA 配置
     const fullCaptchaConfig = await settingsService.getCaptchaConfig();
-    const captchaConfig = {
-      enabled: fullCaptchaConfig.enabled,
-      provider: fullCaptchaConfig.provider,
-      hcaptchaSiteKey: fullCaptchaConfig.hcaptchaSiteKey,
-      recaptchaSiteKey: fullCaptchaConfig.recaptchaSiteKey,
-    };
+    const captchaConfig = toPublicCaptchaConfig(fullCaptchaConfig);
 
     // 4. 返回统一的初始化数据
     res.status(200).json({

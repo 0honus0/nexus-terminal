@@ -1,6 +1,5 @@
 import * as sqlite3 from 'sqlite3';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
-// eslint-disable-next-line import/no-cycle -- 与 schema 侧运行期存在互相引用，当前阶段保持最小改动
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { SidebarConfig, LayoutNode, CaptchaSettings } from '../types/settings.types';
 

@@ -15,20 +15,12 @@ import {
   SftpDecompressSuccessPayload,
   SftpDecompressErrorPayload,
 } from '../websocket/types'; // Import payload types
+import { getErrorCode } from './sftp-error.utils';
 
 interface SftpDirectoryEntry {
   filename: string;
   attrs: Stats;
 }
-
-const getErrorCode = (error: unknown): string | undefined => {
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    const code = (error as { code?: unknown }).code;
-    return typeof code === 'string' ? code : undefined;
-  }
-
-  return undefined;
-};
 
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)

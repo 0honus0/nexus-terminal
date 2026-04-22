@@ -1,9 +1,5 @@
 import { Database } from 'sqlite3';
 import * as schemaSql from './schema';
-// eslint-disable-next-line import/no-cycle -- 仓储初始化流程与 schema 注册存在已知双向依赖
-import * as appearanceRepository from '../appearance/appearance.repository';
-import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
-import * as settingsRepository from '../settings/settings.repository';
 import { presetTerminalThemes } from '../config/preset-themes-definition';
 
 interface RunResult {
@@ -92,9 +88,9 @@ const initAIMessagesTable = async (db: Database): Promise<void> => {
  * Assumes terminalThemeRepository.initializePresetThemes might need the db instance.
  */
 const initTerminalThemesTable = async (db: Database): Promise<void> => {
-  // Pass the db instance to the repository function
-  // Note: This might require modifying initializePresetThemes if it doesn't accept db
-  await terminalThemeRepository.initializePresetThemes(db, presetTerminalThemes);
+  const { initializePresetThemes } =
+    await import('../terminal-themes/terminal-theme.repository.js');
+  await initializePresetThemes(db, presetTerminalThemes);
   console.debug('[DB Init] 预设主题初始化检查完成。');
 };
 
@@ -103,9 +99,8 @@ const initTerminalThemesTable = async (db: Database): Promise<void> => {
  * Assumes appearanceRepository.ensureDefaultSettingsExist might need the db instance.
  */
 const initAppearanceSettingsTable = async (db: Database): Promise<void> => {
-  // Pass the db instance to the repository function
-  // Note: This might require modifying ensureDefaultSettingsExist if it doesn't accept db
-  await appearanceRepository.ensureDefaultSettingsExist(db);
+  const { ensureDefaultSettingsExist } = await import('../appearance/appearance.repository.js');
+  await ensureDefaultSettingsExist(db);
   console.debug('[DB Init] 外观设置初始化检查完成。');
 };
 
@@ -121,7 +116,10 @@ export const tableDefinitions: TableDefinition[] = [
   {
     name: 'settings',
     sql: schemaSql.createSettingsTableSQL,
-    init: settingsRepository.ensureDefaultSettingsExist, // <-- Use the function from the repository
+    init: async (db) => {
+      const { ensureDefaultSettingsExist } = await import('../settings/settings.repository.js');
+      await ensureDefaultSettingsExist(db);
+    },
   },
   {
     name: 'audit_logs',
