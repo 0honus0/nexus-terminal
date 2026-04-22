@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-15（最新复查）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-22（最新复查）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -63,10 +63,25 @@
    - 范围：`useWebSocketConnection.ts`、`useSftpActions.ts`、`useSshTerminal.ts`、`useStatusMonitor.ts`、`useFileUploader.ts`、`FileManager.vue` 及相关消息处理回调。
    - 验收：`npm run -w @nexus-terminal/frontend -s typecheck` 通过，且不新增 `@ts-ignore`/`@ts-expect-error`。
 
-2. **质量门禁扩展到 Backend/Remote-Gateway 类型检查**
-   - 目标：在现有 `quality:check`（已含 debt + frontend typecheck + lint + format）基础上，纳入 backend 与 remote-gateway 的类型检查。
-   - 范围：补充根脚本（如 `typecheck:backend`、`typecheck:remote-gateway`）并接入 `quality:check`；必要时同步 `quality.yml` 说明。
-   - 验收：`npm run -s quality:check` 在本地与 CI 均稳定通过，出现类型回归时可直接阻断。
+2. **质量门禁扩展到 Backend/Remote-Gateway 类型检查（已于 2026-04-22 完成）**
+   - 完成内容：新增 `typecheck:backend`、`typecheck:remote-gateway` 并接入根 `quality:check`。
+   - 当前口径：`quality:check` 已覆盖 debt + frontend/backend/remote-gateway typecheck + lint + format。
+   - 验收结果：`npm run -s quality:check` 本地验证通过，可在类型回归时阻断。
+
+---
+
+## 2026-04-22 分析与整改计划
+
+> 说明：本节仅记录主线程本轮分析识别的 6 类问题，并同步标注本次是否已落地修复。判断依据为 2026-04-22 本地仓库现状与改动结果。
+
+| 问题                                                                                      | 风险                                                                     | 优先级 | 拟定修复动作                                                                        | 验收标准                                                       | 落地状态                |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------- |
+| 1) `trust proxy` 在未显式配置时默认信任 1 层代理                                          | 反向代理链路未正确设置时，`req.ip` 可信度下降，影响限流/白名单判定准确性 | P1     | 默认改为不信任代理，仅在 `TRUST_PROXY` / `TRUST_PROXY_HOPS` 显式配置时启用          | 未配置相关环境变量时 `trust proxy=false`；显式配置场景保持可用 | ✅ 已完成（2026-04-22） |
+| 2) `quality:check` 仅覆盖 frontend typecheck，backend/remote-gateway 未纳入               | 类型回归可能绕过统一质量门禁                                             | P1     | 在根脚本新增 `typecheck:backend`、`typecheck:remote-gateway` 并并入 `quality:check` | `npm run -s quality:check` 同时执行三端 typecheck 且通过       | ✅ 已完成（2026-04-22） |
+| 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22） |
+| 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22） |
+| 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22） |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | ⏳ 待推进               |
 
 ---
 

@@ -6,7 +6,7 @@
 
 [![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](https://github.com/Silentely/nexus-terminal/blob/main/LICENSE)
 
-[docker-url]: https://hub.docker.com/r/heavrnl/nexus-terminal-frontend
+[docker-url]: https://ghcr.io/silentely/nexus-terminal-frontend
 
 </div>
 
@@ -115,6 +115,8 @@ Download the [**docker-compose.yml**](https://raw.githubusercontent.com/Silentel
 ```bash
 wget https://raw.githubusercontent.com/Silentely/nexus-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/Silentely/nexus-terminal/refs/heads/main/.env -O .env
 ```
+
+> The default image registry is GitHub Container Registry (GHCR), namespace: `ghcr.io/silentely`.
 
 > ⚠️ **Note:**
 >

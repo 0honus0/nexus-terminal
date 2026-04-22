@@ -201,10 +201,10 @@ const server = http.createServer(app);
 // --- 信任代理设置 ---
 // 仅在生产环境启用（通常在反向代理如 Nginx 后运行）
 // 使用明确的 hop 数而非 boolean true，以限制可信代理层级
-// 默认信任 1 层代理（通常是 Nginx），可通过 TRUST_PROXY_HOPS 环境变量自定义
-// Update: Default to 1 to avoid express-rate-limit errors when behind a proxy even in dev
+// 默认不信任任何代理，避免在未显式配置时信任 X-Forwarded-* 头
+// 可通过 TRUST_PROXY / TRUST_PROXY_HOPS 环境变量显式启用
 const trustProxyEnv = process.env.TRUST_PROXY;
-let trustProxyValue: number | boolean | string = 1;
+let trustProxyValue: number | boolean | string = false;
 
 if (trustProxyEnv) {
   if (trustProxyEnv.toLowerCase() === 'true') trustProxyValue = true;
@@ -214,7 +214,10 @@ if (trustProxyEnv) {
     trustProxyValue = Number.isNaN(parsed) ? trustProxyEnv : parsed;
   }
 } else if (process.env.TRUST_PROXY_HOPS) {
-  trustProxyValue = parseInt(process.env.TRUST_PROXY_HOPS, 10);
+  const parsedHops = parseInt(process.env.TRUST_PROXY_HOPS, 10);
+  if (!Number.isNaN(parsedHops)) {
+    trustProxyValue = parsedHops;
+  }
 }
 
 app.set('trust proxy', trustProxyValue);

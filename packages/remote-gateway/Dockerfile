@@ -50,7 +50,7 @@ RUN npm uninstall patch-package
 # Expose the API and WebSocket ports
 # These will be configurable via environment variables, but good to have defaults
 EXPOSE 9090
-EXPOSE 8081
+EXPOSE 8080
 
 # Command to run the application
 CMD ["node", "dist/server.js"]

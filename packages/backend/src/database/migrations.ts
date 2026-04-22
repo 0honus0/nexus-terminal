@@ -304,7 +304,7 @@ const definedMigrations: Migration[] = [
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NULL,
                 path TEXT NOT NULL,
-                last_used_at INTEGER NULL;
+                last_used_at INTEGER NULL,
                 created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
             );

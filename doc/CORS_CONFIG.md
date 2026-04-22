@@ -38,7 +38,7 @@ CORS_ALLOW_ALL=true  # ⚠️ 仅用于开发/测试
 **默认值**:
 
 - `FRONTEND_URL`: `http://localhost:5173`
-- `MAIN_BACKEND_URL`: `http://localhost:3000`
+- `MAIN_BACKEND_URL`: `http://localhost:3001`
 
 **描述**: 默认允许的前端和后端 URL，始终会被添加到 CORS 白名单
 
@@ -52,7 +52,7 @@ CORS_ALLOW_ALL=true  # ⚠️ 仅用于开发/测试
 
 ```yaml
 remote-gateway:
-  image: nexus-terminal-remote-gateway:latest
+  image: ghcr.io/silentely/nexus-terminal-remote-gateway:latest
   environment:
     GUACD_HOST: guacd
     GUACD_PORT: 4822
