@@ -1,7 +1,6 @@
 import axios, { Method } from 'axios';
-// eslint-disable-next-line import/no-cycle -- 仅引用发送器接口类型，保持现有模块结构最小改动
-import { INotificationSender } from '../notification.dispatcher.service';
-import { ProcessedNotification } from '../notification.processor.service';
+import type { INotificationSender } from '../notification-sender.interface';
+import type { ProcessedNotification } from '../notification.processor.service';
 import { WebhookConfig } from '../../types/notification.types';
 import { getErrorMessage } from '../../utils/AppError';
 

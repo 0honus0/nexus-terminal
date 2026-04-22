@@ -4,10 +4,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import {
-  NotificationDispatcherService,
-  INotificationSender,
-} from './notification.dispatcher.service';
+import { NotificationDispatcherService } from './notification.dispatcher.service';
+import type { INotificationSender } from './notification-sender.interface';
 import type { ProcessedNotification } from './notification.processor.service';
 import type { NotificationChannelType } from '../types/notification.types';
 

@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-22（第六项第一批并行落地）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第二批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -81,7 +81,7 @@
 | 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22） |
 | 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22） |
 | 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22） |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第一批完成） |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第二批完成） |
 
 ---
 
@@ -100,17 +100,33 @@
   - 变更文件：`packages/frontend/src/components/FileManager.vue`、`packages/frontend/src/composables/file-manager/fileManagerDisplayUtils.ts`
   - 结果：抽离显示层纯函数（`formatSize`、`formatMode`、文件图标映射与解析），降低单文件体量并提升复用性。
 
-### 第六项下一批并行子任务清单（第二批）
+### 第六项推进记录（2026-04-23 第二批并行落地）
 
-1. 任务 D：SFTP 业务服务进一步拆分（`sftp.service.ts`）
-   - 目标：提取“路径校验/映射”、“事件投递”、“错误归一化”子模块，减少单文件复杂度与横向依赖。
-   - 验收：`npm run -s typecheck:backend` 与后端构建通过；行为回归无差异。
-2. 任务 E：认证控制器链路瘦身（`auth.controller.ts` + store 对应调用链）
-   - 目标：将验证码、2FA、Passkey 流程解耦为独立动作层，减少控制器与状态管理层互相牵引。
-   - 验收：`auth.store.test.ts` 全绿，登录/登出/2FA 主路径回归通过。
-3. 任务 F：剩余 `import/no-cycle` 豁免点分组治理（通知链路与 session actions）
-   - 目标：按“类型依赖下沉 + 运行期注入 + 懒加载”三策略逐组收敛，不做一次性大改。
-   - 验收：豁免点数继续下降且 lint/typecheck/quality 门禁全通过。
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**11 -> 5**（第二批净减少 6 处；累计 **16 -> 5**）
+  - `FileManager.vue` 行数：**2591 -> 2565**（第二批净减少 26 行；累计 **2851 -> 2565**）
+- 并行子任务 D（FileManager 终端路径解析拆分）：
+  - 变更文件：`packages/frontend/src/components/FileManager.vue`、`packages/frontend/src/composables/file-manager/fileManagerTerminalPathUtils.ts`
+  - 结果：抽离 `SILENT_PWD_PREFIX`、ANSI 清洗与路径解析纯函数，组件职责进一步聚焦。
+- 并行子任务 E（session/sshSuspend 循环边收敛）：
+  - 变更文件：`packages/frontend/src/stores/session/actions/sshSuspendActions.ts`、`packages/frontend/src/stores/session/actions/sessionActions.ts`
+  - 结果：`sshSuspendActions` 改为运行期懒加载 `sessionActions`，移除两文件间静态双向依赖与对应豁免注释。
+- 并行子任务 F（通知链路循环边收敛）：
+  - 变更文件：`packages/backend/src/notifications/notification-sender.interface.ts`、`packages/backend/src/notifications/notification.dispatcher.service.ts`、`packages/backend/src/notifications/senders/*.service.ts`、`packages/backend/src/notifications/notification.dispatcher.service.test.ts`
+  - 结果：发送器接口下沉到独立类型模块，`dispatcher <-> sender` 静态循环解除，通知模块相关豁免注释移除。
+
+### 第六项下一批并行子任务清单（第三批）
+
+1. 任务 G：数据库初始化链路残余循环依赖收敛
+   - 范围：`database/connection.ts`、`database/schema.registry.ts`、`settings.repository.ts`、`appearance.repository.ts`、`terminal-theme.repository.ts`
+   - 目标：进一步降低初始化链路跨模块静态耦合，保留现有初始化顺序行为。
+   - 验收：`import/no-cycle` 豁免继续下降，后端 typecheck/build 与数据库初始化流程通过。
+2. 任务 H：SFTP 服务模块二次拆分（`sftp.service.ts`）
+   - 目标：提取路径校验/命令拼装/错误归一化等可复用子模块，压缩单文件体量与复杂度。
+   - 验收：后端 typecheck/build 通过，SFTP 核心读写与目录操作路径无回归。
+3. 任务 I：认证控制器链路瘦身（`auth.controller.ts` + 对应调用链）
+   - 目标：将验证码、2FA、Passkey 流程拆到更清晰的动作层或服务层，降低控制器耦合。
+   - 验收：`auth.store.test.ts` 与认证相关后端测试通过，登录/登出/2FA/Passkey 主链路保持一致。
 
 ---
 

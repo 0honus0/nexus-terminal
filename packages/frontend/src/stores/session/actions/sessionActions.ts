@@ -239,7 +239,6 @@ export const openNewSession = (
   // 确保只对 SSH 类型的连接注册 (虽然 wsManager 本身不包含类型信息，但 openNewSession 通常只为 SSH 调用)
   // 如果 connInfo 存在且类型为 SSH，则注册
   if (connInfo && connInfo.type === 'SSH') {
-    // eslint-disable-next-line import/no-cycle -- 运行期懒加载以降低静态循环依赖影响
     void import('./sshSuspendActions')
       .then(({ registerSshSuspendHandlers }) => {
         registerSshSuspendHandlers(wsManager);

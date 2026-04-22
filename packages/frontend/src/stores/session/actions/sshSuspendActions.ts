@@ -17,12 +17,6 @@ import type {
   SshSuspendAutoTerminatedPayload,
 } from '../../../types/websocket.types';
 import type { WsManagerInstance, SessionState } from '../types';
-// eslint-disable-next-line import/no-cycle -- 会话动作与挂起动作相互编排，属于受控循环
-import {
-  activateSession as activateSessionAction,
-  openNewSession,
-  closeSession,
-} from './sessionActions';
 import { useConnectionsStore } from '../../connections.store';
 import { useUiNotificationsStore } from '../../uiNotifications.store';
 import type { SuspendedSshSession } from '../../../types/ssh-suspend.types';
@@ -31,6 +25,8 @@ import apiClient from '../../../utils/apiClient';
 import { extractErrorMessage } from '../../../utils/errorExtractor';
 
 const { t } = i18n.global as unknown as Composer;
+
+const loadSessionActions = () => import('./sessionActions');
 
 /**
  * 请求启动 SSH 会话挂起
@@ -256,6 +252,7 @@ export const resumeSshSession = async (suspendSessionId: string): Promise<void> 
     );
 
     // 1. 调用 openNewSession 创建前端会话状态、WebSocket 连接等，传入完整的 connectionInfo
+    const { openNewSession } = await loadSessionActions();
     openNewSession(
       connectionInfo, // +++ 传入完整的 ConnectionInfo 对象 +++
       { connectionsStore, t }, // 传递依赖
@@ -297,6 +294,7 @@ export const resumeSshSession = async (suspendSessionId: string): Promise<void> 
         }),
       });
       if (sessions.value.has(newFrontendSessionId)) {
+        const { closeSession } = await loadSessionActions();
         closeSession(newFrontendSessionId); // 清理未成功连接的会话
       }
       return;
@@ -328,6 +326,7 @@ export const resumeSshSession = async (suspendSessionId: string): Promise<void> 
     });
     // 如果 newFrontendSessionId 对应的会话已创建但恢复失败，也需要清理
     if (sessions.value.has(newFrontendSessionId)) {
+      const { closeSession } = await loadSessionActions();
       closeSession(newFrontendSessionId);
     }
   }
@@ -680,7 +679,8 @@ const handleSshSuspendResumed = async (payload: SshSuspendResumedPayload): Promi
       console.info(
         `[${t('term.sshSuspend')}] 会话 ${payload.newFrontendSessionId} 已标记为正在恢复。`
       );
-      activateSessionAction(payload.newFrontendSessionId); // 激活标签页
+      const { activateSession } = await loadSessionActions();
+      activateSession(payload.newFrontendSessionId); // 激活标签页
 
       let notificationName = t('sshSuspend.notifications.defaultSessionName'); // 使用 i18n 获取默认名
       if (suspendedSession) {
@@ -725,6 +725,7 @@ const handleSshSuspendResumed = async (payload: SshSuspendResumedPayload): Promi
       console.info(
         `[${t('term.sshSuspend')}] 因后端恢复失败，正在关闭前端会话 ${payload.newFrontendSessionId}`
       );
+      const { closeSession } = await loadSessionActions();
       closeSession(payload.newFrontendSessionId);
     }
   }

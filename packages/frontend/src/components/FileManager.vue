@@ -34,6 +34,10 @@ import {
   formatMode,
   getFileIconClassBase,
 } from '../composables/file-manager/fileManagerDisplayUtils';
+import {
+  SILENT_PWD_PREFIX,
+  parsePathFromSilentOutput,
+} from '../composables/file-manager/fileManagerTerminalPathUtils';
 import { useFileManagerSelection } from '../composables/file-manager/useFileManagerSelection';
 import { useFileManagerDragAndDrop } from '../composables/file-manager/useFileManagerDragAndDrop';
 import { useFileManagerKeyboardNavigation } from '../composables/file-manager/useFileManagerKeyboardNavigation';
@@ -1811,36 +1815,6 @@ const cleanupSilentExecRequest = () => {
     clearTimeout(silentExecTimeoutId);
     silentExecTimeoutId = null;
   }
-};
-
-const SILENT_PWD_PREFIX = '__NX_PWD__';
-const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
-const isAbsolutePath = (value: string): boolean => /^(\/|[A-Za-z]:[\\/])/.test(value);
-
-const parsePathFromSilentOutput = (output: string): string | null => {
-  const lines = output
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((line) => line.replace(ANSI_ESCAPE_PATTERN, '').trim())
-    .filter(Boolean);
-
-  if (lines.length === 0) {
-    return null;
-  }
-
-  for (const line of lines) {
-    const prefixedPath = line.startsWith(SILENT_PWD_PREFIX)
-      ? line.slice(SILENT_PWD_PREFIX.length).trim()
-      : '';
-    if (prefixedPath && isAbsolutePath(prefixedPath)) {
-      return prefixedPath;
-    }
-    if (isAbsolutePath(line)) {
-      return line;
-    }
-  }
-
-  return null;
 };
 
 const syncCurrentPathToTerminalDirectory = () => {

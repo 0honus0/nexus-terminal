@@ -2,17 +2,10 @@ import notificationProcessorService, {
   ProcessedNotification,
 } from './notification.processor.service';
 import { NotificationChannelType } from '../types/notification.types';
-// eslint-disable-next-line import/no-cycle -- 发送器与调度器存在受控双向引用
 import telegramSenderService from './senders/telegram.sender.service';
-// eslint-disable-next-line import/no-cycle -- 发送器与调度器存在受控双向引用
 import emailSenderService from './senders/email.sender.service';
-// eslint-disable-next-line import/no-cycle -- 发送器与调度器存在受控双向引用
 import webhookSenderService from './senders/webhook.sender.service';
-
-// 1. 定义通知发送器接口
-export interface INotificationSender {
-  send(notification: ProcessedNotification): Promise<void>;
-}
+import type { INotificationSender } from './notification-sender.interface';
 
 class NotificationDispatcherService {
   // 使用 Map 来存储不同渠道类型的发送器实例
