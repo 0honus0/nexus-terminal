@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useAuthStore } from './auth.store';
 import apiClient from '../utils/apiClient';
-import router from '../router';
 import { setLocale } from '../i18n';
+import { registerLogoutRedirectHandler } from '../utils/authRuntimeBridge';
 
 // Mock 依赖
 vi.mock('../utils/apiClient', () => ({
@@ -12,12 +12,6 @@ vi.mock('../utils/apiClient', () => ({
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
-  },
-}));
-
-vi.mock('../router', () => ({
-  default: {
-    push: vi.fn(),
   },
 }));
 
@@ -33,10 +27,12 @@ describe('auth.store', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    registerLogoutRedirectHandler(null);
     window.location.href = '';
   });
 
   afterEach(() => {
+    registerLogoutRedirectHandler(null);
     vi.restoreAllMocks();
   });
 
@@ -199,6 +195,8 @@ describe('auth.store', () => {
   describe('logout', () => {
     it('登出成功应清除状态并跳转到登录页', async () => {
       const store = useAuthStore();
+      const redirectToLogin = vi.fn().mockResolvedValue(undefined);
+      registerLogoutRedirectHandler(redirectToLogin);
       store.isAuthenticated = true;
       store.user = { id: 1, username: 'testuser' };
 
@@ -208,7 +206,7 @@ describe('auth.store', () => {
 
       expect(store.isAuthenticated).toBe(false);
       expect(store.user).toBeNull();
-      expect(router.push).toHaveBeenCalledWith({ name: 'Login' });
+      expect(redirectToLogin).toHaveBeenCalledTimes(1);
     });
 
     it('登出失败应设置错误状态', async () => {

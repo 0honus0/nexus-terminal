@@ -7,6 +7,10 @@ import i18n from './i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useSettingsStore } from './stores/settings.store';
 import { useAppearanceStore } from './stores/appearance.store';
+import {
+  registerLogoutRedirectHandler,
+  registerUnauthorizedLogoutHandler,
+} from './utils/authRuntimeBridge';
 import './style.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
@@ -44,6 +48,17 @@ const setupWebManifestLink = async () => {
 (async () => {
   const authStore = useAuthStore(pinia); // 实例化 Auth Store
   const appearanceStore = useAppearanceStore(pinia); // 提前实例化 AppearanceStore
+  registerLogoutRedirectHandler(async () => {
+    await router.push({ name: 'Login' });
+  });
+  registerUnauthorizedLogoutHandler(async () => {
+    if (!authStore.isAuthenticated) {
+      return false;
+    }
+    console.warn('Unauthorized access detected. Logging out.');
+    await authStore.logout();
+    return true;
+  });
 
   try {
     console.info('[main.ts] 开始初始化应用...');

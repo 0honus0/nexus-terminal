@@ -5,8 +5,26 @@ import * as appearanceRepository from '../appearance/appearance.repository';
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
 import * as settingsRepository from '../settings/settings.repository';
 import { presetTerminalThemes } from '../config/preset-themes-definition';
-// eslint-disable-next-line import/no-cycle -- schema 初始化阶段依赖 connection 基础执行器
-import { runDb } from './connection';
+
+interface RunResult {
+  lastID: number;
+  changes: number;
+}
+
+const runDb = (db: Database, sql: string, params: unknown[] = []): Promise<RunResult> => {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function runDbCallback(this: RunResult, err: Error | null) {
+      if (err) {
+        console.error(
+          `[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`
+        );
+        reject(err);
+      } else {
+        resolve({ lastID: this.lastID, changes: this.changes });
+      }
+    });
+  });
+};
 
 /**
  * Interface describing a database table definition for initialization.

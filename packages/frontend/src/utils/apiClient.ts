@@ -1,6 +1,5 @@
 import axios from 'axios';
-// eslint-disable-next-line import/no-cycle -- API 拦截器需要读取鉴权状态，属受控循环依赖
-import { useAuthStore } from '../stores/auth.store';
+import { handleUnauthorizedLogout } from './authRuntimeBridge';
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const AI_REQUEST_TIMEOUT_MS = 60_000;
@@ -54,7 +53,6 @@ apiClient.interceptors.response.use(
 
     if (error.response) {
       const { status, statusText, headers } = error.response;
-      const authStore = useAuthStore(); // 在需要时获取 store 实例
       const contentType = headers?.['content-type'] ?? 'unknown';
       const isUpstreamUnavailableStatus = TRANSIENT_UPSTREAM_STATUS_CODES.includes(
         status as (typeof TRANSIENT_UPSTREAM_STATUS_CODES)[number]
@@ -94,17 +92,10 @@ apiClient.interceptors.response.use(
       // 处理常见的 HTTP 错误状态码
       switch (status) {
         case 401: // 未授权
-          // 如果用户当前是认证状态，则可能是 session 过期或无效
-          if (authStore.isAuthenticated) {
-            console.warn('Unauthorized access detected. Logging out.');
-            // 调用 store 中的 logout 方法，它会处理状态重置和路由跳转
-            authStore.logout();
-            // 可以选择抛出错误或返回一个特定的值，防止后续代码执行
+          if (await handleUnauthorizedLogout()) {
             return Promise.reject(new Error('Unauthorized, logging out.'));
           }
-          // 如果用户本来就未认证，可能只是访问了需要登录的接口，暂时不强制跳转
           console.info('Unauthorized access to protected route.');
-
           break;
         case 403: // 禁止访问
           // 可以显示一个权限不足的提示

@@ -1,10 +1,8 @@
 import { defineStore } from 'pinia';
-// eslint-disable-next-line import/no-cycle -- 认证 API 客户端在运行时存在反向引用
 import apiClient from '../utils/apiClient';
-// eslint-disable-next-line import/no-cycle -- 路由守卫与认证状态存在运行时互相依赖
-import router from '../router';
 import { setLocale } from '../i18n';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { navigateToLoginAfterLogout } from '../utils/authRuntimeBridge';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
 interface UserInfo {
@@ -214,7 +212,7 @@ export const useAuthStore = defineStore('auth', {
         // Removed passkeys clear on logout
         console.info('已登出');
         // 登出后重定向到登录页
-        await router.push({ name: 'Login' });
+        await navigateToLoginAfterLogout();
       } catch (err: unknown) {
         console.error('登出失败:', err);
         this.error = extractErrorMessage(err, '');

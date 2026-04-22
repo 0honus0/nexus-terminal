@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-22（最新复查）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-22（第六项第一批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -81,7 +81,36 @@
 | 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22） |
 | 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22） |
 | 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22） |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | ⏳ 待推进               |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第一批完成） |
+
+---
+
+### 第六项推进记录（2026-04-22 第一批并行落地）
+
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**16 -> 11**（净减少 5 处）
+  - `FileManager.vue` 行数：**2851 -> 2591**（净减少 260 行）
+- 并行子任务 A（backend 初始化链路去耦）：
+  - 变更文件：`packages/backend/src/database/schema.registry.ts`
+  - 结果：移除对 `connection.ts` 的静态 `runDb` 依赖，改为本地执行器封装，降低 schema 初始化链路静态循环耦合。
+- 并行子任务 B（frontend 认证链路去耦）：
+  - 变更文件：`packages/frontend/src/utils/apiClient.ts`、`packages/frontend/src/stores/auth.store.ts`、`packages/frontend/src/router/index.ts`、`packages/frontend/src/main.ts`、`packages/frontend/src/stores/auth.store.test.ts`、`packages/frontend/src/utils/authRuntimeBridge.ts`
+  - 结果：`apiClient` 不再静态依赖 auth store，auth store 不再静态依赖 router，router 守卫改为运行期动态加载 auth store，认证链路循环依赖豁免继续收敛。
+- 并行子任务 C（FileManager 首批拆分）：
+  - 变更文件：`packages/frontend/src/components/FileManager.vue`、`packages/frontend/src/composables/file-manager/fileManagerDisplayUtils.ts`
+  - 结果：抽离显示层纯函数（`formatSize`、`formatMode`、文件图标映射与解析），降低单文件体量并提升复用性。
+
+### 第六项下一批并行子任务清单（第二批）
+
+1. 任务 D：SFTP 业务服务进一步拆分（`sftp.service.ts`）
+   - 目标：提取“路径校验/映射”、“事件投递”、“错误归一化”子模块，减少单文件复杂度与横向依赖。
+   - 验收：`npm run -s typecheck:backend` 与后端构建通过；行为回归无差异。
+2. 任务 E：认证控制器链路瘦身（`auth.controller.ts` + store 对应调用链）
+   - 目标：将验证码、2FA、Passkey 流程解耦为独立动作层，减少控制器与状态管理层互相牵引。
+   - 验收：`auth.store.test.ts` 全绿，登录/登出/2FA 主路径回归通过。
+3. 任务 F：剩余 `import/no-cycle` 豁免点分组治理（通知链路与 session actions）
+   - 目标：按“类型依赖下沉 + 运行期注入 + 懒加载”三策略逐组收敛，不做一次性大改。
+   - 验收：豁免点数继续下降且 lint/typecheck/quality 门禁全通过。
 
 ---
 
