@@ -15,7 +15,11 @@ import { passkeyRepository } from '../passkey/passkey.repository'; // +++ Passke
 import { userRepository } from '../user/user.repository'; // For passkey auth success
 import { SECURITY_CONFIG } from '../config/security.config';
 import { getSingleHeaderToken } from '../utils/url';
-import { toPublicCaptchaConfig, resolveInitAuthState } from './auth-init-data.utils';
+import {
+  resolveRequiresSetup,
+  toPublicCaptchaConfig,
+  resolveInitAuthState,
+} from './auth-init-data.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -1512,8 +1516,7 @@ export const getInitData = async (
     const db = await getDbInstance();
 
     // 1. 检查是否需要初始设置
-    const userCountRow = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
-    const requiresSetup = userCountRow ? userCountRow.count === 0 : true;
+    const requiresSetup = await resolveRequiresSetup(db);
 
     // 2. 检查认证状态
     const { isAuthenticated, user } = await resolveInitAuthState(db, req.session);

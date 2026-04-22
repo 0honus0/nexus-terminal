@@ -35,6 +35,11 @@ export const toPublicCaptchaConfig = (config: CaptchaSettings): PublicCaptchaCon
   };
 };
 
+export const resolveRequiresSetup = async (db: Database): Promise<boolean> => {
+  const userCountRow = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
+  return userCountRow ? userCountRow.count === 0 : true;
+};
+
 export const resolveInitAuthState = async (
   db: Database,
   session: InitSessionSnapshot

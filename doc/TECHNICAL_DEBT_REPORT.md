@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第三批并行落地）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第四批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -81,7 +81,7 @@
 | 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22） |
 | 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22） |
 | 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22） |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第三批完成） |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第四批完成） |
 
 ---
 
@@ -131,17 +131,33 @@
   - 变更文件：`packages/backend/src/auth/auth.controller.ts`、`packages/backend/src/auth/auth-init-data.utils.ts`
   - 结果：抽离初始化端点认证状态解析与 CAPTCHA 公共配置映射逻辑，降低控制器重复逻辑和分支密度。
 
-### 第六项下一批并行子任务清单（第四批）
+### 第六项推进记录（2026-04-23 第四批并行落地）
 
-1. 任务 J：`sftp.service.ts` 深拆（目录操作/压缩解压/读写流编排分层）
-   - 目标：继续拆分到更稳定的子模块边界，降低单文件认知负担与测试耦合。
-   - 验收：后端 typecheck/build 与 SFTP 核心路径回归通过，单文件体量继续下降。
-2. 任务 K：`auth.controller.ts` 认证动作分层（登录/2FA/Passkey handler 下沉）
-   - 目标：按“输入校验 -> 认证执行 -> 审计通知”拆分动作层，控制器仅保留协议编排。
-   - 验收：认证主链路（登录/登出/2FA/Passkey）行为一致，相关测试全绿。
-3. 任务 L：为第三批新工具模块补充单元测试
-   - 范围：`sftp-error.utils.ts`、`sftp-encoding.utils.ts`、`auth-init-data.utils.ts`
-   - 验收：新增测试覆盖核心边界分支（编码降级、低置信度检测、初始化认证态），并纳入 CI 门禁。
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**维持 0**
+  - `SFTP 服务体量`：`sftp.service.ts` **1767 -> 1594**（第四批净减少 173 行；累计 **1884 -> 1594**）
+  - 新增工具单测：**3 文件 / 16 用例全通过**
+- 并行子任务 J（`sftp.service.ts` 深拆继续推进）：
+  - 变更文件：`packages/backend/src/sftp/sftp.service.ts`
+  - 结果：移除已失效的压缩/解压私有错误分支与命令探测死代码，保留 `archiveManager/uploadManager` 委托边界，进一步降低单文件噪音与维护负担。
+- 并行子任务 K（`auth.controller.ts` 认证动作分层继续推进）：
+  - 变更文件：`packages/backend/src/auth/auth.controller.ts`、`packages/backend/src/auth/auth-init-data.utils.ts`
+  - 结果：新增并接入 `resolveRequiresSetup`，继续将初始化逻辑下沉到 utils，控制器编排职责更聚焦。
+- 并行子任务 L（第三批新工具模块补测）：
+  - 变更文件：`packages/backend/src/sftp/sftp-error.utils.test.ts`、`packages/backend/src/sftp/sftp-encoding.utils.test.ts`、`packages/backend/src/auth/auth-init-data.utils.test.ts`
+  - 结果：覆盖错误码提取、编码回退与初始化认证态分支，测试通过并纳入质量门禁。
+
+### 第六项下一批并行子任务清单（第五批）
+
+1. 任务 M：`sftp.service.ts` 目录操作链路下沉（`mkdir/rmdir/unlink/rename`）
+   - 目标：提取目录类操作为独立执行器模块，进一步缩小服务主类体量。
+   - 验收：SFTP 目录操作路径回归通过，后端 typecheck/build 与质量门禁通过。
+2. 任务 N：认证主链路动作分层（`login/verifyLogin2FA/logout`）
+   - 目标：按“输入校验 -> 认证执行 -> 审计通知”落地动作层函数，控制器仅做 HTTP 协议编排。
+   - 验收：认证主链路行为一致，现有前后端认证测试全绿。
+3. 任务 O：新增回归测试（SFTP 目录操作 + 认证初始化端点）
+   - 目标：为第五批拆分提供回归保护，防止职责下沉引入行为漂移。
+   - 验收：新增测试稳定通过并接入现有 CI 门禁。
 
 ---
 
