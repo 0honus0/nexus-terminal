@@ -53,18 +53,18 @@ import {
   resolvePasskeyRegistrationContext,
 } from './auth-passkey-flow.utils';
 import {
-  mapDeletePasskeyError,
-  mapDeletePasskeyResult,
-  mapUpdatePasskeyNameError,
-  recordPasskeyDeletedEvent,
-  recordPasskeyDeleteUnauthorizedEvent,
-  recordPasskeyNameUpdatedEvent,
-  recordPasskeyNameUpdateUnauthorizedEvent,
   resolvePasskeyAuthenticatedActor,
   resolvePasskeyCredentialId as resolvePasskeyManagementCredentialId,
   resolvePasskeyTrimmedName,
-  summarizePasskeyCredentialId,
 } from './auth-passkey-management-flow.utils';
+import {
+  buildDeletePasskeyResultAction,
+  buildListPasskeysSuccessAction,
+  buildUpdatePasskeyNameSuccessAction,
+  type PasskeyManagementSideEffect,
+  resolveDeletePasskeyErrorAction,
+  resolveUpdatePasskeyNameErrorAction,
+} from './auth-passkey-management-actions.utils';
 import {
   createPendingLoginTwoFactorAuthState,
   type PendingAuth,
@@ -82,12 +82,32 @@ import {
   resolvePasskeyAuthenticationVerificationOutcome,
   resolvePasskeyRegistrationVerificationOutcome,
 } from './auth-passkey-register-auth-flow.utils';
+import {
+  resolveChangePasswordAccessValidation,
+  resolveChangePasswordInputValidation,
+  resolveCurrentPasswordMatchValidation,
+  resolveDisable2FAAccessValidation,
+  resolveDisable2FAInputValidation,
+  resolveMutationChangesValidation,
+  resolvePasswordActionUserValidation,
+} from './auth-password-disable2fa-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
+
+const applyPasskeyManagementSideEffects = (sideEffects: PasskeyManagementSideEffect[]): void => {
+  for (const sideEffect of sideEffects) {
+    if (sideEffect.kind === 'audit') {
+      auditLogService.logAction(sideEffect.action, sideEffect.payload);
+      continue;
+    }
+
+    notificationService.sendNotification(sideEffect.event, sideEffect.payload);
+  }
+};
 
 const getRequestHeaderValue = (req: Request, name: string): string | undefined => {
   const headerFromGetter = typeof req.get === 'function' ? req.get(name) : undefined;
@@ -436,10 +456,9 @@ export const listUserPasskeysHandler = async (
 
   try {
     const passkeys = await passkeyService.listPasskeysByUserId(userId);
-    console.debug(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 获取了 Passkey 列表，数量: ${passkeys.length}`
-    );
-    res.status(200).json(passkeys);
+    const listAction = buildListPasskeysSuccessAction({ userId, username }, passkeys);
+    console[listAction.log.level](listAction.log.message);
+    res.status(listAction.response.statusCode).json(listAction.response.body);
   } catch (error: unknown) {
     console.error(
       `[AuthController] 用户 ${username} (ID: ${userId}) 获取 Passkey 列表时出错:`,
@@ -473,49 +492,31 @@ export const deleteUserPasskeyHandler = async (
 
   try {
     const wasDeleted = await passkeyService.deletePasskey(userId, credentialId);
-    const mappedDeleteResult = mapDeletePasskeyResult(wasDeleted);
-    if (mappedDeleteResult.success) {
-      console.info(
-        `[AuthController] 用户 ${username} (ID: ${userId}) 成功删除了 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)})。`
-      );
-      recordPasskeyDeletedEvent(
-        { auditLogService, notificationService },
-        {
-          userId,
-          username,
-          credentialId,
-        }
-      );
-      res.status(mappedDeleteResult.statusCode).json(mappedDeleteResult.body);
-    } else {
-      // 这通常不应该发生，因为 service 层会在找不到或权限不足时抛出错误
-      console.warn(
-        `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 失败，但未抛出错误。`
-      );
-      res.status(mappedDeleteResult.statusCode).json(mappedDeleteResult.body);
-    }
-  } catch (error: unknown) {
-    console.error(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 时出错:`,
-      getErrorMessage(error),
-      (error as Error)?.stack
+    const deleteAction = buildDeletePasskeyResultAction(
+      { userId, username },
+      credentialId,
+      wasDeleted
     );
-    const mappedDeleteError = mapDeletePasskeyError(error);
-    if (!mappedDeleteError.handled) {
+    console[deleteAction.log.level](deleteAction.log.message);
+    applyPasskeyManagementSideEffects(deleteAction.sideEffects);
+    res.status(deleteAction.response.statusCode).json(deleteAction.response.body);
+  } catch (error: unknown) {
+    const deleteErrorAction = resolveDeletePasskeyErrorAction(
+      { userId, username },
+      credentialId,
+      error
+    );
+    console[deleteErrorAction.log.level](
+      deleteErrorAction.log.message,
+      deleteErrorAction.log.errorMessage,
+      deleteErrorAction.log.errorStack
+    );
+    if (!deleteErrorAction.handled) {
       next(error);
       return;
     }
-    if (mappedDeleteError.reason === 'unauthorized') {
-      recordPasskeyDeleteUnauthorizedEvent(
-        { auditLogService, notificationService },
-        {
-          userId,
-          username,
-          credentialIdAttempted: credentialId,
-        }
-      );
-    }
-    res.status(mappedDeleteError.statusCode).json(mappedDeleteError.body);
+    applyPasskeyManagementSideEffects(deleteErrorAction.sideEffects);
+    res.status(deleteErrorAction.response.statusCode).json(deleteErrorAction.response.body);
   }
 };
 
@@ -550,43 +551,31 @@ export const updateUserPasskeyNameHandler = async (
 
   try {
     await passkeyService.updatePasskeyName(userId, credentialId, trimmedName);
-    console.info(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 成功更新了 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 的名称为 "${trimmedName}"。`
+    const updateAction = buildUpdatePasskeyNameSuccessAction(
+      { userId, username },
+      credentialId,
+      trimmedName
     );
-    recordPasskeyNameUpdatedEvent(
-      { auditLogService, notificationService },
-      {
-        userId,
-        username,
-        credentialId,
-        newName: trimmedName,
-      }
-    );
-    // Optionally send a notification if desired
-    // notificationService.sendNotification('PASSKEY_NAME_UPDATED', { userId, username, credentialId: credentialID, newName: trimmedName });
-    res.status(200).json({ message: 'Passkey 名称更新成功。' });
+    console[updateAction.log.level](updateAction.log.message);
+    applyPasskeyManagementSideEffects(updateAction.sideEffects);
+    res.status(updateAction.response.statusCode).json(updateAction.response.body);
   } catch (error: unknown) {
-    console.error(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 更新 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 名称时出错:`,
-      getErrorMessage(error),
-      (error as Error)?.stack
+    const updateErrorAction = resolveUpdatePasskeyNameErrorAction(
+      { userId, username },
+      credentialId,
+      error
     );
-    const mappedUpdateError = mapUpdatePasskeyNameError(error);
-    if (!mappedUpdateError.handled) {
+    console[updateErrorAction.log.level](
+      updateErrorAction.log.message,
+      updateErrorAction.log.errorMessage,
+      updateErrorAction.log.errorStack
+    );
+    if (!updateErrorAction.handled) {
       next(error);
       return;
     }
-    if (mappedUpdateError.reason === 'unauthorized') {
-      recordPasskeyNameUpdateUnauthorizedEvent(
-        { auditLogService, notificationService },
-        {
-          userId,
-          username,
-          credentialIdAttempted: credentialId,
-        }
-      );
-    }
-    res.status(mappedUpdateError.statusCode).json(mappedUpdateError.body);
+    applyPasskeyManagementSideEffects(updateErrorAction.sideEffects);
+    res.status(updateErrorAction.response.statusCode).json(updateErrorAction.response.body);
   }
 };
 
@@ -901,26 +890,25 @@ export const changePassword = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { currentPassword, newPassword } = req.body;
-  const { userId } = req.session;
-
-  if (!userId || req.session.requiresTwoFactor) {
-    res.status(401).json({ message: '用户未认证或认证未完成，请先登录。' });
+  const accessValidation = resolveChangePasswordAccessValidation({
+    userId: req.session.userId,
+    requiresTwoFactor: req.session.requiresTwoFactor,
+  });
+  if (!accessValidation.ok) {
+    res.status(accessValidation.failure.statusCode).json(accessValidation.failure.body);
     return;
   }
 
-  if (!currentPassword || !newPassword) {
-    res.status(400).json({ message: '当前密码和新密码不能为空。' });
+  const inputValidation = resolveChangePasswordInputValidation({
+    currentPassword: req.body?.currentPassword,
+    newPassword: req.body?.newPassword,
+  });
+  if (!inputValidation.ok) {
+    res.status(inputValidation.failure.statusCode).json(inputValidation.failure.body);
     return;
   }
-  if (newPassword.length < 8) {
-    res.status(400).json({ message: '新密码长度至少需要 8 位。' });
-    return;
-  }
-  if (currentPassword === newPassword) {
-    res.status(400).json({ message: '新密码不能与当前密码相同。' });
-    return;
-  }
+  const { userId } = accessValidation.actor;
+  const { currentPassword, newPassword } = inputValidation.input;
 
   try {
     const db = await getDbInstance();
@@ -928,16 +916,18 @@ export const changePassword = async (
       userId,
     ]);
 
-    if (!user) {
+    const userValidation = resolvePasswordActionUserValidation({ user });
+    if (!userValidation.ok) {
       console.error(`修改密码错误: 未找到 ID 为 ${userId} 的用户。`);
-      res.status(404).json({ message: '用户不存在。' });
+      res.status(userValidation.failure.statusCode).json(userValidation.failure.body);
       return;
     }
 
-    const isMatch = await comparePassword(currentPassword, user.hashed_password);
-    if (!isMatch) {
+    const isMatch = await comparePassword(currentPassword, userValidation.user.hashed_password);
+    const matchValidation = resolveCurrentPasswordMatchValidation({ isMatch });
+    if (!matchValidation.ok) {
       console.debug(`修改密码尝试失败: 当前密码错误 - 用户 ID ${userId}`);
-      res.status(400).json({ message: '当前密码不正确。' });
+      res.status(matchValidation.failure.statusCode).json(matchValidation.failure.body);
       return;
     }
 
@@ -950,9 +940,10 @@ export const changePassword = async (
       [newHashedPassword, now, userId]
     );
 
-    if (result.changes === 0) {
+    const changeValidation = resolveMutationChangesValidation({ changes: result.changes });
+    if (!changeValidation.ok) {
       console.error(`修改密码错误: 更新影响行数为 0 - 用户 ID ${userId}`);
-      throw new Error('未找到要更新的用户');
+      throw changeValidation.error;
     }
 
     console.info(`用户 ${userId} 密码已成功修改。`);
@@ -1129,18 +1120,24 @@ export const disable2FA = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { userId } = req.session;
-  const { password } = req.body;
-
-  if (!userId || req.session.requiresTwoFactor) {
-    res.status(401).json({ message: '用户未认证或认证未完成。' });
+  const accessValidation = resolveDisable2FAAccessValidation({
+    userId: req.session.userId,
+    requiresTwoFactor: req.session.requiresTwoFactor,
+  });
+  if (!accessValidation.ok) {
+    res.status(accessValidation.failure.statusCode).json(accessValidation.failure.body);
     return;
   }
 
-  if (!password) {
-    res.status(400).json({ message: '需要提供当前密码才能禁用两步验证。' });
+  const inputValidation = resolveDisable2FAInputValidation({
+    password: req.body?.password,
+  });
+  if (!inputValidation.ok) {
+    res.status(inputValidation.failure.statusCode).json(inputValidation.failure.body);
     return;
   }
+  const { userId } = accessValidation.actor;
+  const { password } = inputValidation.input;
 
   try {
     const db = await getDbInstance();
@@ -1148,13 +1145,15 @@ export const disable2FA = async (
       userId,
     ]);
 
-    if (!user) {
-      res.status(404).json({ message: '用户不存在。' });
+    const userValidation = resolvePasswordActionUserValidation({ user });
+    if (!userValidation.ok) {
+      res.status(userValidation.failure.statusCode).json(userValidation.failure.body);
       return;
     }
-    const isMatch = await comparePassword(password, user.hashed_password);
-    if (!isMatch) {
-      res.status(400).json({ message: '当前密码不正确。' });
+    const isMatch = await comparePassword(password, userValidation.user.hashed_password);
+    const matchValidation = resolveCurrentPasswordMatchValidation({ isMatch });
+    if (!matchValidation.ok) {
+      res.status(matchValidation.failure.statusCode).json(matchValidation.failure.body);
       return;
     }
 
@@ -1165,9 +1164,10 @@ export const disable2FA = async (
       [now, userId]
     );
 
-    if (result.changes === 0) {
+    const changeValidation = resolveMutationChangesValidation({ changes: result.changes });
+    if (!changeValidation.ok) {
       console.error(`禁用 2FA 错误: 更新影响行数为 0 - 用户 ID ${userId}`);
-      throw new Error('未找到要更新的用户');
+      throw changeValidation.error;
     }
 
     console.info(`用户 ${userId} 已成功禁用两步验证。`);
