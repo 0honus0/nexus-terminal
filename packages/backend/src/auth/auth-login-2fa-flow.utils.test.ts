@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Request } from 'express';
 import {
+  clearPendingLoginTwoFactorAuthState,
   createPendingLoginTwoFactorAuthState,
   resolveLogin2FATokenValidation,
   resolveLoginPendingAuthValidation,
@@ -151,5 +152,22 @@ describe('auth-login-2fa-flow.utils', () => {
       username: 'neo',
       expiresAt: 301_000,
     });
+  });
+
+  it('clearPendingLoginTwoFactorAuthState 应在 pending 存在时清理并返回 true', () => {
+    const req = {
+      session: {
+        pendingAuth: {
+          tempToken: 'valid-token',
+          userId: 1,
+          username: 'alice',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+    } as unknown as Request;
+
+    expect(clearPendingLoginTwoFactorAuthState(req)).toBe(true);
+    expect((req.session as unknown as { pendingAuth?: unknown }).pendingAuth).toBeUndefined();
+    expect(clearPendingLoginTwoFactorAuthState(req)).toBe(false);
   });
 });

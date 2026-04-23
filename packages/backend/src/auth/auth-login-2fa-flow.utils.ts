@@ -146,3 +146,12 @@ export const resolveLogin2FATokenValidation = (token: unknown): Login2FATokenVal
     normalizedToken,
   };
 };
+
+export const clearPendingLoginTwoFactorAuthState = (req: Request): boolean => {
+  if (typeof req.session.pendingAuth === 'undefined') {
+    return false;
+  }
+
+  delete req.session.pendingAuth;
+  return true;
+};

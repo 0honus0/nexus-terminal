@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { getErrorMessage } from '../utils/AppError';
-import speakeasy from 'speakeasy';
 import { getDbInstance, runDb, getDb } from '../database/connection';
 import { hashPassword, comparePassword } from '../utils/crypto';
 import { NotificationService } from '../notifications/notification.service';
@@ -59,6 +58,7 @@ import {
   resolveUpdatePasskeyNameErrorAction,
 } from './auth-passkey-management-actions.utils';
 import {
+  clearPendingLoginTwoFactorAuthState,
   createPendingLoginTwoFactorAuthState,
   type PendingAuth,
   resolveLogin2FATokenValidation,
@@ -98,12 +98,14 @@ import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-fa
 import {
   buildLoginTwoFactorInvalidDebugLogAction,
   buildLoginTwoFactorSkewWarnLogAction,
-  buildLoginTwoFactorSkewWarnLogActionAlways,
-  buildLoginTwoFactorSuccessInfoLogAction,
   buildTwoFactorVerifySessionMismatchWarnLogAction,
   buildTwoFactorVerifySessionSyncedDebugLogAction,
   buildTwoFactorVerifySkewWarnLogAction,
 } from './auth-two-factor-log-actions.utils';
+import {
+  buildLoginTwoFactorSuccessLogAction,
+  resolveLoginTwoFactorFailureAction,
+} from './auth-login-two-factor-actions.utils';
 import {
   buildTwoFactorVerifySuccessMutationAction,
   resolveTwoFactorVerifySuccessMutationResultAction,
@@ -814,25 +816,33 @@ export const verifyLogin2FA = async (
       return;
     }
 
-    const verificationDelta = speakeasy.totp.verifyDelta({
+    const verificationResult = verifyTwoFactorTokenWithSkew({
       secret: user.two_factor_secret,
-      encoding: 'base32',
       token: normalizedToken,
-      window: TOTP_VERIFY_WINDOW,
+      verifyWindow: TOTP_VERIFY_WINDOW,
+      skewDetectWindow: TOTP_SKEW_DETECT_WINDOW,
+      skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
-    const verified = verificationDelta !== undefined;
+    const verifyFailureAction = resolveLoginTwoFactorFailureAction({
+      username: user.username,
+      verificationResult,
+    });
+    if (verifyFailureAction.handled) {
+      console[verifyFailureAction.log.level](verifyFailureAction.log.message);
+      res.status(verifyFailureAction.response.statusCode).json(verifyFailureAction.response.body);
+      return;
+    }
 
-    if (verified) {
-      const delta = verificationDelta?.delta ?? 0;
+    if (verificationResult.status === 'verified') {
       const skewWarnLogAction = buildLoginTwoFactorSkewWarnLogAction({
         username: user.username,
-        delta,
+        delta: verificationResult.delta,
         skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
       });
       if (skewWarnLogAction) {
         console[skewWarnLogAction.level](skewWarnLogAction.message);
       }
-      const successLogAction = buildLoginTwoFactorSuccessInfoLogAction(user.username);
+      const successLogAction = buildLoginTwoFactorSuccessLogAction(user.username);
       console[successLogAction.level](successLogAction.message);
       const clientIp = resolveRequestClientIp(req);
       recordLoginSuccessAttempt(
@@ -844,50 +854,29 @@ export const verifyLogin2FA = async (
       const { rememberMe } = req.session;
 
       // +++ Clear pending authentication after successful verification
-      delete req.session.pendingAuth;
+      clearPendingLoginTwoFactorAuthState(req);
 
       completeAuthenticatedSession(req, res, {
         user: { id: user.id, username: user.username },
         rememberMe,
         saveErrorMessage: '登录完成失败，请重试。',
       });
-    } else {
-      const relaxedDelta = speakeasy.totp.verifyDelta({
-        secret: user.two_factor_secret,
-        encoding: 'base32',
-        token: normalizedToken,
-        window: TOTP_SKEW_DETECT_WINDOW,
-      });
-      if (relaxedDelta && Math.abs(relaxedDelta.delta) >= TOTP_SKEW_WARN_THRESHOLD) {
-        const skewSeconds = Math.abs(relaxedDelta.delta) * 30;
-        const skewWarnLogAction = buildLoginTwoFactorSkewWarnLogActionAlways(
-          user.username,
-          relaxedDelta.delta
-        );
-        console[skewWarnLogAction.level](skewWarnLogAction.message);
-        res.status(401).json({
-          message: `验证码无效。检测到客户端时间与服务器存在约 ${skewSeconds} 秒偏差，请校准设备时间后重试。`,
-          code: 'TIME_SKEW_DETECTED',
-          skewSeconds,
-          delta: relaxedDelta.delta,
-        });
-        return;
-      }
-
-      const invalidLogAction = buildLoginTwoFactorInvalidDebugLogAction(user.username);
-      console[invalidLogAction.level](invalidLogAction.message);
-      const clientIp = resolveRequestClientIp(req);
-      recordLoginFailureAttempt(
-        { ipBlacklistService, auditLogService, notificationService },
-        {
-          userId: user.id,
-          username: user.username,
-          reason: 'Invalid 2FA token',
-          clientIp,
-        }
-      );
-      res.status(401).json({ message: '验证码无效。' });
+      return;
     }
+
+    const invalidLogAction = buildLoginTwoFactorInvalidDebugLogAction(user.username);
+    console[invalidLogAction.level](invalidLogAction.message);
+    const clientIp = resolveRequestClientIp(req);
+    recordLoginFailureAttempt(
+      { ipBlacklistService, auditLogService, notificationService },
+      {
+        userId: user.id,
+        username: user.username,
+        reason: 'Invalid 2FA token',
+        clientIp,
+      }
+    );
+    res.status(401).json({ message: '验证码无效。' });
   } catch (error: unknown) {
     console.error(
       `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,
