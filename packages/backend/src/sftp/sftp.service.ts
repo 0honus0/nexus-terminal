@@ -20,6 +20,11 @@ import {
   executeReadFileContentOperation,
   executeWriteFileContentOperation,
 } from './sftp-file-content-operations';
+import {
+  executeChmodPathQueryOperation,
+  executeRealpathPathQueryOperation,
+  executeStatPathQueryOperation,
+} from './sftp-path-query-operations';
 
 type MkdirWithRecursive = (
   path: string,
@@ -191,69 +196,12 @@ export class SftpService {
 
   /** 获取文件/目录状态信息 */
   async stat(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 stat (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:stat:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received stat request for ${path} (ID: ${requestId})`);
-    try {
-      state.sftp.lstat(path, (err, stats: Stats) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] stat ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:stat:error',
-              path,
-              payload: `获取状态失败: ${err.message}`,
-              requestId,
-            })
-          );
-        } else {
-          const fileStats = {
-            size: stats.size,
-            uid: stats.uid,
-            gid: stats.gid,
-            mode: stats.mode,
-            atime: stats.atime * 1000,
-            mtime: stats.mtime * 1000,
-            isDirectory: stats.isDirectory(),
-            isFile: stats.isFile(),
-            isSymbolicLink: stats.isSymbolicLink(),
-          };
-          // Send specific success type
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:stat:success',
-              path,
-              payload: fileStats,
-              requestId,
-            })
-          );
-        }
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] stat ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:stat:error',
-          path,
-          payload: `获取状态时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
+    await executeStatPathQueryOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      path,
+      requestId
+    );
   }
 
   /** 读取文件内容 (支持指定编码) */
@@ -324,219 +272,24 @@ export class SftpService {
 
   /** 修改文件/目录权限 */
   async chmod(sessionId: string, path: string, mode: number, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 chmod (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:chmod:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      ); // Use specific error type
-      return;
-    }
-    const { sftp } = state;
-    console.debug(
-      `[SFTP ${sessionId}] Received chmod request for ${path} to ${mode.toString(8)} (ID: ${requestId})`
+    await executeChmodPathQueryOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      path,
+      mode,
+      requestId
     );
-    try {
-      sftp.chmod(path, mode, (err) => {
-        if (err) {
-          console.error(
-            `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} failed (ID: ${requestId}):`,
-            err
-          );
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:chmod:error',
-              path,
-              payload: `修改权限失败: ${err.message}`,
-              requestId,
-            })
-          );
-        } else {
-          console.debug(
-            `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} success (ID: ${requestId}). Fetching updated stats...`
-          );
-          // Get updated stats after chmod
-          sftp.lstat(path, (statErr, stats) => {
-            if (statErr) {
-              console.error(
-                `[SFTP ${sessionId}] lstat after chmod ${path} failed (ID: ${requestId}):`,
-                statErr
-              );
-              // Send success anyway, but without updated item details
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:chmod:success',
-                  path,
-                  payload: null,
-                  requestId,
-                })
-              );
-            } else {
-              const updatedItem = {
-                filename: path.substring(path.lastIndexOf('/') + 1),
-                longname: '', // lstat doesn't provide longname
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.debug(
-                `[SFTP ${sessionId}] Sending chmod success with updated item for ${path} (ID: ${requestId})`
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:chmod:success',
-                  path,
-                  payload: updatedItem,
-                  requestId,
-                })
-              );
-            }
-          });
-        }
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] chmod ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:chmod:error',
-          path,
-          payload: `修改权限时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
   }
 
   /** 获取路径的绝对表示 */
   async realpath(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 realpath (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:realpath:error',
-          path,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      );
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received realpath request for ${path} (ID: ${requestId})`);
-    try {
-      state.sftp.realpath(path, (err, absPath) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] realpath ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:realpath:error',
-              path,
-              payload: { requestedPath: path, error: `获取绝对路径失败: ${err.message}` },
-              requestId,
-            })
-          );
-        } else {
-          console.debug(
-            `[SFTP ${sessionId}] realpath ${path} -> ${absPath} success (ID: ${requestId}). Fetching target type...`
-          );
-          // 再次检查 state 和 state.sftp 是否仍然有效，因为回调是异步的
-          const currentState = this.clientStates.get(sessionId);
-          if (!currentState || !currentState.sftp) {
-            console.warn(
-              `[SFTP ${sessionId}] SFTP session for ${absPath} became invalid before stat call (ID: ${requestId}).`
-            );
-            // 即使 SFTP 会话失效，也尝试发送已解析的路径，但标记错误
-            state.ws.send(
-              JSON.stringify({
-                type: 'sftp:realpath:error',
-                path, // 原始请求路径
-                payload: {
-                  requestedPath: path,
-                  absolutePath: absPath,
-                  error: 'SFTP 会话在获取目标类型前已失效',
-                },
-                requestId,
-              })
-            );
-            return;
-          }
-          // 对 absPath 执行 stat 操作以获取其真实类型
-          currentState.sftp.stat(absPath, (statErr, stats) => {
-            // 使用 sftp.stat()
-            if (statErr) {
-              console.error(
-                `[SFTP ${sessionId}] stat on realpath target ${absPath} failed (ID: ${requestId}):`,
-                statErr
-              );
-              // 如果 stat 失败，发送带有错误信息的 realpath:error，但仍包含已解析的路径
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:realpath:error',
-                  path, // 原始请求路径
-                  payload: {
-                    requestedPath: path,
-                    absolutePath: absPath, // 仍然发送已解析的路径
-                    error: `获取目标类型失败: ${statErr.message}`,
-                  },
-                  requestId,
-                })
-              );
-            } else {
-              let targetType: 'file' | 'directory' | 'unknown' = 'unknown';
-              if (stats.isFile()) {
-                targetType = 'file';
-              } else if (stats.isDirectory()) {
-                targetType = 'directory';
-              }
-              console.debug(
-                `[SFTP ${sessionId}] Target type for ${absPath} is ${targetType} (ID: ${requestId})`
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:realpath:success',
-                  path, // 原始请求路径
-                  payload: {
-                    requestedPath: path,
-                    absolutePath: absPath,
-                    targetType, // 新增字段
-                  },
-                  requestId,
-                })
-              );
-            }
-          });
-        }
-      });
-    } catch (error: unknown) {
-      console.error(
-        `[SFTP ${sessionId}] realpath ${path} caught unexpected error (ID: ${requestId}):`,
-        error
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:realpath:error',
-          path,
-          payload: `获取绝对路径时发生意外错误: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
+    await executeRealpathPathQueryOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      path,
+      requestId,
+      () => this.clientStates.get(sessionId)
+    );
   }
 
   // +++ 复制文件或目录 +++

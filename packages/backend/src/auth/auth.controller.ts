@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { getErrorMessage } from '../utils/AppError';
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
-import qrcode from 'qrcode';
 import { getDbInstance, runDb, getDb } from '../database/connection';
 import { hashPassword, comparePassword } from '../utils/crypto';
 import { NotificationService } from '../notifications/notification.service';
@@ -35,6 +34,13 @@ import {
   recordTwoFactorDisabledEvent,
   recordTwoFactorEnabledEvent,
 } from './auth-passkey-2fa-flow.utils';
+import {
+  createTwoFactorSecret,
+  resolveTwoFactorEffectiveSecret,
+  respondWithExistingTwoFactorSetup,
+  saveTwoFactorSecretAndRespond,
+  verifyTwoFactorTokenWithSkew,
+} from './auth-two-factor-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -118,14 +124,6 @@ const normalizeBase32Secret = (secret: unknown): string => {
 
   return secret.replace(/[\s-]/g, '').trim().toUpperCase();
 };
-
-const buildTwoFactorOtpAuthUrl = (username: string, secret: string): string =>
-  speakeasy.otpauthURL({
-    secret,
-    encoding: 'base32',
-    label: `NexusTerminal (${username})`,
-    issuer: 'NexusTerminal',
-  });
 
 // 安全收紧：仅允许 ±30 秒（1 * 30 秒）时间窗口。
 const TOTP_VERIFY_WINDOW = 1;
@@ -1018,40 +1016,17 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
-    // 会话中已有临时密钥时直接复用，避免并发 setup 导致前端展示密钥与后端校验密钥不一致。
-    const sessionTempSecret = req.session.tempTwoFactorSecret;
-    if (sessionTempSecret) {
-      const qrCodeUrl = await qrcode.toDataURL(
-        buildTwoFactorOtpAuthUrl(username, sessionTempSecret)
-      );
-      res.json({
-        secret: sessionTempSecret,
-        qrCodeUrl,
-      });
+    // 会话中已有临时密钥时直接复用，避免并发 setup 导致前后端密钥漂移。
+    const reused = await respondWithExistingTwoFactorSetup(req, res, username);
+    if (reused) {
       return;
     }
 
-    const secret = speakeasy.generateSecret({
-      length: 20,
-      name: `NexusTerminal (${username})`,
-    });
-
-    req.session.tempTwoFactorSecret = secret.base32;
-
-    const qrCodeUrl = await qrcode.toDataURL(buildTwoFactorOtpAuthUrl(username, secret.base32));
-
-    // 显式保存 session，确保 tempTwoFactorSecret 在 verify 阶段可见
-    req.session.save((saveErr) => {
-      if (saveErr) {
-        console.error(`[AuthController] 用户 ${userId} 保存临时 2FA 密钥到 session 失败:`, saveErr);
-        res.status(500).json({ message: '保存两步验证状态失败，请重试。' });
-        return;
-      }
-
-      res.json({
-        secret: secret.base32,
-        qrCodeUrl,
-      });
+    const secret = createTwoFactorSecret(username);
+    await saveTwoFactorSecretAndRespond(req, res, {
+      userId,
+      username,
+      secret,
     });
   } catch (error: unknown) {
     console.error(`用户 ${userId} 设置 2FA 时出错:`, error);
@@ -1078,7 +1053,12 @@ export const verifyAndActivate2FA = async (
     return;
   }
 
-  const effectiveSecret = providedSecret || tempSecret;
+  const { effectiveSecret, secretProvidedByBody, sessionSecretMismatched } =
+    resolveTwoFactorEffectiveSecret({
+      req,
+      tempSecret,
+      providedSecret,
+    });
 
   if (!effectiveSecret) {
     res.status(400).json({ message: '未找到临时密钥，请重新开始设置流程。' });
@@ -1096,28 +1076,28 @@ export const verifyAndActivate2FA = async (
   }
 
   try {
-    if (providedSecret && tempSecret && providedSecret !== tempSecret) {
+    if (sessionSecretMismatched) {
       // 兼容并发/重复 setup 导致会话临时密钥与页面展示密钥不一致的场景。
       console.warn(
         `[AuthController] 用户 ${userId} 的 2FA 临时密钥与前端提交密钥不一致，优先使用前端提交密钥进行校验。`
       );
     }
 
-    if (providedSecret && req.session.tempTwoFactorSecret !== providedSecret) {
-      req.session.tempTwoFactorSecret = providedSecret;
+    if (secretProvidedByBody && sessionSecretMismatched) {
+      console.debug(`[AuthController] 用户 ${userId} 的会话临时 2FA 密钥已同步为前端提交值。`);
     }
 
     const db = await getDbInstance();
-    const verificationDelta = speakeasy.totp.verifyDelta({
+    const verificationResult = verifyTwoFactorTokenWithSkew({
       secret: effectiveSecret,
-      encoding: 'base32',
       token: normalizedToken,
-      window: TOTP_VERIFY_WINDOW,
+      verifyWindow: TOTP_VERIFY_WINDOW,
+      skewDetectWindow: TOTP_SKEW_DETECT_WINDOW,
+      skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
-    const verified = verificationDelta !== undefined;
 
-    if (verified) {
-      const delta = verificationDelta?.delta ?? 0;
+    if (verificationResult.status === 'verified') {
+      const { delta } = verificationResult;
       if (Math.abs(delta) > TOTP_SKEW_WARN_THRESHOLD) {
         console.warn(
           `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
@@ -1141,30 +1121,24 @@ export const verifyAndActivate2FA = async (
       delete req.session.tempTwoFactorSecret;
 
       res.status(200).json({ message: '两步验证已成功激活！' });
-    } else {
-      const relaxedDelta = speakeasy.totp.verifyDelta({
-        secret: effectiveSecret,
-        encoding: 'base32',
-        token: normalizedToken,
-        window: TOTP_SKEW_DETECT_WINDOW,
-      });
-      if (relaxedDelta && Math.abs(relaxedDelta.delta) >= TOTP_SKEW_WARN_THRESHOLD) {
-        const skewSeconds = Math.abs(relaxedDelta.delta) * 30;
-        console.warn(
-          `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${relaxedDelta.delta}），建议校准客户端时间。`
-        );
-        res.status(400).json({
-          message: `验证码无效。检测到客户端时间与服务器存在约 ${skewSeconds} 秒偏差，请校准设备时间后重试。`,
-          code: 'TIME_SKEW_DETECTED',
-          skewSeconds,
-          delta: relaxedDelta.delta,
-        });
-        return;
-      }
-
-      console.debug(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
-      res.status(400).json({ message: '验证码无效。' });
+      return;
     }
+
+    if (verificationResult.status === 'time_skew') {
+      console.warn(
+        `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${verificationResult.delta}），建议校准客户端时间。`
+      );
+      res.status(400).json({
+        message: `验证码无效。检测到客户端时间与服务器存在约 ${verificationResult.skewSeconds} 秒偏差，请校准设备时间后重试。`,
+        code: 'TIME_SKEW_DETECTED',
+        skewSeconds: verificationResult.skewSeconds,
+        delta: verificationResult.delta,
+      });
+      return;
+    }
+
+    console.debug(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
+    res.status(400).json({ message: '验证码无效。' });
   } catch (error: unknown) {
     console.error(`用户 ${userId} 验证并激活 2FA 时出错:`, error);
     next(error);
