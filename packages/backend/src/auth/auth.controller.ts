@@ -42,8 +42,6 @@ import {
 } from './auth-two-factor-flow.utils';
 import {
   type ChallengeData,
-  mapPasskeyAuthenticationVerificationResult,
-  mapPasskeyRegistrationVerificationResult,
   persistPasskeyChallengeSession,
   resolvePasskeyAuthenticationContext,
   resolvePasskeyCredentialId,
@@ -68,6 +66,12 @@ import {
   resolveLogin2FATokenValidation,
   resolveLoginPendingAuthValidation,
 } from './auth-login-2fa-flow.utils';
+import {
+  clearPasskeyAuthenticationChallengeSession,
+  clearPasskeyRegistrationSession,
+  resolvePasskeyAuthenticationVerificationOutcome,
+  resolvePasskeyRegistrationVerificationOutcome,
+} from './auth-passkey-register-auth-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -222,6 +226,9 @@ export const verifyPasskeyRegistrationHandler = async (
     fallbackOrigin: getPasskeyRequestOrigin(req),
   });
   if (!registrationContext.ok) {
+    if (registrationContext.failure.body.message === '注册质询已过期，请重新开始注册流程。') {
+      clearPasskeyRegistrationSession(req);
+    }
     res.status(registrationContext.failure.statusCode).json(registrationContext.failure.body);
     return;
   }
@@ -235,7 +242,7 @@ export const verifyPasskeyRegistrationHandler = async (
       registrationContext.userHandle,
       registrationContext.requestOrigin
     );
-    const verificationResult = mapPasskeyRegistrationVerificationResult(verification);
+    const verificationResult = resolvePasskeyRegistrationVerificationOutcome(verification);
 
     if (verificationResult.status === 'verified') {
       await passkeyRepository.createPasskey(verificationResult.newPasskeyToSave);
@@ -253,8 +260,7 @@ export const verifyPasskeyRegistrationHandler = async (
         credentialId: verificationResult.newPasskeyToSave.credential_id,
       });
 
-      delete req.session.currentChallenge;
-      delete req.session.passkeyUserHandle;
+      clearPasskeyRegistrationSession(req);
       res.status(201).json({ verified: true, message: 'Passkey 注册成功。' });
     } else {
       console.warn(
@@ -322,6 +328,9 @@ export const verifyPasskeyAuthenticationHandler = async (
     fallbackOrigin: getPasskeyRequestOrigin(req),
   });
   if (!authenticationContext.ok) {
+    if (authenticationContext.failure.body.message === '认证质询已过期，请重新开始认证流程。') {
+      clearPasskeyAuthenticationChallengeSession(req);
+    }
     res.status(authenticationContext.failure.statusCode).json(authenticationContext.failure.body);
     return;
   }
@@ -334,7 +343,7 @@ export const verifyPasskeyAuthenticationHandler = async (
       authenticationContext.expectedChallenge,
       authenticationContext.requestOrigin
     );
-    const verificationResult = mapPasskeyAuthenticationVerificationResult(verification);
+    const verificationResult = resolvePasskeyAuthenticationVerificationOutcome(verification);
 
     if (verificationResult.status === 'verified') {
       const user = await userRepository.findUserById(verificationResult.userId);

@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第十批并行落地）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第十一批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -74,14 +74,14 @@
 
 > 说明：本节仅记录主线程本轮分析识别的 6 类问题，并同步标注本次是否已落地修复。判断依据为 2026-04-22 本地仓库现状与改动结果。
 
-| 问题                                                                                      | 风险                                                                     | 优先级 | 拟定修复动作                                                                        | 验收标准                                                       | 落地状态                |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------- |
-| 1) `trust proxy` 在未显式配置时默认信任 1 层代理                                          | 反向代理链路未正确设置时，`req.ip` 可信度下降，影响限流/白名单判定准确性 | P1     | 默认改为不信任代理，仅在 `TRUST_PROXY` / `TRUST_PROXY_HOPS` 显式配置时启用          | 未配置相关环境变量时 `trust proxy=false`；显式配置场景保持可用 | ✅ 已完成（2026-04-22） |
-| 2) `quality:check` 仅覆盖 frontend typecheck，backend/remote-gateway 未纳入               | 类型回归可能绕过统一质量门禁                                             | P1     | 在根脚本新增 `typecheck:backend`、`typecheck:remote-gateway` 并并入 `quality:check` | `npm run -s quality:check` 同时执行三端 typecheck 且通过       | ✅ 已完成（2026-04-22） |
-| 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22） |
-| 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22） |
-| 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22） |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第十批完成） |
+| 问题                                                                                      | 风险                                                                     | 优先级 | 拟定修复动作                                                                        | 验收标准                                                       | 落地状态                  |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------- |
+| 1) `trust proxy` 在未显式配置时默认信任 1 层代理                                          | 反向代理链路未正确设置时，`req.ip` 可信度下降，影响限流/白名单判定准确性 | P1     | 默认改为不信任代理，仅在 `TRUST_PROXY` / `TRUST_PROXY_HOPS` 显式配置时启用          | 未配置相关环境变量时 `trust proxy=false`；显式配置场景保持可用 | ✅ 已完成（2026-04-22）   |
+| 2) `quality:check` 仅覆盖 frontend typecheck，backend/remote-gateway 未纳入               | 类型回归可能绕过统一质量门禁                                             | P1     | 在根脚本新增 `typecheck:backend`、`typecheck:remote-gateway` 并并入 `quality:check` | `npm run -s quality:check` 同时执行三端 typecheck 且通过       | ✅ 已完成（2026-04-22）   |
+| 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22）   |
+| 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22）   |
+| 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22）   |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第十一批完成） |
 
 ---
 
@@ -249,16 +249,33 @@
   - 变更文件：`packages/backend/src/sftp/sftp-readdir-operations.test.ts`、`packages/backend/src/auth/auth-login-2fa-flow.utils.test.ts`
   - 结果：覆盖 readdir 未就绪/失败/成功路径与登录 2FA pending 缺失/过期/tempToken 不匹配/token 无效路径，`typecheck + backend test + quality:check` 全绿。
 
-### 第六项下一批并行子任务清单（第十一批）
+### 第六项推进记录（2026-04-23 第十一批并行落地）
 
-1. 任务 AE：`sftp.service.ts` 会话初始化/清理链路下沉（`initializeSftpSession/cleanupSftpSession`）
-   - 目标：将 SFTP 会话生命周期的重复分支与消息发送逻辑抽离到执行器，进一步压缩服务主类。
-   - 验收：`sftp_ready/sftp_error` 与清理行为语义不变，新增执行器测试覆盖初始化成功/失败/重复初始化分支。
-2. 任务 AF：认证控制器 Passkey 注册/认证端点继续分层
-   - 目标：将注册与认证端点中重复的成功/失败响应映射与会话清理动作继续下沉，降低控制器复杂分支。
-   - 验收：Passkey 相关现有测试全绿，新增动作层测试覆盖注册失败与认证失败映射路径。
-3. 任务 AG：第十一批新增回归测试（SFTP 会话动作层 + Passkey 注册/认证动作层）
-   - 目标：为第十一批职责下沉提供回归保护，保持并行改造可回归。
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**维持 0**
+  - `SFTP 服务体量`：`sftp.service.ts` **293 -> 243**（第十一批净减少 50 行；累计 **1884 -> 243**）
+  - `认证控制器体量`：`auth.controller.ts` **1357 -> 1366**（第十一批净增加 9 行；累计 **1592 -> 1366**）
+  - 新增工具单测：**2 文件 / 8 用例全通过**
+- 并行子任务 AE（SFTP 会话生命周期链路下沉）：
+  - 变更文件：`packages/backend/src/sftp/sftp.service.ts`、`packages/backend/src/sftp/sftp-session-operations.ts`
+  - 结果：将 `initializeSftpSession/cleanupSftpSession` 下沉为执行器，保留 `sftp_ready/sftp_error` 与 cleanup 行为语义，服务主类继续收敛。
+- 并行子任务 AF（Passkey 注册/认证端点继续分层）：
+  - 变更文件：`packages/backend/src/auth/auth.controller.ts`、`packages/backend/src/auth/auth-passkey-register-auth-flow.utils.ts`
+  - 结果：抽离注册/认证验证结果映射与会话清理动作，控制器继续保留 HTTP 编排与审计通知语义。
+- 并行子任务 AG（第十一批回归补测）：
+  - 变更文件：`packages/backend/src/sftp/sftp-session-operations.test.ts`、`packages/backend/src/auth/auth-passkey-register-auth-flow.utils.test.ts`
+  - 结果：覆盖 SFTP 会话初始化成功/失败/无效状态与 Passkey 注册/认证失败映射、会话清理辅助路径，`typecheck + backend test + quality:check` 全绿。
+
+### 第六项下一批并行子任务清单（第十二批）
+
+1. 任务 AH：认证控制器 2FA setup/verify 剩余分支继续分层
+   - 目标：将 2FA 启停与验证码失败映射中的重复 DB/响应动作进一步下沉，减少控制器内联分支。
+   - 验收：2FA 相关状态码/文案保持一致，新增动作层测试覆盖 secret 缺失/保存失败/验证失败路径。
+2. 任务 AI：认证控制器 auth status/init-data 轻量动作层抽离
+   - 目标：抽离 `getAuthStatus/getInitData` 中重复鉴权态与响应组装逻辑，进一步降低控制器噪音。
+   - 验收：auth status/init-data 现有行为不变，新增 utils 测试覆盖未认证与已认证分支。
+3. 任务 AJ：第十二批新增回归测试（2FA 动作层 + auth status/init-data 动作层）
+   - 目标：为第十二批职责下沉提供回归保护并稳定持续推进。
    - 验收：新增测试纳入 CI，`npm run -s quality:check` 持续通过。
 
 ---

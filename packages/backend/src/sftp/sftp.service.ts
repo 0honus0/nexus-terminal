@@ -23,6 +23,10 @@ import {
 import { executeCopyOperation } from './sftp-copy-operations';
 import { executeMoveOperation } from './sftp-move-operations';
 import { executeReaddirSftpOperation } from './sftp-readdir-operations';
+import {
+  executeCleanupSftpSessionOperation,
+  executeInitializeSftpSessionOperation,
+} from './sftp-session-operations';
 
 export class SftpService {
   private clientStates: Map<string, ClientState>;
@@ -40,56 +44,7 @@ export class SftpService {
    * @param sessionId 会话 ID
    */
   async initializeSftpSession(sessionId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sshClient || state.sftp) {
-      console.warn(
-        `[SFTP] 无法为会话 ${sessionId} 初始化 SFTP：状态无效、SSH客户端不存在或 SFTP 已初始化。`
-      );
-      return;
-    }
-    if (!state.sshClient) {
-      console.error(`[SFTP] 会话 ${sessionId} 的 SSH 客户端不存在，无法初始化 SFTP。`);
-      return;
-    }
-    return new Promise((resolve, reject) => {
-      state.sshClient.sftp((err, sftpInstance) => {
-        if (err) {
-          console.error(`[SFTP] 为会话 ${sessionId} 初始化 SFTP 会话失败:`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp_error',
-              payload: { connectionId: state.dbConnectionId, message: 'SFTP 初始化失败' },
-            })
-          );
-          reject(err);
-        } else {
-          console.info(`[SFTP] 为会话 ${sessionId} 初始化 SFTP 会话成功。`);
-          state.sftp = sftpInstance;
-          state.ws.send(
-            JSON.stringify({ type: 'sftp_ready', payload: { connectionId: state.dbConnectionId } })
-          );
-          sftpInstance.on('end', () => {
-            console.info(`[SFTP] 会话 ${sessionId} 的 SFTP 会话已结束。`);
-            if (state) state.sftp = undefined;
-          });
-          sftpInstance.on('close', () => {
-            console.info(`[SFTP] 会话 ${sessionId} 的 SFTP 会话已关闭。`);
-            if (state) state.sftp = undefined;
-          });
-          sftpInstance.on('error', (sftpErr: Error) => {
-            console.error(`[SFTP] 会话 ${sessionId} 的 SFTP 会话出错:`, sftpErr);
-            if (state) state.sftp = undefined;
-            state?.ws.send(
-              JSON.stringify({
-                type: 'sftp_error',
-                payload: { connectionId: state.dbConnectionId, message: 'SFTP 会话错误' },
-              })
-            );
-          });
-          resolve();
-        }
-      });
-    });
+    await executeInitializeSftpSessionOperation(this.clientStates.get(sessionId), sessionId);
   }
 
   /**
@@ -97,12 +52,7 @@ export class SftpService {
    * @param sessionId 会话 ID
    */
   cleanupSftpSession(sessionId: string): void {
-    const state = this.clientStates.get(sessionId);
-    if (state?.sftp) {
-      console.debug(`[SFTP] 正在清理 ${sessionId} 的 SFTP 会话...`);
-      state.sftp.end();
-      state.sftp = undefined;
-    }
+    executeCleanupSftpSessionOperation(this.clientStates.get(sessionId), sessionId);
     // Delegate upload cleanup to SftpUploadManager
     this.uploadManager.cleanupSessionUploads(sessionId);
   }
