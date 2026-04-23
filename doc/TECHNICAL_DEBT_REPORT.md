@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第十三批并行落地）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第十四批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -81,7 +81,7 @@
 | 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22）   |
 | 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22）   |
 | 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22）   |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第十三批完成） |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第十四批完成） |
 
 ---
 
@@ -300,16 +300,33 @@
   - 变更文件：`packages/backend/src/auth/auth-passkey-management-actions.utils.test.ts`、`packages/backend/src/auth/auth-password-disable2fa-flow.utils.test.ts`
   - 结果：覆盖 Passkey 删除未命中/越权/未映射错误与密码修改、2FA disable 关键失败分支，`typecheck + backend test + quality:check` 全绿。
 
-### 第六项下一批并行子任务清单（第十四批）
+### 第六项推进记录（2026-04-23 第十四批并行落地）
 
-1. 任务 AN：认证控制器密码安全动作继续下沉（审计/通知 sideEffect 化）
-   - 目标：将 `changePassword/disable2FA` 成功路径中的审计与通知动作下沉为纯函数 sideEffect 描述，进一步削减控制器分支噪音。
-   - 验收：成功路径行为不变，新增动作层测试覆盖审计与通知 sideEffect 输出。
-2. 任务 AO：2FA setup/verify 的数据库更新动作继续模块化
-   - 目标：抽离 2FA 激活链路中的 `updated_at` 写入与 `changes===0` 映射逻辑，统一错误语义并降低控制器重复代码。
-   - 验收：setup/verify 状态码与文案不变，新增动作层测试覆盖更新失败路径。
-3. 任务 AP：第十四批新增回归测试（密码安全动作层 + 2FA 更新动作层）
-   - 目标：为第十四批下沉提供回归保护并确保后续拆分可持续。
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**维持 0**
+  - `SFTP 服务体量`：`sftp.service.ts` **243 -> 243**（第十四批保持不变；累计 **1884 -> 243**）
+  - `认证控制器体量`：`auth.controller.ts` **1379 -> 1399**（第十四批净增加 20 行；累计 **1592 -> 1399**）
+  - 新增工具单测：**2 文件 / 9 用例全通过**
+- 并行子任务 AN（密码安全动作 sideEffect 化）：
+  - 变更文件：`packages/backend/src/auth/auth-password-security-actions.utils.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：`changePassword/disable2FA` 成功路径改为动作层输出（response/log/sideEffects），控制器改为统一执行 sideEffect 并回写响应，行为语义保持不变。
+- 并行子任务 AO（2FA 数据库更新动作模块化）：
+  - 变更文件：`packages/backend/src/auth/auth-2fa-mutation-flow.utils.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：抽离 2FA enable/disable SQL 与 `updated_at` 参数构建，并统一 `changes===0` 错误映射，减少控制器内联更新逻辑。
+- 并行子任务 AP（第十四批回归补测）：
+  - 变更文件：`packages/backend/src/auth/auth-password-security-actions.utils.test.ts`、`packages/backend/src/auth/auth-2fa-mutation-flow.utils.test.ts`
+  - 结果：覆盖密码安全 sideEffect 输出与 2FA mutation 参数/错误映射路径，`typecheck + backend test + quality:check` 全绿。
+
+### 第六项下一批并行子任务清单（第十五批）
+
+1. 任务 AQ：2FA 激活成功动作 sideEffect 化（`2FA_ENABLED`）
+   - 目标：将 `verifyAndActivate2FA` 成功路径中的日志、审计与通知动作下沉为纯函数动作层，继续压缩控制器逻辑噪音。
+   - 验收：激活成功状态码/文案不变，新增动作层测试覆盖 sideEffect 输出。
+2. 任务 AR：2FA setup 会话写入与响应组装动作继续模块化
+   - 目标：将 setup 链路中“生成 secret -> session 持久化 -> payload 响应”的剩余分支进一步收敛为独立动作函数。
+   - 验收：setup 端点行为不变，新增工具层测试覆盖 session 保存失败与复用路径。
+3. 任务 AS：第十五批新增回归测试（2FA 激活动作层 + setup 会话动作层）
+   - 目标：为第十五批下沉改造提供回归护栏，避免连续重构引发语义漂移。
    - 验收：新增测试纳入 CI，`npm run -s quality:check` 持续通过。
 
 ---

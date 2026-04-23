@@ -30,7 +30,6 @@ import {
   completePasskeyAuthenticatedSession,
   recordPasskeyAuthenticationFailure,
   recordPasskeyAuthenticationSuccess,
-  recordTwoFactorDisabledEvent,
   recordTwoFactorEnabledEvent,
 } from './auth-passkey-2fa-flow.utils';
 import {
@@ -91,6 +90,16 @@ import {
   resolveMutationChangesValidation,
   resolvePasswordActionUserValidation,
 } from './auth-password-disable2fa-flow.utils';
+import {
+  buildChangePasswordSuccessAction,
+  buildDisableTwoFactorSuccessAction,
+  type PasswordSecuritySideEffect,
+} from './auth-password-security-actions.utils';
+import {
+  buildDisableTwoFactorMutation,
+  buildEnableTwoFactorMutation,
+  resolveTwoFactorMutationChangesValidation,
+} from './auth-2fa-mutation-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -99,6 +108,17 @@ const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
 
 const applyPasskeyManagementSideEffects = (sideEffects: PasskeyManagementSideEffect[]): void => {
+  for (const sideEffect of sideEffects) {
+    if (sideEffect.kind === 'audit') {
+      auditLogService.logAction(sideEffect.action, sideEffect.payload);
+      continue;
+    }
+
+    notificationService.sendNotification(sideEffect.event, sideEffect.payload);
+  }
+};
+
+const applyPasswordSecuritySideEffects = (sideEffects: PasswordSecuritySideEffect[]): void => {
   for (const sideEffect of sideEffects) {
     if (sideEffect.kind === 'audit') {
       auditLogService.logAction(sideEffect.action, sideEffect.payload);
@@ -946,12 +966,11 @@ export const changePassword = async (
       throw changeValidation.error;
     }
 
-    console.info(`用户 ${userId} 密码已成功修改。`);
-    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
-    auditLogService.logAction('PASSWORD_CHANGED', { userId, ip: clientIp });
-    notificationService.sendNotification('PASSWORD_CHANGED', { userId, ip: clientIp });
-
-    res.status(200).json({ message: '密码已成功修改。' });
+    const clientIp = resolveRequestClientIp(req);
+    const successAction = buildChangePasswordSuccessAction({ userId, clientIp });
+    console[successAction.log.level](successAction.log.message);
+    applyPasswordSecuritySideEffects(successAction.sideEffects);
+    res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {
     console.error(`修改用户 ${userId} 密码时发生内部错误:`, error);
     next(error);
@@ -1083,16 +1102,17 @@ export const verifyAndActivate2FA = async (
           `[AuthController] 用户 ${validatedUserId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
         );
       }
-      const now = Math.floor(Date.now() / 1000);
-      const result = await runDb(
-        db,
-        'UPDATE users SET two_factor_secret = ?, updated_at = ? WHERE id = ?',
-        [effectiveSecret, now, validatedUserId]
-      );
-
-      if (result.changes === 0) {
+      const enableMutation = buildEnableTwoFactorMutation({
+        secret: effectiveSecret,
+        userId: validatedUserId,
+      });
+      const result = await runDb(db, enableMutation.sql, enableMutation.params);
+      const mutationValidation = resolveTwoFactorMutationChangesValidation({
+        changes: result.changes,
+      });
+      if (!mutationValidation.ok) {
         console.error(`激活 2FA 错误: 更新影响行数为 0 - 用户 ID ${validatedUserId}`);
-        throw new Error('未找到要更新的用户');
+        throw mutationValidation.error;
       }
 
       console.info(`用户 ${validatedUserId} 已成功激活两步验证。`);
@@ -1157,26 +1177,26 @@ export const disable2FA = async (
       return;
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const result = await runDb(
-      db,
-      'UPDATE users SET two_factor_secret = NULL, updated_at = ? WHERE id = ?',
-      [now, userId]
-    );
+    const disableMutation = buildDisableTwoFactorMutation({
+      userId,
+    });
+    const result = await runDb(db, disableMutation.sql, disableMutation.params);
 
-    const changeValidation = resolveMutationChangesValidation({ changes: result.changes });
+    const changeValidation = resolveTwoFactorMutationChangesValidation({ changes: result.changes });
     if (!changeValidation.ok) {
       console.error(`禁用 2FA 错误: 更新影响行数为 0 - 用户 ID ${userId}`);
       throw changeValidation.error;
     }
 
-    console.info(`用户 ${userId} 已成功禁用两步验证。`);
-    recordTwoFactorDisabledEvent({ auditLogService, notificationService }, { req, userId });
+    const clientIp = resolveRequestClientIp(req);
+    const successAction = buildDisableTwoFactorSuccessAction({ userId, clientIp });
+    console[successAction.log.level](successAction.log.message);
+    applyPasswordSecuritySideEffects(successAction.sideEffects);
 
     // 禁用时清理临时密钥，避免后续重新启用时读取到陈旧状态。
     delete req.session.tempTwoFactorSecret;
 
-    res.status(200).json({ message: '两步验证已成功禁用。' });
+    res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {
     console.error(`用户 ${userId} 禁用 2FA 时出错:`, error);
     next(error);
