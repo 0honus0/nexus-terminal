@@ -96,21 +96,17 @@ import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.uti
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
 import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-failure-actions.utils';
 import {
-  buildLoginTwoFactorSkewWarnLogAction,
   buildTwoFactorVerifySessionMismatchWarnLogAction,
   buildTwoFactorVerifySessionSyncedDebugLogAction,
   buildTwoFactorVerifySkewWarnLogAction,
 } from './auth-two-factor-log-actions.utils';
 import {
-  buildLoginTwoFactorFailureAttemptAction,
-  buildLoginTwoFactorFallbackFailureResponseAction,
-  buildLoginTwoFactorMissingSecretFailureAction,
-  buildLoginTwoFactorSuccessLogAction,
-  buildLoginTwoFactorSuccessAttemptAction,
-  buildLoginTwoFactorSessionCompletionAction,
   buildLoginTwoFactorDiagnosticsLogActions,
   buildLoginTwoFactorPendingValidationFailedDebugLogAction,
-  resolveLoginTwoFactorFailureAction,
+  buildLoginTwoFactorUserQueryAction,
+  type LoginTwoFactorUserRow,
+  resolveLoginTwoFactorUserLookupAction,
+  resolveLoginTwoFactorVerifiedOutcomeAction,
 } from './auth-login-two-factor-actions.utils';
 import {
   buildTwoFactorVerifySuccessMutationAction,
@@ -810,96 +806,69 @@ export const verifyLogin2FA = async (
 
   try {
     const db = await getDbInstance();
-    // +++ Use pendingAuth.userId instead of session.userId
-    const user = await getDb<User>(
+    const userQueryAction = buildLoginTwoFactorUserQueryAction({
+      userId: verifiedPendingAuth.userId,
+    });
+    const user = await getDb<LoginTwoFactorUserRow>(
       db,
-      'SELECT id, username, two_factor_secret FROM users WHERE id = ?',
-      [verifiedPendingAuth.userId]
+      userQueryAction.sql,
+      userQueryAction.params
     );
-
-    if (!user || !user.two_factor_secret) {
-      const missingSecretFailureAction = buildLoginTwoFactorMissingSecretFailureAction({
-        pendingUserId: verifiedPendingAuth.userId,
-      });
-      console[missingSecretFailureAction.log.level](missingSecretFailureAction.log.message);
+    const userLookupAction = resolveLoginTwoFactorUserLookupAction({
+      pendingUserId: verifiedPendingAuth.userId,
+      user,
+    });
+    if (!userLookupAction.ok) {
+      console[userLookupAction.failureAction.log.level](userLookupAction.failureAction.log.message);
       res
-        .status(missingSecretFailureAction.response.statusCode)
-        .json(missingSecretFailureAction.response.body);
+        .status(userLookupAction.failureAction.response.statusCode)
+        .json(userLookupAction.failureAction.response.body);
       return;
     }
 
+    const { actor } = userLookupAction;
     const verificationResult = verifyTwoFactorTokenWithSkew({
-      secret: user.two_factor_secret,
+      secret: actor.twoFactorSecret,
       token: normalizedToken,
       verifyWindow: TOTP_VERIFY_WINDOW,
       skewDetectWindow: TOTP_SKEW_DETECT_WINDOW,
       skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
-    const verifyFailureAction = resolveLoginTwoFactorFailureAction({
-      username: user.username,
+    const verifiedOutcomeAction = resolveLoginTwoFactorVerifiedOutcomeAction({
+      userId: actor.id,
+      username: actor.username,
+      clientIp: resolveRequestClientIp(req),
+      rememberMe: req.session.rememberMe,
       verificationResult,
+      skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
-    if (verifyFailureAction.handled) {
-      console[verifyFailureAction.log.level](verifyFailureAction.log.message);
-      if (verifyFailureAction.failureReason) {
-        const clientIp = resolveRequestClientIp(req);
-        const failureAttemptAction = buildLoginTwoFactorFailureAttemptAction({
-          userId: user.id,
-          username: user.username,
-          clientIp,
-          reason: verifyFailureAction.failureReason,
-        });
-        if (failureAttemptAction.kind === 'failure') {
-          recordLoginFailureAttempt(
-            { ipBlacklistService, auditLogService, notificationService },
-            failureAttemptAction.payload
-          );
-        }
+    if (verifiedOutcomeAction.kind === 'failure') {
+      if (verifiedOutcomeAction.log) {
+        console[verifiedOutcomeAction.log.level](verifiedOutcomeAction.log.message);
       }
-      res.status(verifyFailureAction.response.statusCode).json(verifyFailureAction.response.body);
-      return;
-    }
-
-    if (verificationResult.status === 'verified') {
-      const skewWarnLogAction = buildLoginTwoFactorSkewWarnLogAction({
-        username: user.username,
-        delta: verificationResult.delta,
-        skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
-      });
-      if (skewWarnLogAction) {
-        console[skewWarnLogAction.level](skewWarnLogAction.message);
-      }
-      const successLogAction = buildLoginTwoFactorSuccessLogAction(user.username);
-      console[successLogAction.level](successLogAction.message);
-      const clientIp = resolveRequestClientIp(req);
-      const successAttemptAction = buildLoginTwoFactorSuccessAttemptAction({
-        userId: user.id,
-        username: user.username,
-        clientIp,
-      });
-      if (successAttemptAction.kind === 'success') {
-        recordLoginSuccessAttempt(
+      if (verifiedOutcomeAction.attemptAction?.kind === 'failure') {
+        recordLoginFailureAttempt(
           { ipBlacklistService, auditLogService, notificationService },
-          successAttemptAction.payload
+          verifiedOutcomeAction.attemptAction.payload
         );
       }
-
-      // 保存 rememberMe 状态，因为 regenerate 会清空 session
-      const { rememberMe } = req.session;
-
-      // +++ Clear pending authentication after successful verification
-      clearPendingLoginTwoFactorAuthState(req);
-
-      const completionAction = buildLoginTwoFactorSessionCompletionAction({
-        user: { id: user.id, username: user.username },
-        rememberMe,
-      });
-      completeAuthenticatedSession(req, res, completionAction);
+      res
+        .status(verifiedOutcomeAction.response.statusCode)
+        .json(verifiedOutcomeAction.response.body);
       return;
     }
 
-    const fallbackFailureResponseAction = buildLoginTwoFactorFallbackFailureResponseAction();
-    res.status(fallbackFailureResponseAction.statusCode).json(fallbackFailureResponseAction.body);
+    for (const logAction of verifiedOutcomeAction.logs) {
+      console[logAction.level](logAction.message);
+    }
+    if (verifiedOutcomeAction.attemptAction.kind === 'success') {
+      recordLoginSuccessAttempt(
+        { ipBlacklistService, auditLogService, notificationService },
+        verifiedOutcomeAction.attemptAction.payload
+      );
+    }
+    clearPendingLoginTwoFactorAuthState(req);
+    completeAuthenticatedSession(req, res, verifiedOutcomeAction.completionAction);
   } catch (error: unknown) {
     console.error(
       `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,
