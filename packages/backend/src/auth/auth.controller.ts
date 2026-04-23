@@ -36,7 +36,6 @@ import {
   verifyTwoFactorTokenWithSkew,
 } from './auth-two-factor-flow.utils';
 import {
-  mapTwoFactorVerifyFailure,
   resolveTwoFactorSetupRequestValidation,
   resolveTwoFactorVerifyRequestValidation,
 } from './auth-2fa-state-flow.utils';
@@ -56,7 +55,6 @@ import {
   buildDeletePasskeyResultAction,
   buildListPasskeysSuccessAction,
   buildUpdatePasskeyNameSuccessAction,
-  type PasskeyManagementSideEffect,
   resolveDeletePasskeyErrorAction,
   resolveUpdatePasskeyNameErrorAction,
 } from './auth-passkey-management-actions.utils';
@@ -89,57 +87,23 @@ import {
 import {
   buildChangePasswordSuccessAction,
   buildDisableTwoFactorSuccessAction,
-  type PasswordSecuritySideEffect,
 } from './auth-password-security-actions.utils';
 import {
   buildDisableTwoFactorMutation,
   buildEnableTwoFactorMutation,
   resolveTwoFactorMutationChangesValidation,
 } from './auth-2fa-mutation-flow.utils';
-import {
-  buildTwoFactorEnabledSuccessAction,
-  type TwoFactorEnabledSideEffect,
-} from './auth-two-factor-enabled-actions.utils';
+import { buildTwoFactorEnabledSuccessAction } from './auth-two-factor-enabled-actions.utils';
 import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.utils';
+import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
+import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-failure-actions.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
-
-const applyPasskeyManagementSideEffects = (sideEffects: PasskeyManagementSideEffect[]): void => {
-  for (const sideEffect of sideEffects) {
-    if (sideEffect.kind === 'audit') {
-      auditLogService.logAction(sideEffect.action, sideEffect.payload);
-      continue;
-    }
-
-    notificationService.sendNotification(sideEffect.event, sideEffect.payload);
-  }
-};
-
-const applyPasswordSecuritySideEffects = (sideEffects: PasswordSecuritySideEffect[]): void => {
-  for (const sideEffect of sideEffects) {
-    if (sideEffect.kind === 'audit') {
-      auditLogService.logAction(sideEffect.action, sideEffect.payload);
-      continue;
-    }
-
-    notificationService.sendNotification(sideEffect.event, sideEffect.payload);
-  }
-};
-
-const applyTwoFactorEnabledSideEffects = (sideEffects: TwoFactorEnabledSideEffect[]): void => {
-  for (const sideEffect of sideEffects) {
-    if (sideEffect.kind === 'audit') {
-      auditLogService.logAction(sideEffect.action, sideEffect.payload);
-      continue;
-    }
-
-    notificationService.sendNotification(sideEffect.event, sideEffect.payload);
-  }
-};
+const authSideEffectServices = { auditLogService, notificationService };
 
 const getRequestHeaderValue = (req: Request, name: string): string | undefined => {
   const headerFromGetter = typeof req.get === 'function' ? req.get(name) : undefined;
@@ -530,7 +494,7 @@ export const deleteUserPasskeyHandler = async (
       wasDeleted
     );
     console[deleteAction.log.level](deleteAction.log.message);
-    applyPasskeyManagementSideEffects(deleteAction.sideEffects);
+    applyAuthSideEffects(authSideEffectServices, deleteAction.sideEffects);
     res.status(deleteAction.response.statusCode).json(deleteAction.response.body);
   } catch (error: unknown) {
     const deleteErrorAction = resolveDeletePasskeyErrorAction(
@@ -547,7 +511,7 @@ export const deleteUserPasskeyHandler = async (
       next(error);
       return;
     }
-    applyPasskeyManagementSideEffects(deleteErrorAction.sideEffects);
+    applyAuthSideEffects(authSideEffectServices, deleteErrorAction.sideEffects);
     res.status(deleteErrorAction.response.statusCode).json(deleteErrorAction.response.body);
   }
 };
@@ -589,7 +553,7 @@ export const updateUserPasskeyNameHandler = async (
       trimmedName
     );
     console[updateAction.log.level](updateAction.log.message);
-    applyPasskeyManagementSideEffects(updateAction.sideEffects);
+    applyAuthSideEffects(authSideEffectServices, updateAction.sideEffects);
     res.status(updateAction.response.statusCode).json(updateAction.response.body);
   } catch (error: unknown) {
     const updateErrorAction = resolveUpdatePasskeyNameErrorAction(
@@ -606,7 +570,7 @@ export const updateUserPasskeyNameHandler = async (
       next(error);
       return;
     }
-    applyPasskeyManagementSideEffects(updateErrorAction.sideEffects);
+    applyAuthSideEffects(authSideEffectServices, updateErrorAction.sideEffects);
     res.status(updateErrorAction.response.statusCode).json(updateErrorAction.response.body);
   }
 };
@@ -981,7 +945,7 @@ export const changePassword = async (
     const clientIp = resolveRequestClientIp(req);
     const successAction = buildChangePasswordSuccessAction({ userId, clientIp });
     console[successAction.log.level](successAction.log.message);
-    applyPasswordSecuritySideEffects(successAction.sideEffects);
+    applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
     res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {
     console.error(`修改用户 ${userId} 密码时发生内部错误:`, error);
@@ -1090,17 +1054,13 @@ export const verifyAndActivate2FA = async (
       skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
 
-    const verifyFailure = mapTwoFactorVerifyFailure(verificationResult);
-    if (verifyFailure) {
-      if (verifyFailure.kind === 'time_skew') {
-        console.warn(
-          `[AuthController] 用户 ${validatedUserId} 的 2FA 激活验证码存在明显时间偏差（delta=${verifyFailure.body.delta}），建议校准客户端时间。`
-        );
-      } else {
-        console.debug(`用户 ${validatedUserId} 2FA 激活失败: 验证码错误。`);
-      }
-
-      res.status(verifyFailure.statusCode).json(verifyFailure.body);
+    const verifyFailureAction = resolveTwoFactorVerifyFailureAction({
+      userId: validatedUserId,
+      verificationResult,
+    });
+    if (verifyFailureAction.handled) {
+      console[verifyFailureAction.log.level](verifyFailureAction.log.message);
+      res.status(verifyFailureAction.response.statusCode).json(verifyFailureAction.response.body);
       return;
     }
 
@@ -1130,7 +1090,7 @@ export const verifyAndActivate2FA = async (
         clientIp,
       });
       console[successAction.log.level](successAction.log.message);
-      applyTwoFactorEnabledSideEffects(successAction.sideEffects);
+      applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
 
       delete req.session.tempTwoFactorSecret;
 
@@ -1202,7 +1162,7 @@ export const disable2FA = async (
     const clientIp = resolveRequestClientIp(req);
     const successAction = buildDisableTwoFactorSuccessAction({ userId, clientIp });
     console[successAction.log.level](successAction.log.message);
-    applyPasswordSecuritySideEffects(successAction.sideEffects);
+    applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
 
     // 禁用时清理临时密钥，避免后续重新启用时读取到陈旧状态。
     delete req.session.tempTwoFactorSecret;
