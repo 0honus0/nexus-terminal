@@ -12,6 +12,7 @@ import speakeasy from 'speakeasy';
 import { getDb } from '../database/connection';
 import { passkeyService } from '../passkey/passkey.service';
 import { userRepository } from '../user/user.repository';
+import { ipBlacklistService } from './ip-blacklist.service';
 
 // Mock dependencies
 vi.mock('../database/connection', () => ({
@@ -556,6 +557,40 @@ describe('Auth Controller - Security Fixes', () => {
             user: { id: 1, username: 'testuser' },
           })
         );
+      });
+
+      it('验证码错误时应返回 401 并记录失败尝试', async () => {
+        const mockUser = {
+          id: 1,
+          username: 'testuser',
+          two_factor_secret: 'JBSWY3DPEHPK3PXP',
+        };
+
+        const tempToken = 'valid-token';
+        const pendingAuth = {
+          tempToken,
+          userId: 1,
+          username: 'testuser',
+          expiresAt: Date.now() + 5 * 60 * 1000,
+        };
+
+        mockSession.pendingAuth = pendingAuth;
+        mockReq.body = {
+          token: '123456',
+          tempToken,
+        };
+
+        (getDb as any).mockResolvedValueOnce(mockUser);
+        (speakeasy.totp.verifyDelta as any)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined);
+
+        await authController.verifyLogin2FA(mockReq as Request, mockRes as Response);
+
+        expect(mockRes.status).toHaveBeenCalledWith(401);
+        expect(mockRes.json).toHaveBeenCalledWith({ message: '验证码无效。' });
+        expect(ipBlacklistService.recordFailedAttempt).toHaveBeenCalledTimes(1);
+        expect(ipBlacklistService.recordFailedAttempt).toHaveBeenCalledWith('127.0.0.1');
       });
     });
   });

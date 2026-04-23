@@ -102,9 +102,13 @@ import {
   buildTwoFactorVerifySkewWarnLogAction,
 } from './auth-two-factor-log-actions.utils';
 import {
+  buildLoginTwoFactorFailureAttemptAction,
+  buildLoginTwoFactorFallbackFailureResponseAction,
+  buildLoginTwoFactorMissingSecretFailureAction,
   buildLoginTwoFactorSuccessLogAction,
+  buildLoginTwoFactorSuccessAttemptAction,
+  buildLoginTwoFactorSessionCompletionAction,
   buildLoginTwoFactorDiagnosticsLogActions,
-  buildLoginTwoFactorFailureAttemptPayload,
   buildLoginTwoFactorPendingValidationFailedDebugLogAction,
   resolveLoginTwoFactorFailureAction,
 } from './auth-login-two-factor-actions.utils';
@@ -814,8 +818,13 @@ export const verifyLogin2FA = async (
     );
 
     if (!user || !user.two_factor_secret) {
-      console.error(`2FA 验证错误: 未找到用户 ${verifiedPendingAuth.userId} 或未设置密钥。`);
-      res.status(400).json({ message: '无法验证，请重新登录。' });
+      const missingSecretFailureAction = buildLoginTwoFactorMissingSecretFailureAction({
+        pendingUserId: verifiedPendingAuth.userId,
+      });
+      console[missingSecretFailureAction.log.level](missingSecretFailureAction.log.message);
+      res
+        .status(missingSecretFailureAction.response.statusCode)
+        .json(missingSecretFailureAction.response.body);
       return;
     }
 
@@ -834,16 +843,18 @@ export const verifyLogin2FA = async (
       console[verifyFailureAction.log.level](verifyFailureAction.log.message);
       if (verifyFailureAction.failureReason) {
         const clientIp = resolveRequestClientIp(req);
-        const failureAttemptPayload = buildLoginTwoFactorFailureAttemptPayload({
+        const failureAttemptAction = buildLoginTwoFactorFailureAttemptAction({
           userId: user.id,
           username: user.username,
           clientIp,
           reason: verifyFailureAction.failureReason,
         });
-        recordLoginFailureAttempt(
-          { ipBlacklistService, auditLogService, notificationService },
-          failureAttemptPayload
-        );
+        if (failureAttemptAction.kind === 'failure') {
+          recordLoginFailureAttempt(
+            { ipBlacklistService, auditLogService, notificationService },
+            failureAttemptAction.payload
+          );
+        }
       }
       res.status(verifyFailureAction.response.statusCode).json(verifyFailureAction.response.body);
       return;
@@ -861,10 +872,17 @@ export const verifyLogin2FA = async (
       const successLogAction = buildLoginTwoFactorSuccessLogAction(user.username);
       console[successLogAction.level](successLogAction.message);
       const clientIp = resolveRequestClientIp(req);
-      recordLoginSuccessAttempt(
-        { ipBlacklistService, auditLogService, notificationService },
-        { userId: user.id, username: user.username, clientIp, twoFactor: true }
-      );
+      const successAttemptAction = buildLoginTwoFactorSuccessAttemptAction({
+        userId: user.id,
+        username: user.username,
+        clientIp,
+      });
+      if (successAttemptAction.kind === 'success') {
+        recordLoginSuccessAttempt(
+          { ipBlacklistService, auditLogService, notificationService },
+          successAttemptAction.payload
+        );
+      }
 
       // 保存 rememberMe 状态，因为 regenerate 会清空 session
       const { rememberMe } = req.session;
@@ -872,15 +890,16 @@ export const verifyLogin2FA = async (
       // +++ Clear pending authentication after successful verification
       clearPendingLoginTwoFactorAuthState(req);
 
-      completeAuthenticatedSession(req, res, {
+      const completionAction = buildLoginTwoFactorSessionCompletionAction({
         user: { id: user.id, username: user.username },
         rememberMe,
-        saveErrorMessage: '登录完成失败，请重试。',
       });
+      completeAuthenticatedSession(req, res, completionAction);
       return;
     }
 
-    res.status(401).json({ message: '验证码无效。' });
+    const fallbackFailureResponseAction = buildLoginTwoFactorFallbackFailureResponseAction();
+    res.status(fallbackFailureResponseAction.statusCode).json(fallbackFailureResponseAction.body);
   } catch (error: unknown) {
     console.error(
       `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,

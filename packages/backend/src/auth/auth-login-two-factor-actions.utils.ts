@@ -14,6 +14,23 @@ export interface LoginTwoFactorFailureAttemptPayload {
   clientIp: string;
 }
 
+export interface LoginTwoFactorSuccessAttemptPayload {
+  userId: number;
+  username: string;
+  clientIp: string;
+  twoFactor: true;
+}
+
+export type LoginTwoFactorAttemptAction =
+  | {
+      kind: 'success';
+      payload: LoginTwoFactorSuccessAttemptPayload;
+    }
+  | {
+      kind: 'failure';
+      payload: LoginTwoFactorFailureAttemptPayload;
+    };
+
 export type LoginTwoFactorFailureAction =
   | {
       handled: false;
@@ -100,6 +117,30 @@ export const buildLoginTwoFactorFailureAttemptPayload = (payload: {
   };
 };
 
+export const buildLoginTwoFactorSuccessAttemptAction = (payload: {
+  userId: number;
+  username: string;
+  clientIp: string;
+}): LoginTwoFactorAttemptAction => ({
+  kind: 'success',
+  payload: {
+    userId: payload.userId,
+    username: payload.username,
+    clientIp: payload.clientIp,
+    twoFactor: true,
+  },
+});
+
+export const buildLoginTwoFactorFailureAttemptAction = (payload: {
+  userId: number;
+  username: string;
+  clientIp: string;
+  reason?: LoginTwoFactorFailureReason;
+}): LoginTwoFactorAttemptAction => ({
+  kind: 'failure',
+  payload: buildLoginTwoFactorFailureAttemptPayload(payload),
+});
+
 export interface LoginTwoFactorDebugLogAction {
   level: 'debug';
   message: string;
@@ -134,4 +175,57 @@ export const buildLoginTwoFactorPendingValidationFailedDebugLogAction = (payload
 }): LoginTwoFactorDebugLogAction => ({
   level: 'debug',
   message: `[AuthController] verifyLogin2FA - FAILED: pendingAuth=${payload.hasPendingAuth}, tempToken=${payload.hasTempToken}`,
+});
+
+export const buildLoginTwoFactorMissingSecretFailureAction = (payload: {
+  pendingUserId: number;
+}): {
+  response: {
+    statusCode: 400;
+    body: {
+      message: '无法验证，请重新登录。';
+    };
+  };
+  log: {
+    level: 'error';
+    message: string;
+  };
+} => ({
+  response: {
+    statusCode: 400,
+    body: { message: '无法验证，请重新登录。' },
+  },
+  log: {
+    level: 'error',
+    message: `2FA 验证错误: 未找到用户 ${payload.pendingUserId} 或未设置密钥。`,
+  },
+});
+
+export const buildLoginTwoFactorSessionCompletionAction = (payload: {
+  user: {
+    id: number;
+    username: string;
+  };
+  rememberMe?: boolean;
+}): {
+  user: {
+    id: number;
+    username: string;
+  };
+  rememberMe?: boolean;
+  saveErrorMessage: string;
+} => ({
+  user: payload.user,
+  rememberMe: payload.rememberMe,
+  saveErrorMessage: '登录完成失败，请重试。',
+});
+
+export const buildLoginTwoFactorFallbackFailureResponseAction = (): {
+  statusCode: 401;
+  body: {
+    message: '验证码无效。';
+  };
+} => ({
+  statusCode: 401,
+  body: { message: '验证码无效。' },
 });

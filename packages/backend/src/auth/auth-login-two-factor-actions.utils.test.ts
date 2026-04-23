@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildLoginTwoFactorDiagnosticsLogActions,
+  buildLoginTwoFactorFallbackFailureResponseAction,
+  buildLoginTwoFactorFailureAttemptAction,
   buildLoginTwoFactorFailureAttemptPayload,
+  buildLoginTwoFactorMissingSecretFailureAction,
   buildLoginTwoFactorPendingValidationFailedDebugLogAction,
+  buildLoginTwoFactorSessionCompletionAction,
+  buildLoginTwoFactorSuccessAttemptAction,
   buildLoginTwoFactorSuccessLogAction,
   resolveLoginTwoFactorFailureAction,
 } from './auth-login-two-factor-actions.utils';
@@ -113,6 +118,71 @@ describe('auth-login-two-factor-actions.utils', () => {
     ).toEqual({
       level: 'debug',
       message: '[AuthController] verifyLogin2FA - FAILED: pendingAuth=false, tempToken=true',
+    });
+  });
+
+  it('应构建 success/failure attempt 动作与通用响应动作', () => {
+    expect(
+      buildLoginTwoFactorSuccessAttemptAction({
+        userId: 1,
+        username: 'alice',
+        clientIp: '10.0.0.1',
+      })
+    ).toEqual({
+      kind: 'success',
+      payload: {
+        userId: 1,
+        username: 'alice',
+        clientIp: '10.0.0.1',
+        twoFactor: true,
+      },
+    });
+
+    expect(
+      buildLoginTwoFactorFailureAttemptAction({
+        userId: 1,
+        username: 'alice',
+        clientIp: '10.0.0.2',
+      })
+    ).toEqual({
+      kind: 'failure',
+      payload: {
+        userId: 1,
+        username: 'alice',
+        reason: 'Invalid 2FA token',
+        clientIp: '10.0.0.2',
+      },
+    });
+
+    expect(
+      buildLoginTwoFactorSessionCompletionAction({
+        user: { id: 1, username: 'alice' },
+        rememberMe: true,
+      })
+    ).toEqual({
+      user: { id: 1, username: 'alice' },
+      rememberMe: true,
+      saveErrorMessage: '登录完成失败，请重试。',
+    });
+
+    expect(
+      buildLoginTwoFactorMissingSecretFailureAction({
+        pendingUserId: 9,
+      })
+    ).toEqual({
+      response: {
+        statusCode: 400,
+        body: { message: '无法验证，请重新登录。' },
+      },
+      log: {
+        level: 'error',
+        message: '2FA 验证错误: 未找到用户 9 或未设置密钥。',
+      },
+    });
+
+    expect(buildLoginTwoFactorFallbackFailureResponseAction()).toEqual({
+      statusCode: 401,
+      body: { message: '验证码无效。' },
     });
   });
 });
