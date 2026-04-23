@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
 
-interface SetupPayload {
+export interface SetupPayload {
   secret: string;
   qrCodeUrl: string;
 }
@@ -15,7 +15,7 @@ const buildTwoFactorOtpAuthUrl = (username: string, secret: string): string =>
     issuer: 'NexusTerminal',
   });
 
-const buildTwoFactorSetupPayload = async (
+export const buildTwoFactorSetupPayload = async (
   username: string,
   secret: string
 ): Promise<SetupPayload> => {

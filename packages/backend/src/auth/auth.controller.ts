@@ -30,19 +30,15 @@ import {
   completePasskeyAuthenticatedSession,
   recordPasskeyAuthenticationFailure,
   recordPasskeyAuthenticationSuccess,
-  recordTwoFactorEnabledEvent,
 } from './auth-passkey-2fa-flow.utils';
 import {
-  createTwoFactorSecret,
   resolveTwoFactorEffectiveSecret,
-  respondWithExistingTwoFactorSetup,
   verifyTwoFactorTokenWithSkew,
 } from './auth-two-factor-flow.utils';
 import {
   mapTwoFactorVerifyFailure,
   resolveTwoFactorSetupRequestValidation,
   resolveTwoFactorVerifyRequestValidation,
-  saveTwoFactorSetupSessionSecret,
 } from './auth-2fa-state-flow.utils';
 import {
   type ChallengeData,
@@ -100,6 +96,11 @@ import {
   buildEnableTwoFactorMutation,
   resolveTwoFactorMutationChangesValidation,
 } from './auth-2fa-mutation-flow.utils';
+import {
+  buildTwoFactorEnabledSuccessAction,
+  type TwoFactorEnabledSideEffect,
+} from './auth-two-factor-enabled-actions.utils';
+import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -119,6 +120,17 @@ const applyPasskeyManagementSideEffects = (sideEffects: PasskeyManagementSideEff
 };
 
 const applyPasswordSecuritySideEffects = (sideEffects: PasswordSecuritySideEffect[]): void => {
+  for (const sideEffect of sideEffects) {
+    if (sideEffect.kind === 'audit') {
+      auditLogService.logAction(sideEffect.action, sideEffect.payload);
+      continue;
+    }
+
+    notificationService.sendNotification(sideEffect.event, sideEffect.payload);
+  }
+};
+
+const applyTwoFactorEnabledSideEffects = (sideEffects: TwoFactorEnabledSideEffect[]): void => {
   for (const sideEffect of sideEffects) {
     if (sideEffect.kind === 'audit') {
       auditLogService.logAction(sideEffect.action, sideEffect.payload);
@@ -1005,21 +1017,18 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
     }
     const { userId: validatedUserId, username: validatedUsername } = setupValidation.actor;
 
-    // 会话中已有临时密钥时直接复用，避免并发 setup 导致前后端密钥漂移。
-    const reused = await respondWithExistingTwoFactorSetup(req, res, validatedUsername);
-    if (reused) {
+    const setupAction = await executeTwoFactorSetupAction({
+      req,
+      userId: validatedUserId,
+      username: validatedUsername,
+    });
+    console[setupAction.log.level](setupAction.log.message);
+    if (!setupAction.ok) {
+      res.status(setupAction.failure.statusCode).json(setupAction.failure.body);
       return;
     }
 
-    const secret = createTwoFactorSecret(validatedUsername);
-    const saveResult = await saveTwoFactorSetupSessionSecret(req, secret);
-    if (!saveResult.ok) {
-      console.error(`[AuthController] 用户 ${validatedUserId} 保存临时 2FA 密钥到 session 失败`);
-      res.status(saveResult.failure.statusCode).json(saveResult.failure.body);
-      return;
-    }
-
-    await respondWithExistingTwoFactorSetup(req, res, validatedUsername);
+    res.status(setupAction.response.statusCode).json(setupAction.response.body);
   } catch (error: unknown) {
     console.error(`用户 ${userId} 设置 2FA 时出错:`, error);
     next(error);
@@ -1115,15 +1124,17 @@ export const verifyAndActivate2FA = async (
         throw mutationValidation.error;
       }
 
-      console.info(`用户 ${validatedUserId} 已成功激活两步验证。`);
-      recordTwoFactorEnabledEvent(
-        { auditLogService, notificationService },
-        { req, userId: validatedUserId }
-      );
+      const clientIp = resolveRequestClientIp(req);
+      const successAction = buildTwoFactorEnabledSuccessAction({
+        userId: validatedUserId,
+        clientIp,
+      });
+      console[successAction.log.level](successAction.log.message);
+      applyTwoFactorEnabledSideEffects(successAction.sideEffects);
 
       delete req.session.tempTwoFactorSecret;
 
-      res.status(200).json({ message: '两步验证已成功激活！' });
+      res.status(successAction.response.statusCode).json(successAction.response.body);
       return;
     }
   } catch (error: unknown) {
