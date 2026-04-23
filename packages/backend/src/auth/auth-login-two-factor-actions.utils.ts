@@ -1,6 +1,7 @@
 import type { TwoFactorTokenVerificationResult } from './auth-two-factor-flow.utils';
 import {
   buildLoginTwoFactorInvalidDebugLogAction,
+  buildLoginTwoFactorSkewWarnLogAction,
   buildLoginTwoFactorSkewWarnLogActionAlways,
   buildLoginTwoFactorSuccessInfoLogAction,
 } from './auth-two-factor-log-actions.utils';
@@ -30,6 +31,63 @@ export type LoginTwoFactorAttemptAction =
       kind: 'failure';
       payload: LoginTwoFactorFailureAttemptPayload;
     };
+
+export interface LoginTwoFactorUserRow {
+  id: number;
+  username: string;
+  two_factor_secret: string | null;
+}
+
+export const LOGIN_TWO_FACTOR_USER_QUERY_SQL =
+  'SELECT id, username, two_factor_secret FROM users WHERE id = ?';
+
+export const buildLoginTwoFactorUserQueryAction = (payload: {
+  userId: number;
+}): {
+  sql: typeof LOGIN_TWO_FACTOR_USER_QUERY_SQL;
+  params: [number];
+} => ({
+  sql: LOGIN_TWO_FACTOR_USER_QUERY_SQL,
+  params: [payload.userId],
+});
+
+export type LoginTwoFactorUserLookupAction =
+  | {
+      ok: false;
+      failureAction: ReturnType<typeof buildLoginTwoFactorMissingSecretFailureAction>;
+    }
+  | {
+      ok: true;
+      actor: {
+        id: number;
+        username: string;
+        twoFactorSecret: string;
+      };
+    };
+
+export const resolveLoginTwoFactorUserLookupAction = (payload: {
+  pendingUserId: number;
+  user: LoginTwoFactorUserRow | null | undefined;
+}): LoginTwoFactorUserLookupAction => {
+  const { pendingUserId, user } = payload;
+  if (!user || !user.two_factor_secret) {
+    return {
+      ok: false,
+      failureAction: buildLoginTwoFactorMissingSecretFailureAction({
+        pendingUserId,
+      }),
+    };
+  }
+
+  return {
+    ok: true,
+    actor: {
+      id: user.id,
+      username: user.username,
+      twoFactorSecret: user.two_factor_secret,
+    },
+  };
+};
 
 export type LoginTwoFactorFailureAction =
   | {
@@ -229,3 +287,93 @@ export const buildLoginTwoFactorFallbackFailureResponseAction = (): {
   statusCode: 401,
   body: { message: '验证码无效。' },
 });
+
+type LoginTwoFactorHandledFailureResponse = Extract<
+  LoginTwoFactorFailureAction,
+  { handled: true }
+>['response'];
+
+export type LoginTwoFactorVerifiedOutcomeAction =
+  | {
+      kind: 'failure';
+      log?: {
+        level: 'warn' | 'debug';
+        message: string;
+      };
+      attemptAction?: LoginTwoFactorAttemptAction;
+      response:
+        | LoginTwoFactorHandledFailureResponse
+        | ReturnType<typeof buildLoginTwoFactorFallbackFailureResponseAction>;
+    }
+  | {
+      kind: 'success';
+      logs: Array<{
+        level: 'warn' | 'info';
+        message: string;
+      }>;
+      attemptAction: LoginTwoFactorAttemptAction;
+      completionAction: ReturnType<typeof buildLoginTwoFactorSessionCompletionAction>;
+    };
+
+export const resolveLoginTwoFactorVerifiedOutcomeAction = (payload: {
+  userId: number;
+  username: string;
+  clientIp: string;
+  rememberMe?: boolean;
+  verificationResult: TwoFactorTokenVerificationResult;
+  skewWarnThreshold: number;
+}): LoginTwoFactorVerifiedOutcomeAction => {
+  const { userId, username, clientIp, rememberMe, verificationResult, skewWarnThreshold } = payload;
+
+  const verifyFailureAction = resolveLoginTwoFactorFailureAction({
+    username,
+    verificationResult,
+  });
+  if (verifyFailureAction.handled) {
+    return {
+      kind: 'failure',
+      log: verifyFailureAction.log,
+      attemptAction: verifyFailureAction.failureReason
+        ? buildLoginTwoFactorFailureAttemptAction({
+            userId,
+            username,
+            clientIp,
+            reason: verifyFailureAction.failureReason,
+          })
+        : undefined,
+      response: verifyFailureAction.response,
+    };
+  }
+
+  if (verificationResult.status === 'verified') {
+    const logs: Array<{ level: 'warn' | 'info'; message: string }> = [];
+    const skewWarnLogAction = buildLoginTwoFactorSkewWarnLogAction({
+      username,
+      delta: verificationResult.delta,
+      skewWarnThreshold,
+    });
+    if (skewWarnLogAction) {
+      logs.push(skewWarnLogAction);
+    }
+    logs.push(buildLoginTwoFactorSuccessLogAction(username));
+
+    return {
+      kind: 'success',
+      logs,
+      attemptAction: buildLoginTwoFactorSuccessAttemptAction({
+        userId,
+        username,
+        clientIp,
+      }),
+      completionAction: buildLoginTwoFactorSessionCompletionAction({
+        user: { id: userId, username },
+        rememberMe,
+      }),
+    };
+  }
+
+  return {
+    kind: 'failure',
+    response: buildLoginTwoFactorFallbackFailureResponseAction(),
+  };
+};
