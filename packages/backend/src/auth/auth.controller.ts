@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { getErrorMessage } from '../utils/AppError';
-import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import { getDbInstance, runDb, getDb } from '../database/connection';
 import { hashPassword, comparePassword } from '../utils/crypto';
@@ -63,6 +62,12 @@ import {
   resolvePasskeyTrimmedName,
   summarizePasskeyCredentialId,
 } from './auth-passkey-management-flow.utils';
+import {
+  createPendingLoginTwoFactorAuthState,
+  type PendingAuth,
+  resolveLogin2FATokenValidation,
+  resolveLoginPendingAuthValidation,
+} from './auth-login-2fa-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -145,14 +150,6 @@ export interface User {
   username: string;
   hashed_password: string;
   two_factor_secret?: string | null;
-}
-
-// +++ Pending Authentication for 2FA Bypass Prevention
-interface PendingAuth {
-  tempToken: string;
-  userId: number;
-  username: string;
-  expiresAt: number;
 }
 
 declare module 'express-session' {
@@ -666,14 +663,12 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     // 检查是否启用了 2FA
     if (user.two_factor_secret) {
       console.debug(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
-      // +++ Generate temporary token for 2FA verification
-      const tempToken = crypto.randomBytes(SECURITY_CONFIG.TEMP_TOKEN_LENGTH).toString('hex');
-      const pendingAuth: PendingAuth = {
-        tempToken,
+      const pendingAuth = createPendingLoginTwoFactorAuthState({
         userId: user.id,
         username: user.username,
-        expiresAt: Date.now() + SECURITY_CONFIG.PENDING_AUTH_TIMEOUT,
-      };
+        tempTokenLength: SECURITY_CONFIG.TEMP_TOKEN_LENGTH,
+        pendingAuthTimeoutMs: SECURITY_CONFIG.PENDING_AUTH_TIMEOUT,
+      });
       startPendingTwoFactorSession(req, res, { pendingAuth, rememberMe, isDev });
     } else {
       console.info(`登录成功 (无 2FA): ${username}`);
@@ -746,7 +741,6 @@ export const verifyLogin2FA = async (
 ): Promise<void> => {
   const { token, tempToken } = req.body; // +++ Accept tempToken from frontend
   const pendingAuth = req.session.pendingAuth as PendingAuth | undefined;
-  const normalizedToken = normalizeTotpToken(token);
 
   // +++ Debug logging for session diagnostics (dev only)
   if (isDev) {
@@ -761,38 +755,29 @@ export const verifyLogin2FA = async (
     );
   }
 
-  // +++ Validate pending authentication state and tempToken
-  if (!pendingAuth || !tempToken) {
-    if (isDev) {
+  const pendingValidationResult = resolveLoginPendingAuthValidation({
+    req,
+    tempToken,
+  });
+  if (!pendingValidationResult.ok) {
+    if (isDev && !pendingAuth) {
       console.debug(
         `[AuthController] verifyLogin2FA - FAILED: pendingAuth=${!!pendingAuth}, tempToken=${!!tempToken}`
       );
     }
-    res.status(401).json({ message: '无效的认证状态。' });
+    res
+      .status(pendingValidationResult.failure.statusCode)
+      .json(pendingValidationResult.failure.body);
     return;
   }
+  const { pendingAuth: verifiedPendingAuth } = pendingValidationResult;
 
-  if (pendingAuth.tempToken !== tempToken) {
-    res.status(401).json({ message: '无效的认证状态。' });
+  const tokenValidationResult = resolveLogin2FATokenValidation(token);
+  if (!tokenValidationResult.ok) {
+    res.status(tokenValidationResult.failure.statusCode).json(tokenValidationResult.failure.body);
     return;
   }
-
-  // +++ Verify tempToken hasn't expired (5 minutes)
-  if (Date.now() > pendingAuth.expiresAt) {
-    delete req.session.pendingAuth;
-    res.status(401).json({ message: '认证已过期，请重新登录。' });
-    return;
-  }
-
-  if (!normalizedToken) {
-    res.status(400).json({ message: '验证码不能为空。' });
-    return;
-  }
-
-  if (!/^\d{6,8}$/.test(normalizedToken)) {
-    res.status(400).json({ message: '验证码格式无效。' });
-    return;
-  }
+  const { normalizedToken } = tokenValidationResult;
 
   try {
     const db = await getDbInstance();
@@ -800,11 +785,11 @@ export const verifyLogin2FA = async (
     const user = await getDb<User>(
       db,
       'SELECT id, username, two_factor_secret FROM users WHERE id = ?',
-      [pendingAuth.userId]
+      [verifiedPendingAuth.userId]
     );
 
     if (!user || !user.two_factor_secret) {
-      console.error(`2FA 验证错误: 未找到用户 ${pendingAuth.userId} 或未设置密钥。`);
+      console.error(`2FA 验证错误: 未找到用户 ${verifiedPendingAuth.userId} 或未设置密钥。`);
       res.status(400).json({ message: '无法验证，请重新登录。' });
       return;
     }
@@ -877,7 +862,10 @@ export const verifyLogin2FA = async (
       res.status(401).json({ message: '验证码无效。' });
     }
   } catch (error: unknown) {
-    console.error(`2FA 验证时发生内部错误 (用户: ${pendingAuth?.userId || 'unknown'}):`, error);
+    console.error(
+      `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,
+      error
+    );
     next(error);
   }
 };
