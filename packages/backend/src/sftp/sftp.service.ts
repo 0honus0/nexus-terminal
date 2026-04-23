@@ -1,4 +1,4 @@
-import { SFTPWrapper, Stats } from 'ssh2';
+import { SFTPWrapper } from 'ssh2';
 import * as pathModule from 'path';
 import {
   ClientState,
@@ -25,19 +25,12 @@ import {
   executeRealpathPathQueryOperation,
   executeStatPathQueryOperation,
 } from './sftp-path-query-operations';
-
-type MkdirWithRecursive = (
-  path: string,
-  attrs: { recursive?: boolean },
-  callback: (err?: Error | undefined) => void
-) => void;
-
-// +++ Define local interface for readdir results +++
-interface SftpDirEntry {
-  filename: string;
-  longname: string;
-  attrs: Stats;
-}
+import {
+  ensureDirectoryExists,
+  executeCopyOperation,
+  formatStatsToFileListItem,
+  getStats,
+} from './sftp-copy-operations';
 
 export class SftpService {
   private clientStates: Map<string, ClientState>;
@@ -299,106 +292,13 @@ export class SftpService {
     destinationDir: string,
     requestId: string
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP Copy] SFTP 未准备好，无法在 ${sessionId} 上执行 copy (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:copy:error',
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      );
-      return;
-    }
-    const { sftp } = state;
-    console.debug(
-      `[SFTP ${sessionId}] Received copy request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`
+    await executeCopyOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      sources,
+      destinationDir,
+      requestId
     );
-
-    const copiedItemsDetails: FileListItem[] = []; // Store details of successfully copied items
-    let firstError: Error | null = null;
-
-    try {
-      // Ensure destination directory exists
-      try {
-        await this.ensureDirectoryExists(sftp, destinationDir);
-      } catch (ensureErr: unknown) {
-        console.error(
-          `[SFTP ${sessionId}] Failed to ensure destination directory ${destinationDir} exists (ID: ${requestId}):`,
-          ensureErr
-        );
-        throw new Error(`无法创建或访问目标目录: ${getErrorMessage(ensureErr)}`);
-      }
-
-      for (const sourcePath of sources) {
-        const sourceName = pathModule.basename(sourcePath);
-        const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/'); // Ensure forward slashes
-
-        if (sourcePath === destPath) {
-          console.warn(
-            `[SFTP ${sessionId}] Skipping copy: source and destination are the same (${sourcePath}) (ID: ${requestId})`
-          );
-          continue; // Skip if source and destination are identical
-        }
-
-        try {
-          const stats = await this.getStats(sftp, sourcePath);
-          if (stats.isDirectory()) {
-            console.debug(
-              `[SFTP ${sessionId}] Copying directory ${sourcePath} to ${destPath} (ID: ${requestId})`
-            );
-            await this.copyDirectoryRecursive(sftp, sourcePath, destPath);
-          } else if (stats.isFile()) {
-            console.debug(
-              `[SFTP ${sessionId}] Copying file ${sourcePath} to ${destPath} (ID: ${requestId})`
-            );
-            await this.copyFile(sftp, sourcePath, destPath);
-          } else {
-            // Handle symlinks or other types if necessary, for now just skip/warn
-            console.warn(
-              `[SFTP ${sessionId}] Skipping copy of unsupported file type: ${sourcePath} (ID: ${requestId})`
-            );
-            continue;
-          }
-          // Get stats of the *newly copied* item
-          const copiedStats = await this.getStats(sftp, destPath);
-          copiedItemsDetails.push(this.formatStatsToFileListItem(destPath, copiedStats));
-        } catch (copyErr: unknown) {
-          console.error(
-            `[SFTP ${sessionId}] Error copying ${sourcePath} to ${destPath} (ID: ${requestId}):`,
-            copyErr
-          );
-          firstError = copyErr instanceof Error ? copyErr : new Error(getErrorMessage(copyErr)); // Store the first error encountered
-          break; // Stop processing further sources on error
-        }
-      }
-
-      if (firstError) {
-        throw firstError; // Throw the first error to be caught below
-      }
-
-      // Send success message with details of copied items
-      console.info(
-        `[SFTP ${sessionId}] Copy operation completed successfully (ID: ${requestId}). Copied items: ${copiedItemsDetails.length}`
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:copy:success',
-          payload: { destination: destinationDir, items: copiedItemsDetails },
-          requestId,
-        })
-      );
-    } catch (error: unknown) {
-      console.error(`[SFTP ${sessionId}] Copy operation failed (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:copy:error',
-          payload: `复制操作失败: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
   }
 
   // +++ 移动文件或目录 +++
@@ -431,7 +331,7 @@ export class SftpService {
     try {
       // Ensure destination directory exists (important for move)
       try {
-        await this.ensureDirectoryExists(sftp, destinationDir);
+        await ensureDirectoryExists(sftp, destinationDir);
       } catch (ensureErr: unknown) {
         console.error(
           `[SFTP ${sessionId}] Failed to ensure destination directory ${destinationDir} exists for move (ID: ${requestId}):`,
@@ -455,7 +355,7 @@ export class SftpService {
           // --- 移动前检查目标是否存在 ---
           let targetExists = false;
           try {
-            await this.getStats(sftp, newPath);
+            await getStats(sftp, newPath);
             targetExists = true;
           } catch (statErr: unknown) {
             const statErrCode = getErrorCode(statErr);
@@ -478,8 +378,8 @@ export class SftpService {
           await this.performRename(sftp, oldPath, newPath); // Use helper for rename logic
 
           // Get stats of the *moved* item at the new location
-          const movedStats = await this.getStats(sftp, newPath);
-          movedItemsDetails.push(this.formatStatsToFileListItem(newPath, movedStats));
+          const movedStats = await getStats(sftp, newPath);
+          movedItemsDetails.push(formatStatsToFileListItem(newPath, movedStats));
         } catch (moveErr: unknown) {
           console.error(
             `[SFTP ${sessionId}] Error moving ${oldPath} to ${newPath} (ID: ${requestId}):`,
@@ -516,184 +416,6 @@ export class SftpService {
     }
   }
 
-  // +++ 辅助方法 - 复制文件 +++
-  private copyFile(sftp: SFTPWrapper, sourcePath: string, destPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const readStream = sftp.createReadStream(sourcePath);
-      const writeStream = sftp.createWriteStream(destPath);
-      let errorOccurred = false;
-
-      const onError = (err: Error) => {
-        if (errorOccurred) return;
-        errorOccurred = true;
-        // Ensure streams are destroyed on error
-        readStream.destroy();
-        writeStream.destroy();
-        console.error(`Error copying file ${sourcePath} to ${destPath}:`, err);
-        reject(new Error(`复制文件失败: ${err.message}`));
-      };
-
-      readStream.on('error', onError);
-      writeStream.on('error', onError);
-
-      writeStream.on('close', () => {
-        // Use 'close' for write stream completion
-        if (!errorOccurred) {
-          resolve();
-        }
-      });
-
-      readStream.pipe(writeStream);
-    });
-  }
-
-  // +++ 辅助方法 - 递归复制目录 +++
-  private async copyDirectoryRecursive(
-    sftp: SFTPWrapper,
-    sourcePath: string,
-    destPath: string
-  ): Promise<void> {
-    try {
-      // Create destination directory
-      await this.ensureDirectoryExists(sftp, destPath);
-
-      // Read source directory contents
-      const items = await this.listDirectory(sftp, sourcePath);
-
-      for (const item of items) {
-        const currentSourcePath = pathModule.join(sourcePath, item.filename).replace(/\\/g, '/');
-        const currentDestPath = pathModule.join(destPath, item.filename).replace(/\\/g, '/');
-        const itemStats = item.attrs; // Assuming readdir provides stats
-
-        if (itemStats.isDirectory()) {
-          await this.copyDirectoryRecursive(sftp, currentSourcePath, currentDestPath);
-        } else if (itemStats.isFile()) {
-          await this.copyFile(sftp, currentSourcePath, currentDestPath);
-        } else {
-          console.warn(`[SFTP Copy Recurse] Skipping unsupported type: ${currentSourcePath}`);
-        }
-      }
-    } catch (error: unknown) {
-      console.error(`Error recursively copying directory ${sourcePath} to ${destPath}:`, error);
-      throw new Error(`递归复制目录失败: ${getErrorMessage(error)}`);
-    }
-  }
-
-  // +++ 辅助方法 - 获取 Stats (Promise wrapper) +++
-  private getStats(sftp: SFTPWrapper, path: string): Promise<Stats> {
-    return new Promise((resolve, reject) => {
-      sftp.lstat(path, (err, stats) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(stats);
-        }
-      });
-    });
-  }
-
-  // +++ 修改：辅助方法 - 确保目录存在 (递归创建) +++
-  private async ensureDirectoryExists(sftp: SFTPWrapper, dirPath: string): Promise<void> {
-    // 规范化路径，移除尾部斜杠（如果存在）
-    const normalizedPath = dirPath.replace(/\/$/, '');
-    if (!normalizedPath || normalizedPath === '/') {
-      return; // 根目录不需要创建
-    }
-
-    try {
-      // 1. 尝试直接 stat 目录
-      await this.getStats(sftp, normalizedPath);
-      // console.debug(`[SFTP Util] Directory already exists: ${normalizedPath}`);
-      // 目录已存在
-    } catch (statError: unknown) {
-      const statErrCode = getErrorCode(statError);
-      const statErrMsg = getErrorMessage(statError);
-      // 2. 如果 stat 失败，检查是否是 "No such file" 错误
-      if (statErrCode === 'ENOENT' || statErrMsg.includes('No such file')) {
-        // 目录不存在，尝试创建
-        try {
-          // 3. 尝试递归创建 (ssh2 的 mkdir 支持非标准 recursive 属性)
-          // 注意：这可能不适用于所有 SFTP 服务器
-          const mkdirWithRecursive = sftp.mkdir as unknown as MkdirWithRecursive;
-          await new Promise<void>((resolveMkdir, rejectMkdir) => {
-            mkdirWithRecursive(normalizedPath, { recursive: true }, (mkdirErr) => {
-              if (mkdirErr) {
-                // 如果递归创建失败，尝试逐级创建
-                console.warn(
-                  `[SFTP Util] Recursive mkdir failed for ${normalizedPath}, falling back to iterative creation:`,
-                  mkdirErr
-                );
-                rejectMkdir(mkdirErr); // Reject to trigger fallback
-              } else {
-                console.debug(`[SFTP Util] Recursively created directory: ${normalizedPath}`);
-                resolveMkdir();
-              }
-            });
-          });
-          // 递归创建成功
-        } catch {
-          // 4. 递归创建失败，回退到逐级创建
-          const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
-          if (parentDir && parentDir !== '/' && parentDir !== '.') {
-            // 递归确保父目录存在
-            await this.ensureDirectoryExists(sftp, parentDir);
-          }
-          // 创建当前目录
-          try {
-            await new Promise<void>((resolveMkdir, rejectMkdir) => {
-              sftp.mkdir(normalizedPath, (mkdirErr) => {
-                if (mkdirErr) {
-                  // 如果逐级创建也失败，则抛出错误
-                  rejectMkdir(new Error(`创建目录失败 ${normalizedPath}: ${mkdirErr.message}`));
-                } else {
-                  console.debug(`[SFTP Util] Iteratively created directory: ${normalizedPath}`);
-                  resolveMkdir();
-                }
-              });
-            });
-          } catch (iterativeMkdirError: unknown) {
-            console.error(
-              `[SFTP Util] Iterative mkdir failed for ${normalizedPath}:`,
-              iterativeMkdirError
-            );
-            // 检查是否是因为目录已存在（可能由并发操作创建）
-            try {
-              const finalStats = await this.getStats(sftp, normalizedPath);
-              if (!finalStats.isDirectory()) {
-                throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
-              }
-              // 如果目录现在存在，则忽略错误
-              console.debug(
-                `[SFTP Util] Directory ${normalizedPath} exists after iterative mkdir failure, likely created concurrently.`
-              );
-            } catch {
-              // 如果最终检查也失败，则抛出原始的逐级创建错误
-              throw iterativeMkdirError;
-            }
-          }
-        }
-      } else {
-        // 其他 stat 错误
-        throw new Error(`检查目录失败 ${normalizedPath}: ${statErrMsg}`);
-      }
-    }
-  }
-
-  // +++ 辅助方法 - 列出目录内容 (Promise wrapper) +++
-  private listDirectory(sftp: SFTPWrapper, path: string): Promise<SftpDirEntry[]> {
-    // 使用本地接口 SftpDirEntry
-    return new Promise((resolve, reject) => {
-      sftp.readdir(path, (err, list) => {
-        // list 的类型现在是 SftpDirEntry[]
-        if (err) {
-          reject(err);
-        } else {
-          resolve(list);
-        }
-      });
-    });
-  }
-
   // +++ 辅助方法 - 执行重命名 (Promise wrapper) +++
   private performRename(sftp: SFTPWrapper, oldPath: string, newPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -705,25 +427,6 @@ export class SftpService {
         }
       });
     });
-  }
-
-  // +++ 辅助方法 - 格式化 Stats 为 FileListItem +++
-  private formatStatsToFileListItem(itemPath: string, stats: Stats): FileListItem {
-    return {
-      filename: pathModule.basename(itemPath),
-      longname: '', // stat doesn't provide longname, maybe generate a basic one?
-      attrs: {
-        size: stats.size,
-        uid: stats.uid,
-        gid: stats.gid,
-        mode: stats.mode,
-        atime: stats.atime * 1000,
-        mtime: stats.mtime * 1000,
-        isDirectory: stats.isDirectory(),
-        isFile: stats.isFile(),
-        isSymbolicLink: stats.isSymbolicLink(),
-      },
-    };
   }
 
   // --- Compress/Decompress Methods (delegated to SftpArchiveManager) ---

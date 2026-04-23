@@ -41,6 +41,15 @@ import {
   saveTwoFactorSecretAndRespond,
   verifyTwoFactorTokenWithSkew,
 } from './auth-two-factor-flow.utils';
+import {
+  type ChallengeData,
+  mapPasskeyAuthenticationVerificationResult,
+  mapPasskeyRegistrationVerificationResult,
+  persistPasskeyChallengeSession,
+  resolvePasskeyAuthenticationContext,
+  resolvePasskeyCredentialId,
+  resolvePasskeyRegistrationContext,
+} from './auth-passkey-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -87,20 +96,6 @@ const getPasskeyRequestOrigin = (req: Request): string | undefined => {
   return `${protocol}://${host}`;
 };
 
-const getVerificationErrorMessage = (value: unknown): string | undefined => {
-  if (typeof value !== 'object' || value === null || !('error' in value)) {
-    return undefined;
-  }
-
-  const { error } = value as { error?: unknown };
-  if (typeof error !== 'object' || error === null || !('message' in error)) {
-    return undefined;
-  }
-
-  const { message } = error as { message?: unknown };
-  return typeof message === 'string' ? message : undefined;
-};
-
 /**
  * 规范化 TOTP 验证码输入：
  * - 全角数字转半角
@@ -137,13 +132,6 @@ export interface User {
   username: string;
   hashed_password: string;
   two_factor_secret?: string | null;
-}
-
-// +++ Challenge Data with Timestamp for Replay Attack Prevention
-interface ChallengeData {
-  challenge: string;
-  timestamp: number;
-  origin?: string;
 }
 
 // +++ Pending Authentication for 2FA Bypass Prevention
@@ -195,24 +183,15 @@ export const generatePasskeyRegistrationOptionsHandler = async (
       requestOrigin
     );
 
-    // +++ Store challenge with timestamp for replay attack prevention
-    req.session.currentChallenge = {
+    await persistPasskeyChallengeSession(req, {
       challenge: options.challenge,
-      timestamp: Date.now(),
       origin: requestOrigin,
-    };
-    // The user.id from options is a Uint8Array. We need to store the original string userId for userHandle.
-    req.session.passkeyUserHandle = userId.toString();
-
-    // 显式保存 session 以确保 challenge 被持久化
-    req.session.save((err) => {
-      if (err) {
-        console.error('[AuthController] 保存 session 失败:', err);
-        return next(err);
-      }
-      console.debug(`[AuthController] Generated Passkey registration options for user ${username}`);
-      res.json(options);
+      // user.id from options is Uint8Array; session stores original string userId as userHandle.
+      userHandle: userId.toString(),
     });
+
+    console.debug(`[AuthController] Generated Passkey registration options for user ${username}`);
+    res.json(options);
   } catch (error: unknown) {
     console.error(`[AuthController] 生成 Passkey 注册选项时出错 (用户: ${username}):`, error);
     next(error);
@@ -227,71 +206,58 @@ export const verifyPasskeyRegistrationHandler = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const registrationResponse = req.body; // The whole body is the response from @simplewebauthn/browser
-  const challengeData = req.session.currentChallenge;
-  const userHandle = req.session.passkeyUserHandle;
-
-  if (!registrationResponse) {
-    res.status(400).json({ message: '注册响应不能为空。' });
+  const registrationContext = resolvePasskeyRegistrationContext({
+    req,
+    registrationResponse: req.body,
+    fallbackOrigin: getPasskeyRequestOrigin(req),
+  });
+  if (!registrationContext.ok) {
+    res.status(registrationContext.failure.statusCode).json(registrationContext.failure.body);
     return;
   }
-  if (!challengeData) {
-    res.status(400).json({ message: '会话中未找到质询信息，请重试注册流程。' });
-    return;
-  }
-  if (!userHandle) {
-    res.status(400).json({ message: '会话中未找到用户句柄，请重试注册流程。' });
-    return;
-  }
-
-  // +++ Verify challenge timestamp (5 minutes validity)
-  if (Date.now() - challengeData.timestamp > SECURITY_CONFIG.CHALLENGE_TIMEOUT) {
-    delete req.session.currentChallenge;
-    delete req.session.passkeyUserHandle;
-    res.status(400).json({ message: '注册质询已过期，请重新开始注册流程。' });
-    return;
-  }
-
-  const expectedChallenge = challengeData.challenge;
-  const requestOrigin = challengeData.origin || getPasskeyRequestOrigin(req);
 
   try {
     const verification = await passkeyService.verifyRegistration(
-      registrationResponse,
-      expectedChallenge,
-      userHandle, // userHandle is userId as string
-      requestOrigin
+      registrationContext.registrationResponse as Parameters<
+        typeof passkeyService.verifyRegistration
+      >[0],
+      registrationContext.expectedChallenge,
+      registrationContext.userHandle,
+      registrationContext.requestOrigin
     );
+    const verificationResult = mapPasskeyRegistrationVerificationResult(verification);
 
-    if (verification.verified && verification.newPasskeyToSave) {
-      await passkeyRepository.createPasskey(verification.newPasskeyToSave);
-      const userIdNum = parseInt(userHandle, 10);
+    if (verificationResult.status === 'verified') {
+      await passkeyRepository.createPasskey(verificationResult.newPasskeyToSave);
+      const userIdNum = parseInt(registrationContext.userHandle, 10);
       console.info(
-        `[AuthController] 用户 ${userHandle} 的 Passkey 注册成功并已保存。 CredentialID: ${verification.newPasskeyToSave.credential_id.substring(0, 8)}***`
+        `[AuthController] 用户 ${registrationContext.userHandle} 的 Passkey 注册成功并已保存。 CredentialID: ${verificationResult.newPasskeyToSave.credential_id.substring(0, 8)}***`
       );
       auditLogService.logAction('PASSKEY_REGISTERED', {
         userId: userIdNum,
-        credentialId: verification.newPasskeyToSave.credential_id,
+        credentialId: verificationResult.newPasskeyToSave.credential_id,
       });
       notificationService.sendNotification('PASSKEY_REGISTERED', {
         userId: userIdNum,
         username: req.session.username,
-        credentialId: verification.newPasskeyToSave.credential_id,
+        credentialId: verificationResult.newPasskeyToSave.credential_id,
       });
 
       delete req.session.currentChallenge;
       delete req.session.passkeyUserHandle;
       res.status(201).json({ verified: true, message: 'Passkey 注册成功。' });
     } else {
-      console.warn(`[AuthController] Passkey 注册验证失败 (用户: ${userHandle}):`, verification);
-      res.status(400).json({
-        verified: false,
-        message: 'Passkey 注册验证失败。',
-        error: getVerificationErrorMessage(verification) || 'Unknown verification error',
-      });
+      console.warn(
+        `[AuthController] Passkey 注册验证失败 (用户: ${registrationContext.userHandle}):`,
+        verification
+      );
+      res.status(400).json(verificationResult.responseBody);
     }
   } catch (error: unknown) {
-    console.error(`[AuthController] 验证 Passkey 注册时出错 (用户: ${userHandle}):`, error);
+    console.error(
+      `[AuthController] 验证 Passkey 注册时出错 (用户: ${registrationContext.userHandle}):`,
+      error
+    );
     next(error);
   }
 };
@@ -312,28 +278,16 @@ export const generatePasskeyAuthenticationOptionsHandler = async (
     // PasskeyService's generateAuthenticationOptions can optionally take a username
     const options = await passkeyService.generateAuthenticationOptions(username, requestOrigin);
 
-    // +++ Store challenge with timestamp for replay attack prevention
-    req.session.currentChallenge = {
+    await persistPasskeyChallengeSession(req, {
       challenge: options.challenge,
-      timestamp: Date.now(),
       origin: requestOrigin,
-    };
-    // For authentication, userHandle is not strictly needed in session beforehand if RP ID is specific enough
-    // or if allowCredentials is used. We'll clear any old one just in case.
-    delete req.session.passkeyUserHandle;
-
-    // 显式保存 session 以确保 challenge 被持久化并设置 cookie
-    // 这对于新 session（用户未登录时）尤为重要
-    req.session.save((err) => {
-      if (err) {
-        console.error('[AuthController] 保存 session 失败:', err);
-        return next(err);
-      }
-      console.debug(
-        `[AuthController] Generated Passkey authentication options (username: ${username || 'any'})`
-      );
-      res.json(options);
+      clearUserHandle: true,
     });
+
+    console.debug(
+      `[AuthController] Generated Passkey authentication options (username: ${username || 'any'})`
+    );
+    res.json(options);
   } catch (error: unknown) {
     console.error(
       `[AuthController] 生成 Passkey 认证选项时出错 (username: ${username || 'any'}):`,
@@ -351,50 +305,39 @@ export const verifyPasskeyAuthenticationHandler = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  // Extract assertionResponse and rememberMe from the request body
   const { assertionResponse, rememberMe } = req.body;
-  const challengeData = req.session.currentChallenge;
-
-  // Rename assertionResponse to authenticationResponseJSON for clarity within this scope
-  const authenticationResponseJSON = assertionResponse;
-
-  if (!authenticationResponseJSON) {
-    res.status(400).json({ message: '认证响应 (assertionResponse) 不能为空。' });
+  const authenticationContext = resolvePasskeyAuthenticationContext({
+    req,
+    assertionResponse,
+    fallbackOrigin: getPasskeyRequestOrigin(req),
+  });
+  if (!authenticationContext.ok) {
+    res.status(authenticationContext.failure.statusCode).json(authenticationContext.failure.body);
     return;
   }
-  if (!challengeData) {
-    res.status(400).json({ message: '会话中未找到质询信息，请重试认证流程。' });
-    return;
-  }
-
-  // +++ Verify challenge timestamp (5 minutes validity)
-  if (Date.now() - challengeData.timestamp > SECURITY_CONFIG.CHALLENGE_TIMEOUT) {
-    delete req.session.currentChallenge;
-    res.status(400).json({ message: '认证质询已过期，请重新开始认证流程。' });
-    return;
-  }
-
-  const expectedChallenge = challengeData.challenge;
-  const requestOrigin = challengeData.origin || getPasskeyRequestOrigin(req);
 
   try {
-    // Pass the extracted authenticationResponseJSON to the service
     const verification = await passkeyService.verifyAuthentication(
-      authenticationResponseJSON,
-      expectedChallenge,
-      requestOrigin
+      authenticationContext.authenticationResponseJSON as Parameters<
+        typeof passkeyService.verifyAuthentication
+      >[0],
+      authenticationContext.expectedChallenge,
+      authenticationContext.requestOrigin
     );
+    const verificationResult = mapPasskeyAuthenticationVerificationResult(verification);
 
-    if (verification.verified && verification.userId && verification.passkey) {
-      const user = await userRepository.findUserById(verification.userId);
+    if (verificationResult.status === 'verified') {
+      const user = await userRepository.findUserById(verificationResult.userId);
       if (!user) {
         // This should ideally not happen if passkey verification was successful
-        console.error(`[AuthController] Passkey 认证成功但未找到用户 ID: ${verification.userId}`);
+        console.error(
+          `[AuthController] Passkey 认证成功但未找到用户 ID: ${verificationResult.userId}`
+        );
         recordPasskeyAuthenticationFailure(
           { auditLogService, notificationService },
           {
             req,
-            credentialId: verification.passkey.credential_id,
+            credentialId: verificationResult.passkey.credential_id,
             reason: 'User not found after verification',
           }
         );
@@ -403,7 +346,7 @@ export const verifyPasskeyAuthenticationHandler = async (
       }
 
       console.info(
-        `[AuthController] 用户 ${user.username} (ID: ${user.id}) 通过 Passkey (ID: ***${verification.passkey.id.toString().substring(verification.passkey.id.toString().length - 4)}) 认证成功。`
+        `[AuthController] 用户 ${user.username} (ID: ${user.id}) 通过 Passkey (ID: ***${verificationResult.passkey.id.toString().substring(verificationResult.passkey.id.toString().length - 4)}) 认证成功。`
       );
       recordPasskeyAuthenticationSuccess(
         { auditLogService, notificationService },
@@ -411,7 +354,7 @@ export const verifyPasskeyAuthenticationHandler = async (
           req,
           userId: user.id,
           username: user.username,
-          credentialId: verification.passkey.credential_id,
+          credentialId: verificationResult.passkey.credential_id,
         }
       );
       completePasskeyAuthenticatedSession(req, res, {
@@ -424,11 +367,13 @@ export const verifyPasskeyAuthenticationHandler = async (
         { auditLogService, notificationService },
         {
           req,
-          credentialId: authenticationResponseJSON?.id || 'unknown',
+          credentialId:
+            resolvePasskeyCredentialId(authenticationContext.authenticationResponseJSON) ||
+            'unknown',
           reason: 'Verification failed',
         }
       );
-      res.status(401).json({ verified: false, message: 'Passkey 认证失败。' });
+      res.status(401).json(verificationResult.responseBody);
     }
   } catch (error: unknown) {
     console.error(`[AuthController] 验证 Passkey 认证时出错:`, error);
@@ -436,7 +381,8 @@ export const verifyPasskeyAuthenticationHandler = async (
       { auditLogService, notificationService },
       {
         req,
-        credentialId: authenticationResponseJSON?.id || 'unknown',
+        credentialId:
+          resolvePasskeyCredentialId(authenticationContext.authenticationResponseJSON) || 'unknown',
         reason: getErrorMessage(error) || 'Unknown error',
       }
     );
