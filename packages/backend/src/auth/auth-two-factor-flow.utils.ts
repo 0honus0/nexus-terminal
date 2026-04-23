@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
+import { syncTwoFactorSessionSecret } from './auth-two-factor-session-actions.utils';
 
 export interface SetupPayload {
   secret: string;
@@ -87,8 +88,8 @@ export const resolveTwoFactorEffectiveSecret = (payload: {
   const sessionSecretMismatched =
     Boolean(providedSecret) && Boolean(tempSecret) && providedSecret !== tempSecret;
 
-  if (providedSecret && req.session.tempTwoFactorSecret !== providedSecret) {
-    req.session.tempTwoFactorSecret = providedSecret;
+  if (providedSecret) {
+    syncTwoFactorSessionSecret({ req, secret: providedSecret });
   }
 
   return {

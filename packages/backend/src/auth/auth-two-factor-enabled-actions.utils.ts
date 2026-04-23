@@ -1,29 +1,9 @@
-import type { AuditLogActionType } from '../types/audit.types';
-import type { NotificationEvent } from '../types/notification.types';
+import {
+  buildSecuritySideEffects,
+  type SecuritySideEffect,
+} from './auth-security-side-effects.utils';
 
-type TwoFactorEnabledEvent = '2FA_ENABLED';
-
-export interface TwoFactorEnabledAuditSideEffect {
-  kind: 'audit';
-  action: TwoFactorEnabledEvent;
-  payload: {
-    userId: number;
-    ip: string;
-  };
-}
-
-export interface TwoFactorEnabledNotificationSideEffect {
-  kind: 'notification';
-  event: TwoFactorEnabledEvent;
-  payload: {
-    userId: number;
-    ip: string;
-  };
-}
-
-export type TwoFactorEnabledSideEffect =
-  | TwoFactorEnabledAuditSideEffect
-  | TwoFactorEnabledNotificationSideEffect;
+export type TwoFactorEnabledSideEffect = SecuritySideEffect;
 
 export interface TwoFactorEnabledSuccessAction {
   response: {
@@ -43,27 +23,11 @@ export const buildTwoFactorEnabledSideEffects = (payload: {
   userId: number;
   clientIp: string;
 }): TwoFactorEnabledSideEffect[] => {
-  const { userId, clientIp } = payload;
-
-  const auditAction: AuditLogActionType = '2FA_ENABLED';
-  const notificationEvent: NotificationEvent = '2FA_ENABLED';
-  const effectPayload = {
-    userId,
-    ip: clientIp,
-  };
-
-  return [
-    {
-      kind: 'audit',
-      action: auditAction,
-      payload: effectPayload,
-    },
-    {
-      kind: 'notification',
-      event: notificationEvent,
-      payload: effectPayload,
-    },
-  ];
+  return buildSecuritySideEffects({
+    event: '2FA_ENABLED',
+    userId: payload.userId,
+    clientIp: payload.clientIp,
+  });
 };
 
 export const buildTwoFactorEnabledSuccessAction = (payload: {

@@ -104,6 +104,7 @@ import {
   buildTwoFactorVerifySuccessMutationAction,
   resolveTwoFactorVerifySuccessMutationResultAction,
 } from './auth-two-factor-verify-success-actions.utils';
+import { clearTwoFactorSessionSecret } from './auth-two-factor-session-actions.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -1097,7 +1098,7 @@ export const verifyAndActivate2FA = async (
       console[successAction.log.level](successAction.log.message);
       applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
 
-      delete req.session.tempTwoFactorSecret;
+      clearTwoFactorSessionSecret(req);
 
       res.status(successAction.response.statusCode).json(successAction.response.body);
       return;
@@ -1170,7 +1171,7 @@ export const disable2FA = async (
     applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
 
     // 禁用时清理临时密钥，避免后续重新启用时读取到陈旧状态。
-    delete req.session.tempTwoFactorSecret;
+    clearTwoFactorSessionSecret(req);
 
     res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {

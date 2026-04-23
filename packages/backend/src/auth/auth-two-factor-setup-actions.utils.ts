@@ -10,6 +10,7 @@ import {
   buildTwoFactorSetupReuseLogAction,
   buildTwoFactorSetupSaveFailedLogAction,
 } from './auth-two-factor-log-actions.utils';
+import { readTwoFactorSessionSecret } from './auth-two-factor-session-actions.utils';
 
 type SaveTwoFactorSessionResult = Awaited<ReturnType<typeof saveTwoFactorSetupSessionSecret>>;
 type SaveTwoFactorSessionFailure = Extract<SaveTwoFactorSessionResult, { ok: false }>['failure'];
@@ -42,7 +43,7 @@ export const executeTwoFactorSetupAction = async (payload: {
   username: string;
 }): Promise<TwoFactorSetupActionResult> => {
   const { req, userId, username } = payload;
-  const sessionTempSecret = req.session.tempTwoFactorSecret;
+  const sessionTempSecret = readTwoFactorSessionSecret(req);
 
   if (sessionTempSecret) {
     const responseBody = await buildTwoFactorSetupPayload(username, sessionTempSecret);

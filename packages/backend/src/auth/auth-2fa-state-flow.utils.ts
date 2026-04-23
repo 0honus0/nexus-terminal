@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import { TwoFactorTokenVerificationResult } from './auth-two-factor-flow.utils';
+import { setTwoFactorSessionSecret } from './auth-two-factor-session-actions.utils';
 
 type TwoFactorFailureResponse =
   | {
@@ -76,7 +77,7 @@ export const saveTwoFactorSetupSessionSecret = async (
       failure: TwoFactorFailureResponse;
     }
 > => {
-  req.session.tempTwoFactorSecret = secret;
+  setTwoFactorSessionSecret(req, secret);
 
   return new Promise((resolve) => {
     req.session.save((saveErr) => {

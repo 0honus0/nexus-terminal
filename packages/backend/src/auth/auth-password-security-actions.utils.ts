@@ -1,29 +1,12 @@
-import type { AuditLogActionType } from '../types/audit.types';
-import type { NotificationEvent } from '../types/notification.types';
+import {
+  buildSecuritySideEffects,
+  type SecurityEvent,
+  type SecuritySideEffect,
+} from './auth-security-side-effects.utils';
 
-type PasswordSecurityEvent = 'PASSWORD_CHANGED' | '2FA_DISABLED';
+type PasswordSecurityEvent = Exclude<SecurityEvent, '2FA_ENABLED'>;
 
-export interface PasswordSecurityAuditSideEffect {
-  kind: 'audit';
-  action: PasswordSecurityEvent;
-  payload: {
-    userId: number;
-    ip: string;
-  };
-}
-
-export interface PasswordSecurityNotificationSideEffect {
-  kind: 'notification';
-  event: PasswordSecurityEvent;
-  payload: {
-    userId: number;
-    ip: string;
-  };
-}
-
-export type PasswordSecuritySideEffect =
-  | PasswordSecurityAuditSideEffect
-  | PasswordSecurityNotificationSideEffect;
+export type PasswordSecuritySideEffect = SecuritySideEffect;
 
 export interface PasswordSecuritySuccessAction {
   response: {
@@ -44,27 +27,7 @@ export const buildPasswordSecuritySideEffects = (payload: {
   userId: number;
   clientIp: string;
 }): PasswordSecuritySideEffect[] => {
-  const { event, userId, clientIp } = payload;
-
-  const auditAction: AuditLogActionType = event;
-  const notificationEvent: NotificationEvent = event;
-  const effectPayload = {
-    userId,
-    ip: clientIp,
-  };
-
-  return [
-    {
-      kind: 'audit',
-      action: auditAction,
-      payload: effectPayload,
-    },
-    {
-      kind: 'notification',
-      event: notificationEvent,
-      payload: effectPayload,
-    },
-  ];
+  return buildSecuritySideEffects(payload);
 };
 
 export const buildChangePasswordSuccessAction = (payload: {
