@@ -1,5 +1,3 @@
-import { SFTPWrapper } from 'ssh2';
-import * as pathModule from 'path';
 import {
   ClientState,
   SftpCompressRequestPayload,
@@ -8,8 +6,6 @@ import {
 import { getErrorMessage } from '../utils/AppError';
 import { SftpUploadManager } from './sftp-upload.manager';
 import { SftpArchiveManager } from './sftp-archive.manager';
-import type { FileListItem } from './sftp-utils';
-import { getErrorCode } from './sftp-error.utils';
 import {
   executeMkdirPathOperation,
   executeRenamePathOperation,
@@ -25,12 +21,8 @@ import {
   executeRealpathPathQueryOperation,
   executeStatPathQueryOperation,
 } from './sftp-path-query-operations';
-import {
-  ensureDirectoryExists,
-  executeCopyOperation,
-  formatStatsToFileListItem,
-  getStats,
-} from './sftp-copy-operations';
+import { executeCopyOperation } from './sftp-copy-operations';
+import { executeMoveOperation } from './sftp-move-operations';
 
 export class SftpService {
   private clientStates: Map<string, ClientState>;
@@ -308,125 +300,13 @@ export class SftpService {
     destinationDir: string,
     requestId: string
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
-      console.warn(`[SFTP Move] SFTP 未准备好，无法在 ${sessionId} 上执行 move (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:move:error',
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        })
-      );
-      return;
-    }
-    const { sftp } = state;
-    console.debug(
-      `[SFTP ${sessionId}] Received move request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`
+    await executeMoveOperation(
+      this.clientStates.get(sessionId),
+      sessionId,
+      sources,
+      destinationDir,
+      requestId
     );
-
-    const movedItemsDetails: FileListItem[] = [];
-    let firstError: Error | null = null;
-
-    try {
-      // Ensure destination directory exists (important for move)
-      try {
-        await ensureDirectoryExists(sftp, destinationDir);
-      } catch (ensureErr: unknown) {
-        console.error(
-          `[SFTP ${sessionId}] Failed to ensure destination directory ${destinationDir} exists for move (ID: ${requestId}):`,
-          ensureErr
-        );
-        throw new Error(`无法创建或访问目标目录: ${getErrorMessage(ensureErr)}`);
-      }
-
-      for (const oldPath of sources) {
-        const sourceName = pathModule.basename(oldPath);
-        const newPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/'); // Ensure forward slashes
-
-        if (oldPath === newPath) {
-          console.warn(
-            `[SFTP ${sessionId}] Skipping move: source and destination are the same (${oldPath}) (ID: ${requestId})`
-          );
-          continue; // Skip if source and destination are identical
-        }
-
-        try {
-          // --- 移动前检查目标是否存在 ---
-          let targetExists = false;
-          try {
-            await getStats(sftp, newPath);
-            targetExists = true;
-          } catch (statErr: unknown) {
-            const statErrCode = getErrorCode(statErr);
-            const statErrMsg = getErrorMessage(statErr);
-            if (!(statErrCode === 'ENOENT' || statErrMsg.includes('No such file'))) {
-              // 如果 stat 失败不是因为 "No such file"，则抛出未知错误
-              throw new Error(`检查目标路径 ${newPath} 状态时出错: ${statErrMsg}`);
-            }
-            // 如果是 "No such file"，则 targetExists 保持 false，可以继续移动
-          }
-
-          if (targetExists) {
-            console.error(
-              `[SFTP ${sessionId}] Move failed: Target path ${newPath} already exists (ID: ${requestId})`
-            );
-            throw new Error(`目标路径 ${pathModule.basename(newPath)} 已存在`);
-          }
-
-          console.debug(`[SFTP ${sessionId}] Moving ${oldPath} to ${newPath} (ID: ${requestId})`);
-          await this.performRename(sftp, oldPath, newPath); // Use helper for rename logic
-
-          // Get stats of the *moved* item at the new location
-          const movedStats = await getStats(sftp, newPath);
-          movedItemsDetails.push(formatStatsToFileListItem(newPath, movedStats));
-        } catch (moveErr: unknown) {
-          console.error(
-            `[SFTP ${sessionId}] Error moving ${oldPath} to ${newPath} (ID: ${requestId}):`,
-            moveErr
-          );
-          firstError = moveErr instanceof Error ? moveErr : new Error(getErrorMessage(moveErr));
-          break; // Stop on first error for move
-        }
-      }
-
-      if (firstError) {
-        throw firstError;
-      }
-
-      console.info(
-        `[SFTP ${sessionId}] Move operation completed successfully (ID: ${requestId}). Moved items: ${movedItemsDetails.length}`
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:move:success',
-          payload: { sources, destination: destinationDir, items: movedItemsDetails },
-          requestId,
-        })
-      );
-    } catch (error: unknown) {
-      console.error(`[SFTP ${sessionId}] Move operation failed (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:move:error',
-          payload: `移动操作失败: ${getErrorMessage(error)}`,
-          requestId,
-        })
-      );
-    }
-  }
-
-  // +++ 辅助方法 - 执行重命名 (Promise wrapper) +++
-  private performRename(sftp: SFTPWrapper, oldPath: string, newPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      sftp.rename(oldPath, newPath, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
   }
 
   // --- Compress/Decompress Methods (delegated to SftpArchiveManager) ---

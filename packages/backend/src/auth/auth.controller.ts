@@ -50,6 +50,19 @@ import {
   resolvePasskeyCredentialId,
   resolvePasskeyRegistrationContext,
 } from './auth-passkey-flow.utils';
+import {
+  mapDeletePasskeyError,
+  mapDeletePasskeyResult,
+  mapUpdatePasskeyNameError,
+  recordPasskeyDeletedEvent,
+  recordPasskeyDeleteUnauthorizedEvent,
+  recordPasskeyNameUpdatedEvent,
+  recordPasskeyNameUpdateUnauthorizedEvent,
+  resolvePasskeyAuthenticatedActor,
+  resolvePasskeyCredentialId as resolvePasskeyManagementCredentialId,
+  resolvePasskeyTrimmedName,
+  summarizePasskeyCredentialId,
+} from './auth-passkey-management-flow.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -398,13 +411,12 @@ export const listUserPasskeysHandler = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { userId } = req.session;
-  const { username } = req.session;
-
-  if (!userId || !username) {
-    res.status(401).json({ message: '用户未认证。' });
+  const actorResult = resolvePasskeyAuthenticatedActor(req);
+  if (!actorResult.ok) {
+    res.status(actorResult.failure.statusCode).json(actorResult.failure.body);
     return;
   }
+  const { userId, username } = actorResult.actor;
 
   try {
     const passkeys = await passkeyService.listPasskeysByUserId(userId);
@@ -429,62 +441,65 @@ export const deleteUserPasskeyHandler = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { userId } = req.session;
-  const { username } = req.session;
-  const { credentialID } = req.params;
-
-  if (!userId || !username) {
-    res.status(401).json({ message: '用户未认证。' });
+  const actorResult = resolvePasskeyAuthenticatedActor(req);
+  if (!actorResult.ok) {
+    res.status(actorResult.failure.statusCode).json(actorResult.failure.body);
     return;
   }
+  const { userId, username } = actorResult.actor;
 
-  if (!credentialID) {
-    res.status(400).json({ message: '必须提供 Passkey 的 CredentialID。' });
+  const credentialResult = resolvePasskeyManagementCredentialId(req.params.credentialID);
+  if (!credentialResult.ok) {
+    res.status(credentialResult.failure.statusCode).json(credentialResult.failure.body);
     return;
   }
+  const { credentialId } = credentialResult;
 
   try {
-    const wasDeleted = await passkeyService.deletePasskey(userId, credentialID);
-    if (wasDeleted) {
+    const wasDeleted = await passkeyService.deletePasskey(userId, credentialId);
+    const mappedDeleteResult = mapDeletePasskeyResult(wasDeleted);
+    if (mappedDeleteResult.success) {
       console.info(
-        `[AuthController] 用户 ${username} (ID: ${userId}) 成功删除了 Passkey (CredentialID: ${credentialID.substring(0, 8)}***)。`
+        `[AuthController] 用户 ${username} (ID: ${userId}) 成功删除了 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)})。`
       );
-      auditLogService.logAction('PASSKEY_DELETED', {
-        userId,
-        username,
-        credentialId: credentialID,
-      });
-      notificationService.sendNotification('PASSKEY_DELETED', {
-        userId,
-        username,
-        credentialId: credentialID,
-      });
-      res.status(200).json({ message: 'Passkey 删除成功。' });
+      recordPasskeyDeletedEvent(
+        { auditLogService, notificationService },
+        {
+          userId,
+          username,
+          credentialId,
+        }
+      );
+      res.status(mappedDeleteResult.statusCode).json(mappedDeleteResult.body);
     } else {
       // 这通常不应该发生，因为 service 层会在找不到或权限不足时抛出错误
       console.warn(
-        `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 失败，但未抛出错误。`
+        `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 失败，但未抛出错误。`
       );
-      res.status(404).json({ message: 'Passkey 未找到或无法删除。' });
+      res.status(mappedDeleteResult.statusCode).json(mappedDeleteResult.body);
     }
   } catch (error: unknown) {
     console.error(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 时出错:`,
+      `[AuthController] 用户 ${username} (ID: ${userId}) 删除 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 时出错:`,
       getErrorMessage(error),
       (error as Error)?.stack
     );
-    if (getErrorMessage(error) === 'Passkey not found.') {
-      res.status(404).json({ message: '指定的 Passkey 未找到。' });
-    } else if (getErrorMessage(error) === 'Unauthorized to delete this passkey.') {
-      auditLogService.logAction('PASSKEY_DELETE_UNAUTHORIZED', {
-        userId,
-        username,
-        credentialIdAttempted: credentialID,
-      });
-      res.status(403).json({ message: '无权删除此 Passkey。' });
-    } else {
+    const mappedDeleteError = mapDeletePasskeyError(error);
+    if (!mappedDeleteError.handled) {
       next(error);
+      return;
     }
+    if (mappedDeleteError.reason === 'unauthorized') {
+      recordPasskeyDeleteUnauthorizedEvent(
+        { auditLogService, notificationService },
+        {
+          userId,
+          username,
+          credentialIdAttempted: credentialId,
+        }
+      );
+    }
+    res.status(mappedDeleteError.statusCode).json(mappedDeleteError.body);
   }
 };
 
@@ -496,60 +511,66 @@ export const updateUserPasskeyNameHandler = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const { userId } = req.session;
-  const { username } = req.session;
-  const { credentialID } = req.params;
-  const { name } = req.body;
-
-  if (!userId || !username) {
-    res.status(401).json({ message: '用户未认证。' });
+  const actorResult = resolvePasskeyAuthenticatedActor(req);
+  if (!actorResult.ok) {
+    res.status(actorResult.failure.statusCode).json(actorResult.failure.body);
     return;
   }
+  const { userId, username } = actorResult.actor;
 
-  if (!credentialID) {
-    res.status(400).json({ message: '必须提供 Passkey 的 CredentialID。' });
+  const credentialResult = resolvePasskeyManagementCredentialId(req.params.credentialID);
+  if (!credentialResult.ok) {
+    res.status(credentialResult.failure.statusCode).json(credentialResult.failure.body);
     return;
   }
+  const { credentialId } = credentialResult;
 
-  if (typeof name !== 'string' || name.trim() === '') {
-    res.status(400).json({ message: 'Passkey 名称不能为空。' });
+  const nameResult = resolvePasskeyTrimmedName(req.body?.name);
+  if (!nameResult.ok) {
+    res.status(nameResult.failure.statusCode).json(nameResult.failure.body);
     return;
   }
-
-  const trimmedName = name.trim();
+  const { trimmedName } = nameResult;
 
   try {
-    await passkeyService.updatePasskeyName(userId, credentialID, trimmedName);
+    await passkeyService.updatePasskeyName(userId, credentialId, trimmedName);
     console.info(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 成功更新了 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 的名称为 "${trimmedName}"。`
+      `[AuthController] 用户 ${username} (ID: ${userId}) 成功更新了 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 的名称为 "${trimmedName}"。`
     );
-    auditLogService.logAction('PASSKEY_NAME_UPDATED', {
-      userId,
-      username,
-      credentialId: credentialID,
-      newName: trimmedName,
-    });
+    recordPasskeyNameUpdatedEvent(
+      { auditLogService, notificationService },
+      {
+        userId,
+        username,
+        credentialId,
+        newName: trimmedName,
+      }
+    );
     // Optionally send a notification if desired
     // notificationService.sendNotification('PASSKEY_NAME_UPDATED', { userId, username, credentialId: credentialID, newName: trimmedName });
     res.status(200).json({ message: 'Passkey 名称更新成功。' });
   } catch (error: unknown) {
     console.error(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 更新 Passkey (CredentialID: ${credentialID.substring(0, 8)}***) 名称时出错:`,
+      `[AuthController] 用户 ${username} (ID: ${userId}) 更新 Passkey (CredentialID: ${summarizePasskeyCredentialId(credentialId)}) 名称时出错:`,
       getErrorMessage(error),
       (error as Error)?.stack
     );
-    if (getErrorMessage(error) === 'Passkey not found.') {
-      res.status(404).json({ message: '指定的 Passkey 未找到。' });
-    } else if (getErrorMessage(error) === 'Unauthorized to update this passkey name.') {
-      auditLogService.logAction('PASSKEY_NAME_UPDATE_UNAUTHORIZED', {
-        userId,
-        username,
-        credentialIdAttempted: credentialID,
-      });
-      res.status(403).json({ message: '无权更新此 Passkey 名称。' });
-    } else {
+    const mappedUpdateError = mapUpdatePasskeyNameError(error);
+    if (!mappedUpdateError.handled) {
       next(error);
+      return;
     }
+    if (mappedUpdateError.reason === 'unauthorized') {
+      recordPasskeyNameUpdateUnauthorizedEvent(
+        { auditLogService, notificationService },
+        {
+          userId,
+          username,
+          credentialIdAttempted: credentialId,
+        }
+      );
+    }
+    res.status(mappedUpdateError.statusCode).json(mappedUpdateError.body);
   }
 };
 
