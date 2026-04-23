@@ -37,9 +37,14 @@ import {
   createTwoFactorSecret,
   resolveTwoFactorEffectiveSecret,
   respondWithExistingTwoFactorSetup,
-  saveTwoFactorSecretAndRespond,
   verifyTwoFactorTokenWithSkew,
 } from './auth-two-factor-flow.utils';
+import {
+  mapTwoFactorVerifyFailure,
+  resolveTwoFactorSetupRequestValidation,
+  resolveTwoFactorVerifyRequestValidation,
+  saveTwoFactorSetupSessionSecret,
+} from './auth-2fa-state-flow.utils';
 import {
   type ChallengeData,
   persistPasskeyChallengeSession,
@@ -66,6 +71,11 @@ import {
   resolveLogin2FATokenValidation,
   resolveLoginPendingAuthValidation,
 } from './auth-login-2fa-flow.utils';
+import {
+  buildAuthStatusHttpResponse,
+  buildInitDataBaseResponse,
+  isAuthenticatedSessionSnapshot,
+} from './auth-init-status-flow.utils';
 import {
   clearPasskeyAuthenticationChallengeSession,
   clearPasskeyRegistrationSession,
@@ -709,34 +719,38 @@ export const getAuthStatus = async (
   const { userId } = req.session;
   const { username } = req.session;
 
-  if (!userId || !username || req.session.requiresTwoFactor) {
+  if (!isAuthenticatedSessionSnapshot(req.session)) {
     res.status(401).json({ isAuthenticated: false });
     return;
   }
+  const authenticatedUserId = userId as number;
+  const authenticatedUsername = username as string;
 
   try {
     const db = await getDbInstance();
     const user = await getDb<{ two_factor_secret: string | null }>(
       db,
       'SELECT two_factor_secret FROM users WHERE id = ?',
-      [userId]
+      [authenticatedUserId]
     );
 
-    if (!user) {
-      res.status(401).json({ isAuthenticated: false });
-      return;
-    }
-
-    res.status(200).json({
-      isAuthenticated: true,
-      user: {
-        id: userId,
-        username,
-        isTwoFactorEnabled: !!user.two_factor_secret,
-      },
-    });
+    const authState = user
+      ? {
+          isAuthenticated: true,
+          user: {
+            id: authenticatedUserId,
+            username: authenticatedUsername,
+            isTwoFactorEnabled: !!user.two_factor_secret,
+          },
+        }
+      : {
+          isAuthenticated: false,
+          user: null,
+        };
+    const response = buildAuthStatusHttpResponse(authState);
+    res.status(response.statusCode).json(response.body);
   } catch (error: unknown) {
-    console.error(`获取用户 ${userId} 状态时发生内部错误:`, error);
+    console.error(`获取用户 ${authenticatedUserId} 状态时发生内部错误:`, error);
     next(error);
   }
 };
@@ -961,11 +975,6 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
   const { userId } = req.session;
   const { username } = req.session;
 
-  if (!userId || !username || req.session.requiresTwoFactor) {
-    res.status(401).json({ message: '用户未认证或认证未完成。' });
-    return;
-  }
-
   try {
     const db = await getDbInstance();
     const user = await getDb<{ two_factor_secret: string | null }>(
@@ -974,24 +983,33 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
       [userId]
     );
     const existingSecret = user ? user.two_factor_secret : null;
-
-    if (existingSecret) {
-      res.status(400).json({ message: '两步验证已启用。如需重置，请先禁用。' });
+    const setupValidation = resolveTwoFactorSetupRequestValidation({
+      userId,
+      username,
+      requiresTwoFactor: req.session.requiresTwoFactor,
+      existingSecret,
+    });
+    if (!setupValidation.ok) {
+      res.status(setupValidation.failure.statusCode).json(setupValidation.failure.body);
       return;
     }
+    const { userId: validatedUserId, username: validatedUsername } = setupValidation.actor;
 
     // 会话中已有临时密钥时直接复用，避免并发 setup 导致前后端密钥漂移。
-    const reused = await respondWithExistingTwoFactorSetup(req, res, username);
+    const reused = await respondWithExistingTwoFactorSetup(req, res, validatedUsername);
     if (reused) {
       return;
     }
 
-    const secret = createTwoFactorSecret(username);
-    await saveTwoFactorSecretAndRespond(req, res, {
-      userId,
-      username,
-      secret,
-    });
+    const secret = createTwoFactorSecret(validatedUsername);
+    const saveResult = await saveTwoFactorSetupSessionSecret(req, secret);
+    if (!saveResult.ok) {
+      console.error(`[AuthController] 用户 ${validatedUserId} 保存临时 2FA 密钥到 session 失败`);
+      res.status(saveResult.failure.statusCode).json(saveResult.failure.body);
+      return;
+    }
+
+    await respondWithExistingTwoFactorSetup(req, res, validatedUsername);
   } catch (error: unknown) {
     console.error(`用户 ${userId} 设置 2FA 时出错:`, error);
     next(error);
@@ -1012,43 +1030,36 @@ export const verifyAndActivate2FA = async (
   const providedSecret = normalizeBase32Secret(secretFromBody);
   const normalizedToken = normalizeTotpToken(token);
 
-  if (!userId || req.session.requiresTwoFactor) {
-    res.status(401).json({ message: '用户未认证或认证未完成。' });
-    return;
-  }
-
   const { effectiveSecret, secretProvidedByBody, sessionSecretMismatched } =
     resolveTwoFactorEffectiveSecret({
       req,
       tempSecret,
       providedSecret,
     });
-
-  if (!effectiveSecret) {
-    res.status(400).json({ message: '未找到临时密钥，请重新开始设置流程。' });
+  const verifyValidation = resolveTwoFactorVerifyRequestValidation({
+    userId,
+    requiresTwoFactor: req.session.requiresTwoFactor,
+    effectiveSecret,
+    normalizedToken,
+  });
+  if (!verifyValidation.ok) {
+    res.status(verifyValidation.failure.statusCode).json(verifyValidation.failure.body);
     return;
   }
-
-  if (!normalizedToken) {
-    res.status(400).json({ message: '验证码不能为空。' });
-    return;
-  }
-
-  if (!/^\d{6,8}$/.test(normalizedToken)) {
-    res.status(400).json({ message: '验证码格式无效。' });
-    return;
-  }
+  const { userId: validatedUserId } = verifyValidation.actor;
 
   try {
     if (sessionSecretMismatched) {
       // 兼容并发/重复 setup 导致会话临时密钥与页面展示密钥不一致的场景。
       console.warn(
-        `[AuthController] 用户 ${userId} 的 2FA 临时密钥与前端提交密钥不一致，优先使用前端提交密钥进行校验。`
+        `[AuthController] 用户 ${validatedUserId} 的 2FA 临时密钥与前端提交密钥不一致，优先使用前端提交密钥进行校验。`
       );
     }
 
     if (secretProvidedByBody && sessionSecretMismatched) {
-      console.debug(`[AuthController] 用户 ${userId} 的会话临时 2FA 密钥已同步为前端提交值。`);
+      console.debug(
+        `[AuthController] 用户 ${validatedUserId} 的会话临时 2FA 密钥已同步为前端提交值。`
+      );
     }
 
     const db = await getDbInstance();
@@ -1060,51 +1071,52 @@ export const verifyAndActivate2FA = async (
       skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
 
+    const verifyFailure = mapTwoFactorVerifyFailure(verificationResult);
+    if (verifyFailure) {
+      if (verifyFailure.kind === 'time_skew') {
+        console.warn(
+          `[AuthController] 用户 ${validatedUserId} 的 2FA 激活验证码存在明显时间偏差（delta=${verifyFailure.body.delta}），建议校准客户端时间。`
+        );
+      } else {
+        console.debug(`用户 ${validatedUserId} 2FA 激活失败: 验证码错误。`);
+      }
+
+      res.status(verifyFailure.statusCode).json(verifyFailure.body);
+      return;
+    }
+
     if (verificationResult.status === 'verified') {
       const { delta } = verificationResult;
       if (Math.abs(delta) > TOTP_SKEW_WARN_THRESHOLD) {
         console.warn(
-          `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
+          `[AuthController] 用户 ${validatedUserId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
         );
       }
       const now = Math.floor(Date.now() / 1000);
       const result = await runDb(
         db,
         'UPDATE users SET two_factor_secret = ?, updated_at = ? WHERE id = ?',
-        [effectiveSecret, now, userId]
+        [effectiveSecret, now, validatedUserId]
       );
 
       if (result.changes === 0) {
-        console.error(`激活 2FA 错误: 更新影响行数为 0 - 用户 ID ${userId}`);
+        console.error(`激活 2FA 错误: 更新影响行数为 0 - 用户 ID ${validatedUserId}`);
         throw new Error('未找到要更新的用户');
       }
 
-      console.info(`用户 ${userId} 已成功激活两步验证。`);
-      recordTwoFactorEnabledEvent({ auditLogService, notificationService }, { req, userId });
+      console.info(`用户 ${validatedUserId} 已成功激活两步验证。`);
+      recordTwoFactorEnabledEvent(
+        { auditLogService, notificationService },
+        { req, userId: validatedUserId }
+      );
 
       delete req.session.tempTwoFactorSecret;
 
       res.status(200).json({ message: '两步验证已成功激活！' });
       return;
     }
-
-    if (verificationResult.status === 'time_skew') {
-      console.warn(
-        `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${verificationResult.delta}），建议校准客户端时间。`
-      );
-      res.status(400).json({
-        message: `验证码无效。检测到客户端时间与服务器存在约 ${verificationResult.skewSeconds} 秒偏差，请校准设备时间后重试。`,
-        code: 'TIME_SKEW_DETECTED',
-        skewSeconds: verificationResult.skewSeconds,
-        delta: verificationResult.delta,
-      });
-      return;
-    }
-
-    console.debug(`用户 ${userId} 2FA 激活失败: 验证码错误。`);
-    res.status(400).json({ message: '验证码无效。' });
   } catch (error: unknown) {
-    console.error(`用户 ${userId} 验证并激活 2FA 时出错:`, error);
+    console.error(`用户 ${validatedUserId} 验证并激活 2FA 时出错:`, error);
     next(error);
   }
 };
@@ -1319,22 +1331,23 @@ export const getInitData = async (
     const requiresSetup = await resolveRequiresSetup(db);
 
     // 2. 检查认证状态
-    const { isAuthenticated, user } = await resolveInitAuthState(db, req.session);
+    const authState = await resolveInitAuthState(db, req.session);
 
     // 3. 获取公共 CAPTCHA 配置
     const fullCaptchaConfig = await settingsService.getCaptchaConfig();
     const captchaConfig = toPublicCaptchaConfig(fullCaptchaConfig);
 
-    // 4. 返回统一的初始化数据
-    res.status(200).json({
-      needsSetup: requiresSetup,
-      isAuthenticated,
-      user,
-      captchaConfig,
-    });
+    // 4. 返回统一的初始化数据（保持 200 响应口径，仅抽离响应组装）
+    res.status(200).json(
+      buildInitDataBaseResponse({
+        needsSetup: requiresSetup,
+        authState,
+        captchaConfig,
+      })
+    );
 
     console.debug(
-      `[AuthController] 初始化数据已发送: needsSetup=${requiresSetup}, isAuthenticated=${isAuthenticated}`
+      `[AuthController] 初始化数据已发送: needsSetup=${requiresSetup}, isAuthenticated=${authState.isAuthenticated}`
     );
   } catch (error: unknown) {
     console.error('[AuthController] 获取初始化数据时出错:', error);
