@@ -96,7 +96,6 @@ import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.uti
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
 import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-failure-actions.utils';
 import {
-  buildLoginTwoFactorInvalidDebugLogAction,
   buildLoginTwoFactorSkewWarnLogAction,
   buildTwoFactorVerifySessionMismatchWarnLogAction,
   buildTwoFactorVerifySessionSyncedDebugLogAction,
@@ -104,6 +103,9 @@ import {
 } from './auth-two-factor-log-actions.utils';
 import {
   buildLoginTwoFactorSuccessLogAction,
+  buildLoginTwoFactorDiagnosticsLogActions,
+  buildLoginTwoFactorFailureAttemptPayload,
+  buildLoginTwoFactorPendingValidationFailedDebugLogAction,
   resolveLoginTwoFactorFailureAction,
 } from './auth-login-two-factor-actions.utils';
 import {
@@ -766,15 +768,14 @@ export const verifyLogin2FA = async (
 
   // +++ Debug logging for session diagnostics (dev only)
   if (isDev) {
-    const getHeaderValue = (name: string): string | undefined => {
-      return getRequestHeaderValue(req, name);
-    };
-
-    console.debug(`[AuthController] verifyLogin2FA - Has pendingAuth: ${!!pendingAuth}`);
-    console.debug(`[AuthController] verifyLogin2FA - Has tempToken: ${!!tempToken}`);
-    console.debug(
-      `[AuthController] verifyLogin2FA - X-Forwarded-Proto: ${getHeaderValue('X-Forwarded-Proto') ?? ''}`
-    );
+    const diagnosticsLogActions = buildLoginTwoFactorDiagnosticsLogActions({
+      hasPendingAuth: !!pendingAuth,
+      hasTempToken: !!tempToken,
+      forwardedProto: getRequestHeaderValue(req, 'X-Forwarded-Proto'),
+    });
+    for (const logAction of diagnosticsLogActions) {
+      console[logAction.level](logAction.message);
+    }
   }
 
   const pendingValidationResult = resolveLoginPendingAuthValidation({
@@ -783,9 +784,11 @@ export const verifyLogin2FA = async (
   });
   if (!pendingValidationResult.ok) {
     if (isDev && !pendingAuth) {
-      console.debug(
-        `[AuthController] verifyLogin2FA - FAILED: pendingAuth=${!!pendingAuth}, tempToken=${!!tempToken}`
-      );
+      const failedDebugLogAction = buildLoginTwoFactorPendingValidationFailedDebugLogAction({
+        hasPendingAuth: !!pendingAuth,
+        hasTempToken: !!tempToken,
+      });
+      console[failedDebugLogAction.level](failedDebugLogAction.message);
     }
     res
       .status(pendingValidationResult.failure.statusCode)
@@ -829,6 +832,19 @@ export const verifyLogin2FA = async (
     });
     if (verifyFailureAction.handled) {
       console[verifyFailureAction.log.level](verifyFailureAction.log.message);
+      if (verifyFailureAction.failureReason) {
+        const clientIp = resolveRequestClientIp(req);
+        const failureAttemptPayload = buildLoginTwoFactorFailureAttemptPayload({
+          userId: user.id,
+          username: user.username,
+          clientIp,
+          reason: verifyFailureAction.failureReason,
+        });
+        recordLoginFailureAttempt(
+          { ipBlacklistService, auditLogService, notificationService },
+          failureAttemptPayload
+        );
+      }
       res.status(verifyFailureAction.response.statusCode).json(verifyFailureAction.response.body);
       return;
     }
@@ -864,18 +880,6 @@ export const verifyLogin2FA = async (
       return;
     }
 
-    const invalidLogAction = buildLoginTwoFactorInvalidDebugLogAction(user.username);
-    console[invalidLogAction.level](invalidLogAction.message);
-    const clientIp = resolveRequestClientIp(req);
-    recordLoginFailureAttempt(
-      { ipBlacklistService, auditLogService, notificationService },
-      {
-        userId: user.id,
-        username: user.username,
-        reason: 'Invalid 2FA token',
-        clientIp,
-      }
-    );
     res.status(401).json({ message: '验证码无效。' });
   } catch (error: unknown) {
     console.error(

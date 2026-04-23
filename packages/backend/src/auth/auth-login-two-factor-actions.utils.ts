@@ -5,12 +5,22 @@ import {
   buildLoginTwoFactorSuccessInfoLogAction,
 } from './auth-two-factor-log-actions.utils';
 
+export type LoginTwoFactorFailureReason = 'Invalid 2FA token';
+
+export interface LoginTwoFactorFailureAttemptPayload {
+  userId: number;
+  username: string;
+  reason: LoginTwoFactorFailureReason;
+  clientIp: string;
+}
+
 export type LoginTwoFactorFailureAction =
   | {
       handled: false;
     }
   | {
       handled: true;
+      failureReason?: LoginTwoFactorFailureReason;
       response: {
         statusCode: 401;
         body:
@@ -58,6 +68,7 @@ export const resolveLoginTwoFactorFailureAction = (payload: {
 
   return {
     handled: true,
+    failureReason: 'Invalid 2FA token',
     response: {
       statusCode: 401,
       body: { message: '验证码无效。' },
@@ -72,3 +83,55 @@ export const buildLoginTwoFactorSuccessLogAction = (
   level: 'info';
   message: string;
 } => buildLoginTwoFactorSuccessInfoLogAction(username);
+
+export const buildLoginTwoFactorFailureAttemptPayload = (payload: {
+  userId: number;
+  username: string;
+  clientIp: string;
+  reason?: LoginTwoFactorFailureReason;
+}): LoginTwoFactorFailureAttemptPayload => {
+  const { userId, username, clientIp, reason = 'Invalid 2FA token' } = payload;
+
+  return {
+    userId,
+    username,
+    reason,
+    clientIp,
+  };
+};
+
+export interface LoginTwoFactorDebugLogAction {
+  level: 'debug';
+  message: string;
+}
+
+export const buildLoginTwoFactorDiagnosticsLogActions = (payload: {
+  hasPendingAuth: boolean;
+  hasTempToken: boolean;
+  forwardedProto?: string;
+}): LoginTwoFactorDebugLogAction[] => {
+  const { hasPendingAuth, hasTempToken, forwardedProto } = payload;
+
+  return [
+    {
+      level: 'debug',
+      message: `[AuthController] verifyLogin2FA - Has pendingAuth: ${hasPendingAuth}`,
+    },
+    {
+      level: 'debug',
+      message: `[AuthController] verifyLogin2FA - Has tempToken: ${hasTempToken}`,
+    },
+    {
+      level: 'debug',
+      message: `[AuthController] verifyLogin2FA - X-Forwarded-Proto: ${forwardedProto ?? ''}`,
+    },
+  ];
+};
+
+export const buildLoginTwoFactorPendingValidationFailedDebugLogAction = (payload: {
+  hasPendingAuth: boolean;
+  hasTempToken: boolean;
+}): LoginTwoFactorDebugLogAction => ({
+  level: 'debug',
+  message: `[AuthController] verifyLogin2FA - FAILED: pendingAuth=${payload.hasPendingAuth}, tempToken=${payload.hasTempToken}`,
+});

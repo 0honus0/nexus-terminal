@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildLoginTwoFactorDiagnosticsLogActions,
+  buildLoginTwoFactorFailureAttemptPayload,
+  buildLoginTwoFactorPendingValidationFailedDebugLogAction,
   buildLoginTwoFactorSuccessLogAction,
   resolveLoginTwoFactorFailureAction,
 } from './auth-login-two-factor-actions.utils';
@@ -42,6 +45,7 @@ describe('auth-login-two-factor-actions.utils', () => {
 
     expect(action).toEqual({
       handled: true,
+      failureReason: 'Invalid 2FA token',
       response: {
         statusCode: 401,
         body: { message: '验证码无效。' },
@@ -63,6 +67,52 @@ describe('auth-login-two-factor-actions.utils', () => {
     expect(buildLoginTwoFactorSuccessLogAction('alice')).toEqual({
       level: 'info',
       message: '用户 alice 2FA 验证成功。',
+    });
+  });
+
+  it('应构建登录 2FA 失败尝试参数与调试日志动作', () => {
+    expect(
+      buildLoginTwoFactorFailureAttemptPayload({
+        userId: 7,
+        username: 'alice',
+        clientIp: '127.0.0.1',
+      })
+    ).toEqual({
+      userId: 7,
+      username: 'alice',
+      reason: 'Invalid 2FA token',
+      clientIp: '127.0.0.1',
+    });
+
+    expect(
+      buildLoginTwoFactorDiagnosticsLogActions({
+        hasPendingAuth: true,
+        hasTempToken: false,
+        forwardedProto: 'https',
+      })
+    ).toEqual([
+      {
+        level: 'debug',
+        message: '[AuthController] verifyLogin2FA - Has pendingAuth: true',
+      },
+      {
+        level: 'debug',
+        message: '[AuthController] verifyLogin2FA - Has tempToken: false',
+      },
+      {
+        level: 'debug',
+        message: '[AuthController] verifyLogin2FA - X-Forwarded-Proto: https',
+      },
+    ]);
+
+    expect(
+      buildLoginTwoFactorPendingValidationFailedDebugLogAction({
+        hasPendingAuth: false,
+        hasTempToken: true,
+      })
+    ).toEqual({
+      level: 'debug',
+      message: '[AuthController] verifyLogin2FA - FAILED: pendingAuth=false, tempToken=true',
     });
   });
 });

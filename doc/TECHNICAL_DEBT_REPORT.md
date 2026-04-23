@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第二十批并行落地）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第二十一批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -74,14 +74,14 @@
 
 > 说明：本节仅记录主线程本轮分析识别的 6 类问题，并同步标注本次是否已落地修复。判断依据为 2026-04-22 本地仓库现状与改动结果。
 
-| 问题                                                                                      | 风险                                                                     | 优先级 | 拟定修复动作                                                                        | 验收标准                                                       | 落地状态                  |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------- |
-| 1) `trust proxy` 在未显式配置时默认信任 1 层代理                                          | 反向代理链路未正确设置时，`req.ip` 可信度下降，影响限流/白名单判定准确性 | P1     | 默认改为不信任代理，仅在 `TRUST_PROXY` / `TRUST_PROXY_HOPS` 显式配置时启用          | 未配置相关环境变量时 `trust proxy=false`；显式配置场景保持可用 | ✅ 已完成（2026-04-22）   |
-| 2) `quality:check` 仅覆盖 frontend typecheck，backend/remote-gateway 未纳入               | 类型回归可能绕过统一质量门禁                                             | P1     | 在根脚本新增 `typecheck:backend`、`typecheck:remote-gateway` 并并入 `quality:check` | `npm run -s quality:check` 同时执行三端 typecheck 且通过       | ✅ 已完成（2026-04-22）   |
-| 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22）   |
-| 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22）   |
-| 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22）   |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第二十批完成） |
+| 问题                                                                                      | 风险                                                                     | 优先级 | 拟定修复动作                                                                        | 验收标准                                                       | 落地状态                    |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------- |
+| 1) `trust proxy` 在未显式配置时默认信任 1 层代理                                          | 反向代理链路未正确设置时，`req.ip` 可信度下降，影响限流/白名单判定准确性 | P1     | 默认改为不信任代理，仅在 `TRUST_PROXY` / `TRUST_PROXY_HOPS` 显式配置时启用          | 未配置相关环境变量时 `trust proxy=false`；显式配置场景保持可用 | ✅ 已完成（2026-04-22）     |
+| 2) `quality:check` 仅覆盖 frontend typecheck，backend/remote-gateway 未纳入               | 类型回归可能绕过统一质量门禁                                             | P1     | 在根脚本新增 `typecheck:backend`、`typecheck:remote-gateway` 并并入 `quality:check` | `npm run -s quality:check` 同时执行三端 typecheck 且通过       | ✅ 已完成（2026-04-22）     |
+| 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22）     |
+| 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22）     |
+| 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22）     |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第二十一批完成） |
 
 ---
 
@@ -419,17 +419,34 @@
   - 变更文件：`packages/backend/src/auth/auth-login-two-factor-actions.utils.test.ts`、`packages/backend/src/auth/auth-login-2fa-flow.utils.test.ts`
   - 结果：新增失败响应映射与 pending 清理动作测试，`typecheck + backend test + quality:check` 全绿。
 
-### 第六项下一批并行子任务清单（第二十一批）
+### 第六项推进记录（2026-04-23 第二十一批并行落地）
 
-1. 任务 BI：`verifyLogin2FA` 调试日志诊断片段动作化（dev-only）
-   - 目标：将 pendingAuth/tempToken/header 的诊断日志拼装收敛为动作函数，减少控制器内联模板噪音。
-   - 验收：仅开发环境输出行为保持一致，生产环境无新增日志。
-2. 任务 BJ：登录 2FA 失败侧副作用动作化（失败审计/通知参数）
-   - 目标：统一 invalid token 失败路径的 `recordLoginFailureAttempt` 参数构造，避免控制器重复字面量。
-   - 验收：失败事件字段（`reason/ip/user`）与现状一致，回归测试覆盖参数映射。
-3. 任务 BK：第二十一批回归补测与门禁固化
-   - 目标：补齐第二十一批新增动作层测试并验证门禁稳定。
-   - 验收：新增测试纳入 CI，`npm run -s quality:check` 与后端全量测试通过。
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**维持 0**
+  - `SFTP 服务体量`：`sftp.service.ts` **243 -> 243**（第二十一批保持不变；累计 **1884 -> 243**）
+  - `认证控制器体量`：`auth.controller.ts` **1376 -> 1380**（第二十一批净增加 4 行；累计 **1592 -> 1380**）
+  - 回归测试补充：**1 文件 / 3 类动作断言**
+- 并行子任务 BI（`verifyLogin2FA` 调试日志诊断片段动作化）：
+  - 变更文件：`packages/backend/src/auth/auth-login-two-factor-actions.utils.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：pendingAuth/tempToken/header 与 pending 校验失败诊断日志统一由动作层构建，控制器仅负责 dev 条件下输出。
+- 并行子任务 BJ（登录 2FA 失败侧副作用动作化）：
+  - 变更文件：`packages/backend/src/auth/auth-login-two-factor-actions.utils.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：invalid token 路径新增 `failureReason` 与失败尝试 payload 构建动作，`recordLoginFailureAttempt` 参数不再内联字面量；time-skew 路径保持不计失败尝试。
+- 并行子任务 BK（第二十一批回归补测与门禁固化）：
+  - 变更文件：`packages/backend/src/auth/auth-login-two-factor-actions.utils.test.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：补充失败 payload 与诊断日志动作断言，`typecheck + 关键认证链路单测 + quality:check` 全绿。
+
+### 第六项下一批并行子任务清单（第二十二批）
+
+1. 任务 BL：`verifyLogin2FA` 成功/失败分支响应动作统一（HTTP body + 状态码）
+   - 目标：将成功与兜底失败响应也动作化，控制器进一步收敛到编排层。
+   - 验收：登录成功与失败响应文案、状态码、字段结构保持一致。
+2. 任务 BM：登录 2FA 链路事件记录动作聚合（成功/失败统一入口）
+   - 目标：将 `recordLoginSuccessAttempt`/`recordLoginFailureAttempt` 参数构建集中为统一动作入口，减少分散拼装。
+   - 验收：审计与通知事件字段不变，关键行为由动作层测试覆盖。
+3. 任务 BN：第二十二批回归补测与门禁固化
+   - 目标：补齐第二十二批新增动作层测试并完成门禁验证。
+   - 验收：新增测试纳入 CI，`npm run -s quality:check` 与后端相关测试通过。
 
 ---
 
