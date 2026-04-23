@@ -199,6 +199,24 @@ export const buildLoginTwoFactorFailureAttemptAction = (payload: {
   payload: buildLoginTwoFactorFailureAttemptPayload(payload),
 });
 
+export const applyLoginTwoFactorAttemptAction = (payload: {
+  attemptAction?: LoginTwoFactorAttemptAction;
+  onSuccess: (attempt: LoginTwoFactorSuccessAttemptPayload) => void;
+  onFailure: (attempt: LoginTwoFactorFailureAttemptPayload) => void;
+}): void => {
+  const { attemptAction, onSuccess, onFailure } = payload;
+  if (!attemptAction) {
+    return;
+  }
+
+  if (attemptAction.kind === 'success') {
+    onSuccess(attemptAction.payload);
+    return;
+  }
+
+  onFailure(attemptAction.payload);
+};
+
 export interface LoginTwoFactorDebugLogAction {
   level: 'debug';
   message: string;

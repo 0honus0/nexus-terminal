@@ -147,6 +147,53 @@ export const resolveLogin2FATokenValidation = (token: unknown): Login2FATokenVal
   };
 };
 
+export type Login2FAVerificationPrecheckResult =
+  | {
+      ok: true;
+      pendingAuth: PendingAuth;
+      normalizedToken: string;
+    }
+  | {
+      ok: false;
+      reason: 'invalid_state' | 'expired' | 'empty_token' | 'invalid_token_format';
+      failure: Login2FAFailureResponse;
+    };
+
+export const resolveLogin2FAVerificationPrecheck = (payload: {
+  req: Request;
+  tempToken: unknown;
+  token: unknown;
+  now?: number;
+}): Login2FAVerificationPrecheckResult => {
+  const pendingValidationResult = resolveLoginPendingAuthValidation({
+    req: payload.req,
+    tempToken: payload.tempToken,
+    now: payload.now,
+  });
+  if (!pendingValidationResult.ok) {
+    return pendingValidationResult;
+  }
+
+  const tokenValidationResult = resolveLogin2FATokenValidation(payload.token);
+  if (!tokenValidationResult.ok) {
+    const reason =
+      tokenValidationResult.failure.body.message === '验证码不能为空。'
+        ? 'empty_token'
+        : 'invalid_token_format';
+    return {
+      ok: false,
+      reason,
+      failure: tokenValidationResult.failure,
+    };
+  }
+
+  return {
+    ok: true,
+    pendingAuth: pendingValidationResult.pendingAuth,
+    normalizedToken: tokenValidationResult.normalizedToken,
+  };
+};
+
 export const clearPendingLoginTwoFactorAuthState = (req: Request): boolean => {
   if (typeof req.session.pendingAuth === 'undefined') {
     return false;

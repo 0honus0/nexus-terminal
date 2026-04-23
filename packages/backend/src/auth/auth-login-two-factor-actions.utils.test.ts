@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   LOGIN_TWO_FACTOR_USER_QUERY_SQL,
+  applyLoginTwoFactorAttemptAction,
   buildLoginTwoFactorDiagnosticsLogActions,
   buildLoginTwoFactorFallbackFailureResponseAction,
   buildLoginTwoFactorFailureAttemptAction,
@@ -332,5 +333,48 @@ describe('auth-login-two-factor-actions.utils', () => {
         saveErrorMessage: '登录完成失败，请重试。',
       },
     });
+  });
+
+  it('应通过 attempt 执行器按 kind 分发成功/失败回调', () => {
+    const onSuccess = vi.fn();
+    const onFailure = vi.fn();
+
+    applyLoginTwoFactorAttemptAction({
+      attemptAction: {
+        kind: 'success',
+        payload: {
+          userId: 1,
+          username: 'alice',
+          clientIp: '127.0.0.1',
+          twoFactor: true,
+        },
+      },
+      onSuccess,
+      onFailure,
+    });
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onFailure).not.toHaveBeenCalled();
+
+    applyLoginTwoFactorAttemptAction({
+      attemptAction: {
+        kind: 'failure',
+        payload: {
+          userId: 1,
+          username: 'alice',
+          reason: 'Invalid 2FA token',
+          clientIp: '127.0.0.1',
+        },
+      },
+      onSuccess,
+      onFailure,
+    });
+    expect(onFailure).toHaveBeenCalledTimes(1);
+
+    applyLoginTwoFactorAttemptAction({
+      onSuccess,
+      onFailure,
+    });
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledTimes(1);
   });
 });

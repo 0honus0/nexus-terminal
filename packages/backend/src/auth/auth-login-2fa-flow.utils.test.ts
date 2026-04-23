@@ -4,6 +4,7 @@ import {
   clearPendingLoginTwoFactorAuthState,
   createPendingLoginTwoFactorAuthState,
   resolveLogin2FATokenValidation,
+  resolveLogin2FAVerificationPrecheck,
   resolveLoginPendingAuthValidation,
 } from './auth-login-2fa-flow.utils';
 
@@ -169,5 +170,64 @@ describe('auth-login-2fa-flow.utils', () => {
     expect(clearPendingLoginTwoFactorAuthState(req)).toBe(true);
     expect((req.session as unknown as { pendingAuth?: unknown }).pendingAuth).toBeUndefined();
     expect(clearPendingLoginTwoFactorAuthState(req)).toBe(false);
+  });
+
+  it('resolveLogin2FAVerificationPrecheck 应在 pending 和 token 均有效时返回预检通过', () => {
+    const req = {
+      session: {
+        pendingAuth: {
+          tempToken: 'valid-token',
+          userId: 1,
+          username: 'alice',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+    } as unknown as Request;
+
+    const result = resolveLogin2FAVerificationPrecheck({
+      req,
+      tempToken: 'valid-token',
+      token: '123 456',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      pendingAuth: {
+        tempToken: 'valid-token',
+        userId: 1,
+        username: 'alice',
+        expiresAt: (req.session as unknown as { pendingAuth: { expiresAt: number } }).pendingAuth
+          .expiresAt,
+      },
+      normalizedToken: '123456',
+    });
+  });
+
+  it('resolveLogin2FAVerificationPrecheck 应透传 token 失败响应并标记原因', () => {
+    const req = {
+      session: {
+        pendingAuth: {
+          tempToken: 'valid-token',
+          userId: 1,
+          username: 'alice',
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+    } as unknown as Request;
+
+    const result = resolveLogin2FAVerificationPrecheck({
+      req,
+      tempToken: 'valid-token',
+      token: '12ab',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'invalid_token_format',
+      failure: {
+        statusCode: 400,
+        body: { message: '验证码格式无效。' },
+      },
+    });
   });
 });
