@@ -5,6 +5,11 @@ import {
   createTwoFactorSecret,
 } from './auth-two-factor-flow.utils';
 import { saveTwoFactorSetupSessionSecret } from './auth-2fa-state-flow.utils';
+import {
+  buildTwoFactorSetupGeneratedLogAction,
+  buildTwoFactorSetupReuseLogAction,
+  buildTwoFactorSetupSaveFailedLogAction,
+} from './auth-two-factor-log-actions.utils';
 
 type SaveTwoFactorSessionResult = Awaited<ReturnType<typeof saveTwoFactorSetupSessionSecret>>;
 type SaveTwoFactorSessionFailure = Extract<SaveTwoFactorSessionResult, { ok: false }>['failure'];
@@ -49,8 +54,7 @@ export const executeTwoFactorSetupAction = async (payload: {
         body: responseBody,
       },
       log: {
-        level: 'debug',
-        message: `[AuthController] 用户 ${userId} 复用已存在的临时 2FA 密钥，直接返回 setup payload。`,
+        ...buildTwoFactorSetupReuseLogAction(userId),
       },
     };
   }
@@ -62,8 +66,7 @@ export const executeTwoFactorSetupAction = async (payload: {
       ok: false,
       failure: saveResult.failure,
       log: {
-        level: 'error',
-        message: `[AuthController] 用户 ${userId} 保存临时 2FA 密钥到 session 失败`,
+        ...buildTwoFactorSetupSaveFailedLogAction(userId),
       },
     };
   }
@@ -77,8 +80,7 @@ export const executeTwoFactorSetupAction = async (payload: {
       body: responseBody,
     },
     log: {
-      level: 'info',
-      message: `[AuthController] 用户 ${userId} 生成新的临时 2FA 密钥并返回 setup payload。`,
+      ...buildTwoFactorSetupGeneratedLogAction(userId),
     },
   };
 };

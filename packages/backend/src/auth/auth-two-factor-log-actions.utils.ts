@@ -1,0 +1,92 @@
+export const buildTwoFactorSetupReuseLogAction = (
+  userId: number
+): {
+  level: 'debug';
+  message: string;
+} => ({
+  level: 'debug',
+  message: `[AuthController] 用户 ${userId} 复用已存在的临时 2FA 密钥，直接返回 setup payload。`,
+});
+
+export const buildTwoFactorSetupSaveFailedLogAction = (
+  userId: number
+): {
+  level: 'error';
+  message: string;
+} => ({
+  level: 'error',
+  message: `[AuthController] 用户 ${userId} 保存临时 2FA 密钥到 session 失败`,
+});
+
+export const buildTwoFactorSetupGeneratedLogAction = (
+  userId: number
+): {
+  level: 'info';
+  message: string;
+} => ({
+  level: 'info',
+  message: `[AuthController] 用户 ${userId} 生成新的临时 2FA 密钥并返回 setup payload。`,
+});
+
+export const buildTwoFactorVerifySessionMismatchWarnLogAction = (
+  userId: number
+): {
+  level: 'warn';
+  message: string;
+} => ({
+  level: 'warn',
+  message: `[AuthController] 用户 ${userId} 的 2FA 临时密钥与前端提交密钥不一致，优先使用前端提交密钥进行校验。`,
+});
+
+export const buildTwoFactorVerifySessionSyncedDebugLogAction = (
+  userId: number
+): {
+  level: 'debug';
+  message: string;
+} => ({
+  level: 'debug',
+  message: `[AuthController] 用户 ${userId} 的会话临时 2FA 密钥已同步为前端提交值。`,
+});
+
+export const buildTwoFactorVerifySkewWarnLogAction = (payload: {
+  userId: number;
+  delta: number;
+  skewWarnThreshold: number;
+}): {
+  level: 'warn';
+  message: string;
+} | null => {
+  const { userId, delta, skewWarnThreshold } = payload;
+  if (Math.abs(delta) <= skewWarnThreshold) {
+    return null;
+  }
+
+  return {
+    level: 'warn',
+    message: buildTwoFactorVerifySkewWarnMessage(userId, delta),
+  };
+};
+
+export const buildTwoFactorVerifyInvalidDebugLogAction = (
+  userId: number
+): {
+  level: 'debug';
+  message: string;
+} => ({
+  level: 'debug',
+  message: `用户 ${userId} 2FA 激活失败: 验证码错误。`,
+});
+
+export const buildTwoFactorVerifySkewWarnMessage = (userId: number, delta: number): string =>
+  `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`;
+
+export const buildTwoFactorVerifySkewWarnLogActionAlways = (
+  userId: number,
+  delta: number
+): {
+  level: 'warn';
+  message: string;
+} => ({
+  level: 'warn',
+  message: buildTwoFactorVerifySkewWarnMessage(userId, delta),
+});

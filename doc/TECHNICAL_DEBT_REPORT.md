@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第十六批并行落地）
+> **生成时间**：2025-12-23 | **更新时间**：2026-04-23（第六项第十七批并行落地）
 > **扫描范围**：packages/backend、packages/frontend、packages/remote-gateway
 > **任务**：【P3-2】整理 TODO/FIXME 到 GitHub Issues
 > **状态**：🟢 持续治理中（ESLint warning: 0，error: 0；Flat Config 迁移完成）
@@ -81,7 +81,7 @@
 | 3) `migrations.ts` 中 `favorite_paths` 建表 SQL 语法错误（`last_used_at` 行分隔符错误）   | 在触发该迁移时可能导致初始化/升级失败                                    | P1     | 修复迁移 SQL 分隔符，确保建表语句可执行                                             | 后端构建与相关数据库初始化流程不因该 SQL 失败                  | ✅ 已完成（2026-04-22）   |
 | 4) remote-gateway 部署口径存在不一致（默认 `MAIN_BACKEND_URL` 端口、Dockerfile 暴露端口） | 部署文档与运行默认值不一致，易引入排障成本                               | P2     | 对齐默认 backend 端口为 `3001`；Dockerfile WebSocket 端口暴露改为 `8080`            | 代码默认值、Dockerfile 与 compose/文档口径一致                 | ✅ 已完成（2026-04-22）   |
 | 5) 中英文 README 与相关配置文档镜像来源口径存在分歧                                       | 运维按文档拉取镜像时可能使用错误仓库/命名空间                            | P2     | 对齐到当前主口径 `ghcr.io/silentely`，并补充说明                                    | README 与 compose 的镜像来源说明一致                           | ✅ 已完成（2026-04-22）   |
-| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第十六批完成） |
+| 6) 核心文件体量偏大且存在多处受控循环依赖豁免（`import/no-cycle`）                        | 长期维护复杂度上升，局部改动回归半径扩大                                 | P3     | 拆分超大模块（优先 FileManager/SFTP/认证链路），逐步消减循环依赖                    | 关键模块单文件体量下降，循环依赖豁免数量持续收敛               | 🟡 进行中（第十七批完成） |
 
 ---
 
@@ -351,17 +351,34 @@
   - 变更文件：`packages/backend/src/auth/auth-two-factor-verify-failure-actions.utils.test.ts`、`packages/backend/src/auth/auth-side-effects-executor.utils.test.ts`
   - 结果：覆盖 verify 失败动作映射与统一副作用执行器顺序/参数路径，`typecheck + backend test + quality:check` 全绿。
 
-### 第六项下一批并行子任务清单（第十七批）
+### 第六项推进记录（2026-04-23 第十七批并行落地）
 
-1. 任务 AW：2FA verify 成功路径动作继续下沉（DB 更新 + 响应组装）
-   - 目标：将 `verifyAndActivate2FA` 成功路径中 mutation 校验后响应组装进一步收敛为动作层，减少控制器内联逻辑。
-   - 验收：成功状态码/文案与 session 清理语义保持不变，新增动作层测试覆盖成功路径。
-2. 任务 AX：认证控制器日志动作标准化
-   - 目标：将 2FA setup/verify 链路中重复日志模板统一为日志动作构建函数，降低硬编码字符串散落风险。
-   - 验收：日志语义不变，控制器字符串常量重复度下降。
-3. 任务 AY：第十七批新增回归测试（2FA verify 成功动作层 + 日志动作标准化）
-   - 目标：为第十七批重构提供回归护栏，确保日志与响应行为可验证。
-   - 验收：新增测试纳入 CI，`npm run -s quality:check` 持续通过。
+- 量化结果：
+  - `import/no-cycle` 受控豁免：**维持 0**
+  - `SFTP 服务体量`：`sftp.service.ts` **243 -> 243**（第十七批保持不变；累计 **1884 -> 243**）
+  - `认证控制器体量`：`auth.controller.ts` **1370 -> 1375**（第十七批净增加 5 行；累计 **1592 -> 1375**）
+  - 新增工具单测：**2 文件 / 7 用例全通过**
+- 并行子任务 AW（2FA verify 成功路径动作下沉）：
+  - 变更文件：`packages/backend/src/auth/auth-two-factor-verify-success-actions.utils.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：将 `verifyAndActivate2FA` 成功路径的 mutation 参数构建、`changes` 校验与成功响应动作统一下沉，控制器保留 HTTP 编排并继续复用 `applyAuthSideEffects`。
+- 并行子任务 AX（2FA setup/verify 日志动作标准化）：
+  - 变更文件：`packages/backend/src/auth/auth-two-factor-log-actions.utils.ts`、`packages/backend/src/auth/auth-two-factor-setup-actions.utils.ts`、`packages/backend/src/auth/auth-two-factor-verify-failure-actions.utils.ts`、`packages/backend/src/auth/auth.controller.ts`
+  - 结果：setup 复用/保存失败/生成成功日志，以及 verify 的 session mismatch/sync、skew、invalid 日志均统一由日志动作构建函数提供，减少控制器硬编码模板。
+- 并行子任务 AY（第十七批回归补测）：
+  - 变更文件：`packages/backend/src/auth/auth-two-factor-log-actions.utils.test.ts`、`packages/backend/src/auth/auth-two-factor-verify-success-actions.utils.test.ts`
+  - 结果：覆盖日志动作模板稳定性与 verify 成功动作映射，`typecheck + backend test + quality:check` 全绿。
+
+### 第六项下一批并行子任务清单（第十八批）
+
+1. 任务 AZ：2FA setup/verify 会话操作统一下沉（读写 + 清理）
+   - 目标：将控制器内联的 session 读写与清理逻辑统一收敛到动作层，缩短 `auth.controller.ts` 中 2FA 分支的编排长度。
+   - 验收：会话缺失/过期/清理失败语义保持不变，新增动作层测试覆盖 setup 与 verify 会话分支。
+2. 任务 BA：2FA 链路审计/通知 sideEffect 生成标准化
+   - 目标：统一 2FA setup/verify/disable 成功与失败路径 sideEffect 构建，减少控制器内重复对象字面量。
+   - 验收：`audit + notification` 事件名、payload、触发时机与现状一致，回归测试覆盖关键事件。
+3. 任务 BB：第十八批回归补测与门禁固化
+   - 目标：补齐第十八批新增动作层测试，保证 `quality:check`、`typecheck:backend` 与后端单测持续全绿。
+   - 验收：新增测试纳入 CI，相关 2FA 端点行为快照/断言保持稳定。
 
 ---
 

@@ -90,13 +90,20 @@ import {
 } from './auth-password-security-actions.utils';
 import {
   buildDisableTwoFactorMutation,
-  buildEnableTwoFactorMutation,
   resolveTwoFactorMutationChangesValidation,
 } from './auth-2fa-mutation-flow.utils';
-import { buildTwoFactorEnabledSuccessAction } from './auth-two-factor-enabled-actions.utils';
 import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.utils';
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
 import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-failure-actions.utils';
+import {
+  buildTwoFactorVerifySessionMismatchWarnLogAction,
+  buildTwoFactorVerifySessionSyncedDebugLogAction,
+  buildTwoFactorVerifySkewWarnLogAction,
+} from './auth-two-factor-log-actions.utils';
+import {
+  buildTwoFactorVerifySuccessMutationAction,
+  resolveTwoFactorVerifySuccessMutationResultAction,
+} from './auth-two-factor-verify-success-actions.utils';
 
 // 开发环境标志，用于控制调试日志输出
 const isDev = process.env.NODE_ENV !== 'production';
@@ -1033,16 +1040,13 @@ export const verifyAndActivate2FA = async (
 
   try {
     if (sessionSecretMismatched) {
-      // 兼容并发/重复 setup 导致会话临时密钥与页面展示密钥不一致的场景。
-      console.warn(
-        `[AuthController] 用户 ${validatedUserId} 的 2FA 临时密钥与前端提交密钥不一致，优先使用前端提交密钥进行校验。`
-      );
+      const mismatchLogAction = buildTwoFactorVerifySessionMismatchWarnLogAction(validatedUserId);
+      console[mismatchLogAction.level](mismatchLogAction.message);
     }
 
     if (secretProvidedByBody && sessionSecretMismatched) {
-      console.debug(
-        `[AuthController] 用户 ${validatedUserId} 的会话临时 2FA 密钥已同步为前端提交值。`
-      );
+      const syncedLogAction = buildTwoFactorVerifySessionSyncedDebugLogAction(validatedUserId);
+      console[syncedLogAction.level](syncedLogAction.message);
     }
 
     const db = await getDbInstance();
@@ -1065,30 +1069,31 @@ export const verifyAndActivate2FA = async (
     }
 
     if (verificationResult.status === 'verified') {
-      const { delta } = verificationResult;
-      if (Math.abs(delta) > TOTP_SKEW_WARN_THRESHOLD) {
-        console.warn(
-          `[AuthController] 用户 ${validatedUserId} 的 2FA 激活验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
-        );
+      const skewWarnLogAction = buildTwoFactorVerifySkewWarnLogAction({
+        userId: validatedUserId,
+        delta: verificationResult.delta,
+        skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
+      });
+      if (skewWarnLogAction) {
+        console[skewWarnLogAction.level](skewWarnLogAction.message);
       }
-      const enableMutation = buildEnableTwoFactorMutation({
+
+      const mutationAction = buildTwoFactorVerifySuccessMutationAction({
         secret: effectiveSecret,
         userId: validatedUserId,
       });
-      const result = await runDb(db, enableMutation.sql, enableMutation.params);
-      const mutationValidation = resolveTwoFactorMutationChangesValidation({
+      const result = await runDb(db, mutationAction.sql, mutationAction.params);
+      const successMutationAction = resolveTwoFactorVerifySuccessMutationResultAction({
         changes: result.changes,
+        userId: validatedUserId,
+        clientIp: resolveRequestClientIp(req),
       });
-      if (!mutationValidation.ok) {
-        console.error(`激活 2FA 错误: 更新影响行数为 0 - 用户 ID ${validatedUserId}`);
-        throw mutationValidation.error;
+      if (!successMutationAction.ok) {
+        console[successMutationAction.log.level](successMutationAction.log.message);
+        throw successMutationAction.error;
       }
 
-      const clientIp = resolveRequestClientIp(req);
-      const successAction = buildTwoFactorEnabledSuccessAction({
-        userId: validatedUserId,
-        clientIp,
-      });
+      const successAction = successMutationAction.successAction;
       console[successAction.log.level](successAction.log.message);
       applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
 

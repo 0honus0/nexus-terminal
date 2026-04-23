@@ -3,6 +3,10 @@ import {
   type TwoFactorVerifyFailureMapping,
 } from './auth-2fa-state-flow.utils';
 import type { TwoFactorTokenVerificationResult } from './auth-two-factor-flow.utils';
+import {
+  buildTwoFactorVerifyInvalidDebugLogAction,
+  buildTwoFactorVerifySkewWarnLogActionAlways,
+} from './auth-two-factor-log-actions.utils';
 
 type TwoFactorVerifyFailureLogAction =
   | {
@@ -46,10 +50,7 @@ export const resolveTwoFactorVerifyFailureAction = (payload: {
         statusCode: mappedFailure.statusCode,
         body: mappedFailure.body,
       },
-      log: {
-        level: 'warn',
-        message: `[AuthController] 用户 ${userId} 的 2FA 激活验证码存在明显时间偏差（delta=${mappedFailure.body.delta}），建议校准客户端时间。`,
-      },
+      log: buildTwoFactorVerifySkewWarnLogActionAlways(userId, mappedFailure.body.delta),
     };
   }
 
@@ -59,9 +60,6 @@ export const resolveTwoFactorVerifyFailureAction = (payload: {
       statusCode: mappedFailure.statusCode,
       body: mappedFailure.body,
     },
-    log: {
-      level: 'debug',
-      message: `用户 ${userId} 2FA 激活失败: 验证码错误。`,
-    },
+    log: buildTwoFactorVerifyInvalidDebugLogAction(userId),
   };
 };
