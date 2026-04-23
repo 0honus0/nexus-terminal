@@ -96,6 +96,10 @@ import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.uti
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
 import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-failure-actions.utils';
 import {
+  buildLoginTwoFactorInvalidDebugLogAction,
+  buildLoginTwoFactorSkewWarnLogAction,
+  buildLoginTwoFactorSkewWarnLogActionAlways,
+  buildLoginTwoFactorSuccessInfoLogAction,
   buildTwoFactorVerifySessionMismatchWarnLogAction,
   buildTwoFactorVerifySessionSyncedDebugLogAction,
   buildTwoFactorVerifySkewWarnLogAction,
@@ -820,12 +824,16 @@ export const verifyLogin2FA = async (
 
     if (verified) {
       const delta = verificationDelta?.delta ?? 0;
-      if (Math.abs(delta) > TOTP_SKEW_WARN_THRESHOLD) {
-        console.warn(
-          `[AuthController] 用户 ${user.username} 的 2FA 登录验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`
-        );
+      const skewWarnLogAction = buildLoginTwoFactorSkewWarnLogAction({
+        username: user.username,
+        delta,
+        skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
+      });
+      if (skewWarnLogAction) {
+        console[skewWarnLogAction.level](skewWarnLogAction.message);
       }
-      console.info(`用户 ${user.username} 2FA 验证成功。`);
+      const successLogAction = buildLoginTwoFactorSuccessInfoLogAction(user.username);
+      console[successLogAction.level](successLogAction.message);
       const clientIp = resolveRequestClientIp(req);
       recordLoginSuccessAttempt(
         { ipBlacklistService, auditLogService, notificationService },
@@ -852,9 +860,11 @@ export const verifyLogin2FA = async (
       });
       if (relaxedDelta && Math.abs(relaxedDelta.delta) >= TOTP_SKEW_WARN_THRESHOLD) {
         const skewSeconds = Math.abs(relaxedDelta.delta) * 30;
-        console.warn(
-          `[AuthController] 用户 ${user.username} 的 2FA 登录验证码存在明显时间偏差（delta=${relaxedDelta.delta}），建议校准客户端时间。`
+        const skewWarnLogAction = buildLoginTwoFactorSkewWarnLogActionAlways(
+          user.username,
+          relaxedDelta.delta
         );
+        console[skewWarnLogAction.level](skewWarnLogAction.message);
         res.status(401).json({
           message: `验证码无效。检测到客户端时间与服务器存在约 ${skewSeconds} 秒偏差，请校准设备时间后重试。`,
           code: 'TIME_SKEW_DETECTED',
@@ -864,7 +874,8 @@ export const verifyLogin2FA = async (
         return;
       }
 
-      console.debug(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
+      const invalidLogAction = buildLoginTwoFactorInvalidDebugLogAction(user.username);
+      console[invalidLogAction.level](invalidLogAction.message);
       const clientIp = resolveRequestClientIp(req);
       recordLoginFailureAttempt(
         { ipBlacklistService, auditLogService, notificationService },

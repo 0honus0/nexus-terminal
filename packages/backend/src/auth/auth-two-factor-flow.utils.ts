@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
 import { syncTwoFactorSessionSecret } from './auth-two-factor-session-actions.utils';
@@ -30,45 +30,6 @@ export const createTwoFactorSecret = (username: string): string => {
     name: `NexusTerminal (${username})`,
   });
   return secret.base32;
-};
-
-export const respondWithExistingTwoFactorSetup = async (
-  req: Request,
-  res: Response,
-  username: string
-): Promise<boolean> => {
-  const sessionTempSecret = req.session.tempTwoFactorSecret;
-  if (!sessionTempSecret) {
-    return false;
-  }
-
-  const payload = await buildTwoFactorSetupPayload(username, sessionTempSecret);
-  res.json(payload);
-  return true;
-};
-
-export const saveTwoFactorSecretAndRespond = async (
-  req: Request,
-  res: Response,
-  payload: {
-    userId: number;
-    username: string;
-    secret: string;
-  }
-): Promise<void> => {
-  const { userId, username, secret } = payload;
-  req.session.tempTwoFactorSecret = secret;
-
-  const responsePayload = await buildTwoFactorSetupPayload(username, secret);
-  req.session.save((saveErr) => {
-    if (saveErr) {
-      console.error(`[AuthController] 用户 ${userId} 保存临时 2FA 密钥到 session 失败:`, saveErr);
-      res.status(500).json({ message: '保存两步验证状态失败，请重试。' });
-      return;
-    }
-
-    res.json(responsePayload);
-  });
 };
 
 export interface TwoFactorEffectiveSecretResult {

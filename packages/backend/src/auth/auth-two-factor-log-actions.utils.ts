@@ -90,3 +90,56 @@ export const buildTwoFactorVerifySkewWarnLogActionAlways = (
   level: 'warn',
   message: buildTwoFactorVerifySkewWarnMessage(userId, delta),
 });
+
+export const buildLoginTwoFactorSkewWarnMessage = (username: string, delta: number): string =>
+  `[AuthController] 用户 ${username} 的 2FA 登录验证码存在明显时间偏差（delta=${delta}），建议校准客户端时间。`;
+
+export const buildLoginTwoFactorSkewWarnLogAction = (payload: {
+  username: string;
+  delta: number;
+  skewWarnThreshold: number;
+}): {
+  level: 'warn';
+  message: string;
+} | null => {
+  const { username, delta, skewWarnThreshold } = payload;
+  if (Math.abs(delta) <= skewWarnThreshold) {
+    return null;
+  }
+
+  return {
+    level: 'warn',
+    message: buildLoginTwoFactorSkewWarnMessage(username, delta),
+  };
+};
+
+export const buildLoginTwoFactorSkewWarnLogActionAlways = (
+  username: string,
+  delta: number
+): {
+  level: 'warn';
+  message: string;
+} => ({
+  level: 'warn',
+  message: buildLoginTwoFactorSkewWarnMessage(username, delta),
+});
+
+export const buildLoginTwoFactorSuccessInfoLogAction = (
+  username: string
+): {
+  level: 'info';
+  message: string;
+} => ({
+  level: 'info',
+  message: `用户 ${username} 2FA 验证成功。`,
+});
+
+export const buildLoginTwoFactorInvalidDebugLogAction = (
+  username: string
+): {
+  level: 'debug';
+  message: string;
+} => ({
+  level: 'debug',
+  message: `用户 ${username} 2FA 验证失败: 验证码错误。`,
+});

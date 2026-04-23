@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildLoginTwoFactorInvalidDebugLogAction,
+  buildLoginTwoFactorSkewWarnLogAction,
+  buildLoginTwoFactorSkewWarnLogActionAlways,
+  buildLoginTwoFactorSuccessInfoLogAction,
   buildTwoFactorSetupGeneratedLogAction,
   buildTwoFactorSetupReuseLogAction,
   buildTwoFactorSetupSaveFailedLogAction,
@@ -68,6 +72,40 @@ describe('auth-two-factor-log-actions.utils', () => {
     expect(buildTwoFactorVerifyInvalidDebugLogAction(12)).toEqual({
       level: 'debug',
       message: '用户 12 2FA 激活失败: 验证码错误。',
+    });
+  });
+
+  it('login skew/success/invalid 日志动作应返回稳定模板', () => {
+    expect(
+      buildLoginTwoFactorSkewWarnLogAction({
+        username: 'alice',
+        delta: 3,
+        skewWarnThreshold: 2,
+      })
+    ).toEqual({
+      level: 'warn',
+      message:
+        '[AuthController] 用户 alice 的 2FA 登录验证码存在明显时间偏差（delta=3），建议校准客户端时间。',
+    });
+    expect(
+      buildLoginTwoFactorSkewWarnLogAction({
+        username: 'alice',
+        delta: 2,
+        skewWarnThreshold: 2,
+      })
+    ).toBeNull();
+    expect(buildLoginTwoFactorSkewWarnLogActionAlways('alice', -4)).toEqual({
+      level: 'warn',
+      message:
+        '[AuthController] 用户 alice 的 2FA 登录验证码存在明显时间偏差（delta=-4），建议校准客户端时间。',
+    });
+    expect(buildLoginTwoFactorSuccessInfoLogAction('alice')).toEqual({
+      level: 'info',
+      message: '用户 alice 2FA 验证成功。',
+    });
+    expect(buildLoginTwoFactorInvalidDebugLogAction('alice')).toEqual({
+      level: 'debug',
+      message: '用户 alice 2FA 验证失败: 验证码错误。',
     });
   });
 });
