@@ -16,7 +16,27 @@
 
 ## 🔀 与上游的不同之处
 
-> 本项目 Fork 自 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)，在上游基础上进行了大量工程质量提升与功能增强。以下是本 Fork 独有的改进：
+> 本项目 Fork 自 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)。  
+> 上游对比基线：`Heavrnl/nexus-terminal:main`  
+> 当前对比快照（2026-04-24）：本仓库相对上游 `ahead 369 / behind 0`。  
+> 在线对比链接：<https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
+
+### 📌 最近批次差异（第16-30批）
+
+- 认证链路动作化重构（2FA 登录流程拆分为预检/查询/结果动作执行器）
+- 认证控制器 SQL 组装下沉（减少内联 SQL，统一 query/mutation builder）
+- 登录、Passkey、2FA 日志动作模板统一（`build*LogAction` + `{ level, message }`）
+- 技术债务治理收口到第三十批（债务文档已同步为完成态）
+
+### ✅ 当前可验证工程状态
+
+- `npm run -s debt:check` 通过（代码标记 / E2E skip / console.log / any 均为 0）
+- `npm run -s quality:check` 通过（格式与质量门禁通过）
+- `import/no-cycle` 受控豁免已收敛至 0（见 `doc/TECHNICAL_DEBT_REPORT.md` 第六项收尾记录）
+
+---
+
+以下为本 Fork 相对上游的长期改进方向（按主题汇总）：
 
 ### ⚡ 性能优化
 
