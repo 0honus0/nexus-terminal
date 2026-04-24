@@ -91,6 +91,14 @@ import {
   buildDisableTwoFactorMutation,
   resolveTwoFactorMutationChangesValidation,
 } from './auth-2fa-mutation-flow.utils';
+import {
+  buildInsertAdminUserMutationAction,
+  buildLoginUserByUsernameQueryAction,
+  buildUpdateUserPasswordMutationAction,
+  buildUserPasswordByIdQueryAction,
+  buildUsersCountQueryAction,
+  buildUserTwoFactorSecretByIdQueryAction,
+} from './auth-controller-sql.utils';
 import { executeTwoFactorSetupAction } from './auth-two-factor-setup-actions.utils';
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
 import { resolveTwoFactorVerifyFailureAction } from './auth-two-factor-verify-failure-actions.utils';
@@ -642,11 +650,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     }
 
     const db = await getDbInstance();
-    const user = await getDb<User>(
-      db,
-      'SELECT id, username, hashed_password, two_factor_secret FROM users WHERE username = ?',
-      [username]
-    );
+    const userQueryAction = buildLoginUserByUsernameQueryAction({ username });
+    const user = await getDb<User>(db, userQueryAction.sql, userQueryAction.params);
 
     if (!user) {
       console.debug(`登录尝试失败: 用户未找到 - ${username}`);
@@ -729,10 +734,13 @@ export const getAuthStatus = async (
 
   try {
     const db = await getDbInstance();
+    const userQueryAction = buildUserTwoFactorSecretByIdQueryAction({
+      userId: authenticatedUserId,
+    });
     const user = await getDb<{ two_factor_secret: string | null }>(
       db,
-      'SELECT two_factor_secret FROM users WHERE id = ?',
-      [authenticatedUserId]
+      userQueryAction.sql,
+      userQueryAction.params
     );
 
     const authState = user
@@ -906,9 +914,8 @@ export const changePassword = async (
 
   try {
     const db = await getDbInstance();
-    const user = await getDb<User>(db, 'SELECT id, hashed_password FROM users WHERE id = ?', [
-      userId,
-    ]);
+    const userQueryAction = buildUserPasswordByIdQueryAction({ userId });
+    const user = await getDb<User>(db, userQueryAction.sql, userQueryAction.params);
 
     const userValidation = resolvePasswordActionUserValidation({ user });
     if (!userValidation.ok) {
@@ -926,12 +933,14 @@ export const changePassword = async (
     }
 
     const newHashedPassword = await hashPassword(newPassword);
-    const now = Math.floor(Date.now() / 1000);
-
+    const passwordMutationAction = buildUpdateUserPasswordMutationAction({
+      hashedPassword: newHashedPassword,
+      userId,
+    });
     const result = await runDb(
       db,
-      'UPDATE users SET hashed_password = ?, updated_at = ? WHERE id = ?',
-      [newHashedPassword, now, userId]
+      passwordMutationAction.sql,
+      passwordMutationAction.params
     );
 
     const changeValidation = resolveMutationChangesValidation({ changes: result.changes });
@@ -961,10 +970,11 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
 
   try {
     const db = await getDbInstance();
+    const userQueryAction = buildUserTwoFactorSecretByIdQueryAction({ userId });
     const user = await getDb<{ two_factor_secret: string | null }>(
       db,
-      'SELECT two_factor_secret FROM users WHERE id = ?',
-      [userId]
+      userQueryAction.sql,
+      userQueryAction.params
     );
     const existingSecret = user ? user.two_factor_secret : null;
     const setupValidation = resolveTwoFactorSetupRequestValidation({
@@ -1128,9 +1138,8 @@ export const disable2FA = async (
 
   try {
     const db = await getDbInstance();
-    const user = await getDb<User>(db, 'SELECT id, hashed_password FROM users WHERE id = ?', [
-      userId,
-    ]);
+    const userQueryAction = buildUserPasswordByIdQueryAction({ userId });
+    const user = await getDb<User>(db, userQueryAction.sql, userQueryAction.params);
 
     const userValidation = resolvePasswordActionUserValidation({ user });
     if (!userValidation.ok) {
@@ -1181,7 +1190,8 @@ export const needsSetup = async (
 ): Promise<void> => {
   try {
     const db = await getDbInstance();
-    const row = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
+    const countQueryAction = buildUsersCountQueryAction();
+    const row = await getDb<{ count: number }>(db, countQueryAction.sql);
     const userCount = row ? row.count : 0;
 
     res.status(200).json({ needsSetup: userCount === 0 });
@@ -1216,7 +1226,8 @@ export const setupAdmin = async (
 
   try {
     const db = await getDbInstance();
-    const row = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
+    const countQueryAction = buildUsersCountQueryAction();
+    const row = await getDb<{ count: number }>(db, countQueryAction.sql);
     const userCount = row ? row.count : 0;
 
     if (userCount > 0) {
@@ -1226,14 +1237,11 @@ export const setupAdmin = async (
     }
 
     const hashedPassword = await hashPassword(password);
-    const now = Math.floor(Date.now() / 1000);
-
-    const result = await runDb(
-      db,
-      `INSERT INTO users (username, hashed_password, created_at, updated_at)
-             VALUES (?, ?, ?, ?)`,
-      [username, hashedPassword, now, now]
-    );
+    const insertAction = buildInsertAdminUserMutationAction({
+      username,
+      hashedPassword,
+    });
+    const result = await runDb(db, insertAction.sql, insertAction.params);
 
     if (typeof result.lastID !== 'number' || result.lastID <= 0) {
       console.error(
