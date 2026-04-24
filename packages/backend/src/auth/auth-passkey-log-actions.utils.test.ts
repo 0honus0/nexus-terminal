@@ -47,11 +47,11 @@ describe('auth-passkey-log-actions.utils', () => {
   it('应返回稳定的 Passkey 认证日志动作模板', () => {
     expect(buildPasskeyAuthenticationOptionsGeneratedDebugLogAction('any')).toEqual({
       level: 'debug',
-      message: '[AuthController] Generated Passkey authentication options (username: any)',
+      message: '[AuthController] Generated Passkey authentication options (username=any)',
     });
     expect(buildPasskeyAuthenticationOptionsErrorLogAction('any')).toEqual({
       level: 'error',
-      message: '[AuthController] 生成 Passkey 认证选项时出错 (username: any):',
+      message: '[AuthController] 生成 Passkey 认证选项时出错 (username=any):',
     });
     expect(buildPasskeyAuthenticationUserNotFoundAfterVerifiedErrorLogAction(12)).toEqual({
       level: 'error',
@@ -84,7 +84,7 @@ describe('auth-passkey-log-actions.utils', () => {
     });
     expect(buildPasskeyHasConfiguredCheckErrorLogAction('any')).toEqual({
       level: 'error',
-      message: '[AuthController] 检查 Passkey 配置状态时出错 (username: any):',
+      message: '[AuthController] 检查 Passkey 配置状态时出错 (username=any):',
     });
   });
 });

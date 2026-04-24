@@ -61,7 +61,7 @@ export const buildPasskeyAuthenticationOptionsGeneratedDebugLogAction = (
   message: string;
 } => ({
   level: 'debug',
-  message: `[AuthController] Generated Passkey authentication options (username: ${username})`,
+  message: `[AuthController] Generated Passkey authentication options (username=${username})`,
 });
 
 export const buildPasskeyAuthenticationOptionsErrorLogAction = (
@@ -71,7 +71,7 @@ export const buildPasskeyAuthenticationOptionsErrorLogAction = (
   message: string;
 } => ({
   level: 'error',
-  message: `[AuthController] 生成 Passkey 认证选项时出错 (username: ${username}):`,
+  message: `[AuthController] 生成 Passkey 认证选项时出错 (username=${username}):`,
 });
 
 export const buildPasskeyAuthenticationUserNotFoundAfterVerifiedErrorLogAction = (
@@ -130,5 +130,5 @@ export const buildPasskeyHasConfiguredCheckErrorLogAction = (
   message: string;
 } => ({
   level: 'error',
-  message: `[AuthController] 检查 Passkey 配置状态时出错 (username: ${username}):`,
+  message: `[AuthController] 检查 Passkey 配置状态时出错 (username=${username}):`,
 });

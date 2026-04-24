@@ -467,7 +467,8 @@ export const verifyPasskeyAuthenticationHandler = async (
         rememberMe,
       });
     } else {
-      const verificationFailedLogAction = buildPasskeyAuthenticationVerificationFailedWarnLogAction();
+      const verificationFailedLogAction =
+        buildPasskeyAuthenticationVerificationFailedWarnLogAction();
       console[verificationFailedLogAction.level](verificationFailedLogAction.message, verification);
       recordPasskeyAuthenticationFailure(
         { auditLogService, notificationService },
@@ -982,11 +983,7 @@ export const changePassword = async (
       hashedPassword: newHashedPassword,
       userId,
     });
-    const result = await runDb(
-      db,
-      passwordMutationAction.sql,
-      passwordMutationAction.params
-    );
+    const result = await runDb(db, passwordMutationAction.sql, passwordMutationAction.params);
 
     const changeValidation = resolveMutationChangesValidation({ changes: result.changes });
     if (!changeValidation.ok) {
