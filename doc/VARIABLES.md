@@ -153,31 +153,31 @@
 
 ### Frontend 服务
 
-| 变量/配置 | 值                                       | 描述                         |
-| --------- | ---------------------------------------- | ---------------------------- |
-| 镜像      | `heavrnl/nexus-terminal-frontend:latest` | 前端容器镜像                 |
-| 端口映射  | `18111:80`                               | 外部端口 18111 映射到容器 80 |
+| 变量/配置 | 值                                                 | 描述                         |
+| --------- | -------------------------------------------------- | ---------------------------- |
+| 镜像      | `ghcr.io/silentely/nexus-terminal-frontend:latest` | 前端容器镜像                 |
+| 端口映射  | `18111:80`                                         | 外部端口 18111 映射到容器 80 |
 
 ### Backend 服务
 
-| 变量/配置  | 值                                      | 描述         |
-| ---------- | --------------------------------------- | ------------ |
-| 镜像       | `heavrnl/nexus-terminal-backend:latest` | 后端容器镜像 |
-| `NODE_ENV` | `production`                            | 生产环境模式 |
-| `PORT`     | `3001`                                  | 服务端口     |
-| 数据卷     | `./data:/app/data`                      | 挂载数据目录 |
+| 变量/配置  | 值                                                | 描述         |
+| ---------- | ------------------------------------------------- | ------------ |
+| 镜像       | `ghcr.io/silentely/nexus-terminal-backend:latest` | 后端容器镜像 |
+| `NODE_ENV` | `production`                                      | 生产环境模式 |
+| `PORT`     | `3001`                                            | 服务端口     |
+| 数据卷     | `./data:/app/data`                                | 挂载数据目录 |
 
 ### Remote Gateway 服务
 
-| 变量/配置                 | 值                                             | 描述                |
-| ------------------------- | ---------------------------------------------- | ------------------- |
-| 镜像                      | `heavrnl/nexus-terminal-remote-gateway:latest` | 远程网关容器镜像    |
-| `GUACD_HOST`              | `guacd`                                        | 连接内部 guacd 服务 |
-| `GUACD_PORT`              | `4822`                                         | Guacd 端口          |
-| `REMOTE_GATEWAY_API_PORT` | `9090`                                         | API 端口            |
-| `REMOTE_GATEWAY_WS_PORT`  | `8080`                                         | WebSocket 端口      |
-| `FRONTEND_URL`            | `http://frontend`                              | 前端地址            |
-| `MAIN_BACKEND_URL`        | `http://backend:3001`                          | 后端地址            |
+| 变量/配置                 | 值                                                       | 描述                |
+| ------------------------- | -------------------------------------------------------- | ------------------- |
+| 镜像                      | `ghcr.io/silentely/nexus-terminal-remote-gateway:latest` | 远程网关容器镜像    |
+| `GUACD_HOST`              | `guacd`                                                  | 连接内部 guacd 服务 |
+| `GUACD_PORT`              | `4822`                                                   | Guacd 端口          |
+| `REMOTE_GATEWAY_API_PORT` | `9090`                                                   | API 端口            |
+| `REMOTE_GATEWAY_WS_PORT`  | `8080`                                                   | WebSocket 端口      |
+| `FRONTEND_URL`            | `http://frontend`                                        | 前端地址            |
+| `MAIN_BACKEND_URL`        | `http://backend:3001`                                    | 后端地址            |
 
 ### Guacd 服务
 
@@ -486,4 +486,4 @@
 
 ---
 
-**文档生成时间**：2025-12-26
+**文档生成时间**：2025-12-26（初始）| **最后更新**：2026-04-24（镜像名对齐修正）

@@ -71,7 +71,7 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **Comprehensive Test Framework**: From near-zero tests to 1500+ test cases, 100% pass rate
 - **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
 - **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
-- **Unit Tests**: Backend 72+ test files, Frontend 31+ test files
+- **Unit Tests**: Backend 118 test files, Frontend 37 test files
 
 ### 🔒 Dependency Security
 
@@ -93,6 +93,7 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - Notification system (e.g., login reminders, anomaly alerts)
 - Audit logs for comprehensive recording of user behavior and system changes
 - Lightweight Node.js-based backend with low resource consumption
+- Supports PWA
 - Built-in heartbeat keep-alive mechanism to ensure stable connections
 - Focus Switcher: Allows switching between input components on the page, supporting customizable switching order and hotkeys.
 - **Batch Command Execution**: Execute commands across multiple servers simultaneously with real-time progress and results display
@@ -257,7 +258,8 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 ### Others
 
 1. **On mobile devices, you can zoom in or out on the terminal font using a two-finger gesture.**
-2. To enable Passkey login, set `RP_ID` and `RP_ORIGIN` in `.env`. For "one passkey across multiple independent domains", use a single `RP_ID` with multiple `RP_ORIGIN` values and expose `/.well-known/webauthn`.
+2. Due to browser limitations, copying terminal content is not available over non-HTTPS or non-localhost connections. Please use HTTPS.
+3. To enable Passkey login, set `RP_ID` and `RP_ORIGIN` in `.env`. For "one passkey across multiple independent domains", use a single `RP_ID` with multiple `RP_ORIGIN` values and expose `/.well-known/webauthn`.
 
 ## ⚠️ Notes
 

@@ -6,6 +6,21 @@
 
 ## 变更记录
 
+### 2026-04-24 (架构文档全量扫描更新)
+
+- **文件统计更新**：
+  - Backend: 192 个 TypeScript 源文件（+71，增长 59%），118 个测试文件
+  - Frontend: 187 个源文件（99 TS + 88 Vue），37 个测试文件，24 个 Pinia stores，22 个路由模块
+  - Remote Gateway: 2 个源文件，1 个测试文件
+  - 总计: 381 个源代码文件 + 164 个测试文件
+- **数据库 Schema**：23 个数据表（较上次 24 表减少 1 个）
+- **测试覆盖率**：
+  - Backend: 118 个测试文件（单元测试 + 集成测试 + 性能测试）
+  - Frontend: 37 个测试文件（组件、Store、Composables 测试）
+  - E2E: 8 个 Playwright 测试规范
+  - Remote Gateway: 1 个测试文件
+- **覆盖率**：100% 模块文档化完成
+
 ### 2026-01-31 (架构文档增量更新)
 
 - **文件统计更新**：
@@ -98,9 +113,9 @@
 graph TD
     subgraph "Nexus Terminal Monorepo"
         A["📦 nexus-terminal (根)"] --> B["📂 packages"]
-        B --> C["🔧 backend<br/>Express + SQLite<br/>(121 TS文件, 24 数据表)"]
-        B --> D["🎨 frontend<br/>Vue 3 + Vite<br/>(184 TS/Vue, 24 Stores)"]
-        B --> E["🖥️ remote-gateway<br/>Guacamole Lite<br/>(1 入口文件)"]
+        B --> C["🔧 backend<br/>Express + SQLite<br/>(192 TS文件, 23 数据表, 118 测试)"]
+        B --> D["🎨 frontend<br/>Vue 3 + Vite<br/>(99 TS + 88 Vue, 24 Stores, 37 测试)"]
+        B --> E["🖥️ remote-gateway<br/>Guacamole Lite<br/>(2 源文件, 1 测试)"]
         A --> F["📚 doc<br/>(技术债务、路线图)"]
     end
 
@@ -158,9 +173,9 @@ sequenceDiagram
 
 | 模块名称           | 路径                      | 语言/框架               | TS 文件数 | 职责描述                                                                | 文档入口                                                        |
 | ------------------ | ------------------------- | ----------------------- | --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- |
-| **backend**        | `packages/backend`        | TypeScript / Express.js | 121       | 后端 API 服务：SSH/SFTP 连接、用户认证、审计日志、通知、Docker 管理等   | [backend/CLAUDE.md](./packages/backend/CLAUDE.md)               |
-| **frontend**       | `packages/frontend`       | TypeScript / Vue 3      | 184       | 前端 Web 应用：终端界面、文件管理器、连接管理、主题定制、路由与状态管理 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
-| **remote-gateway** | `packages/remote-gateway` | TypeScript / Express.js | 1         | 远程桌面网关：RDP/VNC 连接代理，基于 Guacamole 协议                     | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
+| **backend**        | `packages/backend`        | TypeScript / Express.js | 192       | 后端 API 服务：SSH/SFTP 连接、用户认证、审计日志、通知、Docker 管理等   | [backend/CLAUDE.md](./packages/backend/CLAUDE.md)               |
+| **frontend**       | `packages/frontend`       | TypeScript / Vue 3      | 187       | 前端 Web 应用：终端界面、文件管理器、连接管理、主题定制、路由与状态管理 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
+| **remote-gateway** | `packages/remote-gateway` | TypeScript / Express.js | 2         | 远程桌面网关：RDP/VNC 连接代理，基于 Guacamole 协议                     | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
 
 ### 规划文档
 
@@ -238,9 +253,9 @@ npm run build
 ### 当前状态
 
 - **测试框架已配置**：Backend 与 Frontend 均已配置完整测试框架
-- **测试覆盖率**（2026-01-31 更新）：
-  - Backend: 72+ 个 `*.test.ts` 文件（单元测试 + 集成测试 + 性能测试）
-  - Frontend: 31+ 个 `*.test.ts` 文件（组件、Store、Composables 测试）
+- **测试覆盖率**（2026-04-24 更新）：
+  - Backend: 118 个 `*.test.ts` 文件（单元测试 + 集成测试 + 性能测试）
+  - Frontend: 37 个 `*.test.ts` 文件（组件、Store、Composables 测试）
   - E2E: 8 个 `*.spec.ts` 文件（边缘场景覆盖）
   - Remote Gateway: 1 个 `*.test.ts` 文件
 - **测试类型覆盖**：
@@ -748,7 +763,7 @@ Guacd (4822) → RDP/VNC 协议转换
 
 ---
 
-**文档生成时间**：2026-01-31 14:32:58 CST（架构文档增量更新）
+**文档生成时间**：2026-04-24 21:13:34 CST（架构文档全量扫描更新）
 
 **已完成任务**：
 

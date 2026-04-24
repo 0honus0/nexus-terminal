@@ -1738,16 +1738,20 @@ documentation/
 
 ### 6. 测试覆盖率
 
-**当前问题**：
+**当前状态**（2026-04-24 更新）：
 
-- 无自动化测试
+- ✅ 测试框架已全面建立，共 164 个测试文件
+- ✅ Backend: 118 个单元/集成测试文件（Vitest）
+- ✅ Frontend: 37 个单元测试文件（Vitest + Vue Test Utils）
+- ✅ E2E: 8 个 Playwright 测试规范
+- ✅ Remote Gateway: 1 个测试文件
 
-**优化方案**：
+**持续优化方向**：
 
-- **Phase 1**：关键模块单元测试（认证、命令执行、文件上传）
-- **Phase 2**：API 集成测试（Supertest）
-- **Phase 3**：前端组件测试（Vitest + Vue Test Utils）
-- **Phase 4**：E2E 测试（Cypress / Playwright）
+- 提升 Service 层测试覆盖率（目标 ≥80%）
+- 补充 Components/Composables 单元测试（目标 ≥60%）
+- 扩展 E2E 边缘场景覆盖
+- 添加性能基准测试（Autocannon）
 
 ---
 
@@ -1812,7 +1816,7 @@ documentation/
 
 ---
 
-**文档版本**：v1.0  
+**文档版本**：v1.1  
 **创建时间**：2025-12-22  
-**最后更新**：2025-12-22  
+**最后更新**：2026-04-24（测试覆盖率状态修正）  
 **维护者**：Nexus Terminal Team
