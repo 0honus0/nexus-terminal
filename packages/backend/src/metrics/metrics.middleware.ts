@@ -17,7 +17,7 @@ export const metricsMiddleware = (req: Request, res: Response, next: NextFunctio
   // 监听响应完成事件，在响应结束时记录延迟
   res.on('finish', () => {
     // 优先使用路由级路径（如 /api/v1/connections/:id），避免高基数标签
-    const route = req.route?.path || req.path || 'unknown';
+    const route = req.route?.path || 'unmatched_route';
     end({
       method: req.method,
       route,

@@ -183,6 +183,10 @@ defineExpose({
       <!-- 类型 -->
       <div
         @click="emit('sort', 'type')"
+        role="columnheader"
+        :aria-sort="
+          sortKey === 'type' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+        "
         class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
         :style="{
           paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
@@ -204,6 +208,10 @@ defineExpose({
       <!-- 名称 -->
       <div
         @click="emit('sort', 'filename')"
+        role="columnheader"
+        :aria-sort="
+          sortKey === 'filename' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+        "
         class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
         :style="{
           padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
@@ -222,6 +230,10 @@ defineExpose({
       <!-- 大小 -->
       <div
         @click="emit('sort', 'size')"
+        role="columnheader"
+        :aria-sort="
+          sortKey === 'size' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+        "
         class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
         :style="{
           padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
@@ -254,6 +266,10 @@ defineExpose({
       <!-- 修改时间 -->
       <div
         @click="emit('sort', 'mtime')"
+        role="columnheader"
+        :aria-sort="
+          sortKey === 'mtime' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+        "
         class="relative hover:bg-black/5 cursor-pointer flex items-center truncate"
         :style="{
           padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,

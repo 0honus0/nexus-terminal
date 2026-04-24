@@ -11,7 +11,7 @@ services:
       - nexus-terminal-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:80/"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:80/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -39,7 +39,7 @@ services:
       - nexus-terminal-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/api/v1/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/api/v1/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -79,7 +79,7 @@ services:
       - backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9090/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9090/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -100,7 +100,7 @@ services:
       - nexus-terminal-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x guacd"]
+      test: ["CMD-SHELL", "pgrep -x guacd || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

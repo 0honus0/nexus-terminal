@@ -40,7 +40,13 @@ const buildAllowedWsOrigins = (): string[] => {
   return defaultOrigins;
 };
 
-/** 从环境变量解析整数，无效值回退到默认值，支持最小/最大值约束 */
+/**
+ * 安全地从环境变量解析整数，支持范围限制
+ * @param key 环境变量名
+ * @param fallback 默认值（环境变量未设置或无效时使用）
+ * @param min 可选最小值（含）
+ * @param max 可选最大值（含）
+ */
 const intFromEnv = (key: string, fallback: number, min?: number, max?: number): number => {
   const raw = process.env[key];
   const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;

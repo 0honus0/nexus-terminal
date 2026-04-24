@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0", // 抑制 TypeScript 7.0 对 moduleResolution/node10 和 baseUrl 的废弃警告
     "target": "ESNext", // 编译目标为最新 ECMAScript 标准
     "useDefineForClassFields": true, // 使用标准类字段定义
     "module": "ESNext", // 使用 ES 模块系统

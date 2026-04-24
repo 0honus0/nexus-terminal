@@ -1919,6 +1919,8 @@ const handleNavigateToPathFromFavorites = (path: string) => {
 
 <template>
   <div class="flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
+    <!-- 隐藏的文件选择输入框，由 triggerFileUpload 触发 -->
+    <input ref="fileInputRef" type="file" multiple class="hidden" @change="handleFileSelected" />
     <FileManagerToolbar
       ref="toolbarRef"
       :current-path="currentSftpManager?.currentPath?.value ?? '/'"
@@ -1953,6 +1955,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
       @update:editable-path="
         (v: string) => {
           editablePath = v;
+          pathHistoryStore.setSearchTerm(v);
         }
       "
       @start-path-edit="startPathEdit"
