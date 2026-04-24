@@ -143,3 +143,53 @@ export const buildLoginTwoFactorInvalidDebugLogAction = (
   level: 'debug',
   message: `用户 ${username} 2FA 验证失败: 验证码错误。`,
 });
+
+export const buildVerifyLoginTwoFactorInternalErrorLogAction = (
+  userId: number | 'unknown'
+): {
+  level: 'error';
+  message: string;
+} => ({
+  level: 'error',
+  message: `2FA 验证时发生内部错误 (用户: ${userId}):`,
+});
+
+export const buildTwoFactorSetupErrorLogAction = (
+  userId: number | undefined
+): {
+  level: 'error';
+  message: string;
+} => ({
+  level: 'error',
+  message: `用户 ${userId} 设置 2FA 时出错:`,
+});
+
+export const buildTwoFactorVerifyActivateErrorLogAction = (
+  userId: number
+): {
+  level: 'error';
+  message: string;
+} => ({
+  level: 'error',
+  message: `用户 ${userId} 验证并激活 2FA 时出错:`,
+});
+
+export const buildDisableTwoFactorMutationNoChangeErrorLogAction = (
+  userId: number
+): {
+  level: 'error';
+  message: string;
+} => ({
+  level: 'error',
+  message: `禁用 2FA 错误: 更新影响行数为 0 - 用户 ID ${userId}`,
+});
+
+export const buildDisableTwoFactorErrorLogAction = (
+  userId: number
+): {
+  level: 'error';
+  message: string;
+} => ({
+  level: 'error',
+  message: `用户 ${userId} 禁用 2FA 时出错:`,
+});

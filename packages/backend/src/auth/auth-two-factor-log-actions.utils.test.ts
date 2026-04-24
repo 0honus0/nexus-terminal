@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDisableTwoFactorErrorLogAction,
+  buildDisableTwoFactorMutationNoChangeErrorLogAction,
   buildLoginTwoFactorInvalidDebugLogAction,
   buildLoginTwoFactorSkewWarnLogAction,
   buildLoginTwoFactorSkewWarnLogActionAlways,
   buildLoginTwoFactorSuccessInfoLogAction,
   buildTwoFactorSetupGeneratedLogAction,
+  buildTwoFactorSetupErrorLogAction,
   buildTwoFactorSetupReuseLogAction,
   buildTwoFactorSetupSaveFailedLogAction,
+  buildTwoFactorVerifyActivateErrorLogAction,
   buildTwoFactorVerifyInvalidDebugLogAction,
   buildTwoFactorVerifySessionMismatchWarnLogAction,
   buildTwoFactorVerifySessionSyncedDebugLogAction,
   buildTwoFactorVerifySkewWarnLogAction,
   buildTwoFactorVerifySkewWarnLogActionAlways,
+  buildVerifyLoginTwoFactorInternalErrorLogAction,
 } from './auth-two-factor-log-actions.utils';
 
 describe('auth-two-factor-log-actions.utils', () => {
@@ -106,6 +111,29 @@ describe('auth-two-factor-log-actions.utils', () => {
     expect(buildLoginTwoFactorInvalidDebugLogAction('alice')).toEqual({
       level: 'debug',
       message: '用户 alice 2FA 验证失败: 验证码错误。',
+    });
+  });
+
+  it('error 类日志动作应返回稳定模板', () => {
+    expect(buildVerifyLoginTwoFactorInternalErrorLogAction('unknown')).toEqual({
+      level: 'error',
+      message: '2FA 验证时发生内部错误 (用户: unknown):',
+    });
+    expect(buildTwoFactorSetupErrorLogAction(7)).toEqual({
+      level: 'error',
+      message: '用户 7 设置 2FA 时出错:',
+    });
+    expect(buildTwoFactorVerifyActivateErrorLogAction(7)).toEqual({
+      level: 'error',
+      message: '用户 7 验证并激活 2FA 时出错:',
+    });
+    expect(buildDisableTwoFactorMutationNoChangeErrorLogAction(7)).toEqual({
+      level: 'error',
+      message: '禁用 2FA 错误: 更新影响行数为 0 - 用户 ID 7',
+    });
+    expect(buildDisableTwoFactorErrorLogAction(7)).toEqual({
+      level: 'error',
+      message: '用户 7 禁用 2FA 时出错:',
     });
   });
 });
