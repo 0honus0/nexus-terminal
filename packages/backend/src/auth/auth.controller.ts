@@ -764,12 +764,17 @@ export const verifyLogin2FA = async (
   next: NextFunction
 ): Promise<void> => {
   const { token, tempToken } = req.body; // +++ Accept tempToken from frontend
-  const pendingAuth = req.session.pendingAuth as PendingAuth | undefined;
+  const pendingAuthState = req.session.pendingAuth as PendingAuth | undefined;
+  const loginTwoFactorSideEffectServices = {
+    ipBlacklistService,
+    auditLogService,
+    notificationService,
+  };
 
   // +++ Debug logging for session diagnostics (dev only)
   if (isDev) {
     const diagnosticsLogActions = buildLoginTwoFactorDiagnosticsLogActions({
-      hasPendingAuth: !!pendingAuth,
+      hasPendingAuth: !!pendingAuthState,
       hasTempToken: !!tempToken,
       forwardedProto: getRequestHeaderValue(req, 'X-Forwarded-Proto'),
     });
@@ -778,23 +783,25 @@ export const verifyLogin2FA = async (
     }
   }
 
-  const precheckResult = resolveLogin2FAVerificationPrecheck({
+  const verificationPrecheckAction = resolveLogin2FAVerificationPrecheck({
     req,
     tempToken,
     token,
   });
-  if (!precheckResult.ok) {
-    if (isDev && !pendingAuth) {
+  if (!verificationPrecheckAction.ok) {
+    if (isDev && !pendingAuthState) {
       const failedDebugLogAction = buildLoginTwoFactorPendingValidationFailedDebugLogAction({
-        hasPendingAuth: !!pendingAuth,
+        hasPendingAuth: !!pendingAuthState,
         hasTempToken: !!tempToken,
       });
       console[failedDebugLogAction.level](failedDebugLogAction.message);
     }
-    res.status(precheckResult.failure.statusCode).json(precheckResult.failure.body);
+    res
+      .status(verificationPrecheckAction.failure.statusCode)
+      .json(verificationPrecheckAction.failure.body);
     return;
   }
-  const { pendingAuth: verifiedPendingAuth, normalizedToken } = precheckResult;
+  const { pendingAuth: verifiedPendingAuth, normalizedToken } = verificationPrecheckAction;
 
   try {
     const db = await getDbInstance();
@@ -826,7 +833,7 @@ export const verifyLogin2FA = async (
       skewDetectWindow: TOTP_SKEW_DETECT_WINDOW,
       skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
-    const verifiedOutcomeAction = resolveLoginTwoFactorVerifiedOutcomeAction({
+    const verificationOutcomeAction = resolveLoginTwoFactorVerifiedOutcomeAction({
       userId: actor.id,
       username: actor.username,
       clientIp: resolveRequestClientIp(req),
@@ -834,39 +841,32 @@ export const verifyLogin2FA = async (
       verificationResult,
       skewWarnThreshold: TOTP_SKEW_WARN_THRESHOLD,
     });
-    if (verifiedOutcomeAction.kind === 'failure') {
-      if (verifiedOutcomeAction.log) {
-        console[verifiedOutcomeAction.log.level](verifiedOutcomeAction.log.message);
+    if (verificationOutcomeAction.kind === 'failure') {
+      if (verificationOutcomeAction.log) {
+        console[verificationOutcomeAction.log.level](verificationOutcomeAction.log.message);
       }
       applyLoginTwoFactorAttemptAction({
-        attemptAction: verifiedOutcomeAction.attemptAction,
+        attemptAction: verificationOutcomeAction.attemptAction,
         onSuccess: () => undefined,
         onFailure: (attempt) =>
-          recordLoginFailureAttempt(
-            { ipBlacklistService, auditLogService, notificationService },
-            attempt
-          ),
+          recordLoginFailureAttempt(loginTwoFactorSideEffectServices, attempt),
       });
       res
-        .status(verifiedOutcomeAction.response.statusCode)
-        .json(verifiedOutcomeAction.response.body);
+        .status(verificationOutcomeAction.response.statusCode)
+        .json(verificationOutcomeAction.response.body);
       return;
     }
 
-    for (const logAction of verifiedOutcomeAction.logs) {
+    for (const logAction of verificationOutcomeAction.logs) {
       console[logAction.level](logAction.message);
     }
     applyLoginTwoFactorAttemptAction({
-      attemptAction: verifiedOutcomeAction.attemptAction,
-      onSuccess: (attempt) =>
-        recordLoginSuccessAttempt(
-          { ipBlacklistService, auditLogService, notificationService },
-          attempt
-        ),
+      attemptAction: verificationOutcomeAction.attemptAction,
+      onSuccess: (attempt) => recordLoginSuccessAttempt(loginTwoFactorSideEffectServices, attempt),
       onFailure: () => undefined,
     });
     clearPendingLoginTwoFactorAuthState(req);
-    completeAuthenticatedSession(req, res, verifiedOutcomeAction.completionAction);
+    completeAuthenticatedSession(req, res, verificationOutcomeAction.completionAction);
   } catch (error: unknown) {
     console.error(
       `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,
