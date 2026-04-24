@@ -422,10 +422,10 @@ const handleKeyDown = (event: KeyboardEvent) => {
 .file-editor-container {
   width: 100%;
   height: 100%; /* 填充父级 Pane */
-  background-color: #2d2d2d; /* 编辑器背景 */
+  background-color: var(--editor-bg-color); /* 编辑器背景 */
   display: flex;
   flex-direction: column;
-  color: #f0f0f0;
+  color: var(--editor-text-color);
   overflow: hidden; /* 重要：防止内容溢出 */
 }
 
@@ -437,18 +437,18 @@ const handleKeyDown = (event: KeyboardEvent) => {
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 1rem;
-  background-color: #333;
-  border-bottom: 1px solid #555;
+  background-color: var(--editor-header-bg-color);
+  border-bottom: 1px solid var(--editor-border-color);
   font-size: 0.9em;
   flex-shrink: 0;
 }
 .editor-header-placeholder {
   justify-content: flex-start; /* 左对齐提示文本 */
-  color: #888;
+  color: var(--editor-text-muted-color);
 }
 
 .modified-indicator {
-  color: #ffeb3b;
+  color: var(--editor-modified-indicator-color);
   margin-left: 4px;
   font-weight: bold;
 }
@@ -472,13 +472,13 @@ const handleKeyDown = (event: KeyboardEvent) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #888;
+  color: var(--editor-text-muted-color);
 }
 .editor-error {
-  color: #ff8a8a;
+  color: var(--editor-error-text-color);
 }
 .editor-placeholder {
-  color: #666;
+  color: var(--editor-text-dimmed-color);
 }
 
 .editor-actions {
@@ -504,7 +504,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 }
 
 .save-btn {
-  background-color: #4caf50;
+  background-color: var(--editor-btn-save-bg-color);
   color: white;
   border: none;
   padding: 0.4rem 0.8rem;
@@ -513,11 +513,11 @@ const handleKeyDown = (event: KeyboardEvent) => {
   font-size: 0.9em;
 }
 .save-btn:disabled {
-  background-color: #aaa;
+  background-color: var(--editor-btn-disabled-bg-color);
   cursor: not-allowed;
 }
 .save-btn:hover:not(:disabled) {
-  background-color: #45a049;
+  background-color: var(--editor-btn-save-hover-bg-color);
 }
 
 .save-status {
@@ -527,15 +527,15 @@ const handleKeyDown = (event: KeyboardEvent) => {
   white-space: nowrap;
 }
 .save-status.saving {
-  color: #888;
+  color: var(--editor-status-saving-color);
 }
 .save-status.success {
-  color: #4caf50;
-  background-color: #e8f5e9;
+  color: var(--editor-status-success-color);
+  background-color: var(--editor-status-success-bg-color);
 }
 .save-status.error {
-  color: #f44336;
-  background-color: #ffebee;
+  color: var(--editor-status-error-color);
+  background-color: var(--editor-status-error-bg-color);
 }
 
 .editor-instance {
@@ -552,9 +552,9 @@ const handleKeyDown = (event: KeyboardEvent) => {
 }
 
 .encoding-select {
-  background-color: #444;
-  color: #f0f0f0;
-  border: 1px solid #666;
+  background-color: var(--editor-input-bg-color);
+  color: var(--editor-text-color);
+  border: 1px solid var(--editor-input-border-color);
   padding: 0.3rem 0.5rem; /* 恢复内边距 */
   border-radius: 3px;
   font-size: 0.85em;
@@ -566,16 +566,16 @@ const handleKeyDown = (event: KeyboardEvent) => {
 }
 
 .encoding-select:hover {
-  background-color: #555;
+  background-color: var(--editor-input-hover-bg-color);
 }
 
 .encoding-select:focus {
-  border-color: #888;
+  border-color: var(--editor-input-focus-border-color);
 }
 
 .encoding-select-placeholder {
   font-size: 0.85em;
-  color: #888;
+  color: var(--editor-text-muted-color);
   padding: 0.3rem 0.5rem;
   display: inline-block;
   min-width: 80px; /* 与 select 大致对齐 */

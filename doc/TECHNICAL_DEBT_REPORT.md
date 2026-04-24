@@ -1500,8 +1500,8 @@ gantt
 
 - **文件**: `packages/frontend/src/types/websocket.types.ts:11`
 - **问题**: 所有 SFTP/SSH/Session 消息 payload 类型均为 `any`
-- **修复方案**: 替换为判别联合类型或 `Record<string, unknown>`
-- **状态**: 📋 待规划（涉及面广，需分步收敛）
+- **修复方案**: 将 `MessagePayload` 从 `any` 改为 `string | object | undefined`，`WebSocketMessage` 索引签名改为 `unknown`，下游 12 个文件适配类型收窄
+- **状态**: ✅ 已修复（2026-04-24）
 
 #### H6. express.json() 未设置 body size limit
 
@@ -1580,9 +1580,9 @@ gantt
 | L2   | 无 Prometheus/Metrics 端点            | backend 全局           | 📋 待规划               |
 | L3   | audit_logs 表缺少 user_id 列          | schema.ts:12-19        | ✅ 已修复（2026-04-24） |
 | L4   | 路线图 Phase 6-11 功能全部未实现      | PERSONAL_ROADMAP.md    | 📋 待规划               |
-| L5   | Swagger/API 文档生产环境禁用          | index.ts:446-470       | 📋 待规划               |
+| L5   | Swagger/API 文档生产环境禁用          | index.ts:446-470       | ✅ 已修复（2026-04-24） |
 | L6   | 移动端体验不足（滑动/长按/虚拟键盘）  | 前端多文件             | 📋 待规划               |
-| L7   | 硬编码颜色绕过主题系统                | FileEditorContainer 等 | 📋 待规划               |
+| L7   | 硬编码颜色绕过主题系统                | FileEditorContainer 等 | ✅ 已修复（2026-04-24） |
 | L8   | 12 个组件超过 500 行                  | 前端多文件             | 📋 待规划               |
 | L9   | 无障碍访问 (a11y) 严重不足            | 前端全局               | 📋 待规划               |
 | L10  | 命令面板已实现但未在文档说明          | CommandPalette.vue     | ✅ 已修复（2026-04-24） |

@@ -98,6 +98,32 @@
   --status-warning-text: #ffffff;
   --status-error-text: #ffffff;
 
+  /* 编辑器组件主题变量（编辑器始终使用深色主题） */
+  --editor-bg-color: #2d2d2d;
+  --editor-header-bg-color: #333333;
+  --editor-text-color: #f0f0f0;
+  --editor-text-muted-color: #888888;
+  --editor-text-dimmed-color: #666666;
+  --editor-border-color: #555555;
+  --editor-input-bg-color: #444444;
+  --editor-input-border-color: #666666;
+  --editor-input-hover-bg-color: #555555;
+  --editor-input-focus-border-color: #888888;
+  --editor-btn-save-bg-color: #4caf50;
+  --editor-btn-save-hover-bg-color: #45a049;
+  --editor-btn-disabled-bg-color: #aaaaaa;
+  --editor-btn-secondary-bg-color: #607d8b;
+  --editor-btn-secondary-hover-bg-color: #546e7a;
+  --editor-modified-indicator-color: #ffeb3b;
+  --editor-error-text-color: #ff8a8a;
+  --editor-status-saving-color: #888888;
+  --editor-status-success-color: #4caf50;
+  --editor-status-success-bg-color: #e8f5e9;
+  --editor-status-error-color: #f44336;
+  --editor-status-error-bg-color: #ffebee;
+  --editor-close-btn-color: #cccccc;
+  --editor-overlay-bg-color: rgba(0, 0, 0, 0.6);
+
   /* Typography */
   --font-family-sans-serif:
     'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,

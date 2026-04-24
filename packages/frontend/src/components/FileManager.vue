@@ -45,7 +45,7 @@ import FileUploadPopup from './FileUploadPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
 import type { FileListItem } from '../types/sftp.types';
-import type { WebSocketMessage } from '../types/websocket.types';
+import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 import PathHistoryDropdown from './PathHistoryDropdown.vue';
 import { usePathHistoryStore } from '../stores/pathHistory.store';
 import FavoritePathsModal from './FavoritePathsModal.vue';
@@ -428,13 +428,15 @@ const handleItemAction = (item: FileListItem) => {
 
     unregisterSuccess = wsOnMessage(
       'sftp:realpath:success',
-      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
-        if (message.requestId === requestId && payload.requestedPath === itemPath) {
+      (payload: MessagePayload, message: WebSocketMessage) => {
+        if (!payload || typeof payload === 'string') return;
+        const p = payload as SftpRealpathPayload;
+        if (message.requestId === requestId && p.requestedPath === itemPath) {
           cleanupListeners();
           if (!currentSftpManager.value) return;
           // 从 payload 中获取 absolutePath 和 targetType
-          const absolutePath = payload.absolutePath;
-          const targetType = payload.targetType as 'file' | 'directory' | 'unknown'; // 类型断言
+          const absolutePath = p.absolutePath;
+          const targetType = p.targetType as 'file' | 'directory' | 'unknown'; // 类型断言
 
           if (!absolutePath) {
             console.error(
@@ -457,15 +459,15 @@ const handleItemAction = (item: FileListItem) => {
 
     unregisterError = wsOnMessage(
       'sftp:realpath:error',
-      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
-        if (message.requestId === requestId && payload?.requestedPath === itemPath) {
+      (payload: MessagePayload, message: WebSocketMessage) => {
+        if (!payload || typeof payload === 'string') return;
+        const p = payload as SftpRealpathPayload;
+        if (message.requestId === requestId && p?.requestedPath === itemPath) {
           cleanupListeners();
           // payload.error 可能包含来自后端的具体错误信息
           // payload.absolutePath 可能在 stat 失败时仍然存在
-          const serverErrorMsg = payload.error || 'Unknown error resolving symlink target type';
-          const resolvedPathInfo = payload.absolutePath
-            ? ` (Resolved path: ${payload.absolutePath})`
-            : '';
+          const serverErrorMsg = p.error || 'Unknown error resolving symlink target type';
+          const resolvedPathInfo = p.absolutePath ? ` (Resolved path: ${p.absolutePath})` : '';
 
           console.error(
             `[FileManager ${props.sessionId}-${props.instanceId}] Failed to get realpath or target type for symlink '${itemPath}': ${serverErrorMsg}${resolvedPathInfo}`
@@ -1269,12 +1271,14 @@ watchEffect((onCleanup) => {
 
     unregisterSuccess = wsOnMessage(
       'sftp:realpath:success',
-      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
+      (payload: MessagePayload, message: WebSocketMessage) => {
+        if (!payload || typeof payload === 'string') return;
+        const p = payload as SftpRealpathPayload;
         // message 已有类型
-        if (message.requestId === requestId && payload.requestedPath === requestedPath) {
+        if (message.requestId === requestId && p.requestedPath === requestedPath) {
           // 修改：检查 currentSftpManager 是否存在
           if (!currentSftpManager.value) return;
-          const absolutePath = payload.absolutePath;
+          const absolutePath = p.absolutePath;
           if (!absolutePath) {
             console.error(
               `[FileManager ${props.sessionId}-${props.instanceId}] Missing absolutePath for initial realpath response.`,
@@ -1296,10 +1300,12 @@ watchEffect((onCleanup) => {
 
     unregisterError = wsOnMessage(
       'sftp:realpath:error',
-      (payload: SftpRealpathPayload, message: WebSocketMessage) => {
+      (payload: MessagePayload, message: WebSocketMessage) => {
+        if (!payload || typeof payload === 'string') return;
+        const p = payload as SftpRealpathPayload;
         // message 已有类型
         // 修改：使用 payload.requestedPath (如果存在) 或 message.requestId 匹配
-        if (message.requestId === requestId && payload?.requestedPath === requestedPath) {
+        if (message.requestId === requestId && p?.requestedPath === requestedPath) {
           console.error(
             `[FileManager ${props.sessionId}-${props.instanceId}] Failed to get realpath for '${requestedPath}':`,
             payload
@@ -1853,13 +1859,14 @@ const syncCurrentPathToTerminalDirectory = () => {
 
   unregisterSilentExecResult = onMessage(
     'ssh:exec_silent:result',
-    (payload: SilentExecPayload, message: WebSocketMessage) => {
+    (payload: MessagePayload, message: WebSocketMessage) => {
+      const p = payload as unknown as SilentExecPayload;
       if (message.requestId !== requestId) return;
 
       cleanupSilentExecRequest();
       isSyncingPathFromTerminal.value = false;
 
-      const output = typeof payload?.output === 'string' ? payload.output : '';
+      const output = typeof p?.output === 'string' ? p.output : '';
       const path = parsePathFromSilentOutput(output);
 
       if (!path) {
@@ -1873,11 +1880,12 @@ const syncCurrentPathToTerminalDirectory = () => {
 
   unregisterSilentExecError = onMessage(
     'ssh:exec_silent:error',
-    (payload: SilentExecPayload, message: WebSocketMessage) => {
+    (payload: MessagePayload, message: WebSocketMessage) => {
+      const p = payload as unknown as SilentExecPayload;
       if (message.requestId !== requestId) return;
       const errorMessage =
-        typeof payload?.error === 'string'
-          ? payload.error
+        typeof p?.error === 'string'
+          ? p.error
           : t('fileManager.errors.pathReadFailed', '读取终端路径失败');
       finishWithError(errorMessage);
     }
@@ -1982,7 +1990,7 @@ const focusSearchInput = (): boolean => {
 };
 defineExpose({ focusSearchInput, startPathEdit });
 
-// --- 处理“打开编辑器”按钮点击 ---
+// --- 处理'打开编辑器'按钮点击 ---
 const handleOpenEditorClick = () => {
   if (!props.sessionId) {
     console.error(`[FileManager ${props.instanceId}] Cannot open editor: Missing session ID.`);

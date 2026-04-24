@@ -719,7 +719,7 @@ onBeforeUnmount(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: var(--editor-overlay-bg-color);
   z-index: 1000;
   display: flex;
   justify-content: center;
@@ -729,12 +729,12 @@ onBeforeUnmount(() => {
 .editor-popup {
   width: 75%; /* 可以适当调整大小 */
   height: 85%;
-  background-color: #2d2d2d;
+  background-color: var(--editor-bg-color);
   border-radius: 8px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
-  color: #f0f0f0;
+  color: var(--editor-text-color);
   overflow: hidden;
   position: relative; /* 为拖拽手柄定位 */
 }
@@ -765,8 +765,8 @@ onBeforeUnmount(() => {
 .editor-header {
   display: flex;
   padding: 0.5rem 1rem;
-  background-color: #333;
-  border-bottom: 1px solid #555;
+  background-color: var(--editor-header-bg-color);
+  border-bottom: 1px solid var(--editor-border-color);
   font-size: 0.9em;
   flex-shrink: 0;
 }
@@ -785,7 +785,7 @@ onBeforeUnmount(() => {
 }
 
 .editor-header-placeholder {
-  color: #888;
+  color: var(--editor-text-muted-color);
 }
 
 .editor-header-placeholder.is-mobile {
@@ -802,7 +802,7 @@ onBeforeUnmount(() => {
 }
 
 .modified-indicator {
-  color: #ffeb3b;
+  color: var(--editor-modified-indicator-color);
   margin-left: 4px;
   font-weight: bold;
 }
@@ -810,7 +810,7 @@ onBeforeUnmount(() => {
 .close-editor-btn {
   background: none;
   border: none;
-  color: #ccc;
+  color: var(--editor-close-btn-color);
   font-size: 1.2em;
   cursor: pointer;
   padding: 0.2rem 0.5rem;
@@ -860,13 +860,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #888;
+  color: var(--editor-text-muted-color);
 }
 .editor-error {
-  color: #ff8a8a;
+  color: var(--editor-error-text-color);
 }
 .editor-placeholder {
-  color: #666;
+  color: var(--editor-text-dimmed-color);
 }
 
 .editor-actions {
@@ -887,7 +887,7 @@ onBeforeUnmount(() => {
 }
 
 .save-btn {
-  background-color: #4caf50;
+  background-color: var(--editor-btn-save-bg-color);
   color: white;
   border: none;
   padding: 0.4rem 0.8rem;
@@ -896,18 +896,18 @@ onBeforeUnmount(() => {
   font-size: 0.9em;
 }
 .save-btn:disabled {
-  background-color: #aaa;
+  background-color: var(--editor-btn-disabled-bg-color);
   cursor: not-allowed;
 }
 .save-btn:hover:not(:disabled) {
-  background-color: #45a049;
+  background-color: var(--editor-btn-save-hover-bg-color);
 }
 
 .refresh-btn {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  background-color: #607d8b;
+  background-color: var(--editor-btn-secondary-bg-color);
   color: #fff;
   border: none;
   padding: 0.4rem 0.8rem;
@@ -916,11 +916,11 @@ onBeforeUnmount(() => {
   font-size: 0.9em;
 }
 .refresh-btn:disabled {
-  background-color: #aaa;
+  background-color: var(--editor-btn-disabled-bg-color);
   cursor: not-allowed;
 }
 .refresh-btn:hover:not(:disabled) {
-  background-color: #546e7a;
+  background-color: var(--editor-btn-secondary-hover-bg-color);
 }
 
 .search-btn {
@@ -937,11 +937,11 @@ onBeforeUnmount(() => {
     background-color 0.2s,
     color 0.2s;
   padding: 0;
-  color: #ccc;
+  color: var(--editor-close-btn-color);
 }
 .search-btn:hover {
   background-color: rgba(0, 0, 0, 0.1);
-  color: #f0f0f0;
+  color: var(--editor-text-color);
 }
 .search-btn i {
   font-size: 1rem;
@@ -955,15 +955,15 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .save-status.saving {
-  color: #888;
+  color: var(--editor-status-saving-color);
 }
 .save-status.success {
-  color: #4caf50;
-  background-color: #e8f5e9;
+  color: var(--editor-status-success-color);
+  background-color: var(--editor-status-success-bg-color);
 }
 .save-status.error {
-  color: #f44336;
-  background-color: #ffebee;
+  color: var(--editor-status-error-color);
+  background-color: var(--editor-status-error-bg-color);
 }
 
 .editor-instance {
@@ -979,8 +979,8 @@ onBeforeUnmount(() => {
   width: 15px;
   height: 15px;
   background-color: rgba(255, 255, 255, 0.2); /* 半透明手柄 */
-  border-top: 1px solid #555;
-  border-left: 1px solid #555;
+  border-top: 1px solid var(--editor-border-color);
+  border-left: 1px solid var(--editor-border-color);
   cursor: nwse-resize; /* 斜向拖拽光标 */
   z-index: 1001; /* 确保在内容之上 */
 }
@@ -994,9 +994,9 @@ onBeforeUnmount(() => {
 }
 
 .encoding-select {
-  background-color: #444;
-  color: #f0f0f0;
-  border: 1px solid #666;
+  background-color: var(--editor-input-bg-color);
+  color: var(--editor-text-color);
+  border: 1px solid var(--editor-input-border-color);
   padding: 0.3rem 0.5rem; /* 恢复内边距 */
   border-radius: 3px;
   font-size: 0.85em;
@@ -1005,16 +1005,16 @@ onBeforeUnmount(() => {
 }
 
 .encoding-select:hover {
-  background-color: #555;
+  background-color: var(--editor-input-hover-bg-color);
 }
 
 .encoding-select:focus {
-  border-color: #888;
+  border-color: var(--editor-input-focus-border-color);
 }
 
 .encoding-select-placeholder {
   font-size: 0.85em;
-  color: #888;
+  color: var(--editor-text-muted-color);
   padding: 0.3rem 0.5rem;
   display: inline-block;
   min-width: 80px; /* 与 select 大致对齐 */

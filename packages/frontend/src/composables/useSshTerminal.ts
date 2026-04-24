@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import type { Terminal } from '@xterm/xterm';
 import type { SearchAddon, ISearchOptions } from '@xterm/addon-search'; // *** 移除 ISearchResult 导入 ***
 import { sessions as globalSessionsRef } from '../stores/session/state'; // +++ 导入全局 sessions state +++
-import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
+import type { WebSocketMessage } from '../types/websocket.types';
 
 // 定义与 WebSocket 相关的依赖接口
 export interface SshTerminalDependencies {
@@ -249,13 +249,13 @@ export function createSshTerminalManager(
 
   // --- WebSocket 消息处理 ---
 
-  const handleSshOutput = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleSshOutput = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
     }
 
-    let outputData = payload;
+    let outputData: string | Uint8Array = payload as string | Uint8Array;
     // 检查是否为 Base64 编码 (需要后端配合发送 encoding 字段)
     if (message?.encoding === 'base64' && typeof outputData === 'string') {
       try {
@@ -327,7 +327,7 @@ export function createSshTerminalManager(
     // If terminalInstance is not ready, data sits in terminalOutputBuffer until handleTerminalReady calls flushBuffer (or manual logic there)
   };
 
-  const handleSshConnected = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleSshConnected = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
@@ -375,13 +375,14 @@ export function createSshTerminalManager(
     }
   };
 
-  const handleSshDisconnected = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleSshDisconnected = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
     }
 
-    const reason = payload || t('workspace.terminal.unknownReason'); // 使用 i18n 获取未知原因文本
+    const reason =
+      (typeof payload === 'string' ? payload : null) || t('workspace.terminal.unknownReason'); // 使用 i18n 获取未知原因文本
     console.info(`[会话 ${sessionId}][SSH终端模块] SSH 会话已断开:`, reason);
     isSshConnected.value = false; // 更新状态
     terminalInstance.value?.writeln(
@@ -390,13 +391,14 @@ export function createSshTerminalManager(
     // 可以在这里添加其他清理逻辑，例如禁用输入
   };
 
-  const handleSshError = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleSshError = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
     }
 
-    const errorMsg = payload || t('workspace.terminal.unknownSshError'); // 使用 i18n
+    const errorMsg =
+      (typeof payload === 'string' ? payload : null) || t('workspace.terminal.unknownSshError'); // 使用 i18n
     console.error(`[会话 ${sessionId}][SSH终端模块] SSH 错误:`, errorMsg);
     isSshConnected.value = false; // 更新状态
     terminalInstance.value?.writeln(
@@ -404,7 +406,7 @@ export function createSshTerminalManager(
     );
   };
 
-  const handleSshStatus = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleSshStatus = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
@@ -412,33 +414,37 @@ export function createSshTerminalManager(
 
     // 这个消息现在由 useWebSocketConnection 处理以更新全局状态栏消息
     // 这里可以保留日志或用于其他特定于终端的 UI 更新（如果需要）
-    const statusKey = payload?.key || 'unknown';
-    const statusParams = payload?.params || {};
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const statusKey = payloadObj.key || 'unknown';
+    const statusParams = payloadObj.params || {};
     console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, statusKey, statusParams);
     // 可以在终端打印一些状态信息吗？
     // terminalInstance.value?.writeln(`\r\n\x1b[34m[状态: ${statusKey}]\x1b[0m`);
   };
 
-  const handleInfoMessage = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleInfoMessage = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
     }
 
+    const infoText = typeof payload === 'string' ? payload : String(payload ?? '');
     console.info(`[会话 ${sessionId}][SSH终端模块] 收到后端信息:`, payload);
     terminalInstance.value?.writeln(
-      `\r\n\x1b[34m${getTerminalText('infoPrefix')} ${payload}\x1b[0m`
+      `\r\n\x1b[34m${getTerminalText('infoPrefix')} ${infoText}\x1b[0m`
     );
   };
 
-  const handleErrorMessage = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleErrorMessage = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
     }
 
     // 通用错误也可能需要显示在终端
-    const errorMsg = payload || t('workspace.terminal.unknownGenericError'); // 使用 i18n
+    const errorMsg =
+      (typeof payload === 'string' ? payload : null) || t('workspace.terminal.unknownGenericError'); // 使用 i18n
     console.error(`[会话 ${sessionId}][SSH终端模块] 收到后端通用错误:`, errorMsg);
     terminalInstance.value?.writeln(
       `\r\n\x1b[31m${getTerminalText('errorPrefix')} ${errorMsg}\x1b[0m`

@@ -6,15 +6,21 @@ import type { SuspendedSshSession } from './ssh-suspend.types';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-// 通用消息负载类型定义
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type MessagePayload = any;
+// 通用消息负载类型定义，替代原先的 any
+// 各消息子类型通过具体接口（如 SftpReaddirPayload）提供强类型约束
+// 此处用 object 兜底，兼容所有结构化 payload 接口
+export type MessagePayload = string | object | undefined;
 
 // WebSocket 消息结构接口
 export interface WebSocketMessage {
   type: string; // 消息类型
   payload?: MessagePayload; // 消息负载
-  [key: string]: MessagePayload; // 允许其他属性，如 requestId, encoding 等
+  requestId?: string; // 请求关联 ID
+  sessionId?: string; // 会话 ID
+  encoding?: string; // 数据编码方式（如 base64）
+  path?: string; // 文件路径（SFTP 操作）
+  uploadId?: string; // 上传任务 ID
+  [key: string]: unknown; // 允许其他未知属性
 }
 
 // --- SSH Silent Exec 消息类型 ---

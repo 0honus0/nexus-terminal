@@ -1,7 +1,7 @@
 import { ref, readonly, watch, type Ref, ComputedRef } from 'vue'; // 修正导入，移除大写 Readonly, 添加 watch
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
 import type { ServerStatus } from '../types/server.types';
-import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
+import type { WebSocketMessage } from '../types/websocket.types';
 import { useLayoutStore } from '../stores/layout.store';
 
 // 定义与 WebSocket 相关的依赖接口
@@ -45,15 +45,16 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
   };
 
   // --- WebSocket 消息处理 ---
-  const handleStatusUpdate = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleStatusUpdate = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
     }
 
     // console.debug(`[会话 ${sessionId}][状态监控模块] 收到 status_update:`, JSON.stringify(payload));
-    if (payload?.status) {
-      const newStatus: ServerStatus = payload.status;
+    const payloadObj = payload as Record<string, unknown> | undefined;
+    if (payloadObj?.status) {
+      const newStatus: ServerStatus = payloadObj.status as ServerStatus;
       serverStatus.value = newStatus;
       statusError.value = null; // 收到有效状态时清除错误
 
@@ -70,7 +71,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
   };
 
   // 处理可能的后端状态错误消息 (如果后端会发送的话)
-  const handleStatusError = (payload: MessagePayload, message?: WebSocketMessage) => {
+  const handleStatusError = (payload: unknown, message?: WebSocketMessage) => {
     // 检查消息是否属于此会话
     if (message?.sessionId && message.sessionId !== sessionId) {
       return; // 忽略不属于此会话的消息
