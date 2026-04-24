@@ -285,6 +285,75 @@ describe('SFTP Controller', () => {
       expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('不支持的压缩格式'));
     });
 
+    it('应在目标目录路径包含Shell注入字符时发送错误', async () => {
+      const mockSshClient = { exec: vi.fn() };
+      const mockWs = {
+        sessionId: 'session-1',
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+      } as unknown as AuthenticatedWebSocket;
+      clientStates.set('session-1', { sshClient: mockSshClient } as any);
+
+      const payload = {
+        sources: ['file1.txt'],
+        destinationArchiveName: 'archive.zip',
+        format: 'zip' as const,
+        targetDirectory: '/test/$(whoami)',
+        requestId: 'req-1',
+      };
+
+      await handleCompressRequest(mockWs, payload);
+
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('非法字符'));
+      expect(mockSshClient.exec).not.toHaveBeenCalled();
+    });
+
+    it('应在源路径包含反引号时发送错误', async () => {
+      const mockSshClient = { exec: vi.fn() };
+      const mockWs = {
+        sessionId: 'session-1',
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+      } as unknown as AuthenticatedWebSocket;
+      clientStates.set('session-1', { sshClient: mockSshClient } as any);
+
+      const payload = {
+        sources: ['file1.txt', '`malicious`'],
+        destinationArchiveName: 'archive.zip',
+        format: 'zip' as const,
+        targetDirectory: '/test',
+        requestId: 'req-1',
+      };
+
+      await handleCompressRequest(mockWs, payload);
+
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('非法字符'));
+      expect(mockSshClient.exec).not.toHaveBeenCalled();
+    });
+
+    it('应在归档文件名包含分号时发送错误', async () => {
+      const mockSshClient = { exec: vi.fn() };
+      const mockWs = {
+        sessionId: 'session-1',
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+      } as unknown as AuthenticatedWebSocket;
+      clientStates.set('session-1', { sshClient: mockSshClient } as any);
+
+      const payload = {
+        sources: ['file1.txt'],
+        destinationArchiveName: 'archive.zip;rm -rf /',
+        format: 'zip' as const,
+        targetDirectory: '/test',
+        requestId: 'req-1',
+      };
+
+      await handleCompressRequest(mockWs, payload);
+
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('非法字符'));
+      expect(mockSshClient.exec).not.toHaveBeenCalled();
+    });
+
     it('应正确执行压缩命令', async () => {
       const mockStream = {
         on: vi.fn().mockReturnThis(),
@@ -393,6 +462,46 @@ describe('SFTP Controller', () => {
       await handleDecompressRequest(mockWs, payload);
 
       expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('不支持的压缩文件格式'));
+    });
+
+    it('应在压缩包路径包含Shell注入字符时发送错误', async () => {
+      const mockSshClient = { exec: vi.fn() };
+      const mockWs = {
+        sessionId: 'session-1',
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+      } as unknown as AuthenticatedWebSocket;
+      clientStates.set('session-1', { sshClient: mockSshClient } as any);
+
+      const payload = {
+        archivePath: '/test/archive$(whoami).zip',
+        requestId: 'req-1',
+      };
+
+      await handleDecompressRequest(mockWs, payload);
+
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('非法字符'));
+      expect(mockSshClient.exec).not.toHaveBeenCalled();
+    });
+
+    it('应在压缩包路径包含管道符时发送错误', async () => {
+      const mockSshClient = { exec: vi.fn() };
+      const mockWs = {
+        sessionId: 'session-1',
+        readyState: WebSocket.OPEN,
+        send: vi.fn(),
+      } as unknown as AuthenticatedWebSocket;
+      clientStates.set('session-1', { sshClient: mockSshClient } as any);
+
+      const payload = {
+        archivePath: '/test/archive.zip|rm -rf /',
+        requestId: 'req-1',
+      };
+
+      await handleDecompressRequest(mockWs, payload);
+
+      expect(mockWs.send).toHaveBeenCalledWith(expect.stringContaining('非法字符'));
+      expect(mockSshClient.exec).not.toHaveBeenCalled();
     });
 
     it('应正确执行zip解压命令', async () => {

@@ -41,21 +41,21 @@ const buildAllowedWsOrigins = (): string[] => {
 };
 
 export const SECURITY_CONFIG = {
-  // WebAuthn Challenge 超时 (5 分钟)
-  CHALLENGE_TIMEOUT: 5 * 60 * 1000,
+  // WebAuthn Challenge 超时（默认 5 分钟，可通过 CHALLENGE_TIMEOUT_MS 环境变量覆盖）
+  CHALLENGE_TIMEOUT: parseInt(process.env.CHALLENGE_TIMEOUT_MS || '300000'),
 
-  // 2FA 临时认证超时 (5 分钟)
-  PENDING_AUTH_TIMEOUT: 5 * 60 * 1000,
+  // 2FA 临时认证超时（默认 5 分钟，可通过 PENDING_AUTH_TIMEOUT_MS 环境变量覆盖）
+  PENDING_AUTH_TIMEOUT: parseInt(process.env.PENDING_AUTH_TIMEOUT_MS || '300000'),
 
   // 临时令牌长度 (32 字节)
   TEMP_TOKEN_LENGTH: 32,
 
-  // Session Cookie 最大存活时间 (30 天 - Remember Me)
+  // Session Cookie 最大存活时间（默认 30 天，可通过 SESSION_MAX_AGE_DAYS 环境变量覆盖）
   // 与 Session Store TTL (packages/backend/src/index.ts:319) 保持一致
-  SESSION_COOKIE_MAX_AGE: 30 * 24 * 60 * 60 * 1000, // 2592000000 毫秒
+  SESSION_COOKIE_MAX_AGE: parseInt(process.env.SESSION_MAX_AGE_DAYS || '30') * 24 * 60 * 60 * 1000,
 
-  // bcrypt 盐轮次 (2025年推荐值：12-14)
-  BCRYPT_SALT_ROUNDS: 12,
+  // bcrypt 盐轮次（默认 12，可通过 BCRYPT_SALT_ROUNDS 环境变量覆盖，2025年推荐值：12-14）
+  BCRYPT_SALT_ROUNDS: parseInt(process.env.BCRYPT_SALT_ROUNDS || '12'),
 
   // WebSocket 允许的 Origin 白名单 (CSWSH 防护)
   // 支持通过环境变量配置：ALLOWED_WS_ORIGINS 或 RP_ORIGIN

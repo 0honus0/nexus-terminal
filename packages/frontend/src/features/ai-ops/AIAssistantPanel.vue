@@ -203,20 +203,9 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import DOMPurify from 'dompurify';
 import { useAIStore } from '../../stores/ai.store';
 import type { AIInsightSeverity } from '../../types/ai.types';
-
-// HTML 实体转义函数（防止 XSS）
-const escapeHtml = (text: string): string => {
-  const htmlEntities: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  };
-  return text.replace(/[&<>"']/g, (char) => htmlEntities[char] || char);
-};
 
 const { t } = useI18n();
 const emit = defineEmits(['close']);
@@ -282,11 +271,12 @@ const formatDate = (ts: Date | string | number) => {
   });
 };
 
-// 格式化消息（支持 Markdown 基础格式，已做 XSS 防护）
+// 格式化消息（支持 Markdown 基础格式，使用 DOMPurify 防止 XSS）
 const formatMessage = (content: string) => {
-  // 先转义 HTML 实体，防止 XSS 攻击
-  const escaped = escapeHtml(content);
-  return escaped
+  // 先转义 HTML 实体，再应用 Markdown 格式化
+  const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const formatted = escaped
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code class="bg-background px-1 rounded text-xs">$1</code>')
     .replace(/^### (.+)$/gm, '<div class="font-bold text-base mt-2 mb-1">$1</div>')
@@ -294,6 +284,14 @@ const formatMessage = (content: string) => {
     .replace(/^- (.+)$/gm, '<div class="ml-2">• $1</div>')
     .replace(/^\d+\. (.+)$/gm, '<div class="ml-2">$&</div>')
     .replace(/\n/g, '<br/>');
+
+  // 使用 DOMPurify 消毒，仅允许安全的 HTML 标签和属性
+  return DOMPurify.sanitize(formatted, {
+    ALLOWED_TAGS: ['strong', 'code', 'div', 'br'],
+    ALLOWED_ATTR: ['class'],
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+  });
 };
 
 // 严重程度样式

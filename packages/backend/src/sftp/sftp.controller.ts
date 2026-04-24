@@ -16,6 +16,7 @@ import {
   SftpDecompressErrorPayload,
 } from '../websocket/types'; // Import payload types
 import { getErrorCode } from './sftp-error.utils';
+import { validateSafePath } from './sftp-path.utils';
 
 interface SftpDirectoryEntry {
   filename: string;
@@ -429,6 +430,22 @@ export const handleCompressRequest = async (
     `[WS SFTP Compress ${sessionId}] Processing compress request (ID: ${requestId}). Sources: ${sources.join(', ')}, Dest: ${destinationArchiveName}, Format: ${format}, Dir: ${targetDirectory}`
   );
 
+  // --- 路径安全验证：防止 Shell 注入 ---
+  if (!validateSafePath(targetDirectory)) {
+    sendCompressError(ws, '目标目录路径包含非法字符', requestId);
+    return;
+  }
+  if (!validateSafePath(destinationArchiveName)) {
+    sendCompressError(ws, '归档文件名包含非法字符', requestId);
+    return;
+  }
+  for (const source of sources) {
+    if (!validateSafePath(source)) {
+      sendCompressError(ws, `源路径包含非法字符: ${source}`, requestId);
+      return;
+    }
+  }
+
   // --- 构建 Shell 命令 ---
   let command: string;
   // 确保源路径被正确引用，特别是包含空格或特殊字符时
@@ -567,6 +584,12 @@ export const handleDecompressRequest = async (
   console.debug(
     `[WS SFTP Decompress ${sessionId}] Processing decompress request for ${archivePath} (ID: ${requestId})`
   );
+
+  // --- 路径安全验证：防止 Shell 注入 ---
+  if (!validateSafePath(archivePath)) {
+    sendDecompressError(ws, '压缩包路径包含非法字符', requestId);
+    return;
+  }
 
   const extractDir = path.posix.dirname(archivePath);
   const archiveBasename = path.posix.basename(archivePath);

@@ -9,6 +9,21 @@ services:
       - remote-gateway
     networks:
       - nexus-terminal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   backend:
     image: ghcr.io/silentely/nexus-terminal-backend:latest
@@ -22,6 +37,21 @@ services:
       - ./data:/app/data
     networks:
       - nexus-terminal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   remote-gateway:
     image: ghcr.io/silentely/nexus-terminal-remote-gateway:latest
@@ -47,6 +77,21 @@ services:
     depends_on:
       - guacd
       - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   guacd:
     image: guacamole/guacd:latest
@@ -54,6 +99,20 @@ services:
     networks:
       - nexus-terminal-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "guacd || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 networks:
   nexus-terminal-network:
