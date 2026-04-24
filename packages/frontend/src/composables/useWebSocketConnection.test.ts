@@ -208,7 +208,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       // 尝试再次连接
       manager.connect('ws://localhost:3001');
@@ -228,7 +231,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
 
       expect(manager.isConnected.value).toBe(false);
 
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(manager.isConnected.value).toBe(true);
       expect(manager.connectionStatus.value).toBe('connected');
@@ -240,7 +246,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(manager.isConnected.value).toBe(true);
 
@@ -256,7 +265,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       ws.simulateMessage({ type: 'ssh:error', payload: 'Authentication failed' });
 
@@ -270,7 +282,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       ws.simulateMessage({ type: 'sftp_error', payload: { message: 'SFTP failed' } });
 
@@ -284,7 +299,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(manager.isSftpReady.value).toBe(false);
 
@@ -426,9 +444,15 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: { test: 'data' } });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
-      expect(handler).toHaveBeenCalledWith({ test: 'data' }, expect.any(Object));
+      expect(handler).toHaveBeenCalledWith(
+        { connectionId: 1, sessionId: 'session-1' },
+        expect.any(Object)
+      );
     });
 
     it('应返回注销函数', () => {
@@ -443,7 +467,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(handler).not.toHaveBeenCalled();
     });
@@ -459,7 +486,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(handler1).toHaveBeenCalled();
       expect(handler2).toHaveBeenCalled();
@@ -478,7 +508,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(errorHandler).toHaveBeenCalled();
       expect(normalHandler).toHaveBeenCalled();
@@ -523,7 +556,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       manager.connect('ws://localhost:3001');
       const ws = createdWebSockets[0];
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'ssh:connected', payload: {} });
+      ws.simulateMessage({
+        type: 'ssh:connected',
+        payload: { connectionId: 1, sessionId: 'session-1' },
+      });
 
       expect(manager.isConnected.value).toBe(true);
 

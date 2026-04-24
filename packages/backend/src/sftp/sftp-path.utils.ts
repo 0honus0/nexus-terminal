@@ -16,8 +16,8 @@ const UNSAFE_PATH_PATTERNS = [
   /\r/, // 回车符
 ];
 
-/** 允许的路径字符：字母数字、/、.、-、_、空格、(、) */
-const SAFE_PATH_PATTERN = /^[a-zA-Z0-9\/.\-_ ()]+$/;
+/** 允许的路径字符：Unicode 字母/数字、/、.、-、_、空格、(、)、常见安全文件名符号 */
+const SAFE_PATH_PATTERN = /^[\p{L}\p{N}\/.\-_ ()@#+=,'!\[\]{}~]+$/u;
 
 /**
  * 验证路径是否安全，不包含 Shell 注入风险

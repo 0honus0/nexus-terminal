@@ -36,13 +36,13 @@ export class AuditController {
           .json({ success: false, error: '无效的 offset 参数', code: 'INVALID_PARAMETER' });
         return;
       }
-      if (startDate && Number.isNaN(startDate)) {
+      if (startDate !== undefined && Number.isNaN(startDate)) {
         res
           .status(400)
           .json({ success: false, error: '无效的 startDate 参数', code: 'INVALID_PARAMETER' });
         return;
       }
-      if (endDate && Number.isNaN(endDate)) {
+      if (endDate !== undefined && Number.isNaN(endDate)) {
         res
           .status(400)
           .json({ success: false, error: '无效的 endDate 参数', code: 'INVALID_PARAMETER' });

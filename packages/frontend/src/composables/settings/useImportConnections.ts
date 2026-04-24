@@ -45,15 +45,15 @@ export function useImportConnections() {
       if (data.failureCount > 0) {
         importMessage.value = t(
           'settings.importConnections.partialSuccess',
-          `导入完成，成功 {success} 条，失败 {failure} 条。`
-            .replace('{success}', String(data.successCount))
-            .replace('{failure}', String(data.failureCount))
+          { success: data.successCount, failure: data.failureCount },
+          `导入完成，成功 ${data.successCount} 条，失败 ${data.failureCount} 条。`
         );
         importSuccess.value = false;
       } else {
         importMessage.value = t(
           'settings.importConnections.success',
-          `导入成功完成。共导入 {count} 条连接。`.replace('{count}', String(data.successCount))
+          { count: data.successCount },
+          `导入成功完成。共导入 ${data.successCount} 条连接。`
         );
         importSuccess.value = true;
       }
@@ -62,8 +62,21 @@ export function useImportConnections() {
       let message = t('settings.importConnections.error', '导入连接时发生错误。');
       if (isAxiosError(error) && error.response?.data) {
         const data = error.response.data;
-        if (typeof data === 'object' && data !== null && typeof data.message === 'string') {
-          message = data.message;
+        if (typeof data === 'object' && data !== null) {
+          // 部分失败响应：后端返回 400 + successCount/failureCount/errors
+          if (typeof data.failureCount === 'number') {
+            importResult.value = {
+              successCount: data.successCount ?? 0,
+              failureCount: data.failureCount ?? 0,
+              errors: data.errors ?? [],
+            };
+          }
+          // 优先使用 error 字段（新格式），回退到 message（旧格式）
+          if (typeof data.error === 'string') {
+            message = data.error;
+          } else if (typeof data.message === 'string') {
+            message = data.message;
+          }
         } else if (typeof data === 'string') {
           message = data;
         }

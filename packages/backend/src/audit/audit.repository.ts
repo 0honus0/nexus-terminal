@@ -11,10 +11,10 @@ export class AuditLogRepository {
   private static readonly CLEANUP_INTERVAL = 100;
   /** 概率清理：距上次清理超过此时长（毫秒）时触发清理 */
   private static readonly CLEANUP_TIME_INTERVAL_MS = 60_000;
-  /** 概率清理：写入计数器（实例级别，保证每次新建实例从零开始） */
-  private cleanupCounter = 0;
-  /** 概率清理：上次执行清理的时间戳（毫秒，实例级别） */
-  private lastCleanupTime = 0;
+  /** 概率清理：写入计数器（静态成员，跨实例共享） */
+  private static cleanupCounter = 0;
+  /** 概率清理：上次执行清理的时间戳（毫秒，静态成员） */
+  private static lastCleanupTime = Date.now();
 
   /**
    * 添加一条审计日志记录。
@@ -66,19 +66,20 @@ export class AuditLogRepository {
    * 条件：写入次数达到阈值，或距离上次清理已超过指定时间间隔。
    */
   private shouldRunCleanup(): boolean {
-    this.cleanupCounter += 1;
+    AuditLogRepository.cleanupCounter += 1;
     const now = Date.now();
 
-    const counterReached = this.cleanupCounter >= AuditLogRepository.CLEANUP_INTERVAL;
-    const timeElapsed = now - this.lastCleanupTime >= AuditLogRepository.CLEANUP_TIME_INTERVAL_MS;
+    const counterReached = AuditLogRepository.cleanupCounter >= AuditLogRepository.CLEANUP_INTERVAL;
+    const timeElapsed =
+      now - AuditLogRepository.lastCleanupTime >= AuditLogRepository.CLEANUP_TIME_INTERVAL_MS;
 
     return counterReached || timeElapsed;
   }
 
   /** 重置清理计数器与时间戳 */
   private resetCleanupTracking(): void {
-    this.cleanupCounter = 0;
-    this.lastCleanupTime = Date.now();
+    AuditLogRepository.cleanupCounter = 0;
+    AuditLogRepository.lastCleanupTime = Date.now();
   }
 
   /**

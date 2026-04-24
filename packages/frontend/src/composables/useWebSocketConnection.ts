@@ -229,6 +229,42 @@ export function createWebSocketConnectionManager(
       const obj = p as Record<string, unknown> | undefined;
       return typeof obj === 'object' && obj !== null && typeof obj.error === 'string';
     },
+    'ssh:connected': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        (typeof obj.connectionId === 'number' || typeof obj.connectionId === 'string') &&
+        typeof obj.sessionId === 'string'
+      );
+    },
+    'sftp:readdir:success': (p) => Array.isArray(p),
+    'sftp:readdir:error': (p) => typeof p === 'string',
+    'sftp:compress:error': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.error === 'string';
+    },
+    'sftp:decompress:error': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.error === 'string';
+    },
+    'sftp:compress:success': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.message === 'string';
+    },
+    'sftp:decompress:success': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.message === 'string';
+    },
+    status_update: (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.status === 'object' &&
+        obj.status !== null
+      );
+    },
   };
 
   /**

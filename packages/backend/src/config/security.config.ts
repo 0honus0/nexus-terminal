@@ -40,22 +40,32 @@ const buildAllowedWsOrigins = (): string[] => {
   return defaultOrigins;
 };
 
+/** 从环境变量解析整数，无效值回退到默认值，支持最小/最大值约束 */
+const intFromEnv = (key: string, fallback: number, min?: number, max?: number): number => {
+  const raw = process.env[key];
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  let result = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  if (min !== undefined && result < min) result = min;
+  if (max !== undefined && result > max) result = max;
+  return result;
+};
+
 export const SECURITY_CONFIG = {
   // WebAuthn Challenge 超时（默认 5 分钟，可通过 CHALLENGE_TIMEOUT_MS 环境变量覆盖）
-  CHALLENGE_TIMEOUT: parseInt(process.env.CHALLENGE_TIMEOUT_MS || '300000'),
+  CHALLENGE_TIMEOUT: intFromEnv('CHALLENGE_TIMEOUT_MS', 300_000, 1000),
 
   // 2FA 临时认证超时（默认 5 分钟，可通过 PENDING_AUTH_TIMEOUT_MS 环境变量覆盖）
-  PENDING_AUTH_TIMEOUT: parseInt(process.env.PENDING_AUTH_TIMEOUT_MS || '300000'),
+  PENDING_AUTH_TIMEOUT: intFromEnv('PENDING_AUTH_TIMEOUT_MS', 300_000, 1000),
 
   // 临时令牌长度 (32 字节)
   TEMP_TOKEN_LENGTH: 32,
 
   // Session Cookie 最大存活时间（默认 30 天，可通过 SESSION_MAX_AGE_DAYS 环境变量覆盖）
   // 与 Session Store TTL (packages/backend/src/index.ts:319) 保持一致
-  SESSION_COOKIE_MAX_AGE: parseInt(process.env.SESSION_MAX_AGE_DAYS || '30') * 24 * 60 * 60 * 1000,
+  SESSION_COOKIE_MAX_AGE: intFromEnv('SESSION_MAX_AGE_DAYS', 30, 1) * 24 * 60 * 60 * 1000,
 
   // bcrypt 盐轮次（默认 12，可通过 BCRYPT_SALT_ROUNDS 环境变量覆盖，2025年推荐值：12-14）
-  BCRYPT_SALT_ROUNDS: parseInt(process.env.BCRYPT_SALT_ROUNDS || '12'),
+  BCRYPT_SALT_ROUNDS: intFromEnv('BCRYPT_SALT_ROUNDS', 12, 12, 15),
 
   // WebSocket 允许的 Origin 白名单 (CSWSH 防护)
   // 支持通过环境变量配置：ALLOWED_WS_ORIGINS 或 RP_ORIGIN
