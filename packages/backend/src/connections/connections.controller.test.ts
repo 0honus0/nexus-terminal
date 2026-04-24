@@ -92,7 +92,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '缺少必要字段' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '缺少必要字段',
+        code: 'VALIDATION_ERROR',
+      });
     });
 
     it('应在发生其他错误时调用next', async () => {
@@ -172,7 +176,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '无效的连接 ID。' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '无效的连接 ID。',
+        code: 'INVALID_PARAMETER',
+      });
     });
 
     it('应在连接不存在时返回404', async () => {
@@ -186,7 +194,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '连接未找到。' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '连接未找到。',
+        code: 'NOT_FOUND',
+      });
     });
   });
 
@@ -228,7 +240,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '无效的连接 ID。' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '无效的连接 ID。',
+        code: 'INVALID_PARAMETER',
+      });
     });
 
     it('应在连接不存在时返回404', async () => {
@@ -244,7 +260,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '连接未找到。' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '连接未找到。',
+        code: 'NOT_FOUND',
+      });
     });
   });
 
@@ -274,7 +294,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '无效的连接 ID。' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '无效的连接 ID。',
+        code: 'INVALID_PARAMETER',
+      });
     });
 
     it('应在连接不存在时返回404', async () => {
@@ -288,7 +312,11 @@ describe('Connections Controller', () => {
       );
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
-      expect(mockRes.json).toHaveBeenCalledWith({ message: '连接未找到。' });
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: '连接未找到。',
+        code: 'NOT_FOUND',
+      });
     });
   });
 });

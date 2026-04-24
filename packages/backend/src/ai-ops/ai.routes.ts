@@ -32,30 +32,30 @@ const conditionalAiLimiter = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-// POST /api/v1/ai/query - 处理 AI 查询
-router.post('/query', AIController.processQuery);
+// POST /api/v1/ai/query - 处理 AI 查询（涉及外部 AI 调用，使用条件限流）
+router.post('/query', conditionalAiLimiter, AIController.processQuery);
 
 // GET /api/v1/ai/sessions - 获取用户的会话列表
-router.get('/sessions', AIController.getSessions);
+router.get('/sessions', aiLimiter, AIController.getSessions);
 
 // GET /api/v1/ai/sessions/:sessionId - 获取会话详情
-router.get('/sessions/:sessionId', AIController.getSessionDetails);
+router.get('/sessions/:sessionId', aiLimiter, AIController.getSessionDetails);
 
 // DELETE /api/v1/ai/sessions/:sessionId - 删除会话
-router.delete('/sessions/:sessionId', AIController.deleteSession);
+router.delete('/sessions/:sessionId', aiLimiter, AIController.deleteSession);
 
 // GET /api/v1/ai/health - 获取系统健康摘要
-router.get('/health', AIController.getHealthSummary);
+router.get('/health', aiLimiter, AIController.getHealthSummary);
 
 // GET /api/v1/ai/patterns - 获取命令模式分析
-router.get('/patterns', AIController.getCommandPatterns);
+router.get('/patterns', aiLimiter, AIController.getCommandPatterns);
 
 // POST /api/v1/ai/cleanup - 清理用户旧会话
-router.post('/cleanup', AIController.cleanupSessions);
+router.post('/cleanup', aiLimiter, AIController.cleanupSessions);
 
 // AI Provider 配置相关路由
-router.get('/settings', NL2CMDController.getAISettings);
-router.post('/settings', NL2CMDController.saveAISettings);
+router.get('/settings', aiLimiter, NL2CMDController.getAISettings);
+router.post('/settings', aiLimiter, NL2CMDController.saveAISettings);
 
 // NL2CMD 相关路由（应用动态速率限制）
 router.post('/test', conditionalAiLimiter, NL2CMDController.testAIConnection);

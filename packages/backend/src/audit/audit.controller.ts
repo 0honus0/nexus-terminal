@@ -25,19 +25,27 @@ export class AuditController {
 
       // 输入验证 (基本)
       if (Number.isNaN(limit) || limit <= 0) {
-        res.status(400).json({ message: '无效的 limit 参数' });
+        res
+          .status(400)
+          .json({ success: false, error: '无效的 limit 参数', code: 'INVALID_PARAMETER' });
         return;
       }
       if (Number.isNaN(offset) || offset < 0) {
-        res.status(400).json({ message: '无效的 offset 参数' });
+        res
+          .status(400)
+          .json({ success: false, error: '无效的 offset 参数', code: 'INVALID_PARAMETER' });
         return;
       }
       if (startDate && Number.isNaN(startDate)) {
-        res.status(400).json({ message: '无效的 startDate 参数' });
+        res
+          .status(400)
+          .json({ success: false, error: '无效的 startDate 参数', code: 'INVALID_PARAMETER' });
         return;
       }
       if (endDate && Number.isNaN(endDate)) {
-        res.status(400).json({ message: '无效的 endDate 参数' });
+        res
+          .status(400)
+          .json({ success: false, error: '无效的 endDate 参数', code: 'INVALID_PARAMETER' });
         return;
       }
 

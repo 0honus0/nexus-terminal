@@ -66,6 +66,144 @@
 
       <hr class="border-border/50" />
 
+      <!-- Import Connections Section -->
+      <div class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">
+          {{ t('settings.importConnections.title', '导入连接数据') }}
+        </h3>
+        <p class="text-sm text-text-secondary mb-4">
+          {{
+            t(
+              'settings.importConnections.description',
+              '选择 JSON 格式的连接配置文件进行导入。文件大小限制 5MB。'
+            )
+          }}
+        </p>
+
+        <!-- 导入确认对话框 -->
+        <div
+          v-if="showImportConfirm"
+          class="space-y-3 mb-4 p-4 rounded-md border border-warning/30 bg-warning/5"
+        >
+          <p class="text-sm text-warning font-medium">
+            {{ t('settings.importConnections.confirmText', '导入将覆盖当前设置，是否继续？') }}
+          </p>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              @click="confirmImport"
+              :disabled="importLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium inline-flex items-center"
+            >
+              <svg
+                v-if="importLoading"
+                class="animate-spin -ml-1 mr-2 h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              {{
+                importLoading
+                  ? t('common.loading')
+                  : t('settings.importConnections.confirmButton', '确认导入')
+              }}
+            </button>
+            <button
+              type="button"
+              @click="cancelImport"
+              :disabled="importLoading"
+              class="px-4 py-2 bg-background text-foreground border border-border rounded-md shadow-sm hover:bg-header/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium"
+            >
+              {{ t('common.cancel', '取消') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 文件选择按钮 -->
+        <div v-if="!showImportConfirm" class="flex items-center justify-between">
+          <button
+            type="button"
+            @click="triggerFileSelect"
+            :disabled="importLoading"
+            class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium inline-flex items-center"
+          >
+            <svg
+              v-if="importLoading"
+              class="animate-spin -ml-1 mr-2 h-4 w-4"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            {{
+              importLoading
+                ? t('common.loading')
+                : t('settings.importConnections.buttonText', '选择文件导入')
+            }}
+          </button>
+          <p
+            v-if="importMessage"
+            :class="['text-sm', importSuccess ? 'text-success' : 'text-error']"
+          >
+            {{ importMessage }}
+          </p>
+        </div>
+
+        <!-- 导入结果详情 -->
+        <div
+          v-if="importResult && importResult.failureCount > 0"
+          class="mt-3 p-3 rounded-md border border-error/30 bg-error/5 text-sm text-error"
+        >
+          <p class="font-medium mb-1">
+            {{ t('settings.importConnections.errorDetails', '导入错误详情') }}:
+          </p>
+          <ul class="list-disc list-inside space-y-1">
+            <li v-for="(err, idx) in importResult.errors" :key="idx">
+              <span v-if="err.connectionName" class="font-medium">{{ err.connectionName }}:</span>
+              {{ err.message }}
+            </li>
+          </ul>
+        </div>
+
+        <!-- 隐藏的文件输入 -->
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept=".json,application/json"
+          class="hidden"
+          @change="handleFileSelected"
+        />
+      </div>
+
+      <hr class="border-border/50" />
+
       <!-- Audit Log Settings Section -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">
@@ -204,10 +342,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useSettingsStore } from '../../stores/settings.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useExportConnections } from '../../composables/settings/useExportConnections';
+import { useImportConnections } from '../../composables/settings/useImportConnections';
 import { useAuditSettings } from '../../composables/settings/useAuditSettings';
 
 const settingsStore = useSettingsStore();
@@ -220,6 +360,71 @@ const {
   exportConnectionsSuccess,
   handleExportConnections,
 } = useExportConnections();
+
+// 导入功能
+const {
+  importLoading,
+  importMessage,
+  importSuccess,
+  importResult,
+  handleImportConnections,
+  resetImportState,
+} = useImportConnections();
+
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const showImportConfirm = ref(false);
+const pendingFile = ref<File | null>(null);
+
+/** 触发文件选择器 */
+const triggerFileSelect = () => {
+  resetImportState();
+  fileInputRef.value?.click();
+};
+
+/** 文件选择后的回调，弹出确认对话框 */
+const handleFileSelected = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  // 验证文件类型
+  if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+    importMessage.value = t(
+      'settings.importConnections.invalidFileType',
+      '请选择 JSON 格式的文件。'
+    );
+    importSuccess.value = false;
+    target.value = '';
+    return;
+  }
+
+  // 验证文件大小（5MB）
+  if (file.size > 5 * 1024 * 1024) {
+    importMessage.value = t('settings.importConnections.fileTooLarge', '文件大小超过 5MB 限制。');
+    importSuccess.value = false;
+    target.value = '';
+    return;
+  }
+
+  pendingFile.value = file;
+  showImportConfirm.value = true;
+  target.value = '';
+};
+
+/** 确认导入 */
+const confirmImport = async () => {
+  if (!pendingFile.value) return;
+  showImportConfirm.value = false;
+  await handleImportConnections(pendingFile.value);
+  pendingFile.value = null;
+};
+
+/** 取消导入 */
+const cancelImport = () => {
+  showImportConfirm.value = false;
+  pendingFile.value = null;
+  resetImportState();
+};
 
 const {
   auditLogMaxEntries,

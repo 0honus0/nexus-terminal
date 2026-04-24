@@ -7,14 +7,25 @@ import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 type DbAuditLogRow = AuditLogEntry;
 
 export class AuditLogRepository {
+  /** 概率清理：每 N 次写入触发一次清理 */
+  private static readonly CLEANUP_INTERVAL = 100;
+  /** 概率清理：距上次清理超过此时长（毫秒）时触发清理 */
+  private static readonly CLEANUP_TIME_INTERVAL_MS = 60_000;
+  /** 概率清理：写入计数器（实例级别，保证每次新建实例从零开始） */
+  private cleanupCounter = 0;
+  /** 概率清理：上次执行清理的时间戳（毫秒，实例级别） */
+  private lastCleanupTime = 0;
+
   /**
    * 添加一条审计日志记录。
    * @param actionType 操作类型。
    * @param details 可选的详细信息（对象或字符串）。
+   * @param userId 可选的关联用户 ID。
    */
   async addLog(
     actionType: AuditLogActionType,
-    details?: Record<string, unknown> | string | null
+    details?: Record<string, unknown> | string | null,
+    userId?: number | null
   ): Promise<void> {
     const timestamp = Math.floor(Date.now() / 1000);
     let detailsString: string | null = null;
@@ -31,20 +42,43 @@ export class AuditLogRepository {
       }
     }
 
-    const sql = 'INSERT INTO audit_logs (timestamp, action_type, details) VALUES (?, ?, ?)';
-    const params = [timestamp, actionType, detailsString];
+    const sql =
+      'INSERT INTO audit_logs (timestamp, action_type, details, user_id) VALUES (?, ?, ?, ?)';
+    const params = [timestamp, actionType, detailsString, userId ?? null];
 
     try {
       const db = await getDbInstance();
       await runDb(db, sql, params);
 
-      // --- 添加日志清理逻辑 ---
-      await this.cleanupOldLogs(db);
-      // --- 清理逻辑结束 ---
+      // 概率清理：仅在满足条件时执行，避免高频写入场景下的 I/O 开销
+      if (this.shouldRunCleanup()) {
+        await this.cleanupOldLogs(db);
+        this.resetCleanupTracking();
+      }
     } catch (err: unknown) {
       console.error(`[审计日志] 添加操作 ${actionType} 的日志条目时出错: ${getErrorMessage(err)}`);
       // 决定日志记录失败是应该抛出错误还是仅记录日志
     }
+  }
+
+  /**
+   * 判断是否应执行清理。
+   * 条件：写入次数达到阈值，或距离上次清理已超过指定时间间隔。
+   */
+  private shouldRunCleanup(): boolean {
+    this.cleanupCounter += 1;
+    const now = Date.now();
+
+    const counterReached = this.cleanupCounter >= AuditLogRepository.CLEANUP_INTERVAL;
+    const timeElapsed = now - this.lastCleanupTime >= AuditLogRepository.CLEANUP_TIME_INTERVAL_MS;
+
+    return counterReached || timeElapsed;
+  }
+
+  /** 重置清理计数器与时间戳 */
+  private resetCleanupTracking(): void {
+    this.cleanupCounter = 0;
+    this.lastCleanupTime = Date.now();
   }
 
   /**

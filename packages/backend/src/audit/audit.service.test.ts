@@ -42,25 +42,29 @@ describe('AuditLogService', () => {
     it('应成功记录审计日志', async () => {
       await service.logAction('user_login', { username: 'admin' });
 
-      expect(mockRepository.addLog).toHaveBeenCalledWith('user_login', { username: 'admin' });
+      expect(mockRepository.addLog).toHaveBeenCalledWith(
+        'user_login',
+        { username: 'admin' },
+        undefined
+      );
     });
 
     it('应支持字符串类型的 details', async () => {
       await service.logAction('user_logout', 'Session ended');
 
-      expect(mockRepository.addLog).toHaveBeenCalledWith('user_logout', 'Session ended');
+      expect(mockRepository.addLog).toHaveBeenCalledWith('user_logout', 'Session ended', undefined);
     });
 
     it('应支持 null details', async () => {
       await service.logAction('user_logout', null);
 
-      expect(mockRepository.addLog).toHaveBeenCalledWith('user_logout', null);
+      expect(mockRepository.addLog).toHaveBeenCalledWith('user_logout', null, undefined);
     });
 
     it('应支持无 details 参数', async () => {
       await service.logAction('user_logout');
 
-      expect(mockRepository.addLog).toHaveBeenCalledWith('user_logout', undefined);
+      expect(mockRepository.addLog).toHaveBeenCalledWith('user_logout', undefined, undefined);
     });
 
     it('repository 错误时不应抛出异常', async () => {

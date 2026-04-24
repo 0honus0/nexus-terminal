@@ -29,7 +29,7 @@ function getUserId(req: Request): number | null {
 export const generateCommand = async (req: Request, res: Response): Promise<void> => {
   const userId = getUserId(req);
   if (!userId) {
-    res.status(401).json({ success: false, message: '未授权' });
+    res.status(401).json({ success: false, error: '未授权', code: 'UNAUTHORIZED' });
     return;
   }
 
@@ -88,7 +88,7 @@ export const generateCommand = async (req: Request, res: Response): Promise<void
 export const getAISettings = async (req: Request, res: Response): Promise<void> => {
   const userId = getUserId(req);
   if (!userId) {
-    res.status(401).json({ success: false, message: '未授权' });
+    res.status(401).json({ success: false, error: '未授权', code: 'UNAUTHORIZED' });
     return;
   }
 
@@ -120,7 +120,7 @@ export const getAISettings = async (req: Request, res: Response): Promise<void> 
     res.status(200).json({ success: true, settings: maskedSettings });
   } catch (error) {
     console.error('[NL2CMD Controller] 获取 AI 配置失败:', error);
-    res.status(500).json({ success: false, message: '获取 AI 配置失败' });
+    res.status(500).json({ success: false, error: '获取 AI 配置失败', code: 'INTERNAL_ERROR' });
   }
 };
 
@@ -131,7 +131,7 @@ export const getAISettings = async (req: Request, res: Response): Promise<void> 
 export const saveAISettings = async (req: Request, res: Response): Promise<void> => {
   const userId = getUserId(req);
   if (!userId) {
-    res.status(401).json({ success: false, message: '未授权' });
+    res.status(401).json({ success: false, error: '未授权', code: 'UNAUTHORIZED' });
     return;
   }
 
@@ -148,22 +148,28 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
 
   // 参数验证
   if (typeof enabled !== 'boolean') {
-    res.status(400).json({ success: false, message: 'enabled 必须是布尔值' });
+    res
+      .status(400)
+      .json({ success: false, error: 'enabled 必须是布尔值', code: 'VALIDATION_ERROR' });
     return;
   }
 
   if (!['openai', 'gemini', 'claude'].includes(provider)) {
-    res.status(400).json({ success: false, message: 'provider 必须是 openai, gemini 或 claude' });
+    res.status(400).json({
+      success: false,
+      error: 'provider 必须是 openai, gemini 或 claude',
+      code: 'VALIDATION_ERROR',
+    });
     return;
   }
 
   if (!baseUrl || typeof baseUrl !== 'string') {
-    res.status(400).json({ success: false, message: 'baseUrl 不能为空' });
+    res.status(400).json({ success: false, error: 'baseUrl 不能为空', code: 'VALIDATION_ERROR' });
     return;
   }
 
   if (!model || typeof model !== 'string') {
-    res.status(400).json({ success: false, message: 'model 不能为空' });
+    res.status(400).json({ success: false, error: 'model 不能为空', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -196,7 +202,7 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
     res.status(200).json({ success: true, message: 'AI 配置已保存' });
   } catch (error) {
     console.error('[NL2CMD Controller] 保存 AI 配置失败:', error);
-    res.status(500).json({ success: false, message: '保存 AI 配置失败' });
+    res.status(500).json({ success: false, error: '保存 AI 配置失败', code: 'INTERNAL_ERROR' });
   }
 };
 
@@ -207,7 +213,7 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
 export const testAIConnection = async (req: Request, res: Response): Promise<void> => {
   const userId = getUserId(req);
   if (!userId) {
-    res.status(401).json({ success: false, message: '未授权' });
+    res.status(401).json({ success: false, error: '未授权', code: 'UNAUTHORIZED' });
     return;
   }
 
@@ -218,22 +224,26 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
 
   // 参数验证
   if (!['openai', 'gemini', 'claude'].includes(provider)) {
-    res.status(400).json({ success: false, message: 'provider 必须是 openai, gemini 或 claude' });
+    res.status(400).json({
+      success: false,
+      error: 'provider 必须是 openai, gemini 或 claude',
+      code: 'VALIDATION_ERROR',
+    });
     return;
   }
 
   if (!baseUrl || typeof baseUrl !== 'string') {
-    res.status(400).json({ success: false, message: 'baseUrl 不能为空' });
+    res.status(400).json({ success: false, error: 'baseUrl 不能为空', code: 'VALIDATION_ERROR' });
     return;
   }
 
   if (!apiKey || typeof apiKey !== 'string') {
-    res.status(400).json({ success: false, message: 'apiKey 不能为空' });
+    res.status(400).json({ success: false, error: 'apiKey 不能为空', code: 'VALIDATION_ERROR' });
     return;
   }
 
   if (!model || typeof model !== 'string') {
-    res.status(400).json({ success: false, message: 'model 不能为空' });
+    res.status(400).json({ success: false, error: 'model 不能为空', code: 'VALIDATION_ERROR' });
     return;
   }
 
@@ -260,7 +270,7 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
     if (success) {
       res.status(200).json({ success: true, message: '连接测试成功' });
     } else {
-      res.status(400).json({ success: false, message: '连接测试失败' });
+      res.status(400).json({ success: false, error: '连接测试失败', code: 'CONNECTION_FAILED' });
     }
 
     const durationMs = Date.now() - start;

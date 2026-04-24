@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp INTEGER NOT NULL,
     action_type TEXT NOT NULL,
-    details TEXT NULL
+    details TEXT NULL,
+    user_id INTEGER NULL
 );
 `;
 
@@ -24,6 +25,8 @@ export const createAuditLogsIndexesSQL = [
   `CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);`,
   // 操作类型索引 - 用于按操作类型筛选
   `CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON audit_logs(action_type);`,
+  // 用户 ID 索引 - 用于按用户筛选日志
+  `CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);`,
 ];
 
 // Passkeys table definition
