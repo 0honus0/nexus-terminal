@@ -108,6 +108,32 @@ import {
   buildTwoFactorVerifySkewWarnLogAction,
 } from './auth-two-factor-log-actions.utils';
 import {
+  buildLoginCaptchaInvalidDebugLogAction,
+  buildLoginCaptchaSkippedDebugLogAction,
+  buildLoginCaptchaVerificationErrorLogAction,
+  buildLoginCaptchaVerifiedDebugLogAction,
+  buildLoginInternalErrorLogAction,
+  buildLoginInvalidPasswordDebugLogAction,
+  buildLoginSuccessWithoutTwoFactorInfoLogAction,
+  buildLoginTwoFactorRequiredDebugLogAction,
+  buildLoginUserNotFoundDebugLogAction,
+} from './auth-login-log-actions.utils';
+import {
+  buildPasskeyAuthenticationOptionsErrorLogAction,
+  buildPasskeyAuthenticationOptionsGeneratedDebugLogAction,
+  buildPasskeyAuthenticationSuccessInfoLogAction,
+  buildPasskeyAuthenticationUserNotFoundAfterVerifiedErrorLogAction,
+  buildPasskeyAuthenticationVerificationErrorLogAction,
+  buildPasskeyAuthenticationVerificationFailedWarnLogAction,
+  buildPasskeyHasConfiguredCheckErrorLogAction,
+  buildPasskeyListErrorLogAction,
+  buildPasskeyRegistrationOptionsErrorLogAction,
+  buildPasskeyRegistrationOptionsGeneratedDebugLogAction,
+  buildPasskeyRegistrationSuccessInfoLogAction,
+  buildPasskeyRegistrationVerificationErrorLogAction,
+  buildPasskeyRegistrationVerificationFailedWarnLogAction,
+} from './auth-passkey-log-actions.utils';
+import {
   applyLoginTwoFactorAttemptAction,
   buildLoginTwoFactorDiagnosticsLogActions,
   buildLoginTwoFactorPendingValidationFailedDebugLogAction,
@@ -254,10 +280,12 @@ export const generatePasskeyRegistrationOptionsHandler = async (
       userHandle: userId.toString(),
     });
 
-    console.debug(`[AuthController] Generated Passkey registration options for user ${username}`);
+    const optionsLogAction = buildPasskeyRegistrationOptionsGeneratedDebugLogAction(username);
+    console[optionsLogAction.level](optionsLogAction.message);
     res.json(options);
   } catch (error: unknown) {
-    console.error(`[AuthController] 生成 Passkey 注册选项时出错 (用户: ${username}):`, error);
+    const optionsErrorLogAction = buildPasskeyRegistrationOptionsErrorLogAction(username);
+    console[optionsErrorLogAction.level](optionsErrorLogAction.message, error);
     next(error);
   }
 };
@@ -297,9 +325,11 @@ export const verifyPasskeyRegistrationHandler = async (
     if (verificationResult.status === 'verified') {
       await passkeyRepository.createPasskey(verificationResult.newPasskeyToSave);
       const userIdNum = parseInt(registrationContext.userHandle, 10);
-      console.info(
-        `[AuthController] 用户 ${registrationContext.userHandle} 的 Passkey 注册成功并已保存。 CredentialID: ${verificationResult.newPasskeyToSave.credential_id.substring(0, 8)}***`
-      );
+      const registrationSuccessLogAction = buildPasskeyRegistrationSuccessInfoLogAction({
+        userHandle: registrationContext.userHandle,
+        credentialId: verificationResult.newPasskeyToSave.credential_id,
+      });
+      console[registrationSuccessLogAction.level](registrationSuccessLogAction.message);
       auditLogService.logAction('PASSKEY_REGISTERED', {
         userId: userIdNum,
         credentialId: verificationResult.newPasskeyToSave.credential_id,
@@ -313,17 +343,17 @@ export const verifyPasskeyRegistrationHandler = async (
       clearPasskeyRegistrationSession(req);
       res.status(201).json({ verified: true, message: 'Passkey 注册成功。' });
     } else {
-      console.warn(
-        `[AuthController] Passkey 注册验证失败 (用户: ${registrationContext.userHandle}):`,
-        verification
+      const verificationFailedLogAction = buildPasskeyRegistrationVerificationFailedWarnLogAction(
+        registrationContext.userHandle
       );
+      console[verificationFailedLogAction.level](verificationFailedLogAction.message, verification);
       res.status(400).json(verificationResult.responseBody);
     }
   } catch (error: unknown) {
-    console.error(
-      `[AuthController] 验证 Passkey 注册时出错 (用户: ${registrationContext.userHandle}):`,
-      error
+    const verificationErrorLogAction = buildPasskeyRegistrationVerificationErrorLogAction(
+      registrationContext.userHandle
     );
+    console[verificationErrorLogAction.level](verificationErrorLogAction.message, error);
     next(error);
   }
 };
@@ -350,15 +380,16 @@ export const generatePasskeyAuthenticationOptionsHandler = async (
       clearUserHandle: true,
     });
 
-    console.debug(
-      `[AuthController] Generated Passkey authentication options (username: ${username || 'any'})`
+    const optionsLogAction = buildPasskeyAuthenticationOptionsGeneratedDebugLogAction(
+      username || 'any'
     );
+    console[optionsLogAction.level](optionsLogAction.message);
     res.json(options);
   } catch (error: unknown) {
-    console.error(
-      `[AuthController] 生成 Passkey 认证选项时出错 (username: ${username || 'any'}):`,
-      error
+    const optionsErrorLogAction = buildPasskeyAuthenticationOptionsErrorLogAction(
+      username || 'any'
     );
+    console[optionsErrorLogAction.level](optionsErrorLogAction.message, error);
     next(error);
   }
 };
@@ -399,9 +430,11 @@ export const verifyPasskeyAuthenticationHandler = async (
       const user = await userRepository.findUserById(verificationResult.userId);
       if (!user) {
         // This should ideally not happen if passkey verification was successful
-        console.error(
-          `[AuthController] Passkey 认证成功但未找到用户 ID: ${verificationResult.userId}`
-        );
+        const missingUserLogAction =
+          buildPasskeyAuthenticationUserNotFoundAfterVerifiedErrorLogAction(
+            verificationResult.userId
+          );
+        console[missingUserLogAction.level](missingUserLogAction.message);
         recordPasskeyAuthenticationFailure(
           { auditLogService, notificationService },
           {
@@ -414,9 +447,12 @@ export const verifyPasskeyAuthenticationHandler = async (
         return;
       }
 
-      console.info(
-        `[AuthController] 用户 ${user.username} (ID: ${user.id}) 通过 Passkey (ID: ***${verificationResult.passkey.id.toString().substring(verificationResult.passkey.id.toString().length - 4)}) 认证成功。`
-      );
+      const authenticationSuccessLogAction = buildPasskeyAuthenticationSuccessInfoLogAction({
+        username: user.username,
+        userId: user.id,
+        passkeyId: verificationResult.passkey.id,
+      });
+      console[authenticationSuccessLogAction.level](authenticationSuccessLogAction.message);
       recordPasskeyAuthenticationSuccess(
         { auditLogService, notificationService },
         {
@@ -431,7 +467,8 @@ export const verifyPasskeyAuthenticationHandler = async (
         rememberMe,
       });
     } else {
-      console.warn(`[AuthController] Passkey 认证验证失败:`, verification);
+      const verificationFailedLogAction = buildPasskeyAuthenticationVerificationFailedWarnLogAction();
+      console[verificationFailedLogAction.level](verificationFailedLogAction.message, verification);
       recordPasskeyAuthenticationFailure(
         { auditLogService, notificationService },
         {
@@ -445,7 +482,8 @@ export const verifyPasskeyAuthenticationHandler = async (
       res.status(401).json(verificationResult.responseBody);
     }
   } catch (error: unknown) {
-    console.error(`[AuthController] 验证 Passkey 认证时出错:`, error);
+    const verificationErrorLogAction = buildPasskeyAuthenticationVerificationErrorLogAction();
+    console[verificationErrorLogAction.level](verificationErrorLogAction.message, error);
     recordPasskeyAuthenticationFailure(
       { auditLogService, notificationService },
       {
@@ -480,10 +518,8 @@ export const listUserPasskeysHandler = async (
     console[listAction.log.level](listAction.log.message);
     res.status(listAction.response.statusCode).json(listAction.response.body);
   } catch (error: unknown) {
-    console.error(
-      `[AuthController] 用户 ${username} (ID: ${userId}) 获取 Passkey 列表时出错:`,
-      error
-    );
+    const listErrorLogAction = buildPasskeyListErrorLogAction({ userId, username });
+    console[listErrorLogAction.level](listErrorLogAction.message, error);
     next(error);
   }
 };
@@ -623,7 +659,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       try {
         const isCaptchaValid = await captchaService.verifyToken(captchaToken);
         if (!isCaptchaValid) {
-          console.debug(`[AuthController] 登录尝试失败: CAPTCHA 验证失败 - ${username}`);
+          const captchaInvalidLogAction = buildLoginCaptchaInvalidDebugLogAction(username);
+          console[captchaInvalidLogAction.level](captchaInvalidLogAction.message);
           const clientIp = resolveRequestClientIp(req);
           recordLoginFailureAttempt(
             { ipBlacklistService, auditLogService, notificationService },
@@ -636,17 +673,20 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           res.status(401).json({ message: 'CAPTCHA 验证失败。' });
           return;
         }
-        console.debug(`[AuthController] CAPTCHA 验证成功 - ${username}`);
+        const captchaVerifiedLogAction = buildLoginCaptchaVerifiedDebugLogAction(username);
+        console[captchaVerifiedLogAction.level](captchaVerifiedLogAction.message);
       } catch (captchaError: unknown) {
-        console.error(
-          `[AuthController] CAPTCHA 验证过程中出错 (${username}):`,
+        const captchaErrorLogAction = buildLoginCaptchaVerificationErrorLogAction(username);
+        console[captchaErrorLogAction.level](
+          captchaErrorLogAction.message,
           getErrorMessage(captchaError)
         );
         res.status(500).json({ message: 'CAPTCHA 验证服务出错，请稍后重试或检查配置。' });
         return;
       }
     } else {
-      console.debug(`[AuthController] CAPTCHA 未启用，跳过验证 - ${username}`);
+      const captchaSkippedLogAction = buildLoginCaptchaSkippedDebugLogAction(username);
+      console[captchaSkippedLogAction.level](captchaSkippedLogAction.message);
     }
 
     const db = await getDbInstance();
@@ -654,7 +694,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     const user = await getDb<User>(db, userQueryAction.sql, userQueryAction.params);
 
     if (!user) {
-      console.debug(`登录尝试失败: 用户未找到 - ${username}`);
+      const userNotFoundLogAction = buildLoginUserNotFoundDebugLogAction(username);
+      console[userNotFoundLogAction.level](userNotFoundLogAction.message);
       const clientIp = resolveRequestClientIp(req);
       recordLoginFailureAttempt(
         { ipBlacklistService, auditLogService, notificationService },
@@ -671,7 +712,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     const isMatch = await comparePassword(password, user.hashed_password);
 
     if (!isMatch) {
-      console.debug(`登录尝试失败: 密码错误 - ${username}`);
+      const passwordInvalidLogAction = buildLoginInvalidPasswordDebugLogAction(username);
+      console[passwordInvalidLogAction.level](passwordInvalidLogAction.message);
       const clientIp = resolveRequestClientIp(req);
       recordLoginFailureAttempt(
         { ipBlacklistService, auditLogService, notificationService },
@@ -687,7 +729,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     // 检查是否启用了 2FA
     if (user.two_factor_secret) {
-      console.debug(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
+      const twoFactorRequiredLogAction = buildLoginTwoFactorRequiredDebugLogAction(username);
+      console[twoFactorRequiredLogAction.level](twoFactorRequiredLogAction.message);
       const pendingAuth = createPendingLoginTwoFactorAuthState({
         userId: user.id,
         username: user.username,
@@ -696,7 +739,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       });
       startPendingTwoFactorSession(req, res, { pendingAuth, rememberMe, isDev });
     } else {
-      console.info(`登录成功 (无 2FA): ${username}`);
+      const loginSuccessLogAction = buildLoginSuccessWithoutTwoFactorInfoLogAction(username);
+      console[loginSuccessLogAction.level](loginSuccessLogAction.message);
       const clientIp = resolveRequestClientIp(req);
       recordLoginSuccessAttempt(
         { ipBlacklistService, auditLogService, notificationService },
@@ -709,7 +753,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       });
     }
   } catch (error: unknown) {
-    console.error('登录时出错:', error);
+    const loginErrorLogAction = buildLoginInternalErrorLogAction();
+    console[loginErrorLogAction.level](loginErrorLogAction.message, error);
     next(error);
   }
 };
@@ -1365,10 +1410,8 @@ export const checkHasPasskeys = async (
     const hasPasskeys = await passkeyService.hasPasskeysConfigured(username);
     res.status(200).json({ hasPasskeys });
   } catch (error: unknown) {
-    console.error(
-      `[AuthController] 检查 Passkey 配置状态时出错 (username: ${username || 'any'}):`,
-      getErrorMessage(error)
-    );
+    const checkErrorLogAction = buildPasskeyHasConfiguredCheckErrorLogAction(username || 'any');
+    console[checkErrorLogAction.level](checkErrorLogAction.message, getErrorMessage(error));
     next(error);
   }
 };
