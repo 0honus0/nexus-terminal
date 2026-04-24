@@ -16,7 +16,27 @@
 
 ## 🔀 Differences from Upstream
 
-> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal), with significant engineering quality improvements and feature enhancements on top of the upstream version. Below are the unique improvements in this fork:
+> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal).  
+> Upstream baseline: `Heavrnl/nexus-terminal:main`  
+> Snapshot (2026-04-24): this fork is `ahead 369 / behind 0` vs upstream.  
+> Compare URL: <https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
+
+### 📌 Recent Divergence (Batches 16-30)
+
+- Auth flow actionization for login 2FA (precheck/query/outcome execution pipeline)
+- Auth controller SQL extraction (replacing inline SQL with query/mutation builders)
+- Unified log-action templates for login, passkey, and 2FA (`build*LogAction` + `{ level, message }`)
+- Technical debt governance finalized through Batch 30 (debt report closed out)
+
+### ✅ Verifiable Current State
+
+- `npm run -s debt:check` passes (code markers / E2E skip / console.log / any = 0)
+- `npm run -s quality:check` passes (quality and formatting gates)
+- `import/no-cycle` controlled waivers converged to 0 (see `doc/TECHNICAL_DEBT_REPORT.md`)
+
+---
+
+Below is a long-term summary of this fork's enhancements compared to upstream:
 
 ### ⚡ Performance Optimizations
 
