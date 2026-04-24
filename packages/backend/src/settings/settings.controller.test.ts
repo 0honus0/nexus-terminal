@@ -44,6 +44,7 @@ describe('settingsController.updateSettings', () => {
       body: {
         ipWhitelist: '127.0.0.1',
         terminalOutputEnhancerEnabled: 'false',
+        sshSuspendKeepAliveSeconds: '1800',
         notAllowedKey: 'should-be-filtered',
       },
     };
@@ -55,6 +56,7 @@ describe('settingsController.updateSettings', () => {
     expect(settingsService.setMultipleSettings).toHaveBeenCalledWith({
       ipWhitelist: '127.0.0.1',
       terminalOutputEnhancerEnabled: 'false',
+      sshSuspendKeepAliveSeconds: '1800',
     });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ message: '设置已成功更新' });

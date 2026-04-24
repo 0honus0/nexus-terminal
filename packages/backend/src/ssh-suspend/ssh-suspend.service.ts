@@ -19,6 +19,7 @@ import {
 export class SshSuspendService extends EventEmitter {
   private suspendedSessions: SuspendedSessionsMap = new Map();
   private readonly logStorageService: TemporaryLogStorageService;
+  private readonly keepAliveTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(logStorage?: TemporaryLogStorageService) {
     super(); // 调用 EventEmitter 的构造函数
@@ -114,6 +115,55 @@ export class SshSuspendService extends EventEmitter {
     return userSessions;
   }
 
+  private clearKeepAliveTimer(suspendSessionId: string): void {
+    const timer = this.keepAliveTimers.get(suspendSessionId);
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    this.keepAliveTimers.delete(suspendSessionId);
+  }
+
+  private scheduleKeepAliveTimeout(
+    userId: number,
+    suspendSessionId: string,
+    keepAliveSeconds: number
+  ): void {
+    this.clearKeepAliveTimer(suspendSessionId);
+    if (keepAliveSeconds <= 0) {
+      return;
+    }
+
+    const timeoutMs = keepAliveSeconds * 1000;
+    const timer = setTimeout(() => {
+      this.keepAliveTimers.delete(suspendSessionId);
+      const userSessions = this.getUserSessions(userId);
+      const session = userSessions.get(suspendSessionId);
+      if (!session || session.backendSshStatus !== 'hanging') {
+        return;
+      }
+
+      const reason = `Suspended session keepalive timeout reached (${keepAliveSeconds}s).`;
+      console.info(
+        `[SshSuspendService INFO] 用户 ${userId} 的挂起会话 ${suspendSessionId} 已达到保活上限 ${keepAliveSeconds}s，准备自动断开。`
+      );
+      this.handleUnexpectedDisconnection(userId, suspendSessionId, reason);
+      try {
+        session.channel?.close();
+      } catch {
+        /* ignore */
+      }
+      try {
+        session.sshClient?.end();
+      } catch {
+        /* ignore */
+      }
+    }, timeoutMs);
+
+    timer.unref?.();
+    this.keepAliveTimers.set(suspendSessionId, timer);
+  }
+
   /**
    * 当一个被标记为待挂起的会话的 WebSocket 连接断开时，由此方法接管 SSH 资源。
    * @param details 包含接管所需的所有会话详细信息。
@@ -128,6 +178,7 @@ export class SshSuspendService extends EventEmitter {
     connectionId: string;
     logIdentifier: string;
     customSuspendName?: string;
+    keepAliveSeconds?: number;
   }): Promise<string | null> {
     const {
       userId,
@@ -138,6 +189,7 @@ export class SshSuspendService extends EventEmitter {
       connectionId,
       logIdentifier,
       customSuspendName,
+      keepAliveSeconds,
     } = details;
     console.debug(
       `[SshSuspendService DEBUG] takeOverMarkedSession: Called for userId=${userId}, originalSessionId=${originalSessionId}`
@@ -199,6 +251,11 @@ export class SshSuspendService extends EventEmitter {
     );
 
     await this.logStorageService.ensureLogDirectoryExists();
+    const normalizedKeepAliveSeconds =
+      typeof keepAliveSeconds === 'number' && keepAliveSeconds > 0
+        ? Math.floor(keepAliveSeconds)
+        : 0;
+    this.scheduleKeepAliveTimeout(userId, suspendSessionId, normalizedKeepAliveSeconds);
 
     console.debug(
       `[SshSuspendService DEBUG] takeOverMarkedSession: Setting up channel 'data' listener for suspendSessionId=${suspendSessionId}`
@@ -230,6 +287,7 @@ export class SshSuspendService extends EventEmitter {
         );
         currentSession.backendSshStatus = 'disconnected_by_backend';
         currentSession.disconnectionTimestamp = new Date().toISOString();
+        this.clearKeepAliveTimer(suspendSessionId);
 
         // 保存会话元数据到磁盘，以便后端重启后恢复
         const metadata: SessionMetadata = {
@@ -386,6 +444,7 @@ export class SshSuspendService extends EventEmitter {
 
     // 停止监听旧通道事件
     this.removeChannelListeners(session.channel, session.sshClient);
+    this.clearKeepAliveTimer(suspendSessionId);
     // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 已移除会话 ${suspendSessionId} 的旧监听器。`);
 
     let logData = '';
@@ -443,6 +502,7 @@ export class SshSuspendService extends EventEmitter {
       // 如果会话已断开，但记录还在，也应该能被"终止"（即移除）
       if (session && session.backendSshStatus === 'disconnected_by_backend') {
         const logPathToDelete = session.tempLogPath;
+        this.clearKeepAliveTimer(suspendSessionId);
         userSessions.delete(suspendSessionId);
         await Promise.all([
           this.logStorageService.deleteLog(logPathToDelete),
@@ -457,6 +517,7 @@ export class SshSuspendService extends EventEmitter {
     }
 
     this.removeChannelListeners(session.channel, session.sshClient);
+    this.clearKeepAliveTimer(suspendSessionId);
 
     try {
       session.channel.close(); // 尝试优雅关闭
@@ -503,6 +564,7 @@ export class SshSuspendService extends EventEmitter {
 
     // 如果会话在内存中（不论状态），则删除
     if (session) {
+      this.clearKeepAliveTimer(suspendSessionId);
       userSessions.delete(suspendSessionId);
     }
 
@@ -580,16 +642,20 @@ export class SshSuspendService extends EventEmitter {
    * @param userId 用户ID。
    * @param suspendSessionId 发生断开的会话ID。
    */
-  public handleUnexpectedDisconnection(userId: number, suspendSessionId: string): void {
+  public handleUnexpectedDisconnection(
+    userId: number,
+    suspendSessionId: string,
+    reason = 'Unexpected disconnection handled by SshSuspendService.'
+  ): void {
     // userId: string -> number
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
     if (session && session.backendSshStatus === 'hanging') {
-      const reason = 'Unexpected disconnection handled by SshSuspendService.';
       session.backendSshStatus = 'disconnected_by_backend';
       session.disconnectionTimestamp = new Date().toISOString();
       this.removeChannelListeners(session.channel, session.sshClient); // 移除监听器
+      this.clearKeepAliveTimer(suspendSessionId);
       console.info(
         `[用户: ${userId}] 会话 ${suspendSessionId} 状态更新为 'disconnected_by_backend'。原因: ${reason}`
       );

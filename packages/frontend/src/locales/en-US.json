@@ -954,7 +954,13 @@
       "terminalAutoWrapLabel": "Enable terminal auto wrap",
       "terminalAutoWrapDescription": "When disabled, long lines are kept as wide as possible and can be viewed via horizontal scrolling instead of forced wrapping.",
       "terminalAutoWrapSuccess": "Terminal auto wrap setting saved.",
-      "terminalAutoWrapError": "Failed to save terminal auto wrap setting."
+      "terminalAutoWrapError": "Failed to save terminal auto wrap setting.",
+      "sshSuspendKeepAliveTitle": "Suspended Session Keepalive",
+      "sshSuspendKeepAliveLabel": "Keepalive Seconds",
+      "sshSuspendKeepAliveDescription": "Set how long a suspended session stays active in the backend. 0 means keep forever. After timeout, it will be auto-disconnected and cannot be resumed.",
+      "sshSuspendKeepAliveSuccess": "Suspended session keepalive setting saved.",
+      "sshSuspendKeepAliveError": "Failed to save suspended session keepalive setting.",
+      "sshSuspendKeepAliveInvalidInput": "Please enter a valid non-negative integer. 0 means keep forever."
     },
     "statusMonitorShowIp": {
       "title": "Status Monitor: Show IP Address",

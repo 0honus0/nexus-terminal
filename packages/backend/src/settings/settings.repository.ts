@@ -298,6 +298,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
     timezone: 'UTC', // 时区默认值
     terminalScrollbackLimit: '5000', // 终端回滚行数默认值
     terminalAutoWrapEnabled: 'true', // 终端自动换行默认启用
+    sshSuspendKeepAliveSeconds: '0', // 挂起会话保活时长（秒），0 表示永久
     terminalEnableRightClickPaste: 'true', // 终端右键粘贴默认值
   };
   const nowSeconds = Math.floor(Date.now() / 1000);

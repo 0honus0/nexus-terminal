@@ -18,6 +18,7 @@ export function useWorkspaceSettings() {
     showQuickCommandTagsBoolean,
     terminalScrollbackLimitNumber,
     terminalAutoWrapEnabledBoolean,
+    sshSuspendKeepAliveSecondsNumber,
     fileManagerShowDeleteConfirmationBoolean,
     fileManagerSingleClickOpenFileBoolean,
     terminalEnableRightClickPasteBoolean,
@@ -297,6 +298,50 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- SSH Suspend Keepalive Seconds ---
+  const sshSuspendKeepAliveSecondsLocal = ref<number | null>(0);
+  const sshSuspendKeepAliveSecondsLoading = ref(false);
+  const sshSuspendKeepAliveSecondsMessage = ref('');
+  const sshSuspendKeepAliveSecondsSuccess = ref(false);
+
+  const handleUpdateSshSuspendKeepAliveSeconds = async () => {
+    sshSuspendKeepAliveSecondsLoading.value = true;
+    sshSuspendKeepAliveSecondsMessage.value = '';
+    sshSuspendKeepAliveSecondsSuccess.value = false;
+    try {
+      const keepAliveValue = sshSuspendKeepAliveSecondsLocal.value;
+      if (
+        keepAliveValue !== null &&
+        keepAliveValue !== undefined &&
+        (Number.isNaN(keepAliveValue) || !Number.isInteger(keepAliveValue) || keepAliveValue < 0)
+      ) {
+        throw new Error(
+          t(
+            'settings.workspace.sshSuspendKeepAliveInvalidInput',
+            '请输入一个有效的非负整数，0 表示永久保活。'
+          )
+        );
+      }
+      const valueToSave =
+        keepAliveValue === null || keepAliveValue === undefined ? '0' : String(keepAliveValue);
+      await settingsStore.updateSetting('sshSuspendKeepAliveSeconds', valueToSave);
+      sshSuspendKeepAliveSecondsMessage.value = t(
+        'settings.workspace.sshSuspendKeepAliveSuccess',
+        '挂起会话保活时长设置已保存。'
+      );
+      sshSuspendKeepAliveSecondsSuccess.value = true;
+    } catch (error: unknown) {
+      console.error('更新挂起会话保活时长设置失败:', error);
+      sshSuspendKeepAliveSecondsMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.sshSuspendKeepAliveError', '保存挂起会话保活时长设置失败。')
+      );
+      sshSuspendKeepAliveSecondsSuccess.value = false;
+    } finally {
+      sshSuspendKeepAliveSecondsLoading.value = false;
+    }
+  };
+
   // --- File Manager Delete Confirmation ---
   const fileManagerShowDeleteConfirmationLocal = ref(true);
   const fileManagerShowDeleteConfirmationLoading = ref(false);
@@ -539,6 +584,13 @@ export function useWorkspaceSettings() {
     { immediate: true }
   );
   watch(
+    sshSuspendKeepAliveSecondsNumber,
+    (newValue) => {
+      sshSuspendKeepAliveSecondsLocal.value = newValue;
+    },
+    { immediate: true }
+  );
+  watch(
     fileManagerShowDeleteConfirmationBoolean,
     (newValue) => {
       fileManagerShowDeleteConfirmationLocal.value = newValue;
@@ -634,6 +686,11 @@ export function useWorkspaceSettings() {
     terminalAutoWrapMessage,
     terminalAutoWrapSuccess,
     handleUpdateTerminalAutoWrapSetting,
+    sshSuspendKeepAliveSecondsLocal,
+    sshSuspendKeepAliveSecondsLoading,
+    sshSuspendKeepAliveSecondsMessage,
+    sshSuspendKeepAliveSecondsSuccess,
+    handleUpdateSshSuspendKeepAliveSeconds,
 
     fileManagerShowDeleteConfirmationLocal,
     fileManagerShowDeleteConfirmationLoading,

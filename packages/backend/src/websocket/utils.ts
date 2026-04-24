@@ -1,6 +1,39 @@
 import { PortInfo } from './types';
-import { auditLogService, clientStates, sftpService, statusMonitorService } from './state';
+import {
+  auditLogService,
+  clientStates,
+  sftpService,
+  statusMonitorService,
+  settingsService,
+} from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
+
+const SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY = 'sshSuspendKeepAliveSeconds';
+const DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS = 0;
+
+const parseSshSuspendKeepAliveSeconds = (raw: string | null): number => {
+  if (raw === null) {
+    return DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS;
+  }
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    return DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS;
+  }
+  return parsed;
+};
+
+const getSshSuspendKeepAliveSecondsFromSettings = async (): Promise<number> => {
+  try {
+    const rawSetting = await settingsService.getSetting(SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY);
+    return parseSshSuspendKeepAliveSeconds(rawSetting);
+  } catch (error) {
+    console.warn(
+      `[WebSocket] 读取 ${SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY} 失败，将使用默认值 ${DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS}:`,
+      error
+    );
+    return DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS;
+  }
+};
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -95,6 +128,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         `WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`
       );
       try {
+        const keepAliveSeconds = await getSshSuspendKeepAliveSecondsFromSettings();
         const takeoverDetails = {
           userId: state.ws.userId,
           originalSessionId: sessionId, // sessionId 是原始活动会话的ID
@@ -104,6 +138,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
           connectionId: String(state.dbConnectionId),
           logIdentifier: state.suspendLogPath, // 这是基于 originalSessionId 的日志标识
           customSuspendName: undefined, // 如果需要，可以从 state 或其他地方获取
+          keepAliveSeconds,
         };
 
         // 从 state 中"分离"SSH资源，防止后续意外关闭

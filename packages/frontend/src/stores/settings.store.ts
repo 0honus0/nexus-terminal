@@ -65,6 +65,7 @@ interface SettingsState {
   layoutLocked?: string; // 'true' or 'false' - NEW: 布局锁定状态
   terminalScrollbackLimit?: string; //  终端回滚行数上限 (e.g., '5000', '0' for unlimited)
   terminalAutoWrapEnabled?: string; //  'true' or 'false' - 终端自动换行开关
+  sshSuspendKeepAliveSeconds?: string; // 挂起会话保活时长（秒），'0' 表示永久
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   fileManagerSingleClickOpenFile?: string; // 'true' or 'false' - 文件管理器单击打开文件
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
@@ -385,6 +386,12 @@ export const useSettingsStore = defineStore('settings', () => {
           `[SettingsStore] terminalAutoWrapEnabled not found, set to default: ${settings.value.terminalAutoWrapEnabled}`
         );
       }
+      if (settings.value.sshSuspendKeepAliveSeconds === undefined) {
+        settings.value.sshSuspendKeepAliveSeconds = '0'; // 默认永久保活
+        console.info(
+          `[SettingsStore] sshSuspendKeepAliveSeconds not found, set to default: ${settings.value.sshSuspendKeepAliveSeconds}`
+        );
+      }
       //  File Manager Delete Confirmation default
       if (settings.value.fileManagerShowDeleteConfirmation === undefined) {
         settings.value.fileManagerShowDeleteConfirmation = 'true'; // 默认显示删除确认
@@ -573,6 +580,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'layoutLocked',
       'terminalScrollbackLimit',
       'terminalAutoWrapEnabled',
+      'sshSuspendKeepAliveSeconds',
       'fileManagerShowDeleteConfirmation',
       'fileManagerSingleClickOpenFile',
       'terminalEnableRightClickPaste',
@@ -714,6 +722,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'layoutLocked',
       'terminalScrollbackLimit',
       'terminalAutoWrapEnabled',
+      'sshSuspendKeepAliveSeconds',
       'fileManagerShowDeleteConfirmation',
       'fileManagerSingleClickOpenFile',
       'terminalEnableRightClickPaste',
@@ -1072,6 +1081,18 @@ export const useSettingsStore = defineStore('settings', () => {
     return settings.value.terminalAutoWrapEnabled !== 'false'; // Default to true
   });
 
+  const sshSuspendKeepAliveSecondsNumber = computed(() => {
+    const valStr = settings.value.sshSuspendKeepAliveSeconds;
+    if (valStr === null || valStr === undefined || valStr.trim() === '') {
+      return 0;
+    }
+    const val = parseInt(valStr, 10);
+    if (Number.isNaN(val) || val < 0) {
+      return 0;
+    }
+    return val;
+  });
+
   //  Getter for File Manager delete confirmation, returning boolean
   const fileManagerShowDeleteConfirmationBoolean = computed(() => {
     return settings.value.fileManagerShowDeleteConfirmation !== 'false'; // Default to true
@@ -1157,6 +1178,7 @@ export const useSettingsStore = defineStore('settings', () => {
     layoutLockedBoolean,
     terminalScrollbackLimitNumber, //  Expose terminal scrollback limit getter
     terminalAutoWrapEnabledBoolean, // Expose terminal auto wrap getter
+    sshSuspendKeepAliveSecondsNumber, // 挂起会话保活时长（秒）getter
     fileManagerShowDeleteConfirmationBoolean, //  Expose file manager delete confirmation getter
     fileManagerSingleClickOpenFileBoolean, // Expose file manager single-click open file getter
     terminalEnableRightClickPasteBoolean, //  Expose terminal right click paste getter

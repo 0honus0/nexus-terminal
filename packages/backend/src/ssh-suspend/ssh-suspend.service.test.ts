@@ -150,6 +150,67 @@ describe('SshSuspendService', () => {
 
       expect(mockLogStorageService.writeToLog).toHaveBeenCalledWith('log-123', 'test output');
     });
+
+    it('设置保活时长后应在超时后自动断开挂起会话', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockClient = createMockSshClient();
+        const mockChannel = createMockChannel();
+        const eventListener = vi.fn();
+        service.on('sessionAutoTerminated', eventListener);
+
+        await service.takeOverMarkedSession({
+          userId: 1,
+          originalSessionId: 'original-123',
+          sshClient: mockClient as any,
+          channel: mockChannel as any,
+          connectionName: 'Test Server',
+          connectionId: '1',
+          logIdentifier: 'log-123',
+          keepAliveSeconds: 1,
+        });
+
+        await vi.advanceTimersByTimeAsync(1100);
+        const sessions = await service.listSuspendedSessions(1);
+        expect(sessions).toHaveLength(1);
+        expect(sessions[0].backendSshStatus).toBe('disconnected_by_backend');
+        expect(eventListener).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: 1,
+            suspendSessionId: 'mock-uuid-12345',
+            reason: expect.stringContaining('keepalive timeout'),
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('保活时长为 0 时不应触发自动断开', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockClient = createMockSshClient();
+        const mockChannel = createMockChannel();
+
+        await service.takeOverMarkedSession({
+          userId: 1,
+          originalSessionId: 'original-123',
+          sshClient: mockClient as any,
+          channel: mockChannel as any,
+          connectionName: 'Test Server',
+          connectionId: '1',
+          logIdentifier: 'log-123',
+          keepAliveSeconds: 0,
+        });
+
+        await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+        const sessions = await service.listSuspendedSessions(1);
+        expect(sessions).toHaveLength(1);
+        expect(sessions[0].backendSshStatus).toBe('hanging');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('listSuspendedSessions', () => {

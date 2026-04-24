@@ -131,6 +131,7 @@ export const settingsController = {
         'fileManagerShowDeleteConfirmation', // 文件管理器删除确认键
         'fileManagerSingleClickOpenFile', // 文件管理器单击打开文件键
         'terminalAutoWrapEnabled', // 终端自动换行开关
+        'sshSuspendKeepAliveSeconds', // 挂起会话保活时长（秒）
         'terminalEnableRightClickPaste', // 终端右键粘贴键
         'showStatusMonitorIpAddress', // 添加状态监视器IP显示键 (与服务层和前端统一)
         'terminalOutputEnhancerEnabled', // 终端输出增强器开关

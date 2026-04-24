@@ -953,7 +953,13 @@
       "terminalAutoWrapLabel": "启用终端自动换行",
       "terminalAutoWrapDescription": "关闭后将尽量保持宽行并允许水平滚动查看内容，避免长输出被强制折行。",
       "terminalAutoWrapSuccess": "终端自动换行设置已保存。",
-      "terminalAutoWrapError": "保存终端自动换行设置失败。"
+      "terminalAutoWrapError": "保存终端自动换行设置失败。",
+      "sshSuspendKeepAliveTitle": "挂起会话保活时长",
+      "sshSuspendKeepAliveLabel": "保活秒数",
+      "sshSuspendKeepAliveDescription": "设置挂起会话在后台保持活跃的时长。0 表示永久保活。超过该时间将自动断开为不可恢复状态。",
+      "sshSuspendKeepAliveSuccess": "挂起会话保活时长设置已保存。",
+      "sshSuspendKeepAliveError": "保存挂起会话保活时长设置失败。",
+      "sshSuspendKeepAliveInvalidInput": "请输入一个有效的非负整数，0 表示永久保活。"
     },
     "statusMonitorShowIp": {
       "title": "状态监视器显示IP地址",

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { parsePortsString, cleanupClientConnection } from './utils';
-import { clientStates, statusMonitorService, sftpService } from './state';
+import { clientStates, statusMonitorService, sftpService, settingsService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { AuthenticatedWebSocket, ClientState } from './types';
 
@@ -12,6 +12,9 @@ vi.mock('./state', () => ({
   },
   sftpService: {
     cleanupSftpSession: vi.fn(),
+  },
+  settingsService: {
+    getSetting: vi.fn().mockResolvedValue('0'),
   },
   auditLogService: {
     logAction: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +31,7 @@ describe('WebSocket Utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (clientStates as Map<string, any>).clear();
+    (settingsService.getSetting as any).mockResolvedValue('0');
   });
 
   describe('parsePortsString', () => {
@@ -214,10 +218,16 @@ describe('WebSocket Utils', () => {
       clientStates.set('session-1', state as ClientState);
 
       (sshSuspendService.takeOverMarkedSession as any).mockResolvedValue('suspend-session-1');
+      (settingsService.getSetting as any).mockResolvedValue('3600');
 
       await cleanupClientConnection('session-1');
 
       expect(sshSuspendService.takeOverMarkedSession).toHaveBeenCalled();
+      expect(sshSuspendService.takeOverMarkedSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keepAliveSeconds: 3600,
+        })
+      );
       expect(mockSshClient.end).not.toHaveBeenCalled();
       expect(clientStates.has('session-1')).toBe(false);
     });

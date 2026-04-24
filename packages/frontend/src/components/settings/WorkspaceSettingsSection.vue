@@ -428,6 +428,52 @@
         </form>
       </div>
       <hr class="border-border/50" />
+      <!-- SSH Suspend Keepalive -->
+      <div class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">
+          {{ $t('settings.workspace.sshSuspendKeepAliveTitle') }}
+        </h3>
+        <form @submit.prevent="handleUpdateSshSuspendKeepAliveSeconds" class="space-y-4">
+          <div>
+            <label
+              for="sshSuspendKeepAliveSecondsInput"
+              class="block text-sm font-medium text-text-secondary mb-1"
+              >{{ $t('settings.workspace.sshSuspendKeepAliveLabel') }}</label
+            >
+            <input
+              id="sshSuspendKeepAliveSecondsInput"
+              v-model.number="sshSuspendKeepAliveSecondsLocal"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="0"
+              class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            />
+            <p class="text-xs text-text-secondary mt-1">
+              {{ $t('settings.workspace.sshSuspendKeepAliveDescription') }}
+            </p>
+          </div>
+          <div class="flex items-center justify-between pt-2">
+            <button
+              type="submit"
+              :disabled="sshSuspendKeepAliveSecondsLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+            >
+              {{ $t('common.save') }}
+            </button>
+            <p
+              v-if="sshSuspendKeepAliveSecondsMessage"
+              :class="[
+                'text-sm',
+                sshSuspendKeepAliveSecondsSuccess ? 'text-success' : 'text-error',
+              ]"
+            >
+              {{ sshSuspendKeepAliveSecondsMessage }}
+            </p>
+          </div>
+        </form>
+      </div>
+      <hr class="border-border/50" />
       <!-- File Manager Delete Confirmation -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">
@@ -498,11 +544,11 @@
           </div>
           <p class="text-xs text-text-secondary mt-1">
             {{
-                $t(
-                  'settings.workspace.fileManagerOpenFileModeDescription',
-                  '目录始终保持单击进入；此设置仅影响"文件/符号链接"等非目录项的打开方式。'
-                )
-              }}
+              $t(
+                'settings.workspace.fileManagerOpenFileModeDescription',
+                '目录始终保持单击进入；此设置仅影响"文件/符号链接"等非目录项的打开方式。'
+              )
+            }}
           </p>
           <div class="flex items-center justify-between pt-2">
             <button
@@ -798,6 +844,11 @@ const {
   terminalAutoWrapMessage,
   terminalAutoWrapSuccess,
   handleUpdateTerminalAutoWrapSetting,
+  sshSuspendKeepAliveSecondsLocal,
+  sshSuspendKeepAliveSecondsLoading,
+  sshSuspendKeepAliveSecondsMessage,
+  sshSuspendKeepAliveSecondsSuccess,
+  handleUpdateSshSuspendKeepAliveSeconds,
   fileManagerShowDeleteConfirmationLocal,
   fileManagerShowDeleteConfirmationMessage,
   fileManagerShowDeleteConfirmationSuccess,

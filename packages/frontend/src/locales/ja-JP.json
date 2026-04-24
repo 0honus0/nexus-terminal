@@ -953,7 +953,13 @@
       "terminalAutoWrapLabel": "ターミナルの自動折り返しを有効にする",
       "terminalAutoWrapDescription": "無効にすると、長い行は可能な限りそのまま保持され、強制折り返しの代わりに横スクロールで確認できます。",
       "terminalAutoWrapSuccess": "ターミナル自動折り返し設定を保存しました。",
-      "terminalAutoWrapError": "ターミナル自動折り返し設定の保存に失敗しました。"
+      "terminalAutoWrapError": "ターミナル自動折り返し設定の保存に失敗しました。",
+      "sshSuspendKeepAliveTitle": "サスペンドセッション保持時間",
+      "sshSuspendKeepAliveLabel": "保持秒数",
+      "sshSuspendKeepAliveDescription": "サスペンドセッションをバックエンドで保持する時間を設定します。0 は永久保持です。時間を超えると自動切断され、再開できなくなります。",
+      "sshSuspendKeepAliveSuccess": "サスペンドセッション保持時間の設定を保存しました。",
+      "sshSuspendKeepAliveError": "サスペンドセッション保持時間の設定の保存に失敗しました。",
+      "sshSuspendKeepAliveInvalidInput": "0 以上の整数を入力してください。0 は永久保持です。"
     },
     "statusMonitorShowIp": {
       "title": "ステータスモニターでIPアドレスを表示",
