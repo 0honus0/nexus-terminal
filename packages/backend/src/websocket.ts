@@ -8,6 +8,7 @@ import { clientStates } from './websocket/state';
 import { sshSuspendService } from './ssh-suspend/ssh-suspend.service';
 import { SftpService } from './sftp/sftp.service';
 import { cleanupClientConnection } from './websocket/utils';
+import { logger } from './utils/logger';
 
 export {
   ClientState,
@@ -47,16 +48,16 @@ export const initializeWebSocket = async (
 
   // --- WebSocket 服务器关闭处理 ---
   wss.on('close', () => {
-    console.info('WebSocket 服务器正在关闭，清理心跳定时器和所有活动会话...');
+    logger.info('WebSocket 服务器正在关闭，清理心跳定时器和所有活动会话...');
     clearInterval(heartbeatTimer); // Clear heartbeat started by this function
 
     clientStates.forEach((_state, sessionId) => {
       cleanupClientConnection(sessionId);
     });
-    console.info('所有活动会话已清理。');
+    logger.info('所有活动会话已清理。');
   });
 
-  console.info('WebSocket 服务器初始化完成。');
+  logger.info('WebSocket 服务器初始化完成。');
   return wss;
 };
 

@@ -1463,7 +1463,7 @@ gantt
 | 🟢 低优先级 | 10     | 4      | 🔄 40%     |
 | **总计**    | **26** | **16** | 🔄 **62%** |
 
-> 本次 PR 修复了 16 项（H1-H6/M3/M4/M7/M8/M9/M10/L3/L5/L7/L10），剩余 10 项需后续 PR 处理。
+> PR #22 修复了 13 项（H1-H4/H6/M3/M4/M7/M8/M9/M10/L3/L10）。本 PR 追加修复 6 项（M2/M5/M6/L1/L2/L9），剩余 M1（FileManager 拆分）、L4（路线图功能）、L6（移动端体验）、L8（大组件拆分）待后续处理。
 
 ### 🔴 高优先级（6 项）
 
@@ -1522,7 +1522,7 @@ gantt
 
 - **文件**: `packages/frontend/src/stores/settings.store.ts`
 - **修复方案**: 拆分为 settings / captchaSettings / uiPreferences；引入 ParsedSettings 类型
-- **状态**: 📋 待规划
+- **状态**: ✅ 已修复（2026-04-24）— captchaSettings 逻辑拆分至独立 store
 
 #### M3. 审计日志每次写入都执行清理检查
 
@@ -1540,13 +1540,13 @@ gantt
 
 - **缺失**: settings / dashboard / fileEditor / audit / commandHistory / notifications / proxies / quickCommands / session / dialog / focusSwitcher / tags
 - **修复方案**: 优先补充 settings / dashboard / fileEditor 测试
-- **状态**: 📋 待规划
+- **状态**: ✅ 已修复（2026-04-24）— 新增 settings / fileEditor / audit store 测试
 
 #### M6. 控制器级别测试严重缺失
 
 - **缺失**: settings.controller / sftp.controller / docker.controller / notification.controller / ai.controller
 - **修复方案**: 优先补充 settings.controller 和 sftp.controller 测试
-- **状态**: 📋 待规划
+- **状态**: ✅ 已修复（2026-04-24）— 新增 39 个 settings.controller 测试用例
 
 #### M7. 无 CSP 安全头
 
@@ -1576,13 +1576,13 @@ gantt
 
 | 编号 | 问题                                  | 文件/位置              | 状态                    |
 | ---- | ------------------------------------- | ---------------------- | ----------------------- |
-| L1   | 日志系统仅 Console 输出，无结构化日志 | backend 全局           | 📋 待规划               |
-| L2   | 无 Prometheus/Metrics 端点            | backend 全局           | 📋 待规划               |
+| L1   | 日志系统仅 Console 输出，无结构化日志 | backend 全局           | ✅ 已修复（2026-04-24） |
+| L2   | 无 Prometheus/Metrics 端点            | backend 全局           | ✅ 已修复（2026-04-24） |
 | L3   | audit_logs 表缺少 user_id 列          | schema.ts:12-19        | ✅ 已修复（2026-04-24） |
 | L4   | 路线图 Phase 6-11 功能全部未实现      | PERSONAL_ROADMAP.md    | 📋 待规划               |
 | L5   | Swagger/API 文档生产环境禁用          | index.ts:446-470       | ✅ 已修复（2026-04-24） |
 | L6   | 移动端体验不足（滑动/长按/虚拟键盘）  | 前端多文件             | 📋 待规划               |
 | L7   | 硬编码颜色绕过主题系统                | FileEditorContainer 等 | ✅ 已修复（2026-04-24） |
 | L8   | 12 个组件超过 500 行                  | 前端多文件             | 📋 待规划               |
-| L9   | 无障碍访问 (a11y) 严重不足            | 前端全局               | 📋 待规划               |
+| L9   | 无障碍访问 (a11y) 严重不足            | 前端全局               | ✅ 已修复（2026-04-24） |
 | L10  | 命令面板已实现但未在文档说明          | CommandPalette.vue     | ✅ 已修复（2026-04-24） |

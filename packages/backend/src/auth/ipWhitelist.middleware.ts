@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import ipaddr from 'ipaddr.js';
 import { settingsService } from '../settings/settings.service';
+import { logger } from '../utils/logger';
 
 const IP_WHITELIST_SETTING_KEY = 'ipWhitelist';
 const IP_WHITELIST_ENABLED_SETTING_KEY = 'ipWhitelistEnabled';
@@ -25,13 +26,13 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     const requestIpString = req.ip || req.socket.remoteAddress;
 
     if (!requestIpString) {
-      console.warn('无法获取请求 IP 地址，已拒绝访问。');
+      logger.warn('无法获取请求 IP 地址，已拒绝访问。');
       return res.status(403).json({ message: '禁止访问：无法识别来源 IP。' });
     }
 
     // 检查是否是本地开发环境的 IP
     if (LOCAL_IPS.includes(requestIpString)) {
-      console.info(`允许来自本地开发环境 (${requestIpString}) 的访问。`);
+      logger.info(`允许来自本地开发环境 (${requestIpString}) 的访问。`);
       return next();
     }
 
@@ -58,7 +59,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
 
     // 如果解析后白名单为空，也允许所有请求 (避免配置错误导致完全锁死)
     if (whitelistEntries.length === 0) {
-      console.warn('IP 白名单设置非空但解析后为空，暂时允许所有 IP。请检查设置。');
+      logger.warn('IP 白名单设置非空但解析后为空，暂时允许所有 IP。请检查设置。');
       return next();
     }
 
@@ -66,12 +67,12 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     try {
       requestIp = ipaddr.parse(requestIpString);
     } catch {
-      console.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
+      logger.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
       return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
     }
 
     if (!requestIp) {
-      console.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
+      logger.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
       return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
     }
 
@@ -102,7 +103,7 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
           );
         } catch {
           // 如果单个 IP 也解析失败，忽略此条目并记录警告
-          console.warn(`无效的 IP 白名单条目: "${entry}"`);
+          logger.warn(`无效的 IP 白名单条目: "${entry}"`);
           return false;
         }
       }
@@ -113,10 +114,10 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
       return next();
     }
     // IP 不在白名单内，拒绝访问
-    console.warn(`已拒绝来自 IP ${requestIpString} 的访问 (不在白名单内)。`);
+    logger.warn(`已拒绝来自 IP ${requestIpString} 的访问 (不在白名单内)。`);
     return res.status(403).json({ message: '禁止访问：您的 IP 地址不在允许列表中。' });
   } catch (error: unknown) {
-    console.error('IP 白名单中间件执行出错:', error);
+    logger.error(error as Error, 'IP 白名单中间件执行出错');
     // 中间件出错时，为安全起见，默认拒绝访问
     return res.status(500).json({ message: '服务器内部错误 (IP 校验失败)。' });
   }

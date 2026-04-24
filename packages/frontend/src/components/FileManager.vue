@@ -11,7 +11,6 @@ import {
   readonly,
   shallowRef,
 } from 'vue';
-import { useVirtualList } from '@vueuse/core';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -30,11 +29,6 @@ import {
   type CompressFormat,
 } from '../composables/file-manager/useFileManagerContextMenu';
 import {
-  formatSize,
-  formatMode,
-  getFileIconClassBase,
-} from '../composables/file-manager/fileManagerDisplayUtils';
-import {
   SILENT_PWD_PREFIX,
   parsePathFromSilentOutput,
 } from '../composables/file-manager/fileManagerTerminalPathUtils';
@@ -44,11 +38,11 @@ import { useFileManagerKeyboardNavigation } from '../composables/file-manager/us
 import FileUploadPopup from './FileUploadPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
+import FileManagerToolbar from './FileManagerToolbar.vue';
+import FileManagerFileList from './FileManagerFileList.vue';
 import type { FileListItem } from '../types/sftp.types';
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
-import PathHistoryDropdown from './PathHistoryDropdown.vue';
 import { usePathHistoryStore } from '../stores/pathHistory.store';
-import FavoritePathsModal from './FavoritePathsModal.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
@@ -156,20 +150,13 @@ const isEditingPath = ref(false);
 const searchQuery = ref(''); // 搜索查询 ref
 const isMultiSelectMode = ref(false); // 多选模式状态 (主要用于移动端)
 const isSearchActive = ref(false); // 控制搜索框激活状态
-const searchInputRef = ref<HTMLInputElement | null>(null); // 搜索输入框 ref
-const pathInputRef = ref<HTMLInputElement | null>(null);
 const editablePath = ref('');
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
-const dropOverlayRef = ref<HTMLDivElement | null>(null); // +++ 拖拽蒙版引用 +++
-
-// +++ Favorite Paths Modal State +++
-const showFavoritePathsModal = ref(false);
-const favoritePathsButtonRef = ref<HTMLButtonElement | null>(null); // Ref for the trigger button
+const toolbarRef = ref<InstanceType<typeof FileManagerToolbar> | null>(null); // 工具栏子组件引用
+const fileListRef = ref<InstanceType<typeof FileManagerFileList> | null>(null); // 文件列表子组件引用
 
 // +++ Path History Refs +++
 const showPathHistoryDropdown = ref(false);
-const pathInputWrapperRef = ref<HTMLDivElement | null>(null); // Wrapper for path input and dropdown
-const pathHistoryDropdownRef = ref<InstanceType<typeof PathHistoryDropdown> | null>(null);
 const { selectedIndex: pathSelectedIndex, filteredHistory: filteredPathHistory } =
   storeToRefs(pathHistoryStore); // Reactive store state
 
@@ -268,79 +255,32 @@ const filteredFileList = computed(() => {
   );
 });
 
-const handleSort = (key: keyof FileListItem | 'type' | 'size' | 'mtime') => {
-  if (sortKey.value === key) {
+const handleSort = (key: string) => {
+  const typedKey = key as keyof FileListItem | 'type' | 'size' | 'mtime';
+  if (sortKey.value === typedKey) {
     sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
   } else {
-    sortKey.value = key;
+    sortKey.value = typedKey;
     sortDirection.value = 'asc';
   }
 };
 
-// +++ Virtual List Logic +++
-const PARENT_DIR_ITEM: FileListItem = {
-  filename: '..',
-  longname: '..',
-  attrs: {
-    isDirectory: true,
-    isFile: false,
-    isSymbolicLink: false,
-    size: 0,
-    uid: 0,
-    gid: 0,
-    mode: 0,
-    atime: 0,
-    mtime: 0,
-  },
-};
-
-const hasParentLinkForList = computed(
-  () => (currentSftpManager.value?.currentPath.value ?? '/') !== '/'
-);
-
-const virtualListSource = computed(() => {
-  const list = filteredFileList.value;
-  return hasParentLinkForList.value ? [PARENT_DIR_ITEM, ...list] : list;
-});
-
-// 计算 Grid 样式
-const gridStyle = computed(() => ({
-  display: 'grid',
-  // Use columns from colWidths
-  gridTemplateColumns: `${colWidths.value.type}px ${colWidths.value.name}px ${colWidths.value.size}px ${colWidths.value.permissions}px ${colWidths.value.modified}px`,
-}));
-
-// 计算每一行的高度
-const itemHeight = computed(() => Math.round(36 * rowSizeMultiplier.value));
-
-// Initialize Virtual List
-const {
-  list: virtualList,
-  containerProps,
-  wrapperProps,
-  scrollTo: virtualScrollTo,
-} = useVirtualList(virtualListSource, {
-  itemHeight: () => itemHeight.value,
-});
-
+// --- 键盘导航滚动（委托给子组件 FileManagerFileList）---
 const scrollToForKeyboardNavigation = (fileIndex: number) => {
-  const offset = hasParentLinkForList.value ? 1 : 0;
-  virtualScrollTo(fileIndex + offset);
+  const hasParentLink = (currentSftpManager.value?.currentPath.value ?? '/') !== '/';
+  const offset = hasParentLink ? 1 : 0;
+  fileListRef.value?.scrollTo(fileIndex + offset);
 };
 
+// 文件列表子组件挂载后同步容器引用（供拖拽与键盘导航 composable 使用）
 watch(
-  () => containerProps.ref.value,
+  () => fileListRef.value?.containerElement,
   (val) => {
     if (!val) return;
     fileListContainerRef.value = val as HTMLDivElement;
-    containerProps.onScroll();
-  }
+  },
+  { immediate: true }
 );
-
-watch(itemHeight, async () => {
-  await nextTick();
-  containerProps.onScroll();
-});
 
 // --- 列表项点击与选择逻辑 (使用 Composable) ---
 // 定义单击时的动作回调 (移到 Selection 实例化之前)
@@ -441,14 +381,14 @@ const handleItemAction = (item: FileListItem) => {
           if (!absolutePath) {
             console.error(
               `[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing absolutePath. Payload:`,
-              payload
+              p
             );
             return;
           }
           if (!targetType) {
             console.warn(
               `[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing targetType. Defaulting to 'file'. Payload:`,
-              payload
+              p
             );
           }
 
@@ -1453,7 +1393,6 @@ onMounted(() => {
     'fileManagerPathInput',
     focusPathActionWrapper
   );
-  document.addEventListener('click', handleClickOutsidePathInput);
 });
 
 onBeforeUnmount(() => {
@@ -1474,30 +1413,12 @@ onBeforeUnmount(() => {
     );
   }
   unregisterPathFocusAction = null;
-  document.removeEventListener('click', handleClickOutsidePathInput);
   cleanupSilentExecRequest();
   isSyncingPathFromTerminal.value = false;
   sessionStore.removeSftpManager(props.sessionId, props.instanceId);
 });
 
-// +++ 监听蒙版可见性，动态调整高度 +++
-watch(showExternalDropOverlay, (isVisible) => {
-  if (isVisible) {
-    nextTick(() => {
-      // 确保 refs 可用且 scrollHeight 已计算
-      if (dropOverlayRef.value && fileListContainerRef.value) {
-        const scrollHeight = fileListContainerRef.value.scrollHeight;
-        dropOverlayRef.value.style.height = `${scrollHeight}px`;
-      }
-    });
-  } else {
-    // 蒙版隐藏时重置高度
-    if (dropOverlayRef.value) {
-      dropOverlayRef.value.style.height = ''; // 移除内联样式
-      // console.info(`[FileManager ${props.sessionId}-${props.instanceId}] Overlay hidden. Resetting height.`);
-    }
-  }
-});
+// 拖拽蒙版逻辑已移至子组件 FileManagerFileList 内部处理
 
 // --- 列宽调整逻辑 (保持不变) ---
 const getColumnKeyByIndex = (index: number): keyof typeof colWidths.value | null => {
@@ -1581,7 +1502,7 @@ const handlePathInputFocus = () => {
   editablePath.value = currentSftpManager.value.currentPath.value; // Set editable path on focus
   openPathHistory();
   nextTick(() => {
-    pathInputRef.value?.select();
+    toolbarRef.value?.pathInputRef?.select();
   });
 };
 
@@ -1673,48 +1594,12 @@ const startPathEdit = () => {
   isEditingPath.value = true;
   openPathHistory(); // 打开历史记录
   nextTick(() => {
-    pathInputRef.value?.focus();
-    pathInputRef.value?.select();
+    toolbarRef.value?.pathInputRef?.focus();
+    toolbarRef.value?.pathInputRef?.select();
   });
 };
-
-// Modified to handle path history logic
 const handlePathInput = async (event?: Event | FocusEvent) => {
-  // This function is now primarily for blur handling or if Enter is pressed outside keydown.
-  // Most Enter logic is in handlePathInputKeydown.
-  if (event && event instanceof KeyboardEvent && event.key !== 'Enter') {
-    // If it's a key event but not Enter, it's handled by keydown or change.
-    return;
-  }
-
-  if (event && event.type === 'blur') {
-    setTimeout(() => {
-      const activeEl = document.activeElement;
-      const dropdownEl = pathHistoryDropdownRef.value?.$el;
-      if (dropdownEl && dropdownEl.contains(activeEl)) {
-        // Focus is within the dropdown, do nothing yet
-        return;
-      }
-      if (pathInputRef.value !== activeEl) {
-        isEditingPath.value = false;
-        closePathHistory();
-      }
-    }, 150);
-    return;
-  }
-
-  if (!currentSftpManager.value) return;
-
-  const newPath = editablePath.value.trim();
-  // Check if dropdown has a selection, if so, it should have been handled by Enter in keydown
-  if (pathSelectedIndex.value >= 0 && filteredPathHistory.value[pathSelectedIndex.value]) {
-    // This case should ideally not be hit if keydown is working correctly
-    navigateToPath(filteredPathHistory.value[pathSelectedIndex.value].path);
-  } else {
-    navigateToPath(newPath);
-  }
-  isEditingPath.value = false; // Ensure editing mode is exited
-  closePathHistory(); // Ensure dropdown is closed
+  // 已移至子组件 FileManagerToolbar 内部处理
 };
 
 const cancelPathEdit = () => {
@@ -1726,20 +1611,13 @@ const cancelPathEdit = () => {
   }
 };
 
-const handleClickOutsidePathInput = (event: MouseEvent) => {
-  if (pathInputWrapperRef.value && !pathInputWrapperRef.value.contains(event.target as Node)) {
-    if (isEditingPath.value || showPathHistoryDropdown.value) {
-      isEditingPath.value = false;
-      closePathHistory();
-    }
-  }
-};
+// handleClickOutsidePathInput 已移至子组件 FileManagerToolbar 内部处理
 
 // --- 搜索框激活/取消逻辑 ---
 const activateSearch = () => {
   isSearchActive.value = true;
   nextTick(() => {
-    searchInputRef.value?.focus();
+    toolbarRef.value?.searchInputRef?.focus();
   });
 };
 
@@ -1964,8 +1842,8 @@ const focusSearchInput = (): boolean => {
     activateSearch(); // Activate search first
     // nextTick 确保 DOM 更新后再聚焦
     nextTick(() => {
-      if (searchInputRef.value) {
-        searchInputRef.value.focus();
+      if (toolbarRef.value?.searchInputRef) {
+        toolbarRef.value.searchInputRef.focus();
         console.info(
           `[FileManager ${props.sessionId}-${props.instanceId}] Search activated and input focused.`
         );
@@ -1976,8 +1854,8 @@ const focusSearchInput = (): boolean => {
       }
     });
     return true; // 假设会成功
-  } else if (searchInputRef.value) {
-    searchInputRef.value.focus();
+  } else if (toolbarRef.value?.searchInputRef) {
+    toolbarRef.value.searchInputRef.focus();
     console.info(
       `[FileManager ${props.sessionId}-${props.instanceId}] Search already active, input focused.`
     );
@@ -1988,6 +1866,34 @@ const focusSearchInput = (): boolean => {
   );
   return false;
 };
+// --- 工具栏关闭路径历史回调 ---
+const handleClosePathHistoryFromToolbar = () => {
+  isEditingPath.value = false;
+  closePathHistory();
+};
+
+// --- 返回上级目录（供工具栏使用）---
+const handleGoToParent = () => {
+  if (!currentSftpManager.value || currentSftpManager.value.isLoading.value) return;
+  const currentPath = currentSftpManager.value.currentPath.value;
+  if (currentPath === '/') return;
+  handleItemClick({} as MouseEvent, {
+    filename: '..',
+    longname: '..',
+    attrs: {
+      isDirectory: true,
+      isFile: false,
+      isSymbolicLink: false,
+      size: 0,
+      uid: 0,
+      gid: 0,
+      mode: 0,
+      atime: 0,
+      mtime: 0,
+    },
+  });
+};
+
 defineExpose({ focusSearchInput, startPathEdit });
 
 // --- 处理'打开编辑器'按钮点击 ---
@@ -2003,541 +1909,100 @@ const handleOpenEditorClick = () => {
   fileEditorStore.triggerPopup('', props.sessionId); // 修复：传递空字符串而不是 null
 };
 
-// +++ Favorite Paths Modal Logic +++
-const toggleFavoritePathsModal = () => {
-  showFavoritePathsModal.value = !showFavoritePathsModal.value;
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Toggled FavoritePathsModal. Visible: ${showFavoritePathsModal.value}`
-  );
-};
-
+// +++ 收藏路径导航（委托给 SFTP 管理器）+++
 const handleNavigateToPathFromFavorites = (path: string) => {
   if (currentSftpManager.value) {
     currentSftpManager.value.loadDirectory(path);
   }
-  showFavoritePathsModal.value = false; // Close modal after navigation
 };
 </script>
 
 <template>
   <div class="flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
-    <div class="flex items-center justify-between flex-wrap gap-2 p-2 bg-header flex-shrink-0">
-      <!-- Wrapper for Path Actions and Path Bar -->
-      <div class="flex items-center gap-2 flex-grow min-w-0">
-        <!-- Added gap-2, flex-grow, min-w-0 -->
-        <!-- Path Actions -->
-        <div class="flex items-center flex-shrink-0">
-          <!-- Removed mr-auto -->
-          <!-- CD 到终端按钮 -->
-          <button
-            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
-            @click.stop="sendCdCommandToTerminal"
-            :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
-            :title="t('fileManager.actions.cdToTerminal', '将终端路径切换到文件管理器当前路径')"
-          >
-            <i class="fas fa-terminal text-base"></i>
-          </button>
-          <button
-            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
-            @click.stop="syncCurrentPathToTerminalDirectory"
-            :disabled="
-              !currentSftpManager ||
-              !props.wsDeps.isConnected.value ||
-              isEditingPath ||
-              isSyncingPathFromTerminal
-            "
-            :title="
-              t('fileManager.actions.syncFromTerminalPath', '将文件管理器路径切换到终端当前路径')
-            "
-          >
-            <i
-              :class="[
-                'fas',
-                isSyncingPathFromTerminal ? 'fa-spinner fa-spin' : 'fa-folder-open',
-                'text-base',
-              ]"
-            ></i>
-          </button>
-          <!-- 刷新按钮 -->
-          <button
-            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
-            @click.stop="
-              currentSftpManager?.loadDirectory(currentSftpManager?.currentPath?.value ?? '/', true)
-            "
-            :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
-            :title="t('fileManager.actions.refresh')"
-          >
-            <i class="fas fa-sync-alt text-base"></i>
-          </button>
-          <button
-            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
-            @click.stop="
-              handleItemClick($event, {
-                filename: '..',
-                longname: '..',
-                attrs: {
-                  isDirectory: true,
-                  isFile: false,
-                  isSymbolicLink: false,
-                  size: 0,
-                  uid: 0,
-                  gid: 0,
-                  mode: 0,
-                  atime: 0,
-                  mtime: 0,
-                },
-              })
-            "
-            :disabled="
-              !currentSftpManager ||
-              !props.wsDeps.isConnected.value ||
-              currentSftpManager?.currentPath?.value === '/' ||
-              isEditingPath
-            "
-            :title="t('fileManager.actions.parentDirectory')"
-          >
-            <i class="fas fa-arrow-up text-base"></i>
-          </button>
-          <!-- Search Area -->
-          <div class="flex items-center flex-shrink-0">
-            <button
-              v-if="!isSearchActive"
-              class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
-              @click.stop="activateSearch"
-              :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
-              :title="t('fileManager.searchPlaceholder')"
-            >
-              <i class="fas fa-search text-base"></i>
-            </button>
-            <div v-else class="relative flex items-center min-w-[150px] flex-shrink">
-              <i
-                class="fas fa-search absolute left-2 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
-              ></i>
-              <input
-                ref="searchInputRef"
-                type="text"
-                v-model="searchQuery"
-                :placeholder="t('fileManager.searchPlaceholder')"
-                class="flex-grow bg-background border border-border rounded pl-7 pr-2 py-1 text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary min-w-[10px] transition-colors duration-200"
-                data-focus-id="fileManagerSearch"
-                @blur="deactivateSearch"
-                @keyup.esc="cancelSearch"
-                @keydown.up.prevent="handleKeydown"
-                @keydown.down.prevent="handleKeydown"
-                @keydown.enter.prevent="handleKeydown"
-              />
-              <!-- Optional: Clear button -->
-              <!-- <button @click="searchQuery = ''; searchInputRef?.focus()" v-if="searchQuery" class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground">&times;</button> -->
-            </div>
-          </div>
-          <div class="relative flex-shrink-0">
-            <!-- Favorite Paths Button -->
-            <button
-              ref="favoritePathsButtonRef"
-              class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 hover:enabled:bg-black/10 hover:enabled:text-foreground"
-              @click="toggleFavoritePathsModal"
-            >
-              <i class="fas fa-star text-base"></i>
-            </button>
-            <!-- Favorite Paths Modal -->
-            <FavoritePathsModal
-              :is-visible="showFavoritePathsModal"
-              :trigger-element="favoritePathsButtonRef"
-              @close="showFavoritePathsModal = false"
-              @navigate-to-path="handleNavigateToPathFromFavorites"
-            />
-          </div>
-        </div>
-
-        <div
-          ref="pathInputWrapperRef"
-          class="relative flex items-center bg-background border border-border rounded px-1.5 py-0.5"
-          :class="{
-            'flex-grow min-w-0': isEditingPath || showPathHistoryDropdown,
-            'w-fit max-w-full': !isEditingPath && !showPathHistoryDropdown,
-          }"
-        >
-          <span
-            v-show="!isEditingPath && !showPathHistoryDropdown"
-            @click="startPathEdit"
-            class="text-text-secondary pr-2 cursor-text truncate"
-          >
-            <strong
-              :title="t('fileManager.editPathTooltip')"
-              class="font-medium text-link px-1 rounded transition-colors duration-200"
-              :class="{
-                'hover:bg-black/5': currentSftpManager && props.wsDeps.isConnected.value,
-                'opacity-60 cursor-not-allowed':
-                  !currentSftpManager || !props.wsDeps.isConnected.value,
-              }"
-            >
-              {{ currentSftpManager?.currentPath?.value ?? '/' }}
-            </strong>
-          </span>
-          <input
-            v-show="isEditingPath || showPathHistoryDropdown"
-            ref="pathInputRef"
-            type="text"
-            v-model="editablePath"
-            class="flex-grow bg-transparent text-foreground p-0.5 outline-none min-w-[100px]"
-            data-focus-id="fileManagerPathInput"
-            @focus="handlePathInputFocus"
-            @input="handlePathInputChange"
-            @keydown="handlePathInputKeydown"
-            @blur="handlePathInput"
-          />
-          <PathHistoryDropdown
-            v-if="showPathHistoryDropdown"
-            ref="pathHistoryDropdownRef"
-            @pathSelected="handlePathSelectedFromDropdown"
-            @closeDropdown="closePathHistory"
-            class="left-0 right-0 top-full mt-1"
-          />
-        </div>
-      </div>
-      <!-- End Wrapper -->
-      <!-- Main Actions Bar -->
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <input
-          type="file"
-          ref="fileInputRef"
-          @change="handleFileSelected"
-          multiple
-          class="hidden"
-        />
-        <!-- 打开编辑器按钮 -->
-        <button
-          v-if="showPopupFileEditorBoolean"
-          @click="openPopupEditor"
-          :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
-          :title="t('fileManager.actions.openEditor', 'Open Popup Editor')"
-          class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
-          :class="{ 'px-1.5': props.isMobile }"
-        >
-          <i class="far fa-edit text-sm"></i>
-          <!-- 使用编辑图标 -->
-          <span v-if="!props.isMobile">{{
-            t('fileManager.actions.openEditor', 'Open Editor')
-          }}</span>
-          <!-- 添加 i18n key -->
-        </button>
-        <!-- 上传按钮 -->
-        <button
-          @click="triggerFileUpload"
-          :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
-          :title="t('fileManager.actions.uploadFile')"
-          class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
-          :class="{ 'px-1.5': props.isMobile }"
-        >
-          <i class="fas fa-upload text-sm"></i>
-          <span v-if="!props.isMobile">{{ t('fileManager.actions.upload') }}</span>
-        </button>
-        <button
-          @click="handleNewFolderContextMenuClick"
-          :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
-          :title="t('fileManager.actions.newFolder')"
-          class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
-          :class="{ 'px-1.5': props.isMobile }"
-        >
-          <i class="fas fa-folder-plus text-sm"></i>
-          <span v-if="!props.isMobile">{{ t('fileManager.actions.newFolder') }}</span>
-        </button>
-        <button
-          @click="handleNewFileContextMenuClick"
-          :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
-          :title="t('fileManager.actions.newFile')"
-          class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
-          :class="{ 'px-1.5': props.isMobile }"
-        >
-          <i class="far fa-file-alt text-sm"></i>
-          <span v-if="!props.isMobile">{{ t('fileManager.actions.newFile') }}</span>
-        </button>
-        <!-- 多选模式切换按钮 (仅移动端) -->
-        <button
-          v-if="props.isMobile"
-          @click="toggleMultiSelectMode"
-          :title="
-            isMultiSelectMode
-              ? t('fileManager.actions.exitMultiSelect', 'Exit Multi-Select Mode')
-              : t('fileManager.actions.multiSelect', 'Enter Multi-Select Mode')
-          "
-          class="flex items-center gap-1 px-1.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          :class="{
-            'hover:bg-header hover:border-primary hover:text-primary': !isMultiSelectMode,
-            'bg-primary text-white border-primary': isMultiSelectMode,
-          }"
-        >
-          <i class="fas fa-check-square text-sm"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- File List Container -->
-    <div
-      v-bind="containerProps"
-      class="flex-grow overflow-auto relative outline-none"
-      @dragenter.prevent="handleDragEnter"
-      @dragover.prevent="handleDragOver"
-      @dragleave.prevent="handleDragLeave"
-      @drop.prevent="handleDrop"
-      @click="containerProps.ref.value?.focus()"
-      @keydown="handleKeydown"
+    <FileManagerToolbar
+      ref="toolbarRef"
+      :current-path="currentSftpManager?.currentPath?.value ?? '/'"
+      :is-editing-path="isEditingPath"
+      :editable-path="editablePath"
+      :search-query="searchQuery"
+      :is-search-active="isSearchActive"
+      :is-mobile="props.isMobile"
+      :is-connected="!!currentSftpManager && props.wsDeps.isConnected.value"
+      :is-loading="!currentSftpManager || currentSftpManager.isLoading.value"
+      :is-syncing-from-terminal="isSyncingPathFromTerminal"
+      :is-at-root="currentSftpManager?.currentPath?.value === '/'"
+      :show-popup-editor="showPopupFileEditorBoolean"
+      :is-multi-select-mode="isMultiSelectMode"
+      :show-path-history-dropdown="showPathHistoryDropdown"
+      :path-selected-index="pathSelectedIndex"
+      :filtered-path-history="filteredPathHistory"
+      @cd-to-terminal="sendCdCommandToTerminal"
+      @sync-from-terminal="syncCurrentPathToTerminalDirectory"
+      @refresh="
+        currentSftpManager?.loadDirectory(currentSftpManager?.currentPath?.value ?? '/', true)
+      "
+      @go-to-parent="handleGoToParent"
+      @activate-search="activateSearch"
+      @deactivate-search="deactivateSearch"
+      @cancel-search="cancelSearch"
+      @update:search-query="
+        (v: string) => {
+          searchQuery = v;
+        }
+      "
+      @update:editable-path="
+        (v: string) => {
+          editablePath = v;
+        }
+      "
+      @start-path-edit="startPathEdit"
+      @path-input-focus="handlePathInputFocus"
+      @path-input-keydown="handlePathInputKeydown"
+      @path-selected="handlePathSelectedFromDropdown"
+      @close-path-history="handleClosePathHistoryFromToolbar"
+      @navigate-to-favorite="handleNavigateToPathFromFavorites"
+      @open-popup-editor="openPopupEditor"
+      @trigger-file-upload="triggerFileUpload"
+      @new-folder="handleNewFolderContextMenuClick"
+      @new-file="handleNewFileContextMenuClick"
+      @toggle-multi-select="toggleMultiSelectMode"
+      @search-keydown="handleKeydown"
+    />
+    <!-- 文件列表子组件 -->
+    <FileManagerFileList
+      ref="fileListRef"
+      :files="filteredFileList"
+      :has-parent-link="currentSftpManager ? currentSftpManager.currentPath.value !== '/' : false"
+      :sort-key="sortKey"
+      :sort-direction="sortDirection"
+      :selected-items="selectedItems"
+      :selected-index="selectedIndex"
+      :is-mobile="props.isMobile"
+      :col-widths="colWidths"
+      :row-size-multiplier="rowSizeMultiplier"
+      :is-loading="!currentSftpManager || currentSftpManager.isLoading.value"
+      :search-query="searchQuery"
+      :is-multi-select-mode="isMultiSelectMode"
+      :show-external-drop-overlay="showExternalDropOverlay"
+      :drag-over-target="dragOverTarget"
+      @sort="handleSort"
+      @item-click="handleItemClick"
+      @item-double-click="handleItemDoubleClick"
+      @context-menu="showContextMenu"
+      @start-resize="startResize"
+      @drag-enter="handleDragEnter"
+      @drag-over="handleDragOver"
+      @drag-leave="handleDragLeave"
+      @drop="handleDrop"
+      @overlay-drop="handleOverlayDrop"
+      @drag-start="handleDragStart"
+      @drag-end="handleDragEnd"
+      @drag-over-row="handleDragOverRow"
+      @drag-leave-row="handleDragLeaveRow"
+      @drop-on-row="handleDropOnRow"
       @wheel="handleWheel"
-      @contextmenu.prevent="showContextMenu($event)"
-      tabindex="0"
-      :style="{ '--row-size-multiplier': rowSizeMultiplier }"
-    >
-      <!-- 外部文件拖拽蒙版 -->
-      <div
-        v-if="showExternalDropOverlay"
-        ref="dropOverlayRef"
-        class="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-xl font-semibold rounded z-50 pointer-events-auto"
-        @dragover.prevent
-        @dragleave.prevent="handleDragLeave"
-        @drop.prevent="handleOverlayDrop"
-      >
-        {{ t('fileManager.dropFilesHere', 'Drop files here to upload') }}
-      </div>
-
-      <!-- Header Row (Sticky) -->
-      <div
-        class="sticky top-0 z-10 bg-header border-b border-border font-medium text-text-secondary uppercase tracking-wider text-xs select-none"
-        :style="gridStyle"
-      >
-        <!-- Type -->
-        <div
-          @click="handleSort('type')"
-          class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
-          :style="{
-            paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
-            paddingRight: `calc(0.5rem * var(--row-size-multiplier))`,
-            paddingTop: '0.25rem',
-            paddingBottom: '0.25rem',
-          }"
-        >
-          {{ t('fileManager.headers.type') }}
-          <span v-if="sortKey === 'type'" class="ml-1">{{
-            sortDirection === 'asc' ? '▲' : '▼'
-          }}</span>
-          <span
-            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-            @mousedown.prevent="startResize($event, 0)"
-            @click.stop
-          ></span>
-        </div>
-        <!-- Name -->
-        <div
-          @click="handleSort('filename')"
-          class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
-          :style="{
-            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-          }"
-        >
-          {{ t('fileManager.headers.name') }}
-          <span v-if="sortKey === 'filename'" class="ml-1">{{
-            sortDirection === 'asc' ? '▲' : '▼'
-          }}</span>
-          <span
-            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-            @mousedown.prevent="startResize($event, 1)"
-            @click.stop
-          ></span>
-        </div>
-        <!-- Size -->
-        <div
-          @click="handleSort('size')"
-          class="relative border-r border-border/10 hover:bg-black/5 cursor-pointer flex items-center truncate"
-          :style="{
-            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-          }"
-        >
-          {{ t('fileManager.headers.size') }}
-          <span v-if="sortKey === 'size'" class="ml-1">{{
-            sortDirection === 'asc' ? '▲' : '▼'
-          }}</span>
-          <span
-            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-            @mousedown.prevent="startResize($event, 2)"
-            @click.stop
-          ></span>
-        </div>
-        <!-- Permissions -->
-        <div
-          class="relative border-r border-border/10 flex items-center truncate"
-          :style="{
-            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-          }"
-        >
-          {{ t('fileManager.headers.permissions') }}
-          <span
-            class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20"
-            @mousedown.prevent="startResize($event, 3)"
-            @click.stop
-          ></span>
-        </div>
-        <!-- Modified -->
-        <div
-          @click="handleSort('mtime')"
-          class="relative hover:bg-black/5 cursor-pointer flex items-center truncate"
-          :style="{
-            padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-          }"
-        >
-          {{ t('fileManager.headers.modified') }}
-          <span v-if="sortKey === 'mtime'" class="ml-1">{{
-            sortDirection === 'asc' ? '▲' : '▼'
-          }}</span>
-        </div>
-      </div>
-
-      <!-- List Wrapper -->
-      <div v-bind="wrapperProps">
-        <!-- Loading State -->
-        <div
-          v-if="!currentSftpManager || currentSftpManager.isLoading.value"
-          class="px-4 py-6 text-center text-text-secondary italic"
-        >
-          {{ t('fileManager.loading') }}
-        </div>
-
-        <div v-else>
-          <div
-            v-for="{ data: item, index } in virtualList"
-            :key="item.filename"
-            class="border-b border-border transition-colors duration-150 select-none items-center file-row"
-            :style="gridStyle"
-            :draggable="item.filename !== '..'"
-            @dragstart="handleDragStart(item)"
-            @dragend="handleDragEnd"
-            @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
-            @dblclick="handleItemDoubleClick($event, item)"
-            :class="[
-              { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
-              {
-                'bg-primary text-white':
-                  selectedItems.has(item.filename) || index === selectedIndex,
-              },
-              {
-                'hover:bg-header/50': !(
-                  selectedItems.has(item.filename) || index === selectedIndex
-                ),
-              },
-              {
-                'outline-dashed outline-2 outline-offset-[-1px] outline-primary':
-                  item.attrs.isDirectory && dragOverTarget === item.filename,
-              },
-            ]"
-            :data-filename="item.filename"
-            @contextmenu.prevent.stop="showContextMenu($event, item)"
-            @dragover.prevent="handleDragOverRow(item, $event)"
-            @dragleave="handleDragLeaveRow(item)"
-            @drop.prevent="handleDropOnRow(item, $event)"
-          >
-            <!-- Type Icon -->
-            <div
-              class="text-center truncate flex items-center justify-center min-w-0"
-              :style="{
-                paddingLeft: `calc(1rem * var(--row-size-multiplier))`,
-                paddingRight: `calc(0.5rem * var(--row-size-multiplier))`,
-              }"
-            >
-              <i
-                v-if="item.filename === '..'"
-                class="fas fa-level-up-alt text-primary"
-                :style="{
-                  fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-                }"
-              ></i>
-              <i
-                v-else
-                :class="[
-                  'transition-colors duration-150',
-                  item.attrs.isDirectory
-                    ? 'fas fa-folder text-primary'
-                    : item.attrs.isSymbolicLink
-                      ? 'fas fa-link text-cyan-500'
-                      : `${getFileIconClassBase(item.filename)} text-text-secondary`,
-                  {
-                    'text-white': selectedItems.has(item.filename) || index === selectedIndex,
-                  },
-                ]"
-                :style="{
-                  fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-                }"
-              ></i>
-            </div>
-
-            <!-- Name -->
-            <div
-              class="truncate flex items-center min-w-0"
-              :class="{ 'font-medium': item.attrs.isDirectory }"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-                fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-              }"
-            >
-              {{ item.filename }}
-            </div>
-
-            <!-- Size -->
-            <div
-              class="truncate flex items-center min-w-0"
-              :class="[
-                selectedItems.has(item.filename) || index === selectedIndex
-                  ? 'text-white'
-                  : 'text-text-secondary',
-              ]"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-                fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-              }"
-            >
-              {{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}
-            </div>
-
-            <!-- Permissions -->
-            <div
-              class="truncate font-mono flex items-center min-w-0"
-              :class="[
-                selectedItems.has(item.filename) || index === selectedIndex
-                  ? 'text-white'
-                  : 'text-text-secondary',
-              ]"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-                fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-              }"
-            >
-              {{ item.filename !== '..' ? formatMode(item.attrs.mode) : '' }}
-            </div>
-
-            <!-- Modified -->
-            <div
-              class="truncate flex items-center min-w-0"
-              :class="[
-                selectedItems.has(item.filename) || index === selectedIndex
-                  ? 'text-white'
-                  : 'text-text-secondary',
-              ]"
-              :style="{
-                padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
-                fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))`,
-              }"
-            >
-              {{ item.filename !== '..' ? new Date(item.attrs.mtime).toLocaleString() : '' }}
-            </div>
-          </div>
-
-          <!-- Empty Directory / Search Result State -->
-          <div
-            v-if="filteredFileList.length === 0"
-            class="px-4 py-6 text-center text-text-secondary italic"
-          >
-            {{ searchQuery ? t('fileManager.noSearchResults') : t('fileManager.emptyDirectory') }}
-          </div>
-        </div>
-      </div>
-    </div>
+      @keydown="handleKeydown"
+    />
 
     <!-- 使用 FileUploadPopup 组件 -->
     <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" />
