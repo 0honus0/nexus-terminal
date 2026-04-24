@@ -75,10 +75,12 @@ export interface AuditLogEntry {
   timestamp: number; // Unix timestamp (seconds)
   action_type: AuditLogActionType;
   details: string | null; // JSON string or null
+  user_id: number | null; // 关联用户 ID，允许为空
 }
 
 // 用于创建日志条目的数据结构
 export interface AuditLogData {
   actionType: AuditLogActionType;
   details?: Record<string, unknown> | string | null;
+  userId?: number | null; // 关联用户 ID
 }

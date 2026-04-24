@@ -407,7 +407,7 @@ export function createSftpActionsManager(
         'sftp:readfile:success',
         (payload: MessagePayload, message: WebSocketMessage) => {
           // +++ 修改：处理包含 rawContentBase64 和 encodingUsed 的新 payload +++
-          const successPayload = payload as SftpReadFileSuccessPayload; // Type assertion remains valid
+          const successPayload = payload as unknown as SftpReadFileSuccessPayload; // 类型断言：通过 unknown 安全转换
           if (message.requestId === requestId && message.path === path) {
             clearTimeout(timeoutId);
             unregisterSuccess?.();
@@ -424,7 +424,7 @@ export function createSftpActionsManager(
       unregisterError = onMessage(
         'sftp:readfile:error',
         (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as string;
+          const errorPayload = payload as unknown as string;
           if (message.requestId === requestId && message.path === path) {
             clearTimeout(timeoutId);
             unregisterSuccess?.();
@@ -484,7 +484,7 @@ export function createSftpActionsManager(
         'sftp:writefile:error',
         (payload: MessagePayload, message: WebSocketMessage) => {
           // 确保 payload 是期望的类型 (string)
-          const errorPayload = payload as string;
+          const errorPayload = payload as unknown as string;
           if (message.requestId === requestId && message.path === path) {
             clearTimeout(timeoutId);
             unregisterSuccess?.();
@@ -522,7 +522,7 @@ export function createSftpActionsManager(
     console.info(
       `[SFTP ${instanceSessionId}] 发送 sftp:copy 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
     );
-    // 可选：显示一个“正在复制...”的通知
+    // 可选：显示一个'正在复制...'的通知
   };
 
   // +++ 移动项目 +++
@@ -548,7 +548,7 @@ export function createSftpActionsManager(
     console.info(
       `[SFTP ${instanceSessionId}] 发送 sftp:move 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
     );
-    // 可选：显示一个“正在移动...”的通知
+    // 可选：显示一个'正在移动...'的通知
   };
 
   const compressItems = (
@@ -616,7 +616,7 @@ export function createSftpActionsManager(
       unregisterError = onMessage(
         'sftp:compress:error',
         (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as { error: string; details?: string };
+          const errorPayload = payload as unknown as { error: string; details?: string };
           if (message.requestId === requestId) {
             clearTimeout(timeoutId);
             unregisterSuccess?.();
@@ -684,7 +684,7 @@ export function createSftpActionsManager(
       unregisterError = onMessage(
         'sftp:decompress:error',
         (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as { error: string; details?: string };
+          const errorPayload = payload as unknown as { error: string; details?: string };
           if (message.requestId === requestId) {
             clearTimeout(timeoutId);
             unregisterSuccess?.();
@@ -715,7 +715,7 @@ export function createSftpActionsManager(
   // --- Message Handlers ---
 
   const onSftpReaddirSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
-    const fileListPayload = payload as FileListItem[];
+    const fileListPayload = payload as unknown as FileListItem[];
     const { path } = message; // e.g., /root
 
     if (!path) {
@@ -837,7 +837,7 @@ export function createSftpActionsManager(
 
   const onSftpReaddirError = (payload: MessagePayload, message: WebSocketMessage) => {
     // 类型断言，因为我们知道 readdir:error 的 payload 是 string
-    const errorPayload = payload as string;
+    const errorPayload = payload as unknown as string;
     const errorPath = message.path;
 
     // 检查请求 ID 是否匹配当前加载请求
@@ -949,7 +949,7 @@ export function createSftpActionsManager(
 
   // 处理创建目录成功
   const onMkdirSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
-    const newItem = payload as FileListItem | null; // 后端现在会发送 FileListItem 或 null
+    const newItem = payload as unknown as FileListItem | null; // 后端现在会发送 FileListItem 或 null
     const parentPath = message.path?.substring(0, message.path.lastIndexOf('/')) || '/';
 
     console.info(`[SFTP ${instanceSessionId}] 创建目录成功: ${message.path}`);
@@ -993,7 +993,7 @@ export function createSftpActionsManager(
   // 处理重命名成功
   const onRenameSuccess = (payload: MessagePayload, _message: WebSocketMessage) => {
     // 后端现在发送 { oldPath: string, newPath: string, newItem: FileListItem | null }
-    const renamePayload = payload as {
+    const renamePayload = payload as unknown as {
       oldPath: string;
       newPath: string;
       newItem: FileListItem | null;
@@ -1046,7 +1046,7 @@ export function createSftpActionsManager(
 
   // 处理修改权限成功
   const onChmodSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
-    const updatedItem = payload as FileListItem | null; // 后端现在会发送 FileListItem 或 null
+    const updatedItem = payload as unknown as FileListItem | null; // 后端现在会发送 FileListItem 或 null
     const targetPath = message.path;
     const parentPath = targetPath?.substring(0, targetPath.lastIndexOf('/')) || '/';
 
@@ -1072,7 +1072,7 @@ export function createSftpActionsManager(
 
   // 处理写入文件成功 (新建或修改)
   const onWriteFileSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
-    const updatedItem = payload as FileListItem | null; // 后端现在会发送 FileListItem 或 null
+    const updatedItem = payload as unknown as FileListItem | null; // 后端现在会发送 FileListItem 或 null
     const filePath = message.path;
     const parentPath = filePath?.substring(0, filePath.lastIndexOf('/')) || '/';
 
@@ -1099,7 +1099,7 @@ export function createSftpActionsManager(
   // +++ 处理复制成功 +++
   const onCopySuccess = (payload: MessagePayload, _message: WebSocketMessage) => {
     // 后端应发送 { destination: string, items: FileListItem[] | null }
-    const copyPayload = payload as { destination: string; items: FileListItem[] | null };
+    const copyPayload = payload as unknown as { destination: string; items: FileListItem[] | null };
     const destinationDir = copyPayload.destination;
     const newItems = copyPayload.items;
 
@@ -1143,7 +1143,7 @@ export function createSftpActionsManager(
   // +++ 处理移动成功 +++
   const onMoveSuccess = (payload: MessagePayload, _message: WebSocketMessage) => {
     // 后端应发送 { sources: string[], destination: string, items: FileListItem[] | null }
-    const movePayload = payload as {
+    const movePayload = payload as unknown as {
       sources: string[];
       destination: string;
       items: FileListItem[] | null;
@@ -1193,7 +1193,7 @@ export function createSftpActionsManager(
 
   // *** 处理上传成功 ***
   const onUploadSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
-    const newItem = payload as FileListItem | null; // 后端应发送 FileListItem 或 null
+    const newItem = payload as unknown as FileListItem | null; // 后端应发送 FileListItem 或 null
     const fullPath = message.path; // 后端现在应该在 message 中包含完整的上传路径
 
     if (!fullPath) {
@@ -1255,7 +1255,7 @@ export function createSftpActionsManager(
 
   const onActionError = (payload: MessagePayload, message: WebSocketMessage) => {
     // 类型断言，因为我们知道这些错误的 payload 是 string
-    const errorPayload = payload as string;
+    const errorPayload = payload as unknown as string;
     console.error(`[SFTP ${instanceSessionId}] Action ${message.type} failed:`, errorPayload);
     const actionTypeMap: Record<string, string> = {
       'sftp:mkdir:error': t('fileManager.errors.createFolderFailed'),
@@ -1301,7 +1301,11 @@ export function createSftpActionsManager(
       operation,
       command,
       message: details,
-    } = payload as { operation: 'compress' | 'decompress'; command: string; message?: string };
+    } = payload as unknown as {
+      operation: 'compress' | 'decompress';
+      command: string;
+      message?: string;
+    };
     console.error(
       `[SFTP ${instanceSessionId}] Command '${command}' not found on server for ${operation}. Details: ${details}`
     );

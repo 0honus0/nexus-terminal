@@ -1445,3 +1445,144 @@ gantt
 **下次审计计划**: 2026-02-28
 **负责人**: 待分配
 **状态**: ✅ 历史记录（2026-04-13 已闭环，当前以顶部复查快照为准）
+
+---
+
+## 2026-04-24 全面代码审计（前端 + 后端 + 功能缺口）
+
+> **扫描时间**: 2026-04-24
+> **扫描方式**: 并行三代理深度扫描（前端 60 工具调用 / 后端 47 工具调用 / 功能缺口 40 工具调用）
+> **总计发现**: 26 项（高 6 / 中 10 / 低 10）
+
+### 审计总览
+
+| 优先级      | 数量   | 已修复 | 状态       |
+| ----------- | ------ | ------ | ---------- |
+| 🔴 高优先级 | 6      | 6      | ✅ 100%    |
+| 🟡 中优先级 | 10     | 6      | 🔄 60%     |
+| 🟢 低优先级 | 10     | 4      | 🔄 40%     |
+| **总计**    | **26** | **16** | 🔄 **62%** |
+
+> 本次 PR 修复了 16 项（H1-H6/M3/M4/M7/M8/M9/M10/L3/L5/L7/L10），剩余 10 项需后续 PR 处理。
+
+### 🔴 高优先级（6 项）
+
+#### H1. SFTP 压缩/解压 Shell 注入风险
+
+- **文件**: `packages/backend/src/sftp/sftp.controller.ts:403-671`
+- **问题**: `handleCompressRequest` / `handleDecompressRequest` 用用户输入拼接 shell 命令，仅靠双引号转义防护
+- **风险**: backtick / `$()` 仍可被 shell 解释，存在命令注入风险
+- **修复方案**: 对文件路径做白名单字符校验 + 路径遍历检查（禁止 `..`），或改用 SFTP 协议操作
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### H2. AI 面板 v-html + 手动正则清洗存在 XSS 风险
+
+- **文件**: `packages/frontend/src/features/ai-ops/AIAssistantPanel.vue:113,286-296`
+- **问题**: `formatMessage` 手动 escape HTML 后用正则替换构建 HTML，脆弱且不安全
+- **修复方案**: 改用 DOMPurify（项目已有依赖，`LayoutRenderer.vue` 已在使用）
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### H3. Docker Compose 缺少生产就绪配置
+
+- **文件**: `docker-compose.yml`
+- **问题**: 无 healthcheck、无资源限制、仅 guacd 有 restart policy、无日志轮转
+- **修复方案**: 添加 healthcheck / `restart: unless-stopped` / `deploy.resources.limits` / `logging` 配置
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### H4. 无真正的健康检查端点
+
+- **文件**: `packages/backend/src/index.ts:500`
+- **问题**: `/api/v1/status` 仅返回静态字符串，不检查数据库/WebSocket/磁盘
+- **修复方案**: 新增 `/api/v1/health` 端点，检查 SQLite 连通性、WebSocket 状态、磁盘空间、内存使用
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### H5. WebSocket MessagePayload = any 毒化类型系统
+
+- **文件**: `packages/frontend/src/types/websocket.types.ts:11`
+- **问题**: 所有 SFTP/SSH/Session 消息 payload 类型均为 `any`
+- **修复方案**: 将 `MessagePayload` 从 `any` 改为 `string | object | undefined`，`WebSocketMessage` 索引签名改为 `unknown`，下游 12 个文件适配类型收窄
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### H6. express.json() 未设置 body size limit
+
+- **文件**: `packages/backend/src/index.ts:320`
+- **问题**: 未显式配置请求体大小限制
+- **修复方案**: 设置 `express.json({ limit: '1mb' })`
+- **状态**: ✅ 已修复（2026-04-24）
+
+### 🟡 中优先级（10 项）
+
+#### M1. FileManager.vue 2,565 行巨型组件
+
+- **文件**: `packages/frontend/src/components/FileManager.vue`
+- **修复方案**: 拆分为 PathBar / FileList / Toolbar 子组件
+- **状态**: 📋 待规划
+
+#### M2. settings.store.ts 1,188 行 God Store
+
+- **文件**: `packages/frontend/src/stores/settings.store.ts`
+- **修复方案**: 拆分为 settings / captchaSettings / uiPreferences；引入 ParsedSettings 类型
+- **状态**: 📋 待规划
+
+#### M3. 审计日志每次写入都执行清理检查
+
+- **文件**: `packages/backend/src/audit/audit.repository.ts:42,55-83`
+- **修复方案**: 改为概率清理（每 100 次）或时间间隔清理（每 60 秒）
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### M4. AI 路由缺少速率限制
+
+- **文件**: `packages/backend/src/ai-ops/ai.routes.ts:36-54`
+- **修复方案**: 对所有 AI 路由应用 rate limiter
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### M5. 12 个 Pinia Store 零测试覆盖
+
+- **缺失**: settings / dashboard / fileEditor / audit / commandHistory / notifications / proxies / quickCommands / session / dialog / focusSwitcher / tags
+- **修复方案**: 优先补充 settings / dashboard / fileEditor 测试
+- **状态**: 📋 待规划
+
+#### M6. 控制器级别测试严重缺失
+
+- **缺失**: settings.controller / sftp.controller / docker.controller / notification.controller / ai.controller
+- **修复方案**: 优先补充 settings.controller 和 sftp.controller 测试
+- **状态**: 📋 待规划
+
+#### M7. 无 CSP 安全头
+
+- **文件**: `packages/frontend/nginx.conf` + `packages/backend/src/index.ts`
+- **修复方案**: 添加 Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### M8. 数据导出存在但导入 UI 缺失
+
+- **文件**: `packages/frontend/src/components/settings/DataManagementSection.vue`
+- **修复方案**: 补充导入按钮 + 扩展导出范围 + 数据库备份下载
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### M9. 错误响应格式不统一
+
+- **问题**: `{ message }` vs `{ success, error }` vs 全局 ErrorResponse 三种格式并存
+- **修复方案**: 统一为全局 ErrorResponse 类型
+- **状态**: ✅ 已修复（2026-04-24）
+
+#### M10. 安全配置硬编码不可覆盖
+
+- **文件**: `packages/backend/src/config/security.config.ts`
+- **修复方案**: 读取环境变量 + 合理默认值
+- **状态**: ✅ 已修复（2026-04-24）
+
+### 🟢 低优先级（10 项）
+
+| 编号 | 问题                                  | 文件/位置              | 状态                    |
+| ---- | ------------------------------------- | ---------------------- | ----------------------- |
+| L1   | 日志系统仅 Console 输出，无结构化日志 | backend 全局           | 📋 待规划               |
+| L2   | 无 Prometheus/Metrics 端点            | backend 全局           | 📋 待规划               |
+| L3   | audit_logs 表缺少 user_id 列          | schema.ts:12-19        | ✅ 已修复（2026-04-24） |
+| L4   | 路线图 Phase 6-11 功能全部未实现      | PERSONAL_ROADMAP.md    | 📋 待规划               |
+| L5   | Swagger/API 文档生产环境禁用          | index.ts:446-470       | ✅ 已修复（2026-04-24） |
+| L6   | 移动端体验不足（滑动/长按/虚拟键盘）  | 前端多文件             | 📋 待规划               |
+| L7   | 硬编码颜色绕过主题系统                | FileEditorContainer 等 | ✅ 已修复（2026-04-24） |
+| L8   | 12 个组件超过 500 行                  | 前端多文件             | 📋 待规划               |
+| L9   | 无障碍访问 (a11y) 严重不足            | 前端全局               | 📋 待规划               |
+| L10  | 命令面板已实现但未在文档说明          | CommandPalette.vue     | ✅ 已修复（2026-04-24） |

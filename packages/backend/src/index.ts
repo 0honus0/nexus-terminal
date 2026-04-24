@@ -317,7 +317,19 @@ const settingsLimiter = rateLimit({
 
 // --- 其他中间件 ---
 app.use(ipWhitelistMiddleware as RequestHandler);
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// --- 安全响应头中间件（在路由之前设置） ---
+app.use((_req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data: blob:; font-src 'self' data:"
+  );
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // --- 静态文件服务 ---
 const uploadsPath = path.join(__dirname, '../uploads');
@@ -496,9 +508,45 @@ const startServer = () => {
   app.use('/api/v1/ai', apiLimiter, aiRoutes);
   app.use('/api/v1/dashboard', apiLimiter, dashboardRoutes);
 
-  // 状态检查接口
-  app.get('/api/v1/status', (req: Request, res: Response) => {
-    res.json({ status: '后端服务运行中！' });
+  // 健康检查接口（供 Docker healthcheck 与负载均衡器使用）
+  app.get('/api/v1/health', async (_req: Request, res: Response) => {
+    const startTime = Date.now();
+    const checks: {
+      database: 'ok' | 'fail';
+      uptime: number;
+      memory: { used: number; total: number };
+    } = {
+      database: 'fail',
+      uptime: process.uptime(),
+      memory: {
+        used: process.memoryUsage().heapUsed,
+        total: process.memoryUsage().heapTotal,
+      },
+    };
+
+    // 检测 SQLite 连接可用性
+    try {
+      const db = await getDbInstance();
+      await new Promise<void>((resolve, reject) => {
+        db.get('SELECT 1', (err: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      checks.database = 'ok';
+    } catch {
+      checks.database = 'fail';
+    }
+
+    const isHealthy = checks.database === 'ok';
+    const status = isHealthy ? 'healthy' : 'unhealthy';
+
+    res.status(isHealthy ? 200 : 503).json({
+      status,
+      checks,
+      timestamp: new Date().toISOString(),
+      responseTime: Date.now() - startTime,
+    });
   });
   // --- 结束 API 路由 ---
 

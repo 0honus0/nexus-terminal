@@ -210,7 +210,7 @@ packages/backend/
 | `/api/v1/favorite-paths`     | favorite-paths     | 收藏路径管理                          |
 | `/api/v1/batch`              | batch              | 批量命令执行、任务状态查询、取消/删除 |
 | `/api/v1/ai`                 | ai-ops             | AI 会话管理、智能分析查询             |
-| `/api/v1/status`             | (内置)             | 健康检查                              |
+| `/api/v1/health`             | (内置)             | 健康检查（含 SQLite 连通性检测）      |
 
 ---
 

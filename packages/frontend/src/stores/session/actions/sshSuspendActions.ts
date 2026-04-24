@@ -870,28 +870,28 @@ export const registerSshSuspendHandlers = (wsManager: WsManagerInstance): void =
   // 注意：wsManager.onMessage 返回一个注销函数，如果需要，可以收集它们并在会话关闭时调用。
   // 但通常这些处理器会随 wsManager 实例的生命周期一起存在。
   wsManager.onMessage('SSH_MARKED_FOR_SUSPEND_ACK', (p: MessagePayload) =>
-    handleSshMarkedForSuspendAck(p as SshMarkedForSuspendAckPayload)
+    handleSshMarkedForSuspendAck(p as unknown as SshMarkedForSuspendAckPayload)
   );
   wsManager.onMessage('SSH_UNMARKED_FOR_SUSPEND_ACK', (p: MessagePayload) =>
-    handleSshUnmarkedForSuspendAck(p as SshUnmarkedForSuspendAckPayload)
+    handleSshUnmarkedForSuspendAck(p as unknown as SshUnmarkedForSuspendAckPayload)
   );
   wsManager.onMessage('SSH_SUSPEND_LIST_RESPONSE', (p: MessagePayload) =>
-    handleSshSuspendListResponse(p as SshSuspendListResponsePayload)
+    handleSshSuspendListResponse(p as unknown as SshSuspendListResponsePayload)
   );
   wsManager.onMessage('SSH_SUSPEND_RESUMED', (p: MessagePayload) =>
-    handleSshSuspendResumed(p as SshSuspendResumedPayload)
+    handleSshSuspendResumed(p as unknown as SshSuspendResumedPayload)
   );
   wsManager.onMessage('SSH_OUTPUT_CACHED_CHUNK', (p: MessagePayload) =>
-    handleSshOutputCachedChunk(p as SshOutputCachedChunkPayload)
+    handleSshOutputCachedChunk(p as unknown as SshOutputCachedChunkPayload)
   );
   wsManager.onMessage('SSH_SUSPEND_TERMINATED', (p: MessagePayload) =>
-    handleSshSuspendTerminated(p as SshSuspendTerminatedPayload)
+    handleSshSuspendTerminated(p as unknown as SshSuspendTerminatedPayload)
   );
   wsManager.onMessage('SSH_SUSPEND_ENTRY_REMOVED', (p: MessagePayload) =>
-    handleSshSuspendEntryRemoved(p as SshSuspendEntryRemovedPayload)
+    handleSshSuspendEntryRemoved(p as unknown as SshSuspendEntryRemovedPayload)
   );
   wsManager.onMessage('SSH_SUSPEND_AUTO_TERMINATED', (p: MessagePayload) =>
-    handleSshSuspendAutoTerminated(p as SshSuspendAutoTerminatedPayload)
+    handleSshSuspendAutoTerminated(p as unknown as SshSuspendAutoTerminatedPayload)
   );
 
   console.info(

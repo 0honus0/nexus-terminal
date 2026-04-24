@@ -11,6 +11,7 @@ import { passkeyService } from '../passkey/passkey.service'; // +++ Passkey Serv
 import { passkeyRepository } from '../passkey/passkey.repository'; // +++ Passkey Repository
 import { userRepository } from '../user/user.repository'; // For passkey auth success
 import { SECURITY_CONFIG } from '../config/security.config';
+import { ErrorCode } from '../types/error.types';
 import { getSingleHeaderToken } from '../utils/url';
 import {
   resolveRequiresSetup,
@@ -259,7 +260,7 @@ export const generatePasskeyRegistrationOptionsHandler = async (
   const { username } = req.session;
 
   if (!userId || !username) {
-    res.status(401).json({ message: '用户未认证。' });
+    res.status(401).json({ success: false, error: '用户未认证。', code: ErrorCode.UNAUTHORIZED });
     return;
   }
 
@@ -644,7 +645,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
   const { username, password, rememberMe } = req.body;
 
   if (!username || !password) {
-    res.status(400).json({ message: '用户名和密码不能为空。' });
+    res
+      .status(400)
+      .json({ success: false, error: '用户名和密码不能为空。', code: ErrorCode.VALIDATION_ERROR });
     return;
   }
 
@@ -654,7 +657,11 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     if (captchaConfig.enabled) {
       const { captchaToken } = req.body;
       if (!captchaToken) {
-        res.status(400).json({ message: '需要提供 CAPTCHA 令牌。' });
+        res.status(400).json({
+          success: false,
+          error: '需要提供 CAPTCHA 令牌。',
+          code: ErrorCode.CAPTCHA_REQUIRED,
+        });
         return;
       }
       try {
@@ -671,7 +678,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
               clientIp,
             }
           );
-          res.status(401).json({ message: 'CAPTCHA 验证失败。' });
+          res
+            .status(401)
+            .json({ success: false, error: 'CAPTCHA 验证失败。', code: ErrorCode.CAPTCHA_INVALID });
           return;
         }
         const captchaVerifiedLogAction = buildLoginCaptchaVerifiedDebugLogAction(username);
@@ -682,7 +691,11 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           captchaErrorLogAction.message,
           getErrorMessage(captchaError)
         );
-        res.status(500).json({ message: 'CAPTCHA 验证服务出错，请稍后重试或检查配置。' });
+        res.status(500).json({
+          success: false,
+          error: 'CAPTCHA 验证服务出错，请稍后重试或检查配置。',
+          code: ErrorCode.CAPTCHA_SERVICE_ERROR,
+        });
         return;
       }
     } else {
@@ -706,7 +719,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           clientIp,
         }
       );
-      res.status(401).json({ message: '无效的凭据。' });
+      res
+        .status(401)
+        .json({ success: false, error: '无效的凭据。', code: ErrorCode.INVALID_CREDENTIALS });
       return;
     }
 
@@ -724,7 +739,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           clientIp,
         }
       );
-      res.status(401).json({ message: '无效的凭据。' });
+      res
+        .status(401)
+        .json({ success: false, error: '无效的凭据。', code: ErrorCode.INVALID_CREDENTIALS });
       return;
     }
 
@@ -1254,15 +1271,25 @@ export const setupAdmin = async (
   const { username, password, confirmPassword } = req.body;
 
   if (!username || !password || !confirmPassword) {
-    res.status(400).json({ message: '用户名、密码和确认密码不能为空。' });
+    res.status(400).json({
+      success: false,
+      error: '用户名、密码和确认密码不能为空。',
+      code: ErrorCode.VALIDATION_ERROR,
+    });
     return;
   }
   if (password !== confirmPassword) {
-    res.status(400).json({ message: '两次输入的密码不匹配。' });
+    res
+      .status(400)
+      .json({ success: false, error: '两次输入的密码不匹配。', code: ErrorCode.PASSWORD_MISMATCH });
     return;
   }
   if (password.length < 8) {
-    res.status(400).json({ message: '密码长度至少需要 8 位。' });
+    res.status(400).json({
+      success: false,
+      error: '密码长度至少需要 8 位。',
+      code: ErrorCode.PASSWORD_TOO_SHORT,
+    });
     return;
   }
 
@@ -1274,7 +1301,11 @@ export const setupAdmin = async (
 
     if (userCount > 0) {
       console.warn('尝试在已有用户的情况下执行初始设置。');
-      res.status(403).json({ message: '设置已完成，无法重复执行。' });
+      res.status(403).json({
+        success: false,
+        error: '设置已完成，无法重复执行。',
+        code: ErrorCode.SETUP_ALREADY_COMPLETE,
+      });
       return;
     }
 

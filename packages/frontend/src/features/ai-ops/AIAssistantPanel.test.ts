@@ -221,10 +221,29 @@ describe('AIAssistantPanel.vue', () => {
       ];
 
       const wrapper = mount(AIAssistantPanel);
+      const html = wrapper.html();
 
-      // 应被转义，不应直接包含 script 标签
-      expect(wrapper.html()).not.toContain('<script>');
-      expect(wrapper.html()).toContain('&lt;script&gt;');
+      // 不应包含可执行的 script 标签
+      expect(html).not.toContain('<script>');
+      // 危险标签应被转义为纯文本
+      expect(html).toContain('&lt;script&gt;');
+      expect(html).toContain('&lt;/script&gt;');
+    });
+
+    it('应对事件属性进行 XSS 防护', () => {
+      mockState.messages = [
+        createMockMessage({
+          role: 'user',
+          content: '<img src=x onerror="alert(1)">',
+        }),
+      ];
+
+      const wrapper = mount(AIAssistantPanel);
+      const html = wrapper.html();
+
+      // 不应包含可执行的 img 标签，标签应被转义为纯文本
+      expect(html).not.toContain('<img ');
+      expect(html).toContain('&lt;img');
     });
 
     it('应显示消息时间戳', () => {

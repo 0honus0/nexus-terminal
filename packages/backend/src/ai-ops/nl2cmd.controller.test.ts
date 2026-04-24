@@ -55,7 +55,11 @@ describe('NL2CMD Controller', () => {
       await NL2CMDController.generateCommand(req, res);
 
       expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: '未授权' });
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: '未授权',
+        code: 'UNAUTHORIZED',
+      });
     });
 
     it('应该返回 400 当查询内容为空时', async () => {
@@ -160,7 +164,11 @@ describe('NL2CMD Controller', () => {
       await NL2CMDController.saveAISettings(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: 'enabled 必须是布尔值' });
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'enabled 必须是布尔值',
+        code: 'VALIDATION_ERROR',
+      });
     });
 
     it('应该验证 provider 参数值', async () => {
@@ -174,7 +182,8 @@ describe('NL2CMD Controller', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        message: 'provider 必须是 openai, gemini 或 claude',
+        error: 'provider 必须是 openai, gemini 或 claude',
+        code: 'VALIDATION_ERROR',
       });
     });
 
@@ -237,7 +246,11 @@ describe('NL2CMD Controller', () => {
       await NL2CMDController.testAIConnection(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ success: false, message: '连接测试失败' });
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: '连接测试失败',
+        code: 'CONNECTION_FAILED',
+      });
     });
   });
 });

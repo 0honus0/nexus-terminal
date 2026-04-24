@@ -206,7 +206,9 @@ export function useFileUploader(
   // --- 消息处理器 ---
 
   const onUploadReady = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId;
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) return;
 
     const upload = uploads[uploadId];
@@ -224,7 +226,9 @@ export function useFileUploader(
   };
 
   const onUploadSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId;
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) return;
 
     const upload = uploads[uploadId];
@@ -246,7 +250,9 @@ export function useFileUploader(
   };
 
   const onUploadError = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId;
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) {
       console.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:error with missing uploadId:`,
@@ -261,8 +267,8 @@ export function useFileUploader(
         if (typeof payload === 'string') {
           return payload;
         }
-        if (typeof payload?.message === 'string' && payload.message.trim()) {
-          return payload.message;
+        if (typeof payloadObj.message === 'string' && (payloadObj.message as string).trim()) {
+          return payloadObj.message as string;
         }
         return t('fileManager.errors.uploadFailed');
       })();
@@ -287,7 +293,9 @@ export function useFileUploader(
   };
 
   const onUploadPause = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId;
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload && upload.status === 'uploading') {
@@ -297,7 +305,9 @@ export function useFileUploader(
   };
 
   const onUploadResume = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId;
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload && upload.status === 'paused') {
@@ -308,7 +318,9 @@ export function useFileUploader(
   };
 
   const onUploadCancelled = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId;
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload) {
@@ -327,7 +339,9 @@ export function useFileUploader(
 
   // +++ 处理上传进度更新 +++
   const onUploadProgress = (payload: MessagePayload, message: WebSocketMessage) => {
-    const uploadId = message.uploadId || payload?.uploadId; // 从顶层获取 uploadId
+    const payloadObj =
+      typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+    const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined); // 从顶层获取 uploadId
     if (!uploadId) {
       return;
     }
@@ -335,10 +349,10 @@ export function useFileUploader(
     const upload = uploads[uploadId];
     if (upload && upload.status === 'uploading') {
       // payload 现在应该包含 bytesWritten 和 totalSize
-      if (typeof payload?.bytesWritten === 'number' && typeof payload?.totalSize === 'number') {
+      if (typeof payloadObj.bytesWritten === 'number' && typeof payloadObj.totalSize === 'number') {
         upload.progress = Math.min(
           100,
-          Math.round((payload.bytesWritten / payload.totalSize) * 100)
+          Math.round((payloadObj.bytesWritten / payloadObj.totalSize) * 100)
         );
       } else {
         console.warn(

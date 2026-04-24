@@ -62,7 +62,11 @@ export const settingsController = {
       const settingsDto: UpdateAppearanceDto = req.body;
       // 可在此处添加 DTO 验证逻辑
       if (typeof settingsDto !== 'object' || settingsDto === null) {
-        res.status(400).json({ message: '无效的请求体，应为 JSON 对象' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，应为 JSON 对象',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -98,7 +102,11 @@ export const settingsController = {
     try {
       const settingsToUpdate: Record<string, string> = req.body;
       if (typeof settingsToUpdate !== 'object' || settingsToUpdate === null) {
-        res.status(400).json({ message: '无效的请求体，应为 JSON 对象' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，应为 JSON 对象',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -199,8 +207,10 @@ export const settingsController = {
       ) {
         console.warn('[SettingsController] 收到无效的完整焦点配置格式:', fullConfig);
         res.status(400).json({
-          message:
+          success: false,
+          error:
             '无效的请求体，必须是包含 sequence (string[]) 和 shortcuts (Record<string, {shortcut?: string}>) 的对象',
+          code: 'INVALID_REQUEST_BODY',
         });
         return;
       }
@@ -213,7 +223,11 @@ export const settingsController = {
       console.error('[SettingsController] 设置焦点切换顺序时出错:', error);
       const errMsg = getErrorMessage(error);
       if (errMsg === 'Invalid sequence format provided.') {
-        res.status(400).json({ message: '设置焦点切换顺序失败: 无效的格式', error: errMsg });
+        res.status(400).json({
+          success: false,
+          error: '设置焦点切换顺序失败: 无效的格式',
+          code: 'INVALID_FORMAT',
+        });
       } else {
         next(error);
       }
@@ -243,7 +257,11 @@ export const settingsController = {
 
       if (typeof visible !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 visible 格式:', visible);
-        res.status(400).json({ message: '无效的请求体，"visible" 必须是一个布尔值' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，"visible" 必须是一个布尔值',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -291,7 +309,11 @@ export const settingsController = {
 
       if (typeof layoutTree !== 'object' || layoutTree === null) {
         console.warn('[SettingsController] 收到无效的布局树格式 (非对象):', layoutTree);
-        res.status(400).json({ message: '无效的请求体，应为 JSON 对象格式的布局树' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，应为 JSON 对象格式的布局树',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -306,7 +328,11 @@ export const settingsController = {
       console.error('[SettingsController] 设置布局树时出错:', error);
       const errMsg = getErrorMessage(error);
       if (errMsg === 'Invalid layout tree JSON format.') {
-        res.status(400).json({ message: '设置布局树失败: 无效的 JSON 格式', error: errMsg });
+        res.status(400).json({
+          success: false,
+          error: '设置布局树失败: 无效的 JSON 格式',
+          code: 'INVALID_FORMAT',
+        });
       } else {
         next(error);
       }
@@ -335,7 +361,9 @@ export const settingsController = {
     try {
       const ipToDelete = req.params.ip;
       if (!ipToDelete) {
-        res.status(400).json({ message: '缺少要删除的 IP 地址' });
+        res
+          .status(400)
+          .json({ success: false, error: '缺少要删除的 IP 地址', code: 'MISSING_PARAMETER' });
         return;
       }
       await ipBlacklistService.removeFromBlacklist(ipToDelete);
@@ -369,7 +397,11 @@ export const settingsController = {
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
-        res.status(400).json({ message: '无效的请求体，"enabled" 必须是一个布尔值' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，"enabled" 必须是一个布尔值',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -413,7 +445,11 @@ export const settingsController = {
         !Array.isArray(configDto.right)
       ) {
         console.warn('[SettingsController] 收到无效的侧边栏配置格式:', configDto);
-        res.status(400).json({ message: '无效的请求体，应为包含 left 和 right 数组的 JSON 对象' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，应为包含 left 和 right 数组的 JSON 对象',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -425,7 +461,9 @@ export const settingsController = {
       const errMsg = getErrorMessage(error);
       // Handle specific validation errors from the service
       if (errMsg.includes('无效的面板名称') || errMsg.includes('无效的侧栏配置格式')) {
-        res.status(400).json({ message: `设置侧栏配置失败: ${errMsg}` });
+        res
+          .status(400)
+          .json({ success: false, error: `设置侧栏配置失败: ${errMsg}`, code: 'VALIDATION_ERROR' });
       } else {
         next(error);
       }
@@ -468,7 +506,11 @@ export const settingsController = {
 
       if (!configDto || typeof configDto !== 'object') {
         console.warn('[SettingsController] 收到无效的 CAPTCHA 配置格式 (非对象):', configDto);
-        res.status(400).json({ message: '无效的请求体，应为 JSON 对象' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，应为 JSON 对象',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -480,7 +522,11 @@ export const settingsController = {
       const errMsg = getErrorMessage(error);
       // Handle specific validation errors from the service
       if (errMsg.includes('无效的') || errMsg.includes('必须是')) {
-        res.status(400).json({ message: `设置 CAPTCHA 配置失败: ${errMsg}` });
+        res.status(400).json({
+          success: false,
+          error: `设置 CAPTCHA 配置失败: ${errMsg}`,
+          code: 'VALIDATION_ERROR',
+        });
       } else {
         next(error);
       }
@@ -505,7 +551,11 @@ export const settingsController = {
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
-        res.status(400).json({ message: '无效的请求体，"enabled" 必须是一个布尔值' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，"enabled" 必须是一个布尔值',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -541,7 +591,11 @@ export const settingsController = {
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
-        res.status(400).json({ message: '无效的请求体，"enabled" 必须是一个布尔值' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，"enabled" 必须是一个布尔值',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -585,7 +639,11 @@ export const settingsController = {
 
       if (typeof enabled !== 'boolean') {
         console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
-        res.status(400).json({ message: '无效的请求体，"enabled" 必须是一个布尔值' });
+        res.status(400).json({
+          success: false,
+          error: '无效的请求体，"enabled" 必须是一个布尔值',
+          code: 'INVALID_REQUEST_BODY',
+        });
         return;
       }
 
@@ -647,7 +705,9 @@ export const settingsController = {
 
       if (!level || typeof level !== 'string' || !validLevels.includes(level)) {
         res.status(400).json({
-          message: `无效的日志等级。必须是以下之一: ${validLevels.join(', ')}`,
+          success: false,
+          error: `无效的日志等级。必须是以下之一: ${validLevels.join(', ')}`,
+          code: 'INVALID_PARAMETER',
         });
         return;
       }
@@ -688,7 +748,11 @@ export const settingsController = {
       const { maxEntries } = req.body;
 
       if (!Number.isInteger(maxEntries) || maxEntries <= 0) {
-        res.status(400).json({ message: '无效的最大条数，必须是正整数' });
+        res.status(400).json({
+          success: false,
+          error: '无效的最大条数，必须是正整数',
+          code: 'INVALID_PARAMETER',
+        });
         return;
       }
 

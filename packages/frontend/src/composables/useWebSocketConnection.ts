@@ -152,32 +152,119 @@ export function createWebSocketConnectionManager(
 
   const payloadValidators: PayloadValidatorSchema = {
     'terminal:data': (p) => typeof p === 'string',
-    'terminal:resize': (p) =>
-      typeof p === 'object' && typeof p.cols === 'number' && typeof p.rows === 'number',
-    'sftp:ready': (p) => typeof p === 'object' && typeof p.ready === 'boolean',
-    'sftp:list': (p) => typeof p === 'object' && Array.isArray(p.files),
-    'sftp:upload:progress': (p) =>
-      typeof p === 'object' &&
-      typeof p.bytesWritten === 'number' &&
-      typeof p.totalSize === 'number' &&
-      typeof p.progress === 'number',
-    'batch:subtask:update': (p) =>
-      typeof p === 'object' && typeof p.subtaskId === 'string' && typeof p.status === 'string',
-    'ai:message': (p) => typeof p === 'object' && typeof p.content === 'string',
-    SSH_MARKED_FOR_SUSPEND_ACK: (p) =>
-      typeof p === 'object' && typeof p.sessionId === 'string' && typeof p.success === 'boolean',
-    SSH_SUSPEND_RESUMED: (p) =>
-      typeof p === 'object' &&
-      typeof p.suspendSessionId === 'string' &&
-      typeof p.newFrontendSessionId === 'string' &&
-      typeof p.success === 'boolean',
-    SSH_OUTPUT_CACHED_CHUNK: (p) =>
-      typeof p === 'object' &&
-      typeof p.frontendSessionId === 'string' &&
-      typeof p.data === 'string' &&
-      typeof p.isLastChunk === 'boolean',
-    'ssh:exec_silent:result': (p) => typeof p === 'object' && typeof p?.output === 'string',
-    'ssh:exec_silent:error': (p) => typeof p === 'object' && typeof p?.error === 'string',
+    'terminal:resize': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.cols === 'number' &&
+        typeof obj.rows === 'number'
+      );
+    },
+    'sftp:ready': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.ready === 'boolean';
+    },
+    'sftp:list': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && Array.isArray(obj.files);
+    },
+    'sftp:upload:progress': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.bytesWritten === 'number' &&
+        typeof obj.totalSize === 'number' &&
+        typeof obj.progress === 'number'
+      );
+    },
+    'batch:subtask:update': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.subtaskId === 'string' &&
+        typeof obj.status === 'string'
+      );
+    },
+    'ai:message': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.content === 'string';
+    },
+    SSH_MARKED_FOR_SUSPEND_ACK: (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.sessionId === 'string' &&
+        typeof obj.success === 'boolean'
+      );
+    },
+    SSH_SUSPEND_RESUMED: (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.suspendSessionId === 'string' &&
+        typeof obj.newFrontendSessionId === 'string' &&
+        typeof obj.success === 'boolean'
+      );
+    },
+    SSH_OUTPUT_CACHED_CHUNK: (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.frontendSessionId === 'string' &&
+        typeof obj.data === 'string' &&
+        typeof obj.isLastChunk === 'boolean'
+      );
+    },
+    'ssh:exec_silent:result': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.output === 'string';
+    },
+    'ssh:exec_silent:error': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.error === 'string';
+    },
+    'ssh:connected': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        (typeof obj.connectionId === 'number' || typeof obj.connectionId === 'string') &&
+        typeof obj.sessionId === 'string'
+      );
+    },
+    'sftp:readdir:success': (p) => Array.isArray(p),
+    'sftp:readdir:error': (p) => typeof p === 'string',
+    'sftp:compress:error': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.error === 'string';
+    },
+    'sftp:decompress:error': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.error === 'string';
+    },
+    'sftp:compress:success': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.message === 'string';
+    },
+    'sftp:decompress:success': (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return typeof obj === 'object' && obj !== null && typeof obj.message === 'string';
+    },
+    status_update: (p) => {
+      const obj = p as Record<string, unknown> | undefined;
+      return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.status === 'object' &&
+        obj.status !== null
+      );
+    },
   };
 
   /**
@@ -412,8 +499,10 @@ export function createWebSocketConnectionManager(
           ) {
             if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
               connectionStatus.value = 'error';
-              let errorMsg = message.payload || '未知错误';
-              if (typeof errorMsg === 'object' && errorMsg.message) errorMsg = errorMsg.message;
+              let errorMsg: string | unknown = message.payload || '未知错误';
+              if (typeof errorMsg === 'object' && errorMsg !== null && 'message' in errorMsg) {
+                errorMsg = (errorMsg as Record<string, unknown>).message as string;
+              }
               statusMessage.value = getStatusText('error', { message: errorMsg });
               isSftpReady.value = false;
             }

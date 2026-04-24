@@ -22,7 +22,7 @@ export const createConnection = async (
     console.error('Controller: 创建连接时发生错误:', error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('缺少') || errMsg.includes('需要提供')) {
-      res.status(400).json({ message: errMsg });
+      res.status(400).json({ success: false, error: errMsg, code: 'VALIDATION_ERROR' });
     } else {
       next(error);
     }
@@ -57,14 +57,14 @@ export const getConnectionById = async (
   try {
     const connectionId = parseInt(req.params.id, 10);
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
 
     const connection = await ConnectionService.getConnectionById(connectionId);
 
     if (!connection) {
-      res.status(404).json({ message: '连接未找到。' });
+      res.status(404).json({ success: false, error: '连接未找到。', code: 'NOT_FOUND' });
     } else {
       res.status(200).json(connection);
     }
@@ -85,14 +85,14 @@ export const updateConnection = async (
   try {
     const connectionId = parseInt(req.params.id, 10);
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
 
     const updatedConnection = await ConnectionService.updateConnection(connectionId, req.body);
 
     if (!updatedConnection) {
-      res.status(404).json({ message: '连接未找到。' });
+      res.status(404).json({ success: false, error: '连接未找到。', code: 'NOT_FOUND' });
     } else {
       res.status(200).json({ message: '连接更新成功。', connection: updatedConnection });
     }
@@ -100,7 +100,7 @@ export const updateConnection = async (
     console.error(`Controller: 更新连接 ${req.params.id} 时发生错误:`, error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('需要提供')) {
-      res.status(400).json({ message: errMsg });
+      res.status(400).json({ success: false, error: errMsg, code: 'VALIDATION_ERROR' });
     } else {
       next(error);
     }
@@ -118,14 +118,14 @@ export const deleteConnection = async (
   try {
     const connectionId = parseInt(req.params.id, 10);
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
 
     const deleted = await ConnectionService.deleteConnection(connectionId);
 
     if (!deleted) {
-      res.status(404).json({ message: '连接未找到。' });
+      res.status(404).json({ success: false, error: '连接未找到。', code: 'NOT_FOUND' });
     } else {
       res.status(200).json({ message: '连接删除成功。' });
     }
@@ -146,7 +146,7 @@ export const testConnection = async (
   try {
     const connectionId = parseInt(req.params.id, 10);
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
 
@@ -186,22 +186,27 @@ export const testUnsavedConnection = async (
     if (!host || !port || !username || !auth_method) {
       res.status(400).json({
         success: false,
-        message: '缺少必要的连接信息 (host, port, username, auth_method)。',
+        error: '缺少必要的连接信息 (host, port, username, auth_method)。',
+        code: 'MISSING_PARAMETER',
       });
       return;
     }
     // 密码认证时，password 字段必须存在，但可以为空字符串
     if (auth_method === 'password' && password === undefined) {
-      res
-        .status(400)
-        .json({ success: false, message: '密码认证方式需要提供 password 字段 (可以为空字符串)。' });
+      res.status(400).json({
+        success: false,
+        error: '密码认证方式需要提供 password 字段 (可以为空字符串)。',
+        code: 'VALIDATION_ERROR',
+      });
       return;
     }
     // 密钥认证时，必须提供 ssh_key_id 或 private_key
     if (auth_method === 'key' && !ssh_key_id && !private_key) {
-      res
-        .status(400)
-        .json({ success: false, message: '密钥认证方式需要提供 ssh_key_id 或 private_key。' });
+      res.status(400).json({
+        success: false,
+        error: '密钥认证方式需要提供 ssh_key_id 或 private_key。',
+        code: 'VALIDATION_ERROR',
+      });
       return;
     }
     // 如果同时提供了 ssh_key_id 和 private_key，优先使用 ssh_key_id (或者可以报错，这里选择优先)
@@ -228,16 +233,24 @@ export const testUnsavedConnection = async (
 
     // 验证 port 和 proxy_id 是否为有效数字
     if (Number.isNaN(connectionConfig.port)) {
-      res.status(400).json({ success: false, message: '端口号必须是有效的数字。' });
+      res
+        .status(400)
+        .json({ success: false, error: '端口号必须是有效的数字。', code: 'INVALID_PARAMETER' });
       return;
     }
     if (proxy_id && Number.isNaN(connectionConfig.proxy_id as number)) {
-      res.status(400).json({ success: false, message: '代理 ID 必须是有效的数字。' });
+      res
+        .status(400)
+        .json({ success: false, error: '代理 ID 必须是有效的数字。', code: 'INVALID_PARAMETER' });
       return;
     }
     // 验证 ssh_key_id (如果提供了)
     if (ssh_key_id && Number.isNaN(connectionConfig.ssh_key_id as number)) {
-      res.status(400).json({ success: false, message: 'SSH 密钥 ID 必须是有效的数字。' });
+      res.status(400).json({
+        success: false,
+        error: 'SSH 密钥 ID 必须是有效的数字。',
+        code: 'INVALID_PARAMETER',
+      });
       return;
     }
 
@@ -285,7 +298,11 @@ export const importConnections = async (
   next: NextFunction
 ): Promise<void> => {
   if (!req.file) {
-    res.status(400).json({ message: '未找到上传的文件 (需要名为 "connectionsFile" 的文件)。' });
+    res.status(400).json({
+      success: false,
+      error: '未找到上传的文件 (需要名为 "connectionsFile" 的文件)。',
+      code: 'MISSING_FILE',
+    });
     return;
   }
 
@@ -310,7 +327,7 @@ export const importConnections = async (
     console.error('Controller: 导入连接时发生错误:', error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('解析 JSON 文件失败')) {
-      res.status(400).json({ message: errMsg });
+      res.status(400).json({ success: false, error: errMsg, code: 'PARSE_ERROR' });
     } else {
       next(error);
     }
@@ -331,7 +348,7 @@ export const getRdpSessionToken = async (
   try {
     const connectionId = parseInt(req.params.id, 10);
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
 
@@ -340,7 +357,7 @@ export const getRdpSessionToken = async (
       await ConnectionService.getConnectionWithDecryptedCredentials(connectionId);
 
     if (!connectionData) {
-      res.status(404).json({ message: '连接未找到。' });
+      res.status(404).json({ success: false, error: '连接未找到。', code: 'NOT_FOUND' });
       return;
     }
 
@@ -348,7 +365,9 @@ export const getRdpSessionToken = async (
 
     // 2. 验证连接类型是否为 RDP
     if (connection.type !== 'RDP') {
-      res.status(400).json({ message: '此连接类型不是 RDP。' });
+      res
+        .status(400)
+        .json({ success: false, error: '此连接类型不是 RDP。', code: 'INVALID_CONNECTION_TYPE' });
       return;
     }
 
@@ -373,7 +392,11 @@ export const getRdpSessionToken = async (
       console.warn(
         `[Controller:getRdpSessionToken] RDP connection ${connectionId} does not use password auth or password decryption failed.`
       );
-      res.status(400).json({ message: 'RDP 连接需要使用密码认证，或密码解密失败。' });
+      res.status(400).json({
+        success: false,
+        error: 'RDP 连接需要使用密码认证，或密码解密失败。',
+        code: 'AUTH_REQUIRED',
+      });
       return;
     }
 
@@ -445,7 +468,9 @@ export const getRdpSessionToken = async (
     if (statusCode >= 500) {
       next(error);
     } else {
-      res.status(statusCode).json({ message: responseMessage });
+      res
+        .status(statusCode)
+        .json({ success: false, error: responseMessage, code: 'REMOTE_DESKTOP_ERROR' });
     }
   }
 };
@@ -462,7 +487,7 @@ export const getVncSessionToken = async (
   try {
     const connectionId = parseInt(req.params.id, 10);
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
 
@@ -470,14 +495,16 @@ export const getVncSessionToken = async (
       await ConnectionService.getConnectionWithDecryptedCredentials(connectionId);
 
     if (!connectionData) {
-      res.status(404).json({ message: '连接未找到。' });
+      res.status(404).json({ success: false, error: '连接未找到。', code: 'NOT_FOUND' });
       return;
     }
 
     const { connection, decryptedPassword } = connectionData;
 
     if (connection.type !== 'VNC') {
-      res.status(400).json({ message: '此连接类型不是 VNC。' });
+      res
+        .status(400)
+        .json({ success: false, error: '此连接类型不是 VNC。', code: 'INVALID_CONNECTION_TYPE' });
       return;
     }
 
@@ -498,7 +525,11 @@ export const getVncSessionToken = async (
       console.warn(
         `[Controller:getVncSessionToken] VNC connection ${connectionId} does not use password auth or password decryption failed.`
       );
-      res.status(400).json({ message: 'VNC 连接需要使用密码认证，或密码解密失败。' });
+      res.status(400).json({
+        success: false,
+        error: 'VNC 连接需要使用密码认证，或密码解密失败。',
+        code: 'AUTH_REQUIRED',
+      });
       return;
     }
 
@@ -565,7 +596,9 @@ export const getVncSessionToken = async (
     if (statusCode >= 500) {
       next(error);
     } else {
-      res.status(statusCode).json({ message: responseMessage });
+      res
+        .status(statusCode)
+        .json({ success: false, error: responseMessage, code: 'REMOTE_DESKTOP_ERROR' });
     }
   }
 };
@@ -582,11 +615,17 @@ export const cloneConnection = async (
     const { name: newName } = req.body; // 从请求体获取新名称
 
     if (Number.isNaN(originalConnectionId)) {
-      res.status(400).json({ message: '无效的原始连接 ID。' });
+      res
+        .status(400)
+        .json({ success: false, error: '无效的原始连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
     if (!newName || typeof newName !== 'string') {
-      res.status(400).json({ message: '需要提供有效的字符串类型的新连接名称 (name)。' });
+      res.status(400).json({
+        success: false,
+        error: '需要提供有效的字符串类型的新连接名称 (name)。',
+        code: 'VALIDATION_ERROR',
+      });
       return;
     }
 
@@ -597,9 +636,9 @@ export const cloneConnection = async (
     const errMsg = getErrorMessage(error);
     console.error(`Controller: 克隆连接 ${req.params.id} 时发生错误:`, error);
     if (errMsg.includes('未找到')) {
-      res.status(404).json({ message: errMsg });
+      res.status(404).json({ success: false, error: errMsg, code: 'NOT_FOUND' });
     } else if (errMsg.includes('名称已存在')) {
-      res.status(409).json({ message: errMsg }); // 409 Conflict for duplicate name
+      res.status(409).json({ success: false, error: errMsg, code: 'DUPLICATE_NAME' }); // 409 Conflict for duplicate name
     } else {
       next(error);
     }
@@ -619,15 +658,25 @@ export const addTagToConnections = async (
 
     // 验证输入
     if (!Array.isArray(connection_ids) || !connection_ids.every((id) => typeof id === 'number')) {
-      res.status(400).json({ message: 'connection_ids 必须是一个数字数组。' });
+      res.status(400).json({
+        success: false,
+        error: 'connection_ids 必须是一个数字数组。',
+        code: 'VALIDATION_ERROR',
+      });
       return;
     }
     if (typeof tag_id !== 'number' || tag_id <= 0) {
-      res.status(400).json({ message: 'tag_id 必须是一个有效的正整数。' });
+      res.status(400).json({
+        success: false,
+        error: 'tag_id 必须是一个有效的正整数。',
+        code: 'INVALID_PARAMETER',
+      });
       return;
     }
     if (connection_ids.length === 0) {
-      res.status(400).json({ message: 'connection_ids 不能为空数组。' });
+      res
+        .status(400)
+        .json({ success: false, error: 'connection_ids 不能为空数组。', code: 'VALIDATION_ERROR' });
       return;
     }
 
@@ -639,7 +688,7 @@ export const addTagToConnections = async (
     const errMsg = getErrorMessage(error);
     console.error(`Controller: 为多个连接添加标签 ${req.body?.tag_id} 时发生错误:`, error);
     if (errMsg.includes('标签 ID') && errMsg.includes('不存在')) {
-      res.status(400).json({ message: errMsg }); // Bad request if tag doesn't exist
+      res.status(400).json({ success: false, error: errMsg, code: 'NOT_FOUND' }); // Bad request if tag doesn't exist
     } else {
       next(error);
     }
@@ -660,18 +709,22 @@ export const updateConnectionTags = async (
     const { tag_ids } = req.body;
 
     if (Number.isNaN(connectionId)) {
-      res.status(400).json({ message: '无效的连接 ID。' });
+      res.status(400).json({ success: false, error: '无效的连接 ID。', code: 'INVALID_PARAMETER' });
       return;
     }
     if (!Array.isArray(tag_ids) || !tag_ids.every((id) => typeof id === 'number')) {
-      res.status(400).json({ message: 'tag_ids 必须是一个数字数组。' });
+      res
+        .status(400)
+        .json({ success: false, error: 'tag_ids 必须是一个数字数组。', code: 'VALIDATION_ERROR' });
       return;
     }
 
     const success = await ConnectionService.updateConnectionTags(connectionId, tag_ids);
 
     if (!success) {
-      res.status(404).json({ message: '连接未找到或更新标签失败。' });
+      res
+        .status(404)
+        .json({ success: false, error: '连接未找到或更新标签失败。', code: 'NOT_FOUND' });
     } else {
       res.status(200).json({ message: '连接标签更新成功。' });
     }
@@ -679,7 +732,7 @@ export const updateConnectionTags = async (
     const errMsg = getErrorMessage(error);
     console.error(`Controller: 更新连接 ${req.params.id} 的标签时发生错误:`, error);
     if (errMsg.includes('未找到')) {
-      res.status(404).json({ message: errMsg });
+      res.status(404).json({ success: false, error: errMsg, code: 'NOT_FOUND' });
     } else {
       next(error);
     }

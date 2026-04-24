@@ -51,14 +51,22 @@ router.post(
     upload.single('connectionsFile')(req, res, (err: unknown) => {
       const importReq = req as ImportRequest;
       if (importReq.fileValidationError) {
-        return res.status(400).json({ message: importReq.fileValidationError });
+        return res.status(400).json({
+          success: false,
+          error: importReq.fileValidationError,
+          code: 'INVALID_FILE_TYPE',
+        });
       }
       if (err instanceof multer.MulterError) {
-        return res.status(400).json({ message: `文件上传错误: ${err.message}` });
+        return res
+          .status(400)
+          .json({ success: false, error: `文件上传错误: ${err.message}`, code: 'UPLOAD_ERROR' });
       }
       if (err) {
         console.error('Unexpected error during file upload:', err);
-        return res.status(500).json({ message: '文件上传处理失败' });
+        return res
+          .status(500)
+          .json({ success: false, error: '文件上传处理失败', code: 'INTERNAL_ERROR' });
       }
       next();
     });

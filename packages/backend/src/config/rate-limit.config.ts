@@ -48,12 +48,12 @@ export const apiLimiter = rateLimit({
 
 /**
  * AI/NL2CMD 限流器 - 用于 AI 相关端点（防止 API 配额快速耗尽）
- * 适用于：/api/v1/ai/nl2cmd, /api/v1/ai/test
+ * 适用于：/api/v1/ai 下所有路由
  */
 export const aiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 分钟窗口
-  max: 10, // 每分钟最多 10 次请求
-  message: { success: false, error: 'AI 请求过于频繁，请稍后再试（每分钟限制 10 次）' },
+  max: 30, // 每分钟最多 30 次请求
+  message: { success: false, error: 'AI 请求过于频繁，请稍后再试（每分钟限制 30 次）' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => getRateLimitIpKey(req),

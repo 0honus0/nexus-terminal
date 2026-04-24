@@ -7,6 +7,7 @@ import { generateSessionId } from '../utils';
 import type { SessionState, SftpManagerInstance, WsManagerInstance } from '../types';
 
 import { createWebSocketConnectionManager } from '../../../composables/useWebSocketConnection';
+import type { MessagePayload } from '../../../types/websocket.types';
 import {
   createSshTerminalManager,
   type SshTerminalDependencies,
@@ -140,7 +141,8 @@ export const openNewSession = (
 
   const unregisterConnectedHandler = wsManager.onMessage(
     'ssh:connected',
-    (connectedPayload: SshConnectedPayload) => {
+    (payload: MessagePayload) => {
+      const connectedPayload = payload as SshConnectedPayload;
       const backendSID = connectedPayload.sessionId as string;
       const backendCID = String(connectedPayload.connectionId);
 
@@ -148,7 +150,7 @@ export const openNewSession = (
         `[SessionActions/ssh:connected] 收到消息。前端初始SID: ${originalFrontendSessionIdForHandler}, 后端SID: ${backendSID}, 后端CID: ${backendCID}`
       );
 
-      // reconnect 后会话键可能已从初始 SID 改写，优先按 wsManager 反查“当前”会话键。
+      // reconnect 后会话键可能已从初始 SID 改写，优先按 wsManager 反查'当前'会话键。
       let sessionToUpdate: SessionState | undefined;
       let currentFrontendSessionId: string | null = null;
       for (const [sessionId, sessionState] of sessions.value.entries()) {

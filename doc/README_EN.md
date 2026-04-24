@@ -239,6 +239,14 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 4.  **Tab Group Fold Bar**: You can directly click on the tab name in the view to rename the tab.
 5.  **Automatic Reconnection**: When the connection is lost, you can press Enter in the command input box or terminal, or click the same SSH connection in the connection list to trigger automatic reconnection.
 
+### Command Palette
+
+1.  **Open**: Press `Ctrl + K` (or `Cmd + K` on macOS) to open the command palette. Press `ESC` or click the overlay to close it.
+2.  **Search Connections**: Type keywords in the search box to quickly filter saved connections and jump to the workspace to establish a connection.
+3.  **Page Navigation**: Quickly navigate to the Dashboard, Connections, Settings, and other pages.
+4.  **Theme Switching**: Switch between dark and light themes directly from the command palette.
+5.  **Keyboard Navigation**: Use `↑` `↓` arrow keys to browse options, and press `Enter` to confirm and execute.
+
 ### Batch Command Execution Component
 
 1. **Select Servers**: In the batch execution panel, check the SSH connections you want to execute commands on, with support for select all/deselect all
