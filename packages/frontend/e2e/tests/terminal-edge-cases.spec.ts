@@ -3,6 +3,71 @@ import { WorkspacePage } from '../pages/workspace.page';
 import { EDGE_CASE_DATA } from '../fixtures/test-data';
 
 test.describe('终端功能边缘场景测试', () => {
+  test.describe('终端换行设置', () => {
+    test('关闭终端自动换行后应启用无换行容器样式', async ({ authenticatedPage }) => {
+      const workspace = new WorkspacePage(authenticatedPage);
+
+      // 进入设置页并确保在"工作区"标签下
+      await authenticatedPage.goto('/settings');
+      await authenticatedPage.waitForLoadState('networkidle');
+
+      const workspaceTab = authenticatedPage.locator('button:has-text("工作区"), button:has-text("Workspace")').first();
+      if (await workspaceTab.isVisible().catch(() => false)) {
+        await workspaceTab.click();
+      }
+
+      // 关闭自动换行并保存
+      const wrapCheckbox = authenticatedPage.locator('#terminalAutoWrapEnabled');
+      await expect(wrapCheckbox).toBeVisible({ timeout: 10000 });
+      await wrapCheckbox.uncheck();
+
+      const autoWrapForm = authenticatedPage.locator('form:has(#terminalAutoWrapEnabled)');
+      await autoWrapForm.locator('button[type="submit"]').click();
+
+      // 刷新后确认状态持久化（避免只验证内存态）
+      await authenticatedPage.reload();
+      await authenticatedPage.waitForLoadState('networkidle');
+      if (await workspaceTab.isVisible().catch(() => false)) {
+        await workspaceTab.click();
+      }
+      await expect(wrapCheckbox).not.toBeChecked();
+
+      // 进入工作区并激活一个会话（若有连接）
+      await workspace.goto();
+      const connection = authenticatedPage.locator(
+        '.connection-list [data-testid="connection-item"]:first-child, .connection-list .connection-item:first-child'
+      );
+      if (!(await connection.isVisible({ timeout: 5000 }).catch(() => false))) {
+        // 测试环境可能没有可用连接，无法验证终端类名；恢复设置后安全退出
+        await authenticatedPage.goto('/settings');
+        await authenticatedPage.waitForLoadState('networkidle');
+        if (await workspaceTab.isVisible().catch(() => false)) {
+          await workspaceTab.click();
+        }
+        await wrapCheckbox.check();
+        await autoWrapForm.locator('button[type="submit"]').click();
+        return;
+      }
+
+      await connection.dblclick();
+      await expect(workspace.terminalContainer).toBeVisible({ timeout: 15000 });
+
+      // 关闭自动换行后，终端外层容器应带 no-auto-wrap 类
+      const noWrapContainer = authenticatedPage.locator('.terminal-outer-wrapper.no-auto-wrap').first();
+      await expect(noWrapContainer).toBeVisible({ timeout: 10000 });
+
+      // 恢复设置，避免影响其他用例
+      await authenticatedPage.goto('/settings');
+      await authenticatedPage.waitForLoadState('networkidle');
+      if (await workspaceTab.isVisible().catch(() => false)) {
+        await workspaceTab.click();
+      }
+      await wrapCheckbox.check();
+      await autoWrapForm.locator('button[type="submit"]').click();
+      await expect(wrapCheckbox).toBeChecked();
+    });
+  });
+
   test.describe('会话挂起与恢复', () => {
     test('网络断开后会话应保持挂起状态', async ({ authenticatedPage, context }) => {
       const workspace = new WorkspacePage(authenticatedPage);

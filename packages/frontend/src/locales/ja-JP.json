@@ -948,7 +948,12 @@
       "terminalEnableRightClickPasteLabel": "ターミナルの右クリック貼り付けを有効にする",
       "terminalEnableRightClickPasteDescription": "ターミナル領域内でマウスの右ボタンを使用してクリップボードの内容を貼り付けることを許可します。",
       "terminalRightClickPasteSuccess": "ターミナルの右クリック貼り付け設定が保存されました。",
-      "terminalRightClickPasteError": "ターミナルの右クリック貼り付け設定の保存に失敗しました。"
+      "terminalRightClickPasteError": "ターミナルの右クリック貼り付け設定の保存に失敗しました。",
+      "terminalAutoWrapTitle": "ターミナル自動折り返し",
+      "terminalAutoWrapLabel": "ターミナルの自動折り返しを有効にする",
+      "terminalAutoWrapDescription": "無効にすると、長い行は可能な限りそのまま保持され、強制折り返しの代わりに横スクロールで確認できます。",
+      "terminalAutoWrapSuccess": "ターミナル自動折り返し設定を保存しました。",
+      "terminalAutoWrapError": "ターミナル自動折り返し設定の保存に失敗しました。"
     },
     "statusMonitorShowIp": {
       "title": "ステータスモニターでIPアドレスを表示",

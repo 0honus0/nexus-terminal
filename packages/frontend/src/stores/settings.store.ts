@@ -64,6 +64,7 @@ interface SettingsState {
   showQuickCommandTags?: string; // 'true' or 'false'
   layoutLocked?: string; // 'true' or 'false' - NEW: 布局锁定状态
   terminalScrollbackLimit?: string; //  终端回滚行数上限 (e.g., '5000', '0' for unlimited)
+  terminalAutoWrapEnabled?: string; //  'true' or 'false' - 终端自动换行开关
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   fileManagerSingleClickOpenFile?: string; // 'true' or 'false' - 文件管理器单击打开文件
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
@@ -377,6 +378,13 @@ export const useSettingsStore = defineStore('settings', () => {
           `[SettingsStore] terminalScrollbackLimit not found, set to default: ${settings.value.terminalScrollbackLimit}`
         );
       }
+      //  Terminal auto wrap default
+      if (settings.value.terminalAutoWrapEnabled === undefined) {
+        settings.value.terminalAutoWrapEnabled = 'true'; // 默认启用自动换行
+        console.info(
+          `[SettingsStore] terminalAutoWrapEnabled not found, set to default: ${settings.value.terminalAutoWrapEnabled}`
+        );
+      }
       //  File Manager Delete Confirmation default
       if (settings.value.fileManagerShowDeleteConfirmation === undefined) {
         settings.value.fileManagerShowDeleteConfirmation = 'true'; // 默认显示删除确认
@@ -564,6 +572,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'showQuickCommandTags',
       'layoutLocked',
       'terminalScrollbackLimit',
+      'terminalAutoWrapEnabled',
       'fileManagerShowDeleteConfirmation',
       'fileManagerSingleClickOpenFile',
       'terminalEnableRightClickPaste',
@@ -704,6 +713,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'showQuickCommandTags',
       'layoutLocked',
       'terminalScrollbackLimit',
+      'terminalAutoWrapEnabled',
       'fileManagerShowDeleteConfirmation',
       'fileManagerSingleClickOpenFile',
       'terminalEnableRightClickPaste',
@@ -1057,6 +1067,11 @@ export const useSettingsStore = defineStore('settings', () => {
     return val; // Return 0 if it's 0, or the positive number
   });
 
+  //  Getter for terminal auto wrap enabled, returning boolean
+  const terminalAutoWrapEnabledBoolean = computed(() => {
+    return settings.value.terminalAutoWrapEnabled !== 'false'; // Default to true
+  });
+
   //  Getter for File Manager delete confirmation, returning boolean
   const fileManagerShowDeleteConfirmationBoolean = computed(() => {
     return settings.value.fileManagerShowDeleteConfirmation !== 'false'; // Default to true
@@ -1141,6 +1156,7 @@ export const useSettingsStore = defineStore('settings', () => {
     //  Expose layout locked getter
     layoutLockedBoolean,
     terminalScrollbackLimitNumber, //  Expose terminal scrollback limit getter
+    terminalAutoWrapEnabledBoolean, // Expose terminal auto wrap getter
     fileManagerShowDeleteConfirmationBoolean, //  Expose file manager delete confirmation getter
     fileManagerSingleClickOpenFileBoolean, // Expose file manager single-click open file getter
     terminalEnableRightClickPasteBoolean, //  Expose terminal right click paste getter

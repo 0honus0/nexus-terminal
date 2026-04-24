@@ -948,7 +948,12 @@
       "terminalEnableRightClickPasteLabel": "启用终端右键粘贴",
       "terminalEnableRightClickPasteDescription": "允许在终端区域内使用鼠标右键粘贴剪贴板内容。",
       "terminalRightClickPasteSuccess": "终端右键粘贴设置已保存。",
-      "terminalRightClickPasteError": "保存终端右键粘贴设置失败。"
+      "terminalRightClickPasteError": "保存终端右键粘贴设置失败。",
+      "terminalAutoWrapTitle": "终端自动换行",
+      "terminalAutoWrapLabel": "启用终端自动换行",
+      "terminalAutoWrapDescription": "关闭后将尽量保持宽行并允许水平滚动查看内容，避免长输出被强制折行。",
+      "terminalAutoWrapSuccess": "终端自动换行设置已保存。",
+      "terminalAutoWrapError": "保存终端自动换行设置失败。"
     },
     "statusMonitorShowIp": {
       "title": "状态监视器显示IP地址",

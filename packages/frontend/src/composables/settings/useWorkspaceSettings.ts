@@ -17,6 +17,7 @@ export function useWorkspaceSettings() {
     showConnectionTagsBoolean,
     showQuickCommandTagsBoolean,
     terminalScrollbackLimitNumber,
+    terminalAutoWrapEnabledBoolean,
     fileManagerShowDeleteConfirmationBoolean,
     fileManagerSingleClickOpenFileBoolean,
     terminalEnableRightClickPasteBoolean,
@@ -266,6 +267,36 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- Terminal Auto Wrap ---
+  const terminalAutoWrapEnabled = ref(true);
+  const terminalAutoWrapLoading = ref(false);
+  const terminalAutoWrapMessage = ref('');
+  const terminalAutoWrapSuccess = ref(false);
+
+  const handleUpdateTerminalAutoWrapSetting = async () => {
+    terminalAutoWrapLoading.value = true;
+    terminalAutoWrapMessage.value = '';
+    terminalAutoWrapSuccess.value = false;
+    try {
+      const valueToSave = terminalAutoWrapEnabled.value ? 'true' : 'false';
+      await settingsStore.updateSetting('terminalAutoWrapEnabled', valueToSave);
+      terminalAutoWrapMessage.value = t(
+        'settings.workspace.terminalAutoWrapSuccess',
+        '终端自动换行设置已保存。'
+      );
+      terminalAutoWrapSuccess.value = true;
+    } catch (error: unknown) {
+      console.error('更新终端自动换行设置失败:', error);
+      terminalAutoWrapMessage.value = extractErrorMessage(
+        error,
+        t('settings.workspace.terminalAutoWrapError', '保存终端自动换行设置失败。')
+      );
+      terminalAutoWrapSuccess.value = false;
+    } finally {
+      terminalAutoWrapLoading.value = false;
+    }
+  };
+
   // --- File Manager Delete Confirmation ---
   const fileManagerShowDeleteConfirmationLocal = ref(true);
   const fileManagerShowDeleteConfirmationLoading = ref(false);
@@ -501,6 +532,13 @@ export function useWorkspaceSettings() {
     { immediate: true }
   );
   watch(
+    terminalAutoWrapEnabledBoolean,
+    (newValue) => {
+      terminalAutoWrapEnabled.value = newValue;
+    },
+    { immediate: true }
+  );
+  watch(
     fileManagerShowDeleteConfirmationBoolean,
     (newValue) => {
       fileManagerShowDeleteConfirmationLocal.value = newValue;
@@ -591,6 +629,11 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitMessage,
     terminalScrollbackLimitSuccess,
     handleUpdateTerminalScrollbackLimit,
+    terminalAutoWrapEnabled,
+    terminalAutoWrapLoading,
+    terminalAutoWrapMessage,
+    terminalAutoWrapSuccess,
+    handleUpdateTerminalAutoWrapSetting,
 
     fileManagerShowDeleteConfirmationLocal,
     fileManagerShowDeleteConfirmationLoading,

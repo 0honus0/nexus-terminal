@@ -7,7 +7,8 @@ export function useTerminalFit(
   terminal: Ref<Terminal | null>,
   terminalRef: Ref<HTMLElement | null>,
   sessionId: string,
-  isActive: Ref<boolean>
+  isActive: Ref<boolean>,
+  shouldFitByWidth: Ref<boolean>
 ) {
   const emitWorkspaceEvent = useWorkspaceEventEmitter();
   const fitAddon = new FitAddon();
@@ -45,7 +46,15 @@ export function useTerminalFit(
     if (!terminal.value || !terminalRef.value) return;
     try {
       if (terminalRef.value.offsetHeight > 0 && terminalRef.value.offsetWidth > 0) {
-        fitAddon.fit();
+        if (shouldFitByWidth.value) {
+          fitAddon.fit();
+        } else {
+          // 非自动换行模式下仅调整行数，保持列数不被容器宽度强制收缩
+          const proposed = fitAddon.proposeDimensions();
+          if (proposed && terminal.value.rows !== proposed.rows) {
+            terminal.value.resize(terminal.value.cols, proposed.rows);
+          }
+        }
         const dimensions = { cols: terminal.value.cols, rows: terminal.value.rows };
         emitWorkspaceEvent('terminal:resize', { sessionId, dims: dimensions });
         emitWorkspaceEvent('terminal:stabilizedResize', {
@@ -85,7 +94,15 @@ export function useTerminalFit(
         lastResizeObserverHeight = roundedHeight;
 
         if (rectHeight > 0 && rectWidth > 0) {
-          fitAddon.fit();
+          if (shouldFitByWidth.value) {
+            fitAddon.fit();
+          } else {
+            // 非自动换行模式下仅根据高度调整 rows，cols 由终端自身保持
+            const proposed = fitAddon.proposeDimensions();
+            if (proposed && terminal.value.rows !== proposed.rows) {
+              terminal.value.resize(terminal.value.cols, proposed.rows);
+            }
+          }
           debouncedEmitResize(terminal.value);
           emitWorkspaceEvent('terminal:stabilizedResize', {
             sessionId,

@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect, type PropType } from 'vue';
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  nextTick,
+  watchEffect,
+  computed,
+  type PropType,
+} from 'vue';
 import { Terminal, IDisposable } from '@xterm/xterm';
 import { useDeviceDetection } from '../../composables/useDeviceDetection';
 import { useAppearanceStore } from '../../stores/appearance.store';
@@ -67,7 +76,8 @@ const { fitAddon, fitAndEmitResizeNow, setupResizeObserver } = useTerminalFit(
   terminalInstance,
   terminalRef,
   props.sessionId,
-  isActiveRef
+  isActiveRef,
+  computed(() => terminalAutoWrapEnabledBoolean.value)
 );
 
 const { setupInputHandler } = useTerminalSocket(terminalInstance, props.sessionId, streamRef);
@@ -100,6 +110,7 @@ const sessionStore = useSessionStore();
 const {
   autoCopyOnSelectBoolean,
   terminalScrollbackLimitNumber,
+  terminalAutoWrapEnabledBoolean,
   terminalEnableRightClickPasteBoolean,
   terminalOutputEnhancerEnabledBoolean,
 } = storeToRefs(settingsStore);
@@ -133,6 +144,67 @@ const debouncedSaveFontSize = debounce(async (size: number) => {
 const getScrollbackValue = (limit: number): number => {
   if (limit === 0) return Infinity;
   return Math.max(0, limit);
+};
+
+const MIN_TERMINAL_COLS_NO_WRAP = 240;
+
+const syncNoWrapContentWidth = (term: Terminal) => {
+  const element = term.element as HTMLElement | null;
+  if (!element) return;
+
+  if (terminalAutoWrapEnabledBoolean.value) {
+    element.style.removeProperty('width');
+    const screen = element.querySelector('.xterm-screen') as HTMLElement | null;
+    if (screen) screen.style.removeProperty('width');
+    return;
+  }
+
+  const core = (term as unknown as { _core?: { _renderService?: { dimensions?: unknown } } })._core;
+  const dimensions = core?._renderService?.dimensions as
+    | { css?: { cell?: { width?: number } } }
+    | undefined;
+  const cellWidth = dimensions?.css?.cell?.width ?? 0;
+  if (!Number.isFinite(cellWidth) || cellWidth <= 0) return;
+
+  const contentWidth = Math.ceil(term.cols * cellWidth);
+  if (contentWidth <= 0) return;
+
+  element.style.width = `${contentWidth}px`;
+  const screen = element.querySelector('.xterm-screen') as HTMLElement | null;
+  if (screen) {
+    screen.style.width = `${contentWidth}px`;
+  }
+};
+
+const applyTerminalWrapMode = () => {
+  const term = terminalInstance.value;
+  if (!term) return;
+
+  try {
+    if (terminalAutoWrapEnabledBoolean.value) {
+      fitAndEmitResizeNow();
+      syncNoWrapContentWidth(term);
+      return;
+    }
+
+    // 关闭自动换行时保持更宽列数，并仅让行数随容器高度调整
+    const proposed = fitAddon.proposeDimensions();
+    const targetRows = proposed?.rows ?? term.rows;
+    const targetCols = Math.max(
+      term.cols,
+      proposed?.cols ?? term.cols,
+      MIN_TERMINAL_COLS_NO_WRAP
+    );
+
+    if (targetCols !== term.cols || targetRows !== term.rows) {
+      term.resize(targetCols, targetRows);
+    }
+
+    fitAndEmitResizeNow();
+    syncNoWrapContentWidth(term);
+  } catch (error) {
+    console.warn(`[Terminal ${props.sessionId}] Failed to apply terminal wrap mode:`, error);
+  }
 };
 
 // --- 右键粘贴功能 ---
@@ -211,7 +283,7 @@ const handleTouchMove = (event: TouchEvent) => {
         terminalInstance.value.options.fontSize ?? currentTerminalFontSize.value;
       if (newSize !== currentTerminalOptFontSize) {
         terminalInstance.value.options.fontSize = newSize;
-        fitAndEmitResizeNow();
+        applyTerminalWrapMode();
         debouncedSaveFontSize(newSize);
       }
     }
@@ -303,7 +375,7 @@ onMounted(() => {
     isTerminalDomReady.value = true;
     console.info(`[Terminal ${props.sessionId}] Xterm open() called.`);
 
-    fitAndEmitResizeNow(); // Use composable method
+    applyTerminalWrapMode();
 
     // Set up Input Handler (from composable)
     setupInputHandler();
@@ -389,14 +461,14 @@ onMounted(() => {
     watch(currentTerminalFontFamily, (newFontFamily) => {
       if (term) {
         term.options.fontFamily = newFontFamily;
-        fitAndEmitResizeNow();
+        applyTerminalWrapMode();
       }
     });
 
     watch(currentTerminalFontSize, (newSize) => {
       if (term) {
         term.options.fontSize = newSize;
-        fitAndEmitResizeNow();
+        applyTerminalWrapMode();
       }
     });
 
@@ -462,6 +534,10 @@ onMounted(() => {
       }
     });
 
+    watch(terminalAutoWrapEnabledBoolean, () => {
+      applyTerminalWrapMode();
+    });
+
     // --- Wheel Zoom ---
     if (terminalRef.value) {
       terminalRef.value.addEventListener('wheel', (event: WheelEvent) => {
@@ -475,7 +551,7 @@ onMounted(() => {
 
             if (newSize !== currentSize) {
               term.options.fontSize = newSize;
-              fitAndEmitResizeNow();
+              applyTerminalWrapMode();
               debouncedSaveFontSize(newSize);
             }
           }
@@ -617,7 +693,11 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper">
+  <div
+    ref="terminalOuterWrapperRef"
+    class="terminal-outer-wrapper"
+    :class="{ 'no-auto-wrap': !terminalAutoWrapEnabledBoolean }"
+  >
     <div ref="terminalRef" class="terminal-inner-container"></div>
   </div>
 </template>
@@ -628,6 +708,11 @@ watchEffect(() => {
   height: 100%;
   overflow: hidden;
   position: relative;
+}
+
+.terminal-outer-wrapper.no-auto-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .terminal-inner-container {
@@ -647,6 +732,15 @@ watchEffect(() => {
 .terminal-inner-container :deep(.xterm-screen canvas) {
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
+}
+
+.terminal-outer-wrapper.no-auto-wrap :deep(.xterm-viewport) {
+  overflow-x: auto;
+  overflow-y: scroll;
+}
+
+.terminal-outer-wrapper.no-auto-wrap :deep(.xterm-screen) {
+  min-width: max-content;
 }
 
 .terminal-inner-container.has-text-stroke :deep(.xterm-rows span),

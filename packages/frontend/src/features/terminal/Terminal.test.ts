@@ -117,6 +117,7 @@ const {
   mockSettingsState: {
     autoCopyOnSelectBoolean: { value: false, __v_isRef: true as const },
     terminalScrollbackLimitNumber: { value: 1000, __v_isRef: true as const },
+    terminalAutoWrapEnabledBoolean: { value: true, __v_isRef: true as const },
     terminalEnableRightClickPasteBoolean: { value: false, __v_isRef: true as const },
     terminalOutputEnhancerEnabledBoolean: { value: true, __v_isRef: true as const },
   },
@@ -189,6 +190,7 @@ describe('Terminal.vue', () => {
     mockAppearanceState.currentTerminalFontSize.value = 14;
     mockAppearanceState.currentTerminalFontFamily.value = 'monospace';
     mockSettingsState.autoCopyOnSelectBoolean.value = false;
+    mockSettingsState.terminalAutoWrapEnabledBoolean.value = true;
     mockSettingsState.terminalEnableRightClickPasteBoolean.value = false;
   });
 
