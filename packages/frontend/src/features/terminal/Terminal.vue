@@ -190,11 +190,7 @@ const applyTerminalWrapMode = () => {
     // 关闭自动换行时保持更宽列数，并仅让行数随容器高度调整
     const proposed = fitAddon.proposeDimensions();
     const targetRows = proposed?.rows ?? term.rows;
-    const targetCols = Math.max(
-      term.cols,
-      proposed?.cols ?? term.cols,
-      MIN_TERMINAL_COLS_NO_WRAP
-    );
+    const targetCols = Math.max(term.cols, proposed?.cols ?? term.cols, MIN_TERMINAL_COLS_NO_WRAP);
 
     if (targetCols !== term.cols || targetRows !== term.rows) {
       term.resize(targetCols, targetRows);

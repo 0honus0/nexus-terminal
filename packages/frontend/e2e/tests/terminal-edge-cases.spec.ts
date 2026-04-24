@@ -11,7 +11,9 @@ test.describe('终端功能边缘场景测试', () => {
       await authenticatedPage.goto('/settings');
       await authenticatedPage.waitForLoadState('networkidle');
 
-      const workspaceTab = authenticatedPage.locator('button:has-text("工作区"), button:has-text("Workspace")').first();
+      const workspaceTab = authenticatedPage
+        .locator('button:has-text("工作区"), button:has-text("Workspace")')
+        .first();
       if (await workspaceTab.isVisible().catch(() => false)) {
         await workspaceTab.click();
       }
@@ -53,7 +55,9 @@ test.describe('终端功能边缘场景测试', () => {
       await expect(workspace.terminalContainer).toBeVisible({ timeout: 15000 });
 
       // 关闭自动换行后，终端外层容器应带 no-auto-wrap 类
-      const noWrapContainer = authenticatedPage.locator('.terminal-outer-wrapper.no-auto-wrap').first();
+      const noWrapContainer = authenticatedPage
+        .locator('.terminal-outer-wrapper.no-auto-wrap')
+        .first();
       await expect(noWrapContainer).toBeVisible({ timeout: 10000 });
 
       // 恢复设置，避免影响其他用例

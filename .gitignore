@@ -177,6 +177,9 @@ electron-app/node_modules/
 electron-app/dist_electron/
 
 # Husky git hooks
-.husky/
+.husky/*
+!.husky/pre-commit
+!.husky/commit-msg
+.husky/_/
 .ace-tool/
 .omx/

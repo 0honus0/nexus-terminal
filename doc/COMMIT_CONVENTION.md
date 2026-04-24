@@ -201,6 +201,7 @@ Closes #345"
 - **智能引号拦截**：`scripts/check-smart-quotes.js` 会检查暂存区代码文件中的 `‘ ’ “ ”`，命中即阻止提交，避免引号边界问题。
 - **安全格式化**：`lint-staged` 对暂存代码执行 `eslint --fix` 与 `prettier --write`，减少格式化噪音进入提交历史。
 - **质量总闸门**：pre-commit 在 `lint-staged` 后强制执行 `npm run -s quality:check`，统一覆盖 `debt:check`、前端 typecheck、零 warning lint 与 `format:check`。
+- **受控降级开关**：若历史格式债务暂未清理，可临时设置 `SKIP_PRECOMMIT_QUALITY=1` 跳过 `quality:check`，但仍保留 `lint-staged` 对暂存区的检查；建议仅短期使用并尽快补齐全仓质量。
 - **any 与噪音处理**：`debt:check` 持续拦截新增 `: any / <any> / any[]`，并过滤注释类噪音，避免无效告警干扰提交。
 
 ### 如果提交消息格式错误
@@ -255,7 +256,13 @@ $ git commit -m "✨ feat(connections): 添加连接分组功能"
 
 ### Q: 如何跳过提交检查？
 
-**不推荐**跳过检查。如果确实需要（如紧急修复），可以使用：
+优先使用受控方式，仅跳过全仓质量门禁并保留暂存区检查：
+
+```bash
+SKIP_PRECOMMIT_QUALITY=1 git commit -m "✨ feat(scope): 示例"
+```
+
+如果确实需要（如紧急修复）再使用：
 
 ```bash
 git commit --no-verify -m "emergency fix"
