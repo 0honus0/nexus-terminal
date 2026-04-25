@@ -239,6 +239,23 @@ export class SftpUploadManager {
       return;
     }
 
+    // 滑动窗口硬限制：拒绝超出窗口的块，防止恶意/旧客户端绕过流控
+    if (uploadState.inFlightChunks >= UPLOAD_WINDOW_SIZE) {
+      console.warn(
+        `[SFTP Upload ${uploadId}] Window full (${uploadState.inFlightChunks}/${UPLOAD_WINDOW_SIZE}), rejecting chunk ${chunkIndex}.`
+      );
+      state.ws.send(
+        JSON.stringify({
+          type: 'sftp:upload:error',
+          payload: {
+            uploadId,
+            message: `滑动窗口已满（${uploadState.inFlightChunks}/${UPLOAD_WINDOW_SIZE}），请等待确认后再发送`,
+          },
+        })
+      );
+      return;
+    }
+
     try {
       uploadState.inFlightChunks++;
       const chunkBuffer = Buffer.from(dataBase64, 'base64');
