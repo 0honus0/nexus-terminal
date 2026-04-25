@@ -30,7 +30,7 @@ export function useExportConnections() {
       }
 
       const blob = new Blob([response.data], {
-        type: response.headers['content-type'] || 'application/zip',
+        type: (response.headers['content-type'] as string) || 'application/zip',
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

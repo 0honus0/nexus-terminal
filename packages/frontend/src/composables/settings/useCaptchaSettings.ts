@@ -1,7 +1,7 @@
 import { ref, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
-import { useSettingsStore } from '../../stores/settings.store';
+import { useCaptchaSettingsStore } from '../../stores/captchaSettings.store';
 
 // Define necessary types locally if not shared, or import from a shared types file
 export type CaptchaProvider = 'hcaptcha' | 'recaptcha' | 'none';
@@ -16,9 +16,9 @@ export interface UpdateCaptchaSettingsDto {
 }
 
 export function useCaptchaSettings() {
-  const settingsStore = useSettingsStore();
+  const captchaStore = useCaptchaSettingsStore();
   const { t } = useI18n();
-  const { captchaSettings } = storeToRefs(settingsStore);
+  const { captchaSettings } = storeToRefs(captchaStore);
 
   const captchaForm = reactive<UpdateCaptchaSettingsDto>({
     enabled: false,
@@ -75,7 +75,7 @@ export function useCaptchaSettings() {
       };
 
       // Step 4: Call save operation
-      await settingsStore.updateCaptchaSettings(dtoToSave);
+      await captchaStore.updateCaptchaSettings(dtoToSave);
       captchaMessage.value = t('settings.captcha.success.saved');
       captchaSuccess.value = true;
       // Clear secret key fields from the form after successful save

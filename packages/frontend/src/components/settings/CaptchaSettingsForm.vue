@@ -172,18 +172,18 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
-import { useSettingsStore } from '../../stores/settings.store';
+import { useCaptchaSettingsStore } from '../../stores/captchaSettings.store';
 import { useCaptchaSettings } from '../../composables/settings/useCaptchaSettings';
 
 // const { t } = useI18n(); // $t is globally available in template
-const settingsStore = useSettingsStore();
-const { captchaSettings, captchaError } = storeToRefs(settingsStore); // To make v-if="!captchaSettings" reactive
+const captchaStore = useCaptchaSettingsStore();
+const { captchaSettings, captchaError } = storeToRefs(captchaStore); // To make v-if="!captchaSettings" reactive
 
 const { captchaForm, captchaLoading, captchaMessage, captchaSuccess, handleUpdateCaptchaSettings } =
   useCaptchaSettings();
 
 const retryLoadCaptchaSettings = async () => {
-  await settingsStore.loadCaptchaSettings();
+  await captchaStore.loadCaptchaSettings();
 };
 
 // onMounted in parent SettingsView.vue loads captchaSettings via settingsStore.loadCaptchaSettings()

@@ -449,6 +449,7 @@ const handleQuickCommandExecute = (command: string) => {
         @click="emitWorkspaceEvent('terminal:clear')"
         class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
         :title="t('commandInputBar.clearTerminal', '清空终端')"
+        :aria-label="t('commandInputBar.clearTerminal', '清空终端')"
       >
         <i class="fas fa-eraser text-base"></i>
       </button>
@@ -458,6 +459,7 @@ const handleQuickCommandExecute = (command: string) => {
         @click="openQuickCommandsModal"
         class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
         :title="t('quickCommands.title', '快捷指令')"
+        :aria-label="t('quickCommands.title', '快捷指令')"
       >
         <i class="fas fa-bolt text-base"></i>
       </button>
@@ -467,6 +469,7 @@ const handleQuickCommandExecute = (command: string) => {
         @click="focusSwitcherStore.toggleConfigurator(true)"
         class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
         :title="t('commandInputBar.configureFocusSwitch', '配置焦点切换')"
+        :aria-label="t('commandInputBar.configureFocusSwitch', '配置焦点切换')"
       >
         <i class="fas fa-keyboard text-base"></i>
         <!-- Removed text-primary -->
@@ -487,6 +490,7 @@ const handleQuickCommandExecute = (command: string) => {
         }"
         ref="commandInputRef"
         data-focus-id="commandInput"
+        :aria-label="t('commandInputBar.placeholder')"
         @keydown="handleCommandInputKeydown"
         @blur="handleCommandInputBlur"
       />
@@ -526,6 +530,7 @@ const handleQuickCommandExecute = (command: string) => {
         type="text"
         v-model="searchTerm"
         :placeholder="t('commandInputBar.searchPlaceholder')"
+        :aria-label="t('commandInputBar.searchPlaceholder')"
         class="flex-grow min-w-0 px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
         :class="{
           'basis-1/4': !props.isMobile && !isAIActive,
@@ -549,6 +554,7 @@ const handleQuickCommandExecute = (command: string) => {
           @click="openSuspendedSshSessionsModal"
           class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
           :title="t('suspendedSshSessions.title', '挂起会话')"
+          :aria-label="t('suspendedSshSessions.title', '挂起会话')"
         >
           <i class="fas fa-pause-circle text-base"></i>
         </button>
@@ -558,6 +564,11 @@ const handleQuickCommandExecute = (command: string) => {
           @click="emit('toggle-virtual-keyboard')"
           class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
           :title="
+            props.isVirtualKeyboardVisible
+              ? t('commandInputBar.hideKeyboard', '隐藏虚拟键盘')
+              : t('commandInputBar.showKeyboard', '显示虚拟键盘')
+          "
+          :aria-label="
             props.isVirtualKeyboardVisible
               ? t('commandInputBar.hideKeyboard', '隐藏虚拟键盘')
               : t('commandInputBar.showKeyboard', '显示虚拟键盘')
@@ -576,6 +587,9 @@ const handleQuickCommandExecute = (command: string) => {
           :title="
             isNL2CMDEnabled ? (isAIActive ? '关闭 AI 助手' : 'AI 助手') : '请在设置中启用 AI 助手'
           "
+          :aria-label="
+            isNL2CMDEnabled ? (isAIActive ? '关闭 AI 助手' : 'AI 助手') : '请在设置中启用 AI 助手'
+          "
           :disabled="!isNL2CMDEnabled"
           :class="{
             'bg-primary/10 text-primary border-primary/50': isAIActive,
@@ -591,6 +605,9 @@ const handleQuickCommandExecute = (command: string) => {
           @click="toggleSearch"
           class="flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
           :title="isSearching ? t('commandInputBar.closeSearch') : t('commandInputBar.openSearch')"
+          :aria-label="
+            isSearching ? t('commandInputBar.closeSearch') : t('commandInputBar.openSearch')
+          "
           :class="{ 'bg-primary/10 text-primary border-primary/50': isSearching }"
         >
           <i v-if="!isSearching" class="fas fa-search text-base"></i>
@@ -604,6 +621,7 @@ const handleQuickCommandExecute = (command: string) => {
             @click="findPrevious"
             class="flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
             :title="t('commandInputBar.findPrevious')"
+            :aria-label="t('commandInputBar.findPrevious')"
           >
             <i class="fas fa-arrow-up text-base"></i>
           </button>
@@ -611,6 +629,7 @@ const handleQuickCommandExecute = (command: string) => {
             @click="findNext"
             class="flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
             :title="t('commandInputBar.findNext')"
+            :aria-label="t('commandInputBar.findNext')"
           >
             <i class="fas fa-arrow-down text-base"></i>
           </button>
@@ -620,6 +639,7 @@ const handleQuickCommandExecute = (command: string) => {
           v-if="showPopupFileManagerBoolean || props.isMobile"
           @click="openFileManagerModal"
           class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+          :aria-label="t('fileManager.modalTitle', '文件管理器')"
         >
           <i class="fas fa-folder text-base"></i>
         </button>
@@ -628,6 +648,7 @@ const handleQuickCommandExecute = (command: string) => {
           v-if="showPopupFileEditorBoolean || props.isMobile"
           @click="openFileEditorModal"
           class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+          :aria-label="t('fileManager.actions.openEditor', '打开编辑器')"
         >
           <i class="fas fa-edit text-base"></i>
         </button>

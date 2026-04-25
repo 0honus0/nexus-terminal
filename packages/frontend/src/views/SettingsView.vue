@@ -152,6 +152,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '../stores/auth.store';
 import { useSettingsStore } from '../stores/settings.store';
+import { useCaptchaSettingsStore } from '../stores/captchaSettings.store';
 import { useAppearanceStore } from '../stores/appearance.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
@@ -194,17 +195,20 @@ const {
   settings,
   isLoading: settingsLoading,
   error: settingsError,
-  captchaError,
   language: storeLanguage,
 } = storeToRefs(settingsStore);
 
+// CAPTCHA 相关状态已迁移至独立 store
+const captchaStore = useCaptchaSettingsStore();
+const { captchaError } = storeToRefs(captchaStore);
+
 const retryLoadCaptchaSettings = async () => {
-  await settingsStore.loadCaptchaSettings();
+  await captchaStore.loadCaptchaSettings();
 };
 
 onMounted(async () => {
   // await fetchIpBlacklist(); // REMOVED - Handled by useIpBlacklist.ts onMounted
-  await settingsStore.loadCaptchaSettings(); // <-- Load CAPTCHA settings
+  await captchaStore.loadCaptchaSettings(); // <-- Load CAPTCHA settings
   await checkLatestVersion(); // 检查版本更新
 });
 </script>

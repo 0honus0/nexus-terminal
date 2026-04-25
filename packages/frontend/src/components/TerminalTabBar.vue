@@ -240,7 +240,7 @@ const contextMenuItems = computed(() => {
       if (targetSessionState.isMarkedForSuspend) {
         items.push({ label: 'tabs.contextMenu.unmarkForSuspend', action: 'unmark-for-suspend' });
       } else {
-        // 当未标记时，显示原来的“挂起”文本，但 action 触发新的标记流程
+        // 当未标记时，显示原来的"挂起"文本，但 action 触发新的标记流程
         items.push({ label: 'tabs.contextMenu.suspendSession', action: 'mark-for-suspend' });
       }
       items.push({ label: '', action: '', isSeparator: true }); // 分隔符
@@ -498,6 +498,7 @@ onBeforeUnmount(() => {
               :class="{ 'text-foreground hover:bg-header': session.sessionId === activeSessionId }"
               @click="closeSession($event, session.sessionId)"
               :title="$t('tabs.closeTabTooltip')"
+              :aria-label="$t('tabs.closeTabTooltip')"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -518,6 +519,7 @@ onBeforeUnmount(() => {
         class="flex items-center justify-center px-3 h-full border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150 flex-shrink-0"
         @click="togglePopup"
         :title="$t('tabs.newTabTooltip')"
+        :aria-label="$t('tabs.newTabTooltip')"
       >
         <i class="fas fa-plus text-sm"></i>
       </button>
@@ -529,6 +531,7 @@ onBeforeUnmount(() => {
         class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
         @click="toggleHeader"
         :title="toggleButtonTitle"
+        :aria-label="toggleButtonTitle"
       >
         <i :class="[eyeIconClass, 'text-sm']"></i>
       </button>
@@ -537,6 +540,7 @@ onBeforeUnmount(() => {
         class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
         @click="showTransferProgressModal = true"
         :title="t('terminalTabBar.showTransferProgressTooltip', '查看传输进度')"
+        :aria-label="t('terminalTabBar.showTransferProgressTooltip', '查看传输进度')"
       >
         <i class="fas fa-tasks text-sm"></i>
       </button>
@@ -546,6 +550,7 @@ onBeforeUnmount(() => {
         class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
         @click="openLayoutConfigurator"
         :title="t('layout.configure', '配置布局')"
+        :aria-label="t('layout.configure', '配置布局')"
       >
         <i class="fas fa-th-large text-sm"></i>
       </button>
@@ -562,6 +567,7 @@ onBeforeUnmount(() => {
         <button
           class="absolute top-2 right-2 p-1 text-text-secondary hover:text-foreground"
           @click="togglePopup"
+          :aria-label="t('common.close', '关闭')"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

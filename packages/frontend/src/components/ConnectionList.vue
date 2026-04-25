@@ -242,6 +242,7 @@ const handleTestConnection = async (connectionId: number) => {
                     conn.type === 'RDP' || conn.type === 'VNC' ? 'fa-desktop' : 'fa-server',
                     'mr-2 w-4 text-center text-text-secondary',
                   ]"
+                  aria-hidden="true"
                 ></i>
                 <span>{{ conn.name }}</span>
               </td>

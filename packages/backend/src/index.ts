@@ -19,6 +19,7 @@ import {
   setLogLevel as setRuntimeLogLevel,
   type LogLevel,
 } from './logging/logger';
+import { logger, setLogLevel as setPinoLogLevel } from './utils/logger';
 import { getDbInstance } from './database/connection';
 import authRouter from './auth/auth.routes';
 import connectionsRouter from './connections/connections.routes';
@@ -41,6 +42,8 @@ import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
 import batchRoutes from './batch/batch.routes';
 import aiRoutes from './ai-ops/ai.routes';
 import dashboardRoutes from './services/dashboard.routes';
+import metricsRoutes from './metrics/metrics.routes';
+import { metricsMiddleware } from './metrics/metrics.middleware';
 import { initializeWebSocket } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
@@ -68,15 +71,15 @@ const projectRootEnvPath = path.resolve(__dirname, '../../../.env');
 const rootConfigResult = dotenv.config({ path: projectRootEnvPath });
 
 if (rootConfigResult.error && (rootConfigResult.error as NodeJS.ErrnoException).code !== 'ENOENT') {
-  console.warn(
+  logger.warn(
     `[ENV Init Early] Warning: Could not load root .env file from ${projectRootEnvPath}. Error: ${rootConfigResult.error.message}`
   );
 } else if (!rootConfigResult.error) {
-  console.debug(
+  logger.debug(
     `[ENV Init Early] Loaded environment variables from root .env file: ${projectRootEnvPath}`
   );
 } else {
-  console.debug(
+  logger.debug(
     `[ENV Init Early] Root .env file not found at ${projectRootEnvPath}, proceeding without it.`
   );
 }
@@ -90,11 +93,11 @@ if (
   dataConfigResultGlobal.error &&
   (dataConfigResultGlobal.error as NodeJS.ErrnoException).code !== 'ENOENT'
 ) {
-  console.warn(
+  logger.warn(
     `[ENV Init Early] Warning: Could not load data .env file from ${dataEnvPathGlobal}. Error: ${dataConfigResultGlobal.error.message}`
   );
 } else if (!dataConfigResultGlobal.error) {
-  console.debug(
+  logger.debug(
     `[ENV Init Early] Loaded environment variables from data .env file: ${dataEnvPathGlobal}`
   );
 }
@@ -102,14 +105,14 @@ if (
 // --- 全局错误处理 ---
 // 捕获未处理的 Promise Rejection
 process.on('unhandledRejection', (reason: unknown, _promise: Promise<unknown>) => {
-  console.error('---未处理的 Promise Rejection---');
-  console.error('原因:', reason);
+  logger.error('---未处理的 Promise Rejection---');
+  logger.error({ err: reason as Error }, '原因:');
 });
 
 // 捕获未捕获的同步异常
 process.on('uncaughtException', (error: Error) => {
-  console.error('---未捕获的异常---');
-  console.error('错误:', error);
+  logger.error('---未捕获的异常---');
+  logger.error(error, '错误:');
 });
 
 const initializeEnvironment = async () => {
@@ -119,7 +122,7 @@ const initializeEnvironment = async () => {
 
   // 检查 ENCRYPTION_KEY (process.env should be populated by early loading)
   if (!process.env.ENCRYPTION_KEY) {
-    console.info('[ENV Init] ENCRYPTION_KEY 未设置，正在生成...');
+    logger.info('[ENV Init] ENCRYPTION_KEY 未设置，正在生成...');
     const newEncryptionKey = crypto.randomBytes(32).toString('hex');
     process.env.ENCRYPTION_KEY = newEncryptionKey; // 更新当前进程环境
     keysToAppend += `\nENCRYPTION_KEY=${newEncryptionKey}`;
@@ -128,7 +131,7 @@ const initializeEnvironment = async () => {
 
   // 3. 检查 SESSION_SECRET
   if (!process.env.SESSION_SECRET) {
-    console.info('[ENV Init] SESSION_SECRET 未设置，正在生成...');
+    logger.info('[ENV Init] SESSION_SECRET 未设置，正在生成...');
     const newSessionSecret = crypto.randomBytes(64).toString('hex');
     process.env.SESSION_SECRET = newSessionSecret; // 更新当前进程环境
     keysToAppend += `\nSESSION_SECRET=${newSessionSecret}`;
@@ -137,11 +140,11 @@ const initializeEnvironment = async () => {
 
   // 4. 检查 GUACD_HOST 和 GUACD_PORT
   if (!process.env.GUACD_HOST) {
-    console.warn('[ENV Init] GUACD_HOST 未设置，将使用默认值 "localhost"');
+    logger.warn('[ENV Init] GUACD_HOST 未设置，将使用默认值 "localhost"');
     process.env.GUACD_HOST = 'localhost';
   }
   if (!process.env.GUACD_PORT) {
-    console.warn('[ENV Init] GUACD_PORT 未设置，将使用默认值 "4822"');
+    logger.warn('[ENV Init] GUACD_PORT 未设置，将使用默认值 "4822"');
     process.env.GUACD_PORT = '4822';
   }
 
@@ -158,11 +161,11 @@ const initializeEnvironment = async () => {
         }
       }
       fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim()); // Use dataEnvPath, trim() 移除开头的换行符
-      console.warn(`[ENV Init] 已自动生成密钥并保存到 ${dataEnvPath}`); // Use dataEnvPath
-      console.warn('[ENV Init] !!! 重要：请务必备份此 data/.env 文件，并在生产环境中妥善保管 !!!');
+      logger.warn(`[ENV Init] 已自动生成密钥并保存到 ${dataEnvPath}`); // Use dataEnvPath
+      logger.warn('[ENV Init] !!! 重要：请务必备份此 data/.env 文件，并在生产环境中妥善保管 !!!');
     } catch (error) {
-      console.error(`[ENV Init] 无法写入密钥到 ${dataEnvPath}:`, error); // Use dataEnvPath
-      console.error('[ENV Init] 请检查文件权限或手动创建 data/.env 文件并添加生成的密钥。');
+      logger.error({ err: error as Error }, `[ENV Init] 无法写入密钥到 ${dataEnvPath}`); // Use dataEnvPath
+      logger.error('[ENV Init] 请检查文件权限或手动创建 data/.env 文件并添加生成的密钥。');
       // 即使写入失败，密钥已在 process.env 中，程序可以继续运行本次
     }
   }
@@ -170,11 +173,11 @@ const initializeEnvironment = async () => {
   // 5. 生产环境最终检查 (虽然理论上已被覆盖，但作为保险)
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.ENCRYPTION_KEY) {
-      console.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
+      logger.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
       process.exit(1);
     }
     if (!process.env.SESSION_SECRET) {
-      console.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
+      logger.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
       process.exit(1);
     }
   }
@@ -182,11 +185,11 @@ const initializeEnvironment = async () => {
   // 6. 最终检查 (包括 Guacamole 相关)
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.ENCRYPTION_KEY) {
-      console.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
+      logger.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
       process.exit(1);
     }
     if (!process.env.SESSION_SECRET) {
-      console.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
+      logger.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
       process.exit(1);
     }
     // Guacd host/port are less critical to halt on, defaults might work
@@ -319,6 +322,9 @@ const settingsLimiter = rateLimit({
 app.use(ipWhitelistMiddleware as RequestHandler);
 app.use(express.json({ limit: '1mb' }));
 
+// --- Prometheus 指标采集中间件（在路由之前，采集所有 HTTP 请求延迟） ---
+app.use(metricsMiddleware as RequestHandler);
+
 // --- 安全响应头中间件（在路由之前设置） ---
 app.use((_req, res, next) => {
   res.setHeader(
@@ -371,19 +377,19 @@ const resolvePasskeyRpIdFromHost = (host: string): string | undefined => {
 const initializeDatabase = async () => {
   try {
     const db = await getDbInstance();
-    console.debug('[Index] 正在检查用户数量...');
+    logger.debug('[Index] 正在检查用户数量...');
     const userCount = await new Promise<number>((resolve, reject) => {
       db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: { count: number }) => {
         if (err) {
-          console.error('检查 users 表时出错:', err.message);
+          logger.error(err, '检查 users 表时出错');
           return reject(err);
         }
         resolve(row.count);
       });
     });
-    console.debug(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
+    logger.debug(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
   } catch (error) {
-    console.error('数据库初始化或检查失败:', error);
+    logger.error(error as Error, '数据库初始化或检查失败');
     process.exit(1);
   }
 };
@@ -393,8 +399,9 @@ const initializeRuntimeLogLevel = async () => {
   try {
     const level = await settingsService.getLogLevel();
     setRuntimeLogLevel(level as LogLevel);
+    setPinoLogLevel(level);
   } catch (error) {
-    console.warn('[Index] 初始化日志等级失败，将使用默认日志等级。', error);
+    logger.warn(error as Error, '[Index] 初始化日志等级失败，将使用默认日志等级。');
   }
 };
 
@@ -473,12 +480,12 @@ const startServer = () => {
           customSiteTitle: '星枢终端 API 文档',
         })
       );
-      console.info(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
+      logger.info(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
     } catch (error) {
-      console.warn('[Swagger] 文档依赖未安装，已跳过 /api-docs 挂载。', error);
+      logger.warn(error as Error, '[Swagger] 文档依赖未安装，已跳过 /api-docs 挂载。');
     }
   } else {
-    console.info('[Swagger] 生产环境已禁用 API 文档');
+    logger.info('[Swagger] 生产环境已禁用 API 文档');
   }
   // --- 结束 Swagger 文档路由 ---
 
@@ -507,6 +514,9 @@ const startServer = () => {
   app.use('/api/v1/batch', apiLimiter, batchRoutes);
   app.use('/api/v1/ai', apiLimiter, aiRoutes);
   app.use('/api/v1/dashboard', apiLimiter, dashboardRoutes);
+
+  // Prometheus 指标端点（无需认证和限流，供 Prometheus 服务器抓取）
+  app.use('/api/v1/metrics', metricsRoutes);
 
   // 健康检查接口（供 Docker healthcheck 与负载均衡器使用）
   app.get('/api/v1/health', async (_req: Request, res: Response) => {
@@ -556,7 +566,7 @@ const startServer = () => {
   // --- 结束错误处理中间件 ---
 
   server.listen(port, () => {
-    console.info(`后端服务器正在监听 http://localhost:${port}`);
+    logger.info(`后端服务器正在监听 http://localhost:${port}`);
     initializeWebSocket(server, sessionMiddleware as RequestHandler); // Initialize existing WebSocket
   });
 };
@@ -571,8 +581,8 @@ const main = async () => {
     printEnvironmentConfig(envConfig);
   } catch (error) {
     if (error instanceof EnvironmentValidationError) {
-      console.error('[ENV Validator] 环境变量验证失败:');
-      error.errors.forEach((err) => console.error(`  - ${err}`));
+      logger.error('[ENV Validator] 环境变量验证失败:');
+      error.errors.forEach((err) => logger.error(`  - ${err}`));
       process.exit(1);
     }
     throw error;
@@ -584,6 +594,6 @@ const main = async () => {
 };
 
 main().catch((error) => {
-  console.error('启动过程中发生未处理的错误:', error);
+  logger.error(error, '启动过程中发生未处理的错误');
   process.exit(1);
 });

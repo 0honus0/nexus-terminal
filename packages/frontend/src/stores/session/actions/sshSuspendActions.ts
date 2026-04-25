@@ -525,7 +525,7 @@ export const exportSshSessionLog = async (suspendSessionId: string): Promise<voi
       // 如果响应是 Blob 但我们期望 JSON 错误信息，需要特殊处理
       // 假设错误时后端会返回 JSON
       const responseData = error.response.data;
-      const responseContentType = error.response.headers?.['content-type'];
+      const responseContentType = error.response.headers?.['content-type'] as string | undefined;
       if (responseData instanceof Blob && responseContentType?.includes('application/json')) {
         try {
           const errorJson = JSON.parse(await responseData.text()) as { message?: string };

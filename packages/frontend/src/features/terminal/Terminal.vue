@@ -693,6 +693,9 @@ watchEffect(() => {
     ref="terminalOuterWrapperRef"
     class="terminal-outer-wrapper"
     :class="{ 'no-auto-wrap': !terminalAutoWrapEnabledBoolean }"
+    role="log"
+    aria-label="终端输出"
+    aria-live="polite"
   >
     <div ref="terminalRef" class="terminal-inner-container"></div>
   </div>
