@@ -35,12 +35,9 @@ export interface TableDefinition {
  * 初始化审计日志表索引
  * 为 audit_logs 表创建性能优化索引
  */
-const initAuditLogsTable = async (db: Database): Promise<void> => {
-  // 创建审计日志索引以优化查询性能
-  for (const indexSql of schemaSql.createAuditLogsIndexesSQL) {
-    await runDb(db, indexSql);
-  }
-  console.debug('[DB Init] 审计日志索引创建完成。');
+const initAuditLogsTable = async (_db: Database): Promise<void> => {
+  // 索引创建已移至 migrations.ts（迁移 #12），避免在旧数据库上因 user_id 列尚未添加而失败
+  console.debug('[DB Init] 审计日志表初始化检查完成（索引由迁移管理）。');
 };
 
 /**
