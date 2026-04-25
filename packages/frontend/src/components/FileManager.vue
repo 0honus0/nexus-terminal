@@ -35,6 +35,10 @@ import {
 import { useFileManagerSelection } from '../composables/file-manager/useFileManagerSelection';
 import { useFileManagerDragAndDrop } from '../composables/file-manager/useFileManagerDragAndDrop';
 import { useFileManagerKeyboardNavigation } from '../composables/file-manager/useFileManagerKeyboardNavigation';
+import { useFileManagerSortFilter } from '../composables/file-manager/useFileManagerSortFilter';
+import { useFileManagerColumnResize } from '../composables/file-manager/useFileManagerColumnResize';
+import { useFileManagerLayoutSettings } from '../composables/file-manager/useFileManagerLayoutSettings';
+import { useFileManagerPathNavigation } from '../composables/file-manager/useFileManagerPathNavigation';
 import FileUploadPopup from './FileUploadPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
@@ -142,23 +146,46 @@ const {
   fileManagerSingleClickOpenFileBoolean,
 } = storeToRefs(settingsStore); // 使用 storeToRefs 保持响应性
 
+// --- 排序与过滤 Composable ---
+const { sortKey, sortDirection, searchQuery, filteredFileList, handleSort } =
+  useFileManagerSortFilter({
+    fileList: computed(() => currentSftpManager.value?.fileList.value ?? []),
+  });
+
 // --- UI 状态 Refs (Remain mostly the same) ---
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const sortKey = ref<keyof FileListItem | 'type' | 'size' | 'mtime'>('filename');
-const sortDirection = ref<'asc' | 'desc'>('asc');
-const isEditingPath = ref(false);
-const searchQuery = ref(''); // 搜索查询 ref
 const isMultiSelectMode = ref(false); // 多选模式状态 (主要用于移动端)
 const isSearchActive = ref(false); // 控制搜索框激活状态
-const editablePath = ref('');
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const toolbarRef = ref<InstanceType<typeof FileManagerToolbar> | null>(null); // 工具栏子组件引用
 const fileListRef = ref<InstanceType<typeof FileManagerFileList> | null>(null); // 文件列表子组件引用
 
-// +++ Path History Refs +++
-const showPathHistoryDropdown = ref(false);
+// --- 日志前缀（供多个 composable 共享）---
+const logPrefix = computed(() => `[FileManager ${props.sessionId}-${props.instanceId}]`);
+
+// --- 路径导航 Composable ---
+const {
+  isEditingPath,
+  editablePath,
+  showPathHistoryDropdown,
+  startPathEdit,
+  cancelPathEdit,
+  handlePathInputFocus,
+  handlePathInputKeydown,
+  handlePathSelectedFromDropdown,
+  navigateToPath,
+  closePathHistory,
+} = useFileManagerPathNavigation({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  isConnected: computed(() => props.wsDeps.isConnected.value),
+  pathHistoryStore,
+  pathInputRef: computed(() => toolbarRef.value?.pathInputRef ?? null),
+  logPrefix,
+});
+
+// +++ Path History Refs (for template binding) +++
 const { selectedIndex: pathSelectedIndex, filteredHistory: filteredPathHistory } =
-  storeToRefs(pathHistoryStore); // Reactive store state
+  storeToRefs(pathHistoryStore);
 
 // +++ 操作模态框状态 +++
 const isActionModalVisible = ref(false);
@@ -172,7 +199,6 @@ const clipboardState = ref<ClipboardState>({ hasContent: false });
 const clipboardSourcePaths = ref<string[]>([]); // 存储源完整路径
 const clipboardSourceBaseDir = ref<string>(''); // 存储源目录
 
-const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会被 store 覆盖
 const isSyncingPathFromTerminal = ref(false);
 let unregisterSilentExecResult: (() => void) | null = null;
 let unregisterSilentExecError: (() => void) | null = null;
@@ -183,87 +209,27 @@ let silentExecTimeoutId: ReturnType<typeof setTimeout> | null = null;
 // --- 键盘导航状态 (移至 useFileManagerKeyboardNavigation) ---
 // const selectedIndex = ref<number>(-1);
 
-// --- Column Resizing State (Remains the same) ---
-const colWidths = ref({
-  // 默认值会被 store 覆盖
-  type: 50,
-  name: 300,
-  size: 100,
-  permissions: 120,
-  modified: 180,
+// --- 布局设置 Composable（列宽 + 行大小乘数）---
+const { rowSizeMultiplier, colWidths, saveLayoutSettings, handleWheel } =
+  useFileManagerLayoutSettings({
+    storeMultiplier: fileManagerRowSizeMultiplierNumber,
+    storeWidths: fileManagerColWidthsObject,
+    onSaveSettings: (multiplier, widths) => {
+      settingsStore.updateFileManagerLayoutSettings(multiplier, widths);
+    },
+  });
+
+// --- 列宽调整 Composable ---
+const { startResize } = useFileManagerColumnResize({
+  colWidths,
+  onResizeEnd: saveLayoutSettings,
 });
-const isResizing = ref(false);
-const resizingColumnIndex = ref(-1);
-const startX = ref(0);
-const startWidth = ref(0);
 
 // --- 辅助函数 ---
 const generateRequestId = (): string =>
   `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-// --- 排序与过滤逻辑 ---
-// 修改：依赖 currentSftpManager.value.fileList
-const sortedFileList = computed(() => {
-  if (!currentSftpManager.value?.fileList.value) return []; // 检查 manager 和 fileList 是否存在
-  const list = [...currentSftpManager.value.fileList.value]; // 从 manager 获取列表
-  const key = sortKey.value;
-  const direction = sortDirection.value === 'asc' ? 1 : -1;
-
-  list.sort((a, b) => {
-    if (key !== 'type') {
-      if (a.attrs.isDirectory && !b.attrs.isDirectory) return -1;
-      if (!a.attrs.isDirectory && b.attrs.isDirectory) return 1;
-    }
-    let valA: string | number | boolean;
-    let valB: string | number | boolean;
-    switch (key) {
-      case 'type':
-        valA = a.attrs.isDirectory ? 0 : a.attrs.isSymbolicLink ? 1 : 2;
-        valB = b.attrs.isDirectory ? 0 : b.attrs.isSymbolicLink ? 1 : 2;
-        break;
-      case 'filename':
-        valA = a.filename.toLowerCase();
-        valB = b.filename.toLowerCase();
-        break;
-      case 'size':
-        valA = a.attrs.isFile ? a.attrs.size : -1;
-        valB = b.attrs.isFile ? b.attrs.size : -1;
-        break;
-      case 'mtime':
-        valA = a.attrs.mtime;
-        valB = b.attrs.mtime;
-        break;
-      default:
-        valA = a.filename.toLowerCase();
-        valB = b.filename.toLowerCase();
-    }
-    if (valA < valB) return -1 * direction;
-    if (valA > valB) return 1 * direction;
-    if (key !== 'filename') return a.filename.localeCompare(b.filename);
-    return 0;
-  });
-  return list;
-});
-
-const filteredFileList = computed(() => {
-  if (!searchQuery.value) {
-    return sortedFileList.value; // 如果没有搜索查询，返回原始排序列表
-  }
-  const lowerCaseQuery = searchQuery.value.toLowerCase();
-  return sortedFileList.value.filter((item) =>
-    item.filename.toLowerCase().includes(lowerCaseQuery)
-  );
-});
-
-const handleSort = (key: string) => {
-  const typedKey = key as keyof FileListItem | 'type' | 'size' | 'mtime';
-  if (sortKey.value === typedKey) {
-    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
-  } else {
-    sortKey.value = typedKey;
-    sortDirection.value = 'asc';
-  }
-};
+// --- 排序与过滤逻辑已提取至 useFileManagerSortFilter composable ---
 
 // --- 键盘导航滚动（委托给子组件 FileManagerFileList）---
 const scrollToForKeyboardNavigation = (fileIndex: number) => {
@@ -1097,82 +1063,13 @@ watch(sortDirection, () => {
   clearSelection(); // 清空选择
 });
 
-// --- 保存设置的函数 ---
-const saveLayoutSettings = () => {
-  // 确保 colWidths.value 是普通对象，而不是 Proxy
-  const widthsToSave = JSON.parse(JSON.stringify(colWidths.value));
-  // +++ 日志：记录保存的值 +++
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Triggering saveLayoutSettings: multiplier=${rowSizeMultiplier.value}, widths=${JSON.stringify(widthsToSave)}`
-  );
-  settingsStore.updateFileManagerLayoutSettings(rowSizeMultiplier.value, widthsToSave);
-};
-
 // --- 生命周期钩子 ---
 onMounted(() => {
   // --- 移除 onMounted 中的加载逻辑 ---
   // Initial load logic is handled by watchEffect below and the main sftp loading watchEffect
 });
 
-// +++ 使用 watchEffect 响应式地加载和应用布局设置 +++
-watchEffect(() => {
-  // 检查 store 中的值是否有效 (避免在 store 加载完成前使用默认值覆盖本地 ref)
-  // fileManagerColWidthsObject 初始可能是空对象 {}，需要检查其是否有键
-  const storeMultiplier = fileManagerRowSizeMultiplierNumber.value;
-  const storeWidths = fileManagerColWidthsObject.value;
-
-  // +++ 日志：记录从 store 获取的值 +++
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] watchEffect triggered. Store values: multiplier=${storeMultiplier}, widths=${JSON.stringify(storeWidths)}`
-  );
-
-  // 只有当 store 加载完成并提供了有效值时才更新
-  // 假设 store 加载完成后 multiplier > 0 且 widths 对象有内容
-  if (storeMultiplier > 0 && Object.keys(storeWidths).length > 0) {
-    const currentMultiplier = rowSizeMultiplier.value;
-    const currentWidthsString = JSON.stringify(colWidths.value);
-    const storeWidthsString = JSON.stringify(storeWidths);
-
-    // +++ 日志：记录当前值和 store 值，以及是否更新 +++
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Comparing values: Current Multiplier=${currentMultiplier}, Store Multiplier=${storeMultiplier}. Update needed: ${storeMultiplier !== currentMultiplier}`
-    );
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Comparing values: Current Widths=${currentWidthsString}, Store Widths=${storeWidthsString}. Update needed: ${storeWidthsString !== currentWidthsString}`
-    );
-
-    // 仅在值不同时更新，避免不必要的重渲染和潜在的循环更新
-    if (storeMultiplier !== currentMultiplier) {
-      rowSizeMultiplier.value = storeMultiplier;
-      console.info(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Row size multiplier updated from store: ${storeMultiplier}`
-      );
-    }
-    if (storeWidthsString !== currentWidthsString) {
-      // --- 修改：合并 storeWidths 到 colWidths.value ---
-      // 确保 colWidths.value 的所有键都存在，并用 store 的值更新（如果存在且有效）
-      const updatedWidths = { ...colWidths.value }; // 创建当前值的副本
-      for (const key in updatedWidths) {
-        if (
-          storeWidths[key] !== undefined &&
-          typeof storeWidths[key] === 'number' &&
-          storeWidths[key] > 0
-        ) {
-          updatedWidths[key as keyof typeof updatedWidths] = storeWidths[key];
-        }
-      }
-      colWidths.value = updatedWidths; // 赋值更新后的对象
-      console.info(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Column widths updated from store: ${JSON.stringify(updatedWidths)}`
-      );
-    }
-  } else {
-    // +++ 日志：记录等待 store 加载 +++
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Waiting for valid layout settings from store... Store Multiplier=${storeMultiplier}, Store Widths Keys=${Object.keys(storeWidths).length}`
-    );
-  }
-});
+// 布局设置同步逻辑已提取至 useFileManagerLayoutSettings composable
 
 // 使用 watchEffect 监听连接和 SFTP 就绪状态以触发初始加载
 // 恢复使用 props.wsDeps
@@ -1331,7 +1228,7 @@ watch(
   () => props.sessionId,
   (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
-      closePathHistory(); // 关闭可能打开的路径历史下拉菜单
+      cancelPathEdit(); // 关闭路径编辑、历史下拉、并重置 editablePath
       pathHistoryStore.setSearchTerm(''); // 清空搜索词
       // 1. 重新初始化 SFTP 管理器
       initializeSftpManager(newSessionId, props.instanceId);
@@ -1340,7 +1237,6 @@ watch(
       clearSelection();
       searchQuery.value = '';
       isSearchActive.value = false;
-      isEditingPath.value = false;
       sortKey.value = 'filename'; // 重置排序
       sortDirection.value = 'asc';
     }
@@ -1420,198 +1316,9 @@ onBeforeUnmount(() => {
 
 // 拖拽蒙版逻辑已移至子组件 FileManagerFileList 内部处理
 
-// --- 列宽调整逻辑 (保持不变) ---
-const getColumnKeyByIndex = (index: number): keyof typeof colWidths.value | null => {
-  const keys = Object.keys(colWidths.value) as Array<keyof typeof colWidths.value>;
-  return keys[index] ?? null;
-};
+// --- 列宽调整逻辑已提取至 useFileManagerColumnResize composable ---
 
-const startResize = (event: MouseEvent, index: number) => {
-  event.stopPropagation();
-  event.preventDefault();
-  isResizing.value = true;
-  resizingColumnIndex.value = index;
-  startX.value = event.clientX;
-  const colKey = getColumnKeyByIndex(index);
-  if (colKey) {
-    startWidth.value = colWidths.value[colKey];
-  } else {
-    const thElement = (event.target as HTMLElement).closest('th');
-    startWidth.value = thElement?.offsetWidth ?? 100;
-  }
-  document.addEventListener('mousemove', handleResize);
-  document.addEventListener('mouseup', stopResize);
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-};
-
-const handleResize = (event: MouseEvent) => {
-  if (!isResizing.value || resizingColumnIndex.value < 0) return;
-  const currentX = event.clientX;
-  const diffX = currentX - startX.value;
-  const newWidth = Math.max(30, startWidth.value + diffX);
-  const colKey = getColumnKeyByIndex(resizingColumnIndex.value);
-  if (colKey) {
-    colWidths.value[colKey] = newWidth;
-  }
-};
-
-const stopResize = () => {
-  if (isResizing.value) {
-    isResizing.value = false;
-    resizingColumnIndex.value = -1;
-    document.removeEventListener('mousemove', handleResize);
-    document.removeEventListener('mouseup', stopResize);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    // +++ 在调整结束后保存列宽 +++
-    // +++ 日志：记录触发保存 +++
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] stopResize triggered saveLayoutSettings.`
-    );
-    saveLayoutSettings();
-  }
-};
-
-// --- 路径编辑逻辑 (包含路径历史) ---
-
-const openPathHistory = () => {
-  showPathHistoryDropdown.value = true; // 总是尝试显示下拉框
-  // 如果列表为空，则尝试获取历史记录。
-  // pathHistoryStore.fetchHistory() 应该能够处理未连接时 apiClient 的失败。
-  if (pathHistoryStore.historyList.length === 0) {
-    pathHistoryStore.fetchHistory();
-  }
-  // 总是设置搜索词，以便即使历史记录是旧的或空的，也能基于当前输入进行过滤或显示。
-  pathHistoryStore.setSearchTerm(editablePath.value);
-};
-
-const closePathHistory = () => {
-  showPathHistoryDropdown.value = false;
-  pathHistoryStore.resetSelection();
-};
-
-const handlePathInputFocus = () => {
-  isEditingPath.value = true; // Keep existing behavior
-  if (
-    !currentSftpManager.value ||
-    currentSftpManager.value.isLoading.value ||
-    !props.wsDeps.isConnected.value
-  )
-    return;
-  editablePath.value = currentSftpManager.value.currentPath.value; // Set editable path on focus
-  openPathHistory();
-  nextTick(() => {
-    toolbarRef.value?.pathInputRef?.select();
-  });
-};
-
-const handlePathInputChange = () => {
-  if (showPathHistoryDropdown.value) {
-    pathHistoryStore.setSearchTerm(editablePath.value);
-  }
-};
-
-const navigateToPath = async (path: string) => {
-  if (!currentSftpManager.value || !path || path.trim().length === 0) return;
-  const trimmedPath = path.trim();
-  isEditingPath.value = false;
-  closePathHistory();
-
-  if (trimmedPath === currentSftpManager.value.currentPath.value) {
-    return;
-  }
-
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] 尝试导航到新路径: ${trimmedPath}`
-  );
-  try {
-    await currentSftpManager.value.loadDirectory(trimmedPath);
-    // 如果 loadDirectory 没有抛出错误，我们认为它成功了
-    pathHistoryStore.addPath(trimmedPath); // 导航成功后添加到历史
-    editablePath.value = trimmedPath; // 更新输入框内容
-  } catch (error) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] 导航到路径 ${trimmedPath} 失败:`,
-      error
-    );
-    // 导航失败，不添加到历史记录，也不更新输入框内容 (除非有特定需求)
-  }
-};
-
-const handlePathInputKeydown = (event: KeyboardEvent) => {
-  if (!showPathHistoryDropdown.value) {
-    if (event.key === 'Enter') {
-      navigateToPath(editablePath.value);
-    } else if (event.key === 'Escape') {
-      cancelPathEdit();
-    }
-    return;
-  }
-
-  switch (event.key) {
-    case 'ArrowDown':
-      event.preventDefault();
-      pathHistoryStore.selectNextPath();
-      // Dropdown component handles scrolling
-      break;
-    case 'ArrowUp':
-      event.preventDefault();
-      pathHistoryStore.selectPreviousPath();
-      // Dropdown component handles scrolling
-      break;
-    case 'Enter':
-      event.preventDefault();
-      if (pathSelectedIndex.value >= 0 && filteredPathHistory.value[pathSelectedIndex.value]) {
-        navigateToPath(filteredPathHistory.value[pathSelectedIndex.value].path);
-      } else {
-        navigateToPath(editablePath.value);
-      }
-      closePathHistory();
-      break;
-    case 'Escape':
-      event.preventDefault();
-      closePathHistory();
-      // Keep isEditingPath true to allow user to continue editing or blur
-      break;
-  }
-};
-
-const handlePathSelectedFromDropdown = (path: string) => {
-  editablePath.value = path; // Update input field
-  navigateToPath(path); // Navigate and add to history
-  closePathHistory();
-};
-
-const startPathEdit = () => {
-  if (
-    !currentSftpManager.value ||
-    currentSftpManager.value.isLoading.value ||
-    !props.wsDeps.isConnected.value
-  )
-    return;
-  editablePath.value = currentSftpManager.value.currentPath.value;
-  isEditingPath.value = true;
-  openPathHistory(); // 打开历史记录
-  nextTick(() => {
-    toolbarRef.value?.pathInputRef?.focus();
-    toolbarRef.value?.pathInputRef?.select();
-  });
-};
-const handlePathInput = async (event?: Event | FocusEvent) => {
-  // 已移至子组件 FileManagerToolbar 内部处理
-};
-
-const cancelPathEdit = () => {
-  isEditingPath.value = false;
-  closePathHistory();
-  // Optionally, revert editablePath to currentSftpManager.currentPath.value
-  if (currentSftpManager.value) {
-    editablePath.value = currentSftpManager.value.currentPath.value;
-  }
-};
-
-// handleClickOutsidePathInput 已移至子组件 FileManagerToolbar 内部处理
+// --- 路径编辑逻辑已提取至 useFileManagerPathNavigation composable ---
 
 // --- 搜索框激活/取消逻辑 ---
 const activateSearch = () => {
@@ -1809,24 +1516,7 @@ const openPopupEditor = () => {
   );
   fileEditorStore.triggerPopup('', props.sessionId); // 修复：使用空字符串触发空编辑器
 };
-// --- 行大小调整逻辑 ---
-const handleWheel = (event: WheelEvent) => {
-  if (event.ctrlKey) {
-    event.preventDefault(); // 阻止页面默认滚动行为
-    const delta = event.deltaY > 0 ? -0.05 : 0.05; // 滚轮向下减小，向上增大
-    // 限制字体大小乘数在 0.5 到 2 之间
-    const newMultiplier = Math.max(0.5, Math.min(2, rowSizeMultiplier.value + delta));
-    const oldMultiplier = rowSizeMultiplier.value;
-    rowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2)); // 保留两位小数避免浮点数问题
-    if (rowSizeMultiplier.value !== oldMultiplier) {
-      // +++ 日志：记录触发保存 +++
-      console.info(
-        `[FileManager ${props.sessionId}-${props.instanceId}] handleWheel triggered saveLayoutSettings.`
-      );
-      saveLayoutSettings();
-    }
-  }
-};
+// --- 行大小调整逻辑已提取至 useFileManagerLayoutSettings composable ---
 
 // +++ 聚焦搜索框的方法 +++
 const focusSearchInput = (): boolean => {
@@ -1868,8 +1558,7 @@ const focusSearchInput = (): boolean => {
 };
 // --- 工具栏关闭路径历史回调 ---
 const handleClosePathHistoryFromToolbar = () => {
-  isEditingPath.value = false;
-  closePathHistory();
+  cancelPathEdit();
 };
 
 // --- 返回上级目录（供工具栏使用）---
@@ -1909,11 +1598,9 @@ const handleOpenEditorClick = () => {
   fileEditorStore.triggerPopup('', props.sessionId); // 修复：传递空字符串而不是 null
 };
 
-// +++ 收藏路径导航（委托给 SFTP 管理器）+++
+// +++ 收藏路径导航（走路径导航 composable，记录历史）+++
 const handleNavigateToPathFromFavorites = (path: string) => {
-  if (currentSftpManager.value) {
-    currentSftpManager.value.loadDirectory(path);
-  }
+  navigateToPath(path);
 };
 </script>
 
