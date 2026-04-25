@@ -19,11 +19,21 @@ describe('AuditLogRepository', () => {
 
   beforeEach(() => {
     repository = new AuditLogRepository();
-    vi.clearAllMocks();
+    // resetAllMocks 会清空 mockResolvedValueOnce 队列并重置实现，
+    // 比 clearAllMocks 更彻底，防止跨测试 mock 状态泄漏
+    vi.resetAllMocks();
+    // 重新设置默认实现（resetAllMocks 会清除 vi.mock 工厂中的实现）
+    (getDbInstance as any).mockResolvedValue({});
+    (runDb as any).mockResolvedValue({ changes: 1 });
+    (allDb as any).mockResolvedValue([]);
+    // getDb 无默认实现，各测试按需设置 mockResolvedValueOnce
+    // 重置静态成员，避免跨测试状态污染
+    (AuditLogRepository as any).cleanupCounter = 0;
+    (AuditLogRepository as any).lastCleanupTime = Date.now();
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('addLog', () => {
@@ -77,6 +87,8 @@ describe('AuditLogRepository', () => {
     });
 
     it('当日志数量超过限制时应触发清理', async () => {
+      // 设置计数器接近阈值，使下次 addLog 调用 shouldRunCleanup() 返回 true
+      (AuditLogRepository as any).cleanupCounter = 99;
       // 模拟日志数量超过 50000
       // 第一次 getDb 调用来自 settingsService.getAuditLogMaxEntries -> settingsRepository.getSetting
       // 第二次 getDb 调用来自 cleanupOldLogs -> SELECT COUNT(*)

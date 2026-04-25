@@ -214,14 +214,17 @@ describe('AddConnectionFormAdvanced.vue', () => {
       expect((checkbox.element as HTMLInputElement).checked).toBe(false);
     });
 
-    it('点击开关应更新 formData.force_keyboard_interactive', async () => {
+    it('点击开关应通过事件传递 force_keyboard_interactive', async () => {
       const formData = createMockFormData({ type: 'SSH' });
       wrapper = createComponent(formData);
 
       const checkbox = wrapper.find('input[type="checkbox"]');
       await (checkbox as any).setChecked(true);
 
-      expect(formData.force_keyboard_interactive).toBe(true);
+      // checkbox 使用 @change → handleForceKeyboardInteractiveChange → patchFormData → emit('patch-form-data')
+      const emitted = wrapper.emitted('patch-form-data');
+      expect(emitted).toBeTruthy();
+      expect(emitted?.[emitted.length - 1]?.[0]).toEqual({ force_keyboard_interactive: true });
     });
 
     it('编辑模式下应正确显示已有值', () => {
@@ -467,14 +470,18 @@ describe('AddConnectionFormAdvanced.vue', () => {
       );
     });
 
-    it('应正确双向绑定备注内容', async () => {
+    it('应正确通过事件传递备注内容', async () => {
       const formData = createMockFormData();
       wrapper = createComponent(formData);
 
       const textarea = wrapper.find('textarea#conn-notes');
       await textarea.setValue('测试备注内容');
 
-      expect(formData.notes).toBe('测试备注内容');
+      // textarea 使用 @input → patchFormData → emit('patch-form-data') 模式
+      // 不直接修改 prop 对象，而是通过事件向父组件传递变更
+      const emitted = wrapper.emitted('patch-form-data');
+      expect(emitted).toBeTruthy();
+      expect(emitted?.[emitted.length - 1]?.[0]).toEqual({ notes: '测试备注内容' });
     });
   });
 
