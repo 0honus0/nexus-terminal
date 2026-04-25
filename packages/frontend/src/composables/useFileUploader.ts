@@ -1,4 +1,4 @@
-import { reactive, nextTick, onUnmounted, type Ref, watchEffect } from 'vue';
+import { reactive, onUnmounted, type Ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../types/sftp.types';
 import type { UploadItem } from '../types/upload.types';
@@ -40,15 +40,16 @@ export function useFileUploader(
       return;
     }
 
-    const chunkSize = 1024 * 64; // 64KB 块大小
+    const CHUNK_SIZE = 1024 * 256; // 256KB 块大小（优化：减少消息数量，降低内存压力）
+    const WINDOW_SIZE = 8; // 滑动窗口大小：允许同时在途的最大块数量
     const reader = new FileReader();
     let offset = startByte;
-    let chunkIndex = 0; // Initialize chunk index counter
-    let currentChunkSize = 0; // Store the size of the chunk being processed
+    let chunkIndex = 0;
+    let currentChunkSize = 0;
+    let inFlight = 0; // 当前在途（已发送未确认）的块数量
 
     reader.onload = (e) => {
       const currentUpload = uploads[uploadId];
-      // *发送前* 再次检查连接和状态
       if (
         !wsDeps.value.isConnected.value ||
         !currentUpload ||
@@ -57,14 +58,13 @@ export function useFileUploader(
         console.warn(
           `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} status changed or disconnected before sending chunk at offset ${offset}.`
         );
-        return; // 如果状态改变或断开连接，则停止发送
+        return;
       }
 
       const chunkResult = e.target?.result as string;
-      // 确保结果是字符串并且包含 base64 前缀
       if (typeof chunkResult === 'string' && chunkResult.startsWith('data:')) {
         const chunkBase64 = chunkResult.split(',')[1];
-        const isLast = offset + chunkSize >= file.size;
+        const isLast = offset + CHUNK_SIZE >= file.size;
 
         wsDeps.value.sendMessage({
           type: 'sftp:upload:chunk',
@@ -72,12 +72,7 @@ export function useFileUploader(
         });
 
         offset += currentChunkSize;
-
-        if (!isLast) {
-          nextTick(readNextChunk);
-        } else {
-          console.info(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
-        }
+        // 不再在此处递增 inFlight —— 由 ack 处理器控制流控
       } else {
         console.error(
           `[FileUploader ${sessionIdForLog.value}] FileReader returned unexpected result for ${uploadId}:`,
@@ -100,21 +95,51 @@ export function useFileUploader(
     };
 
     const readNextChunk = () => {
-      // 读取下一个块之前再次检查状态
       if (offset < file.size && uploads[uploadId]?.status === 'uploading') {
-        const slice = file.slice(offset, offset + chunkSize);
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
         currentChunkSize = slice.size;
+        inFlight++;
         reader.readAsDataURL(slice);
       }
     };
 
-    // 开始读取第一个块（或恢复时的下一个块）
+    // 后端 chunk ack 处理器：接收窗口槽位信息，触发下一批读取
+    const onChunkAck = (payload: MessagePayload, message: WebSocketMessage) => {
+      const ackUploadId =
+        message.uploadId ||
+        (typeof payload === 'object' && payload !== null
+          ? (payload as Record<string, unknown>).uploadId
+          : undefined);
+      if (ackUploadId !== uploadId) return;
+
+      inFlight = Math.max(0, inFlight - 1);
+
+      // 根据后端返回的窗口槽位决定是否继续读取
+      const payloadObj =
+        typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      const serverSlots =
+        typeof payloadObj.windowSlots === 'number' ? payloadObj.windowSlots : WINDOW_SIZE;
+
+      // 在窗口允许范围内继续读取
+      while (inFlight < Math.min(serverSlots, WINDOW_SIZE) && offset < file.size) {
+        readNextChunk();
+      }
+    };
+
+    // 注册 ack 处理器
+    const unregisterAck = wsDeps.value.onMessage('sftp:upload:chunk:ack', onChunkAck);
+
+    // 保存注销函数到 upload 对象，以便取消时清理
+    (upload as UploadItem & { _unregisterAck?: () => void })._unregisterAck = unregisterAck;
+
+    // 初始填充窗口：读取 WINDOW_SIZE 个块
     if (file.size > 0) {
-      readNextChunk();
+      for (let i = 0; i < WINDOW_SIZE && offset < file.size; i++) {
+        readNextChunk();
+      }
     } else {
-      // 立即处理零字节文件
+      // 零字节文件直接发送
       console.info(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
-      // Send chunkIndex 0 for zero-byte file
       wsDeps.value.sendMessage({
         type: 'sftp:upload:chunk',
         payload: { uploadId, chunkIndex: 0, data: '', isLast: true },
@@ -190,6 +215,13 @@ export function useFileUploader(
       console.info(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
       upload.status = 'cancelled'; // 立即更新状态
 
+      // 清理滑动窗口 ack 监听器
+      const uploadWithAck = upload as UploadItem & { _unregisterAck?: () => void };
+      if (uploadWithAck._unregisterAck) {
+        uploadWithAck._unregisterAck();
+        uploadWithAck._unregisterAck = undefined;
+      }
+
       if (notifyBackend && wsDeps.value.isConnected.value) {
         wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
       }
@@ -237,9 +269,15 @@ export function useFileUploader(
       upload.status = 'success';
       upload.progress = 100;
 
+      // 清理滑动窗口 ack 监听器
+      const uploadWithAck = upload as UploadItem & { _unregisterAck?: () => void };
+      if (uploadWithAck._unregisterAck) {
+        uploadWithAck._unregisterAck();
+        uploadWithAck._unregisterAck = undefined;
+      }
+
       // 立即删除记录
       if (uploads[uploadId]) {
-        // 确保记录仍然存在
         delete uploads[uploadId];
       }
     } else {
@@ -278,6 +316,13 @@ export function useFileUploader(
       );
       upload.status = 'error';
       upload.error = errorMessage; // 使用 payload 作为错误消息
+
+      // 清理滑动窗口 ack 监听器
+      const uploadWithAck = upload as UploadItem & { _unregisterAck?: () => void };
+      if (uploadWithAck._unregisterAck) {
+        uploadWithAck._unregisterAck();
+        uploadWithAck._unregisterAck = undefined;
+      }
 
       // 让错误消息可见时间长一些
       setTimeout(() => {
