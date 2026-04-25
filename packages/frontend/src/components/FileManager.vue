@@ -8,6 +8,7 @@ import {
   watch,
   watchEffect,
   type PropType,
+  type Ref,
   readonly,
   shallowRef,
 } from 'vue';
@@ -38,6 +39,7 @@ import { useFileManagerKeyboardNavigation } from '../composables/file-manager/us
 import { useFileManagerSortFilter } from '../composables/file-manager/useFileManagerSortFilter';
 import { useFileManagerColumnResize } from '../composables/file-manager/useFileManagerColumnResize';
 import { useFileManagerLayoutSettings } from '../composables/file-manager/useFileManagerLayoutSettings';
+import { useFileManagerPathNavigation } from '../composables/file-manager/useFileManagerPathNavigation';
 import FileUploadPopup from './FileUploadPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
@@ -153,18 +155,38 @@ const { sortKey, sortDirection, searchQuery, sortedFileList, filteredFileList, h
 
 // --- UI 状态 Refs (Remain mostly the same) ---
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const isEditingPath = ref(false);
 const isMultiSelectMode = ref(false); // 多选模式状态 (主要用于移动端)
 const isSearchActive = ref(false); // 控制搜索框激活状态
-const editablePath = ref('');
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const toolbarRef = ref<InstanceType<typeof FileManagerToolbar> | null>(null); // 工具栏子组件引用
 const fileListRef = ref<InstanceType<typeof FileManagerFileList> | null>(null); // 文件列表子组件引用
 
-// +++ Path History Refs +++
-const showPathHistoryDropdown = ref(false);
+// --- 路径导航 Composable ---
+const {
+  isEditingPath,
+  editablePath,
+  showPathHistoryDropdown,
+  startPathEdit,
+  cancelPathEdit,
+  handlePathInputFocus,
+  handlePathInputChange,
+  handlePathInputKeydown,
+  handlePathSelectedFromDropdown,
+  navigateToPath,
+  closePathHistory,
+} = useFileManagerPathNavigation({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  isConnected: computed(() => props.wsDeps.isConnected.value),
+  pathHistoryStore,
+  pathInputRef: computed(
+    () => toolbarRef.value?.pathInputRef ?? null
+  ) as unknown as Ref<HTMLInputElement | null>,
+  logPrefix: `[FileManager ${props.sessionId}-${props.instanceId}]`,
+});
+
+// +++ Path History Refs (for template binding) +++
 const { selectedIndex: pathSelectedIndex, filteredHistory: filteredPathHistory } =
-  storeToRefs(pathHistoryStore); // Reactive store state
+  storeToRefs(pathHistoryStore);
 
 // +++ 操作模态框状态 +++
 const isActionModalVisible = ref(false);
@@ -1300,145 +1322,7 @@ onBeforeUnmount(() => {
 
 // --- 列宽调整逻辑已提取至 useFileManagerColumnResize composable ---
 
-// --- 路径编辑逻辑 (包含路径历史) ---
-
-const openPathHistory = () => {
-  showPathHistoryDropdown.value = true; // 总是尝试显示下拉框
-  // 如果列表为空，则尝试获取历史记录。
-  // pathHistoryStore.fetchHistory() 应该能够处理未连接时 apiClient 的失败。
-  if (pathHistoryStore.historyList.length === 0) {
-    pathHistoryStore.fetchHistory();
-  }
-  // 总是设置搜索词，以便即使历史记录是旧的或空的，也能基于当前输入进行过滤或显示。
-  pathHistoryStore.setSearchTerm(editablePath.value);
-};
-
-const closePathHistory = () => {
-  showPathHistoryDropdown.value = false;
-  pathHistoryStore.resetSelection();
-};
-
-const handlePathInputFocus = () => {
-  isEditingPath.value = true; // Keep existing behavior
-  if (
-    !currentSftpManager.value ||
-    currentSftpManager.value.isLoading.value ||
-    !props.wsDeps.isConnected.value
-  )
-    return;
-  editablePath.value = currentSftpManager.value.currentPath.value; // Set editable path on focus
-  openPathHistory();
-  nextTick(() => {
-    toolbarRef.value?.pathInputRef?.select();
-  });
-};
-
-const handlePathInputChange = () => {
-  if (showPathHistoryDropdown.value) {
-    pathHistoryStore.setSearchTerm(editablePath.value);
-  }
-};
-
-const navigateToPath = async (path: string) => {
-  if (!currentSftpManager.value || !path || path.trim().length === 0) return;
-  const trimmedPath = path.trim();
-  isEditingPath.value = false;
-  closePathHistory();
-
-  if (trimmedPath === currentSftpManager.value.currentPath.value) {
-    return;
-  }
-
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] 尝试导航到新路径: ${trimmedPath}`
-  );
-  try {
-    await currentSftpManager.value.loadDirectory(trimmedPath);
-    // 如果 loadDirectory 没有抛出错误，我们认为它成功了
-    pathHistoryStore.addPath(trimmedPath); // 导航成功后添加到历史
-    editablePath.value = trimmedPath; // 更新输入框内容
-  } catch (error) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] 导航到路径 ${trimmedPath} 失败:`,
-      error
-    );
-    // 导航失败，不添加到历史记录，也不更新输入框内容 (除非有特定需求)
-  }
-};
-
-const handlePathInputKeydown = (event: KeyboardEvent) => {
-  if (!showPathHistoryDropdown.value) {
-    if (event.key === 'Enter') {
-      navigateToPath(editablePath.value);
-    } else if (event.key === 'Escape') {
-      cancelPathEdit();
-    }
-    return;
-  }
-
-  switch (event.key) {
-    case 'ArrowDown':
-      event.preventDefault();
-      pathHistoryStore.selectNextPath();
-      // Dropdown component handles scrolling
-      break;
-    case 'ArrowUp':
-      event.preventDefault();
-      pathHistoryStore.selectPreviousPath();
-      // Dropdown component handles scrolling
-      break;
-    case 'Enter':
-      event.preventDefault();
-      if (pathSelectedIndex.value >= 0 && filteredPathHistory.value[pathSelectedIndex.value]) {
-        navigateToPath(filteredPathHistory.value[pathSelectedIndex.value].path);
-      } else {
-        navigateToPath(editablePath.value);
-      }
-      closePathHistory();
-      break;
-    case 'Escape':
-      event.preventDefault();
-      closePathHistory();
-      // Keep isEditingPath true to allow user to continue editing or blur
-      break;
-  }
-};
-
-const handlePathSelectedFromDropdown = (path: string) => {
-  editablePath.value = path; // Update input field
-  navigateToPath(path); // Navigate and add to history
-  closePathHistory();
-};
-
-const startPathEdit = () => {
-  if (
-    !currentSftpManager.value ||
-    currentSftpManager.value.isLoading.value ||
-    !props.wsDeps.isConnected.value
-  )
-    return;
-  editablePath.value = currentSftpManager.value.currentPath.value;
-  isEditingPath.value = true;
-  openPathHistory(); // 打开历史记录
-  nextTick(() => {
-    toolbarRef.value?.pathInputRef?.focus();
-    toolbarRef.value?.pathInputRef?.select();
-  });
-};
-const handlePathInput = async (event?: Event | FocusEvent) => {
-  // 已移至子组件 FileManagerToolbar 内部处理
-};
-
-const cancelPathEdit = () => {
-  isEditingPath.value = false;
-  closePathHistory();
-  // Optionally, revert editablePath to currentSftpManager.currentPath.value
-  if (currentSftpManager.value) {
-    editablePath.value = currentSftpManager.value.currentPath.value;
-  }
-};
-
-// handleClickOutsidePathInput 已移至子组件 FileManagerToolbar 内部处理
+// --- 路径编辑逻辑已提取至 useFileManagerPathNavigation composable ---
 
 // --- 搜索框激活/取消逻辑 ---
 const activateSearch = () => {
