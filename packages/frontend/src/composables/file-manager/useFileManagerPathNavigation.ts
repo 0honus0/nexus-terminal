@@ -3,28 +3,29 @@
  * 从 FileManager.vue 提取，负责路径输入、历史记录下拉、路径导航
  */
 
-import { ref, nextTick, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, nextTick, type Ref, type ComputedRef } from 'vue';
 import { usePathHistoryStore } from '../../stores/pathHistory.store';
+import type { SftpManagerInstance } from '../../composables/useSftpActions';
 
 type PathHistoryStore = ReturnType<typeof usePathHistoryStore>;
 
-type SftpManagerInstance = {
-  currentPath: Ref<string>;
-  isLoading: Ref<boolean>;
-  loadDirectory: (path: string) => void;
-};
+/** 从 SftpManagerInstance 中提取路径导航所需字段 */
+type PathNavigationSftpManager = Pick<
+  SftpManagerInstance,
+  'currentPath' | 'isLoading' | 'loadDirectory'
+>;
 
 export interface UseFileManagerPathNavigationOptions {
   /** SFTP 管理器实例（响应式） */
-  currentSftpManager: ComputedRef<SftpManagerInstance | null>;
+  currentSftpManager: ComputedRef<PathNavigationSftpManager | null>;
   /** WebSocket 连接状态 */
   isConnected: ComputedRef<boolean>;
   /** 路径历史 Store */
   pathHistoryStore: PathHistoryStore;
   /** 路径输入框引用（用于聚焦和选中） */
-  pathInputRef: Ref<HTMLInputElement | null>;
-  /** 日志前缀 */
-  logPrefix?: string;
+  pathInputRef: Ref<HTMLInputElement | null> | ComputedRef<HTMLInputElement | null>;
+  /** 日志前缀（支持静态字符串或响应式引用） */
+  logPrefix?: string | Ref<string> | ComputedRef<string>;
 }
 
 export interface UseFileManagerPathNavigationReturn {
@@ -60,8 +61,13 @@ export const useFileManagerPathNavigation = (
     isConnected,
     pathHistoryStore,
     pathInputRef,
-    logPrefix = '[FileManager]',
+    logPrefix: logPrefixInput = '[FileManager]',
   } = options;
+
+  /** 将 logPrefix 统一为响应式字符串 */
+  const logPrefix = computed(() =>
+    typeof logPrefixInput === 'string' ? logPrefixInput : logPrefixInput.value
+  );
 
   const isEditingPath = ref(false);
   const editablePath = ref('');
@@ -106,13 +112,13 @@ export const useFileManagerPathNavigation = (
 
     if (trimmedPath === manager.currentPath.value) return;
 
-    console.info(`${logPrefix} 尝试导航到新路径: ${trimmedPath}`);
+    console.info(`${logPrefix.value} 尝试导航到新路径: ${trimmedPath}`);
     try {
       await manager.loadDirectory(trimmedPath);
       pathHistoryStore.addPath(trimmedPath);
       editablePath.value = trimmedPath;
     } catch (error) {
-      console.error(`${logPrefix} 导航到路径 ${trimmedPath} 失败:`, error);
+      console.error(`${logPrefix.value} 导航到路径 ${trimmedPath} 失败:`, error);
     }
   };
 

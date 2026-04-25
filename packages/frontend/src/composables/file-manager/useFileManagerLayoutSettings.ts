@@ -3,7 +3,7 @@
  * 从 FileManager.vue 提取，负责行大小乘数和列宽与 Store 的双向同步
  */
 
-import { ref, watchEffect, type Ref } from 'vue';
+import { ref, computed, watchEffect, type Ref, type ComputedRef } from 'vue';
 import type { ColumnWidths } from './useFileManagerColumnResize';
 
 export interface UseFileManagerLayoutSettingsOptions {
@@ -13,8 +13,8 @@ export interface UseFileManagerLayoutSettingsOptions {
   storeWidths: Ref<Record<string, number>>;
   /** 保存布局设置到 Store 的回调 */
   onSaveSettings: (multiplier: number, widths: ColumnWidths) => void;
-  /** 日志前缀（实例标识） */
-  logPrefix?: string;
+  /** 日志前缀（支持静态字符串或响应式引用） */
+  logPrefix?: string | Ref<string> | ComputedRef<string>;
 }
 
 export interface UseFileManagerLayoutSettingsReturn {
@@ -39,7 +39,17 @@ const DEFAULT_COL_WIDTHS: ColumnWidths = {
 export const useFileManagerLayoutSettings = (
   options: UseFileManagerLayoutSettingsOptions
 ): UseFileManagerLayoutSettingsReturn => {
-  const { storeMultiplier, storeWidths, onSaveSettings, logPrefix = '[FileManager]' } = options;
+  const {
+    storeMultiplier,
+    storeWidths,
+    onSaveSettings,
+    logPrefix: logPrefixInput = '[FileManager]',
+  } = options;
+
+  /** 将 logPrefix 统一为响应式字符串 */
+  const logPrefix = computed(() =>
+    typeof logPrefixInput === 'string' ? logPrefixInput : logPrefixInput.value
+  );
 
   const rowSizeMultiplier = ref(1.0);
   const colWidths = ref<ColumnWidths>({ ...DEFAULT_COL_WIDTHS });
@@ -47,7 +57,7 @@ export const useFileManagerLayoutSettings = (
   const saveLayoutSettings = () => {
     const widthsToSave = JSON.parse(JSON.stringify(colWidths.value));
     console.info(
-      `${logPrefix} Triggering saveLayoutSettings: multiplier=${rowSizeMultiplier.value}, widths=${JSON.stringify(widthsToSave)}`
+      `${logPrefix.value} Triggering saveLayoutSettings: multiplier=${rowSizeMultiplier.value}, widths=${JSON.stringify(widthsToSave)}`
     );
     onSaveSettings(rowSizeMultiplier.value, widthsToSave);
   };
@@ -60,7 +70,7 @@ export const useFileManagerLayoutSettings = (
       const oldMultiplier = rowSizeMultiplier.value;
       rowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2));
       if (rowSizeMultiplier.value !== oldMultiplier) {
-        console.info(`${logPrefix} handleWheel triggered saveLayoutSettings.`);
+        console.info(`${logPrefix.value} handleWheel triggered saveLayoutSettings.`);
         saveLayoutSettings();
       }
     }
@@ -72,7 +82,7 @@ export const useFileManagerLayoutSettings = (
     const sWidths = storeWidths.value;
 
     console.info(
-      `${logPrefix} watchEffect triggered. Store values: multiplier=${sMultiplier}, widths=${JSON.stringify(sWidths)}`
+      `${logPrefix.value} watchEffect triggered. Store values: multiplier=${sMultiplier}, widths=${JSON.stringify(sWidths)}`
     );
 
     if (sMultiplier > 0 && Object.keys(sWidths).length > 0) {
@@ -82,7 +92,7 @@ export const useFileManagerLayoutSettings = (
 
       if (sMultiplier !== currentMultiplier) {
         rowSizeMultiplier.value = sMultiplier;
-        console.info(`${logPrefix} Row size multiplier updated from store: ${sMultiplier}`);
+        console.info(`${logPrefix.value} Row size multiplier updated from store: ${sMultiplier}`);
       }
       if (storeWidthsString !== currentWidthsString) {
         const updatedWidths = { ...colWidths.value };
@@ -93,12 +103,12 @@ export const useFileManagerLayoutSettings = (
         }
         colWidths.value = updatedWidths;
         console.info(
-          `${logPrefix} Column widths updated from store: ${JSON.stringify(updatedWidths)}`
+          `${logPrefix.value} Column widths updated from store: ${JSON.stringify(updatedWidths)}`
         );
       }
     } else {
       console.info(
-        `${logPrefix} Waiting for valid layout settings from store... Store Multiplier=${sMultiplier}, Store Widths Keys=${Object.keys(sWidths).length}`
+        `${logPrefix.value} Waiting for valid layout settings from store... Store Multiplier=${sMultiplier}, Store Widths Keys=${Object.keys(sWidths).length}`
       );
     }
   });

@@ -8,7 +8,6 @@ import {
   watch,
   watchEffect,
   type PropType,
-  type Ref,
   readonly,
   shallowRef,
 } from 'vue';
@@ -148,7 +147,7 @@ const {
 } = storeToRefs(settingsStore); // 使用 storeToRefs 保持响应性
 
 // --- 排序与过滤 Composable ---
-const { sortKey, sortDirection, searchQuery, sortedFileList, filteredFileList, handleSort } =
+const { sortKey, sortDirection, searchQuery, filteredFileList, handleSort } =
   useFileManagerSortFilter({
     fileList: computed(() => currentSftpManager.value?.fileList.value ?? []),
   });
@@ -169,19 +168,15 @@ const {
   startPathEdit,
   cancelPathEdit,
   handlePathInputFocus,
-  handlePathInputChange,
   handlePathInputKeydown,
   handlePathSelectedFromDropdown,
-  navigateToPath,
   closePathHistory,
 } = useFileManagerPathNavigation({
   currentSftpManager: computed(() => currentSftpManager.value),
   isConnected: computed(() => props.wsDeps.isConnected.value),
   pathHistoryStore,
-  pathInputRef: computed(
-    () => toolbarRef.value?.pathInputRef ?? null
-  ) as unknown as Ref<HTMLInputElement | null>,
-  logPrefix: `[FileManager ${props.sessionId}-${props.instanceId}]`,
+  pathInputRef: computed(() => toolbarRef.value?.pathInputRef ?? null),
+  logPrefix: computed(() => `[FileManager ${props.sessionId}-${props.instanceId}]`),
 });
 
 // +++ Path History Refs (for template binding) +++
@@ -219,11 +214,11 @@ const { rowSizeMultiplier, colWidths, saveLayoutSettings, handleWheel } =
     onSaveSettings: (multiplier, widths) => {
       settingsStore.updateFileManagerLayoutSettings(multiplier, widths);
     },
-    logPrefix: logPrefix.value,
+    logPrefix,
   });
 
 // --- 列宽调整 Composable ---
-const { isResizing, startResize } = useFileManagerColumnResize({
+const { startResize } = useFileManagerColumnResize({
   colWidths,
   onResizeEnd: saveLayoutSettings,
 });
