@@ -3,7 +3,7 @@
  * 负责初始化 prom-client 默认指标与自定义业务指标
  */
 
-import promClient = require('prom-client');
+import * as promClient from 'prom-client';
 import { clientStates } from '../websocket/state';
 
 // 创建独立注册表，避免与默认全局注册表冲突

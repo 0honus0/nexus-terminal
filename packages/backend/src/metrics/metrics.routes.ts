@@ -5,6 +5,7 @@
 
 import express, { Request, Response } from 'express';
 import { registry } from './metrics.service';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get('/', async (_req: Request, res: Response) => {
     res.setHeader('Content-Type', registry.contentType);
     res.end(await registry.metrics());
   } catch (error) {
-    console.error('[Metrics] 生成指标数据失败:', error);
+    logger.error(error as Error, '[Metrics] 生成指标数据失败');
     res.status(500).end('指标采集失败');
   }
 });
