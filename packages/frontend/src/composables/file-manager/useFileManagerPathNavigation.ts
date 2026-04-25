@@ -87,9 +87,9 @@ export const useFileManagerPathNavigation = (
   };
 
   const handlePathInputFocus = () => {
-    isEditingPath.value = true;
     const manager = currentSftpManager.value;
     if (!manager || manager.isLoading.value || !isConnected.value) return;
+    isEditingPath.value = true;
     editablePath.value = manager.currentPath.value;
     openPathHistory();
     nextTick(() => {
@@ -150,7 +150,6 @@ export const useFileManagerPathNavigation = (
         } else {
           navigateToPath(editablePath.value);
         }
-        closePathHistory();
         break;
       }
       case 'Escape':

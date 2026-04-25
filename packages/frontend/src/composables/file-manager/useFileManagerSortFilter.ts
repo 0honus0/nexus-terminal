@@ -6,12 +6,12 @@
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import type { FileListItem } from '../../types/sftp.types';
 
-export type SortKey = keyof FileListItem | 'type' | 'size' | 'mtime';
+export type SortKey = 'type' | 'filename' | 'size' | 'mtime';
 export type SortDirection = 'asc' | 'desc';
 
 export interface UseFileManagerSortFilterOptions {
   /** 原始文件列表（未排序） */
-  fileList: Ref<FileListItem[]>;
+  fileList: Ref<FileListItem[]> | ComputedRef<FileListItem[]>;
 }
 
 export interface UseFileManagerSortFilterReturn {
@@ -80,7 +80,7 @@ export const useFileManagerSortFilter = (
       }
       if (valA < valB) return -1 * direction;
       if (valA > valB) return 1 * direction;
-      if (key !== 'filename') return a.filename.localeCompare(b.filename);
+      if (key !== 'filename') return a.filename.localeCompare(b.filename) * direction;
       return 0;
     });
     return list;

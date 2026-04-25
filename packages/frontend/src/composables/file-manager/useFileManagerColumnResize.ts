@@ -3,7 +3,7 @@
  * 从 FileManager.vue 提取，负责表格列宽的拖拽调整
  */
 
-import { ref, type Ref } from 'vue';
+import { ref, onScopeDispose, type Ref } from 'vue';
 
 export interface ColumnWidths extends Record<string, number> {
   type: number;
@@ -83,6 +83,13 @@ export const useFileManagerColumnResize = (
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   };
+
+  // 组件卸载时清理全局事件监听，防止泄漏
+  onScopeDispose(() => {
+    if (isResizing.value) {
+      stopResize();
+    }
+  });
 
   return {
     isResizing,
