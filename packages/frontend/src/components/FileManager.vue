@@ -152,7 +152,7 @@ const { isSearchActive, activateSearch, deactivateSearch, cancelSearch, focusSea
   useFileManagerSearch({
     toolbarRef: computed(() => toolbarRef.value),
     sessionStore,
-    sessionId: props.sessionId,
+    sessionId: computed(() => props.sessionId),
     instanceId: props.instanceId,
     searchQuery,
     focusSwitcherStore,

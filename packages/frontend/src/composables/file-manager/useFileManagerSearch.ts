@@ -3,7 +3,7 @@
  * 从 FileManager.vue 提取，负责搜索框的激活、取消、聚焦及外部触发器监听
  */
 
-import { ref, nextTick, watch, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, nextTick, watch, type Ref, type ComputedRef } from 'vue';
 import type { useSessionStore } from '../../stores/session.store';
 import type { useFocusSwitcherStore } from '../../stores/focusSwitcher.store';
 
@@ -20,8 +20,8 @@ export interface UseFileManagerSearchOptions {
   toolbarRef: ComputedRef<SearchToolbarRef | null>;
   /** 会话 Store */
   sessionStore: SessionStore;
-  /** 会话 ID */
-  sessionId: string;
+  /** 会话 ID（响应式，支持同一 FileManager 实例服务不同会话） */
+  sessionId: Ref<string> | ComputedRef<string>;
   /** 实例 ID */
   instanceId: string;
   /** 搜索查询字符串（来自排序过滤 composable） */
@@ -34,7 +34,7 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
   const { toolbarRef, sessionStore, sessionId, instanceId, searchQuery, focusSwitcherStore } =
     options;
 
-  const logPrefix = `[FileManager ${sessionId}-${instanceId}]`;
+  const logPrefix = computed(() => `[FileManager ${sessionId.value}-${instanceId}]`);
 
   const isSearchActive = ref(false);
 
@@ -59,8 +59,8 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
 
   /** 聚焦搜索输入框 */
   const focusSearchInput = (): boolean => {
-    if (sessionId !== sessionStore.activeSessionId) {
-      console.info(`${logPrefix} Ignoring focus request for inactive session.`);
+    if (sessionId.value !== sessionStore.activeSessionId) {
+      console.info(`${logPrefix.value} Ignoring focus request for inactive session.`);
       return false;
     }
 
@@ -69,19 +69,21 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
       nextTick(() => {
         if (toolbarRef.value?.searchInputRef) {
           toolbarRef.value.searchInputRef.focus();
-          console.info(`${logPrefix} Search activated and input focused.`);
+          console.info(`${logPrefix.value} Search activated and input focused.`);
         } else {
-          console.warn(`${logPrefix} Search activated but input ref not found after nextTick.`);
+          console.warn(
+            `${logPrefix.value} Search activated but input ref not found after nextTick.`
+          );
         }
       });
       return true;
     } else if (toolbarRef.value?.searchInputRef) {
       toolbarRef.value.searchInputRef.focus();
-      console.info(`${logPrefix} Search already active, input focused.`);
+      console.info(`${logPrefix.value} Search already active, input focused.`);
       return true;
     }
 
-    console.warn(`${logPrefix} Could not focus search input.`);
+    console.warn(`${logPrefix.value} Could not focus search input.`);
     return false;
   };
 
@@ -89,8 +91,8 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
   watch(
     () => focusSwitcherStore.activateFileManagerSearchTrigger,
     (newValue, oldValue) => {
-      if (newValue > (oldValue ?? 0) && sessionId === sessionStore.activeSessionId) {
-        console.info(`${logPrefix} Received search activation trigger for active session.`);
+      if (newValue > (oldValue ?? 0) && sessionId.value === sessionStore.activeSessionId) {
+        console.info(`${logPrefix.value} Received search activation trigger for active session.`);
         activateSearch();
       }
     },

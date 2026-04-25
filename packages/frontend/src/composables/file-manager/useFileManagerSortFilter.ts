@@ -80,7 +80,8 @@ export const useFileManagerSortFilter = (
       }
       if (valA < valB) return -1 * direction;
       if (valA > valB) return 1 * direction;
-      if (key !== 'filename') return a.filename.localeCompare(b.filename) * direction;
+      // 文件名 tie-break 始终使用升序，与排序方向无关，保证同值分组内顺序稳定
+      if (key !== 'filename') return a.filename.localeCompare(b.filename);
       return 0;
     });
     return list;
