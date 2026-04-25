@@ -176,7 +176,8 @@
     "errorJsonSyntax": "JSON 语法错误",
     "noThemeSelected": "未选择主题",
     "unknownTheme": "未知主题",
-    "noThemesFound": "未找到匹配的主题"
+    "noThemesFound": "未找到匹配的主题",
+    "passkeyLoginButton": "使用 Passkey 登录"
   },
   "login": {
     "title": "用户登录",
@@ -867,6 +868,14 @@
         "SSH_CONNECT_SUCCESS": "SSH 连接成功",
         "SSH_CONNECT_FAILURE": "SSH 连接失败",
         "SSH_SHELL_FAILURE": "SSH Shell 打开失败",
+        "SSH_DISCONNECT": "SSH 连接已断开",
+        "SSH_SESSION_SUSPENDED": "SSH 会话已挂起",
+        "FILE_UPLOAD": "文件上传",
+        "FILE_DOWNLOAD": "文件下载",
+        "COMMAND_BLOCKED": "命令已拦截",
+        "CONNECTIONS_TAG_ADDED": "连接标签已添加",
+        "CONNECTIONS_TAG_REMOVED": "连接标签已移除",
+        "CAPTCHA_SETTINGS_UPDATED": "验证码设置已更新",
         "DATABASE_MIGRATION": "数据库迁移",
         "ADMIN_SETUP_COMPLETE": "初始设置完成"
       }
@@ -1233,6 +1242,14 @@
       "SSH_CONNECT_SUCCESS": "SSH 连接成功",
       "SSH_CONNECT_FAILURE": "SSH 连接失败",
       "SSH_SHELL_FAILURE": "SSH Shell 打开失败",
+      "SSH_DISCONNECT": "SSH 连接已断开",
+      "SSH_SESSION_SUSPENDED": "SSH 会话已挂起",
+      "FILE_UPLOAD": "文件上传",
+      "FILE_DOWNLOAD": "文件下载",
+      "COMMAND_BLOCKED": "命令已拦截",
+      "CONNECTIONS_TAG_ADDED": "连接标签已添加",
+      "CONNECTIONS_TAG_REMOVED": "连接标签已移除",
+      "CAPTCHA_SETTINGS_UPDATED": "验证码设置已更新",
       "DATABASE_MIGRATION": "数据库迁移",
       "ADMIN_SETUP_COMPLETE": "初始设置完成",
       "REMOTE_DESKTOP_CONNECTING": "远程桌面连接中",

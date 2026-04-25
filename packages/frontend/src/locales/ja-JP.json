@@ -176,7 +176,8 @@
     "errorJsonSyntax": "JSON 構文エラー",
     "noThemeSelected": "テーマが選択されていません",
     "unknownTheme": "不明なテーマ",
-    "noThemesFound": "一致するテーマが見つかりません"
+    "noThemesFound": "一致するテーマが見つかりません",
+    "passkeyLoginButton": "Passkeyでログイン"
   },
   "login": {
     "title": "ユーザーログイン",
@@ -867,6 +868,14 @@
         "SSH_CONNECT_SUCCESS": "SSH 接続成功",
         "SSH_CONNECT_FAILURE": "SSH 接続失敗",
         "SSH_SHELL_FAILURE": "SSH Shell オープン失敗",
+        "SSH_DISCONNECT": "SSH 切断",
+        "SSH_SESSION_SUSPENDED": "SSH セッション一時停止",
+        "FILE_UPLOAD": "ファイルアップロード",
+        "FILE_DOWNLOAD": "ファイルダウンロード",
+        "COMMAND_BLOCKED": "コマンドブロック",
+        "CONNECTIONS_TAG_ADDED": "接続タグ追加",
+        "CONNECTIONS_TAG_REMOVED": "接続タグ削除",
+        "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA設定更新",
         "DATABASE_MIGRATION": "データベース移行",
         "ADMIN_SETUP_COMPLETE": "初期管理者設定完了"
       }
@@ -1232,6 +1241,14 @@
       "SSH_CONNECT_SUCCESS": "SSH 接続成功",
       "SSH_CONNECT_FAILURE": "SSH 接続失敗",
       "SSH_SHELL_FAILURE": "SSH Shell オープン失敗",
+      "SSH_DISCONNECT": "SSH 切断",
+      "SSH_SESSION_SUSPENDED": "SSH セッション一時停止",
+      "FILE_UPLOAD": "ファイルアップロード",
+      "FILE_DOWNLOAD": "ファイルダウンロード",
+      "COMMAND_BLOCKED": "コマンドブロック",
+      "CONNECTIONS_TAG_ADDED": "接続タグ追加",
+      "CONNECTIONS_TAG_REMOVED": "接続タグ削除",
+      "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA設定更新",
       "DATABASE_MIGRATION": "データベース移行",
       "ADMIN_SETUP_COMPLETE": "初期管理者設定完了",
       "REMOTE_DESKTOP_CONNECTING": "リモートデスクトップ接続中",
@@ -1597,14 +1614,7 @@
       "unmarkForSuspend": "取消挂起"
     },
     "closeTabTooltip": "关闭标签页",
-    "newTabTooltip": "新建连接标签页",
-    "security": "セキュリティ",
-    "ipControl": "IP制御",
-    "workspace": "ワークスペース",
-    "system": "システム",
-    "dataManagement": "データ管理",
-    "appearance": "外観",
-    "about": "バージョン情報"
+    "newTabTooltip": "新建连接标签页"
   },
   "sshKeys": {
     "selector": {
@@ -1850,11 +1860,5 @@
       "security": "查看安全事件统计",
       "connections": "连接使用情况"
     }
-  },
-  "exportConnections": {
-    "title": "接続データのエクスポート",
-    "decryptKeyInfo": "解凍パスワードは、data/.env ファイル内の ENCRYPTION_KEY です。このファイルを安全に保管してください。",
-    "buttonText": "エクスポートを開始"
-  },
-  "loading": "読み込み中..."
+  }
 }
