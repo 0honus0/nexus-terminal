@@ -16,23 +16,17 @@
 
 ## 🔀 Differences from Upstream
 
-> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal).  
-> Upstream baseline: `Heavrnl/nexus-terminal:main`  
-> Snapshot (2026-04-24): this fork is `ahead 369 / behind 0` vs upstream.  
+> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal).
+> Upstream baseline: `Heavrnl/nexus-terminal:main`
+> Snapshot (2026-04-25): this fork is `ahead 369+ / behind 0` vs upstream.
 > Compare URL: <https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
-
-### 📌 Recent Divergence (Batches 16-30)
-
-- Auth flow actionization for login 2FA (precheck/query/outcome execution pipeline)
-- Auth controller SQL extraction (replacing inline SQL with query/mutation builders)
-- Unified log-action templates for login, passkey, and 2FA (`build*LogAction` + `{ level, message }`)
-- Technical debt governance finalized through Batch 30 (debt report closed out)
 
 ### ✅ Verifiable Current State
 
 - `npm run -s debt:check` passes (code markers / E2E skip / console.log / any = 0)
-- `npm run -s quality:check` passes (quality and formatting gates)
-- `import/no-cycle` controlled waivers converged to 0 (see `doc/TECHNICAL_DEBT_REPORT.md`)
+- `npm run -s quality:check` passes (debt + 3-way typecheck + lint + format)
+- `import/no-cycle` controlled waivers converged to 0
+- 2026-04-24 full audit: 24/26 items fixed (92%), remaining L4/L6 pending planning
 
 ---
 
@@ -48,23 +42,37 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 | **Command History Virtual Scrolling** | Smooth rendering of thousands of history records without lag                                                                |
 | **Frontend Lazy Loading**             | RDP/VNC components loaded on-demand, guacamole dependency (~200KB) no longer blocks initial render                          |
 | **SQLite WAL Mode**                   | Enabled WAL mode for optimized concurrent read/write, reduced lock contention                                               |
+| **Audit Log Probabilistic Cleanup**   | Triggered every 100 writes instead of every write, eliminating unnecessary cleanup overhead                                 |
 
 ### 🛠️ New Features
 
 - **Terminal Appearance Live Preview**: Real-time preview window in appearance settings for font, theme, stroke, and shadow changes
 - **Force Keyboard-Interactive Auth**: New `keyboard-interactive` option for SSH connections, supporting TOTP/2FA server authentication
 - **NL2CMD Natural Language Commands**: Multi-model integration (OpenAI/Claude/Gemini), converting natural language directly to terminal commands
-- **Configurable Rate Limiting**: Flexible API rate limit control via environment variables
+- **Configurable Rate Limiting**: Flexible API rate limit control via environment variables (including dedicated AI route rate limiting)
 - **Unified Cache Manager**: Type-safe localStorage operations with version control and TTL expiration management
 - **Unified Error Extractor**: Eliminated duplicated error extraction patterns with globally unified error handling
+- **Health Check Endpoint**: `/api/v1/health` checks SQLite connectivity, WebSocket status, disk space, and memory usage
+- **Structured Logging**: JSON structured log output for log aggregation and analysis
+- **Prometheus Metrics Endpoint**: Built-in application metrics collection, compatible with Grafana and other monitoring platforms
+- **Data Import**: Settings page supports data import (alongside existing export), with database backup download
+- **Command Palette**: Built-in Command Palette component for quick action search and execution
 
 ### 🏗️ Architecture Refactoring
 
-- **Technical Debt Cleared**: 24/24 technical debt items fully resolved (100%), covering P0-P3 priorities
-- **Type-Safe Error Handling**: Eliminated `catch (error: any)` anti-pattern, 29 files migrated to `unknown` type
-- **SFTP Module Split**: Decomposed God Class into UploadManager, ArchiveManager, Utils with single responsibility
+- **Technical Debt Fully Governed**: Historical 24/24 items cleared + 2026-04-24 audit 24/26 items fixed (92%)
+- **Type Safety Governance**: All `@ts-ignore` removed, `any` and weak typing cleared within business source code
+- **SFTP Service Deep Decomposition**: `sftp.service.ts` reduced from 1884 to 243 lines (**-87%**), split into readdir/move/copy/path-operations/session executor modules
+- **Auth Controller Layered Refactoring**: `auth.controller.ts` reduced from 1592 to 1366 lines (**-14%**), split into login/passkey/2FA/password action-layer utils with SQL assembly unified
+- **Cycle Dependencies Zeroed**: `import/no-cycle` controlled waivers converged from 16 to 0, decoupling auth chain, DB init chain, and notification chain
+- **FileManager Component Decomposition**: From 2851 lines split into composable functions (sort/filter, path navigation, column resize, layout settings, clipboard, item actions, action modal, download)
 - **Repository Base Class**: Unified Repository-layer error handling and logging, benefiting 15+ files
 - **Typed Error Hierarchy**: Added `DatabaseError`, `ValidationError`, `ExternalServiceError` type-safe error subclasses
+- **ESLint Flat Config Migration**: Completed migration to Flat Config, legacy config paths fully removed, Vue SFCs fully linted
+- **CSP Security Headers**: Added Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
+- **Unified Error Response Format**: Global ErrorResponse type, eliminating `{ message }` vs `{ success, error }` inconsistency
+- **Security Config Environment Variables**: `security.config.ts` supports env var overrides, no longer hardcoded
+- **Docker Compose Production-Ready**: Added healthcheck, resource limits, restart policy, and log rotation
 
 ### 🧪 Test Coverage
 
@@ -72,12 +80,17 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
 - **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
 - **Unit Tests**: Backend 118 test files, Frontend 37 test files
+- **New Store Tests**: settings / fileEditor / audit store test coverage
+- **New Controller Tests**: 39 test cases for settings.controller
+- **Quality Gate**: `quality:check` covers debt + 3-way typecheck + lint + format
 
 ### 🔒 Dependency Security
 
+- **Audit Cleared (2026-04-13)**: `npm audit --omit=dev` and `npm audit` both at 0 (critical/high/moderate/low all cleared)
 - **Critical Vulnerability Fixes**: Proactively patched known high-severity vulnerabilities in axios, qs, tar (CVE/GHSA)
 - **Dependabot Automation**: Configured automatic dependency updates for continuous security monitoring
 - **Dependency Overrides**: Enforced secure versions via npm overrides
+- **XSS Protection**: AI panel migrated to DOMPurify, SFTP compress/decompress added path whitelist validation
 
 ---
 

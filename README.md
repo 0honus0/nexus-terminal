@@ -16,23 +16,17 @@
 
 ## 🔀 与上游的不同之处
 
-> 本项目 Fork 自 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)。  
-> 上游对比基线：`Heavrnl/nexus-terminal:main`  
-> 当前对比快照（2026-04-24）：本仓库相对上游 `ahead 369 / behind 0`。  
+> 本项目 Fork 自 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)。
+> 上游对比基线：`Heavrnl/nexus-terminal:main`
+> 当前对比快照（2026-04-25）：本仓库相对上游 `ahead 369+ / behind 0`。
 > 在线对比链接：<https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
-
-### 📌 最近批次差异（第16-30批）
-
-- 认证链路动作化重构（2FA 登录流程拆分为预检/查询/结果动作执行器）
-- 认证控制器 SQL 组装下沉（减少内联 SQL，统一 query/mutation builder）
-- 登录、Passkey、2FA 日志动作模板统一（`build*LogAction` + `{ level, message }`）
-- 技术债务治理收口到第三十批（债务文档已同步为完成态）
 
 ### ✅ 当前可验证工程状态
 
 - `npm run -s debt:check` 通过（代码标记 / E2E skip / console.log / any 均为 0）
-- `npm run -s quality:check` 通过（格式与质量门禁通过）
-- `import/no-cycle` 受控豁免已收敛至 0（见 `doc/TECHNICAL_DEBT_REPORT.md` 第六项收尾记录）
+- `npm run -s quality:check` 通过（debt + 三端 typecheck + lint + format）
+- `import/no-cycle` 受控豁免已收敛至 0
+- 2026-04-24 全面审计 26 项中已修复 24 项（92%），剩余 L4/L6 待规划
 
 ---
 
@@ -48,30 +42,47 @@
 | **命令历史虚拟滚动**     | 数千条历史记录流畅渲染，无卡顿                                                    |
 | **前端懒加载优化**       | RDP/VNC 组件按需加载，guacamole 依赖 (~200KB) 不再阻塞首屏                        |
 | **SQLite WAL 模式**      | 启用 WAL 模式优化数据库并发读写，减少锁竞争                                       |
+| **审计日志概率清理**     | 改为概率触发（每 100 次写入清理一次），避免每次写入都执行清理检查                 |
 
 ### 🛠️ 新增功能
 
 - **终端外观实时预览**：外观自定义设置中新增实时预览窗口，支持字体、主题、描边、阴影的即时预览
 - **强制键盘交互式认证**：SSH 连接新增 `keyboard-interactive` 选项，支持 TOTP/2FA 服务器认证
 - **NL2CMD 自然语言命令生成**：集成 OpenAI/Claude/Gemini 多模型，自然语言直接转换为终端命令
-- **可配置速率限制**：通过环境变量灵活控制 API 速率限制
+- **可配置速率限制**：通过环境变量灵活控制 API 速率限制（含 AI 路由独立限流）
 - **统一缓存管理器**：类型安全的 localStorage 操作，支持版本控制与 TTL 过期管理
 - **统一错误消息提取器**：消除重复的错误提取模式，全局统一错误处理
+- **健康检查端点**：`/api/v1/health` 检查 SQLite 连通性、WebSocket 状态、磁盘空间、内存使用
+- **结构化日志**：日志系统支持 JSON 结构化输出，便于日志聚合与分析
+- **Prometheus Metrics 端点**：内置应用指标采集，支持 Grafana 等监控平台对接
+- **数据导入功能**：设置页面支持数据导入（配合已有导出功能），支持数据库备份下载
+- **命令面板**：内置 Command Palette 组件，支持快捷操作检索与执行
 
 ### 🏗️ 架构重构
 
-- **技术债务治理（持续进行）**：历史批次已完成 24/24 项清理；截至 2026-04-14 当前口径为（TODO 0 条、E2E `test.skip` 0 条、运行时漏洞 0 条、全量审计漏洞 0 条、直连弃用依赖 0 项）
-- **类型安全持续治理**：关键路径 `@ts-ignore` 已专项清理，`any` 与弱类型用法仍在分批收敛
-- **SFTP 模块拆分**：将 God Class 拆分为 UploadManager、ArchiveManager、Utils 等职责单一的子模块
+- **技术债务全面治理**：历史 24/24 项清理完成 + 2026-04-24 审计 26 项修复 24 项（92%）
+- **类型安全治理**：`@ts-ignore` 全部清除，`any` 与弱类型用法已清零（业务源码范围内）
+- **SFTP 服务深度拆分**：`sftp.service.ts` 从 1884 行缩减至 243 行（**-87%**），拆分为 readdir/move/copy/path-operations/session 等独立执行器模块
+- **认证控制器分层重构**：`auth.controller.ts` 从 1592 行缩减至 1366 行（**-14%**），拆分为 login/passkey/2FA/password 等动作层 utils，SQL 组装统一下沉
+- **循环依赖清零**：`import/no-cycle` 受控豁免从 16 处收敛至 0，认证链路、数据库初始化链路、通知链路等全部解耦
+- **FileManager 组件拆分**：从 2851 行拆分为 composable 组合式函数（排序/过滤、路径导航、列宽调整、布局设置、剪贴板、文件项操作、操作模态框、下载）
 - **Repository 基类抽象**：统一 Repository 层错误处理与日志记录，15+ 文件受益
 - **类型化错误体系**：新增 `DatabaseError`、`ValidationError`、`ExternalServiceError` 等类型安全的错误子类
+- **ESLint Flat Config 迁移**：完成 Flat Config 迁移，旧配置链路全部下线，Vue SFC 全量纳入 lint
+- **CSP 安全头**：添加 Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
+- **统一错误响应格式**：全局 ErrorResponse 类型统一，消除 `{ message }` vs `{ success, error }` 混用
+- **安全配置环境变量化**：`security.config.ts` 支持环境变量覆盖，不再硬编码
+- **Docker Compose 生产就绪**：添加 healthcheck、资源限制、restart policy、日志轮转
 
 ### 🧪 测试覆盖
 
-- **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，持续推进 E2E 跳过用例回补
+- **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，100% 通过率
 - **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
 - **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
 - **单元测试**：Backend 118 测试文件，Frontend 37 测试文件
+- **新增 Store 测试**：settings / fileEditor / audit store 测试覆盖
+- **新增 Controller 测试**：settings.controller 39 个测试用例
+- **质量门禁**：`quality:check` 覆盖 debt + 三端 typecheck + lint + format
 
 ### 🔒 依赖安全
 
@@ -79,6 +90,7 @@
 - **高危漏洞修复**：已完成 axios、qs、tar 等依赖的已知高危漏洞修复（CVE/GHSA）
 - **Dependabot 自动化**：配置自动依赖更新，持续监控安全风险
 - **依赖 overrides**：通过 npm overrides 强制使用安全版本
+- **XSS 防护**：AI 面板改用 DOMPurify 清洗，SFTP 压缩/解压增加路径白名单校验
 
 ---
 
