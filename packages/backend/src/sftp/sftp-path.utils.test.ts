@@ -106,6 +106,16 @@ describe('validateSafePath', () => {
     });
   });
 
+  describe('应拒绝以 - 开头的路径（防止参数注入）', () => {
+    it('应拒绝以 - 开头的文件名', () => {
+      expect(validateSafePath('-rf')).toBe(false);
+    });
+
+    it('应拒绝路径中包含以 - 开头的段', () => {
+      expect(validateSafePath('/home/user/--dangerous')).toBe(false);
+    });
+  });
+
   describe('应拒绝边界情况', () => {
     it('应拒绝空字符串', () => {
       expect(validateSafePath('')).toBe(false);

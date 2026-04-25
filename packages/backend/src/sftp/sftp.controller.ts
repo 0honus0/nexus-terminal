@@ -455,20 +455,20 @@ export const handleCompressRequest = async (
   const quotedTargetDir = `"${targetDirectory.replace(/"/g, '\\"')}"`;
   const quotedDestName = `"${destinationArchiveName.replace(/"/g, '\\"')}"`;
 
-  const cdCommand = `cd ${quotedTargetDir}`;
+  const cdCommand = `cd -- ${quotedTargetDir}`;
 
   switch (format) {
     case 'zip':
-      // zip -r [归档名] [源文件/目录列表]
-      command = `${cdCommand} && zip -qr ${quotedDestName} ${quotedSources}`; // -q for quiet to reduce stderr noise
+      // zip -r [归档名] -- [源文件/目录列表]（-- 终止选项解析，防止 - 开头文件名被当作参数）
+      command = `${cdCommand} && zip -qr ${quotedDestName} -- ${quotedSources}`;
       break;
     case 'targz':
-      // tar -czvf [归档名] [源文件/目录列表]
-      command = `${cdCommand} && tar -czf ${quotedDestName} ${quotedSources}`; // removed -v for less noise
+      // tar -czf [归档名] -- [源文件/目录列表]
+      command = `${cdCommand} && tar -czf ${quotedDestName} -- ${quotedSources}`;
       break;
     case 'tarbz2':
-      // tar -cjvf [归档名] [源文件/目录列表]
-      command = `${cdCommand} && tar -cjf ${quotedDestName} ${quotedSources}`; // removed -v for less noise
+      // tar -cjf [归档名] -- [源文件/目录列表]
+      command = `${cdCommand} && tar -cjf ${quotedDestName} -- ${quotedSources}`;
       break;
     default:
       sendCompressError(ws, `不支持的压缩格式: ${format}`, requestId);
@@ -600,19 +600,19 @@ export const handleDecompressRequest = async (
   const quotedExtractDir = `"${extractDir.replace(/"/g, '\\"')}"`;
   const quotedArchiveBasename = `"${archiveBasename.replace(/"/g, '\\"')}"`;
 
-  const cdCommand = `cd ${quotedExtractDir}`;
+  const cdCommand = `cd -- ${quotedExtractDir}`;
 
   const lowerArchivePath = archivePath.toLowerCase();
 
   if (lowerArchivePath.endsWith('.zip')) {
-    // unzip -o [压缩包名]
-    command = `${cdCommand} && unzip -oq ${quotedArchiveBasename}`; // -o: overwrite, -q: quiet
+    // unzip -o -- [压缩包名]（-- 终止选项解析）
+    command = `${cdCommand} && unzip -oq -- ${quotedArchiveBasename}`;
   } else if (lowerArchivePath.endsWith('.tar.gz') || lowerArchivePath.endsWith('.tgz')) {
-    // tar -xzvf [压缩包名]
-    command = `${cdCommand} && tar -xzf ${quotedArchiveBasename}`; // removed -v
+    // tar -xzf -- [压缩包名]
+    command = `${cdCommand} && tar -xzf -- ${quotedArchiveBasename}`;
   } else if (lowerArchivePath.endsWith('.tar.bz2') || lowerArchivePath.endsWith('.tbz2')) {
-    // tar -xjvf [压缩包名]
-    command = `${cdCommand} && tar -xjf ${quotedArchiveBasename}`; // removed -v
+    // tar -xjf -- [压缩包名]
+    command = `${cdCommand} && tar -xjf -- ${quotedArchiveBasename}`;
   } else {
     sendDecompressError(ws, `不支持的压缩文件格式: ${archivePath}`, requestId);
     return;

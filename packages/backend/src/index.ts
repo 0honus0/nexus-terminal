@@ -515,8 +515,10 @@ const startServer = () => {
   app.use('/api/v1/ai', apiLimiter, aiRoutes);
   app.use('/api/v1/dashboard', apiLimiter, dashboardRoutes);
 
-  // Prometheus 指标端点（无需认证和限流，供 Prometheus 服务器抓取）
-  app.use('/api/v1/metrics', metricsRoutes);
+  // Prometheus 指标端点（受 ENABLE_METRICS 环境变量控制，默认关闭，避免公网暴露）
+  if (process.env.ENABLE_METRICS === 'true') {
+    app.use('/api/v1/metrics', metricsRoutes);
+  }
 
   // 健康检查接口（供 Docker healthcheck 与负载均衡器使用）
   app.get('/api/v1/health', async (_req: Request, res: Response) => {

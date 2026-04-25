@@ -62,7 +62,11 @@ describe('IP Whitelist Middleware', () => {
 
         expect(mockNext).not.toHaveBeenCalled();
         expect(mockRes.status).toHaveBeenCalledWith(403);
-        expect(mockRes.json).toHaveBeenCalledWith({ message: '禁止访问：无法识别来源 IP。' });
+        expect(mockRes.json).toHaveBeenCalledWith({
+          success: false,
+          error: '禁止访问：无法识别来源 IP。',
+          code: 'IP_UNRECOGNIZABLE',
+        });
       });
 
       it('应使用 socket.remoteAddress 作为备用 IP 来源', async () => {
@@ -171,7 +175,9 @@ describe('IP Whitelist Middleware', () => {
         expect(mockNext).not.toHaveBeenCalled();
         expect(mockRes.status).toHaveBeenCalledWith(403);
         expect(mockRes.json).toHaveBeenCalledWith({
-          message: '禁止访问：您的 IP 地址不在允许列表中。',
+          success: false,
+          error: '禁止访问：您的 IP 地址不在允许列表中。',
+          code: 'IP_NOT_ALLOWED',
         });
       });
 
@@ -295,7 +301,11 @@ describe('IP Whitelist Middleware', () => {
 
         expect(mockNext).not.toHaveBeenCalled();
         expect(mockRes.status).toHaveBeenCalledWith(403);
-        expect(mockRes.json).toHaveBeenCalledWith({ message: '禁止访问：无效的来源 IP 格式。' });
+        expect(mockRes.json).toHaveBeenCalledWith({
+          success: false,
+          error: '禁止访问：无效的来源 IP 格式。',
+          code: 'INVALID_IP_FORMAT',
+        });
       });
     });
 
@@ -309,7 +319,9 @@ describe('IP Whitelist Middleware', () => {
         expect(mockNext).not.toHaveBeenCalled();
         expect(mockRes.status).toHaveBeenCalledWith(500);
         expect(mockRes.json).toHaveBeenCalledWith({
-          message: '服务器内部错误 (IP 校验失败)。',
+          success: false,
+          error: '服务器内部错误 (IP 校验失败)。',
+          code: 'INTERNAL_ERROR',
         });
       });
     });

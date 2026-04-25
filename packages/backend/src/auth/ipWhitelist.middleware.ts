@@ -27,7 +27,9 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
 
     if (!requestIpString) {
       logger.warn('无法获取请求 IP 地址，已拒绝访问。');
-      return res.status(403).json({ message: '禁止访问：无法识别来源 IP。' });
+      return res
+        .status(403)
+        .json({ success: false, error: '禁止访问：无法识别来源 IP。', code: 'IP_UNRECOGNIZABLE' });
     }
 
     // 检查是否是本地开发环境的 IP
@@ -68,12 +70,20 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
       requestIp = ipaddr.parse(requestIpString);
     } catch {
       logger.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
-      return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
+      return res.status(403).json({
+        success: false,
+        error: '禁止访问：无效的来源 IP 格式。',
+        code: 'INVALID_IP_FORMAT',
+      });
     }
 
     if (!requestIp) {
       logger.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
-      return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
+      return res.status(403).json({
+        success: false,
+        error: '禁止访问：无效的来源 IP 格式。',
+        code: 'INVALID_IP_FORMAT',
+      });
     }
 
     // 检查 IP 是否匹配白名单中的任何条目
@@ -115,10 +125,16 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
     }
     // IP 不在白名单内，拒绝访问
     logger.warn(`已拒绝来自 IP ${requestIpString} 的访问 (不在白名单内)。`);
-    return res.status(403).json({ message: '禁止访问：您的 IP 地址不在允许列表中。' });
+    return res.status(403).json({
+      success: false,
+      error: '禁止访问：您的 IP 地址不在允许列表中。',
+      code: 'IP_NOT_ALLOWED',
+    });
   } catch (error: unknown) {
     logger.error(error as Error, 'IP 白名单中间件执行出错');
     // 中间件出错时，为安全起见，默认拒绝访问
-    return res.status(500).json({ message: '服务器内部错误 (IP 校验失败)。' });
+    return res
+      .status(500)
+      .json({ success: false, error: '服务器内部错误 (IP 校验失败)。', code: 'INTERNAL_ERROR' });
   }
 };
