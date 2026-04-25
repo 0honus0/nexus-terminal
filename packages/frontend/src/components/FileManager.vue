@@ -369,6 +369,7 @@ const { triggerDownload, triggerDownloadDirectory } = useFileManagerDownload({
   dbConnectionId: props.dbConnectionId,
   sessionId: props.sessionId,
   instanceId: props.instanceId,
+  showError: uiNotificationsStore.showError,
 });
 
 // +++ 压缩/解压处理函数 +++

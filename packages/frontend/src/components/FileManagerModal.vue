@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, type ComputedRef } from 'vue';
+import { ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import FileManager from './FileManager.vue';
 import type { WebSocketDependencies } from '../composables/useSftpActions';
@@ -111,9 +111,17 @@ const closeFileManagerModal = () => {
   console.info('[FileManagerModal] FileManager modal hidden (kept alive).');
 };
 
+/** 清理指定会话的文件管理器实例（会话关闭时调用，避免内存泄漏） */
+const removeSession = (sessionId: string) => {
+  fileManagerPropsMap.value.delete(sessionId);
+  fileManagerPropsMap.value = new Map(fileManagerPropsMap.value);
+  console.info(`[FileManagerModal] Cleaned up FileManager for session ${sessionId}.`);
+};
+
 defineExpose({
   open,
   handleFileManagerOpenRequest,
+  removeSession,
 });
 </script>
 

@@ -134,7 +134,7 @@ const {
     const untaggedGroup = filteredAndGroupedConnections.value.find((g) => g.tagId === null);
     return untaggedGroup ? untaggedGroup.connections.map((c) => c.id) : [];
   },
-  expandedGroups: expandedGroups.value,
+  expandedGroups: () => expandedGroups.value,
   notify: uiNotificationsStore.addNotification,
   t,
 });

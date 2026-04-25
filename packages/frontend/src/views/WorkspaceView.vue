@@ -191,8 +191,10 @@ const _onConnectionRequestEdit = (payload: { connectionInfo: ConnectionInfo }) =
 const _onSearchStart = (payload: { term: string }) => handleSearch(payload.term);
 const _onSessionActivate = (payload: { sessionId: string }) =>
   sessionStore.activateSession(payload.sessionId);
-const _onSessionClose = (payload: { sessionId: string }) =>
+const _onSessionClose = (payload: { sessionId: string }) => {
+  fileManagerModalRef.value?.removeSession(payload.sessionId);
   sessionStore.closeSession(payload.sessionId);
+};
 const _onSessionCloseOthers = (payload: { targetSessionId: string }) =>
   handleCloseOtherSessions(payload.targetSessionId);
 const _onSessionCloseToRight = (payload: { targetSessionId: string }) =>

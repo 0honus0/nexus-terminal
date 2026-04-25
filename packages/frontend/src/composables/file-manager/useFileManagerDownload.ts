@@ -18,10 +18,12 @@ export interface UseFileManagerDownloadOptions {
   sessionId: string;
   /** 实例 ID */
   instanceId: string;
+  /** 显示错误通知的函数 */
+  showError: (message: string) => void;
 }
 
 export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
-  const { currentSftpManager, wsDeps, dbConnectionId, sessionId, instanceId } = options;
+  const { currentSftpManager, wsDeps, dbConnectionId, sessionId, instanceId, showError } = options;
 
   const logPrefix = `[FileManager ${sessionId}-${instanceId}]`;
 
@@ -117,22 +119,24 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
           console.error(
             `${logPrefix} Directory download failed: ${response.status} ${response.statusText}`
           );
-          let _errorMsg = `Server responded with status ${response.status}`;
+          let errorMsg = `Server responded with status ${response.status}`;
           try {
             const errorData = await response.json();
-            _errorMsg = errorData.message || _errorMsg;
+            errorMsg = errorData.message || errorMsg;
           } catch {
             try {
               const textError = await response.text();
-              if (textError) _errorMsg = textError;
+              if (textError) errorMsg = textError;
             } catch {
               /* ignore */
             }
           }
+          showError(errorMsg);
         }
       })
       .catch((error) => {
         console.error(`${logPrefix} Network error during directory download:`, error);
+        showError(error instanceof Error ? error.message : String(error));
       });
   };
 

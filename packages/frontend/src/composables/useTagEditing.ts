@@ -19,8 +19,8 @@ export interface TagEditingDependencies {
   addTagToConnections: (connectionIds: number[], tagId: number) => Promise<boolean>;
   /** 获取"未标记"分组的连接 ID 列表 */
   getUntaggedConnectionIds: () => number[];
-  /** 展开状态（响应式），用于在重命名后更新分组键名 */
-  expandedGroups: Record<string, boolean>;
+  /** 获取展开状态（响应式），用于在重命名后更新分组键名 */
+  expandedGroups: () => Record<string, boolean>;
   /** 通知函数 */
   notify: (opts: { message: string; type: 'success' | 'error' | 'info' | 'warning' }) => void;
   /** 国际化翻译函数 */
@@ -116,10 +116,11 @@ export function useTagEditing(deps: TagEditingDependencies) {
 
           // 更新展开状态：将"未标记"分组的展开状态迁移到新标签名下
           const untaggedGroupName = deps.t('workspaceConnectionList.untagged');
-          if (deps.expandedGroups[untaggedGroupName] !== undefined) {
-            const currentState = deps.expandedGroups[untaggedGroupName];
-            delete deps.expandedGroups[untaggedGroupName]; // eslint-disable-line no-param-reassign
-            deps.expandedGroups[newName] = currentState; // eslint-disable-line no-param-reassign
+          const groups1 = deps.expandedGroups();
+          if (groups1[untaggedGroupName] !== undefined) {
+            const currentState = groups1[untaggedGroupName];
+            delete groups1[untaggedGroupName];
+            groups1[newName] = currentState;
           }
         }
       } else if (typeof currentEditingId === 'number') {
@@ -133,10 +134,11 @@ export function useTagEditing(deps: TagEditingDependencies) {
           if (updateResult) {
             deps.notify({ message: deps.t('tags.updateSuccess'), type: 'success' });
             // 更新展开状态：将旧名称的展开状态迁移到新名称下
-            if (deps.expandedGroups[originalTag.name] !== undefined) {
-              const currentState = deps.expandedGroups[originalTag.name];
-              delete deps.expandedGroups[originalTag.name]; // eslint-disable-line no-param-reassign
-              deps.expandedGroups[newName] = currentState; // eslint-disable-line no-param-reassign
+            const groups2 = deps.expandedGroups();
+            if (groups2[originalTag.name] !== undefined) {
+              const currentState = groups2[originalTag.name];
+              delete groups2[originalTag.name];
+              groups2[newName] = currentState;
             }
           }
         }
