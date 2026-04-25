@@ -4,15 +4,14 @@ import {
   computed,
   onMounted,
   onBeforeUnmount,
-  nextTick,
   watch,
   watchEffect,
   type PropType,
+  type Ref,
   readonly,
   shallowRef,
 } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import {
   createSftpActionsManager,
@@ -28,10 +27,6 @@ import {
   type ClipboardState,
   type CompressFormat,
 } from '../composables/file-manager/useFileManagerContextMenu';
-import {
-  SILENT_PWD_PREFIX,
-  parsePathFromSilentOutput,
-} from '../composables/file-manager/fileManagerTerminalPathUtils';
 import { useFileManagerSelection } from '../composables/file-manager/useFileManagerSelection';
 import { useFileManagerDragAndDrop } from '../composables/file-manager/useFileManagerDragAndDrop';
 import { useFileManagerKeyboardNavigation } from '../composables/file-manager/useFileManagerKeyboardNavigation';
@@ -39,6 +34,12 @@ import { useFileManagerSortFilter } from '../composables/file-manager/useFileMan
 import { useFileManagerColumnResize } from '../composables/file-manager/useFileManagerColumnResize';
 import { useFileManagerLayoutSettings } from '../composables/file-manager/useFileManagerLayoutSettings';
 import { useFileManagerPathNavigation } from '../composables/file-manager/useFileManagerPathNavigation';
+import { useFileManagerSearch } from '../composables/file-manager/useFileManagerSearch';
+import { useFileManagerTerminalSync } from '../composables/file-manager/useFileManagerTerminalSync';
+import { useFileManagerItemActions } from '../composables/file-manager/useFileManagerItemActions';
+import { useFileManagerActionModal } from '../composables/file-manager/useFileManagerActionModal';
+import { useFileManagerClipboard } from '../composables/file-manager/useFileManagerClipboard';
+import { useFileManagerDownload } from '../composables/file-manager/useFileManagerDownload';
 import FileUploadPopup from './FileUploadPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
@@ -56,11 +57,6 @@ type SftpRealpathPayload = {
   targetType?: 'file' | 'directory' | 'unknown';
   error?: string;
 };
-type SilentExecPayload = {
-  output?: string;
-  error?: string;
-};
-
 // --- Props ---
 const props = defineProps({
   sessionId: {
@@ -90,7 +86,6 @@ const props = defineProps({
 
 // --- 核心 Composables ---
 const { t } = useI18n();
-const route = useRoute(); // Keep for download URL generation for now
 const sessionStore = useSessionStore(); // 实例化 Session Store
 
 // --- 获取并存储 SFTP 管理器实例 ---
@@ -152,10 +147,19 @@ const { sortKey, sortDirection, searchQuery, filteredFileList, handleSort } =
     fileList: computed(() => currentSftpManager.value?.fileList.value ?? []),
   });
 
-// --- UI 状态 Refs (Remain mostly the same) ---
+// --- 搜索 Composable（依赖 searchQuery、focusSwitcherStore）---
+const { isSearchActive, activateSearch, deactivateSearch, cancelSearch, focusSearchInput } =
+  useFileManagerSearch({
+    toolbarRef: computed(() => toolbarRef.value),
+    sessionStore,
+    sessionId: props.sessionId,
+    instanceId: props.instanceId,
+    searchQuery,
+    focusSwitcherStore,
+  });
+
+// --- UI 状态 Refs ---
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const isMultiSelectMode = ref(false); // 多选模式状态 (主要用于移动端)
-const isSearchActive = ref(false); // 控制搜索框激活状态
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const toolbarRef = ref<InstanceType<typeof FileManagerToolbar> | null>(null); // 工具栏子组件引用
 const fileListRef = ref<InstanceType<typeof FileManagerFileList> | null>(null); // 文件列表子组件引用
@@ -187,27 +191,21 @@ const {
 const { selectedIndex: pathSelectedIndex, filteredHistory: filteredPathHistory } =
   storeToRefs(pathHistoryStore);
 
-// +++ 操作模态框状态 +++
-const isActionModalVisible = ref(false);
-const currentActionType = ref<'delete' | 'rename' | 'chmod' | 'newFile' | 'newFolder' | null>(null);
-const actionItem = ref<FileListItem | null>(null); // For single item operations
-const actionItems = ref<FileListItem[]>([]); // For multi-item operations (e.g., delete)
-const actionInitialValue = ref(''); // For pre-filling input in modal
-
-// +++ 剪贴板状态 +++
-const clipboardState = ref<ClipboardState>({ hasContent: false });
-const clipboardSourcePaths = ref<string[]>([]); // 存储源完整路径
-const clipboardSourceBaseDir = ref<string>(''); // 存储源目录
-
-const isSyncingPathFromTerminal = ref(false);
-let unregisterSilentExecResult: (() => void) | null = null;
-let unregisterSilentExecError: (() => void) | null = null;
-let unregisterSilentExecDisconnect: (() => void) | null = null;
-let unregisterSilentExecClosed: (() => void) | null = null;
-let unregisterSilentExecSocketError: (() => void) | null = null;
-let silentExecTimeoutId: ReturnType<typeof setTimeout> | null = null;
-// --- 键盘导航状态 (移至 useFileManagerKeyboardNavigation) ---
-// const selectedIndex = ref<number>(-1);
+// --- 终端同步 Composable ---
+const {
+  isSyncingPathFromTerminal,
+  sendCdCommandToTerminal,
+  syncCurrentPathToTerminalDirectory,
+  cleanupSilentExecRequest,
+} = useFileManagerTerminalSync({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  wsDeps: props.wsDeps,
+  sessionId: props.sessionId,
+  instanceId: props.instanceId,
+  t,
+  uiNotificationsStore,
+  sessionStore,
+});
 
 // --- 布局设置 Composable（列宽 + 行大小乘数）---
 const { rowSizeMultiplier, colWidths, saveLayoutSettings, handleWheel } =
@@ -248,212 +246,40 @@ watch(
   { immediate: true }
 );
 
-// --- 列表项点击与选择逻辑 (使用 Composable) ---
-// 定义单击时的动作回调 (移到 Selection 实例化之前)
-const handleItemAction = (item: FileListItem) => {
-  if (!currentSftpManager.value) return;
-
-  const itemPath = currentSftpManager.value.joinPath(
-    currentSftpManager.value.currentPath.value,
-    item.filename
-  );
-
-  if (item.attrs.isSymbolicLink) {
-    if (currentSftpManager.value.isLoading.value) {
-      return;
-    }
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Symbolic link clicked: ${itemPath}. Attempting to resolve with sftp:realpath...`
-    );
-
-    const { sendMessage: wsSend, onMessage: wsOnMessage } = props.wsDeps;
-    const requestId = generateRequestId();
-
-    const handleResolvedPath = (
-      realPath: string,
-      targetType: 'file' | 'directory' | 'unknown',
-      originalLinkItem: FileListItem
-    ) => {
-      if (!currentSftpManager.value) return;
-
-      if (targetType === 'directory') {
-        currentSftpManager.value.loadDirectory(realPath);
-      } else if (targetType === 'file') {
-        const targetFilename =
-          realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename; // Get filename from realPath
-        const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
-
-        // Preserve mobile multi-select behavior for the original link item
-        if (props.isMobile && isMultiSelectMode.value) {
-          if (selectedItems.value.has(originalLinkItem.filename)) {
-            selectedItems.value.delete(originalLinkItem.filename);
-          } else {
-            selectedItems.value.add(originalLinkItem.filename);
-          }
-          return;
-        }
-
-        if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, props.sessionId);
-        }
-        if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, props.sessionId, props.instanceId);
-        } else {
-          sessionStore.openFileInSession(props.sessionId, fileInfo);
-        }
-      } else {
-        // targetType is 'unknown' or not provided as expected
-        console.warn(
-          `[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}'). Defaulting to open as file.`
-        );
-        // Fallback: attempt to open as file, or display an error
-        const targetFilename =
-          realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename;
-        const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
-        if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, props.sessionId);
-        }
-        if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, props.sessionId, props.instanceId);
-        } else {
-          sessionStore.openFileInSession(props.sessionId, fileInfo);
-        }
-      }
-    };
-
-    let unregisterSuccess: (() => void) | undefined;
-    let unregisterError: (() => void) | undefined;
-    let timeoutId: NodeJS.Timeout | number | undefined;
-
-    const cleanupListeners = () => {
-      unregisterSuccess?.();
-      unregisterError?.();
-      if (timeoutId) clearTimeout(timeoutId as any);
-      timeoutId = undefined;
-    };
-
-    unregisterSuccess = wsOnMessage(
-      'sftp:realpath:success',
-      (payload: MessagePayload, message: WebSocketMessage) => {
-        if (!payload || typeof payload === 'string') return;
-        const p = payload as SftpRealpathPayload;
-        if (message.requestId === requestId && p.requestedPath === itemPath) {
-          cleanupListeners();
-          if (!currentSftpManager.value) return;
-          // 从 payload 中获取 absolutePath 和 targetType
-          const absolutePath = p.absolutePath;
-          const targetType = p.targetType as 'file' | 'directory' | 'unknown'; // 类型断言
-
-          if (!absolutePath) {
-            console.error(
-              `[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing absolutePath. Payload:`,
-              p
-            );
-            return;
-          }
-          if (!targetType) {
-            console.warn(
-              `[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing targetType. Defaulting to 'file'. Payload:`,
-              p
-            );
-          }
-
-          handleResolvedPath(absolutePath, targetType || 'unknown', item);
-        }
-      }
-    );
-
-    unregisterError = wsOnMessage(
-      'sftp:realpath:error',
-      (payload: MessagePayload, message: WebSocketMessage) => {
-        if (!payload || typeof payload === 'string') return;
-        const p = payload as SftpRealpathPayload;
-        if (message.requestId === requestId && p?.requestedPath === itemPath) {
-          cleanupListeners();
-          // payload.error 可能包含来自后端的具体错误信息
-          // payload.absolutePath 可能在 stat 失败时仍然存在
-          const serverErrorMsg = p.error || 'Unknown error resolving symlink target type';
-          const resolvedPathInfo = p.absolutePath ? ` (Resolved path: ${p.absolutePath})` : '';
-
-          console.error(
-            `[FileManager ${props.sessionId}-${props.instanceId}] Failed to get realpath or target type for symlink '${itemPath}': ${serverErrorMsg}${resolvedPathInfo}`
-          );
-        }
-      }
-    );
-
-    timeoutId = setTimeout(() => {
-      cleanupListeners();
-      console.error(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Timeout getting realpath for symlink '${itemPath}' (ID: ${requestId}).`
-      );
-    }, 10000); // 10 秒超时
-    wsSend({ type: 'sftp:realpath', requestId: requestId, payload: { path: itemPath } });
-    return; // Handled by async callbacks
-  }
-
-  if (item.attrs.isDirectory) {
-    if (currentSftpManager.value.isLoading.value) {
-      return;
-    }
-    const newPath =
-      item.filename === '..'
-        ? currentSftpManager.value.currentPath.value.substring(
-            0,
-            currentSftpManager.value.currentPath.value.lastIndexOf('/')
-          ) || '/'
-        : currentSftpManager.value.joinPath(
-            currentSftpManager.value.currentPath.value,
-            item.filename
-          );
-    currentSftpManager.value.loadDirectory(newPath);
-  } else if (item.attrs.isFile) {
-    // This block now only handles regular files, as symlinks are handled above.
-    if (props.isMobile && isMultiSelectMode.value) {
-      if (selectedItems.value.has(item.filename)) {
-        selectedItems.value.delete(item.filename);
-      } else {
-        selectedItems.value.add(item.filename);
-      }
-      return;
-    }
-    const filePath = itemPath; // itemPath is already calculated
-    const fileInfo: FileInfo = { name: item.filename, fullPath: filePath };
-
-    if (settingsStore.showPopupFileEditorBoolean) {
-      fileEditorStore.triggerPopup(filePath, props.sessionId);
-    }
-
-    if (shareFileEditorTabsBoolean.value) {
-      fileEditorStore.openFile(filePath, props.sessionId, props.instanceId);
-    } else {
-      sessionStore.openFileInSession(props.sessionId, fileInfo);
-    }
-  }
-};
-
-// 切换多选模式 (主要用于移动端)
-const toggleMultiSelectMode = () => {
-  isMultiSelectMode.value = !isMultiSelectMode.value;
-  if (!isMultiSelectMode.value) {
-    clearSelection(); // 退出多选模式时清空选择
-  }
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Multi-select mode: ${isMultiSelectMode.value ? 'enabled' : 'disabled'}`
-  );
-};
-
-// 实例化选择 Composable (需要 filteredFileList 和 handleItemAction)
+// --- 文件项操作 Composable（在 Selection 之前实例化，因为 Selection 回调依赖 handleItemAction）---
+// 延迟引用 selectedItems/clearSelection，避免与 Selection 的循环依赖
+let _selectionSelectedItems: Ref<Set<string>> | null = null;
+let _selectionClearSelection: (() => void) | null = null;
 const {
-  selectedItems, // 使用 Composable 返回的 selectedItems
-  lastClickedIndex, // 获取 lastClickedIndex 以传递给 ContextMenu
-  handleItemClick: originalHandleItemClick, // 使用 Composable 返回的 handleItemClick
+  isMultiSelectMode,
+  handleItemAction,
+  toggleMultiSelectMode,
+  handleItemClick,
+  handleItemDoubleClick,
+  setItemActionSelectionDeps,
+} = useFileManagerItemActions({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  wsDeps: props.wsDeps,
+  sessionId: props.sessionId,
+  instanceId: props.instanceId,
+  isMobile: computed(() => props.isMobile),
+  showPopupFileEditorBoolean,
+  shareFileEditorTabsBoolean,
+  fileEditorStore,
+  sessionStore,
+  getSelectedItems: () => _selectionSelectedItems!,
+  getClearSelection: () => _selectionClearSelection!,
+});
+
+// --- 选择 Composable（依赖 handleItemAction）---
+const {
+  selectedItems,
+  lastClickedIndex,
+  handleItemClick: originalHandleItemClick,
   handleItemDoubleClick: originalHandleItemDoubleClick,
-  clearSelection, // 获取清空选择的方法
+  clearSelection,
 } = useFileManagerSelection({
-  // 传递当前显示的列表 (已排序和过滤)
-  displayedFileList: filteredFileList, // 现在 filteredFileList 已定义
-  // 目录保持单击进入；移动端保持原有单击打开/进入行为
+  displayedFileList: filteredFileList,
   onItemSingleClickAction: (item) => {
     if (
       props.isMobile ||
@@ -464,7 +290,6 @@ const {
       handleItemAction(item);
     }
   },
-  // 桌面端非目录项改为双击打开（文件/符号链接等）
   onItemDoubleClickAction: (item) => {
     if (
       !props.isMobile &&
@@ -477,28 +302,13 @@ const {
   },
 });
 
-// 自定义 handleItemClick 函数以支持移动端多选模式
-const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect = false) => {
-  if (item.filename === '..') {
-    originalHandleItemClick(event, item);
-    return;
-  }
-
-  if (props.isMobile && (isMultiSelectMode.value || forceMultiSelect)) {
-    if (selectedItems.value.has(item.filename)) {
-      selectedItems.value.delete(item.filename);
-    } else {
-      selectedItems.value.add(item.filename);
-    }
-    return;
-  }
-  originalHandleItemClick(event, item);
-};
-
-const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
-  if (props.isMobile) return;
-  originalHandleItemDoubleClick(event, item);
-};
+// 注入选择 composable 的原始回调到 itemActions composable
+_selectionSelectedItems = selectedItems;
+_selectionClearSelection = clearSelection;
+setItemActionSelectionDeps({
+  originalHandleItemClick,
+  originalHandleItemDoubleClick,
+});
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
 const computedSelectedFullItems = computed((): FileListItem[] => {
@@ -508,372 +318,58 @@ const computedSelectedFullItems = computed((): FileListItem[] => {
   return filteredFileList.value.filter((item) => selectedItems.value.has(item.filename));
 });
 
-// --- 操作模态框辅助函数 ---
-const openActionModal = (
-  type: 'delete' | 'rename' | 'chmod' | 'newFile' | 'newFolder',
-  item?: FileListItem | null, // For single item operations like rename, chmod
-  items?: FileListItem[], // For multi-item operations like delete
-  initialValue?: string // For pre-filling input, e.g., old name for rename
-) => {
-  currentActionType.value = type;
-  actionItem.value = item || null;
-  actionItems.value = items || (item ? [item] : []); // Ensure actionItems has the item(s)
-  actionInitialValue.value = initialValue || '';
-  isActionModalVisible.value = true;
-};
+// --- 操作模态框 Composable ---
+const {
+  isActionModalVisible,
+  currentActionType,
+  actionItem,
+  actionItems,
+  actionInitialValue,
+  openActionModal,
+  handleModalClose,
+  handleModalConfirm,
+  handleDeleteSelectedClick,
+  handleRenameContextMenuClick,
+  handleChangePermissionsContextMenuClick,
+  handleNewFolderContextMenuClick,
+  handleNewFileContextMenuClick,
+} = useFileManagerActionModal({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  wsDeps: props.wsDeps,
+  sessionId: props.sessionId,
+  instanceId: props.instanceId,
+  selectedItems,
+  fileManagerShowDeleteConfirmationBoolean,
+});
 
-const handleModalClose = () => {
-  isActionModalVisible.value = false;
-  // Reset states if needed, though they'll be overwritten on next open
-  currentActionType.value = null;
-  actionItem.value = null;
-  actionItems.value = [];
-  actionInitialValue.value = '';
-};
+// --- 剪贴板 Composable ---
+const {
+  clipboardState,
+  clipboardSourcePaths,
+  clipboardSourceBaseDir,
+  handleCopy,
+  handleCut,
+  handlePaste,
+} = useFileManagerClipboard({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  selectedItems,
+  sessionId: props.sessionId,
+  instanceId: props.instanceId,
+});
 
-const handleModalConfirm = (value?: string) => {
-  if (!currentSftpManager.value || !currentActionType.value) {
-    handleModalClose();
-    return;
-  }
-  const manager = currentSftpManager.value;
-
-  switch (currentActionType.value) {
-    case 'delete':
-      if (actionItems.value.length > 0) {
-        manager.deleteItems(actionItems.value);
-        selectedItems.value.clear(); // Clear selection after delete
-      }
-      break;
-    case 'rename':
-      if (actionItem.value && value && value !== actionItem.value.filename) {
-        manager.renameItem(actionItem.value, value);
-      }
-      break;
-    case 'chmod':
-      if (actionItem.value && value && /^[0-7]{3,4}$/.test(value)) {
-        const newMode = parseInt(value, 8);
-        manager.changePermissions(actionItem.value, newMode);
-      } else if (value) {
-        // value exists but is invalid
-        // Optionally, re-open modal with error or use a notification
-        // For now, just log and close
-        console.error(
-          `[FileManager ${props.sessionId}-${props.instanceId}] Invalid chmod value from modal: ${value}`
-        );
-        // It might be better to show an error in the modal itself and not close it.
-        // The modal currently has its own validation, so this path might not be hit often.
-      }
-      break;
-    case 'newFile':
-      if (value) {
-        if (manager.fileList.value.some((item: FileListItem) => item.filename === value)) {
-          console.warn(
-            `[FileManager ${props.sessionId}-${props.instanceId}] File ${value} already exists. Modal should prevent this.`
-          );
-          return; // Prevent closing if error
-        }
-        manager.createFile(value);
-      }
-      break;
-    case 'newFolder':
-      if (value) {
-        if (manager.fileList.value.some((item: FileListItem) => item.filename === value)) {
-          console.warn(
-            `[FileManager ${props.sessionId}-${props.instanceId}] Folder ${value} already exists. Modal should prevent this.`
-          );
-          return; // Prevent closing if error
-        }
-        manager.createDirectory(value);
-      }
-      break;
-  }
-  handleModalClose(); // Close modal after action
-};
-
-// --- SFTP 操作处理函数 (定义在此处，供 Composable 使用) ---
-const handleDeleteSelectedClick = () => {
-  // 修改：检查 currentSftpManager 是否存在
-  if (!currentSftpManager.value) return;
-  // 使用 props.wsDeps 和 currentSftpManager.value.fileList
-  if (!props.wsDeps.isConnected.value || selectedItems.value.size === 0) return;
-  const itemsToDelete = Array.from(selectedItems.value)
-    .map((filename) =>
-      currentSftpManager.value?.fileList.value.find((f: FileListItem) => f.filename === filename)
-    )
-    .filter((item): item is FileListItem => item !== undefined);
-  if (itemsToDelete.length === 0) return;
-
-  // 根据设置决定是否显示确认模态框
-  if (settingsStore.fileManagerShowDeleteConfirmationBoolean) {
-    openActionModal('delete', null, itemsToDelete);
-  } else {
-    // 直接执行删除
-    if (currentSftpManager.value) {
-      currentSftpManager.value.deleteItems(itemsToDelete);
-      selectedItems.value.clear(); // Clear selection after delete
-    }
-  }
-};
-
-const handleRenameContextMenuClick = (item: FileListItem) => {
-  // item 已有类型
-  if (!props.wsDeps.isConnected.value || !item) return; // 恢复使用 props.wsDeps
-  if (!currentSftpManager.value) return;
-  openActionModal('rename', item, undefined, item.filename);
-};
-
-const handleChangePermissionsContextMenuClick = (item: FileListItem) => {
-  // item 已有类型
-  if (!props.wsDeps.isConnected.value || !item) return; // 恢复使用 props.wsDeps
-  if (!currentSftpManager.value) return;
-  const currentModeOctal = (item.attrs.mode & 0o777).toString(8).padStart(3, '0');
-  openActionModal('chmod', item, undefined, currentModeOctal);
-};
-
-const handleNewFolderContextMenuClick = () => {
-  if (!props.wsDeps.isConnected.value) return; // 恢复使用 props.wsDeps
-  if (!currentSftpManager.value) return;
-  openActionModal('newFolder');
-};
-
-const handleNewFileContextMenuClick = () => {
-  if (!props.wsDeps.isConnected.value) return; // 恢复使用 props.wsDeps
-  if (!currentSftpManager.value) return;
-  openActionModal('newFile');
-};
-
-// +++ 复制、剪切、粘贴处理函数 +++
-const handleCopy = () => {
-  if (!currentSftpManager.value || selectedItems.value.size === 0) return;
-  const manager = currentSftpManager.value;
-  clipboardSourcePaths.value = Array.from(selectedItems.value).map((filename) =>
-    manager.joinPath(manager.currentPath.value, filename)
-  );
-  clipboardState.value = { hasContent: true, operation: 'copy' };
-  clipboardSourceBaseDir.value = manager.currentPath.value; // 记录源目录
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Copied to clipboard:`,
-    clipboardSourcePaths.value
-  );
-  // 可选：添加 UI 通知
-};
-
-const handleCut = () => {
-  if (!currentSftpManager.value || selectedItems.value.size === 0) return;
-  const manager = currentSftpManager.value;
-  clipboardSourcePaths.value = Array.from(selectedItems.value).map((filename) =>
-    manager.joinPath(manager.currentPath.value, filename)
-  );
-  clipboardState.value = { hasContent: true, operation: 'cut' };
-  clipboardSourceBaseDir.value = manager.currentPath.value; // 记录源目录
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Cut to clipboard:`,
-    clipboardSourcePaths.value
-  );
-  // 可选：添加 UI 通知
-};
-
-const handlePaste = () => {
-  if (
-    !currentSftpManager.value ||
-    !clipboardState.value.hasContent ||
-    clipboardSourcePaths.value.length === 0
-  )
-    return;
-  const manager = currentSftpManager.value;
-  const destinationDir = manager.currentPath.value;
-  const operation = clipboardState.value.operation;
-  const sources = clipboardSourcePaths.value;
-  const sourceBaseDir = clipboardSourceBaseDir.value; // 获取源目录
-
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Pasting items. Operation: ${operation}, Sources: ${sources.join(', ')}, Destination: ${destinationDir}`
-  );
-
-  if (operation === 'copy') {
-    // 调用 SFTP 管理器的 copyItems 方法 (稍后添加)
-    manager.copyItems(sources, destinationDir);
-  } else if (operation === 'cut') {
-    // 调用 SFTP 管理器的 moveItems 方法 (稍后添加)
-    // 检查是否在同一目录下剪切粘贴（无效操作）
-    if (sourceBaseDir === destinationDir) {
-      console.warn(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Cannot cut and paste in the same directory.`
-      );
-      // 可选：显示警告通知
-      return;
-    }
-    manager.moveItems(sources, destinationDir);
-    // 剪切后清空剪贴板
-    clipboardState.value = { hasContent: false };
-    clipboardSourcePaths.value = [];
-    clipboardSourceBaseDir.value = '';
-  }
-  // 粘贴后不清空复制的剪贴板，允许重复粘贴
-  // 清空选择可能不是最佳体验，用户可能想继续操作粘贴后的文件
-  // clearSelection();
-};
-
-// --- 文件上传触发器 (定义在此处，供 Composable 使用) ---
+// --- 文件上传触发器 ---
 const triggerFileUpload = () => {
   fileInputRef.value?.click();
 };
 
-// --- 下载触发器 (定义在此处，供 Composable 使用) ---
-const triggerDownload = (items: FileListItem[]) => {
-  // 修改：接受 FileListItem 数组
-  // 恢复使用 props.wsDeps.isConnected
-  if (!props.wsDeps.isConnected.value) {
-    return;
-  }
-  // connectionId 仍然从 props 获取
-  const currentConnectionId = props.dbConnectionId;
-  if (!currentConnectionId) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Cannot download: Missing connection ID.`
-    );
-    return;
-  }
-  // 修改：简化检查
-  if (!currentSftpManager.value) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Cannot download: SFTP manager is not available.`
-    );
-    return;
-  }
-
-  // 遍历数组中的每个文件项
-  items.forEach((item) => {
-    // 确保只下载文件
-    if (!item.attrs.isFile) {
-      console.warn(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Skipping download for non-file item: ${item.filename}`
-      );
-      return;
-    }
-
-    const downloadPath = currentSftpManager.value!.joinPath(
-      currentSftpManager.value!.currentPath.value,
-      item.filename
-    );
-    const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&remotePath=${encodeURIComponent(downloadPath)}`;
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`
-    );
-
-    // 为每个文件创建一个链接并点击
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    // --- 修正：移除文件名中的双引号以兼容 Chrome ---
-    const safeFilename = item.filename.replace(/"/g, ''); // 移除所有双引号
-    link.setAttribute('download', safeFilename);
-    // --- 结束修正 ---
-    document.body.appendChild(link);
-    link.click();
-
-    // 稍微延迟移除链接，以确保下载开始
-    setTimeout(() => {
-      document.body.removeChild(link);
-    }, 100);
-  });
-};
-
-// +++ 文件夹下载触发器 +++
-const triggerDownloadDirectory = (item: FileListItem) => {
-  if (!props.wsDeps.isConnected.value) {
-    return;
-  }
-  const currentConnectionId = props.dbConnectionId;
-  if (!currentConnectionId) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Cannot download directory: Missing connection ID.`
-    );
-    return;
-  }
-  if (!currentSftpManager.value) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Cannot download directory: SFTP manager is not available.`
-    );
-    return;
-  }
-
-  // 确保是目录
-  if (!item.attrs.isDirectory) {
-    console.warn(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Skipping directory download for non-directory item: ${item.filename}`
-    );
-    return;
-  }
-
-  const directoryPath = currentSftpManager.value.joinPath(
-    currentSftpManager.value.currentPath.value,
-    item.filename
-  );
-  // 定义新的后端 API 端点 URL (稍后实现)
-  const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&remotePath=${encodeURIComponent(directoryPath)}`;
-
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Attempting directory download for ${item.filename}: ${downloadUrl}`
-  );
-
-  // --- 修改：使用 fetch 尝试下载，并处理后端未实现的情况 ---
-  fetch(downloadUrl)
-    .then(async (response) => {
-      if (response.ok) {
-        // 后端实现成功，尝试触发下载
-        const blob = await response.blob();
-        // 从 Content-Disposition 头获取文件名 (需要后端设置)
-        const contentDisposition = response.headers.get('content-disposition');
-        let filename = `${item.filename}.zip`; // 默认文件名
-        if (contentDisposition) {
-          const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
-          if (filenameMatch && filenameMatch.length > 1) {
-            filename = filenameMatch[1];
-          }
-        }
-
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        // --- 修正：移除 ZIP 文件名中的双引号以兼容 Chrome ---
-        const safeZipFilename = filename.replace(/"/g, '');
-        link.setAttribute('download', safeZipFilename);
-        // --- 结束修正 ---
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href); // 释放对象 URL
-        console.info(
-          `[FileManager ${props.sessionId}-${props.instanceId}] Directory download triggered for: ${filename}`
-        );
-      } else {
-        // 处理错误，例如 404 Not Found
-        console.error(
-          `[FileManager ${props.sessionId}-${props.instanceId}] Directory download failed: ${response.status} ${response.statusText}`
-        );
-        // 尝试读取错误信息体
-        let errorMsg = `Server responded with status ${response.status}`;
-        try {
-          const errorData = await response.json(); // 假设后端返回 JSON 错误
-          errorMsg = errorData.message || errorMsg;
-        } catch (e) {
-          // 如果响应体不是 JSON 或读取失败
-          try {
-            const textError = await response.text();
-            if (textError) errorMsg = textError;
-          } catch (e2) {
-            /* ignore */
-          }
-        }
-      }
-    })
-    .catch((error) => {
-      console.error(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Network error during directory download:`,
-        error
-      );
-    });
-};
+// --- 下载 Composable ---
+const { triggerDownload, triggerDownloadDirectory } = useFileManagerDownload({
+  currentSftpManager: computed(() => currentSftpManager.value),
+  wsDeps: props.wsDeps,
+  dbConnectionId: props.dbConnectionId,
+  sessionId: props.sessionId,
+  instanceId: props.instanceId,
+});
 
 // +++ 压缩/解压处理函数 +++
 const handleCompress = (items: FileListItem[], format: CompressFormat) => {
@@ -1203,25 +699,7 @@ watchEffect((onCleanup) => {
   }
 });
 
-// +++ 监听 Store 中的触发器以激活搜索 +++
-watch(
-  () => focusSwitcherStore.activateFileManagerSearchTrigger,
-  (newValue, oldValue) => {
-    // 修改监听器
-    // 确保只在触发器值增加时执行（避免初始加载或重置时触发）
-    // 并且当前组件的 sessionId 与活动 sessionId 匹配
-    // 检查 newValue > oldValue 确保是递增触发，避免重复执行
-    // 检查是否是当前活动会话的此实例（如果需要区分实例）
-    // 目前假设搜索触发器对会话内的所有 FileManager 生效
-    if (newValue > (oldValue ?? 0) && props.sessionId === sessionStore.activeSessionId) {
-      console.info(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Received search activation trigger for active session.`
-      );
-      activateSearch(); // 调用组件内部的激活搜索方法
-    }
-  },
-  { immediate: false }
-); // 添加 immediate: false 避免初始值为 0 时触发
+// --- 搜索激活触发器监听已提取至 useFileManagerSearch composable ---
 
 // --- 监听 sessionId prop 的变化 ---
 watch(
@@ -1320,189 +798,9 @@ onBeforeUnmount(() => {
 
 // --- 路径编辑逻辑已提取至 useFileManagerPathNavigation composable ---
 
-// --- 搜索框激活/取消逻辑 ---
-const activateSearch = () => {
-  isSearchActive.value = true;
-  nextTick(() => {
-    toolbarRef.value?.searchInputRef?.focus();
-  });
-};
+// --- 搜索框激活/取消逻辑已提取至 useFileManagerSearch composable ---
 
-const deactivateSearch = () => {
-  isSearchActive.value = false;
-};
-
-const cancelSearch = () => {
-  searchQuery.value = ''; // 按 Esc 清空并失活
-  isSearchActive.value = false;
-};
-
-// --- 发送 CD 命令到终端的方法 ---
-const sendCdCommandToTerminal = () => {
-  if (!currentSftpManager.value || !props.wsDeps.isConnected.value) {
-    console.warn(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Cannot send CD command: SFTP manager not ready or not connected.`
-    );
-    return;
-  }
-  const currentPath = currentSftpManager.value.currentPath.value;
-  if (!currentPath) {
-    console.warn(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Cannot send CD command: Current path is empty.`
-    );
-    return;
-  }
-
-  // 路径可能包含空格，需要用引号括起来以确保在各种 shell 中正确处理
-  const escapedPath = `"${currentPath}"`;
-  // 添加换行符以模拟按下 Enter 键执行命令
-  const command = `cd ${escapedPath}\n`;
-
-  console.info(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Sending command to terminal: ${command.trim()}`
-  );
-  try {
-    // 获取当前活动会话
-    const activeSession = sessionStore.activeSession;
-    if (!activeSession) {
-      console.error(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: No active session found.`
-      );
-      // 可选：添加 UI 通知
-      // uiNotificationsStore.addNotification({ message: t('fileManager.errors.noActiveSession', 'No active session found.'), type: 'error' });
-      return;
-    }
-    // 检查 terminalManager 是否存在
-    if (!activeSession.terminalManager) {
-      console.error(
-        `[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Terminal manager not found for active session.`
-      );
-      // 可选：添加 UI 通知
-      // uiNotificationsStore.addNotification({ message: t('fileManager.errors.terminalManagerNotFound', 'Terminal manager not found.'), type: 'error' });
-      return;
-    }
-    // 使用 terminalManager 的 sendData 方法发送命令
-    activeSession.terminalManager.sendData(command);
-  } catch (error) {
-    console.error(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command to terminal:`,
-      error
-    );
-  }
-};
-
-const cleanupSilentExecRequest = () => {
-  unregisterSilentExecResult?.();
-  unregisterSilentExecResult = null;
-  unregisterSilentExecError?.();
-  unregisterSilentExecError = null;
-  unregisterSilentExecDisconnect?.();
-  unregisterSilentExecDisconnect = null;
-  unregisterSilentExecClosed?.();
-  unregisterSilentExecClosed = null;
-  unregisterSilentExecSocketError?.();
-  unregisterSilentExecSocketError = null;
-  if (silentExecTimeoutId) {
-    clearTimeout(silentExecTimeoutId);
-    silentExecTimeoutId = null;
-  }
-};
-
-const syncCurrentPathToTerminalDirectory = () => {
-  if (
-    !currentSftpManager.value ||
-    !props.wsDeps.isConnected.value ||
-    isSyncingPathFromTerminal.value
-  ) {
-    return;
-  }
-
-  const requestId = generateRequestId();
-  const { sendMessage, onMessage } = props.wsDeps;
-  const posixPwdCommand = `printf '${SILENT_PWD_PREFIX}%s\\n' "$(pwd 2>/dev/null || /bin/pwd 2>/dev/null || command pwd 2>/dev/null || printf '%s' "$PWD" 2>/dev/null || echo "$PWD" 2>/dev/null)"`;
-  const commandsByShell = {
-    posix: posixPwdCommand,
-    fish: `printf '${SILENT_PWD_PREFIX}%s\\n' (pwd)`,
-    powershell: `Write-Output ('${SILENT_PWD_PREFIX}' + (Get-Location).Path)`,
-    cmd: `echo ${SILENT_PWD_PREFIX}%cd%`,
-    default: posixPwdCommand,
-  };
-
-  isSyncingPathFromTerminal.value = true;
-  cleanupSilentExecRequest();
-
-  const finishWithError = (message: string) => {
-    cleanupSilentExecRequest();
-    isSyncingPathFromTerminal.value = false;
-    uiNotificationsStore.showError(message);
-  };
-
-  const finishSilentlyOnDisconnect = () => {
-    cleanupSilentExecRequest();
-    isSyncingPathFromTerminal.value = false;
-  };
-
-  unregisterSilentExecResult = onMessage(
-    'ssh:exec_silent:result',
-    (payload: MessagePayload, message: WebSocketMessage) => {
-      const p = payload as unknown as SilentExecPayload;
-      if (message.requestId !== requestId) return;
-
-      cleanupSilentExecRequest();
-      isSyncingPathFromTerminal.value = false;
-
-      const output = typeof p?.output === 'string' ? p.output : '';
-      const path = parsePathFromSilentOutput(output);
-
-      if (!path) {
-        uiNotificationsStore.showError(t('fileManager.errors.pathReadFailed', '读取终端路径失败'));
-        return;
-      }
-
-      currentSftpManager.value?.loadDirectory(path);
-    }
-  );
-
-  unregisterSilentExecError = onMessage(
-    'ssh:exec_silent:error',
-    (payload: MessagePayload, message: WebSocketMessage) => {
-      const p = payload as unknown as SilentExecPayload;
-      if (message.requestId !== requestId) return;
-      const errorMessage =
-        typeof p?.error === 'string'
-          ? p.error
-          : t('fileManager.errors.pathReadFailed', '读取终端路径失败');
-      finishWithError(errorMessage);
-    }
-  );
-
-  unregisterSilentExecDisconnect = onMessage('ssh:disconnected', () => {
-    finishSilentlyOnDisconnect();
-  });
-
-  unregisterSilentExecClosed = onMessage('internal:closed', () => {
-    finishSilentlyOnDisconnect();
-  });
-
-  unregisterSilentExecSocketError = onMessage('internal:error', () => {
-    finishSilentlyOnDisconnect();
-  });
-
-  silentExecTimeoutId = setTimeout(() => {
-    finishWithError(t('fileManager.errors.pathReadTimeout', '读取终端路径超时'));
-  }, 6000);
-
-  sendMessage({
-    type: 'ssh:exec_silent',
-    requestId,
-    payload: {
-      commandsByShell,
-      timeoutMs: 5000,
-      successCriteria: 'absolute_path',
-      suppressTerminalPrompt: true,
-    },
-  });
-};
+// --- 终端同步逻辑已提取至 useFileManagerTerminalSync composable ---
 
 // --- 打开弹窗编辑器的方法 ---
 const openPopupEditor = () => {
@@ -1518,44 +816,7 @@ const openPopupEditor = () => {
 };
 // --- 行大小调整逻辑已提取至 useFileManagerLayoutSettings composable ---
 
-// +++ 聚焦搜索框的方法 +++
-const focusSearchInput = (): boolean => {
-  // 检查当前会话是否激活，防止后台实例响应
-  if (props.sessionId !== sessionStore.activeSessionId) {
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Ignoring focus request for inactive session.`
-    );
-    return false;
-  }
-
-  if (!isSearchActive.value) {
-    activateSearch(); // Activate search first
-    // nextTick 确保 DOM 更新后再聚焦
-    nextTick(() => {
-      if (toolbarRef.value?.searchInputRef) {
-        toolbarRef.value.searchInputRef.focus();
-        console.info(
-          `[FileManager ${props.sessionId}-${props.instanceId}] Search activated and input focused.`
-        );
-      } else {
-        console.warn(
-          `[FileManager ${props.sessionId}-${props.instanceId}] Search activated but input ref not found after nextTick.`
-        );
-      }
-    });
-    return true; // 假设会成功
-  } else if (toolbarRef.value?.searchInputRef) {
-    toolbarRef.value.searchInputRef.focus();
-    console.info(
-      `[FileManager ${props.sessionId}-${props.instanceId}] Search already active, input focused.`
-    );
-    return true;
-  }
-  console.warn(
-    `[FileManager ${props.sessionId}-${props.instanceId}] Could not focus search input.`
-  );
-  return false;
-};
+// --- 聚焦搜索框的方法已提取至 useFileManagerSearch composable ---
 // --- 工具栏关闭路径历史回调 ---
 const handleClosePathHistoryFromToolbar = () => {
   cancelPathEdit();
