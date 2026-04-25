@@ -59,6 +59,20 @@ vi.mock('../stores/settings.store', () => ({
   useSettingsStore: () => settingsStoreMock,
 }));
 
+vi.mock('../stores/captchaSettings.store', () => ({
+  useCaptchaSettingsStore: () => ({
+    captchaSettings: ref(null),
+    captchaError: ref(null),
+    isLoading: ref(false),
+    isCaptchaEnabled: ref(false),
+    captchaProvider: ref('none'),
+    hcaptchaSiteKey: ref(''),
+    recaptchaSiteKey: ref(''),
+    loadCaptchaSettings: vi.fn().mockResolvedValue(undefined),
+    updateCaptchaSettings: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 vi.mock('../stores/auth.store', () => ({
   useAuthStore: () => ({}),
 }));
