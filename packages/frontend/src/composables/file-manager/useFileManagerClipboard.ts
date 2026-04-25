@@ -75,7 +75,8 @@ export function useFileManagerClipboard(options: UseFileManagerClipboardOptions)
         return;
       }
       manager.moveItems(sources, destinationDir);
-      // 剪切后清空剪贴板
+      // 注意：moveItems 是 fire-and-forget（无返回值），此处同步清空剪贴板。
+      // 若后端移动失败，用户将无法重试。理想方案需监听 sftp:move:success 事件后再清空。
       clipboardState.value = { hasContent: false };
       clipboardSourcePaths.value = [];
       clipboardSourceBaseDir.value = '';

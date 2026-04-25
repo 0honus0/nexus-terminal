@@ -269,6 +269,7 @@ const {
   sessionStore,
   getSelectedItems: () => _selectionSelectedItems!,
   getClearSelection: () => _selectionClearSelection!,
+  showError: uiNotificationsStore.showError,
 });
 
 // --- 选择 Composable（依赖 handleItemAction）---
@@ -340,6 +341,7 @@ const {
   instanceId: props.instanceId,
   selectedItems,
   fileManagerShowDeleteConfirmationBoolean,
+  showError: uiNotificationsStore.showError,
 });
 
 // --- 剪贴板 Composable ---

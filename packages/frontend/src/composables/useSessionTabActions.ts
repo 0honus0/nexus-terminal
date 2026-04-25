@@ -23,6 +23,10 @@ export function useSessionTabActions(deps: SessionTabActionsDependencies) {
    * 关闭目标 session 以外的所有 session
    */
   const handleCloseOtherSessions = (targetSessionId: string) => {
+    const targetExists = sessionTabsWithStatus.value.some(
+      (tab) => tab.sessionId === targetSessionId
+    );
+    if (!targetExists) return;
     const sessionsToClose = sessionTabsWithStatus.value
       .filter((tab) => tab.sessionId !== targetSessionId)
       .map((tab) => tab.sessionId);

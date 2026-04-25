@@ -1,7 +1,11 @@
-/** * 单个连接项组件 * * 从 WorkspaceConnectionList.vue
-中提取，消除三种视图模式（分组视图、虚拟列表、普通列表） * 中重复的 li
-模板代码。渲染单个连接行：图标 + 名称。 */
 <script setup lang="ts">
+/**
+ * 单个连接项组件
+ *
+ * 从 WorkspaceConnectionList.vue 中提取，消除三种视图模式
+ * （分组视图、虚拟列表、普通列表）中重复的 li 模板代码。
+ * 渲染单个连接行：图标 + 名称。
+ */
 import { computed } from 'vue';
 import type { ConnectionInfo } from '../stores/connections.store';
 

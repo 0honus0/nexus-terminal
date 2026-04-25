@@ -106,6 +106,11 @@ export function useTagEditing(deps: TagEditingDependencies) {
                 message: deps.t('workspaceConnectionList.allConnectionsTaggedSuccess'),
                 type: 'success',
               });
+            } else {
+              deps.notify({
+                message: deps.t('workspaceConnectionList.allConnectionsTaggedFailed'),
+                type: 'error',
+              });
             }
           } else {
             deps.notify({

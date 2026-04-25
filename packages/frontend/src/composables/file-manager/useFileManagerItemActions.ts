@@ -46,6 +46,8 @@ export interface UseFileManagerItemActionsOptions {
   getSelectedItems: () => Ref<Set<string>>;
   /** 延迟获取清空选择函数 */
   getClearSelection: () => () => void;
+  /** 显示错误通知的函数 */
+  showError: (message: string) => void;
 }
 
 export function useFileManagerItemActions(options: UseFileManagerItemActionsOptions) {
@@ -61,6 +63,7 @@ export function useFileManagerItemActions(options: UseFileManagerItemActionsOpti
     sessionStore,
     getSelectedItems,
     getClearSelection,
+    showError,
   } = options;
 
   const logPrefix = `[FileManager ${sessionId}-${instanceId}]`;
@@ -196,6 +199,7 @@ export function useFileManagerItemActions(options: UseFileManagerItemActionsOpti
             console.error(
               `${logPrefix} Failed to get realpath for symlink '${itemPath}': ${serverErrorMsg}${resolvedPathInfo}`
             );
+            showError(`Failed to resolve symlink: ${serverErrorMsg}`);
           }
         }
       );
@@ -205,6 +209,7 @@ export function useFileManagerItemActions(options: UseFileManagerItemActionsOpti
         console.error(
           `${logPrefix} Timeout getting realpath for symlink '${itemPath}' (ID: ${requestId}).`
         );
+        showError(`Timeout resolving symlink: ${itemPath}`);
       }, 10000);
 
       wsSend({ type: 'sftp:realpath', requestId, payload: { path: itemPath } });
@@ -216,8 +221,10 @@ export function useFileManagerItemActions(options: UseFileManagerItemActionsOpti
       if (manager.isLoading.value) return;
       const newPath =
         item.filename === '..'
-          ? manager.currentPath.value.substring(0, manager.currentPath.value.lastIndexOf('/')) ||
-            '/'
+          ? (() => {
+              const cur = manager.currentPath.value.replace(/\/+$/, '') || '/';
+              return cur.substring(0, cur.lastIndexOf('/')) || '/';
+            })()
           : manager.joinPath(manager.currentPath.value, item.filename);
       manager.loadDirectory(newPath);
     } else if (item.attrs.isFile) {

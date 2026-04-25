@@ -20,6 +20,8 @@ export interface UseFileManagerActionModalOptions {
   selectedItems: Ref<Set<string>>;
   /** 是否显示删除确认（响应式） */
   fileManagerShowDeleteConfirmationBoolean: Ref<boolean>;
+  /** 显示错误通知的函数 */
+  showError: (message: string) => void;
 }
 
 export function useFileManagerActionModal(options: UseFileManagerActionModalOptions) {
@@ -30,6 +32,7 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
     instanceId,
     selectedItems,
     fileManagerShowDeleteConfirmationBoolean,
+    showError,
   } = options;
 
   const logPrefix = `[FileManager ${sessionId}-${instanceId}]`;
@@ -92,12 +95,15 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
           manager.changePermissions(actionItem.value, newMode);
         } else if (value) {
           console.error(`${logPrefix} Invalid chmod value from modal: ${value}`);
+          showError(`Invalid permission value: ${value}`);
+          return;
         }
         break;
       case 'newFile':
         if (value) {
           if (manager.fileList.value.some((item: FileListItem) => item.filename === value)) {
             console.warn(`${logPrefix} File ${value} already exists. Modal should prevent this.`);
+            showError(`File "${value}" already exists`);
             return;
           }
           manager.createFile(value);
@@ -107,6 +113,7 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
         if (value) {
           if (manager.fileList.value.some((item: FileListItem) => item.filename === value)) {
             console.warn(`${logPrefix} Folder ${value} already exists. Modal should prevent this.`);
+            showError(`Folder "${value}" already exists`);
             return;
           }
           manager.createDirectory(value);
@@ -146,7 +153,7 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
   const handleChangePermissionsContextMenuClick = (item: FileListItem) => {
     if (!wsDeps.isConnected.value || !item) return;
     if (!currentSftpManager.value) return;
-    const currentModeOctal = (item.attrs.mode & 0o777).toString(8).padStart(3, '0');
+    const currentModeOctal = (item.attrs.mode & 0o7777).toString(8).padStart(4, '0');
     openActionModal('chmod', item, undefined, currentModeOctal);
   };
 

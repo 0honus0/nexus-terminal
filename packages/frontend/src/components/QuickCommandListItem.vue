@@ -1,6 +1,8 @@
 <template>
   <li
     :data-command-id="command.id"
+    role="button"
+    tabindex="0"
     class="group flex justify-between items-center mb-1 cursor-pointer rounded-md hover:bg-primary/10 transition-colors duration-150"
     :style="{
       padding: isCompactMode
@@ -10,6 +12,7 @@
     :class="{ 'bg-primary/20 font-medium': isSelected }"
     @click="$emit('execute', command)"
     @contextmenu.prevent="$emit('contextmenu', $event, command)"
+    @keydown.enter.space.prevent="$emit('execute', command)"
   >
     <!-- 命令信息 -->
     <div class="flex flex-col overflow-hidden mr-2 flex-grow">
