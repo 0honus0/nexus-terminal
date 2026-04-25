@@ -19,7 +19,7 @@ import {
   setLogLevel as setRuntimeLogLevel,
   type LogLevel,
 } from './logging/logger';
-import { logger } from './utils/logger';
+import { logger, setLogLevel as setPinoLogLevel } from './utils/logger';
 import { getDbInstance } from './database/connection';
 import authRouter from './auth/auth.routes';
 import connectionsRouter from './connections/connections.routes';
@@ -399,6 +399,7 @@ const initializeRuntimeLogLevel = async () => {
   try {
     const level = await settingsService.getLogLevel();
     setRuntimeLogLevel(level as LogLevel);
+    setPinoLogLevel(level);
   } catch (error) {
     logger.warn(error as Error, '[Index] 初始化日志等级失败，将使用默认日志等级。');
   }
