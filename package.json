@@ -84,7 +84,8 @@
     "speakeasy": "^2.0.0",
     "sqlite3": "^6.0.1",
     "vite": "^6.4.2",
-    "vue-eslint-parser": "^10.2.0"
+    "vue-eslint-parser": "^10.2.0",
+    "vue-tsc": "^3.2.7"
   },
   "overrides": {
     "vite": "^6.4.2",
