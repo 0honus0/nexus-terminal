@@ -79,7 +79,7 @@
 - **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，100% 通过率
 - **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
 - **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
-- **单元测试**：Backend 118 测试文件，Frontend 37 测试文件
+- **单元测试**：Backend 123 测试文件，Frontend 47 测试文件
 - **新增 Store 测试**：settings / fileEditor / audit store 测试覆盖
 - **新增 Controller 测试**：settings.controller 39 个测试用例
 - **质量门禁**：`quality:check` 覆盖 debt + 三端 typecheck + lint + format

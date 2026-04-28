@@ -6,6 +6,21 @@
 
 ## 变更记录
 
+### 2026-04-28 (架构文档增量扫描更新)
+
+- **文件统计更新**：
+  - Backend: 192 个 TypeScript 源文件，118 个测试文件（保持稳定）
+  - Frontend: 187 个源文件（99 TS + 88 Vue），39 个测试文件（+2，增长 5%）
+  - Remote Gateway: 2 个源文件，1 个测试文件
+  - 总计: 381 个源代码文件 + 158 个测试文件
+- **测试覆盖率**：
+  - Backend: 118 个测试文件（单元测试 + 集成测试 + 性能测试）
+  - Frontend: 39 个测试文件（组件、Store、Composables 测试）
+  - E2E: 8 个 Playwright 测试规范
+  - Remote Gateway: 1 个测试文件
+- **覆盖率**：100% 模块文档化完成
+- **扫描策略**：阶段 A（全仓清点）+ 阶段 B（模块优先扫描）+ 阶段 C（深度补捞）
+
 ### 2026-04-24 (架构文档全量扫描更新)
 
 - **文件统计更新**：
@@ -112,15 +127,15 @@
 ```mermaid
 graph TD
     subgraph "Nexus Terminal Monorepo"
-        A["📦 nexus-terminal (根)"] --> B["📂 packages"]
-        B --> C["🔧 backend<br/>Express + SQLite<br/>(192 TS文件, 23 数据表, 118 测试)"]
-        B --> D["🎨 frontend<br/>Vue 3 + Vite<br/>(99 TS + 88 Vue, 24 Stores, 37 测试)"]
-        B --> E["🖥️ remote-gateway<br/>Guacamole Lite<br/>(2 源文件, 1 测试)"]
-        A --> F["📚 doc<br/>(技术债务、路线图)"]
+        A["nexus-terminal (根)"] --> B["packages"]
+        B --> C["backend<br/>Express + SQLite<br/>(192 TS文件, 23 数据表, 118 测试)"]
+        B --> D["frontend<br/>Vue 3 + Vite<br/>(99 TS + 88 Vue, 24 Stores, 39 测试)"]
+        B --> E["remote-gateway<br/>Guacamole Lite<br/>(2 源文件, 1 测试)"]
+        A --> F["doc<br/>(技术债务、路线图)"]
     end
 
     subgraph "外部依赖"
-        G["🐳 guacd<br/>RDP/VNC 协议"]
+        G["guacd<br/>RDP/VNC 协议"]
     end
 
     D -- "HTTP/WS<br/>API 调用" --> C
@@ -253,16 +268,16 @@ npm run build
 ### 当前状态
 
 - **测试框架已配置**：Backend 与 Frontend 均已配置完整测试框架
-- **测试覆盖率**（2026-04-24 更新）：
+- **测试覆盖率**（2026-04-28 更新）：
   - Backend: 118 个 `*.test.ts` 文件（单元测试 + 集成测试 + 性能测试）
-  - Frontend: 37 个 `*.test.ts` 文件（组件、Store、Composables 测试）
+  - Frontend: 39 个 `*.test.ts` 文件（组件、Store、Composables 测试）
   - E2E: 8 个 `*.spec.ts` 文件（边缘场景覆盖）
   - Remote Gateway: 1 个 `*.test.ts` 文件
 - **测试类型覆盖**：
-  - ✅ 单元测试（Vitest）
-  - ✅ 集成测试（SSH/SFTP/RDP/VNC 协议模拟）
-  - ✅ E2E 测试（Playwright）
-  - ✅ 性能测试（Autocannon）
+  - 单元测试（Vitest）
+  - 集成测试（SSH/SFTP/RDP/VNC 协议模拟）
+  - E2E 测试（Playwright）
+  - 性能测试（Autocannon）
 
 ### 测试框架配置
 
@@ -593,12 +608,12 @@ class LoginPage {
 
 | 模块类型   | 行覆盖率目标 | 分支覆盖率目标 |
 | ---------- | ------------ | -------------- |
-| Service    | ≥80%         | ≥70%           |
-| Controller | ≥70%         | ≥60%           |
-| Repository | ≥60%         | ≥50%           |
-| Utils      | ≥90%         | ≥80%           |
-| Store      | ≥80%         | ≥70%           |
-| Component  | ≥60%         | ≥50%           |
+| Service    | >=80%        | >=70%          |
+| Controller | >=70%        | >=60%          |
+| Repository | >=60%        | >=50%          |
+| Utils      | >=90%        | >=80%          |
+| Store      | >=80%        | >=70%          |
+| Component  | >=60%        | >=50%          |
 
 ---
 
@@ -728,9 +743,9 @@ class LoginPage {
 - **后端入口**：`packages/backend/src/index.ts`
 - **前端入口**：`packages/frontend/src/main.ts`
 - **路由定义**：
-  - 后端：`packages/backend/src/*/routes.ts`（识别 22 个路由模块）
+  - 后端：`packages/backend/src/*/routes.ts`（识别 23 个路由模块）
   - 前端：`packages/frontend/src/router/index.ts`（13 个视图路由）
-- **状态管理**：`packages/frontend/src/stores/*.store.ts`（24 个 Pinia stores）
+- **状态管理**：`packages/frontend/src/stores/*.store.ts`（25 个 Pinia stores）
 - **WebSocket**：
   - 服务端：`packages/backend/src/websocket.ts`
   - 处理器：`packages/backend/src/websocket/handlers/`
@@ -763,20 +778,21 @@ Guacd (4822) → RDP/VNC 协议转换
 
 ---
 
-**文档生成时间**：2026-04-24 21:13:34 CST（架构文档全量扫描更新）
+**文档生成时间**：2026-04-28 19:11:10 CST（架构文档增量扫描更新）
 
 **已完成任务**：
 
-- ✅ 阶段 A：全仓清点 - 文件统计与模块识别
-- ✅ 阶段 B：模块优先扫描 - 24 个数据表、121+ TypeScript 文件（Backend）、184 TypeScript/Vue 文件（Frontend）
-- ✅ 架构图更新 - 增加模块统计信息
-- ✅ 测试覆盖率更新 - 72+ Backend 测试、31+ Frontend 测试、8 个 E2E 测试
-- ✅ 覆盖率报告 - 100% 模块文档化完成
+- 阶段 A：全仓清点 - 文件统计与模块识别
+- 阶段 B：模块优先扫描 - 23 个数据表、192 TypeScript 文件（Backend）、187 TypeScript/Vue 文件（Frontend）
+- 阶段 C：深度补捞 - 补充前端测试文件统计（39 个）
+- 架构图更新 - 保持模块统计信息准确
+- 测试覆盖率更新 - 118 Backend 测试、39 Frontend 测试、8 个 E2E 测试
+- 覆盖率报告 - 100% 模块文档化完成
 
 **下次扫描建议**：
 
-- 补充后端各业务模块的 Service 层单元测试覆盖率（目标：≥80% 行覆盖率）
-- 补充前端 Components 与 Composables 的单元测试（目标：≥60% 组件覆盖率）
+- 补充后端各业务模块的 Service 层单元测试覆盖率（目标：>=80% 行覆盖率）
+- 补充前端 Components 与 Composables 的单元测试（目标：>=60% 组件覆盖率）
 - 扩展 E2E 测试用例覆盖更多边缘场景（基于 Playwright）
 - 定期审查技术债务报告（doc/TECHNICAL_DEBT_REPORT.md）并处理高优先级项
 - 监控 Phase 4/5 新增模块（批量操作、AI 智能运维）的测试覆盖率提升

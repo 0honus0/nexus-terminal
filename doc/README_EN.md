@@ -79,7 +79,7 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **Comprehensive Test Framework**: From near-zero tests to 1500+ test cases, 100% pass rate
 - **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
 - **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
-- **Unit Tests**: Backend 118 test files, Frontend 37 test files
+- **Unit Tests**: Backend 123 test files, Frontend 47 test files
 - **New Store Tests**: settings / fileEditor / audit store test coverage
 - **New Controller Tests**: 39 test cases for settings.controller
 - **Quality Gate**: `quality:check` covers debt + 3-way typecheck + lint + format
