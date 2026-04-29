@@ -62,57 +62,53 @@ jobs:
         id: issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_NUM: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+          TARGET_TYPE: ${{ github.event.inputs.target_type || 'issue' }}
+          AUTO_TITLE: ${{ github.event.issue.title }}
+          AUTO_BODY: ${{ github.event.issue.body || '' }}
+          AUTO_AUTHOR: ${{ github.event.issue.user.login }}
+          AUTO_URL: ${{ github.event.issue.html_url }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .ai_runtime
 
-          INPUT_NUM="${{ github.event.issue.number || github.event.inputs.issue_number }}"
-          TARGET_TYPE="${{ github.event.inputs.target_type || 'issue' }}"
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
 
-          if [ -n "${{ github.event.issue.number || '' }}" ]; then
-            # 自动触发：直接使用事件数据
-            cat > .ai_runtime/issue.json <<JSON
-            {
-              "number": ${INPUT_NUM},
-              "title": $(echo '${{ github.event.issue.title }}' | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))"),
-              "body": $(echo '${{ github.event.issue.body || '' }}' | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))"),
-              "author": $(echo '${{ github.event.issue.user.login }}' | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))"),
-              "url": $(echo '${{ github.event.issue.html_url }}' | python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))")
-            }
-            JSON
-          else
-            # 手动触发：根据选择的类型获取数据
-            echo "手动触发模式，获取 ${TARGET_TYPE} #${INPUT_NUM} 的数据..."
+          input_num = os.environ['INPUT_NUM']
+          target_type = os.environ['TARGET_TYPE']
+          auto_title = os.environ.get('AUTO_TITLE', '')
 
-            if [ "${TARGET_TYPE}" = "pr" ]; then
-              gh pr view "${INPUT_NUM}" --json number,title,body,author,url | python3 -c "
-          import sys, json
-          d = json.load(sys.stdin)
-          print(json.dumps({
-            'number': d['number'],
-            'title': d.get('title', ''),
-            'body': d.get('body', '') or '',
-            'author': d.get('author', {}).get('login', '') if isinstance(d.get('author'), dict) else str(d.get('author', '')),
-            'url': d.get('url', '')
-          }, ensure_ascii=False))
-          " > .ai_runtime/issue.json
-              echo "成功获取 PR #${INPUT_NUM}"
-            else
-              gh issue view "${INPUT_NUM}" --json number,title,body,author,url | python3 -c "
-          import sys, json
-          d = json.load(sys.stdin)
-          print(json.dumps({
-            'number': d['number'],
-            'title': d.get('title', ''),
-            'body': d.get('body', '') or '',
-            'author': d.get('author', {}).get('login', '') if isinstance(d.get('author'), dict) else str(d.get('author', '')),
-            'url': d.get('url', '')
-          }, ensure_ascii=False))
-          " > .ai_runtime/issue.json
-              echo "成功获取 Issue #${INPUT_NUM}"
-            fi
-          fi
+          if auto_title:
+              # 自动触发：使用事件环境变量
+              payload = {
+                  "number": int(input_num),
+                  "title": auto_title,
+                  "body": os.environ.get('AUTO_BODY', ''),
+                  "author": os.environ.get('AUTO_AUTHOR', ''),
+                  "url": os.environ.get('AUTO_URL', ''),
+              }
+          else:
+              # 手动触发：通过 gh CLI 获取数据
+              cmd = ['gh', 'pr' if target_type == 'pr' else 'issue', 'view', input_num,
+                     '--json', 'number,title,body,author,url']
+              result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+              d = json.loads(result.stdout)
+              author = d.get('author', {})
+              payload = {
+                  "number": d['number'],
+                  "title": d.get('title', ''),
+                  "body": d.get('body', '') or '',
+                  "author": author.get('login', '') if isinstance(author, dict) else str(author),
+                  "url": d.get('url', ''),
+              }
+
+          pathlib.Path('.ai_runtime/issue.json').write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8'
+          )
+          print(f"成功获取 {target_type} #{input_num}: {payload['title']}")
+          PY
 
           echo "payload=$(cat .ai_runtime/issue.json | jq -c .)" >> "$GITHUB_OUTPUT"
 
