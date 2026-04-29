@@ -111,6 +111,7 @@ jobs:
           PY
 
           echo "payload=$(cat .ai_runtime/issue.json | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$(jq -r '.number' .ai_runtime/issue.json)" >> "$GITHUB_OUTPUT"
 
       - name: Stage 1 - classify and rewrite query
         id: rewrite
@@ -834,13 +835,14 @@ jobs:
         env:
           AI_AUTO_LABEL: ${{ env.AI_AUTO_LABEL }}
           RESULT_JSON: ${{ steps.triage_norm.outputs.json }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
         with:
           script: |
             const marker = "<!-- ai-issue-smart-reply:v3 -->";
             const result = JSON.parse(process.env.RESULT_JSON || "{}");
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const issue_number = context.issue.number;
+            const issue_number = parseInt(process.env.ISSUE_NUMBER, 10) || context.issue.number;
 
             function supportText(s) {
               switch (s) {
