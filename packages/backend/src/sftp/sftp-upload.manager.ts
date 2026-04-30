@@ -268,7 +268,15 @@ export class SftpUploadManager {
     }
 
     try {
-      uploadState.inFlightChunks++;
+      // 仅在块未重复时才计入在途计数，防止重复块耗尽滑动窗口
+      const isDuplicate = uploadState.pendingChunks.has(chunkIndex);
+      if (!isDuplicate) {
+        uploadState.inFlightChunks++;
+      } else {
+        console.warn(
+          `[SFTP Upload ${uploadId}] Duplicate chunk ${chunkIndex} received, overwriting buffer.`
+        );
+      }
       const chunkBuffer = Buffer.from(dataBase64, 'base64');
 
       // 将块存入排序缓冲区（不直接写入流）
@@ -318,9 +326,10 @@ export class SftpUploadManager {
         uploadState.inFlightChunks = Math.max(0, uploadState.inFlightChunks - 1);
 
         if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-          const progressPercent = Math.round(
-            (uploadState.bytesWritten / uploadState.totalSize) * 100
-          );
+          const progressPercent =
+            uploadState.totalSize === 0
+              ? 100
+              : Math.round((uploadState.bytesWritten / uploadState.totalSize) * 100);
           state.ws.send(
             JSON.stringify({
               type: 'sftp:upload:progress',

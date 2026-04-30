@@ -126,6 +126,8 @@ const _onSessionRemapped = (payload: { oldSessionId: string; newSessionId: strin
     console.info(
       `[FileManager ${effectiveSessionId.value}-${props.instanceId}] 收到 session:remapped 事件，旧ID: ${payload.oldSessionId} → 新ID: ${payload.newSessionId}，重新初始化 SFTP 管理器。`
     );
+    // 先清理旧 session 的 SFTP 管理器，避免残留监听器
+    sessionStore.removeSftpManager(payload.oldSessionId, props.instanceId);
     effectiveSessionId.value = payload.newSessionId;
     initializeSftpManager(payload.newSessionId, props.instanceId);
   }
