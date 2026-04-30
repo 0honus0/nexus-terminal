@@ -204,6 +204,14 @@ export function useFileUploader(
       cleanRelativePath = cleanRelativePath.endsWith('/')
         ? cleanRelativePath.slice(0, -1)
         : cleanRelativePath;
+
+      // 文件夹上传时 webkitRelativePath 已包含文件名（如 test/4.txt），
+      // 需要提取纯目录部分，避免文件名被拼接两次
+      const pathParts = cleanRelativePath.split('/');
+      if (pathParts.length > 1 && pathParts[pathParts.length - 1] === file.name) {
+        cleanRelativePath = pathParts.slice(0, -1).join('/');
+      }
+
       // 拼接路径，确保 cleanRelativePath 和 file.name 之间只有一个斜杠
       finalRemotePath = `${basePath}${cleanRelativePath ? `${cleanRelativePath}/` : ''}${file.name}`;
     } else {

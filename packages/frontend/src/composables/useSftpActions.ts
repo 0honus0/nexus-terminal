@@ -309,6 +309,23 @@ export function createSftpActionsManager(
     sendMessage({ type: 'sftp:readdir', requestId, payload: { path } });
   };
 
+  // --- 防抖刷新：合并短时间内的多次 loadDirectory 请求 ---
+  const _pendingRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const scheduleDirectoryRefresh = (path: string, delay = 150) => {
+    const existing = _pendingRefreshTimers.get(path);
+    if (existing) clearTimeout(existing);
+    _pendingRefreshTimers.set(
+      path,
+      setTimeout(() => {
+        _pendingRefreshTimers.delete(path);
+        // 只有当当前路径匹配且未在加载中时才刷新
+        if (currentPathRef.value === path && !isLoading.value) {
+          loadDirectory(path, true);
+        }
+      }, delay)
+    );
+  };
+
   const createDirectory = (newDirName: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
@@ -1236,34 +1253,32 @@ export function createSftpActionsManager(
         parentNodeAfterUpload.childrenLoaded = true;
       }
 
-      // 如果上传发生在当前目录或其子目录，刷新当前目录以确保视图同步
+      // 如果上传发生在当前目录或其子目录，防抖刷新以合并多个并发上传的请求
       if (
         parentPath === currentPathRef.value ||
         parentPath.startsWith(`${currentPathRef.value}/`)
       ) {
-        loadDirectory(currentPathRef.value, true);
+        scheduleDirectoryRefresh(currentPathRef.value);
       }
     } else {
-      // 如果后端未能提供更新信息，标记推断出的父节点需要重新加载
+      // 后端未提供更新信息，仅在父节点尚未加载时才标记需要重新加载
       const parentNode = findNodeByPath(fileTree, parentPath);
-      if (parentNode) {
+      if (parentNode && !parentNode.childrenLoaded) {
         parentNode.childrenLoaded = false;
         console.warn(
           `[SFTP ${instanceSessionId}] Upload success for ${fullPath} but no item details received. Marking parent ${parentPath} for reload.`
         );
-        // 如果上传发生在当前目录或其子目录，触发当前目录刷新可能有用
         if (
           parentPath === currentPathRef.value ||
           parentPath.startsWith(`${currentPathRef.value}/`)
         ) {
-          loadDirectory(currentPathRef.value);
+          scheduleDirectoryRefresh(currentPathRef.value);
         }
-      } else {
+      } else if (!parentNode) {
         console.warn(
           `[SFTP ${instanceSessionId}] Upload success for ${fullPath}, no item details, and parent node ${parentPath} not found in tree.`
         );
-        // 可能需要刷新根目录或当前目录
-        loadDirectory(currentPathRef.value);
+        scheduleDirectoryRefresh(currentPathRef.value);
       }
     }
   };
