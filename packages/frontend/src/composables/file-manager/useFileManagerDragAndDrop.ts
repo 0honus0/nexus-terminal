@@ -189,17 +189,18 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       const dirReader = (item as FileSystemDirectoryEntry).createReader();
       dirReader.readEntries(
         (entries) => {
+          const dirRelativePath = traversalPath ? `${traversalPath}${item.name}/` : `${item.name}/`;
           console.info(
-            `[DragDrop] Traversing directory: ${currentPath}${item.name}, found ${entries.length} entries.`
+            `[DragDrop] Traversing directory: ${dirRelativePath}, found ${entries.length} entries.`
           );
-          // 递归遍历目录中的每个条目
+          // 递归遍历目录中的每个条目，使用相对路径
           entries.forEach((entry) => {
-            traverseFileTree(entry, `${currentPath.value + item.name}/`); // 更新相对路径
+            traverseFileTree(entry, dirRelativePath);
           });
         },
         (err) => {
           console.error(
-            `[DragDrop] Error reading directory entries: ${currentPath}${item.name}`,
+            `[DragDrop] Error reading directory entries: ${traversalPath}${item.name}`,
             err
           );
         }
