@@ -231,9 +231,16 @@ export class SftpService {
     sessionId: string,
     uploadId: string,
     chunkIndex: number,
-    dataBase64: string
+    dataBase64: string,
+    isLast?: boolean
   ): Promise<void> {
-    return this.uploadManager.handleUploadChunk(sessionId, uploadId, chunkIndex, dataBase64);
+    return this.uploadManager.handleUploadChunk(
+      sessionId,
+      uploadId,
+      chunkIndex,
+      dataBase64,
+      isLast
+    );
   }
 
   /** Cancel an ongoing upload (delegated to SftpUploadManager) */

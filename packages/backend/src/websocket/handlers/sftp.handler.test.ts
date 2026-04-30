@@ -472,7 +472,8 @@ describe('SFTP WebSocket Handler', () => {
         'test-session',
         'upload-1',
         0,
-        'base64data'
+        'base64data',
+        undefined
       );
     });
 
@@ -492,7 +493,8 @@ describe('SFTP WebSocket Handler', () => {
         'test-session',
         'upload-empty',
         0,
-        ''
+        '',
+        undefined
       );
     });
   });

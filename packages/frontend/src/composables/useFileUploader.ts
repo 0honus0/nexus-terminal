@@ -44,7 +44,6 @@ export function useFileUploader(
     const WINDOW_SIZE = 8; // 滑动窗口大小：允许同时在途的最大块数量
     const ACK_TIMEOUT_MS = 3000; // ACK 超时回退时间（兼容旧后端不发送 ack 的场景）
     let offset = startByte;
-    let chunkIndex = 0;
     let inFlight = 0; // 当前在途（已发送未确认）的块数量
     let ackReceived = false; // 标记是否收到过 ack（用于判断后端是否支持滑动窗口）
     let ackFallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -78,10 +77,11 @@ export function useFileUploader(
         if (typeof chunkResult === 'string' && chunkResult.startsWith('data:')) {
           const chunkBase64 = chunkResult.split(',')[1];
           const isLast = currentOffset + CHUNK_SIZE >= file.size;
+          const chunkIndex = Math.floor(currentOffset / CHUNK_SIZE);
 
           wsDeps.value.sendMessage({
             type: 'sftp:upload:chunk',
-            payload: { uploadId, chunkIndex: chunkIndex++, data: chunkBase64, isLast },
+            payload: { uploadId, chunkIndex, data: chunkBase64, isLast },
           });
         } else {
           console.error(

@@ -32,6 +32,7 @@ type SftpUploadChunkPayload = {
   uploadId?: string;
   chunkIndex?: number;
   data?: string;
+  isLast?: boolean;
 };
 
 type SftpUploadCancelPayload = {
@@ -267,7 +268,8 @@ export async function handleSftpUploadChunk(
     sessionId,
     payload.uploadId,
     payload.chunkIndex,
-    payload.data
+    payload.data,
+    payload.isLast
   );
 }
 
