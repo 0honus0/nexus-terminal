@@ -29,7 +29,7 @@ export const getOrCreateSftpManager = (
     console.info(
       `[SftpManagerActions] 为会话 ${sessionId} 创建新的 SFTP 管理器实例: ${instanceId}`
     );
-    const currentSftpPath = ref<string>('.'); // 每个实例有自己的路径
+    const currentSftpPath = ref<string>('/'); // 每个实例有自己的路径，初始为根目录
     const wsDeps: WebSocketDependencies = {
       sendMessage: session.wsManager.sendMessage,
       onMessage: session.wsManager.onMessage,
