@@ -57,8 +57,8 @@ export const useSessionStore = defineStore('session', () => {
   const cleanupAllSessions = () => sessionActions.cleanupAllSessions();
 
   // SFTP Manager Actions
-  const getOrCreateSftpManager = (sessionId: string, instanceId: string) =>
-    sftpManagerActions.getOrCreateSftpManager(sessionId, instanceId, { t });
+  const getOrCreateSftpManager = (sessionId: string, instanceId: string, initialPath?: string) =>
+    sftpManagerActions.getOrCreateSftpManager(sessionId, instanceId, { t }, initialPath);
   const removeSftpManager = (sessionId: string, instanceId: string) =>
     sftpManagerActions.removeSftpManager(sessionId, instanceId);
 

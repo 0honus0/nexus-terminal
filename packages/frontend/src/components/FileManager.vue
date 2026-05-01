@@ -96,8 +96,8 @@ const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
 // 追踪当前有效的 session ID（session:remapped 后会更新）
 const effectiveSessionId = ref(props.sessionId);
 
-const initializeSftpManager = (sessionId: string, instanceId: string) => {
-  const manager = sessionStore.getOrCreateSftpManager(sessionId, instanceId);
+const initializeSftpManager = (sessionId: string, instanceId: string, initialPath?: string) => {
+  const manager = sessionStore.getOrCreateSftpManager(sessionId, instanceId, initialPath);
   if (!manager) {
     // 抛出错误或显示错误消息，阻止组件进一步渲染
     console.error(
@@ -123,13 +123,17 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
 const _onSessionRemapped = (payload: { oldSessionId: string; newSessionId: string }) => {
   if (payload.oldSessionId === effectiveSessionId.value) {
+    // 保存旧 session 的当前路径，用于重建管理器时恢复
+    const oldManager = sessionStore.getOrCreateSftpManager(payload.oldSessionId, props.instanceId);
+    const savedPath = oldManager?.currentPath.value || '/';
     console.info(
-      `[FileManager ${effectiveSessionId.value}-${props.instanceId}] 收到 session:remapped 事件，旧ID: ${payload.oldSessionId} → 新ID: ${payload.newSessionId}，重新初始化 SFTP 管理器。`
+      `[FileManager ${effectiveSessionId.value}-${props.instanceId}] 收到 session:remapped 事件，旧ID: ${payload.oldSessionId} → 新ID: ${payload.newSessionId}，保存路径: ${savedPath}，重新初始化 SFTP 管理器。`
     );
     // 先清理旧 session 的 SFTP 管理器，避免残留监听器
     sessionStore.removeSftpManager(payload.oldSessionId, props.instanceId);
     effectiveSessionId.value = payload.newSessionId;
-    initializeSftpManager(payload.newSessionId, props.instanceId);
+    // 传入保存的路径，使新管理器恢复到之前的导航位置
+    initializeSftpManager(payload.newSessionId, props.instanceId, savedPath);
   }
 };
 
@@ -747,22 +751,21 @@ watchEffect((onCleanup) => {
 // --- 搜索激活触发器监听已提取至 useFileManagerSearch composable ---
 
 // --- 监听 sessionId prop 的变化 ---
+// 标签切换时不销毁旧 session 的 SFTP 管理器，保留路径状态
+// getOrCreateSftpManager 会直接返回已存在的实例（含保留的路径）
 watch(
   () => props.sessionId,
   (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
       cancelPathEdit(); // 关闭路径编辑、历史下拉、并重置 editablePath
       pathHistoryStore.setSearchTerm(''); // 清空搜索词
-      // 1. 先清理旧 session 的 SFTP 管理器，避免残留监听器
-      if (oldSessionId) {
-        sessionStore.removeSftpManager(oldSessionId, props.instanceId);
-      }
-      // 2. 同步 effectiveSessionId
+      // 不再销毁旧 session 的 SFTP 管理器，保留其路径状态供后续切换恢复
+      // 1. 同步 effectiveSessionId
       effectiveSessionId.value = newSessionId;
-      // 3. 重新初始化 SFTP 管理器
+      // 2. 获取或创建 SFTP 管理器（如果已存在则直接返回，路径自动保留）
       initializeSftpManager(newSessionId, props.instanceId);
 
-      // 4. 重置 UI 状态
+      // 3. 重置 UI 状态
       clearSelection();
       searchQuery.value = '';
       isSearchActive.value = false;

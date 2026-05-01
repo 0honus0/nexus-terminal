@@ -771,7 +771,8 @@ describe('FileManager.vue', () => {
 
       expect(mockSessionStore.getOrCreateSftpManager).toHaveBeenCalledWith(
         'session-1',
-        'instance-1'
+        'instance-1',
+        undefined
       );
     });
 
@@ -936,7 +937,8 @@ describe('FileManager.vue', () => {
 
       expect(mockSessionStore.getOrCreateSftpManager).toHaveBeenCalledWith(
         'session-2',
-        'instance-1'
+        'instance-1',
+        undefined
       );
     });
   });
