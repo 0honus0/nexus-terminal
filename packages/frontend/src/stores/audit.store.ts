@@ -49,8 +49,8 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         } else {
           isLoading.value = true; // 无缓存，初始加载
         }
-      } catch (error: unknown) {
-        console.error('[AuditLogStore] Failed to load or parse dashboard logs cache:', error);
+      } catch (loadError: unknown) {
+        console.error('[AuditLogStore] Failed to load or parse dashboard logs cache:', loadError);
         localStorage.removeItem(cacheKey);
         isLoading.value = true; // 缓存无效，需要加载
       }

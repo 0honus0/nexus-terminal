@@ -186,8 +186,8 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
           return;
         }
       }
-    } catch (error: unknown) {
-      console.error('[QuickCmdStore] Failed to load or parse expanded groups state:', error);
+    } catch (loadError: unknown) {
+      console.error('[QuickCmdStore] Failed to load or parse expanded groups state:', loadError);
       localStorage.removeItem(EXPANDED_GROUPS_STORAGE_KEY);
     }
     // Default to empty object if no valid state found
@@ -198,8 +198,8 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
   const saveExpandedGroups = () => {
     try {
       localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, JSON.stringify(expandedGroups.value));
-    } catch (error: unknown) {
-      console.error('[QuickCmdStore] Failed to save expanded groups state:', error);
+    } catch (saveError: unknown) {
+      console.error('[QuickCmdStore] Failed to save expanded groups state:', saveError);
     }
   };
 
@@ -271,8 +271,8 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       } else {
         isLoading.value = true;
       }
-    } catch (error: unknown) {
-      console.error('[QuickCmdStore] Failed to load or parse commands cache:', error);
+    } catch (loadError: unknown) {
+      console.error('[QuickCmdStore] Failed to load or parse commands cache:', loadError);
       localStorage.removeItem(cacheKey);
       isLoading.value = true;
     }

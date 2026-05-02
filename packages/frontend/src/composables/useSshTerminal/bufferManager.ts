@@ -39,7 +39,6 @@ function mergeUint8Arrays(arrays: Uint8Array[]): Uint8Array | null {
 export function createBufferManager(terminal: Terminal) {
   const buffer: (string | Uint8Array)[] = [];
   let currentBufferSizeBytes = 0;
-  let isFlushing = false;
   let flushScheduled = false;
   let lastFlushTime = 0;
 
@@ -77,7 +76,6 @@ export function createBufferManager(terminal: Terminal) {
    */
   const doFlush = () => {
     if (buffer.length === 0) {
-      isFlushing = false;
       flushScheduled = false;
       return;
     }
@@ -131,7 +129,6 @@ export function createBufferManager(terminal: Terminal) {
       }
     }
 
-    isFlushing = false;
     flushScheduled = false;
   };
 

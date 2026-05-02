@@ -23,8 +23,13 @@ export interface TerminalThemeDeps {
  * 创建终端主题子 Store，提供主题相关的状态、计算属性和操作方法
  */
 export function createTerminalThemeStore(deps: TerminalThemeDeps) {
-  const { appearanceSettings, allTerminalThemes, isLoading, error, updateAppearanceSettings } =
-    deps;
+  const {
+    appearanceSettings,
+    allTerminalThemes,
+    isLoading: _isLoading,
+    error,
+    updateAppearanceSettings,
+  } = deps;
   // 辅助函数：安全获取 ref 值（ref 始终已初始化，不会为 undefined）
   const getSettings = () => appearanceSettings.value as AppearanceSettings;
   const getThemes = () => allTerminalThemes.value as TerminalTheme[];

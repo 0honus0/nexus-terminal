@@ -4,11 +4,11 @@ WebAuthn Passkey 认证模块，提供 Passkey 注册、认证、管理功能。
 
 ## 文件结构
 
-| 文件 | 职责 |
-|------|------|
-| `passkey.service.ts` | Passkey 业务逻辑（注册挑战、认证验证、凭证管理） |
-| `passkey.repository.ts` | Passkey 数据访问层 |
-| `passkey.service.test.ts` | 单元测试 |
+| 文件                      | 职责                                             |
+| ------------------------- | ------------------------------------------------ |
+| `passkey.service.ts`      | Passkey 业务逻辑（注册挑战、认证验证、凭证管理） |
+| `passkey.repository.ts`   | Passkey 数据访问层                               |
+| `passkey.service.test.ts` | 单元测试                                         |
 
 ## 无独立 Routes 的原因
 

@@ -36,7 +36,7 @@ describe('路由守卫', () => {
   });
 
   it('应该允许访问登录页面', async () => {
-    const to = { name: 'Login', path: '/login' };
+    const _to = { name: 'Login', path: '/login' };
     const result = await router.options.routes;
     expect(result.length).toBeGreaterThan(0);
   });

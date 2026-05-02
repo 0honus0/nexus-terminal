@@ -10,7 +10,7 @@ import { passkeyRepository } from '../passkey/passkey.repository';
 import { userRepository } from '../user/user.repository';
 import { ErrorCode } from '../types/error.types';
 import {
-  type ChallengeData,
+  type ChallengeData as _ChallengeData,
   persistPasskeyChallengeSession,
   resolvePasskeyAuthenticationContext,
   resolvePasskeyCredentialId,
@@ -54,7 +54,7 @@ import {
   recordPasskeyAuthenticationFailure,
   recordPasskeyAuthenticationSuccess,
 } from './auth-passkey-2fa-flow.utils';
-import { resolveRequestClientIp } from './auth-main-flow.utils';
+import { resolveRequestClientIp as _resolveRequestClientIp } from './auth-main-flow.utils';
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
 import { NotificationService } from '../notifications/notification.service';
 import { AuditLogService } from '../audit/audit.service';

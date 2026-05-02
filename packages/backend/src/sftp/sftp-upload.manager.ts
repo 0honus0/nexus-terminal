@@ -446,9 +446,9 @@ export class SftpUploadManager {
       }
     } catch (error: unknown) {
       console.error(`[SFTP Upload ${uploadId}] _doFlushPendingChunks 异常:`, error);
-      const state = this.clientStates.get(uploadState.sessionId);
-      if (state?.ws && state.ws.readyState === WebSocket.OPEN) {
-        state.ws.send(
+      const clientState = this.clientStates.get(uploadState.sessionId);
+      if (clientState?.ws && clientState.ws.readyState === WebSocket.OPEN) {
+        clientState.ws.send(
           JSON.stringify({
             type: 'sftp:upload:error',
             payload: { uploadId, message: `刷写缓冲区时出错: ${getErrorMessage(error)}` },

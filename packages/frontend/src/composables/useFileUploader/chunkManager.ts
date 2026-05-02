@@ -3,7 +3,7 @@
  * 从 useFileUploader.ts 提取，负责文件分块读取与滑动窗口发送
  */
 
-import type { UploadItem } from '../../types/upload.types';
+import type { UploadItem as _UploadItem } from '../../types/upload.types';
 
 /** 分块大小：256KB */
 const CHUNK_SIZE = 1024 * 256;

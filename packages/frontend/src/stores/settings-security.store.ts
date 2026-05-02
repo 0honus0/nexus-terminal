@@ -16,22 +16,22 @@ export function createSecuritySettingsGetters(deps: SecuritySettingsDeps) {
   const { settings } = deps;
 
   /** IP 白名单启用状态 */
-  const ipWhitelistEnabled = computed(() => settings.value!.ipWhitelistEnabled === 'true');
+  const ipWhitelistEnabled = computed(() => settings.value?.ipWhitelistEnabled === 'true');
 
   /** IP 黑名单启用状态（默认启用） */
   const ipBlacklistEnabledBoolean = computed(() => {
-    return settings.value!.ipBlacklistEnabled !== 'false';
+    return settings.value?.ipBlacklistEnabled !== 'false';
   });
 
   /** 最大登录尝试次数 */
   const maxLoginAttempts = computed(() => {
-    const val = parseInt(settings.value!.maxLoginAttempts || '5', 10);
+    const val = parseInt(settings.value?.maxLoginAttempts || '5', 10);
     return Number.isNaN(val) || val <= 0 ? 5 : val;
   });
 
   /** 登录封禁时长（秒） */
   const loginBanDuration = computed(() => {
-    const val = parseInt(settings.value!.loginBanDuration || '300', 10);
+    const val = parseInt(settings.value?.loginBanDuration || '300', 10);
     return Number.isNaN(val) || val <= 0 ? 300 : val;
   });
 

@@ -3,7 +3,7 @@
  * 从 index.ts 提取，集中管理 Express 中间件的配置与注册
  */
 
-import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, RequestHandler } from 'express';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import cors from 'cors';

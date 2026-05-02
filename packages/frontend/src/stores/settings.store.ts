@@ -8,13 +8,11 @@
  * - settings-layout.store.ts: 布局设置计算属性（侧边栏、文件管理器布局）
  */
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import apiClient from '../utils/apiClient';
-import { cacheManager, CACHE_KEYS, CACHE_CONFIG } from '../utils/cacheManager';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { setLocale, defaultLng, availableLocales } from '../i18n';
 import type { PaneName } from './layout.store';
-import type { ConnectionInfo } from './connections.store';
 
 // 子 Store 导入
 import {
@@ -83,9 +81,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const error = ref<string | null>(null);
 
   // --- 初始化子 Store ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const systemGetters = createSystemSettingsGetters({ settings: settings as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const securityGetters = createSecuritySettingsGetters({ settings: settings as any });
   const layoutGetters = createLayoutSettingsGetters({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     settings: settings as any,
     parsedSidebarPaneWidths,
     parsedFileManagerColWidths,

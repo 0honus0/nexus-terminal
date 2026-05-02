@@ -10,9 +10,9 @@ import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import {
   findNodeByPath,
-  removeNodeFromTree,
-  addOrUpdateNodeInTree,
-  sortFiles,
+  removeNodeFromTree as _removeNodeFromTree,
+  addOrUpdateNodeInTree as _addOrUpdateNodeInTree,
+  sortFiles as _sortFiles,
 } from './useSftpTreeUtils';
 import { createMessageHandlers } from './useSftpMessageHandlers';
 

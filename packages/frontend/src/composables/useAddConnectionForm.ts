@@ -316,7 +316,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
   // Helper function to parse a single script line using minimist
 
-  const parseScriptLine = (
+  const _parseScriptLine = (
     line: string
   ): {
     type: 'SSH' | 'RDP' | 'VNC';

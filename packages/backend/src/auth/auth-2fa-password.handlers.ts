@@ -7,7 +7,7 @@ import { getDbInstance, getDb, runDb } from '../database/connection';
 import { hashPassword, comparePassword } from '../utils/crypto';
 import { NotificationService } from '../notifications/notification.service';
 import { AuditLogService } from '../audit/audit.service';
-import { ErrorCode } from '../types/error.types';
+import { ErrorCode as _ErrorCode } from '../types/error.types';
 import {
   resolveTwoFactorEffectiveSecret,
   verifyTwoFactorTokenWithSkew,

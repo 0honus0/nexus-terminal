@@ -34,7 +34,7 @@ export function acquireSessionLock(sessionId: string): {
   release: () => void;
 } {
   const prev = sessionLocks.get(sessionId) ?? Promise.resolve();
-  let release: () => void;
+  let release!: () => void;
   const next = new Promise<void>((resolve) => {
     release = () => {
       resolve();
@@ -46,7 +46,7 @@ export function acquireSessionLock(sessionId: string): {
     sessionId,
     prev.then(() => next)
   );
-  return { lock: prev, release: release! };
+  return { lock: prev, release };
 }
 
 // 存储 userId 到 WebSocket 连接集合的映射 (支持一个用户多个连接)

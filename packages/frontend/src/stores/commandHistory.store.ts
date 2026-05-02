@@ -71,8 +71,8 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       } else {
         isLoading.value = true; // 无缓存，初始加载
       }
-    } catch (error: unknown) {
-      console.error('[CmdHistoryStore] Failed to load or parse history cache:', error);
+    } catch (loadError: unknown) {
+      console.error('[CmdHistoryStore] Failed to load or parse history cache:', loadError);
       localStorage.removeItem(cacheKey); // 解析失败则移除缓存
       isLoading.value = true; // 缓存无效，需要加载
     }

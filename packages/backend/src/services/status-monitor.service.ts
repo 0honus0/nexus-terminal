@@ -292,7 +292,8 @@ class StatusDataAggregator {
       }
     }
     this.cpuStats.set(sessionId, { ...currentCpuTimes, timestamp: now });
-    return prev?.total ? (prev.total > 0 ? 0 : undefined) : 0;
+    if (!prev?.total) return 0;
+    return prev.total > 0 ? 0 : undefined;
   }
 
   /** 计算网络速率 */

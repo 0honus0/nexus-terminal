@@ -2,7 +2,7 @@
  * 外观 Store - 背景与 UI 主题子模块
  * 职责：页面/终端背景图片管理、UI 主题（CSS 变量）应用、暗色模式
  */
-import { ref, computed, watch, nextTick } from 'vue';
+import { computed, watch, nextTick } from 'vue';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { defaultUiTheme } from '../features/appearance/config/default-themes';

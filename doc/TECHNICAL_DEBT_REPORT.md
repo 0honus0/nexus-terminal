@@ -306,13 +306,13 @@
 
 ### 按级别分布
 
-| 级别   | 剩余 | 占比  | 主要类型               |
-| ------ | ---- | ----- | ---------------------- |
-| Critical | 1  | 1.8%  | 测试覆盖               |
-| High   | 11   | 20.0% | 代码质量 + 边界条件    |
-| Medium | 24   | 43.6% | 代码质量 + 边界条件    |
-| Low    | 19   | 34.5% | 代码质量 + 安全 + 边界 |
-| **合计** | **55** | — | —                    |
+| 级别     | 剩余   | 占比  | 主要类型               |
+| -------- | ------ | ----- | ---------------------- |
+| Critical | 1      | 1.8%  | 测试覆盖               |
+| High     | 11     | 20.0% | 代码质量 + 边界条件    |
+| Medium   | 24     | 43.6% | 代码质量 + 边界条件    |
+| Low      | 19     | 34.5% | 代码质量 + 安全 + 边界 |
+| **合计** | **55** | —     | —                      |
 
 ### 按修复类型分类
 
@@ -320,102 +320,102 @@
 
 大型上帝对象/函数是最高密度的债务来源：
 
-| ID     | 文件/模块                              | 行数  | 拆分策略                                           |
-| ------ | -------------------------------------- | ----- | -------------------------------------------------- |
-| H-8    | `auth.controller.ts`                   | 1,445 | SQL/Repository 调用提取到 service 层               |
-| H-9    | `useAddConnectionForm.ts`              | 1,204 | 拆分为 6 个职责单一的 composable                   |
-| H-10   | `useSftpActions.ts`                    | 1,319 | 拆分为 navigation / operations / upload / download |
-| H-11   | `StatusMonitorService`                 | 507   | 提取健康检查和数据聚合为独立类                     |
-| H-12   | `ssh.service.ts` 递归跳板函数          | 207   | 拆分代理连接、跳板解析、错误恢复                   |
-| H-14   | `appearance.store.ts`                  | 1,073 | 拆分为 theme / font / background 子 store          |
-| H-15   | `settings.store.ts`                    | 1,025 | 按域拆分为 system / security / layout 子 store     |
-| M-3    | `useWebSocketConnection.ts`            | 641   | 提取消息解析、重连逻辑为子模块                     |
-| M-4    | `useSshTerminal.ts`                    | 522   | 提取缓冲管理、事件处理为子模块                     |
-| M-5    | `transfers.service.ts`                 | 1,435 | 拆分为 orchestrator / sftp-transfer / rsync        |
-| M-8    | `auth/` 26 个扁平工具文件              | —     | 按功能分组到子目录：flows / actions / utils        |
-| M-12   | `connection.service.ts` 61 处加解密    | —     | 创建 `encryptConnectionCredentials()` 辅助函数     |
-| M-17   | `index.ts` 后端入口                    | 598   | 提取中间件配置、路由注册、服务器启动               |
-| M-19   | `SuspendedSshSessionsView.vue` 嵌套 13 层 | —  | 提取子组件，使用 `v-if` 守卫减少嵌套              |
-| L-17   | 5 个前端 composable 超过 200 行        | —     | 下次重构时考虑进一步拆分                           |
+| ID   | 文件/模块                                 | 行数  | 拆分策略                                           |
+| ---- | ----------------------------------------- | ----- | -------------------------------------------------- |
+| H-8  | `auth.controller.ts`                      | 1,445 | SQL/Repository 调用提取到 service 层               |
+| H-9  | `useAddConnectionForm.ts`                 | 1,204 | 拆分为 6 个职责单一的 composable                   |
+| H-10 | `useSftpActions.ts`                       | 1,319 | 拆分为 navigation / operations / upload / download |
+| H-11 | `StatusMonitorService`                    | 507   | 提取健康检查和数据聚合为独立类                     |
+| H-12 | `ssh.service.ts` 递归跳板函数             | 207   | 拆分代理连接、跳板解析、错误恢复                   |
+| H-14 | `appearance.store.ts`                     | 1,073 | 拆分为 theme / font / background 子 store          |
+| H-15 | `settings.store.ts`                       | 1,025 | 按域拆分为 system / security / layout 子 store     |
+| M-3  | `useWebSocketConnection.ts`               | 641   | 提取消息解析、重连逻辑为子模块                     |
+| M-4  | `useSshTerminal.ts`                       | 522   | 提取缓冲管理、事件处理为子模块                     |
+| M-5  | `transfers.service.ts`                    | 1,435 | 拆分为 orchestrator / sftp-transfer / rsync        |
+| M-8  | `auth/` 26 个扁平工具文件                 | —     | 按功能分组到子目录：flows / actions / utils        |
+| M-12 | `connection.service.ts` 61 处加解密       | —     | 创建 `encryptConnectionCredentials()` 辅助函数     |
+| M-17 | `index.ts` 后端入口                       | 598   | 提取中间件配置、路由注册、服务器启动               |
+| M-19 | `SuspendedSshSessionsView.vue` 嵌套 13 层 | —     | 提取子组件，使用 `v-if` 守卫减少嵌套               |
+| L-17 | 5 个前端 composable 超过 200 行           | —     | 下次重构时考虑进一步拆分                           |
 
 #### 2. 测试覆盖补充（14 项，预估 36h+）
 
 测试是第二大债务来源，核心模块零测试风险最高：
 
-| ID   | 目标                           | 当前覆盖 | 优先级 | 预估工时 |
-| ---- | ------------------------------ | -------- | ------ | -------- |
-| C-3  | 12 个 Pinia Store 零测试       | 0%       | P0     | 4h       |
-| H-13 | 6 个后端模块缺 repository 层   | —        | P1     | 8h       |
-| M-6  | 前端 `utils/` 6 个模块零测试   | 0%       | P2     | 6h       |
-| M-9  | 前端 `router/` 目录零测试      | 0%       | P2     | 4h       |
-| M-20 | 后端 `logging/` 和 `middleware/` 零测试 | 0% | P2  | 4h       |
-| L-10 | `output-processor.ts` 395 行   | 0%       | P3     | 3h       |
-| L-11 | `cacheManager.ts` 250 行       | 0%       | P3     | 2h       |
-| L-16 | 前端 `locales/` 翻译完整性     | 0%       | P3     | 2h       |
+| ID   | 目标                                    | 当前覆盖 | 优先级 | 预估工时 |
+| ---- | --------------------------------------- | -------- | ------ | -------- |
+| C-3  | 12 个 Pinia Store 零测试                | 0%       | P0     | 4h       |
+| H-13 | 6 个后端模块缺 repository 层            | —        | P1     | 8h       |
+| M-6  | 前端 `utils/` 6 个模块零测试            | 0%       | P2     | 6h       |
+| M-9  | 前端 `router/` 目录零测试               | 0%       | P2     | 4h       |
+| M-20 | 后端 `logging/` 和 `middleware/` 零测试 | 0%       | P2     | 4h       |
+| L-10 | `output-processor.ts` 395 行            | 0%       | P3     | 3h       |
+| L-11 | `cacheManager.ts` 250 行                | 0%       | P3     | 2h       |
+| L-16 | 前端 `locales/` 翻译完整性              | 0%       | P3     | 2h       |
 
 #### 3. 输入验证与边界条件（10 项，预估 16h）
 
-| ID   | 验证缺失                   | 影响         | 修复建议                                        |
-| ---- | -------------------------- | ------------ | ----------------------------------------------- |
-| H-21 | SSH shell ready 无超时     | 连接挂起     | 添加 shell-ready 超时（如 10s）                 |
-| M-24 | 多设备会话状态不一致       | 用户困惑     | 文档说明行为，考虑添加会话列表端点              |
-| M-25 | SFTP payload 用 `z.any()`  | 验证绕过     | 为每个 SFTP 操作定义专用 Zod schema             |
-| M-26 | 无端口范围验证             | 无效连接     | 添加 `port >= 1 && port <= 65535`               |
-| M-27 | 无主机名格式验证           | 无效连接     | 添加最大 253 字符 + 合法主机名/IP 正则          |
-| M-28 | 注册无密码复杂度限制       | 弱密码       | 用户名 3-64 字符 + 密码含字母和数字            |
-| M-29 | `ssh:resize` 无上限        | 资源消耗     | 添加 `cols <= 1000 && rows <= 500`              |
-| L-19 | `lastPingTime` 条目累积    | 内存泄漏     | 在连接 close 处理中清理                         |
-| L-20 | `requestIdleCallback` 兼容 | Safari 降级  | 使用 polyfill 或辅助函数                        |
-| L-21 | `Uint8Array` 大拼接开销    | 性能         | 考虑使用 Blob 或逐块写入                        |
+| ID   | 验证缺失                   | 影响        | 修复建议                               |
+| ---- | -------------------------- | ----------- | -------------------------------------- |
+| H-21 | SSH shell ready 无超时     | 连接挂起    | 添加 shell-ready 超时（如 10s）        |
+| M-24 | 多设备会话状态不一致       | 用户困惑    | 文档说明行为，考虑添加会话列表端点     |
+| M-25 | SFTP payload 用 `z.any()`  | 验证绕过    | 为每个 SFTP 操作定义专用 Zod schema    |
+| M-26 | 无端口范围验证             | 无效连接    | 添加 `port >= 1 && port <= 65535`      |
+| M-27 | 无主机名格式验证           | 无效连接    | 添加最大 253 字符 + 合法主机名/IP 正则 |
+| M-28 | 注册无密码复杂度限制       | 弱密码      | 用户名 3-64 字符 + 密码含字母和数字    |
+| M-29 | `ssh:resize` 无上限        | 资源消耗    | 添加 `cols <= 1000 && rows <= 500`     |
+| L-19 | `lastPingTime` 条目累积    | 内存泄漏    | 在连接 close 处理中清理                |
+| L-20 | `requestIdleCallback` 兼容 | Safari 降级 | 使用 polyfill 或辅助函数               |
+| L-21 | `Uint8Array` 大拼接开销    | 性能        | 考虑使用 Blob 或逐块写入               |
 
 #### 4. 代码质量清理（10 项，预估 10h）
 
-| ID    | 问题                                      | 修复建议                                  |
-| ----- | ----------------------------------------- | ----------------------------------------- |
-| H-6   | 7 个空 catch 块静默吞错                   | 至少记录日志，迁移失败应终止启动          |
-| H-7   | 170 个 catch 块未 `error: unknown`        | 批量替换                                  |
-| M-1   | `services/` 目录 14 个服务扁平堆放        | 域服务移入各自模块                        |
-| M-7   | `settings.controller.ts` 30 个重复 try-catch | 使用 `asyncHandler` 包装所有路由       |
-| M-13  | 46 个 catch 块用短变量名 `e`              | 统一为 `error: unknown`                   |
-| M-14  | 硬编码 OpenAI API base URL                | 提取为共享常量 `AI_PROVIDER_DEFAULTS`     |
-| M-15  | `useFileUploader.ts` 495 行               | 提取分块管理和重试逻辑                    |
-| M-16  | 硬编码 50000 审计日志最大条目             | 定义 `DEFAULT_AUDIT_LOG_MAX_ENTRIES` 常量 |
-| M-18  | Catch 块仅 console.warn/error 不传播      | 评估是否应传播 / 设置 UI 状态             |
-| L-13  | catch 变量命名不一致                      | 统一为 `catch (error: unknown)`           |
+| ID   | 问题                                         | 修复建议                                  |
+| ---- | -------------------------------------------- | ----------------------------------------- |
+| H-6  | 7 个空 catch 块静默吞错                      | 至少记录日志，迁移失败应终止启动          |
+| H-7  | 170 个 catch 块未 `error: unknown`           | 批量替换                                  |
+| M-1  | `services/` 目录 14 个服务扁平堆放           | 域服务移入各自模块                        |
+| M-7  | `settings.controller.ts` 30 个重复 try-catch | 使用 `asyncHandler` 包装所有路由          |
+| M-13 | 46 个 catch 块用短变量名 `e`                 | 统一为 `error: unknown`                   |
+| M-14 | 硬编码 OpenAI API base URL                   | 提取为共享常量 `AI_PROVIDER_DEFAULTS`     |
+| M-15 | `useFileUploader.ts` 495 行                  | 提取分块管理和重试逻辑                    |
+| M-16 | 硬编码 50000 审计日志最大条目                | 定义 `DEFAULT_AUDIT_LOG_MAX_ENTRIES` 常量 |
+| M-18 | Catch 块仅 console.warn/error 不传播         | 评估是否应传播 / 设置 UI 状态             |
+| L-13 | catch 变量命名不一致                         | 统一为 `catch (error: unknown)`           |
 
 #### 5. 安全与配置（6 项，预估 4h）
 
 | ID   | 问题                           | 严重程度 | 修复建议                           |
 | ---- | ------------------------------ | -------- | ---------------------------------- |
-| L-1  | Swagger 非生产环境暴露        | Low      | 文档说明 `NODE_ENV=production`     |
-| L-2  | uuid 依赖缓冲区边界检查       | Low      | `npm audit fix --force`            |
-| L-3  | 错误消息泄露内部路径          | Low      | 生产环境仅返回通用错误消息         |
-| L-22 | PWA SW 缓存过期 WebSocket 状态 | Low     | 后端握手时发送版本号，前端检测刷新 |
-| L-23 | DNS 解析失败消息不友好        | Low      | 捕获 `ENOTFOUND` 提供友好消息      |
-| L-24 | 代理连接失败不区分目标        | Low      | 包装错误上下文                     |
+| L-1  | Swagger 非生产环境暴露         | Low      | 文档说明 `NODE_ENV=production`     |
+| L-2  | uuid 依赖缓冲区边界检查        | Low      | `npm audit fix --force`            |
+| L-3  | 错误消息泄露内部路径           | Low      | 生产环境仅返回通用错误消息         |
+| L-22 | PWA SW 缓存过期 WebSocket 状态 | Low      | 后端握手时发送版本号，前端检测刷新 |
+| L-23 | DNS 解析失败消息不友好         | Low      | 捕获 `ENOTFOUND` 提供友好消息      |
+| L-24 | 代理连接失败不区分目标         | Low      | 包装错误上下文                     |
 
 #### 6. 硬编码常量提取（6 项，预估 3h）
 
-| ID   | 硬编码位置                                  | 建议常量名                          |
-| ---- | ------------------------------------------- | ----------------------------------- |
-| L-4  | GitHub 仓库 URL（3 处）                     | `GITHUB_REPO_URL`                   |
-| L-5  | CORS 默认 origin                            | 生产环境日志警告                    |
-| L-6  | Passkey 超时 60000ms                        | `PASSKEY_CHALLENGE_TIMEOUT_MS`      |
-| L-7  | SSH 重连延迟 5000ms                         | `DEFAULT_SSH_RECONNECT_DELAY_MS`    |
-| L-8  | SQLite PRAGMA 值                            | `SQLITE_CACHE_SIZE_KB` 等           |
-| L-9  | `loginBanDuration: '300'`                   | `DEFAULT_LOGIN_BAN_DURATION_SECONDS`|
+| ID  | 硬编码位置                | 建议常量名                           |
+| --- | ------------------------- | ------------------------------------ |
+| L-4 | GitHub 仓库 URL（3 处）   | `GITHUB_REPO_URL`                    |
+| L-5 | CORS 默认 origin          | 生产环境日志警告                     |
+| L-6 | Passkey 超时 60000ms      | `PASSKEY_CHALLENGE_TIMEOUT_MS`       |
+| L-7 | SSH 重连延迟 5000ms       | `DEFAULT_SSH_RECONNECT_DELAY_MS`     |
+| L-8 | SQLite PRAGMA 值          | `SQLITE_CACHE_SIZE_KB` 等            |
+| L-9 | `loginBanDuration: '300'` | `DEFAULT_LOGIN_BAN_DURATION_SECONDS` |
 
 ### 修复建议优先级
 
-| 优先级 | 批次                           | 预估工时 | 收益                               |
-| ------ | ------------------------------ | -------- | ---------------------------------- |
-| **P0** | C-3：补 session.store 测试     | 4h       | 核心状态管理零测试→基础覆盖        |
-| **P1** | H-6 空 catch + H-7 类型化      | 4h       | 全局错误处理质量提升，风险最低     |
-| **P1** | H-21 shell ready 超时          | 2h       | 防止 SSH 连接挂起                  |
-| **P2** | M-25~M-29 输入验证补全         | 8h       | 防御性编程，减少无效请求           |
-| **P2** | M-6/M-9/M-20 测试补充          | 14h      | 基础设施层测试覆盖                 |
-| **P3** | H-8~H-15 上帝对象拆分          | 40h+     | 长期可维护性，需逐个推进           |
-| **P3** | L-tier 常量提取 + 代码清理     | 13h      | 代码整洁度，可随开发穿插完成       |
+| 优先级 | 批次                       | 预估工时 | 收益                           |
+| ------ | -------------------------- | -------- | ------------------------------ |
+| **P0** | C-3：补 session.store 测试 | 4h       | 核心状态管理零测试→基础覆盖    |
+| **P1** | H-6 空 catch + H-7 类型化  | 4h       | 全局错误处理质量提升，风险最低 |
+| **P1** | H-21 shell ready 超时      | 2h       | 防止 SSH 连接挂起              |
+| **P2** | M-25~M-29 输入验证补全     | 8h       | 防御性编程，减少无效请求       |
+| **P2** | M-6/M-9/M-20 测试补充      | 14h      | 基础设施层测试覆盖             |
+| **P3** | H-8~H-15 上帝对象拆分      | 40h+     | 长期可维护性，需逐个推进       |
+| **P3** | L-tier 常量提取 + 代码清理 | 13h      | 代码整洁度，可随开发穿插完成   |
 
 ---
 

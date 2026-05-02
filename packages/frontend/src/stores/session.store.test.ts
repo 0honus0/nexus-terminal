@@ -309,7 +309,7 @@ describe('session.store', () => {
 
   describe('SSH Suspend Actions', () => {
     it('应该导出 SSH 挂起相关 actions', async () => {
-      const sshSuspendActions = await import('./session/actions/sshSuspendActions');
+      const _sshSuspendActions = await import('./session/actions/sshSuspendActions');
       const { useSessionStore } = await import('./session.store');
       const store = useSessionStore();
 
