@@ -96,6 +96,10 @@ const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
 // 追踪当前有效的 session ID（session:remapped 后会更新）
 const effectiveSessionId = ref(props.sessionId);
 
+// 标记是否刚完成 session 重映射，用于抑制 isSftpReady watcher 的冗余 loadDirectory 调用
+// 重映射后由连接 watcher（initialLoadDone 分支）负责正确的初始加载
+const justRemapped = ref(false);
+
 const initializeSftpManager = (sessionId: string, instanceId: string, initialPath?: string) => {
   const manager = sessionStore.getOrCreateSftpManager(sessionId, instanceId, initialPath);
   if (!manager) {
@@ -123,15 +127,19 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
 const _onSessionRemapped = (payload: { oldSessionId: string; newSessionId: string }) => {
   if (payload.oldSessionId === effectiveSessionId.value) {
-    // 保存旧 session 的当前路径，用于重建管理器时恢复
-    const oldManager = sessionStore.getOrCreateSftpManager(payload.oldSessionId, props.instanceId);
-    const savedPath = oldManager?.currentPath.value || '/';
+    // 使用本地 ref 获取旧 manager 的当前路径
+    // 此时 sessionActions 已从 sessions Map 中删除旧 key，无法通过 store 查找
+    const savedPath = currentSftpManager.value?.currentPath.value || '/';
     console.info(
       `[FileManager ${effectiveSessionId.value}-${props.instanceId}] 收到 session:remapped 事件，旧ID: ${payload.oldSessionId} → 新ID: ${payload.newSessionId}，保存路径: ${savedPath}，重新初始化 SFTP 管理器。`
     );
-    // 先清理旧 session 的 SFTP 管理器，避免残留监听器
+    // 清理旧 manager 的监听器
+    currentSftpManager.value?.cleanup?.();
     sessionStore.removeSftpManager(payload.oldSessionId, props.instanceId);
     effectiveSessionId.value = payload.newSessionId;
+    // 标记为刚重映射，阻止 isSftpReady watcher 触发冗余的 loadDirectory
+    // 目录加载由连接 watcher（initialLoadDone 分支）负责
+    justRemapped.value = true;
     // 传入保存的路径，使新管理器恢复到之前的导航位置
     initializeSftpManager(payload.newSessionId, props.instanceId, savedPath);
   }
@@ -144,6 +152,14 @@ watch(
   () => props.wsDeps.isSftpReady.value,
   (ready) => {
     if (ready && currentSftpManager.value) {
+      // 重映射后跳过：目录加载由连接 watcher（initialLoadDone 分支）负责
+      // 避免与连接 watcher 产生竞争导致重复加载和 UI 闪烁
+      if (justRemapped.value) {
+        console.info(
+          `[FileManager ${effectiveSessionId.value}-${props.instanceId}] SFTP 已就绪，但跳过自动加载（刚完成 session 重映射，由连接 watcher 处理）`
+        );
+        return;
+      }
       console.info(
         `[FileManager ${effectiveSessionId.value}-${props.instanceId}] SFTP 已就绪，自动加载根目录`
       );
@@ -762,6 +778,12 @@ watchEffect((onCleanup) => {
     // clearSelection(); // 可以在连接丢失时不清空选择，看产品需求
     // currentSftpManager.value?.setInitialLoadDone(false); // 不再重置，保持状态
     cleanupListeners();
+  }
+
+  // 重映射标志在此 watchEffect 触发后重置
+  // 确保 isSftpReady watcher 在重映射时跳过，但后续重连时正常工作
+  if (justRemapped.value) {
+    justRemapped.value = false;
   }
 });
 
