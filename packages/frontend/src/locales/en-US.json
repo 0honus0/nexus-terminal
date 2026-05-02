@@ -441,6 +441,8 @@
       "parentDirectory": "Parent Directory",
       "uploadFile": "Upload File",
       "upload": "Upload",
+      "uploadFolder": "Upload Folder",
+      "uploadFolderUnsupported": "Folder upload is not supported in this browser",
       "newFolder": "New Folder",
       "newFile": "New File",
       "rename": "Rename",

@@ -200,6 +200,7 @@ const { isSearchActive, activateSearch, deactivateSearch, cancelSearch, focusSea
 
 // --- UI 状态 Refs ---
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const folderInputRef = ref<HTMLInputElement | null>(null);
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const toolbarRef = ref<InstanceType<typeof FileManagerToolbar> | null>(null); // 工具栏子组件引用
 const fileListRef = ref<InstanceType<typeof FileManagerFileList> | null>(null); // 文件列表子组件引用
@@ -404,6 +405,11 @@ const triggerFileUpload = () => {
   fileInputRef.value?.click();
 };
 
+// --- 文件夹上传触发器 ---
+const triggerFolderUpload = () => {
+  folderInputRef.value?.click();
+};
+
 // --- 下载 Composable ---
 const { triggerDownload, triggerDownloadDirectory } = useFileManagerDownload({
   currentSftpManager: computed(() => currentSftpManager.value),
@@ -503,6 +509,7 @@ const {
     }
   },
   onUpload: triggerFileUpload,
+  onUploadFolder: triggerFolderUpload,
   onDownload: triggerDownload,
   onDelete: handleDeleteSelectedClick,
   onRename: handleRenameContextMenuClick,
@@ -563,8 +570,18 @@ const {
 // --- 文件上传逻辑 (handleFileSelected 保持在此处，由 triggerFileUpload 调用) ---
 const handleFileSelected = (event: Event) => {
   const input = event.target as HTMLInputElement;
-  if (!input.files || !props.wsDeps.isConnected.value) return;
-  // 支持文件夹上传：提取 webkitRelativePath 作为相对路径
+  if (!input.files || !props.wsDeps.isConnected.value || !props.wsDeps.isSftpReady.value) return;
+  Array.from(input.files).forEach((file) => {
+    startFileUpload(file);
+  });
+  input.value = '';
+};
+
+// --- 文件夹上传逻辑 (handleFolderSelected 由 triggerFolderUpload 调用) ---
+const handleFolderSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  if (!input.files || !props.wsDeps.isConnected.value || !props.wsDeps.isSftpReady.value) return;
+  // 提取 webkitRelativePath 作为相对路径，保留目录结构
   Array.from(input.files).forEach((file) => {
     const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
     startFileUpload(file, relativePath || undefined);
@@ -924,13 +941,15 @@ const handleNavigateToPathFromFavorites = (path: string) => {
 <template>
   <div class="flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
     <!-- 隐藏的文件选择输入框，由 triggerFileUpload 触发 -->
+    <input ref="fileInputRef" type="file" multiple class="hidden" @change="handleFileSelected" />
+    <!-- 隐藏的文件夹选择输入框，由 triggerFolderUpload 触发 -->
     <input
-      ref="fileInputRef"
+      ref="folderInputRef"
       type="file"
       multiple
       webkitdirectory
       class="hidden"
-      @change="handleFileSelected"
+      @change="handleFolderSelected"
     />
     <FileManagerToolbar
       ref="toolbarRef"
@@ -941,6 +960,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
       :is-search-active="isSearchActive"
       :is-mobile="props.isMobile"
       :is-connected="!!currentSftpManager && props.wsDeps.isConnected.value"
+      :is-sftp-ready="!!currentSftpManager && props.wsDeps.isSftpReady.value"
       :is-loading="!currentSftpManager || currentSftpManager.isLoading.value"
       :is-syncing-from-terminal="isSyncingPathFromTerminal"
       :is-at-root="currentSftpManager?.currentPath?.value === '/'"
@@ -977,6 +997,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
       @navigate-to-favorite="handleNavigateToPathFromFavorites"
       @open-popup-editor="openPopupEditor"
       @trigger-file-upload="triggerFileUpload"
+      @trigger-folder-upload="triggerFolderUpload"
       @new-folder="handleNewFolderContextMenuClick"
       @new-file="handleNewFileContextMenuClick"
       @toggle-multi-select="toggleMultiSelectMode"

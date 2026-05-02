@@ -35,6 +35,7 @@ export interface UseFileManagerContextMenuOptions {
   // --- 回调函数 ---
   onRefresh: () => void;
   onUpload: () => void;
+  onUploadFolder: () => void;
   onDownload: (items: FileListItem[]) => void; // 文件下载回调
   onDownloadDirectory: (item: FileListItem) => void; // +++ 文件夹下载回调 +++
   onDelete: () => void; // 删除操作现在由外部处理
@@ -69,6 +70,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     t,
     onRefresh,
     onUpload,
+    onUploadFolder,
     onDownload,
     onDelete,
     onRename,
@@ -322,7 +324,12 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
         label: t('fileManager.actions.upload'),
         action: onUpload,
         disabled: !(isConnected.value && isSftpReady.value),
-      }); // 上传放在新建之后
+      }); // 上传文件放在新建之后
+      menu.push({
+        label: t('fileManager.actions.uploadFolder'),
+        action: onUploadFolder,
+        disabled: !(isConnected.value && isSftpReady.value),
+      }); // 上传文件夹
 
       // --- 分隔符 (视觉) ---
 
@@ -361,6 +368,11 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
         {
           label: t('fileManager.actions.upload'),
           action: onUpload,
+          disabled: !(isConnected.value && isSftpReady.value),
+        },
+        {
+          label: t('fileManager.actions.uploadFolder'),
+          action: onUploadFolder,
           disabled: !(isConnected.value && isSftpReady.value),
         },
         // --- 分隔符 (视觉) ---

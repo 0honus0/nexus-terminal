@@ -441,6 +441,8 @@
       "parentDirectory": "上一级",
       "uploadFile": "上传文件",
       "upload": "上传",
+      "uploadFolder": "上传文件夹",
+      "uploadFolderUnsupported": "当前浏览器不支持文件夹上传",
       "newFolder": "新建文件夹",
       "newFile": "新建文件",
       "rename": "重命名",

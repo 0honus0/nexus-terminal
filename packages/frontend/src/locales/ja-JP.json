@@ -441,6 +441,8 @@
       "parentDirectory": "上位ディレクトリ",
       "uploadFile": "ファイルをアップロード",
       "upload": "アップロード",
+      "uploadFolder": "フォルダーをアップロード",
+      "uploadFolderUnsupported": "このブラウザではフォルダーアップロードに対応していません",
       "newFolder": "新しいフォルダー",
       "newFile": "新しいファイル",
       "rename": "名前を変更",

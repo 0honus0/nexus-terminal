@@ -6,7 +6,7 @@
  * 以及上传/新建文件等操作按钮。
  * 仅负责 UI 渲染与事件转发，所有业务逻辑由父组件 FileManager 管理。
  */
-import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import PathHistoryDropdown from './PathHistoryDropdown.vue';
 import FavoritePathsModal from './FavoritePathsModal.vue';
@@ -20,6 +20,8 @@ const props = defineProps({
   isMobile: { type: Boolean, default: false },
   /** WebSocket 是否已连接 */
   isConnected: { type: Boolean, default: false },
+  /** SFTP 是否已就绪 */
+  isSftpReady: { type: Boolean, default: false },
   /** SFTP 管理器是否正在加载 */
   isLoading: { type: Boolean, default: false },
   /** 是否正在从终端同步路径 */
@@ -59,6 +61,7 @@ const emit = defineEmits<{
   'navigate-to-favorite': [path: string];
   'open-popup-editor': [];
   'trigger-file-upload': [];
+  'trigger-folder-upload': [];
   'new-folder': [];
   'new-file': [];
   'toggle-multi-select': [];
@@ -67,6 +70,21 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+
+// --- 浏览器能力检测：webkitdirectory 是否可用 ---
+const isFolderUploadSupported = computed(() => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  return 'webkitdirectory' in input;
+});
+
+// --- 统一禁用条件：上传/新建操作需要 isConnected && isSftpReady ---
+const isActionDisabled = computed(() => !props.isConnected || !props.isSftpReady);
+
+// --- 文件夹上传按钮禁用条件（额外检查浏览器能力） ---
+const isFolderUploadDisabled = computed(
+  () => isActionDisabled.value || !isFolderUploadSupported.value
+);
 
 // --- DOM 引用 ---
 const searchInputRef = ref<HTMLInputElement | null>(null);
@@ -296,10 +314,10 @@ onBeforeUnmount(() => {
         <i class="far fa-edit text-sm"></i>
         <span v-if="!isMobile">{{ t('fileManager.actions.openEditor', 'Open Editor') }}</span>
       </button>
-      <!-- 上传按钮 -->
+      <!-- 上传文件按钮 -->
       <button
         @click="emit('trigger-file-upload')"
-        :disabled="!isConnected"
+        :disabled="isActionDisabled"
         :title="t('fileManager.actions.uploadFile')"
         class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
         :class="{ 'px-1.5': isMobile }"
@@ -307,10 +325,25 @@ onBeforeUnmount(() => {
         <i class="fas fa-upload text-sm"></i>
         <span v-if="!isMobile">{{ t('fileManager.actions.upload') }}</span>
       </button>
+      <!-- 上传文件夹按钮 -->
+      <button
+        @click="emit('trigger-folder-upload')"
+        :disabled="isFolderUploadDisabled"
+        :title="
+          isFolderUploadSupported
+            ? t('fileManager.actions.uploadFolder')
+            : t('fileManager.actions.uploadFolderUnsupported', '当前浏览器不支持文件夹上传')
+        "
+        class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+        :class="{ 'px-1.5': isMobile }"
+      >
+        <i class="fas fa-folder-upload text-sm"></i>
+        <span v-if="!isMobile">{{ t('fileManager.actions.uploadFolder') }}</span>
+      </button>
       <!-- 新建文件夹按钮 -->
       <button
         @click="emit('new-folder')"
-        :disabled="!isConnected"
+        :disabled="isActionDisabled"
         :title="t('fileManager.actions.newFolder')"
         class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
         :class="{ 'px-1.5': isMobile }"
@@ -321,7 +354,7 @@ onBeforeUnmount(() => {
       <!-- 新建文件按钮 -->
       <button
         @click="emit('new-file')"
-        :disabled="!isConnected"
+        :disabled="isActionDisabled"
         :title="t('fileManager.actions.newFile')"
         class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
         :class="{ 'px-1.5': isMobile }"
