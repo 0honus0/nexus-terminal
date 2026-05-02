@@ -321,7 +321,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
         disabled: !(isConnected.value && isSftpReady.value),
       });
       menu.push({
-        label: t('fileManager.actions.upload'),
+        label: t('fileManager.actions.uploadFile'),
         action: onUpload,
         disabled: !(isConnected.value && isSftpReady.value),
       }); // 上传文件放在新建之后
@@ -366,7 +366,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
           disabled: !(isConnected.value && isSftpReady.value),
         },
         {
-          label: t('fileManager.actions.upload'),
+          label: t('fileManager.actions.uploadFile'),
           action: onUpload,
           disabled: !(isConnected.value && isSftpReady.value),
         },

@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
         :class="{ 'px-1.5': isMobile }"
       >
         <i class="fas fa-upload text-sm"></i>
-        <span v-if="!isMobile">{{ t('fileManager.actions.upload') }}</span>
+        <span v-if="!isMobile">{{ t('fileManager.actions.uploadFile') }}</span>
       </button>
       <!-- 上传文件夹按钮 -->
       <button
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
         class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
         :class="{ 'px-1.5': isMobile }"
       >
-        <i class="fas fa-folder-upload text-sm"></i>
+        <i class="fas fa-cloud-arrow-up text-sm"></i>
         <span v-if="!isMobile">{{ t('fileManager.actions.uploadFolder') }}</span>
       </button>
       <!-- 新建文件夹按钮 -->
