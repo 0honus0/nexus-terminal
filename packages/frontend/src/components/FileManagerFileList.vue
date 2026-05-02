@@ -53,6 +53,7 @@ const emit = defineEmits<{
   sort: [key: string];
   'item-click': [event: MouseEvent, item: FileListItem, forceMultiSelect: boolean];
   'item-double-click': [event: MouseEvent, item: FileListItem];
+  'item-long-press': [event: TouchEvent, item: FileListItem];
   'context-menu': [event: MouseEvent, item?: FileListItem];
   'start-resize': [event: MouseEvent, index: number];
   'drag-enter': [event: DragEvent];
@@ -86,6 +87,34 @@ const PARENT_DIR_ITEM: FileListItem = {
     atime: 0,
     mtime: 0,
   },
+};
+
+// --- 移动端长按手势检测 ---
+const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const longPressTriggered = ref(false);
+const LONG_PRESS_DURATION = 500;
+
+const handleTouchStart = (event: TouchEvent, item: FileListItem) => {
+  if (!props.isMobile || item.filename === '..') return;
+  longPressTriggered.value = false;
+  longPressTimer.value = setTimeout(() => {
+    longPressTriggered.value = true;
+    emit('item-long-press', event, item);
+  }, LONG_PRESS_DURATION);
+};
+
+const handleTouchEnd = () => {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value);
+    longPressTimer.value = null;
+  }
+};
+
+const handleTouchMove = () => {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value);
+    longPressTimer.value = null;
+  }
 };
 
 // --- 虚拟列表数据源（含可选的父目录条目）---
@@ -301,6 +330,10 @@ defineExpose({
           @dragend="emit('drag-end')"
           @click="emit('item-click', $event, item, isMobile && isMultiSelectMode)"
           @dblclick="emit('item-double-click', $event, item)"
+          @touchstart.passive="handleTouchStart($event, item)"
+          @touchend.passive="handleTouchEnd"
+          @touchmove.passive="handleTouchMove"
+          @touchcancel.passive="handleTouchEnd"
           :class="[
             { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
             {

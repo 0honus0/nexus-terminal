@@ -283,9 +283,8 @@ export function useFileManagerItemActions(options: UseFileManagerItemActionsOpti
     _originalHandleItemClick?.(event, item);
   };
 
-  /** 包装的列表项双击处理（移动端跳过） */
+  /** 包装的列表项双击处理（移动端由长按手势触发） */
   const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
-    if (isMobile.value) return;
     _originalHandleItemDoubleClick?.(event, item);
   };
 

@@ -340,7 +340,6 @@ const {
   displayedFileList: filteredFileList,
   onItemSingleClickAction: (item) => {
     if (
-      props.isMobile ||
       item.filename === '..' ||
       item.attrs.isDirectory ||
       fileManagerSingleClickOpenFileBoolean.value
@@ -350,7 +349,6 @@ const {
   },
   onItemDoubleClickAction: (item) => {
     if (
-      !props.isMobile &&
       !fileManagerSingleClickOpenFileBoolean.value &&
       item.filename !== '..' &&
       !item.attrs.isDirectory
@@ -367,6 +365,21 @@ setItemActionSelectionDeps({
   originalHandleItemClick,
   originalHandleItemDoubleClick,
 });
+
+/** 移动端长按处理：触发右键菜单 + 当单击打开设置关闭时同时打开文件 */
+const handleItemLongPress = (event: TouchEvent, item: FileListItem) => {
+  if (item.filename === '..') return;
+  // 触发双击动作（当单击打开设置关闭时打开文件）
+  handleItemDoubleClick({} as MouseEvent, item);
+  // 触发右键菜单（使用触摸点坐标）
+  const touch = event.changedTouches?.[0];
+  if (touch) {
+    showContextMenu(
+      { preventDefault: () => {}, clientX: touch.clientX, clientY: touch.clientY } as MouseEvent,
+      item
+    );
+  }
+};
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
 const computedSelectedFullItems = computed((): FileListItem[] => {
@@ -1045,6 +1058,7 @@ const handleNavigateToPathFromFavorites = (path: string) => {
       @sort="handleSort"
       @item-click="handleItemClick"
       @item-double-click="handleItemDoubleClick"
+      @item-long-press="handleItemLongPress"
       @context-menu="showContextMenu"
       @start-resize="startResize"
       @drag-enter="handleDragEnter"
