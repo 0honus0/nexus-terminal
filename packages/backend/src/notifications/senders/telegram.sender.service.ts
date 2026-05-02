@@ -21,9 +21,9 @@ class TelegramSenderService implements INotificationSender {
         const url = new URL(customDomain); // Validate and parse the custom domain
         baseApiUrl = `${url.protocol}//${url.host}`; // Use protocol and host from customDomain
         console.info(`[TelegramSender] Using custom domain: ${baseApiUrl}`);
-      } catch (e: unknown) {
+      } catch (error: unknown) {
         console.warn(
-          `[TelegramSender] Invalid customDomain URL: ${customDomain}. Falling back to default Telegram API. (${getErrorMessage(e)})`
+          `[TelegramSender] Invalid customDomain URL: ${customDomain}. Falling back to default Telegram API. (${getErrorMessage(error)})`
         );
         // Optionally, you could throw an error here or decide to proceed with the default
       }

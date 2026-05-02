@@ -51,7 +51,8 @@ vi.mock('../state', async (importOriginal) => {
 
 // Mock utils
 vi.mock('../utils', () => ({
-  cleanupClientConnection: vi.fn(),
+  cleanupClientConnection: vi.fn().mockResolvedValue(undefined),
+  registerSessionCleanup: vi.fn(),
 }));
 
 // Mock temporaryLogStorageService

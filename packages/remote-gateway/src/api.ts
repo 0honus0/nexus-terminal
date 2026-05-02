@@ -118,7 +118,7 @@ export function createRemoteGatewayApiApp(options: CreateRemoteGatewayApiAppOpti
       try {
         const tokenData = JSON.stringify(connectionParams);
         res.json({ token: encryptToken(tokenData) });
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[Remote Gateway] /api/remote-desktop/token 接口出错:', error);
         res.status(500).json({ error: '生成令牌失败' });
       }

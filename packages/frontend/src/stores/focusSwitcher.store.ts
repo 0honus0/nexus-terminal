@@ -138,7 +138,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
         );
         itemConfigs.value = {};
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[FocusSwitcherStore] Failed to load or parse configuration from backend (${apiUrl}):`,
         error
@@ -170,7 +170,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
       // console.info(`[FocusSwitcherStore] Received response from PUT ${apiUrl}. Status: ${response.status}`);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({})); // 响应体解析失败时使用空对象
         console.error(
           `[FocusSwitcherStore] Save failed. Status: ${response.status}, Error data:`,
           errorData
@@ -182,7 +182,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
       await response.json();
       // console.info('[FocusSwitcherStore] Configuration successfully saved to backend. Response message:', result.message);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[FocusSwitcherStore] Failed to save configuration to backend (${apiUrl}):`,
         error
@@ -340,7 +340,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
           // console.info(`[FocusSwitcherStore] An action for ${id} returned undefined (skipped). Trying next action if available.`);
         }
         // 如果 result 是其他值，也视为跳过或未处理
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`[FocusSwitcherStore] Error executing a focus action for ${id}:`, error);
         // 即使出错，也继续尝试下一个动作
       }

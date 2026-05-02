@@ -78,16 +78,16 @@ const mapRowToTerminalTheme = (row: DbTerminalThemeRow): TerminalTheme => {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-  } catch (e: unknown) {
+  } catch (error: unknown) {
     console.error(
       `Error mapping theme data for theme ID ${row.id}:`,
-      getErrorMessage(e),
+      getErrorMessage(error),
       'Raw row:',
       row
     );
     throw ErrorFactory.databaseError(
       '主题数据映射失败',
-      `Failed to map theme data for theme ID ${row.id}: ${getErrorMessage(e)}`
+      `Failed to map theme data for theme ID ${row.id}: ${getErrorMessage(error)}`
     );
   }
 };

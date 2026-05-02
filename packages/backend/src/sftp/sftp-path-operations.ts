@@ -1,6 +1,7 @@
 import { Stats } from 'ssh2';
 import type { ClientState } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
+import { shellEscape } from '../utils/shell-escape';
 
 interface PathItemPayload {
   filename: string;
@@ -144,7 +145,7 @@ export const executeRmdirPathOperation = async (
   }
 
   console.debug(`[SSH Exec ${sessionId}] Received rmdir request for ${path} (ID: ${requestId})`);
-  const command = `rm -rf '${path.replace(/'/g, "'\\''")}'`;
+  const command = `rm -rf ${shellEscape(path)}`;
 
   console.debug(`[SSH Exec ${sessionId}] 尝试使用 rm -rf 命令删除 ${path} (ID: ${requestId})`);
   console.debug(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);

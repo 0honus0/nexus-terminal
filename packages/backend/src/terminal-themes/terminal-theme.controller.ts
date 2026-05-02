@@ -31,7 +31,7 @@ export const getAllThemesController = async (
   try {
     const themes = await terminalThemeService.getAllThemes();
     res.status(200).json(themes);
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };
@@ -56,7 +56,7 @@ export const getThemeByIdController = async (
     } else {
       res.status(404).json({ message: '未找到指定的主题' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };
@@ -145,7 +145,7 @@ export const deleteThemeController = async (
       // 可能因为 ID 不存在或主题是预设主题而删除失败
       res.status(404).json({ message: '未找到可删除的主题或该主题为预设主题' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };
@@ -224,7 +224,7 @@ export const exportThemeController = async (
     } else {
       res.status(404).json({ message: '未找到指定的主题' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };

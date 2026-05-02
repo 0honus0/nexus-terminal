@@ -130,8 +130,8 @@ const initTerminal = async () => {
 
   // 使用 requestIdleCallback 在浏览器空闲时初始化
   const initInIdle = () => {
-    if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(
+    if (window.requestIdleCallback) {
+      window.requestIdleCallback(
         () => {
           createTerminalInstance();
         },

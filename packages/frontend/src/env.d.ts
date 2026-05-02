@@ -1,5 +1,20 @@
 /// <reference types="vite/client" />
 
+// requestIdleCallback 非标准 API 类型声明（Safari 不支持，需运行时检测）
+interface IdleRequestCallback {
+  (deadline: IdleDeadline): void;
+}
+
+interface IdleDeadline {
+  readonly didTimeout: boolean;
+  timeRemaining: () => number;
+}
+
+interface Window {
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+}
+
 // vue3-recaptcha2 包的 package.json exports 未正确暴露类型声明（bundler moduleResolution）
 declare module 'vue3-recaptcha2' {
   import type { DefineComponent } from 'vue';

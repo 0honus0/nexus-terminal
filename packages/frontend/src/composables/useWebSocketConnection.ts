@@ -277,10 +277,10 @@ export function createWebSocketConnectionManager(
     try {
       const translated = t(`workspace.status.${statusKey}`, params || {});
       return translated === `workspace.status.${statusKey}` ? statusKey : translated;
-    } catch (e) {
+    } catch (error: unknown) {
       console.warn(
         `[WebSocket ${instanceSessionId}] i18n 错误 (键: workspace.status.${statusKey}):`,
-        e
+        error
       );
       return statusKey;
     }
@@ -301,8 +301,11 @@ export function createWebSocketConnectionManager(
       messageHandlers.get(type)?.forEach((handler) => {
         try {
           handler(payload, fullMessage);
-        } catch (e) {
-          console.error(`[WebSocket ${instanceSessionId}] 消息处理器错误 (类型: "${type}"):`, e);
+        } catch (error: unknown) {
+          console.error(
+            `[WebSocket ${instanceSessionId}] 消息处理器错误 (类型: "${type}"):`,
+            error
+          );
         }
       });
     }
@@ -330,8 +333,8 @@ export function createWebSocketConnectionManager(
     }
 
     reconnectAttempts++;
-    // 指数退避延迟 (例如: 2s, 4s, 8s, 16s, 32s)
-    const delay = 2 ** reconnectAttempts * 1000;
+    // 指数退避延迟 + 随机抖动，防止后端重启时所有客户端同时重连（惊群效应）
+    const delay = 2 ** reconnectAttempts * 1000 + Math.random() * 1000;
     statusMessage.value = getStatusText('reconnecting', {
       attempt: reconnectAttempts,
       delay: delay / 1000,
@@ -514,10 +517,10 @@ export function createWebSocketConnectionManager(
 
           // 分发消息给此实例的处理器
           dispatchMessage(message.type, message.payload, message);
-        } catch (e) {
+        } catch (error: unknown) {
           console.error(
             `[WebSocket ${instanceSessionId}] 处理消息时出错:`,
-            e,
+            error,
             '原始数据:',
             event.data
           );
@@ -607,8 +610,8 @@ export function createWebSocketConnectionManager(
       try {
         const messageString = JSON.stringify(message);
         ws.value.send(messageString);
-      } catch (e) {
-        console.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, e, message);
+      } catch (error: unknown) {
+        console.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, error, message);
       }
     } else {
       console.warn(

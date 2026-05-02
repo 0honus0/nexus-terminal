@@ -41,7 +41,7 @@ export class TransfersController {
 
       const task = await this.transfersService.initiateNewTransfer(payload, userId);
       res.status(202).json(task); // 202 Accepted 表示请求已接受处理，但尚未完成
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[TransfersController] Error initiating transfer:', error);
       res.status(500).json({
         message: 'Failed to initiate transfer.',
@@ -59,7 +59,7 @@ export class TransfersController {
       }
       const tasks = await this.transfersService.getAllTransferTasks(userId);
       res.status(200).json(tasks);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[TransfersController] Error getting all transfer statuses:', error);
       res.status(500).json({
         message: 'Failed to retrieve transfer statuses.',
@@ -90,7 +90,7 @@ export class TransfersController {
           message: `Transfer task with ID ${taskId} not found or not accessible by this user.`,
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[TransfersController] Error getting status for task ${req.params.taskId}:`,
         error
@@ -125,7 +125,7 @@ export class TransfersController {
           message: `Failed to initiate cancellation for task ${taskId}. It may not exist, not be accessible, or already be in a final state.`,
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[TransfersController] Error cancelling task ${req.params.taskId}:`, error);
       res.status(500).json({
         message: 'Failed to cancel task.',

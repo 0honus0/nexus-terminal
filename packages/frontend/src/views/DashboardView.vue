@@ -128,7 +128,7 @@ const getActionIcon = (actionType: string): string => dashboardStore.getActionIc
 const handleRefresh = async () => {
   try {
     await dashboardStore.fetchAllData(timeRange.value);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Dashboard] 刷新失败:', error);
     uiNotifications.showError(t('dashboard.errors.refreshFailed') || '刷新数据失败，请稍后重试');
   }
@@ -139,7 +139,7 @@ const handleTimeRangeChange = async () => {
     const range = toSecondsRange(dateTimeRange.value);
     dashboardStore.setTimeRange(range);
     await dashboardStore.fetchAllData(range);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Dashboard] 时间范围变更失败:', error);
     uiNotifications.showError(
       t('dashboard.errors.timeRangeFailed') || '时间范围变更失败，请稍后重试'
@@ -205,7 +205,7 @@ onMounted(async () => {
     if (!hasInitializedDashboardData.value) {
       console.info('[Dashboard] 等待认证初始化完成后再加载数据。');
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Dashboard] 初始化失败:', error);
     uiNotifications.showError(
       t('dashboard.errors.initFailed') || '仪表盘初始化失败，请刷新页面重试'
@@ -222,7 +222,7 @@ watch(
   async () => {
     try {
       await initializeDashboardDataIfReady();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Dashboard] 认证完成后初始化失败:', error);
     }
   },
@@ -244,7 +244,7 @@ const handleConnectionModified = async () => {
     showAddEditConnectionForm.value = false;
     connectionToEdit.value = null;
     await connectionsStore.fetchConnections();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Dashboard] 连接列表更新失败:', error);
     uiNotifications.showError(
       t('dashboard.errors.connectionsFailed') || '连接列表更新失败，请稍后重试'

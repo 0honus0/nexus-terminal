@@ -521,13 +521,13 @@ export class SshSuspendService extends EventEmitter {
 
     try {
       session.channel.close(); // 尝试优雅关闭
-    } catch (e) {
-      console.warn(`[用户: ${userId}, 会话: ${suspendSessionId}] 关闭channel时出错:`, e);
+    } catch (error: unknown) {
+      console.warn(`[用户: ${userId}, 会话: ${suspendSessionId}] 关闭channel时出错:`, error);
     }
     try {
       session.sshClient.end(); // 尝试优雅关闭
-    } catch (e) {
-      console.warn(`[用户: ${userId}, 会话: ${suspendSessionId}] 关闭sshClient时出错:`, e);
+    } catch (error: unknown) {
+      console.warn(`[用户: ${userId}, 会话: ${suspendSessionId}] 关闭sshClient时出错:`, error);
     }
 
     const logPathToFinallyDelete = session.tempLogPath;
@@ -535,7 +535,13 @@ export class SshSuspendService extends EventEmitter {
     // 活跃会话被终止时不会有元数据文件，但为了保险仍尝试删除
     await Promise.all([
       this.logStorageService.deleteLog(logPathToFinallyDelete),
-      this.logStorageService.deleteMetadata(suspendSessionId).catch(() => {}), // 忽略不存在的情况
+      this.logStorageService.deleteMetadata(suspendSessionId).catch((error: unknown) => {
+        // 忽略删除不存在元数据的预期错误
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!msg.includes('ENOENT')) {
+          console.warn(`[SshSuspend] 删除元数据失败 (${suspendSessionId}): ${msg}`);
+        }
+      }),
     ]);
 
     console.info(
@@ -579,7 +585,7 @@ export class SshSuspendService extends EventEmitter {
         `[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} 的日志和元数据已删除 (内存中状态: ${session ? session.backendSshStatus : '不在内存'})。`
       );
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[用户: ${userId}] 删除会话 ${suspendSessionId} 的文件失败:`, error);
       return false;
     }
@@ -627,7 +633,7 @@ export class SshSuspendService extends EventEmitter {
       try {
         await this.logStorageService.writeMetadata(suspendSessionId, metadata);
         console.debug(`[用户: ${userId}] 挂起会话 ${suspendSessionId} 的元数据文件已同步更新。`);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`[用户: ${userId}] 更新会话 ${suspendSessionId} 元数据文件失败:`, error);
         // 内存已更新，元数据文件更新失败不影响返回值
       }
@@ -741,7 +747,7 @@ export class SshSuspendService extends EventEmitter {
       const filename = `ssh_log_${safeBaseName}_${session.tempLogPath}_${timestamp}.log`;
 
       return { content: logContent, filename };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[SshSuspendService][用户: ${userId}] getSessionLogContent: 读取挂起会话 ${suspendSessionId} (日志: ${session.tempLogPath}) 失败:`,
         error

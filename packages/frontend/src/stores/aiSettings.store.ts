@@ -7,12 +7,13 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { AISettings, AISettingsResponse, AITestResponse } from '../types/nl2cmd.types';
 import apiClient, { AI_REQUEST_TIMEOUT_MS } from '../utils/apiClient';
+import { DEFAULT_OPENAI_BASE_URL } from '../utils/aiConstants';
 
 // 默认 AI 设置常量
 const DEFAULT_AI_SETTINGS: AISettings = {
   enabled: false,
   provider: 'openai',
-  baseUrl: 'https://api.openai.com',
+  baseUrl: DEFAULT_OPENAI_BASE_URL,
   apiKey: '',
   model: 'gpt-4o-mini',
   openaiEndpoint: 'chat/completions',
@@ -40,7 +41,7 @@ export const useAISettingsStore = defineStore('aiSettings', () => {
         settings.value = response.data.settings;
         hasLoaded.value = true;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[AI Settings Store] 加载配置失败:', error);
       hasLoaded.value = true; // 即使失败也标记为已加载，避免重复请求
       throw error;
@@ -61,7 +62,7 @@ export const useAISettingsStore = defineStore('aiSettings', () => {
       } else {
         throw new Error(response.data.message || '保存配置失败');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[AI Settings Store] 保存配置失败:', error);
       throw error;
     } finally {
@@ -79,7 +80,7 @@ export const useAISettingsStore = defineStore('aiSettings', () => {
         timeout: AI_REQUEST_TIMEOUT_MS,
       });
       return response.data.success;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[AI Settings Store] 测试连接失败:', error);
       return false;
     } finally {

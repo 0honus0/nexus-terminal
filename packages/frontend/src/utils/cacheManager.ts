@@ -81,8 +81,8 @@ export class CacheManager {
       }
 
       return cached.data;
-    } catch (e) {
-      console.error(`[CacheManager] 读取缓存失败: ${key}`, e);
+    } catch (error: unknown) {
+      console.error(`[CacheManager] 读取缓存失败: ${key}`, error);
       this.remove(key);
       return defaultValue;
     }
@@ -106,8 +106,8 @@ export class CacheManager {
       };
       localStorage.setItem(fullKey, JSON.stringify(cached));
       return true;
-    } catch (e) {
-      console.error(`[CacheManager] 写入缓存失败: ${key}`, e);
+    } catch (error: unknown) {
+      console.error(`[CacheManager] 写入缓存失败: ${key}`, error);
       // 可能是存储空间不足，尝试清理过期缓存
       this.clearExpired();
       return false;

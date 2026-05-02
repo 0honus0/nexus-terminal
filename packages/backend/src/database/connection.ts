@@ -4,6 +4,10 @@ import fs from 'fs';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
 import { getErrorMessage } from '../utils/AppError';
 
+// SQLite 性能优化常量
+const SQLITE_CACHE_SIZE_KB = 64_000; // 64MB 内存缓存（负值表示 KB）
+const SQLITE_MMAP_SIZE_BYTES = 268_435_456; // 256MB 内存映射 I/O
+
 const dbDir = path.join(__dirname, '..', '..', 'data');
 const dbFilename = 'nexus-terminal.db';
 const dbPath = path.join(dbDir, dbFilename);
@@ -92,12 +96,12 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
   await runDb(db, 'PRAGMA journal_mode = WAL;');
   // NORMAL 同步模式：平衡安全性与性能
   await runDb(db, 'PRAGMA synchronous = NORMAL;');
-  // 64MB 内存缓存
-  await runDb(db, 'PRAGMA cache_size = -64000;');
+  // 内存缓存（负值表示 KB 单位）
+  await runDb(db, `PRAGMA cache_size = -${SQLITE_CACHE_SIZE_KB};`);
   // 临时表使用内存存储
   await runDb(db, 'PRAGMA temp_store = MEMORY;');
-  // 启用内存映射 I/O (256MB)
-  await runDb(db, 'PRAGMA mmap_size = 268435456;');
+  // 启用内存映射 I/O
+  await runDb(db, `PRAGMA mmap_size = ${SQLITE_MMAP_SIZE_BYTES};`);
   // 启用外键约束
   await runDb(db, 'PRAGMA foreign_keys = ON;');
 

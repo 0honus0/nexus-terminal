@@ -117,7 +117,7 @@ export const useFileManagerPathNavigation = (
       await manager.loadDirectory(trimmedPath);
       pathHistoryStore.addPath(trimmedPath);
       editablePath.value = trimmedPath;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`${logPrefix.value} 导航到路径 ${trimmedPath} 失败:`, error);
     }
   };

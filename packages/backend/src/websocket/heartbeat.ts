@@ -81,6 +81,14 @@ export function initializeHeartbeat(
         // 检查连接状态，非 OPEN 状态跳过并清理
         if (extWs.readyState !== WebSocket.OPEN) {
           lastPingTime.delete(extWs);
+          // 对卡在 CLOSING 状态的连接强制终止，防止条目在 close 事件前持续累积
+          if (extWs.readyState === WebSocket.CLOSING) {
+            try {
+              extWs.terminate();
+            } catch {
+              // 忽略已损坏的连接
+            }
+          }
           return; // 跳过非活动连接
         }
 
@@ -93,7 +101,7 @@ export function initializeHeartbeat(
             `WebSocket 心跳检测：${clientType} 客户端 ${extWs.username} (会话: ${extWs.sessionId}) ` +
               `连续 ${extWs.missedPongCount} 次无响应（阈值: ${maxMissed}），正在终止...`
           );
-          cleanupClientConnection(extWs.sessionId);
+          cleanupClientConnection(extWs.sessionId).catch(() => {});
           lastPingTime.delete(extWs);
           return extWs.terminate();
         }

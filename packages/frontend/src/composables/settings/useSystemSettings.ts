@@ -226,7 +226,7 @@ export function useSystemSettings() {
     try {
       const response = await apiClient.get('/settings/log-level');
       selectedLogLevel.value = response.data.level || 'info';
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('获取日志等级失败:', error);
     }
   };

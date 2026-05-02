@@ -411,7 +411,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   try {
     await navigator.clipboard.writeText(ipAddress);
     uiNotificationsStore.showSuccess(t('common.copied', '已复制!'));
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Failed to copy IP address: ', err);
     uiNotificationsStore.showError(t('statusMonitor.copyIpError', '复制 IP 失败'));
   }

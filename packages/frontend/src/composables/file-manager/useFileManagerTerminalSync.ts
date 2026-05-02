@@ -110,7 +110,7 @@ export function useFileManagerTerminalSync(options: UseFileManagerTerminalSyncOp
         return;
       }
       activeSession.terminalManager.sendData(command);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`${logPrefix.value} Failed to send command to terminal:`, error);
     }
   };

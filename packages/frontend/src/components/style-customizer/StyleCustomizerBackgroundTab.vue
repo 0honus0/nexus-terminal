@@ -6,6 +6,7 @@ import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { GITHUB_REPO_URL } from '../../utils/constants';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -72,8 +73,7 @@ const initializeEditableState = () => {
   uploadError.value = null;
   currentActiveTab.value = activeHtmlPresetTab.value; // Sync with store state
   localRemoteHtmlPresetsRepositoryUrl.value =
-    remoteHtmlPresetsRepositoryUrl.value ||
-    'https://github.com/Silentely/nexus-terminal/tree/main/doc/custom_html_theme';
+    remoteHtmlPresetsRepositoryUrl.value || `${GITHUB_REPO_URL}/tree/main/doc/custom_html_theme`;
 };
 
 onMounted(async () => {
@@ -279,11 +279,11 @@ const handleEditPresetAsNew = async (preset: { name: string; type: 'preset' | 'c
     newPresetName.value = `${preset.name.replace(/\.html$/, '')}(1)`; // Default new name
     newPresetContent.value = content;
     showPresetEditor.value = true;
-  } catch (e: unknown) {
+  } catch (error: unknown) {
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.errorFetchingPresetContentForCopy', {
-        message: extractErrorMessage(e, t('styleCustomizer.uploadFailed')),
+        message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
         name: preset.name,
       }),
     });
@@ -352,7 +352,7 @@ const handleSaveLocalPreset = async () => {
         });
         showPresetEditor.value = false;
       } catch (error: unknown) {
-        // It's recommended to add this key to your i18n files, e.g., "Failed to rename local preset: {message}"
+        // It's recommended to add this key to your i18n files, error.g., "Failed to rename local preset: {message}"
         notificationsStore.addNotification({
           type: 'error',
           message: t('styleCustomizer.localPresetRenameFailed', {
@@ -768,11 +768,11 @@ const filteredRemoteHtmlPresets = computed(() => {
                     try {
                       const content = await getLocalHtmlPresetContent(preset.name);
                       openEditPresetEditor({ name: preset.name, content });
-                    } catch (e: unknown) {
+                    } catch (error: unknown) {
                       notificationsStore.addNotification({
                         type: 'error',
                         message: t('styleCustomizer.errorFetchingPresetContentForEdit', {
-                          message: extractErrorMessage(e, t('styleCustomizer.uploadFailed')),
+                          message: extractErrorMessage(error, t('styleCustomizer.uploadFailed')),
                         }),
                       });
                     }
@@ -836,7 +836,7 @@ const filteredRemoteHtmlPresets = computed(() => {
               :placeholder="
                 t(
                   'styleCustomizer.remoteRepoUrlPlaceholder',
-                  'https://github.com/Silentely/nexus-terminal/tree/main/doc/custom_html_theme'
+                  `${GITHUB_REPO_URL}/tree/main/doc/custom_html_theme`
                 )
               "
             />

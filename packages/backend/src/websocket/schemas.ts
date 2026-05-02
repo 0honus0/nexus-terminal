@@ -69,6 +69,60 @@ export const dockerGetStatsSchema = z.object({
 
 // --- SFTP 基本操作 Schema ---
 
+// 为每个 SFTP 操作定义专用 payload schema，替换原来的 z.any()
+const sftpPathPayloadSchema = z.object({
+  path: z.string().min(1).max(4096),
+});
+
+const sftpReadfilePayloadSchema = z.object({
+  path: z.string().min(1).max(4096),
+  encoding: z.string().max(64).optional(),
+});
+
+const sftpWritefilePayloadSchema = z.object({
+  path: z.string().min(1).max(4096),
+  content: z.string().max(10485760).optional(), // 最大 10MB
+  data: z.string().max(10485760).optional(),
+  encoding: z.string().max(64).optional(),
+});
+
+const sftpRenamePayloadSchema = z.object({
+  oldPath: z.string().min(1).max(4096),
+  newPath: z.string().min(1).max(4096),
+});
+
+const sftpChmodPayloadSchema = z.object({
+  path: z.string().min(1).max(4096),
+  mode: z.number().int().min(0).max(0o7777),
+});
+
+const sftpCopyMovePayloadSchema = z.object({
+  sources: z.array(z.string().min(1).max(4096)).min(1).max(100),
+  destination: z.string().min(1).max(4096),
+});
+
+const sftpCompressPayloadSchema = z.object({
+  sources: z.array(z.string().min(1).max(4096)).min(1).max(100),
+  destination: z.string().min(1).max(4096),
+  format: z.enum(['zip', 'targz', 'tarbz2']),
+});
+
+const sftpDecompressPayloadSchema = z.object({
+  source: z.string().min(1).max(4096),
+});
+
+/** SFTP 基本操作 payload 联合类型，按操作类型区分验证 */
+const sftpBasePayloadSchema = z.union([
+  sftpPathPayloadSchema, // readdir, stat, mkdir, rmdir, unlink, realpath
+  sftpReadfilePayloadSchema,
+  sftpWritefilePayloadSchema,
+  sftpRenamePayloadSchema,
+  sftpChmodPayloadSchema,
+  sftpCopyMovePayloadSchema,
+  sftpCompressPayloadSchema,
+  sftpDecompressPayloadSchema,
+]);
+
 const sftpOperationTypes = z.enum([
   'sftp:readdir',
   'sftp:stat',
@@ -88,7 +142,7 @@ const sftpOperationTypes = z.enum([
 
 export const sftpBaseSchema = z.object({
   type: sftpOperationTypes,
-  payload: z.any(), // SFTP 操作 payload 各异，保持宽松
+  payload: sftpBasePayloadSchema,
   requestId: z.string().optional(),
 });
 

@@ -40,6 +40,33 @@ export function createSshTerminalManager(
   const terminalOutputBuffer = ref<(string | Uint8Array)[]>([]); // 缓冲 WebSocket 消息直到终端准备好
   const isSshConnected = ref(false); // 跟踪 SSH 连接状态
 
+  // 合并 Uint8Array 的阈值（超过此值逐块写入，避免昂贵的大数组分配）
+  const MERGE_THRESHOLD_BYTES = 512 * 1024; // 512KB
+
+  // 缓冲区大小上限，防止高吞吐终端输出下无限增长
+  const MAX_BUFFER_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+  let currentBufferSizeBytes = 0;
+
+  const getItemByteSize = (item: string | Uint8Array): number => {
+    if (typeof item === 'string') {
+      // 字符串按 UTF-16 编码估算字节数（每个字符最多 4 字节，保守用 2 字节）
+      return item.length * 2;
+    }
+    return item.byteLength;
+  };
+
+  const trimBuffer = (): void => {
+    while (
+      currentBufferSizeBytes > MAX_BUFFER_SIZE_BYTES &&
+      terminalOutputBuffer.value.length > 0
+    ) {
+      const removed = terminalOutputBuffer.value.shift();
+      if (removed) {
+        currentBufferSizeBytes -= getItemByteSize(removed);
+      }
+    }
+  };
+
   // +++ Throttling State +++
   let isFlushing = false;
   let flushScheduled = false;
@@ -52,9 +79,33 @@ export function createSshTerminalManager(
       requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
     };
 
-  // 合并 Uint8Array 数组为单个 Uint8Array
-  const mergeUint8Arrays = (arrays: Uint8Array[]): Uint8Array => {
+  /**
+   * 调度空闲任务：优先使用 requestIdleCallback（Safari 降级到 rAF）
+   * 封装 Safari 兼容性逻辑，便于单元测试和复用
+   */
+  const scheduleIdleTask = (callback: () => void, timeout = IDLE_CALLBACK_TIMEOUT_MS): void => {
+    if (idleWindow.requestIdleCallback) {
+      idleWindow.requestIdleCallback(
+        (deadline: IdleDeadline) => {
+          if (deadline.timeRemaining() > 0 || deadline.didTimeout) {
+            callback();
+          } else {
+            requestAnimationFrame(callback);
+          }
+        },
+        { timeout }
+      );
+    } else {
+      // Safari 等不支持 requestIdleCallback 的浏览器降级到 rAF
+      requestAnimationFrame(callback);
+    }
+  };
+
+  // 合并 Uint8Array 数组为单个 Uint8Array（超过阈值时逐块写入，避免昂贵的大数组分配）
+  const mergeUint8Arrays = (arrays: Uint8Array[]): Uint8Array | null => {
     const totalLength = arrays.reduce((acc, arr) => acc + arr.length, 0);
+    // 超过阈值时不合并，返回 null 由调用方逐块写入
+    if (totalLength > MERGE_THRESHOLD_BYTES) return null;
     const result = new Uint8Array(totalLength);
     let offset = 0;
     for (const arr of arrays) {
@@ -62,6 +113,17 @@ export function createSshTerminalManager(
       offset += arr.length;
     }
     return result;
+  };
+
+  /**
+   * 将 Uint8Array 数组逐块写入终端（用于超过合并阈值的大数据）
+   */
+  const writeUint8ArraysIndividually = (arrays: Uint8Array[]): void => {
+    const terminal = terminalInstance.value;
+    if (!terminal) return;
+    for (const arr of arrays) {
+      terminal.write(arr);
+    }
   };
 
   // 执行实际的缓冲区写入
@@ -74,6 +136,7 @@ export function createSshTerminalManager(
 
     const buffer = terminalOutputBuffer.value;
     terminalOutputBuffer.value = []; // 先清空，避免竞态
+    currentBufferSizeBytes = 0;
 
     // 合并所有数据后一次性写入，减少 DOM 操作
     if (buffer.length === 1) {
@@ -86,8 +149,13 @@ export function createSshTerminalManager(
         // 字符串批量合并
         terminalInstance.value.write((buffer as string[]).join(''));
       } else if (allUint8Arrays) {
-        // Uint8Array 批量合并
-        terminalInstance.value.write(mergeUint8Arrays(buffer as Uint8Array[]));
+        // Uint8Array 批量合并（大数据时逐块写入，避免昂贵的大数组分配）
+        const merged = mergeUint8Arrays(buffer as Uint8Array[]);
+        if (merged) {
+          terminalInstance.value.write(merged);
+        } else {
+          writeUint8ArraysIndividually(buffer as Uint8Array[]);
+        }
       } else {
         // 混合类型：分组处理，减少写入次数
         let strBatch = '';
@@ -103,7 +171,16 @@ export function createSshTerminalManager(
         const flushUint8Batch = () => {
           const terminal = terminalInstance.value;
           if (uint8Batch.length > 0 && terminal) {
-            terminal.write(uint8Batch.length === 1 ? uint8Batch[0] : mergeUint8Arrays(uint8Batch));
+            if (uint8Batch.length === 1) {
+              terminal.write(uint8Batch[0]);
+            } else {
+              const merged = mergeUint8Arrays(uint8Batch);
+              if (merged) {
+                terminal.write(merged);
+              } else {
+                writeUint8ArraysIndividually(uint8Batch);
+              }
+            }
             uint8Batch = [];
           }
         };
@@ -132,33 +209,18 @@ export function createSshTerminalManager(
     }
   };
 
-  // 安排刷新：使用 requestIdleCallback 优先处理非紧急输出
+  // 安排刷新：使用 requestIdleCallback 优先处理非紧急输出（Safari 自动降级到 rAF）
   const scheduleFlush = () => {
     if (flushScheduled) return;
     flushScheduled = true;
 
     const timeSinceLastFlush = performance.now() - lastFlushTime;
 
-    // 如果距离上次刷新时间较短，使用 requestIdleCallback 延迟处理
-    if (timeSinceLastFlush < FLUSH_INTERVAL_MS && idleWindow.requestIdleCallback) {
-      idleWindow.requestIdleCallback(
-        (deadline: IdleDeadline) => {
-          // 如果有空闲时间或超时，执行刷新
-          if (deadline.timeRemaining() > 0 || deadline.didTimeout) {
-            doFlush();
-          } else {
-            // 没有空闲时间，使用 rAF
-            flushScheduled = false;
-            requestAnimationFrame(() => {
-              flushScheduled = true;
-              doFlush();
-            });
-          }
-        },
-        { timeout: IDLE_CALLBACK_TIMEOUT_MS }
-      );
+    // 如果距离上次刷新时间较短，使用 scheduleIdleTask 延迟处理
+    if (timeSinceLastFlush < FLUSH_INTERVAL_MS) {
+      scheduleIdleTask(doFlush);
     } else {
-      // 首次刷新或浏览器不支持 requestIdleCallback，使用 rAF
+      // 首次刷新或距上次刷新时间足够长，直接使用 rAF
       requestAnimationFrame(doFlush);
     }
   };
@@ -270,14 +332,14 @@ export function createSshTerminalManager(
         }
         // 直接使用原始二进制数据作为 Uint8Array 写入终端，避免编码转换问题
         outputData = bytes;
-      } catch (e) {
+      } catch (error: unknown) {
         console.error(
           `[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`,
-          e,
+          error,
           '原始数据:',
           message.payload
         );
-        outputData = `\r\n[解码错误: ${e}]\r\n`; // 在终端显示解码错误
+        outputData = `\r\n[解码错误: ${error}]\r\n`; // 在终端显示解码错误
       }
     }
     // 如果不是 base64 或解码失败，确保它是字符串
@@ -317,6 +379,8 @@ export function createSshTerminalManager(
 
     // 大数据包或缓冲队列非空时，数据进入队列使用批量缓冲策略
     terminalOutputBuffer.value.push(outputData);
+    currentBufferSizeBytes += getItemByteSize(outputData);
+    trimBuffer(); // 超出上限时丢弃最旧条目
 
     if (terminalInstance.value) {
       if (!isFlushing) {
@@ -372,6 +436,7 @@ export function createSshTerminalManager(
       console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接时仍有缓冲数据，正在写入...`);
       terminalOutputBuffer.value.forEach((data) => terminalInstance.value?.write(data));
       terminalOutputBuffer.value = [];
+      currentBufferSizeBytes = 0;
     }
   };
 

@@ -3,6 +3,9 @@ import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { SidebarConfig, LayoutNode, CaptchaSettings } from '../types/settings.types';
 
+// 登录封禁默认时长（秒），对应 5 分钟
+const DEFAULT_LOGIN_BAN_DURATION_SECONDS = '300';
+
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
 
@@ -90,7 +93,7 @@ export const settingsRepository = {
     try {
       await Promise.all(promises);
       // console.info('[仓库] setMultipleSettings 成功完成。');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[仓库] setMultipleSettings 失败:', error);
       throw ErrorFactory.databaseError('批量设置失败', '批量设置失败');
     }
@@ -113,11 +116,11 @@ export const getSidebarConfig = async (): Promise<SidebarConfig> => {
         console.warn(
           `[设置仓库] 在数据库中发现无效的 sidebarConfig 格式: ${jsonString}。返回默认值。`
         );
-      } catch (parseError) {
+      } catch (parseError: unknown) {
         console.error(`[设置仓库] 从数据库解析 sidebarConfig JSON 失败: ${jsonString}`, parseError);
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[设置仓库] 获取侧边栏配置设置时出错 (键: ${SIDEBAR_CONFIG_KEY}):`, error);
   }
   return defaultValue;
@@ -141,7 +144,7 @@ export const setSidebarConfig = async (config: SidebarConfig): Promise<void> => 
     }
     const jsonString = JSON.stringify(config);
     await settingsRepository.setSetting(SIDEBAR_CONFIG_KEY, jsonString);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[设置仓库] 设置侧边栏配置时出错 (键: ${SIDEBAR_CONFIG_KEY}):`, error);
     throw ErrorFactory.databaseError('保存侧边栏配置失败。', '保存侧边栏配置失败。');
   }
@@ -178,11 +181,11 @@ export const getCaptchaConfig = async (): Promise<CaptchaSettings> => {
         console.warn(
           `[设置仓库] 在数据库中发现无效的 captchaConfig 格式: ${jsonString}。返回默认值。`
         );
-      } catch (parseError) {
+      } catch (parseError: unknown) {
         console.error(`[设置仓库] 从数据库解析 captchaConfig JSON 失败: ${jsonString}`, parseError);
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[设置仓库] 获取 CAPTCHA 配置设置时出错 (键: ${CAPTCHA_CONFIG_KEY}):`, error);
   }
   return defaultValue;
@@ -211,7 +214,7 @@ export const setCaptchaConfig = async (config: CaptchaSettings): Promise<void> =
 
     const jsonString = JSON.stringify(config);
     await settingsRepository.setSetting(CAPTCHA_CONFIG_KEY, jsonString);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[设置仓库] 设置 CAPTCHA 配置时出错 (键: ${CAPTCHA_CONFIG_KEY}):`, error);
     throw ErrorFactory.databaseError('保存 CAPTCHA 配置失败。', '保存 CAPTCHA 配置失败。');
   }
@@ -277,7 +280,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
     ipWhitelistEnabled: 'false',
     ipWhitelist: '',
     maxLoginAttempts: '5',
-    loginBanDuration: '300',
+    loginBanDuration: DEFAULT_LOGIN_BAN_DURATION_SECONDS,
     focusSwitcherSequence: JSON.stringify([
       'quickCommandsSearch',
       'commandHistorySearch',

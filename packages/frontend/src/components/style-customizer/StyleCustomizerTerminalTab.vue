@@ -10,6 +10,18 @@ import { defaultXtermTheme } from '../../features/appearance/config/default-them
 import { extractErrorMessage } from '../../utils/errorExtractor';
 import TerminalPreview from './TerminalPreview.vue';
 
+/** 类型安全的 ITheme 动态属性访问 */
+function getThemeValue(themeData: ITheme | undefined, key: string): string | undefined {
+  if (!themeData) return undefined;
+  return (themeData as Record<string, unknown>)[key] as string | undefined;
+}
+
+function setThemeValue(themeData: ITheme | undefined, key: string, value: string): void {
+  if (themeData) {
+    (themeData as Record<string, string>)[key] = value;
+  }
+}
+
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
 const notificationsStore = useUiNotificationsStore();
@@ -286,8 +298,8 @@ const handleAddNewTheme = () => {
     } else {
       editableTerminalThemeString.value = '';
     }
-  } catch (e) {
-    console.error('格式化新终端主题字符串失败:', e);
+  } catch (error: unknown) {
+    console.error('格式化新终端主题字符串失败:', error);
     editableTerminalThemeString.value = '';
   }
   emit('update:isEditingTheme', true);
@@ -336,8 +348,8 @@ const handleEditTheme = async (theme: TerminalTheme) => {
       } else {
         editableTerminalThemeString.value = '';
       }
-    } catch (e) {
-      console.error('格式化编辑终端主题字符串失败:', e);
+    } catch (error: unknown) {
+      console.error('格式化编辑终端主题字符串失败:', error);
       editableTerminalThemeString.value = '';
     }
     emit('update:isEditingTheme', true);
@@ -540,8 +552,8 @@ watch(
         ) {
           terminalThemeParseError.value = null;
         }
-      } catch (e) {
-        console.error('格式化终端主题字符串失败 (watcher):', e);
+      } catch (error: unknown) {
+        console.error('格式化终端主题字符串失败 (watcher):', error);
       }
     }
   },
@@ -561,8 +573,8 @@ watch(
         } else {
           editableTerminalThemeString.value = terminalThemePlaceholder; // Or empty
         }
-      } catch (e) {
-        console.error('初始化编辑终端主题字符串失败:', e);
+      } catch (error: unknown) {
+        console.error('初始化编辑终端主题字符串失败:', error);
         editableTerminalThemeString.value = terminalThemePlaceholder; // Or empty
       }
       terminalThemeParseError.value = null; // Clear parse error when starting to edit
@@ -998,13 +1010,16 @@ watch(
           v-if="typeof value === 'string' && value.startsWith('#')"
           type="color"
           :id="`xterm-${key}`"
-          v-model.lazy="(editingTheme.themeData as any)[key]"
+          :value="getThemeValue(editingTheme.themeData, key)"
           class="p-0.5 h-[34px] min-w-[40px] max-w-[50px] rounded border border-border flex-shrink-0 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+          @input="
+            setThemeValue(editingTheme.themeData, key, ($event.target as HTMLInputElement).value)
+          "
         />
         <input
           v-if="typeof value === 'string' && value.startsWith('#')"
           type="text"
-          :value="(editingTheme.themeData as any)[key]"
+          :value="getThemeValue(editingTheme.themeData, key)"
           readonly
           class="flex-grow min-w-[80px] bg-header cursor-text border border-border px-[0.7rem] py-2 rounded text-sm text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           @focus="handleFocusAndSelect"
@@ -1013,8 +1028,11 @@ watch(
           v-else
           type="text"
           :id="`xterm-${key}`"
-          v-model="(editingTheme.themeData as any)[key]"
+          :value="getThemeValue(editingTheme.themeData, key)"
           class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          @input="
+            setThemeValue(editingTheme.themeData, key, ($event.target as HTMLInputElement).value)
+          "
         />
       </div>
     </div>

@@ -173,7 +173,7 @@ const getLanguageExtension = async (lang: string) => {
       } else {
         return [];
       }
-    } catch (error) {
+    } catch (error: unknown) {
       return [];
     }
   }

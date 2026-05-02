@@ -231,11 +231,19 @@ export const testUnsavedConnection = async (
       proxy_id: proxy_id ? parseInt(proxy_id, 10) : null, // 确保 proxy_id 是数字或 null
     };
 
-    // 验证 port 和 proxy_id 是否为有效数字
+    // 验证 port 是否为有效数字且在合法范围 (1-65535)
     if (Number.isNaN(connectionConfig.port)) {
       res
         .status(400)
         .json({ success: false, error: '端口号必须是有效的数字。', code: 'INVALID_PARAMETER' });
+      return;
+    }
+    if (connectionConfig.port < 1 || connectionConfig.port > 65535) {
+      res.status(400).json({
+        success: false,
+        error: '端口号必须在 1-65535 范围内。',
+        code: 'INVALID_PARAMETER',
+      });
       return;
     }
     if (proxy_id && Number.isNaN(connectionConfig.proxy_id as number)) {

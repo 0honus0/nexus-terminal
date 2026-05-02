@@ -39,7 +39,7 @@ export const ipBlacklistCheckMiddleware = async (
     }
     // IP 未被封禁，继续处理请求
     next();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[IP Blacklist Check] 检查 IP ${clientIp} 时发生错误:`, error);
     // 中间件执行出错，为安全起见，阻止请求
     res.status(500).json({ message: '服务器内部错误 (IP 黑名单检查失败)。' });

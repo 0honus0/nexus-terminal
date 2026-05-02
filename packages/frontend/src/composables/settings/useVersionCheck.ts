@@ -1,6 +1,7 @@
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
+import { GITHUB_REPO_URL } from '@/utils/constants';
 
 export function useVersionCheck() {
   const { t } = useI18n();
@@ -27,7 +28,7 @@ export function useVersionCheck() {
     try {
       const response = await axios.get('/VERSION');
       appVersion.value = response.data.trim();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('加载应用版本失败:', error);
       appVersion.value = '未知版本';
     }
@@ -39,7 +40,7 @@ export function useVersionCheck() {
     latestVersion.value = null;
     try {
       const response = await axios.get(
-        'https://raw.githubusercontent.com/Silentely/nexus-terminal/main/VERSION'
+        `https://raw.githubusercontent.com/${GITHUB_REPO_URL.split('github.com/')[1]}/main/VERSION`
       );
       if (response.data && response.data.trim()) {
         latestVersion.value = response.data.trim();

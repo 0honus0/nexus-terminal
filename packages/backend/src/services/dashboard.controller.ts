@@ -28,7 +28,7 @@ export const getStats = async (req: Request, res: Response, next: NextFunction):
 
     const stats = await Service.getDashboardStats(timeRange);
     res.status(200).json(stats);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取仪表盘统计失败:', error);
     next(error);
   }
@@ -45,7 +45,7 @@ export const getAssetHealth = async (
   try {
     const health = await Service.getAssetHealth();
     res.status(200).json(health);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取资产健康状态失败:', error);
     next(error);
   }
@@ -74,7 +74,7 @@ export const getTimeline = async (
 
     const timeline = await Service.getActivityTimeline(limit, timeRange);
     res.status(200).json({ events: timeline });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取活动时间线失败:', error);
     next(error);
   }
@@ -99,7 +99,7 @@ export const getStorage = async (
         total: Service.formatBytes(stats.totalSize),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取存储统计失败:', error);
     next(error);
   }
@@ -124,7 +124,7 @@ export const getSystemResources = async (
         diskTotal: Service.formatBytes(resources.diskTotal),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Controller: 获取系统资源失败:', error);
     next(error);
   }

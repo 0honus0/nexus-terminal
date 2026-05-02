@@ -17,8 +17,10 @@ class WebhookSenderService implements INotificationSender {
 
     try {
       new URL(url);
-    } catch (e: unknown) {
-      console.error(`[WebhookSender] Invalid webhook URL format: ${url} (${getErrorMessage(e)})`);
+    } catch (error: unknown) {
+      console.error(
+        `[WebhookSender] Invalid webhook URL format: ${url} (${getErrorMessage(error)})`
+      );
       throw new Error(`Invalid webhook URL format: ${url}`);
     }
 

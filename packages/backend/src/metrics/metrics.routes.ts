@@ -18,7 +18,7 @@ router.get('/', async (_req: Request, res: Response) => {
   try {
     res.setHeader('Content-Type', registry.contentType);
     res.end(await registry.metrics());
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error(error as Error, '[Metrics] 生成指标数据失败');
     res.status(500).end('指标采集失败');
   }

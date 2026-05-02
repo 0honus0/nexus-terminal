@@ -62,7 +62,7 @@ const handleItemClick = async (pathItem: FavoritePathItem) => {
   try {
     // Mark path as used before navigating
     await favoritePathsStore.markPathAsUsed(pathItem.id, t);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to mark path as used:', error);
     // Optionally, inform the user about the failure, though navigation will still proceed.
   }
@@ -87,7 +87,7 @@ const handleDelete = async (pathItem: FavoritePathItem) => {
   if (confirmed) {
     try {
       await favoritePathsStore.deleteFavoritePath(pathItem.id, t);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to delete favorite path from modal:', error);
     }
   }
@@ -100,7 +100,7 @@ const handleSendToTerminal = (pathItem: FavoritePathItem) => {
     const command = `cd ${escapedPath}\n`;
     try {
       activeSession.terminalManager.sendData(command);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[FavoritePathsModal] Failed to send command to active terminal:', error);
     }
   } else {

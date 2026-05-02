@@ -3,8 +3,13 @@ import { AuthenticatedWebSocket, ClientState, DockerContainer, DockerStats } fro
 import { parsePortsString } from '../utils';
 import { clientStates, settingsService } from '../state';
 import { getErrorMessage } from '../../utils/AppError';
+import { sanitizeDockerContainerId, isValidDockerCommand } from '../../utils/docker-security';
 
 const DEFAULT_DOCKER_STATUS_INTERVAL_SECONDS = 2;
+
+// Docker 命令执行后等待容器状态同步的延迟（毫秒）
+// 短暂延迟确保 Docker daemon 已完成状态变更，避免读取到旧状态
+const DOCKER_STATUS_SYNC_DELAY_MS = 500;
 
 type DockerCommandAction = 'start' | 'stop' | 'restart' | 'remove';
 
@@ -193,7 +198,7 @@ export async function fetchRemoteDockerStatus(
     try {
       // 净化所有 containerIds，仅允许安全字符（命令注入防护）
       const cleanContainerIds = runningContainerIds
-        .map((id) => id.replace(/[^a-zA-Z0-9_-]/g, ''))
+        .map((id) => sanitizeDockerContainerId(id))
         .filter((id) => id.length > 0);
 
       if (cleanContainerIds.length === 0) {
@@ -370,8 +375,12 @@ export async function handleDockerCommand(
     `WebSocket: Processing command '${command}' for container '${containerId}' on session ${sessionId}...`
   );
   try {
-    const cleanContainerId = containerId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const cleanContainerId = sanitizeDockerContainerId(containerId);
     if (!cleanContainerId) throw new Error('Invalid container ID format after sanitization.');
+
+    if (!isValidDockerCommand(command)) {
+      throw new Error(`Unsupported command: ${command}`);
+    }
 
     let dockerCliCommand: string;
     switch (command) {
@@ -387,8 +396,6 @@ export async function handleDockerCommand(
       case 'remove':
         dockerCliCommand = `docker rm -f ${cleanContainerId}`;
         break;
-      default:
-        throw new Error(`Unsupported command: ${command}`);
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -427,7 +434,7 @@ export async function handleDockerCommand(
       if (currentState && currentState.ws.readyState === WebSocket.OPEN) {
         currentState.ws.send(JSON.stringify({ type: 'request_docker_status_update' }));
       }
-    }, 500);
+    }, DOCKER_STATUS_SYNC_DELAY_MS);
   } catch (error: unknown) {
     console.error(
       `WebSocket: 执行远程 Docker 命令 (${command} for ${containerId}) 失败 for session ${sessionId}:`,
@@ -486,7 +493,7 @@ export async function handleDockerGetStats(
   }
 
   // 净化 containerId，仅允许安全字符（命令注入防护）
-  const cleanContainerId = containerId.replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanContainerId = sanitizeDockerContainerId(containerId);
   if (!cleanContainerId) {
     console.error(
       `WebSocket: Invalid container ID format after sanitization for session ${sessionId}: ${containerId}`

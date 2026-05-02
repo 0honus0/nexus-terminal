@@ -547,7 +547,7 @@ const copyCommand = async (command: string) => {
   try {
     await navigator.clipboard.writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('使用Clipboard API复制命令失败:', err);
     // 备用方案：使用临时文本区域和execCommand
     try {
@@ -565,7 +565,7 @@ const copyCommand = async (command: string) => {
       } else {
         uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败'));
       }
-    } catch (fallbackErr) {
+    } catch (fallbackErr: unknown) {
       console.error('备用复制方法也失败:', fallbackErr);
       uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败'));
     }

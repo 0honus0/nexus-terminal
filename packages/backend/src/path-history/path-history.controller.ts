@@ -15,7 +15,7 @@ export const addPath = async (req: Request, res: Response, next: NextFunction): 
   try {
     const newId = await PathHistoryService.addPathHistory(path);
     res.status(201).json({ id: newId, message: '路径已添加到历史记录' });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('添加路径历史记录控制器出错:', error);
     next(error);
   }
@@ -33,7 +33,7 @@ export const getAllPaths = async (
     const history = await PathHistoryService.getAllPathHistory();
     // Repository 返回的是升序（旧->新）
     res.status(200).json(history);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('获取路径历史记录控制器出错:', error);
     next(error);
   }
@@ -61,7 +61,7 @@ export const deletePath = async (
     } else {
       res.status(404).json({ message: '未找到要删除的路径历史记录' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('删除路径历史记录控制器出错:', error);
     next(error);
   }
@@ -78,7 +78,7 @@ export const clearAllPaths = async (
   try {
     const count = await PathHistoryService.clearAllPathHistory();
     res.status(200).json({ count, message: `已清空 ${count} 条路径历史记录` });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('清空路径历史记录控制器出错:', error);
     next(error);
   }

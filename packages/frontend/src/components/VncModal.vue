@@ -282,7 +282,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
         currentClipboardText.substring(0, 50) + (currentClipboardText.length > 50 ? '...' : '')
       );
     }
-  } catch (err) {
+  } catch (err: unknown) {
     // This error is expected if the document/tab is not focused when the VNC display element gets focus.
     // Or if clipboard permissions are not granted.
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
@@ -361,7 +361,7 @@ const setupInputListeners = () => {
     // document.addEventListener('copy', handleHostCopy); // Removed this
     // displayEl.addEventListener('mouseenter', trySyncClipboardOnMouseEnter); // Changed to focus event
     displayEl.addEventListener('focus', trySyncClipboardOnDisplayFocus);
-  } catch (inputError) {
+  } catch (inputError: unknown) {
     console.error('Error setting up VNC input listeners:', inputError);
     statusMessage.value = t('remoteDesktopModal.errors.inputError');
   }
@@ -379,8 +379,8 @@ const removeInputListeners = () => {
         if (displayEl) {
           displayEl.style.cursor = 'default';
         }
-      } catch (e) {
-        console.warn('Could not reset cursor on VNC display element:', e);
+      } catch (error: unknown) {
+        console.warn('Could not reset cursor on VNC display element:', error);
       }
     }
   }

@@ -43,7 +43,7 @@ const createMockStats = (kind: 'file' | 'directory' = 'file'): MockStats => ({
 
 const createState = (): MockState => {
   return {
-    ws: { send: vi.fn() },
+    ws: { send: vi.fn(), readyState: 1 }, // readyState: 1 = OPEN
     sftp: {
       readdir: vi.fn(),
     },

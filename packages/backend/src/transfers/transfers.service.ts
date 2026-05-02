@@ -489,9 +489,9 @@ export class TransfersService {
           console.debug(
             `[TransfersService] SSH connection to source server explicitly closed for task ${taskId}.`
           );
-        } catch (e: unknown) {
+        } catch (error: unknown) {
           console.warn(
-            `[TransfersService] Error ending sourceSshClient for task ${taskId}: ${getErrorMessage(e)}`
+            `[TransfersService] Error ending sourceSshClient for task ${taskId}: ${getErrorMessage(error)}`
           );
         }
       }

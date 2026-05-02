@@ -303,8 +303,8 @@ export const closeSession = (sessionId: string) => {
     sessionToClose.disposables.forEach((dispose) => {
       try {
         dispose();
-      } catch (e) {
-        console.error(`[SessionActions] 清理disposable时出错:`, e);
+      } catch (error: unknown) {
+        console.error(`[SessionActions] 清理disposable时出错:`, error);
       }
     });
     sessionToClose.disposables = []; // 清空数组

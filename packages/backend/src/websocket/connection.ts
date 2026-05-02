@@ -339,7 +339,7 @@ export function initializeConnectionHandler(
                         })
                       );
                     }
-                    cleanupClientConnection(newFrontendSessionId);
+                    cleanupClientConnection(newFrontendSessionId).catch(() => {});
                   });
                   result.sshClient.on('error', (err: Error) => {
                     console.error(
@@ -353,7 +353,7 @@ export function initializeConnectionHandler(
                           payload: { sessionId: newFrontendSessionId, error: err.message },
                         })
                       );
-                    cleanupClientConnection(newFrontendSessionId);
+                    cleanupClientConnection(newFrontendSessionId).catch(() => {});
                   });
                   // console.info(`[WebSocket Handler][${type}] 已为恢复的会话 ${newFrontendSessionId} 设置事件监听器。`);
 
@@ -836,7 +836,7 @@ export function initializeConnectionHandler(
         // 清理心跳状态
         cleanupHeartbeat(ws);
 
-        cleanupClientConnection(ws.sessionId);
+        cleanupClientConnection(ws.sessionId).catch(() => {});
       });
 
       ws.on('error', (error) => {
@@ -850,7 +850,7 @@ export function initializeConnectionHandler(
         // 清理心跳状态
         cleanupHeartbeat(ws);
 
-        cleanupClientConnection(ws.sessionId); // Ensure cleanup on error too
+        cleanupClientConnection(ws.sessionId).catch(() => {}); // Ensure cleanup on error too
       });
     }
   });

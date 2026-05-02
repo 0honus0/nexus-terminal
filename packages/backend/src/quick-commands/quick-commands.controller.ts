@@ -52,7 +52,7 @@ export const addQuickCommand = async (
       console.error(`[Controller] 添加快捷指令后未能找到 ID: ${newId}`);
       res.status(201).json({ message: '快捷指令已添加，但无法检索新记录', id: newId });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 添加快捷指令失败:', error);
     next(error);
   }
@@ -74,7 +74,7 @@ export const getAllQuickCommands = async (
   try {
     const commands = await QuickCommandsService.getAllQuickCommands(validSortBy);
     res.status(200).json(commands);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('获取快捷指令控制器出错:', error);
     next(error);
   }
@@ -154,7 +154,7 @@ export const updateQuickCommand = async (
         return;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('更新快捷指令控制器出错:', error);
     next(error);
   }
@@ -182,7 +182,7 @@ export const deleteQuickCommand = async (
     } else {
       res.status(404).json({ message: '未找到要删除的快捷指令' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('删除快捷指令控制器出错:', error);
     next(error);
   }
@@ -212,7 +212,7 @@ export const incrementUsage = async (
       console.warn(`尝试增加不存在的快捷指令 (ID: ${id}) 的使用次数`);
       res.status(200).json({ message: '使用次数已记录 (或指令不存在)' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('增加快捷指令使用次数控制器出错:', error);
     next(error);
   }
@@ -247,7 +247,7 @@ export const assignTagToCommands = async (
       success: true,
       message: `标签 ${tagId} 已成功尝试关联到 ${commandIds.length} 个指令。`,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 批量分配标签时出错:', error);
     next(error);
   }

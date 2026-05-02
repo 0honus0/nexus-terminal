@@ -94,12 +94,12 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
         throw new Error(`指定的终端主题 ID 不存在: ${themeIdNum}`);
       }
       console.debug(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       console.error(
         `[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`,
-        getErrorMessage(e)
+        getErrorMessage(error)
       );
-      throw new Error(`验证终端主题 ID 时出错: ${getErrorMessage(e) || themeIdNum}`);
+      throw new Error(`验证终端主题 ID 时出错: ${getErrorMessage(error) || themeIdNum}`);
     }
   } else if (
     settingsDto.hasOwnProperty('activeTerminalThemeId') &&
@@ -754,10 +754,8 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
       throw new Error('不允许使用 IP 地址作为远程文件 URL。');
     }
 
-    // 2.2 域名白名单校验
-    const isAllowedDomain = ALLOWED_DOMAINS.some(
-      (domain) => urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
-    );
+    // 2.2 域名白名单校验（精确匹配，防止子域名绕过）
+    const isAllowedDomain = ALLOWED_DOMAINS.some((domain) => urlObj.hostname === domain);
 
     if (!isAllowedDomain) {
       throw new Error(`远程文件 URL 的域名不在允许列表中。仅支持: ${ALLOWED_DOMAINS.join(', ')}`);

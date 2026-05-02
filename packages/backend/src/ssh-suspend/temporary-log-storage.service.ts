@@ -7,6 +7,8 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 }
 
 const MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
+/** 环形缓冲保留大小：日志超限时保留尾部 80MB，丢弃头部旧数据 */
+const RING_BUFFER_RETAIN_BYTES = 80 * 1024 * 1024;
 const LOG_DIRECTORY = './data/temp_suspended_ssh_logs/';
 
 /**
@@ -26,9 +28,21 @@ export interface SessionMetadata {
 /**
  * TemporaryLogStorageService负责管理临时日志文件的原子化读、写、删除及轮替操作。
  */
+// 仅允许安全字符，防止路径遍历攻击（如 ../../etc/passwd）
+const VALID_SUSPEND_ID = /^[a-zA-Z0-9_-]+$/;
+
 export class TemporaryLogStorageService {
   constructor() {
     this.ensureLogDirectoryExists();
+  }
+
+  /**
+   * 校验 suspendSessionId 是否为合法标识符，防止路径遍历。
+   */
+  private validateSuspendSessionId(suspendSessionId: string): void {
+    if (!VALID_SUSPEND_ID.test(suspendSessionId)) {
+      throw new Error(`无效的挂起会话 ID: "${suspendSessionId}"，仅允许字母、数字、下划线和连字符`);
+    }
   }
 
   /**
@@ -38,17 +52,19 @@ export class TemporaryLogStorageService {
     try {
       await fs.mkdir(LOG_DIRECTORY, { recursive: true });
       // console.info(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`创建日志目录 '${LOG_DIRECTORY}' 失败:`, error);
       // 在实际应用中，这里可能需要更健壮的错误处理
     }
   }
 
   private getLogFilePath(suspendSessionId: string): string {
+    this.validateSuspendSessionId(suspendSessionId);
     return path.join(LOG_DIRECTORY, `${suspendSessionId}.log`);
   }
 
   private getMetadataFilePath(suspendSessionId: string): string {
+    this.validateSuspendSessionId(suspendSessionId);
     return path.join(LOG_DIRECTORY, `${suspendSessionId}.meta.json`);
   }
 
@@ -65,23 +81,25 @@ export class TemporaryLogStorageService {
       let stat;
       try {
         stat = await fs.stat(filePath);
-      } catch (e: unknown) {
-        if (!isNodeError(e) || e.code !== 'ENOENT') {
-          throw e;
+      } catch (error: unknown) {
+        if (!isNodeError(error) || error.code !== 'ENOENT') {
+          throw error;
         }
         // 文件不存在，是正常情况，后续会创建
       }
 
       if (stat && stat.size >= MAX_LOG_SIZE_BYTES) {
-        // 文件过大，执行轮替策略：清空文件
+        // 文件过大，执行环形缓冲轮替：保留尾部数据，丢弃头部旧数据
         console.info(
-          `日志文件 '${filePath}' 大小达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行轮替（清空）。`
+          `日志文件 '${filePath}' 大小达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行环形缓冲轮替（保留尾部 ${RING_BUFFER_RETAIN_BYTES / (1024 * 1024)}MB）。`
         );
-        await fs.writeFile(filePath, data, 'utf8'); // 清空并写入新数据
+        const fileContent = (await fs.readFile(filePath, 'utf8')) ?? '';
+        const retainContent = fileContent.slice(-RING_BUFFER_RETAIN_BYTES);
+        await fs.writeFile(filePath, retainContent + data, 'utf8');
       } else {
         await fs.appendFile(filePath, data, 'utf8');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`写入日志文件 '${filePath}' 失败:`, error);
       throw error; // 重新抛出错误，让调用者处理
     }
@@ -136,7 +154,7 @@ export class TemporaryLogStorageService {
     try {
       await this.ensureLogDirectoryExists();
       await fs.writeFile(filePath, JSON.stringify(metadata, null, 2), 'utf8');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`写入元数据文件 '${filePath}' 失败:`, error);
       throw error;
     }
@@ -200,7 +218,7 @@ export class TemporaryLogStorageService {
       return files
         .filter((file) => file.endsWith('.meta.json'))
         .map((file) => file.replace(/\.meta\.json$/, ''));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`列出元数据文件失败:`, error);
       return [];
     }
@@ -218,7 +236,7 @@ export class TemporaryLogStorageService {
       return files
         .filter((file) => file.endsWith('.log'))
         .map((file) => file.replace(/\.log$/, ''));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`列出日志目录 '${LOG_DIRECTORY}' 中的文件失败:`, error);
       return []; // 发生错误时返回空数组
     }

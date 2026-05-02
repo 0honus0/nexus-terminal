@@ -91,8 +91,13 @@ export const errorHandler = (
  * 用于处理未匹配到任何路由的请求
  */
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction): void => {
+  // 生产环境仅返回通用消息，避免泄露内部路由结构；开发环境保留完整路径便于调试
+  const detail =
+    process.env.NODE_ENV === 'production'
+      ? '请求的资源不存在'
+      : `路由未找到: ${req.method} ${req.path}`;
   const error = new AppError(
-    `路由未找到: ${req.method} ${req.path}`,
+    detail,
     ErrorCode.NOT_FOUND,
     404,
     ErrorSeverity.LOW,

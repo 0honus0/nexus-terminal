@@ -5,6 +5,7 @@ import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { clientStates } from '../websocket';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { shellEscape } from '../utils/shell-escape';
 import {
   ClientState,
   AuthenticatedWebSocket,
@@ -448,12 +449,10 @@ export const handleCompressRequest = async (
 
   // --- 构建 Shell 命令 ---
   let command: string;
-  // 确保源路径被正确引用，特别是包含空格或特殊字符时
-  // 注意：源路径是相对于 targetDirectory 的
-  const quotedSources = sources.map((s: string) => `"${s.replace(/"/g, '\\"')}"`).join(' ');
-  // 确保目标目录和压缩包名称被正确引用
-  const quotedTargetDir = `"${targetDirectory.replace(/"/g, '\\"')}"`;
-  const quotedDestName = `"${destinationArchiveName.replace(/"/g, '\\"')}"`;
+  // 使用单引号转义，防止 $、`、\、! 等字符被 shell 解释
+  const quotedSources = sources.map((s: string) => shellEscape(s)).join(' ');
+  const quotedTargetDir = shellEscape(targetDirectory);
+  const quotedDestName = shellEscape(destinationArchiveName);
 
   const cdCommand = `cd -- ${quotedTargetDir}`;
 
@@ -596,9 +595,9 @@ export const handleDecompressRequest = async (
 
   // --- 构建 Shell 命令 ---
   let command: string;
-  // 确保路径被正确引用
-  const quotedExtractDir = `"${extractDir.replace(/"/g, '\\"')}"`;
-  const quotedArchiveBasename = `"${archiveBasename.replace(/"/g, '\\"')}"`;
+  // 使用单引号转义，防止 $、`、\、! 等字符被 shell 解释
+  const quotedExtractDir = shellEscape(extractDir);
+  const quotedArchiveBasename = shellEscape(archiveBasename);
 
   const cdCommand = `cd -- ${quotedExtractDir}`;
 

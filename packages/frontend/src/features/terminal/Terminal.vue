@@ -136,7 +136,7 @@ const debouncedSaveFontSize = debounce(async (size: number) => {
       await appearanceStore.setTerminalFontSize(size);
       console.info(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[Terminal ${props.sessionId}] Debounced font size save failed:`, error);
   }
 }, 500);
@@ -198,7 +198,7 @@ const applyTerminalWrapMode = () => {
 
     fitAndEmitResizeNow();
     syncNoWrapContentWidth(term);
-  } catch (error) {
+  } catch (error: unknown) {
     console.warn(`[Terminal ${props.sessionId}] Failed to apply terminal wrap mode:`, error);
   }
 };
@@ -219,7 +219,7 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
     try {
       await navigator.clipboard.writeText(selection);
       terminal.clearSelection();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('[Terminal] Failed to copy selection via Right Click:', err);
     }
     return;
@@ -231,7 +231,7 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
       const processedText = text.replace(/\r\n?/g, '\n');
       emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('[Terminal] Failed to paste via Right Click:', err);
   }
 };
@@ -338,7 +338,7 @@ onMounted(() => {
       console.info(
         `[Terminal ${props.sessionId}] OutputEnhancerAddon 加载成功 (enabled: ${terminalOutputEnhancerEnabledBoolean.value})`
       );
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[Terminal ${props.sessionId}] OutputEnhancerAddon 加载失败，降级使用原始终端：`,
         error
@@ -359,10 +359,10 @@ onMounted(() => {
       });
       term.loadAddon(webglAddonInstance);
       console.info(`[Terminal ${props.sessionId}] WebGL renderer enabled.`);
-    } catch (e) {
+    } catch (error: unknown) {
       console.warn(
         `[Terminal ${props.sessionId}] WebGL addon failed to load, falling back to canvas/dom renderer:`,
-        e
+        error
       );
       webglAddonInstance = null;
     }
@@ -428,7 +428,7 @@ onMounted(() => {
                   if (term && webglAddonInstance) {
                     term.refresh(0, term.rows - 1);
                   }
-                } catch (refreshError) {
+                } catch (refreshError: unknown) {
                   console.warn(
                     `[Terminal ${props.sessionId}] WebGL refresh failed, WebGL context may be lost:`,
                     refreshError
@@ -446,8 +446,8 @@ onMounted(() => {
               });
             }
             // Canvas/DOM 渲染器会自动处理主题更新，无需手动刷新
-          } catch (e) {
-            console.warn(`[Terminal ${props.sessionId}] Theme update failed:`, e);
+          } catch (error: unknown) {
+            console.warn(`[Terminal ${props.sessionId}] Theme update failed:`, error);
           }
         }
       },
@@ -480,7 +480,7 @@ onMounted(() => {
           if (selection) {
             try {
               await navigator.clipboard.writeText(selection);
-            } catch (err) {
+            } catch (err: unknown) {
               console.error('[Terminal] Copy failed:', err);
             }
           }
@@ -496,7 +496,7 @@ onMounted(() => {
                 data: processedText,
               });
             }
-          } catch (err) {
+          } catch (err: unknown) {
             console.error('[Terminal] Paste failed:', err);
           }
         } else if (event.ctrlKey && event.shiftKey && event.code === 'KeyO') {

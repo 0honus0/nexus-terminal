@@ -36,8 +36,8 @@ export function useTerminalFit(
       emitWorkspaceEvent('terminal:resize', { sessionId, dims: dimensions });
       try {
         term.refresh(0, term.rows - 1);
-      } catch (e) {
-        console.warn(`[Terminal ${sessionId}] Refresh failed:`, e);
+      } catch (error: unknown) {
+        console.warn(`[Terminal ${sessionId}] Refresh failed:`, error);
       }
     }
   }, 150);
@@ -69,8 +69,8 @@ export function useTerminalFit(
           }
         });
       }
-    } catch (e) {
-      console.warn('Immediate fit/resize failed:', e);
+    } catch (error: unknown) {
+      console.warn('Immediate fit/resize failed:', error);
     }
   };
 

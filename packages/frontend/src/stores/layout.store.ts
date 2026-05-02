@@ -339,7 +339,7 @@ export const useLayoutStore = defineStore('layout', () => {
         try {
           localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(loadedLayout));
           console.info('[Layout Store] Step 1: Saved processed layout to localStorage.');
-        } catch (lsError) {
+        } catch (lsError: unknown) {
           console.error(
             '[Layout Store] Step 1: Failed to save processed layout to localStorage:',
             lsError
@@ -348,7 +348,7 @@ export const useLayoutStore = defineStore('layout', () => {
       } else {
         console.info('[Layout Store] Step 1: Backend did not return layout data.');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] Step 1: Error loading layout from backend:', error);
     }
 
@@ -368,7 +368,7 @@ export const useLayoutStore = defineStore('layout', () => {
         console.info('[Layout Store] Step 2: Sidebar config loaded from backend.');
         try {
           localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify(response.data));
-        } catch (lsError) {
+        } catch (lsError: unknown) {
           console.error(
             '[Layout Store] Step 2: Failed to save backend sidebar config to localStorage:',
             lsError
@@ -377,7 +377,7 @@ export const useLayoutStore = defineStore('layout', () => {
       } else {
         console.info('[Layout Store] Step 2: Backend did not return valid sidebar data.');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] Step 2: Error loading sidebar config from backend:', error);
     }
 
@@ -399,7 +399,7 @@ export const useLayoutStore = defineStore('layout', () => {
           loadedLayout = ensureNodeIds(getDefaultLayout());
           console.info('[Layout Store] Step 4: Default layout processed with ensureNodeIds.');
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(
           '[Layout Store] Step 3/4: Error loading/parsing layout from localStorage or applying default:',
           error
@@ -439,7 +439,7 @@ export const useLayoutStore = defineStore('layout', () => {
           );
           sidebarPanes.value = getDefaultSidebarPanes();
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(
           '[Layout Store] Step 5/6: Error loading/parsing sidebar config from localStorage or applying default:',
           error
@@ -610,7 +610,7 @@ export const useLayoutStore = defineStore('layout', () => {
         );
         isHeaderVisible.value = true; // 默认值
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] Failed to load header visibility from backend:', error);
       // 出错时使用默认值
       isHeaderVisible.value = true;
@@ -627,7 +627,7 @@ export const useLayoutStore = defineStore('layout', () => {
       // --- 调用后端 API (复用 nav-bar-visibility 接口) ---
       await apiClient.put('/settings/nav-bar-visibility', { visible: newValue }); // 使用 apiClient
       console.info('[Layout Store] Header visibility saved to backend.');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] Failed to save header visibility to backend:', error);
     }
   }
@@ -653,7 +653,7 @@ export const useLayoutStore = defineStore('layout', () => {
       console.info('[Layout Store] Attempting to save main layout to backend...');
       await apiClient.put('/settings/layout', layoutTree.value); // await
       console.info('[Layout Store] 主布局已成功保存到后端 (sent value):', layoutTree.value);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] 保存主布局到后端失败:', error);
     }
     // localStorage is synchronous
@@ -661,7 +661,7 @@ export const useLayoutStore = defineStore('layout', () => {
       const layoutToSave = JSON.stringify(layoutTree.value);
       localStorage.setItem(LAYOUT_STORAGE_KEY, layoutToSave);
       console.info('[Layout Store] 主布局已自动保存到 localStorage (saved value):', layoutToSave);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] 保存主布局到 localStorage 失败:', error);
     }
   }
@@ -674,7 +674,7 @@ export const useLayoutStore = defineStore('layout', () => {
       console.info('[Layout Store] Attempting to save sidebar config to backend...');
       await apiClient.put('/settings/sidebar', sidebarPanes.value); // await
       console.info('[Layout Store] 侧栏配置已成功保存到后端。');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] 保存侧栏配置到后端失败:', error);
     }
     // localStorage is synchronous
@@ -682,7 +682,7 @@ export const useLayoutStore = defineStore('layout', () => {
       const sidebarsToSave = JSON.stringify(sidebarPanes.value);
       localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarsToSave);
       console.info('[Layout Store] 侧栏配置已自动保存到 localStorage。');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[Layout Store] 保存侧栏配置到 localStorage 失败:', error);
     }
   }

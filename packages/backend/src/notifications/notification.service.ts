@@ -338,9 +338,9 @@ export class NotificationService {
         const url = new URL(config.customDomain);
         baseApiUrl = `${url.protocol}//${url.host}`;
         console.debug(`[通知测试 - Telegram] 使用自定义域名: ${baseApiUrl}`);
-      } catch (e: unknown) {
+      } catch (error: unknown) {
         console.warn(
-          `[通知测试 - Telegram] 无效的自定义域名 URL: ${config.customDomain}。将回退到默认 Telegram API。(${getErrorMessage(e)})`
+          `[通知测试 - Telegram] 无效的自定义域名 URL: ${config.customDomain}。将回退到默认 Telegram API。(${getErrorMessage(error)})`
         );
       }
     }
@@ -743,9 +743,9 @@ export class NotificationService {
         const url = new URL(config.customDomain);
         baseApiUrlSend = `${url.protocol}//${url.host}`;
         console.debug(`[_sendTelegram] 使用自定义域名: ${baseApiUrlSend} (事件: ${payload.event})`);
-      } catch (e: unknown) {
+      } catch (error: unknown) {
         console.warn(
-          `[_sendTelegram] 无效的自定义域名 URL: ${config.customDomain} (事件: ${payload.event})。将回退到默认 Telegram API。(${getErrorMessage(e)})`
+          `[_sendTelegram] 无效的自定义域名 URL: ${config.customDomain} (事件: ${payload.event})。将回退到默认 Telegram API。(${getErrorMessage(error)})`
         );
       }
     }

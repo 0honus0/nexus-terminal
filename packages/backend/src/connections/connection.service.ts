@@ -14,6 +14,17 @@ import {
 export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateConnectionInput };
 
 /**
+ * 辅助函数：加密凭证值，空值返回 null
+ * 统一处理 password / private_key / passphrase 的加密逻辑
+ * @param value - 需要加密的明文值
+ * @returns 加密后的字符串，或 null（输入为空时）
+ */
+const encryptCredential = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  return encrypt(value);
+};
+
+/**
  * 辅助函数：验证 jump_chain 并处理与 proxy_id 的互斥关系
  * @param jumpChain 输入的 jump_chain
  * @param proxyId 输入的 proxy_id
@@ -148,7 +159,7 @@ export const createConnection = async (
       if (!input.password) {
         throw new Error('SSH 密码认证方式需要提供 password。');
       }
-      encryptedPassword = encrypt(input.password);
+      encryptedPassword = encryptCredential(input.password);
       sshKeyIdToSave = null; // Password auth cannot use ssh_key_id
     } else {
       // auth_method is 'key'
@@ -164,9 +175,9 @@ export const createConnection = async (
         encryptedPassphrase = null;
       } else if (input.private_key) {
         // Encrypt the provided private key and passphrase
-        encryptedPrivateKey = encrypt(input.private_key);
+        encryptedPrivateKey = encryptCredential(input.private_key);
         if (input.passphrase) {
-          encryptedPassphrase = encrypt(input.passphrase);
+          encryptedPassphrase = encryptCredential(input.passphrase);
         }
         sshKeyIdToSave = null; // Ensure ssh_key_id is null if providing key directly
       } else {
@@ -179,7 +190,7 @@ export const createConnection = async (
     if (!input.password) {
       throw new Error('RDP 连接需要提供 password。');
     }
-    encryptedPassword = encrypt(input.password);
+    encryptedPassword = encryptCredential(input.password);
     // authMethodForDb remains 'password' for RDP
     encryptedPrivateKey = null;
     encryptedPassphrase = null;
@@ -189,7 +200,7 @@ export const createConnection = async (
     if (!input.password) {
       throw new Error('VNC 连接需要提供 password。');
     }
-    encryptedPassword = encrypt(input.password);
+    encryptedPassword = encryptCredential(input.password);
     authMethodForDb = 'password'; // VNC always uses password auth
     encryptedPrivateKey = null;
     encryptedPassphrase = null;
@@ -306,10 +317,10 @@ export const updateConnection = async (
       // currentFullConnection.jump_chain is string | null
       try {
         jumpChainFromDb = JSON.parse(currentFullConnection.jump_chain) as number[];
-      } catch (e) {
+      } catch (error: unknown) {
         console.error(
           `[Service:updateConnection] Failed to parse jump_chain from DB for connection ${id}: ${currentFullConnection.jump_chain}`,
-          e
+          error
         );
         // Treat as null if parsing fails, or consider throwing an error
         jumpChainFromDb = null;
@@ -370,7 +381,7 @@ export const updateConnection = async (
           throw new Error('切换到密码认证时需要提供 password。');
         }
         // Encrypt if password is not empty, otherwise set to null (to clear)
-        dataToUpdate.encrypted_password = input.password ? encrypt(input.password) : null;
+        dataToUpdate.encrypted_password = encryptCredential(input.password);
         needsCredentialUpdate = true;
       }
       // When switching to password, clear key fields and ssh_key_id
@@ -396,10 +407,8 @@ export const updateConnection = async (
             dataToUpdate.encrypted_passphrase = null;
           } else {
             // Encrypt the direct key provided alongside clearing ssh_key_id
-            dataToUpdate.encrypted_private_key = input.private_key
-              ? encrypt(input.private_key)
-              : null;
-            dataToUpdate.encrypted_passphrase = input.passphrase ? encrypt(input.passphrase) : null;
+            dataToUpdate.encrypted_private_key = encryptCredential(input.private_key);
+            dataToUpdate.encrypted_passphrase = encryptCredential(input.passphrase);
           }
         } else {
           // Validate the provided ssh_key_id
@@ -420,10 +429,10 @@ export const updateConnection = async (
           throw new Error('切换到密钥认证时需要提供 private_key 或选择一个已保存的密钥。');
         }
         // Encrypt if key is not empty, otherwise set to null (to clear)
-        dataToUpdate.encrypted_private_key = input.private_key ? encrypt(input.private_key) : null;
+        dataToUpdate.encrypted_private_key = encryptCredential(input.private_key);
         // Update passphrase only if direct key was provided OR passphrase itself was provided
         if (input.passphrase !== undefined) {
-          dataToUpdate.encrypted_passphrase = input.passphrase ? encrypt(input.passphrase) : null;
+          dataToUpdate.encrypted_passphrase = encryptCredential(input.passphrase);
         } else if (input.private_key) {
           // If only private_key is provided, clear passphrase
           dataToUpdate.encrypted_passphrase = null;
@@ -436,7 +445,7 @@ export const updateConnection = async (
         currentFullConnection.encrypted_private_key
       ) {
         // Only passphrase provided, and not using ssh_key_id, and a direct key already exists
-        dataToUpdate.encrypted_passphrase = input.passphrase ? encrypt(input.passphrase) : null;
+        dataToUpdate.encrypted_passphrase = encryptCredential(input.passphrase);
         needsCredentialUpdate = true;
       }
 
@@ -450,7 +459,7 @@ export const updateConnection = async (
     // RDP only uses password
     if (input.password !== undefined) {
       // Check if password was provided
-      dataToUpdate.encrypted_password = input.password ? encrypt(input.password) : null;
+      dataToUpdate.encrypted_password = encryptCredential(input.password);
       needsCredentialUpdate = true;
     }
     // Ensure SSH specific fields are nullified if switching to RDP or updating RDP
@@ -469,7 +478,7 @@ export const updateConnection = async (
     // VNC only uses password
     if (input.password !== undefined) {
       // Check if password was provided
-      dataToUpdate.encrypted_password = input.password ? encrypt(input.password) : null;
+      dataToUpdate.encrypted_password = encryptCredential(input.password);
       needsCredentialUpdate = true;
     }
     // Ensure SSH specific fields are nullified if switching to VNC or updating VNC

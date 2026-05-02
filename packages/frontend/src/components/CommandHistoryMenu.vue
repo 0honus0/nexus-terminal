@@ -115,7 +115,7 @@ const copyCommand = async (command: string) => {
     await navigator.clipboard.writeText(command);
     // 可以选择性地显示一个复制成功的提示
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板')); // 使用独立的 uiNotificationsStore
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('复制命令失败:', err);
     uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败')); // 使用独立的 uiNotificationsStore
   }

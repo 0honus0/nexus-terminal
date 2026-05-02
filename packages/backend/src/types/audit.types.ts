@@ -64,6 +64,8 @@ export type AuditLogActionType =
   // Command security
   //   - COMMAND_BLOCKED: { userId?: number, username?: string, connectionId?: number, sessionId?: string, ip?: string, reason?: string, command?: string }
   | 'COMMAND_BLOCKED'
+  //   - BATCH_COMMAND_EXECUTED: { userId: number, command: string, connectionIds: number[], sudo?: boolean, targetCount: number }
+  | 'BATCH_COMMAND_EXECUTED'
 
   // System/Error
   | 'DATABASE_MIGRATION'

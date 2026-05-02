@@ -19,7 +19,7 @@ export function useAuditSettings() {
       if (Number.isInteger(maxEntries) && maxEntries > 0) {
         auditLogMaxEntries.value = maxEntries;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('获取审计日志最大保留条数失败:', error);
     }
   };
@@ -67,7 +67,7 @@ export function useAuditSettings() {
     try {
       const response = await apiClient.get('/audit-logs/count');
       auditLogCount.value = response.data.count || 0;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('获取审计日志数量失败:', error);
     }
   };

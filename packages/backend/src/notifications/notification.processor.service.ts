@@ -41,7 +41,7 @@ class NotificationProcessorService extends EventEmitter {
       this.registerEventListeners();
       this.isInitialized = true;
       console.info('[NotificationProcessor] 初始化完成。');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('[NotificationProcessor] 因 i18n 错误导致初始化失败:', error);
     }
   }
@@ -99,7 +99,7 @@ class NotificationProcessorService extends EventEmitter {
         if (langSetting && supportedLngs.includes(langSetting)) {
           userLang = langSetting;
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(
           `[NotificationProcessor] 获取语言设置时出错，使用默认 (${defaultLng}):`,
           error
@@ -115,7 +115,7 @@ class NotificationProcessorService extends EventEmitter {
       for (const setting of applicableSettings) {
         this.processSingleSetting(setting, eventType, payload, translatedEvent, userLang);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[NotificationProcessor] 获取事件 ${eventKey} 的设置失败:`, error);
     }
   }
@@ -160,7 +160,7 @@ class NotificationProcessorService extends EventEmitter {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[NotificationProcessor] 获取语言设置时出错，使用默认 (${defaultLng}):`, error);
     }
     const translatedEvent = i18next.t(`event.${AppEventType.TestNotification}`, {
@@ -199,7 +199,7 @@ class NotificationProcessorService extends EventEmitter {
           `[NotificationProcessor] 正在为 ${setting.channel_type} 发送 sendNotification (设置 ID: ${setting.id}, 事件: ${eventType})`
         );
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[NotificationProcessor] 为设置 ID ${setting.id} 和事件 ${eventType} 准备通知时出错:`,
         error

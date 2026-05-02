@@ -31,119 +31,18 @@
         <p>{{ $t('suspendedSshSessions.noResults') }}</p>
       </div>
       <ul v-else class="list-none p-0 m-0">
-        <li
+        <SuspendedSessionItem
           v-for="session in filteredSessions"
           :key="session.suspendSessionId"
-          class="session-item p-3 mb-2 border border-border/70 rounded-md bg-surface-ground"
-          :class="{ 'opacity-60': session.backendSshStatus === 'disconnected_by_backend' }"
-        >
-          <div class="flex justify-between items-center">
-            <div class="session-info flex-grow mr-2">
-              <div class="font-bold text-lg flex items-center">
-                <span
-                  v-if="editingSuspendSessionId !== session.suspendSessionId"
-                  class="cursor-pointer hover:text-primary"
-                  :title="$t('suspendedSshSessions.tooltip.editName')"
-                  @click="startEditingName(session)"
-                >
-                  {{ session.customSuspendName || session.connectionName }}
-                </span>
-                <input
-                  v-else
-                  ref="nameInputRef"
-                  v-model="currentEditingNameValue"
-                  type="text"
-                  class="text-lg font-bold w-full px-1 py-0.5 border border-primary rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  @blur="finishEditingName()"
-                  @keydown.enter.prevent="finishEditingName()"
-                  @keydown.esc.prevent="cancelEditingName()"
-                />
-                <span
-                  :class="[
-                    'px-2 py-0.5 text-xs font-semibold rounded-full ml-2 whitespace-nowrap' /* +++ 调整了 padding 和增加了 ml-2, whitespace-nowrap +++ */,
-                    session.backendSshStatus === 'hanging'
-                      ? 'bg-green-100 text-green-700 dark:bg-green-700 dark:text-green-100'
-                      : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-700 dark:text-yellow-100',
-                  ]"
-                >
-                  {{
-                    session.backendSshStatus === 'hanging'
-                      ? $t('suspendedSshSessions.status.hanging')
-                      : $t('suspendedSshSessions.status.disconnected')
-                  }}
-                </span>
-              </div>
-              <div class="text-sm text-muted-color">
-                {{ $t('suspendedSshSessions.label.originalConnection') }}:
-                {{ session.connectionName }}
-              </div>
-              <div class="text-xs text-muted-color mt-1">
-                {{ $t('suspendedSshSessions.label.suspendedAt') }}:
-                {{ formatDateTime(session.suspendStartTime) }}
-              </div>
-              <div
-                v-if="
-                  session.backendSshStatus === 'disconnected_by_backend' &&
-                  session.disconnectionTimestamp
-                "
-                class="text-xs text-orange-500 mt-1"
-              >
-                {{
-                  $t('suspendedSshSessions.disconnectedAt', {
-                    time: formatDateTime(session.disconnectionTimestamp),
-                  })
-                }}
-              </div>
-            </div>
-
-            <div class="session-status-actions flex flex-col items-end">
-              <div class="actions flex flex-col space-y-2 mt-1">
-                <button
-                  v-if="session.backendSshStatus === 'hanging'"
-                  @click="resumeSession(session)"
-                  :title="$t('suspendedSshSessions.action.resume')"
-                  class="responsive-button-padding py-1.5 text-sm font-medium rounded-md text-button-text bg-button hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors duration-150 inline-flex items-center"
-                >
-                  <i
-                    class="fas fa-play action-icon"
-                    style="color: var(--button-text-color, white)"
-                  ></i>
-                  <!-- Assuming icon color should also match button text -->
-                  <span class="button-session-text">{{
-                    $t('suspendedSshSessions.action.resume')
-                  }}</span>
-                </button>
-                <button
-                  @click="removeSession(session)"
-                  :title="$t('suspendedSshSessions.action.remove')"
-                  class="responsive-button-padding py-1.5 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-150 inline-flex items-center"
-                >
-                  <i class="fas fa-trash-alt action-icon" style="color: white"></i>
-                  <span class="button-session-text">{{
-                    $t('suspendedSshSessions.action.remove')
-                  }}</span>
-                </button>
-                <button
-                  v-if="
-                    session.backendSshStatus === 'disconnected_by_backend' ||
-                    session.backendSshStatus === 'hanging'
-                  "
-                  @click="exportLog(session)"
-                  :title="$t('suspendedSshSessions.action.exportLog')"
-                  class="responsive-button-padding py-1.5 text-sm font-medium rounded-md text-button-text bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150 inline-flex items-center"
-                >
-                  <i
-                    class="fas fa-download action-icon"
-                    style="color: var(--button-text-color, white)"
-                  ></i>
-                  <span class="button-session-text">{{
-                    $t('suspendedSshSessions.action.exportLog')
-                  }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </li>
+          :session="session"
+          :is-editing="editingSuspendSessionId === session.suspendSessionId"
+          @start-edit="startEditingName"
+          @finish-edit="finishEditingName"
+          @cancel-edit="cancelEditingName"
+          @resume="resumeSession"
+          @remove="removeSession"
+          @export-log="exportLog"
+        />
       </ul>
     </div>
   </div>
@@ -166,6 +65,7 @@ import { useSessionStore } from '../stores/session.store';
 import { useConnectionsStore } from '../stores/connections.store'; // +++ 导入 Connections Store +++
 import type { SuspendedSshSession } from '../types/ssh-suspend.types';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents'; // +++ 导入事件发射器 +++
+import SuspendedSessionItem from '../components/SuspendedSessionItem.vue';
 
 const { t } = useI18n();
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
@@ -222,7 +122,7 @@ const formatDateTime = (isoString?: string) => {
       hour: '2-digit',
       minute: '2-digit',
     });
-  } catch (e) {
+  } catch (error: unknown) {
     return t('time.invalidDate');
   }
 };
@@ -234,29 +134,28 @@ const startEditingName = (session: SuspendedSshSession) => {
   // 聚焦逻辑已移至 watcher
 };
 
-const finishEditingName = () => {
+const finishEditingName = (newName?: string) => {
   if (editingSuspendSessionId.value === null) return;
 
   const sessionId = editingSuspendSessionId.value;
-  const newName = currentEditingNameValue.value.trim();
+  const trimmedName = (newName || currentEditingNameValue.value).trim();
 
   const originalSession = storeSuspendedSshSessions.value.find(
     (s) => s.suspendSessionId === sessionId
   );
   if (!originalSession) {
-    editingSuspendSessionId.value = null; // 重置状态
+    editingSuspendSessionId.value = null;
     return;
   }
 
-  editingSuspendSessionId.value = null; // 退出编辑模式
+  editingSuspendSessionId.value = null;
 
   if (
-    newName &&
-    newName !== (originalSession.customSuspendName || originalSession.connectionName)
+    trimmedName &&
+    trimmedName !== (originalSession.customSuspendName || originalSession.connectionName)
   ) {
-    sessionStore.editSshSessionName(sessionId, newName);
+    sessionStore.editSshSessionName(sessionId, trimmedName);
   }
-  // 如果名称未变或为空，则无需操作，因为 currentEditingNameValue 不会持久化
 };
 
 const cancelEditingName = () => {
@@ -279,7 +178,7 @@ const resumeSession = async (session: SuspendedSshSession) => {
     // resumeSshSession 返回 Promise<void>，调用完成即表示操作已执行
     await sessionStore.resumeSshSession(session.suspendSessionId);
     console.info('[SuspendedSshSessionsView] Call to sessionStore.resumeSshSession completed.');
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(
       `[SuspendedSshSessionsView] Error during resumeSession for ${session.suspendSessionId}:`,
       error
@@ -374,7 +273,7 @@ const ensureConnectionsFetched = async () => {
     console.info('[SuspendedSshSessionsView] Ensuring connections are fetched.');
     await connectionsStore.fetchConnections(); // +++ 获取连接列表 +++
     connectionsPrefetched = true;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[SuspendedSshSessionsView] Error fetching connections:', error);
     // 根据需要处理错误，例如显示通知
   }

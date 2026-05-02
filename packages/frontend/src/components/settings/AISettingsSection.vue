@@ -74,7 +74,7 @@
         <input
           v-model="localSettings.baseUrl"
           class="w-full mt-2 px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary placeholder:text-muted-foreground"
-          placeholder="https://api.openai.com"
+          :placeholder="DEFAULT_OPENAI_BASE_URL"
         />
         <p class="text-xs text-muted-foreground mt-1">
           {{ getBaseUrlPlaceholder() }}
@@ -229,6 +229,7 @@
 import { ref, onMounted, watch } from 'vue';
 import { useAISettingsStore } from '../../stores/aiSettings.store';
 import type { AISettings } from '../../types/nl2cmd.types';
+import { DEFAULT_OPENAI_BASE_URL } from '../../utils/aiConstants';
 
 const aiSettingsStore = useAISettingsStore();
 
@@ -236,7 +237,7 @@ const aiSettingsStore = useAISettingsStore();
 const localSettings = ref<AISettings>({
   enabled: false,
   provider: 'openai',
-  baseUrl: 'https://api.openai.com',
+  baseUrl: DEFAULT_OPENAI_BASE_URL,
   apiKey: '',
   model: 'gpt-4o-mini',
   openaiEndpoint: 'chat/completions',
@@ -262,7 +263,7 @@ onMounted(async () => {
   try {
     await aiSettingsStore.loadSettings();
     localSettings.value = { ...aiSettingsStore.settings };
-  } catch (error) {
+  } catch (error: unknown) {
     setStatus('加载 AI 配置失败', false);
   }
 });
@@ -280,7 +281,7 @@ watch(
 function handleProviderChange() {
   switch (localSettings.value.provider) {
     case 'openai':
-      localSettings.value.baseUrl = 'https://api.openai.com';
+      localSettings.value.baseUrl = DEFAULT_OPENAI_BASE_URL;
       localSettings.value.model = 'gpt-4o-mini';
       localSettings.value.openaiEndpoint = 'chat/completions';
       break;
@@ -301,7 +302,7 @@ function handleProviderChange() {
 function getBaseUrlPlaceholder(): string {
   switch (localSettings.value.provider) {
     case 'openai':
-      return 'OpenAI API 地址，默认为 https://api.openai.com';
+      return `OpenAI API 地址，默认为 ${DEFAULT_OPENAI_BASE_URL}`;
     case 'gemini':
       return 'Gemini API 地址，默认为 https://generativelanguage.googleapis.com';
     case 'claude':
@@ -355,7 +356,7 @@ async function handleSave() {
 
     await aiSettingsStore.saveSettings(localSettings.value);
     setStatus('AI 配置已保存', true);
-  } catch (error) {
+  } catch (error: unknown) {
     setStatus('保存 AI 配置失败', false);
   }
 }
@@ -375,7 +376,7 @@ async function handleTest() {
     } else {
       setStatus('连接测试失败，请检查配置', false);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     setStatus('测试连接时发生错误', false);
   }
 }

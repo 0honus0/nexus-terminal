@@ -30,7 +30,7 @@
         </span>
         <a
           v-else-if="isUpdateAvailable && latestVersion"
-          :href="`https://github.com/Silentely/nexus-terminal/releases/tag/${latestVersion}`"
+          :href="`${GITHUB_REPO_URL}/releases/tag/${latestVersion}`"
           target="_blank"
           rel="noopener noreferrer"
           class="inline-flex items-center text-xs ml-2 px-2 py-0.5 rounded-full bg-warning text-white hover:bg-warning/80"
@@ -55,7 +55,7 @@
         </a>
         <span class="opacity-50">|</span>
         <a
-          href="https://github.com/Silentely/nexus-terminal"
+          :href="GITHUB_REPO_URL"
           target="_blank"
           rel="noopener noreferrer"
           class="text-primary hover:underline inline-flex items-center"
@@ -105,6 +105,7 @@
 import { onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useVersionCheck } from '../../composables/settings/useVersionCheck';
+import { GITHUB_REPO_URL } from '../../utils/constants';
 
 const { t } = useI18n(); // $t is available in template, but t can be used in script if needed
 

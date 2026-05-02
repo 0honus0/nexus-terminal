@@ -41,7 +41,7 @@ export const getEncryptionKeyBuffer = (): Buffer => {
       throw new Error('Invalid ENCRYPTION_KEY length.');
     }
     return keyBuffer;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('错误：无法将 ENCRYPTION_KEY 从 hex 解码为 Buffer:', error);
     throw new Error('Failed to decode ENCRYPTION_KEY.');
   }
@@ -134,7 +134,7 @@ export const encrypt = (text: string): string => {
 
     // 组合格式：[keyVersion][iv][encrypted][tag]
     return Buffer.concat([keyIdBuffer, iv, encrypted, tag]).toString('base64');
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('加密失败:', error);
     throw new Error('加密过程中发生错误');
   }
@@ -181,7 +181,7 @@ export const decrypt = (encryptedText: string): string => {
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
     return decrypted.toString('utf8');
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('解密失败:', error);
     throw new Error('解密过程中发生错误或数据无效');
   }

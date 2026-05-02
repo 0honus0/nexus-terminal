@@ -136,8 +136,8 @@ export const getAllQuickCommands = async (
       if (row.variables) {
         try {
           parsedVariables = JSON.parse(row.variables);
-        } catch (e) {
-          console.error(`Error parsing variables for quick command ${row.id}:`, e);
+        } catch (error: unknown) {
+          console.error(`Error parsing variables for quick command ${row.id}:`, error);
           // 保持 parsedVariables 为 null
         }
       }
@@ -202,8 +202,8 @@ export const findQuickCommandById = async (
       if (row.variables) {
         try {
           parsedVariables = JSON.parse(row.variables);
-        } catch (e) {
-          console.error(`Error parsing variables for quick command ${row.id}:`, e);
+        } catch (error: unknown) {
+          console.error(`Error parsing variables for quick command ${row.id}:`, error);
           // 保持 parsedVariables 为 null
         }
       }

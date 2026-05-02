@@ -16,6 +16,7 @@ import {
   SftpDecompressErrorPayload,
 } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
+import { shellEscape } from '../utils/shell-escape';
 
 export class SftpArchiveManager {
   private clientStates: Map<string, ClientState>;
@@ -72,13 +73,11 @@ export class SftpArchiveManager {
         ? pathModule.posix.basename(s)
         : relativePath;
     });
-    const quotedRelativeSources = relativeSources
-      .map((s: string) => `'${s.replace(/'/g, "'\\''")}'`)
-      .join(' ');
+    const quotedRelativeSources = relativeSources.map((s: string) => shellEscape(s)).join(' ');
 
-    const quotedTargetDir = `'${targetDirectory.replace(/'/g, "'\\''")}'`;
-    const quotedDestName = `'${destinationArchiveName.replace(/'/g, "'\\''")}'`;
-    const cdCommand = `cd ${quotedTargetDir}`;
+    const quotedTargetDir = shellEscape(targetDirectory);
+    const quotedDestName = shellEscape(destinationArchiveName);
+    const cdCommand = `cd -- ${quotedTargetDir}`;
 
     let command: string;
     switch (format) {
@@ -215,9 +214,9 @@ export class SftpArchiveManager {
 
     const extractDir = pathModule.posix.dirname(archivePath);
     const archiveBasename = pathModule.posix.basename(archivePath);
-    const quotedExtractDir = `'${extractDir.replace(/'/g, "'\\''")}'`;
-    const quotedArchiveBasename = `'${archiveBasename.replace(/'/g, "'\\''")}'`;
-    const cdCommand = `cd ${quotedExtractDir}`;
+    const quotedExtractDir = shellEscape(extractDir);
+    const quotedArchiveBasename = shellEscape(archiveBasename);
+    const cdCommand = `cd -- ${quotedExtractDir}`;
 
     let command: string;
     if (lowerArchivePath.endsWith('.zip')) {

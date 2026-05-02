@@ -32,7 +32,7 @@ export function useTerminalSocket(
               terminal.value.write(value);
             }
           }
-        } catch (error) {
+        } catch (error: unknown) {
           console.error('Error reading terminal stream:', error);
         } finally {
           reader.releaseLock();

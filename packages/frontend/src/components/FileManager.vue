@@ -472,7 +472,7 @@ const handleCopyPath = async (item: FileListItem) => {
     uiNotificationsStore.showSuccess(
       t('fileManager.notifications.pathCopied', 'Path copied to clipboard')
     );
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(
       `[FileManager ${props.sessionId}-${props.instanceId}] Failed to copy path: `,
       err

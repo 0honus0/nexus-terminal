@@ -119,13 +119,13 @@ onMounted(async () => {
   if (connections.value.length === 0) {
     try {
       await connectionsStore.fetchConnections();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('加载连接列表失败:', error);
     }
   }
   try {
     await tagsStore.fetchTags();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('加载标签列表失败:', error);
   }
 });
@@ -174,8 +174,8 @@ const formatRelativeTime = (timestampInSeconds: number | null | undefined): stri
     const langPart = currentI18nLocale.split('-')[0];
     let targetDateFnsLocale = dateFnsLocales[currentI18nLocale] || dateFnsLocales[langPart] || enUS;
     return formatDistanceToNow(date, { addSuffix: true, locale: targetDateFnsLocale });
-  } catch (e) {
-    console.error('格式化日期失败:', e);
+  } catch (error: unknown) {
+    console.error('格式化日期失败:', error);
     return String(timestampInSeconds);
   }
 };
@@ -420,7 +420,7 @@ const handleTestAllFilteredConnections = async () => {
 
   try {
     await Promise.all(testPromises);
-  } catch (error) {
+  } catch (error: unknown) {
     // This catch block handles errors if Promise.all itself fails,
     // though individual promise rejections are handled above.
     console.error('Error during batch testing of connections (Promise.all):', error);
@@ -463,7 +463,7 @@ const getSingleTestButtonInfo = (connId: number | undefined, connType: string | 
     };
   }
   if (state?.status === 'success' || state?.status === 'error') {
-    // 测试完成后，按钮恢复为初始“测试”状态
+    // 测试完成后，按钮恢复为初始"测试"状态
     return {
       textKey: 'connections.actions.test',
       iconClass: 'fas fa-plug',
@@ -472,7 +472,7 @@ const getSingleTestButtonInfo = (connId: number | undefined, connType: string | 
       title: t('connections.actions.test', '测试'),
     };
   }
-  // 默认状态也是“测试”
+  // 默认状态也是"测试"
   return {
     textKey: 'connections.actions.test',
     iconClass: 'fas fa-plug',
@@ -515,7 +515,7 @@ const handleConnectAllFilteredConnections = async () => {
       // or if connectTo triggers operations that might benefit from not being fired too rapidly.
       // await new Promise(resolve => setTimeout(resolve, 200)); // Example delay
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error connecting to all filtered SSH connections:', error);
     // uiNotificationsStore.addNotification({ message: t('connections.errors.connectAllSshFailed', '连接全部 SSH 操作失败。'), type: 'error' });
   } finally {

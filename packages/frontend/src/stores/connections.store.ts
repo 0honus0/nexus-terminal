@@ -242,14 +242,14 @@ export const useConnectionsStore = defineStore('connections', {
             }
             this.error = null;
           }
-        } catch (e: unknown) {
+        } catch (error: unknown) {
           // 捕获 deleteConnection 调用本身可能抛出的意外错误
           allSucceeded = false;
-          const errorMessage = extractErrorMessage(e, '未知错误');
+          const errorMessage = extractErrorMessage(error, '未知错误');
           individualErrors.push(`调用删除连接 ID ${id} 时发生意外错误: ${errorMessage}`);
           console.error(
             `[ConnectionsStore] Unexpected error calling deleteConnection for ID ${id}`,
-            e
+            error
           );
         }
       }

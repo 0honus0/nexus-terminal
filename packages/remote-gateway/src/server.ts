@@ -124,7 +124,7 @@ try {
       }
     });
   }
-} catch (error) {
+} catch (error: unknown) {
   console.error(`[Remote Gateway] 初始化 GuacamoleLite 失败:`, error);
   process.exit(1);
 }

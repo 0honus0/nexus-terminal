@@ -8,8 +8,11 @@ import { Request, Response, NextFunction } from 'express';
 import * as BatchService from './batch.service';
 import { BatchExecPayload } from './batch.types';
 import { ErrorFactory } from '../utils/AppError';
+import { AuditLogService } from '../audit/audit.service';
 
 type SessionWithUserId = Request['session'] & { userId?: number };
+
+const auditLogService = new AuditLogService();
 
 /**
  * 获取当前用户 ID
@@ -81,6 +84,19 @@ export const execBatch = async (req: Request, res: Response, next: NextFunction)
       sudo,
     };
 
+    // 记录审计日志，sudo 标记为高风险
+    await auditLogService.logAction(
+      'BATCH_COMMAND_EXECUTED',
+      {
+        command: command.trim(),
+        connectionIds,
+        sudo: sudo === true,
+        targetCount: connectionIds.length,
+        riskLevel: sudo === true ? 'high' : 'normal',
+      },
+      userId
+    );
+
     const task = await BatchService.execCommandBatch(payload, userId);
 
     res.status(201).json({
@@ -89,7 +105,7 @@ export const execBatch = async (req: Request, res: Response, next: NextFunction)
       message: `批量任务已创建，包含 ${task.totalSubTasks} 个子任务`,
       task,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error); // 传递给全局错误处理中间件
   }
 };
@@ -123,7 +139,7 @@ export const getTaskStatus = async (
     }
 
     res.status(200).json({ success: true, task });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };
@@ -149,7 +165,7 @@ export const getTaskList = async (
 
     const tasks = await BatchService.getTasksByUser(userId, safeLimit, safeOffset);
     res.status(200).json({ success: true, tasks, limit: safeLimit, offset: safeOffset });
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };
@@ -189,7 +205,7 @@ export const cancelTask = async (
     } else {
       throw ErrorFactory.badRequest('无法取消任务（可能已完成或已取消）');
     }
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };
@@ -218,7 +234,7 @@ export const deleteTask = async (
     } else {
       throw ErrorFactory.notFound('任务不存在或无权删除');
     }
-  } catch (error) {
+  } catch (error: unknown) {
     next(error);
   }
 };

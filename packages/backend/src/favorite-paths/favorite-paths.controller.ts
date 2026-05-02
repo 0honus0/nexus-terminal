@@ -31,7 +31,7 @@ export const createFavoritePath = async (
       console.error(`[Controller] 添加收藏路径后未能找到 ID: ${newId}`);
       res.status(201).json({ message: '收藏路径已添加，但无法检索新记录', id: newId });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 添加收藏路径失败:', error);
     next(error);
   }
@@ -53,7 +53,7 @@ export const getAllFavoritePaths = async (
   try {
     const favoritePaths = await FavoritePathsService.getAllFavoritePaths(validSortBy);
     res.status(200).json(favoritePaths);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('获取收藏路径控制器出错:', error);
     next(error);
   }
@@ -81,7 +81,7 @@ export const getFavoritePathById = async (
     } else {
       res.status(404).json({ message: '未找到指定的收藏路径' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('获取单个收藏路径控制器出错:', error);
     next(error);
   }
@@ -131,7 +131,7 @@ export const updateFavoritePath = async (
         return;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('更新收藏路径控制器出错:', error);
     next(error);
   }
@@ -159,7 +159,7 @@ export const deleteFavoritePath = async (
     } else {
       res.status(404).json({ message: '未找到要删除的收藏路径' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('删除收藏路径控制器出错:', error);
     next(error);
   }
@@ -206,7 +206,7 @@ export const incrementUsage = async (
         return;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('更新收藏路径上次使用时间控制器出错:', error);
     next(error);
   }
@@ -254,7 +254,7 @@ export const updateLastUsedTimestamp = async (
         return;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('更新收藏路径上次使用时间戳控制器出错:', error);
     next(error);
   }

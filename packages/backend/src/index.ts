@@ -10,9 +10,6 @@ import crypto from 'crypto';
 
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
-import helmet from 'helmet';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import cors from 'cors';
 import { settingsService } from './settings/settings.service';
 import {
   installConsoleLogging,
@@ -21,39 +18,21 @@ import {
 } from './logging/logger';
 import { logger, setLogLevel as setPinoLogLevel } from './utils/logger';
 import { getDbInstance } from './database/connection';
-import authRouter from './auth/auth.routes';
-import connectionsRouter from './connections/connections.routes';
-import sftpRouter from './sftp/sftp.routes';
-import proxyRoutes from './proxies/proxies.routes';
-import tagsRouter from './tags/tags.routes';
-import settingsRoutes from './settings/settings.routes';
-import notificationRoutes from './notifications/notification.routes';
-import auditRoutes from './audit/audit.routes';
-import commandHistoryRoutes from './command-history/command-history.routes';
-import quickCommandsRoutes from './quick-commands/quick-commands.routes';
-import terminalThemeRoutes from './terminal-themes/terminal-theme.routes';
-import appearanceRoutes from './appearance/appearance.routes';
-import sshKeysRouter from './ssh-keys/ssh-keys.routes';
-import quickCommandTagRoutes from './quick-command-tags/quick-command-tag.routes';
-import sshSuspendRouter from './ssh-suspend/ssh-suspend.routes';
-import { transfersRoutes } from './transfers/transfers.routes';
-import pathHistoryRoutes from './path-history/path-history.routes';
-import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
-import batchRoutes from './batch/batch.routes';
-import aiRoutes from './ai-ops/ai.routes';
-import dashboardRoutes from './services/dashboard.routes';
-import metricsRoutes from './metrics/metrics.routes';
-import { metricsMiddleware } from './metrics/metrics.middleware';
 import { initializeWebSocket } from './websocket';
-import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
-import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import {
   validateEnvironment,
   printEnvironmentConfig,
   EnvironmentValidationError,
 } from './config/env.validator';
 import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
-import { getHostnameFromHostHeader, getSingleHeaderToken, normalizeOrigin } from './utils/url';
+import { getHostnameFromHostHeader, getSingleHeaderToken } from './utils/url';
+import {
+  configureTrustProxy,
+  registerSecurityMiddleware,
+  createApiLimiter,
+  createSettingsLimiter,
+} from './config/middleware';
+import { registerRoutes } from './config/routes';
 
 import './services/event.service';
 import './notifications/notification.processor.service';
@@ -163,7 +142,7 @@ const initializeEnvironment = async () => {
       fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim()); // Use dataEnvPath, trim() 移除开头的换行符
       logger.warn(`[ENV Init] 已自动生成密钥并保存到 ${dataEnvPath}`); // Use dataEnvPath
       logger.warn('[ENV Init] !!! 重要：请务必备份此 data/.env 文件，并在生产环境中妥善保管 !!!');
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error({ err: error as Error }, `[ENV Init] 无法写入密钥到 ${dataEnvPath}`); // Use dataEnvPath
       logger.error('[ENV Init] 请检查文件权限或手动创建 data/.env 文件并添加生成的密钥。');
       // 即使写入失败，密钥已在 process.env 中，程序可以继续运行本次
@@ -201,141 +180,13 @@ const initializeEnvironment = async () => {
 const app = express();
 const server = http.createServer(app);
 
-// --- 信任代理设置 ---
-// 仅在生产环境启用（通常在反向代理如 Nginx 后运行）
-// 使用明确的 hop 数而非 boolean true，以限制可信代理层级
-// 默认不信任任何代理，避免在未显式配置时信任 X-Forwarded-* 头
-// 可通过 TRUST_PROXY / TRUST_PROXY_HOPS 环境变量显式启用
-const trustProxyEnv = process.env.TRUST_PROXY;
-let trustProxyValue: number | boolean | string = false;
+// --- 信任代理与安全中间件 ---
+configureTrustProxy(app);
+registerSecurityMiddleware(app);
 
-if (trustProxyEnv) {
-  if (trustProxyEnv.toLowerCase() === 'true') trustProxyValue = true;
-  else if (trustProxyEnv.toLowerCase() === 'false') trustProxyValue = false;
-  else {
-    const parsed = parseInt(trustProxyEnv, 10);
-    trustProxyValue = Number.isNaN(parsed) ? trustProxyEnv : parsed;
-  }
-} else if (process.env.TRUST_PROXY_HOPS) {
-  const parsedHops = parseInt(process.env.TRUST_PROXY_HOPS, 10);
-  if (!Number.isNaN(parsedHops)) {
-    trustProxyValue = parsedHops;
-  }
-}
-
-app.set('trust proxy', trustProxyValue);
-
-// --- 安全中间件 ---
-// 1. Helmet - 设置 HTTP 安全头
-app.use(
-  helmet({
-    contentSecurityPolicy: false, // 由前端处理 CSP
-    crossOriginEmbedderPolicy: false, // 允许跨域资源
-  })
-);
-
-// 2. CORS - 跨域资源共享配置
-const baseAllowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-      .map((o) => o.trim())
-      .filter(Boolean)
-  : ['http://localhost:5173', 'http://localhost:18111'];
-
-const rpConfiguredOrigins = process.env.RP_ORIGIN
-  ? process.env.RP_ORIGIN.split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean)
-  : [];
-
-const allowedOrigins = Array.from(
-  new Set(
-    [...baseAllowedOrigins, ...rpConfiguredOrigins]
-      .map((origin) => normalizeOrigin(origin) || origin)
-      .filter(Boolean)
-  )
-);
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // 允许没有 origin 的请求（如 Postman、curl）
-      if (!origin) return callback(null, true);
-      const normalizedOrigin = normalizeOrigin(origin) || origin;
-      if (allowedOrigins.includes(normalizedOrigin)) {
-        return callback(null, true);
-      }
-      // 返回 false 触发 CORS 错误（403），而非 Error（500）
-      return callback(null, false);
-    },
-    credentials: true, // 允许携带 Cookie
-  })
-);
-
-// 3. Rate Limiting - 限流配置
-// 认证相关端点的精细化限流已在 auth.routes.ts 中配置（见 src/config/rate-limit.config.ts）
-
-const parsePositiveIntEnv = (raw: string | undefined, fallback: number): number => {
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const getRateLimitKey = (req: Request) => {
-  // 优先按登录用户限流，避免在 Cloudflare/Nginx 等代理场景下多个用户共享同一出口 IP 造成误伤。
-  if (req.session?.userId) return `uid:${req.session.userId}`;
-  // 使用 express-rate-limit 内置的 IP key 生成器，自动处理 IPv6 归一化，避免绕过限流。
-  // 注意：ipKeyGenerator 的入参是 IP 字符串（推荐传 req.ip）。
-  return ipKeyGenerator(req.ip || 'unknown');
-};
-
-// 一般 API 宽松限流
-const apiLimiterWindowMs = parsePositiveIntEnv(
-  process.env.API_RATE_LIMIT_WINDOW_MS,
-  15 * 60 * 1000
-);
-const apiLimiterMax = parsePositiveIntEnv(process.env.API_RATE_LIMIT_MAX, 300);
-const apiLimiter = rateLimit({
-  windowMs: apiLimiterWindowMs,
-  max: apiLimiterMax,
-  message: '请求过于频繁，请稍后再试',
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: getRateLimitKey,
-});
-
-// 设置相关接口限流（相对更宽松，避免设置页初始化触发多接口请求导致 429）
-const settingsLimiterWindowMs = parsePositiveIntEnv(
-  process.env.SETTINGS_RATE_LIMIT_WINDOW_MS,
-  15 * 60 * 1000
-);
-const settingsLimiterMax = parsePositiveIntEnv(process.env.SETTINGS_RATE_LIMIT_MAX, 500);
-const settingsLimiter = rateLimit({
-  windowMs: settingsLimiterWindowMs,
-  max: settingsLimiterMax,
-  message: '请求过于频繁，请稍后再试',
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: getRateLimitKey,
-});
-
-// --- 其他中间件 ---
-app.use(ipWhitelistMiddleware as RequestHandler);
-app.use(express.json({ limit: '1mb' }));
-
-// --- Prometheus 指标采集中间件（在路由之前，采集所有 HTTP 请求延迟） ---
-app.use(metricsMiddleware as RequestHandler);
-
-// --- 安全响应头中间件（在路由之前设置） ---
-app.use((_req, res, next) => {
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data: blob:; font-src 'self' data:"
-  );
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  next();
-});
+// --- 限流中间件 ---
+const apiLimiter = createApiLimiter();
+const settingsLimiter = createSettingsLimiter();
 
 // --- 静态文件服务 ---
 const uploadsPath = path.join(__dirname, '../uploads');
@@ -388,7 +239,7 @@ const initializeDatabase = async () => {
       });
     });
     logger.debug(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
-  } catch (error) {
+  } catch (error: unknown) {
     logger.error(error as Error, '数据库初始化或检查失败');
     process.exit(1);
   }
@@ -400,7 +251,7 @@ const initializeRuntimeLogLevel = async () => {
     const level = await settingsService.getLogLevel();
     setRuntimeLogLevel(level as LogLevel);
     setPinoLogLevel(level);
-  } catch (error) {
+  } catch (error: unknown) {
     logger.warn(error as Error, '[Index] 初始化日志等级失败，将使用默认日志等级。');
   }
 };
@@ -463,6 +314,7 @@ const startServer = () => {
 
   // --- OpenAPI/Swagger 文档路由（工具链：API 文档） ---
   // 仅在非生产环境启用 Swagger 文档，避免暴露 API 结构
+  // 安全要求：NODE_ENV=production 时必须禁用 Swagger，防止 API 结构泄露
   if (!isProd) {
     try {
       // eslint-disable-next-line global-require, import/no-extraneous-dependencies
@@ -481,7 +333,7 @@ const startServer = () => {
         })
       );
       logger.info(`[Swagger] API 文档已启用: http://localhost:${port}/api-docs`);
-    } catch (error) {
+    } catch (error: unknown) {
       logger.warn(error as Error, '[Swagger] 文档依赖未安装，已跳过 /api-docs 挂载。');
     }
   } else {
@@ -490,82 +342,8 @@ const startServer = () => {
   // --- 结束 Swagger 文档路由 ---
 
   // --- 应用 API 路由 ---
-  // 认证路由（限流策略已在 auth.routes.ts 中精细化配置）
-  app.use('/api/v1/auth', authRouter);
-
-  // 一般 API 路由（宽松限流）
-  app.use('/api/v1/connections', apiLimiter, connectionsRouter);
-  app.use('/api/v1/sftp', apiLimiter, sftpRouter);
-  app.use('/api/v1/proxies', apiLimiter, proxyRoutes);
-  app.use('/api/v1/tags', apiLimiter, tagsRouter);
-  app.use('/api/v1/settings', settingsLimiter, settingsRoutes);
-  app.use('/api/v1/notifications', apiLimiter, notificationRoutes);
-  app.use('/api/v1/audit-logs', apiLimiter, auditRoutes);
-  app.use('/api/v1/command-history', apiLimiter, commandHistoryRoutes);
-  app.use('/api/v1/quick-commands', apiLimiter, quickCommandsRoutes);
-  app.use('/api/v1/terminal-themes', apiLimiter, terminalThemeRoutes);
-  app.use('/api/v1/appearance', apiLimiter, appearanceRoutes);
-  app.use('/api/v1/ssh-keys', apiLimiter, sshKeysRouter);
-  app.use('/api/v1/quick-command-tags', apiLimiter, quickCommandTagRoutes);
-  app.use('/api/v1/ssh-suspend', apiLimiter, sshSuspendRouter);
-  app.use('/api/v1/transfers', apiLimiter, transfersRoutes());
-  app.use('/api/v1/path-history', apiLimiter, pathHistoryRoutes);
-  app.use('/api/v1/favorite-paths', apiLimiter, favoritePathsRouter);
-  app.use('/api/v1/batch', apiLimiter, batchRoutes);
-  app.use('/api/v1/ai', apiLimiter, aiRoutes);
-  app.use('/api/v1/dashboard', apiLimiter, dashboardRoutes);
-
-  // Prometheus 指标端点（受 ENABLE_METRICS 环境变量控制，默认关闭，避免公网暴露）
-  if (process.env.ENABLE_METRICS === 'true') {
-    app.use('/api/v1/metrics', metricsRoutes);
-  }
-
-  // 健康检查接口（供 Docker healthcheck 与负载均衡器使用）
-  app.get('/api/v1/health', async (_req: Request, res: Response) => {
-    const startTime = Date.now();
-    const checks: {
-      database: 'ok' | 'fail';
-      uptime: number;
-      memory: { used: number; total: number };
-    } = {
-      database: 'fail',
-      uptime: process.uptime(),
-      memory: {
-        used: process.memoryUsage().heapUsed,
-        total: process.memoryUsage().heapTotal,
-      },
-    };
-
-    // 检测 SQLite 连接可用性
-    try {
-      const db = await getDbInstance();
-      await new Promise<void>((resolve, reject) => {
-        db.get('SELECT 1', (err: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      checks.database = 'ok';
-    } catch {
-      checks.database = 'fail';
-    }
-
-    const isHealthy = checks.database === 'ok';
-    const status = isHealthy ? 'healthy' : 'unhealthy';
-
-    res.status(isHealthy ? 200 : 503).json({
-      status,
-      checks,
-      timestamp: new Date().toISOString(),
-      responseTime: Date.now() - startTime,
-    });
-  });
+  registerRoutes(app, apiLimiter, settingsLimiter);
   // --- 结束 API 路由 ---
-
-  // --- P1-6: 全局错误处理中间件（必须在所有路由之后） ---
-  app.use(notFoundHandler); // 404 处理
-  app.use(errorHandler); // 错误处理
-  // --- 结束错误处理中间件 ---
 
   server.listen(port, () => {
     logger.info(`后端服务器正在监听 http://localhost:${port}`);
@@ -581,7 +359,7 @@ const main = async () => {
   try {
     const envConfig = validateEnvironment();
     printEnvironmentConfig(envConfig);
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof EnvironmentValidationError) {
       logger.error('[ENV Validator] 环境变量验证失败:');
       error.errors.forEach((err) => logger.error(`  - ${err}`));

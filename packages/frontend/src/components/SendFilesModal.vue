@@ -293,7 +293,7 @@ onMounted(async () => {
     if (tagsStore.tags.length === 0) {
       await tagsStore.fetchTags();
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(t('sendFilesModal.errorFetchingData'), error);
     // Optionally, show a user-facing error message
   } finally {

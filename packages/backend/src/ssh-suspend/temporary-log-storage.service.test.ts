@@ -96,20 +96,27 @@ describe('TemporaryLogStorageService', () => {
       );
     });
 
-    it('文件超过最大大小时应执行轮替（清空重写）', async () => {
+    it('文件超过最大大小时应执行环形缓冲轮替', async () => {
       // 模拟文件大小达到 100MB
       mockFs.stat.mockResolvedValue({ size: 100 * 1024 * 1024 });
+      // 模拟读取现有文件内容
+      mockFs.readFile.mockResolvedValue('A'.repeat(100 * 1024 * 1024));
       mockFs.writeFile.mockResolvedValue(undefined);
 
       const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       await service.writeToLog('session-456', 'new data after rotation');
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
+      // 环形缓冲：保留尾部80MB + 新数据
+      expect(mockFs.readFile).toHaveBeenCalledWith(
         expect.stringContaining('session-456.log'),
-        'new data after rotation',
         'utf8'
       );
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('执行轮替'));
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('session-456.log'),
+        expect.stringContaining('new data after rotation'),
+        'utf8'
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('环形缓冲轮替'));
       consoleSpy.mockRestore();
     });
 
@@ -253,20 +260,10 @@ describe('TemporaryLogStorageService', () => {
   });
 
   describe('边界条件', () => {
-    it('应处理包含特殊字符的 sessionId', async () => {
-      // 创建一个带有 code 属性的 Error 实例，以通过 isNodeError 类型守卫
-      const enoentError = Object.assign(new Error('ENOENT: no such file or directory'), {
-        code: 'ENOENT',
-      });
-      mockFs.stat.mockRejectedValue(enoentError);
-      mockFs.appendFile.mockResolvedValue(undefined);
-
-      await service.writeToLog('session-with-特殊字符-123', 'data');
-
-      expect(mockFs.appendFile).toHaveBeenCalledWith(
-        expect.stringContaining('session-with-特殊字符-123.log'),
-        'data',
-        'utf8'
+    it('应拒绝包含非法字符的 sessionId', async () => {
+      // 包含中文字符的 sessionId 应被路径遍历验证拒绝
+      await expect(service.writeToLog('session-with-特殊字符-123', 'data')).rejects.toThrow(
+        '无效的挂起会话 ID'
       );
     });
 

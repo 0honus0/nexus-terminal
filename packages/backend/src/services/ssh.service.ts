@@ -296,10 +296,21 @@ const _setupSshClientListenersAndConnect = (
         console.error(`${logPrefix} SSH connection error:`, err);
         try {
           client.end();
-        } catch (e: unknown) {
-          console.error(`${logPrefix} Error ending client in errorHandler:`, e);
+        } catch (error: unknown) {
+          console.error(`${logPrefix} Error ending client in errorHandler:`, error);
         }
-        reject(err);
+        // 为 DNS 解析失败提供友好的中文错误消息
+        const dnsErrorMap: Record<string, string> = {
+          ENOTFOUND: `主机 "${config.host}" 未找到，请检查主机名或 IP 地址是否正确`,
+          EAI_AGAIN: `DNS 解析 "${config.host}" 暂时失败，请检查网络连接后重试`,
+          ENOTIMP: `DNS 查询不被支持`,
+        };
+        const dnsErrorCode = (err as NodeJS.ErrnoException).code;
+        if (dnsErrorCode && dnsErrorMap[dnsErrorCode]) {
+          reject(new Error(dnsErrorMap[dnsErrorCode]));
+        } else {
+          reject(err);
+        }
       },
       close: () => {
         client.removeListener('ready', eventHandlers.ready);
@@ -397,7 +408,18 @@ const _connectViaSocksProxy = (
         resolve(socket);
       })
       .catch((socksError) => {
-        const errMsg = `SOCKS5 proxy ${proxyDetails.host}:${proxyDetails.port} connection failed: ${socksError.message}`;
+        const socksErrCode = (socksError as NodeJS.ErrnoException).code;
+        let errMsg: string;
+        // 区分代理不可达与目标不可达
+        if (
+          socksErrCode === 'ECONNREFUSED' ||
+          socksErrCode === 'ENOTFOUND' ||
+          socksErrCode === 'ETIMEDOUT'
+        ) {
+          errMsg = `SOCKS5 代理 ${proxyDetails.host}:${proxyDetails.port} 不可达: ${socksError.message}`;
+        } else {
+          errMsg = `通过 SOCKS5 代理 ${proxyDetails.host}:${proxyDetails.port} 连接目标 ${destinationHost}:${destinationPort} 失败: ${socksError.message}`;
+        }
         console.error(`SshService: ${errMsg}`);
         reject(new Error(errMsg));
       });
@@ -438,13 +460,32 @@ const _connectViaHttpProxy = (
         resolve(socket);
       } else {
         socket.destroy();
-        const errMsg = `HTTP proxy ${proxyDetails.host}:${proxyDetails.port} connection failed (status: ${res.statusCode})`;
+        // 区分代理认证失败(407)、代理拒绝(502/503)与目标不可达
+        let errMsg: string;
+        if (res.statusCode === 407) {
+          errMsg = `HTTP 代理 ${proxyDetails.host}:${proxyDetails.port} 认证失败 (407)，请检查代理用户名和密码`;
+        } else if (res.statusCode === 502 || res.statusCode === 503) {
+          errMsg = `通过 HTTP 代理连接目标 ${destinationHost}:${destinationPort} 失败，目标服务器不可达 (状态码: ${res.statusCode})`;
+        } else {
+          errMsg = `HTTP 代理 ${proxyDetails.host}:${proxyDetails.port} 拒绝连接到目标 ${destinationHost}:${destinationPort} (状态码: ${res.statusCode})`;
+        }
         console.error(`SshService: ${errMsg}`);
         reject(new Error(errMsg));
       }
     });
     req.on('error', (err) => {
-      const errMsg = `HTTP proxy ${proxyDetails.host}:${proxyDetails.port} request error: ${err.message}`;
+      const httpErrCode = (err as NodeJS.ErrnoException).code;
+      let errMsg: string;
+      // 区分代理不可达与目标不可达
+      if (
+        httpErrCode === 'ECONNREFUSED' ||
+        httpErrCode === 'ENOTFOUND' ||
+        httpErrCode === 'ETIMEDOUT'
+      ) {
+        errMsg = `HTTP 代理 ${proxyDetails.host}:${proxyDetails.port} 不可达: ${err.message}`;
+      } else {
+        errMsg = `HTTP 代理 ${proxyDetails.host}:${proxyDetails.port} 请求错误: ${err.message}`;
+      }
       console.error(`SshService: ${errMsg}`);
       reject(new Error(errMsg));
     });
@@ -565,115 +606,157 @@ function _prepareConnectConfigForHop(
   return config;
 }
 
+// --- 跳板链错误恢复：清理所有中间客户端并拒绝连接 ---
+function _cleanupJumpChainClients(
+  activeClients: Client[],
+  clientOnError?: Client,
+  logPrefix?: string
+): void {
+  if (clientOnError) {
+    try {
+      clientOnError.end();
+    } catch (error: unknown) {
+      console.error(`${logPrefix || 'SshService'}: 清理失败客户端时出错:`, getErrorMessage(error));
+    }
+  }
+  activeClients.forEach((client) => {
+    try {
+      client.end();
+    } catch (error: unknown) {
+      console.error(`${logPrefix || 'SshService'}: 清理活跃客户端时出错:`, getErrorMessage(error));
+    }
+  });
+  activeClients.length = 0;
+}
+
+// --- 连接到跳板链最终目标 ---
+function _connectToFinalTarget(
+  previousStream: ClientChannel,
+  finalTargetDetails: DecryptedConnectionDetails,
+  timeoutPerHop: number
+): Promise<Client> {
+  const finalClient = new Client();
+  const finalConnectConfig: KeyboardInteractiveConnectConfig = {
+    sock: previousStream as unknown as net.Socket,
+    username: finalTargetDetails.username,
+    password: finalTargetDetails.password,
+    privateKey: finalTargetDetails.privateKey,
+    passphrase: finalTargetDetails.passphrase,
+    readyTimeout: timeoutPerHop,
+    keepaliveInterval: 5000,
+    keepaliveCountMax: 10,
+  };
+
+  // 如果强制使用键盘交互式认证，添加到最终目标配置
+  if (finalTargetDetails.force_keyboard_interactive) {
+    finalConnectConfig.authMethod = 'keyboard-interactive';
+    finalConnectConfig.keyboardInteractive = (
+      _ctx: unknown,
+      messages: string[],
+      finish: (responses: string[]) => void
+    ) => {
+      console.debug(
+        `SshService: Keyboard interactive auth for final target ${finalTargetDetails.name}. Messages: ${JSON.stringify(messages)}`
+      );
+      if (finalTargetDetails.password) {
+        finish([finalTargetDetails.password]);
+      } else {
+        finish([]);
+      }
+    };
+  }
+
+  return _setupSshClientListenersAndConnect(
+    finalClient,
+    finalConnectConfig,
+    true,
+    finalTargetDetails.id,
+    finalTargetDetails.name
+  ).catch((err: unknown) => {
+    throw new Error(
+      `Final target connection error for ${finalTargetDetails.name} (via jump chain): ${err instanceof Error ? err.message : String(err)}`
+    );
+  });
+}
+
+// --- 为中间跳板建立 forwardOut 并递归到下一跳 ---
+function _forwardOutAndRecurse(
+  currentHopClient: Client,
+  currentHopLogPrefix: string,
+  hopIndex: number,
+  jumpChainDetails: JumpHostDetail[],
+  finalTargetDetails: DecryptedConnectionDetails,
+  activeClients: Client[],
+  timeoutPerHop: number,
+  resolveOuter: (client: Client) => void,
+  rejectOuter: (error: Error) => void
+): void {
+  const isLastJumpHost = hopIndex === jumpChainDetails.length - 1;
+  const nextTargetHost = isLastJumpHost
+    ? finalTargetDetails.host
+    : jumpChainDetails[hopIndex + 1].host;
+  const nextTargetPort = isLastJumpHost
+    ? finalTargetDetails.port
+    : jumpChainDetails[hopIndex + 1].port;
+
+  console.debug(`${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort}`);
+  currentHopClient.forwardOut('127.0.0.1', 0, nextTargetHost, nextTargetPort, (err, nextStream) => {
+    if (err) {
+      console.error(`${currentHopLogPrefix}forwardOut FAILED:`, err);
+      _cleanupJumpChainClients(activeClients, currentHopClient, currentHopLogPrefix);
+      rejectOuter(
+        new Error(
+          `${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort} failed: ${err.message}`
+        )
+      );
+      return;
+    }
+    console.debug(`${currentHopLogPrefix}forwardOut successful.`);
+    _establishConnectionViaJumpChainRecursive(
+      hopIndex + 1,
+      nextStream,
+      jumpChainDetails,
+      finalTargetDetails,
+      activeClients,
+      timeoutPerHop
+    )
+      .then(resolveOuter)
+      .catch(rejectOuter);
+  });
+}
+
 // --- Core recursive logic for multi-hop SSH connection ---
 async function _establishConnectionViaJumpChainRecursive(
   hopIndex: number,
   previousStream: ClientChannel | null,
   jumpChainDetails: JumpHostDetail[],
   finalTargetDetails: DecryptedConnectionDetails,
-  activeClients: Client[], // Stores successfully connected intermediate clients for cleanup
+  activeClients: Client[],
   timeoutPerHop: number
 ): Promise<Client> {
   return new Promise<Client>((resolveOuter, rejectOuter) => {
-    const cleanupAndReject = (error: Error, clientOnError?: Client) => {
-      console.error(
-        `SshService: JumpChainCleanupAndReject (Hop ${hopIndex + 1}) for ${finalTargetDetails.name}. Error: ${error.message}`
-      );
-      if (clientOnError) {
-        try {
-          clientOnError.end();
-        } catch (e: unknown) {
-          console.error(
-            `SshService: Error ending clientOnError during jump chain cleanup:`,
-            getErrorMessage(e)
-          );
-        }
-      }
-      activeClients.forEach((client) => {
-        try {
-          client.end();
-        } catch (e: unknown) {
-          console.error(
-            `SshService: Error ending an active client during jump chain cleanup:`,
-            getErrorMessage(e)
-          );
-        }
-      });
-      activeClients.length = 0; // Clear the array
-      rejectOuter(error);
-    };
+    const hopLogPrefix = `SshService: JumpHop[${hopIndex + 1}/${jumpChainDetails.length}]`;
 
-    // Base case: All jump hosts are connected. Now connect to the final target.
+    // Base case: 所有跳板已连接，连接到最终目标
     if (hopIndex === jumpChainDetails.length) {
       if (!previousStream) {
         console.error(
-          `SshService: JumpHop[BaseCase] Error - Jump chain exhausted but no stream to final target for ${finalTargetDetails.name}.`
+          `${hopLogPrefix} Error - 跳板链耗尽但无可用流到最终目标 ${finalTargetDetails.name}.`
         );
-        return cleanupAndReject(
-          new Error(
-            'SshService: Jump chain exhausted but no stream to final target. This indicates an internal logic error.'
-          )
-        );
+        rejectOuter(new Error('SshService: 跳板链耗尽但无可用流到最终目标，内部逻辑错误。'));
+        return;
       }
-
-      const finalClient = new Client();
-
-      const finalConnectConfig: KeyboardInteractiveConnectConfig = {
-        sock: previousStream as unknown as net.Socket,
-        username: finalTargetDetails.username,
-        password: finalTargetDetails.password,
-        privateKey: finalTargetDetails.privateKey,
-        passphrase: finalTargetDetails.passphrase,
-        readyTimeout: timeoutPerHop,
-        keepaliveInterval: 5000,
-        keepaliveCountMax: 10,
-      };
-
-      // 如果强制使用键盘交互式认证，添加到最终目标配置
-      if (finalTargetDetails.force_keyboard_interactive) {
-        finalConnectConfig.authMethod = 'keyboard-interactive';
-        finalConnectConfig.keyboardInteractive = (
-          _ctx: unknown,
-          messages: string[],
-          finish: (responses: string[]) => void
-        ) => {
-          console.debug(
-            `SshService: Keyboard interactive auth for final target ${finalTargetDetails.name}. Messages: ${JSON.stringify(messages)}`
-          );
-          if (finalTargetDetails.password) {
-            finish([finalTargetDetails.password]);
-          } else {
-            finish([]);
-          }
-        };
-      }
-
-      _setupSshClientListenersAndConnect(
-        finalClient,
-        finalConnectConfig,
-        true, // isFinalClient
-        finalTargetDetails.id,
-        finalTargetDetails.name
-      )
-        .then((client) => {
-          resolveOuter(client); // Successfully connected to final target
-        })
-        .catch((err) => {
-          cleanupAndReject(
-            new Error(
-              `Final target connection error for ${finalTargetDetails.name} (via jump chain): ${err.message}`
-            ),
-            finalClient
-          );
-        });
-      return; // Exit promise executor
+      _connectToFinalTarget(previousStream, finalTargetDetails, timeoutPerHop)
+        .then(resolveOuter)
+        .catch(rejectOuter);
+      return;
     }
 
-    // Recursive step: Connect to the current jump host
+    // 递归步骤：连接当前跳板
     const currentJumpHostDetails = jumpChainDetails[hopIndex];
-    const currentHopLogPrefix = `SshService: JumpHop[${hopIndex + 1}/${jumpChainDetails.length}] (${currentJumpHostDetails.name || currentJumpHostDetails.host}:${currentJumpHostDetails.port}) -> `;
+    const currentHopLogPrefix = `${hopLogPrefix} (${currentJumpHostDetails.name || currentJumpHostDetails.host}:${currentJumpHostDetails.port}) -> `;
     console.debug(
-      `${currentHopLogPrefix}Connecting to jump host: ${currentJumpHostDetails.host}:${currentJumpHostDetails.port} (User: ${currentJumpHostDetails.username}, Auth: ${currentJumpHostDetails.auth_method}). PreviousStream exists: ${!!previousStream}`
+      `${currentHopLogPrefix}连接跳板: ${currentJumpHostDetails.host}:${currentJumpHostDetails.port} (User: ${currentJumpHostDetails.username}). PreviousStream: ${!!previousStream}`
     );
 
     const currentHopClient = new Client();
@@ -683,93 +766,53 @@ async function _establishConnectionViaJumpChainRecursive(
       timeoutPerHop,
       finalTargetDetails.force_keyboard_interactive
     );
-    console.debug(
-      `${currentHopLogPrefix}Prepared connect config for this hop: Host=${connectConfigForThisHop.host}, Port=${connectConfigForThisHop.port}, SockPresent=${!!connectConfigForThisHop.sock}`
-    );
 
-    // Define specific handlers for this intermediate hop
-    const currentHopHandlers = {
-      ready: () => {
-        currentHopClient.removeListener('error', currentHopHandlers.error);
-        currentHopClient.removeListener('close', currentHopHandlers.close);
-        activeClients.push(currentHopClient); // Add to activeClients only AFTER successful connection
-
-        console.debug(`${currentHopLogPrefix}Successfully connected.`);
-
-        const isLastJumpHost = hopIndex === jumpChainDetails.length - 1;
-        const nextTargetHost = isLastJumpHost
-          ? finalTargetDetails.host
-          : jumpChainDetails[hopIndex + 1].host;
-        const nextTargetPort = isLastJumpHost
-          ? finalTargetDetails.port
-          : jumpChainDetails[hopIndex + 1].port;
-
-        console.debug(
-          `${currentHopLogPrefix}Attempting forwardOut to ${nextTargetHost}:${nextTargetPort}`
-        );
-        currentHopClient.forwardOut(
-          '127.0.0.1',
-          0,
-          nextTargetHost,
-          nextTargetPort, // Listen on any local port on the jump host
-          (err, nextStream) => {
-            if (err) {
-              console.error(
-                `${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort} FAILED:`,
-                err
-              );
-              // currentHopClient is in activeClients, cleanupAndReject will handle it.
-              return cleanupAndReject(
-                new Error(
-                  `${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort} failed: ${err.message}`
-                ),
-                currentHopClient
-              );
-            }
-            console.debug(
-              `${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort} successful. Proceeding to next hop or target with new stream.`
-            );
-            _establishConnectionViaJumpChainRecursive(
-              hopIndex + 1,
-              nextStream,
-              jumpChainDetails,
-              finalTargetDetails,
-              activeClients,
-              timeoutPerHop
-            )
-              .then(resolveOuter) // Propagate success
-              .catch(rejectOuter); // Propagate failure (cleanup handled by deeper calls or cleanupAndReject)
-          }
-        );
-      },
-      error: (err: Error) => {
-        console.error(`${currentHopLogPrefix}Connection ERROR:`, err);
-        currentHopClient.removeListener('ready', currentHopHandlers.ready); // 'ready' is once
-        currentHopClient.removeListener('close', currentHopHandlers.close);
-        cleanupAndReject(
-          new Error(`${currentHopLogPrefix}connection error: ${err.message}`),
-          currentHopClient
-        );
-      },
-      close: () => {
-        currentHopClient.removeListener('ready', currentHopHandlers.ready); // 'ready' is once
-        currentHopClient.removeListener('error', currentHopHandlers.error);
-        console.warn(`${currentHopLogPrefix}Connection closed unexpectedly.`);
-        // This might indicate the hop dropped. If the promise for this hop hasn't settled,
-        // it should be an error. cleanupAndReject will handle this if it's called.
-        // To be safe, if the outer promise hasn't been settled, reject it.
-        // However, 'error' event usually precedes an unexpected close that causes failure.
-        // If this 'close' happens after 'ready' and during 'forwardOut' or deeper recursion,
-        // the failure will be caught by those stages or the final client.
-      },
+    const cleanupAndReject = (error: Error, clientOnError?: Client) => {
+      console.error(`${currentHopLogPrefix}Error: ${error.message}`);
+      _cleanupJumpChainClients(activeClients, clientOnError, currentHopLogPrefix);
+      rejectOuter(error);
     };
 
-    currentHopClient.once('ready', currentHopHandlers.ready);
-    currentHopClient.on('error', currentHopHandlers.error);
-    currentHopClient.on('close', currentHopHandlers.close);
+    const readyHandler = () => {
+      currentHopClient.removeListener('error', errorHandler);
+      currentHopClient.removeListener('close', closeHandler);
+      activeClients.push(currentHopClient);
+      console.debug(`${currentHopLogPrefix}连接成功。`);
+      _forwardOutAndRecurse(
+        currentHopClient,
+        currentHopLogPrefix,
+        hopIndex,
+        jumpChainDetails,
+        finalTargetDetails,
+        activeClients,
+        timeoutPerHop,
+        resolveOuter,
+        cleanupAndReject
+      );
+    };
+
+    const errorHandler = (err: Error) => {
+      console.error(`${currentHopLogPrefix}Connection ERROR:`, err);
+      currentHopClient.removeListener('ready', readyHandler);
+      currentHopClient.removeListener('close', closeHandler);
+      cleanupAndReject(
+        new Error(`${currentHopLogPrefix}connection error: ${err.message}`),
+        currentHopClient
+      );
+    };
+
+    const closeHandler = () => {
+      currentHopClient.removeListener('ready', readyHandler);
+      currentHopClient.removeListener('error', errorHandler);
+      console.warn(`${currentHopLogPrefix}Connection closed unexpectedly.`);
+    };
+
+    currentHopClient.once('ready', readyHandler);
+    currentHopClient.on('error', errorHandler);
+    currentHopClient.on('close', closeHandler);
 
     console.debug(
-      `${currentHopLogPrefix}Attempting to connect. Config: host=${connectConfigForThisHop.host}, port=${connectConfigForThisHop.port}, user=${connectConfigForThisHop.username}, sock=${!!connectConfigForThisHop.sock}`
+      `${currentHopLogPrefix}连接配置: host=${connectConfigForThisHop.host}, port=${connectConfigForThisHop.port}, sock=${!!connectConfigForThisHop.sock}`
     );
     currentHopClient.connect(connectConfigForThisHop);
   });
@@ -826,9 +869,24 @@ export const establishSshConnection = (
  * @returns Promise<ClientChannel> Shell 通道实例
  * @throws Error 如果打开 Shell 失败
  */
-export const openShell = (sshClient: Client): Promise<ClientChannel> => {
+export const openShell = (
+  sshClient: Client,
+  timeoutMs: number = 10_000
+): Promise<ClientChannel> => {
   return new Promise((resolve, reject) => {
+    let callbackCalled = false;
+    const timer = setTimeout(() => {
+      if (!callbackCalled) {
+        callbackCalled = true;
+        console.error(`SshService: 打开 Shell 超时（${timeoutMs}ms）。`);
+        reject(new Error(`打开 Shell 超时（${timeoutMs}ms）。`));
+      }
+    }, timeoutMs);
+
     sshClient.shell((err, stream) => {
+      clearTimeout(timer);
+      if (callbackCalled) return; // 超时已处理
+      callbackCalled = true;
       if (err) {
         console.error(`SshService: 打开 Shell 失败:`, err);
         return reject(new Error(`打开 Shell 失败: ${err.message}`));

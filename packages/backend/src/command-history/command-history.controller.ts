@@ -19,7 +19,7 @@ export const addCommand = async (
   try {
     const newId = await CommandHistoryService.addCommandHistory(command);
     res.status(201).json({ id: newId, message: '命令已添加到历史记录' });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('添加命令历史记录控制器出错:', error);
     next(error);
   }
@@ -37,7 +37,7 @@ export const getAllCommands = async (
     const history = await CommandHistoryService.getAllCommandHistory();
     // 注意：前端要求最新在下，最旧在上。Repository 返回的是升序（旧->新），符合要求。
     res.status(200).json(history);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('获取命令历史记录控制器出错:', error);
     next(error);
   }
@@ -65,7 +65,7 @@ export const deleteCommand = async (
     } else {
       res.status(404).json({ message: '未找到要删除的命令历史记录' });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('删除命令历史记录控制器出错:', error);
     next(error);
   }
@@ -82,7 +82,7 @@ export const clearAllCommands = async (
   try {
     const count = await CommandHistoryService.clearAllCommandHistory();
     res.status(200).json({ count, message: `已清空 ${count} 条命令历史记录` });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('清空命令历史记录控制器出错:', error);
     next(error);
   }

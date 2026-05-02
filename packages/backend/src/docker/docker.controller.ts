@@ -14,7 +14,7 @@ export class DockerController {
     try {
       const status = await dockerService.getContainerStatus();
       res.json(status); // 直接返回 { available: boolean, containers: DockerContainer[] }
-    } catch (error) {
+    } catch (error: unknown) {
       // 将错误传递给 Express 的错误处理中间件
       next(error);
     }
@@ -46,7 +46,7 @@ export class DockerController {
       res.status(200).json({
         message: `Command '${command}' executed successfully for container ${containerId}.`,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       next(error); // 传递给全局错误处理中间件
     }
   }

@@ -200,7 +200,7 @@ const handleLayoutLockChange = async () => {
     await settingsStore.updateSetting('layoutLocked', String(isLocked));
     // No need to update local state directly, store watcher should handle it if needed,
     // but the button's appearance relies on layoutLockedBoolean which comes from the store.
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[LayoutConfigurator] Failed to update layout lock setting:', error);
   }
 };
@@ -237,7 +237,7 @@ const saveLayout = async () => {
     // isModified will update automatically based on comparison with original state after save
     emit('close'); // Close dialog *after* save is complete
     console.info('[LayoutConfigurator] Layout saved successfully, dialog closed.');
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[LayoutConfigurator] Error saving layout:', error);
   }
 };

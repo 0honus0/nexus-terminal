@@ -103,8 +103,8 @@ export const setLocale = (lang: string) => {
       try {
         localStorage.setItem(localStorageKey, lang); // 持久化到 localStorage
         console.info(`[i18n] Locale "${lang}" saved to localStorage.`);
-      } catch (e) {
-        console.error('[i18n] Failed to save locale to localStorage:', e);
+      } catch (error: unknown) {
+        console.error('[i18n] Failed to save locale to localStorage:', error);
       }
     } else {
       console.info(`[i18n] Locale is already "${lang}". No update needed.`);

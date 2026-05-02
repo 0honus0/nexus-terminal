@@ -361,8 +361,8 @@ describe('SSH Service', () => {
 
       await establishSshConnection(keyboardInteractiveConnDetails);
 
-      // 等待异步回调执行
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // 等待异步回调执行（使用 vi.waitFor 替代脆弱的 setTimeout）
+      await vi.waitFor(() => expect(capturedCallback).not.toBeNull(), { timeout: 200 });
 
       expect(capturedCallback).not.toBeNull();
       expect(capturedCallback).toEqual(['testpass']);
@@ -578,7 +578,7 @@ describe('SSH Service', () => {
       (SocksClient.createConnection as any).mockRejectedValue(new Error('Proxy timeout'));
 
       await expect(establishSshConnection(proxyConnDetails)).rejects.toThrow(
-        'SOCKS5 proxy 10.0.0.1:1080 connection failed'
+        '通过 SOCKS5 代理 10.0.0.1:1080'
       );
     });
 
@@ -650,7 +650,7 @@ describe('SSH Service', () => {
         mockRequest.emit('connect', { statusCode: 407 }, mockSocket, Buffer.alloc(0));
       }, 5);
 
-      await expect(connectionPromise).rejects.toThrow('HTTP proxy 10.0.0.2:8080 connection failed');
+      await expect(connectionPromise).rejects.toThrow('HTTP 代理 10.0.0.2:8080 认证失败 (407)');
     });
 
     it('HTTP 代理请求错误时应抛出错误', async () => {
@@ -677,7 +677,9 @@ describe('SSH Service', () => {
         mockRequest.emit('error', new Error('Network error'));
       }, 5);
 
-      await expect(connectionPromise).rejects.toThrow('HTTP proxy 10.0.0.2:8080 request error');
+      await expect(connectionPromise).rejects.toThrow(
+        'HTTP 代理 10.0.0.2:8080 请求错误: Network error'
+      );
     });
 
     it('设置为 proxy 但没有代理配置时应回退到直连', async () => {

@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getErrorMessage } from '../utils/AppError';
+import { sanitizeDockerContainerId, isValidDockerCommand } from '../utils/docker-security';
 
 const execAsync = promisify(exec);
 
@@ -108,7 +109,7 @@ export class DockerService {
             // 初始化 stats 为 null
             data.stats = null;
             return data as DockerContainer;
-          } catch (parseError) {
+          } catch (parseError: unknown) {
             console.error(`[DockerService] Failed to parse container JSON line: ${line}`, {
               error: parseError,
             });
@@ -150,7 +151,7 @@ export class DockerService {
             // 也可以考虑用 Name 匹配作为备选
             // if (statsData.Name) statsMap.set(statsData.Name, statsData);
           }
-        } catch (parseError) {
+        } catch (parseError: unknown) {
           console.error(`[DockerService] Failed to parse stats JSON line: ${line}`, {
             error: parseError,
           });
@@ -191,9 +192,14 @@ export class DockerService {
     }
 
     // 参数校验和清理，防止命令注入
-    const cleanContainerId = containerId.replace(/[^a-zA-Z0-9_-]/g, '');
+    const cleanContainerId = sanitizeDockerContainerId(containerId);
     if (!cleanContainerId) {
       throw new Error('Invalid container ID format.');
+    }
+
+    if (!isValidDockerCommand(command)) {
+      console.error(`[DockerService] Received unknown command type: ${command}`);
+      throw new Error(`Unsupported Docker command: ${command}`);
     }
 
     let dockerCliCommand: string;
@@ -208,13 +214,8 @@ export class DockerService {
         dockerCliCommand = `docker restart ${cleanContainerId}`;
         break;
       case 'remove':
-        // 使用 -f 强制删除正在运行的容器，对应前端的 'down' 意图
         dockerCliCommand = `docker rm -f ${cleanContainerId}`;
         break;
-      default:
-        // 防止未知的命令类型
-        console.error(`[DockerService] Received unknown command type: ${command}`); // Use console.error
-        throw new Error(`Unsupported Docker command: ${command}`);
     }
 
     console.info(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log

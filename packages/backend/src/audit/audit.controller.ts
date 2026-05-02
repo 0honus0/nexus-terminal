@@ -65,8 +65,8 @@ export class AuditController {
         if (log.details) {
           try {
             parsedDetails = JSON.parse(log.details);
-          } catch (e) {
-            console.warn(`[Audit Log] Failed to parse details for log ID ${log.id}:`, e);
+          } catch (error: unknown) {
+            console.warn(`[Audit Log] Failed to parse details for log ID ${log.id}:`, error);
             parsedDetails = { raw: log.details, parseError: true };
           }
         }
@@ -79,7 +79,7 @@ export class AuditController {
         limit,
         offset,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('获取审计日志时出错:', error);
       next(error); // 传递给全局错误处理中间件
     }
@@ -95,7 +95,7 @@ export class AuditController {
         message: '审计日志已全部删除',
         deletedCount,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('删除审计日志时出错:', error);
       next(error); // 传递给全局错误处理中间件
     }
@@ -108,7 +108,7 @@ export class AuditController {
     try {
       const count = await auditLogService.getLogCount();
       res.status(200).json({ count });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('获取审计日志数量时出错:', error);
       next(error); // 传递给全局错误处理中间件
     }

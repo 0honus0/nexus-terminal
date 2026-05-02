@@ -10,7 +10,7 @@ import {
   notificationService,
 } from '../state';
 import * as SshService from '../../services/ssh.service';
-import { cleanupClientConnection } from '../utils';
+import { cleanupClientConnection, registerSessionCleanup } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
 import { startDockerStatusPolling } from './docker.handler';
 import { getErrorMessage } from '../../utils/AppError';
@@ -43,6 +43,8 @@ interface SshResizePayload {
 
 const MAX_SILENT_OUTPUT_SIZE = 64 * 1024;
 const MAX_SILENT_LINE_BUFFER_SIZE = 16 * 1024;
+// Shell 就绪超时（毫秒），超时后认为 shell 挂起并报错
+const SHELL_READY_TIMEOUT_MS = 10_000;
 const TERMINAL_LINE_KILL_CONTROL = '\u0015';
 
 interface PendingSilentExecRequest {
@@ -64,6 +66,8 @@ interface PendingSilentExecRequest {
 }
 
 const pendingSilentExecRequests = new Map<string, PendingSilentExecRequest>();
+// H-17: sessionId -> requestId 反向索引，避免并发请求被覆盖
+const sessionToSilentExecRequestId = new Map<string, string>();
 const pendingPromptSuppressionSessions = new Set<string>();
 const SILENT_PWD_PREFIX = '__NX_PWD__';
 const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
@@ -170,23 +174,29 @@ const isSilentExecOutputAccepted = (
 };
 
 const finalizeSilentExecWithError = (sessionId: string, error: string): void => {
-  const request = pendingSilentExecRequests.get(sessionId);
+  const requestId = sessionToSilentExecRequestId.get(sessionId);
+  const request = requestId ? pendingSilentExecRequests.get(requestId) : undefined;
   if (!request) {
+    sessionToSilentExecRequestId.delete(sessionId);
     return;
   }
   clearSilentExecTimer(request);
-  pendingSilentExecRequests.delete(sessionId);
+  pendingSilentExecRequests.delete(request.requestId);
+  sessionToSilentExecRequestId.delete(sessionId);
   pendingPromptSuppressionSessions.delete(sessionId);
   sendSilentExecResponse(request.ws, 'ssh:exec_silent:error', request.requestId, { error });
 };
 
 const finalizeSilentExecWithResult = (sessionId: string, output: string): void => {
-  const request = pendingSilentExecRequests.get(sessionId);
+  const requestId = sessionToSilentExecRequestId.get(sessionId);
+  const request = requestId ? pendingSilentExecRequests.get(requestId) : undefined;
   if (!request) {
+    sessionToSilentExecRequestId.delete(sessionId);
     return;
   }
   clearSilentExecTimer(request);
-  pendingSilentExecRequests.delete(sessionId);
+  pendingSilentExecRequests.delete(request.requestId);
+  sessionToSilentExecRequestId.delete(sessionId);
   if (request.suppressTerminalPrompt) {
     pendingPromptSuppressionSessions.add(sessionId);
   } else {
@@ -198,7 +208,8 @@ const finalizeSilentExecWithResult = (sessionId: string, output: string): void =
 };
 
 const moveToNextSilentExecAttempt = (sessionId: string, reason: string): void => {
-  const request = pendingSilentExecRequests.get(sessionId);
+  const requestId = sessionToSilentExecRequestId.get(sessionId);
+  const request = requestId ? pendingSilentExecRequests.get(requestId) : undefined;
   if (!request) {
     return;
   }
@@ -226,7 +237,8 @@ const createSilentExecMarker = (requestId: string, attemptIndex: number): string
 };
 
 const startSilentExecAttempt = (sessionId: string): void => {
-  const request = pendingSilentExecRequests.get(sessionId);
+  const requestId = sessionToSilentExecRequestId.get(sessionId);
+  const request = requestId ? pendingSilentExecRequests.get(requestId) : undefined;
   if (!request) {
     return;
   }
@@ -253,8 +265,20 @@ const startSilentExecAttempt = (sessionId: string): void => {
   request.collectedOutput = '';
 
   request.timeoutId = setTimeout(() => {
-    moveToNextSilentExecAttempt(sessionId, 'Timed out while waiting for command output.');
-    startSilentExecAttempt(sessionId);
+    // H-18: 超时后先发送 Ctrl+C 中止当前命令，避免旧命令输出污染新命令
+    try {
+      const currentState = clientStates.get(sessionId);
+      if (currentState?.sshShellStream) {
+        currentState.sshShellStream.write('\x03');
+      }
+    } catch {
+      /* 忽略写入错误 */
+    }
+    // 等待 500ms 让 Ctrl+C 生效后再启动下一尝试
+    request.timeoutId = setTimeout(() => {
+      moveToNextSilentExecAttempt(sessionId, 'Timed out while waiting for command output.');
+      startSilentExecAttempt(sessionId);
+    }, 500);
   }, request.timeoutMs);
 
   try {
@@ -271,7 +295,8 @@ const startSilentExecAttempt = (sessionId: string): void => {
 };
 
 const processSshStreamOutput = (sessionId: string, chunk: string): string => {
-  const request = pendingSilentExecRequests.get(sessionId);
+  const requestId = sessionToSilentExecRequestId.get(sessionId);
+  const request = requestId ? pendingSilentExecRequests.get(requestId) : undefined;
   if (!request) {
     if (!pendingPromptSuppressionSessions.has(sessionId)) {
       return chunk;
@@ -373,7 +398,8 @@ const processSshStreamOutput = (sessionId: string, chunk: string): string => {
   }
 
   // 如果本次处理过程中请求已结束，补发尚未换行的尾部内容（常见于 shell prompt）。
-  if (!pendingSilentExecRequests.has(sessionId) && request.pendingLineBuffer) {
+  const requestStillActive = sessionToSilentExecRequestId.get(sessionId) === request.requestId;
+  if (!requestStillActive && request.pendingLineBuffer) {
     const shouldSuppressPendingPrompt =
       request.suppressTerminalPrompt && isLikelyShellPromptLine(request.pendingLineBuffer);
     if (!shouldSuppressPendingPrompt) {
@@ -428,9 +454,12 @@ const getSilentExecCommandCandidates = (payload: SilentExecPayload): string[] =>
   return Array.from(commands);
 };
 
+// SSH 静默执行超时默认值（5秒），等待用户配置覆盖
+const DEFAULT_SSH_RECONNECT_DELAY_MS = 5000;
+
 const getSilentExecTimeoutMs = (value: unknown): number => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 5000;
+    return DEFAULT_SSH_RECONNECT_DELAY_MS;
   }
   return Math.max(1000, Math.min(Math.floor(value), 20000));
 };
@@ -475,7 +504,7 @@ export function handleSshExecSilent(
     return;
   }
 
-  if (pendingSilentExecRequests.has(sessionId)) {
+  if (sessionToSilentExecRequestId.has(sessionId)) {
     sendSilentExecResponse(ws, 'ssh:exec_silent:error', requestId, {
       error: 'Another silent command is already in progress.',
     });
@@ -498,9 +527,25 @@ export function handleSshExecSilent(
     suppressTerminalPrompt: payload.suppressTerminalPrompt === true,
   };
 
-  pendingSilentExecRequests.set(sessionId, request);
+  // H-17: 使用 requestId 作为主键，避免并发请求被覆盖
+  pendingSilentExecRequests.set(requestId, request);
+  sessionToSilentExecRequestId.set(sessionId, requestId);
   startSilentExecAttempt(sessionId);
 }
+
+// H-19: 注册会话级清理回调，在 cleanupClientConnection 中调用，清理 silent exec 定时器
+registerSessionCleanup((sessionId: string) => {
+  const requestId = sessionToSilentExecRequestId.get(sessionId);
+  if (requestId) {
+    const request = pendingSilentExecRequests.get(requestId);
+    if (request) {
+      clearSilentExecTimer(request);
+      pendingSilentExecRequests.delete(requestId);
+    }
+    sessionToSilentExecRequestId.delete(sessionId);
+  }
+  pendingPromptSuppressionSessions.delete(sessionId);
+});
 
 export async function handleSshConnect(
   ws: AuthenticatedWebSocket,
@@ -579,6 +624,21 @@ export async function handleSshConnect(
     try {
       const defaultCols = payload?.cols || 80; // Use provided cols or default
       const defaultRows = payload?.rows || 24; // Use provided rows or default
+      // H-21: Shell 就绪超时保护，防止 shell 挂起导致无限等待
+      let shellCallbackCalled = false;
+      const shellReadyTimeout = setTimeout(() => {
+        if (!shellCallbackCalled) {
+          shellCallbackCalled = true;
+          console.error(
+            `SSH: 会话 ${newSessionId} Shell 就绪超时（${SHELL_READY_TIMEOUT_MS}ms）。`
+          );
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ssh:error', payload: 'Shell 就绪超时，请重试。' }));
+          }
+          cleanupClientConnection(newSessionId).catch(() => {});
+        }
+      }, SHELL_READY_TIMEOUT_MS);
+
       sshClient.shell(
         {
           term: payload?.term || 'xterm-256color',
@@ -586,6 +646,9 @@ export async function handleSshConnect(
           rows: defaultRows,
         },
         (err, stream) => {
+          clearTimeout(shellReadyTimeout);
+          if (shellCallbackCalled) return; // 超时已处理，忽略后续回调
+          shellCallbackCalled = true;
           if (err) {
             console.error(`SSH: 会话 ${newSessionId} 打开 Shell 失败:`, err);
             auditLogService.logAction('SSH_SHELL_FAILURE', {
@@ -610,7 +673,7 @@ export async function handleSshConnect(
                 JSON.stringify({ type: 'ssh:error', payload: `打开 Shell 失败: ${err.message}` })
               );
             }
-            cleanupClientConnection(newSessionId);
+            cleanupClientConnection(newSessionId).catch(() => {});
             return;
           }
 
@@ -696,7 +759,7 @@ export async function handleSshConnect(
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
             }
-            cleanupClientConnection(newSessionId);
+            cleanupClientConnection(newSessionId).catch(() => {});
           });
 
           if (ws.readyState === WebSocket.OPEN)
@@ -749,7 +812,7 @@ export async function handleSshConnect(
           })
         );
       }
-      cleanupClientConnection(newSessionId);
+      cleanupClientConnection(newSessionId).catch(() => {});
     }
 
     sshClient.on('close', () => {
@@ -758,7 +821,7 @@ export async function handleSshConnect(
         'SSH connection closed before silent command completed.'
       );
       console.debug(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
-      cleanupClientConnection(newSessionId);
+      cleanupClientConnection(newSessionId).catch(() => {});
     });
     sshClient.on('error', (err: Error) => {
       finalizeSilentExecWithError(
@@ -769,7 +832,7 @@ export async function handleSshConnect(
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));
       }
-      cleanupClientConnection(newSessionId);
+      cleanupClientConnection(newSessionId).catch(() => {});
     });
   } catch (connectError: unknown) {
     const connectErrMsg = getErrorMessage(connectError);

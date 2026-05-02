@@ -25,12 +25,17 @@ interface ActiveUpload {
   pendingChunks: Map<number, Buffer>;
   /** 下一个期望写入的块索引 */
   expectedChunkIndex: number;
-  /** 是否正在刷写缓冲区（防止重入） */
-  flushingChunks: boolean;
+  /** 刷写缓冲区的 Promise 锁（防止重入，排队等待当前刷写完成后再执行） */
+  flushLock: Promise<void> | null;
 }
 
 /** 滑动窗口大小：允许同时在途的最大块数量 */
 const UPLOAD_WINDOW_SIZE = 8;
+
+/** 全局内存跟踪：所有活跃上传的已缓冲字节总量上限（256MB） */
+const GLOBAL_UPLOAD_MEMORY_LIMIT = 256 * 1024 * 1024;
+/** 所有活跃上传的当前已缓冲内存总量 */
+let globalBufferedBytes = 0;
 
 export class SftpUploadManager {
   private clientStates: Map<string, ClientState>;
@@ -150,7 +155,7 @@ export class SftpUploadManager {
         inFlightChunks: 0,
         pendingChunks: new Map(),
         expectedChunkIndex: 0,
-        flushingChunks: false,
+        flushLock: null,
       };
       this.activeUploads.set(uploadId, uploadState);
 
@@ -165,7 +170,18 @@ export class SftpUploadManager {
         this.activeUploads.delete(uploadId);
       });
 
+      // 超时回退：如果 stream.end() 后 close 事件未在 5s 内触发，强制销毁流并清理
+      const closeTimeoutFallback = setTimeout(() => {
+        const pendingState = this.activeUploads.get(uploadId);
+        if (pendingState && !pendingState.stream.destroyed) {
+          console.warn(`[SFTP Upload ${uploadId}] stream close 事件超时 (5s)，强制销毁流。`);
+          pendingState.stream.destroy();
+          this.activeUploads.delete(uploadId);
+        }
+      }, 5000);
+
       stream.on('close', () => {
+        clearTimeout(closeTimeoutFallback);
         const finalState = this.activeUploads.get(uploadId);
         if (finalState) {
           if (finalState.bytesWritten >= finalState.totalSize) {
@@ -268,6 +284,24 @@ export class SftpUploadManager {
     }
 
     try {
+      // 全局内存上限检查：拒绝超出总缓冲内存上限的新分块
+      const estimatedChunkBytes = Math.ceil((dataBase64.length * 3) / 4); // base64 解码后大致字节数
+      if (globalBufferedBytes + estimatedChunkBytes > GLOBAL_UPLOAD_MEMORY_LIMIT) {
+        console.warn(
+          `[SFTP Upload ${uploadId}] Global buffer memory limit reached (${Math.round(globalBufferedBytes / 1024 / 1024)}MB/${Math.round(GLOBAL_UPLOAD_MEMORY_LIMIT / 1024 / 1024)}MB), rejecting chunk ${chunkIndex}.`
+        );
+        state.ws.send(
+          JSON.stringify({
+            type: 'sftp:upload:error',
+            payload: {
+              uploadId,
+              message: `服务器缓冲内存已满（${Math.round(globalBufferedBytes / 1024 / 1024)}MB），请等待上传完成后再继续`,
+            },
+          })
+        );
+        return;
+      }
+
       // 仅在块未重复时才计入在途计数，防止重复块耗尽滑动窗口
       const isDuplicate = uploadState.pendingChunks.has(chunkIndex);
       if (!isDuplicate) {
@@ -278,6 +312,9 @@ export class SftpUploadManager {
         );
       }
       const chunkBuffer = Buffer.from(dataBase64, 'base64');
+
+      // 跟踪全局缓冲内存
+      globalBufferedBytes += chunkBuffer.length;
 
       // 将块存入排序缓冲区（不直接写入流）
       uploadState.pendingChunks.set(chunkIndex, chunkBuffer);
@@ -299,17 +336,39 @@ export class SftpUploadManager {
   /**
    * 按序刷写待写入块缓冲区
    * 从 expectedChunkIndex 开始，连续写入已到达的块
+   * 使用 Promise 锁保证同一时间只有一个刷写流程运行，后续调用排队等待
    */
-  private async flushPendingChunks(uploadId: string): Promise<void> {
+  private flushPendingChunks(uploadId: string): Promise<void> {
+    const uploadState = this.activeUploads.get(uploadId);
+    if (!uploadState) return Promise.resolve();
+
+    const state = this.clientStates.get(uploadState.sessionId);
+    if (!state) return Promise.resolve();
+
+    // Promise 锁：如果已经在刷写，排队等待当前刷写完成后再执行新一轮
+    if (uploadState.flushLock) {
+      return uploadState.flushLock.then(() => this._doFlushPendingChunks(uploadId));
+    }
+
+    // 没有正在进行的刷写，直接启动
+    const flushPromise = this._doFlushPendingChunks(uploadId);
+    uploadState.flushLock = flushPromise;
+    flushPromise.finally(() => {
+      // 刷写完成后清除锁，但如果有新数据在 await 期间到达，会在 finally 后由下一轮调用重新启动
+      if (uploadState) uploadState.flushLock = null;
+    });
+    return flushPromise;
+  }
+
+  /**
+   * 实际执行刷写逻辑（由 flushPendingChunks 调用）
+   */
+  private async _doFlushPendingChunks(uploadId: string): Promise<void> {
     const uploadState = this.activeUploads.get(uploadId);
     if (!uploadState) return;
 
     const state = this.clientStates.get(uploadState.sessionId);
     if (!state) return;
-
-    // 防止重入：如果已经在刷写，直接返回（外层 handleUploadChunk 会继续调用）
-    if (uploadState.flushingChunks) return;
-    uploadState.flushingChunks = true; // eslint-disable-line no-param-reassign
 
     try {
       while (uploadState.pendingChunks.has(uploadState.expectedChunkIndex)) {
@@ -317,6 +376,10 @@ export class SftpUploadManager {
         const bufferedChunk = uploadState.pendingChunks.get(currentIndex);
         if (!bufferedChunk) break;
         uploadState.pendingChunks.delete(currentIndex);
+
+        // 释放已写入块的全局缓冲内存跟踪
+        globalBufferedBytes = Math.max(0, globalBufferedBytes - bufferedChunk.length);
+
         uploadState.expectedChunkIndex++;
 
         // 写入流并等待完成（传入 buffer，避免 writeChunkToStream 重新查找已被删除的条目）
@@ -381,8 +444,18 @@ export class SftpUploadManager {
           break;
         }
       }
-    } finally {
-      uploadState.flushingChunks = false; // eslint-disable-line no-param-reassign
+    } catch (error: unknown) {
+      console.error(`[SFTP Upload ${uploadId}] _doFlushPendingChunks 异常:`, error);
+      const state = this.clientStates.get(uploadState.sessionId);
+      if (state?.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(
+          JSON.stringify({
+            type: 'sftp:upload:error',
+            payload: { uploadId, message: `刷写缓冲区时出错: ${getErrorMessage(error)}` },
+          })
+        );
+      }
+      this.cancelUploadInternal(uploadId, `Flush error: ${getErrorMessage(error)}`);
     }
   }
 
@@ -491,6 +564,10 @@ export class SftpUploadManager {
         } else {
           currentStream.destroy();
         }
+      }
+      // 释放待写入块的全局缓冲内存跟踪，防止内存泄漏
+      for (const [, buffered] of uploadState.pendingChunks) {
+        globalBufferedBytes = Math.max(0, globalBufferedBytes - buffered.length);
       }
       this.activeUploads.delete(uploadId);
     }

@@ -116,7 +116,7 @@ export function useFileEditor(
         try {
           editingFileContent.value = atob(fileData.content); // 解码
           editingFileEncoding.value = 'base64'; // 记录原始编码
-        } catch (decodeError) {
+        } catch (decodeError: unknown) {
           console.error(`[文件编辑器模块] Base64 解码错误 for ${filePath}:`, decodeError);
           editorError.value = t('fileManager.errors.fileDecodeError');
           editingFileContent.value = `// ${t('fileManager.errors.fileDecodeError')}\n${fileData.content}`; // 显示原始 Base64 作为后备

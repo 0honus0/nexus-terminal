@@ -23,7 +23,7 @@ export class SshSuspendController {
       const sessions: SuspendedSessionInfo[] =
         await sshSuspendService.listSuspendedSessions(userId);
       res.status(200).json(sessions);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[SshSuspendController] Error fetching suspended SSH sessions for user ID: ${req.session.userId}:`,
         error
@@ -71,7 +71,7 @@ export class SshSuspendController {
           message: `Failed to terminate and remove session ${suspendSessionId}. It might not exist or not be in a 'hanging' state.`,
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[SshSuspendController] Error terminating session for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
@@ -121,7 +121,7 @@ export class SshSuspendController {
           message: `Failed to remove session entry ${suspendSessionId}. It might not exist or was still 'hanging'.`,
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[SshSuspendController] Error removing session entry for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
@@ -180,7 +180,7 @@ export class SshSuspendController {
           message: `Failed to update name for session ${suspendSessionId}. It might not exist.`,
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[SshSuspendController] Error editing session name for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
@@ -228,7 +228,7 @@ export class SshSuspendController {
           message: `Failed to export log for session ${suspendSessionId}. It might not exist, not be in a valid state for export, or log reading failed.`,
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[SshSuspendController] Error exporting session log for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error

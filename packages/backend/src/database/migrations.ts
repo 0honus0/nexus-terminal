@@ -44,11 +44,17 @@ const tableExists = async (db: Database, tableName: string): Promise<boolean> =>
 };
 
 // 辅助函数：检查列是否存在
+// 仅允许合法的 SQLite 标识符，防止 PRAGMA 语句中的注入
+const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
 const columnExists = async (
   db: Database,
   tableName: string,
   columnName: string
 ): Promise<boolean> => {
+  if (!VALID_TABLE_NAME.test(tableName)) {
+    throw new Error(`无效的表名: "${tableName}"`);
+  }
   return new Promise((resolve, reject) => {
     db.all(`PRAGMA table_info(${tableName})`, (err, columns: TableInfoColumn[]) => {
       if (err) reject(err);

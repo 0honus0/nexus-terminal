@@ -30,8 +30,8 @@ export const useTagsStore = defineStore('tags', () => {
       } else {
         isLoading.value = true; // 无缓存，初始加载
       }
-    } catch (e) {
-      console.error('[TagsStore] Failed to load or parse tags cache:', e);
+    } catch (error: unknown) {
+      console.error('[TagsStore] Failed to load or parse tags cache:', error);
       localStorage.removeItem(cacheKey); // 解析失败则移除缓存
       isLoading.value = true; // 缓存无效，需要加载
     }

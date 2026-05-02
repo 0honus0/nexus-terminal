@@ -554,7 +554,11 @@ function executeCommand(
           if (dbAllowedSize > 0) {
             const dbChunk = chunk.substring(0, dbAllowedSize);
             dbOutputSize += dbAllowedSize;
-            BatchRepository.appendSubTaskOutput(subTaskId, dbChunk).catch(() => {});
+            BatchRepository.appendSubTaskOutput(subTaskId, dbChunk).catch((error: unknown) => {
+              console.warn(
+                `[Batch] 追加子任务输出失败 (subTaskId=${subTaskId}): ${error instanceof Error ? error.message : String(error)}`
+              );
+            });
           }
         }
       };

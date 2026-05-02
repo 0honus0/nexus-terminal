@@ -73,6 +73,9 @@ export const SECURITY_CONFIG = {
   // bcrypt 盐轮次（默认 12，可通过 BCRYPT_SALT_ROUNDS 环境变量覆盖，2025年推荐值：12-14）
   BCRYPT_SALT_ROUNDS: intFromEnv('BCRYPT_SALT_ROUNDS', 12, 12, 15),
 
+  // Passkey 挑战超时（默认 60 秒，可通过 PASSKEY_CHALLENGE_TIMEOUT_MS 环境变量覆盖）
+  PASSKEY_CHALLENGE_TIMEOUT_MS: intFromEnv('PASSKEY_CHALLENGE_TIMEOUT_MS', 60_000, 10_000, 300_000),
+
   // WebSocket 允许的 Origin 白名单 (CSWSH 防护)
   // 支持通过环境变量配置：ALLOWED_WS_ORIGINS 或 RP_ORIGIN
   ALLOWED_WS_ORIGINS: buildAllowedWsOrigins(),

@@ -131,24 +131,24 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
       if (row.encrypted_password) {
         try {
           plainPassword = decrypt(row.encrypted_password);
-        } catch (e: unknown) {
-          console.warn(`解密连接 [${row.name}] 密码失败: ${getErrorMessage(e)}`);
+        } catch (error: unknown) {
+          console.warn(`解密连接 [${row.name}] 密码失败: ${getErrorMessage(error)}`);
         }
       }
       let plainPrivateKey = null;
       if (row.encrypted_private_key) {
         try {
           plainPrivateKey = decrypt(row.encrypted_private_key);
-        } catch (e: unknown) {
-          console.warn(`解密连接 [${row.name}] 私钥失败: ${getErrorMessage(e)}`);
+        } catch (error: unknown) {
+          console.warn(`解密连接 [${row.name}] 私钥失败: ${getErrorMessage(error)}`);
         }
       }
       let plainPassphrase = null;
       if (row.encrypted_passphrase) {
         try {
           plainPassphrase = decrypt(row.encrypted_passphrase);
-        } catch (e: unknown) {
-          console.warn(`解密连接 [${row.name}] 私钥密码失败: ${getErrorMessage(e)}`);
+        } catch (error: unknown) {
+          console.warn(`解密连接 [${row.name}] 私钥密码失败: ${getErrorMessage(error)}`);
         }
       }
 
@@ -179,24 +179,24 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
         if (row.proxy_encrypted_password) {
           try {
             proxyPlainPassword = decrypt(row.proxy_encrypted_password);
-          } catch (e: unknown) {
-            console.warn(`解密代理 [${row.proxy_name}] 密码失败: ${getErrorMessage(e)}`);
+          } catch (error: unknown) {
+            console.warn(`解密代理 [${row.proxy_name}] 密码失败: ${getErrorMessage(error)}`);
           }
         }
         let proxyPlainPrivateKey = null;
         if (row.proxy_encrypted_private_key) {
           try {
             proxyPlainPrivateKey = decrypt(row.proxy_encrypted_private_key);
-          } catch (e: unknown) {
-            console.warn(`解密代理 [${row.proxy_name}] 私钥失败: ${getErrorMessage(e)}`);
+          } catch (error: unknown) {
+            console.warn(`解密代理 [${row.proxy_name}] 私钥失败: ${getErrorMessage(error)}`);
           }
         }
         let proxyPlainPassphrase = null;
         if (row.proxy_encrypted_passphrase) {
           try {
             proxyPlainPassphrase = decrypt(row.proxy_encrypted_passphrase);
-          } catch (e: unknown) {
-            console.warn(`解密代理 [${row.proxy_name}] 私钥密码失败: ${getErrorMessage(e)}`);
+          } catch (error: unknown) {
+            console.warn(`解密代理 [${row.proxy_name}] 私钥密码失败: ${getErrorMessage(error)}`);
           }
         }
 

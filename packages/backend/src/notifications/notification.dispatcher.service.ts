@@ -84,7 +84,7 @@ class NotificationDispatcherService {
     try {
       await sender.send(notification);
       console.info(`[NotificationDispatcher] 已成功通过 ${notification.channelType} 发送通知`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(
         `[NotificationDispatcher] 通过 ${notification.channelType} 发送通知失败:`,
         error

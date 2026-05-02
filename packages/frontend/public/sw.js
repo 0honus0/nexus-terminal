@@ -1,4 +1,6 @@
-const CACHE_NAME = 'nexus-terminal-cache-v2';
+/** Service Worker 版本号，每次部署时递增以触发更新检测 */
+const SW_VERSION = '1.0.0';
+const CACHE_NAME = `nexus-terminal-cache-${SW_VERSION}`;
 const urlsToCache = [
   '/icons/icon-72x72.png',
   '/icons/icon-96x96.png',
@@ -57,4 +59,18 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+/**
+ * 处理来自客户端的消息
+ * 支持版本查询：客户端发送 { type: 'GET_SW_VERSION' }，SW 回复当前版本号
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'GET_SW_VERSION') {
+    event.source.postMessage({ type: 'SW_VERSION', version: SW_VERSION });
+  }
+  // 客户端确认跳过等待，立即激活新 SW
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

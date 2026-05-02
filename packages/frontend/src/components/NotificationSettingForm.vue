@@ -677,8 +677,8 @@ watch(webhookHeadersString, (newVal) => {
     }
     webhookConfig.value.headers = parsed;
     headerError.value = null;
-  } catch (e: unknown) {
-    const errorMessage = extractErrorMessage(e, t('common.errorOccurred'));
+  } catch (error: unknown) {
+    const errorMessage = extractErrorMessage(error, t('common.errorOccurred'));
     headerError.value = t('settings.notifications.form.invalidJson') + `: ${errorMessage}`;
   }
 });
@@ -764,8 +764,8 @@ const handleTestNotification = async () => {
         ) {
           throw new Error('Headers must be a JSON object.');
         }
-      } catch (e: unknown) {
-        const errorMessage = extractErrorMessage(e, t('common.errorOccurred'));
+      } catch (error: unknown) {
+        const errorMessage = extractErrorMessage(error, t('common.errorOccurred'));
         testResult.value = {
           success: false,
           message: t('settings.notifications.form.invalidJson') + `: ${errorMessage}`,

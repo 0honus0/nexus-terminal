@@ -1,6 +1,7 @@
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
+import { GITHUB_REPO_URL } from '@/utils/constants';
 
 export function useAboutSection() {
   const { t } = useI18n();
@@ -34,7 +35,7 @@ export function useAboutSection() {
     try {
       const response = await axios.get('/VERSION');
       appVersion.value = response.data.trim();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('加载应用版本失败:', error);
       appVersion.value = '未知版本';
     }
@@ -46,7 +47,7 @@ export function useAboutSection() {
     latestVersion.value = null; // Reset before check
     try {
       const response = await axios.get(
-        'https://api.github.com/repos/Silentely/nexus-terminal/releases/latest',
+        `https://api.github.com/repos/${GITHUB_REPO_URL.split('github.com/')[1]}/releases/latest`,
         {
           // 移除 headers 以尝试解决潜在的CORS或请求问题，GitHub API 通常不需要特定 headers 进行公共读取
         }

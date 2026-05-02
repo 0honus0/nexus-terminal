@@ -171,7 +171,7 @@ export const fetchSuspendedSshSessions = async (options?: {
       `[${t('term.sshSuspend')}] 已通过 HTTP 获取挂起列表，数量: ${response.data.length}`
     );
     return { ok: true, status: 200 };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`[${t('term.sshSuspend')}] 通过 HTTP 获取挂起列表失败:`, error);
     const status = isAxiosError(error) ? error.response?.status : undefined;
     if (shouldNotifyOnError) {
@@ -315,7 +315,7 @@ export const resumeSshSession = async (suspendSessionId: string): Promise<void> 
     // 后续流程由 handleSshSuspendResumed 处理
     // 它会使用 newFrontendSessionId，并将 isResuming 标记设置到这个会话上。
     // 成功后，它内部应该会调用 fetchSuspendedSshSessions() 来更新列表。
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(
       `[${t('term.sshSuspend')}] 恢复会话 ${suspendSessionId} 过程中发生顶层错误:`,
       error
@@ -692,7 +692,7 @@ const handleSshSuspendResumed = async (payload: SshSuspendResumedPayload): Promi
         message: t('sshSuspend.notifications.resumeSuccess', { name: notificationName }),
       });
       // 后端会通过与此 sessionToUpdate.wsManager 关联的 WebSocket 连接发送 SSH_OUTPUT_CACHED_CHUNK
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(`[${t('term.sshSuspend')}] 处理会话恢复通知时出错:`, error);
       uiNotificationsStore.addNotification({
         type: 'error',

@@ -82,7 +82,7 @@ export async function getAISettings(): Promise<AISettings | null> {
       }
     }
     return config;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[NL2CMD] 获取 AI 配置失败:', error);
     return null;
   }
@@ -98,7 +98,7 @@ export async function saveAISettings(settings: AISettings): Promise<void> {
       apiKey: settings.apiKey ? encrypt(settings.apiKey) : '',
     };
     await settingsRepository.setSetting(AI_SETTINGS_KEY, JSON.stringify(settingsToStore));
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[NL2CMD] 保存 AI 配置失败:', error);
     throw new Error('保存 AI 配置失败');
   }
@@ -251,7 +251,7 @@ async function callOpenAIChatCompletions(
 
   try {
     return await postChatCompletions(requestBody);
-  } catch (error) {
+  } catch (error: unknown) {
     // 兼容：部分 OpenAI-compatible 端点仍只接受 max_tokens
     if (
       axios.isAxiosError(error) &&
@@ -350,7 +350,7 @@ async function callOpenAIResponses(config: AIProviderConfig, prompt: string): Pr
   let data: OpenAIResponsesResponse;
   try {
     data = await postResponses(requestBody);
-  } catch (error) {
+  } catch (error: unknown) {
     // 兼容：部分 OpenAI-compatible 端点仍沿用 max_tokens
     if (
       axios.isAxiosError(error) &&
@@ -677,7 +677,7 @@ export async function generateCommand(
       warning,
       streaming: streamingEnabled,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     const totalMs = Date.now() - startTime;
     if (shouldLogTiming(totalMs)) {
       console.warn('[NL2CMD Timing] Failed', {
@@ -754,7 +754,7 @@ export async function testAIConnection(
     }
 
     return true;
-  } catch (error) {
+  } catch (error: unknown) {
     const totalMs = Date.now() - startTime;
     if (shouldLogTiming(totalMs)) {
       console.warn('[NL2CMD Timing] Test failed', {

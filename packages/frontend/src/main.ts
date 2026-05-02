@@ -112,12 +112,12 @@ const setupWebManifestLink = async () => {
           appearanceStore.loadInitialAppearanceData(),
         ]);
         console.info('[main.ts] 用户设置和外观数据加载完成。');
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[main.ts] 加载用户设置或外观数据失败:', error);
         // 加载失败也继续,可能使用默认值或显示错误
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     // 捕获初始化过程中的意外错误
     console.error('[main.ts] 应用初始化过程中发生严重错误:', error);
     // 即使发生严重错误,应用也已经挂载,可能显示错误页面或回退状态
@@ -131,6 +131,23 @@ const setupWebManifestLink = async () => {
         .register('/sw.js')
         .then((registration) => {
           console.info('SW registered: ', registration);
+
+          // 检测 SW 更新：当有新的 Service Worker 进入 waiting 状态时通知用户刷新
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (!newWorker) return;
+
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // 新 SW 已安装但尚未激活，提示用户刷新
+                console.info('[SW] 新版本已就绪，等待用户确认刷新');
+                if (window.confirm('应用有新版本可用，是否立即刷新以获取最新内容？')) {
+                  newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  window.location.reload();
+                }
+              }
+            });
+          });
         })
         .catch((registrationError) => {
           console.info('SW registration failed: ', registrationError);

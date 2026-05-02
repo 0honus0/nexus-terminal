@@ -62,8 +62,8 @@ const initializeEditableState = () => {
     } else {
       editableUiThemeString.value = '';
     }
-  } catch (e) {
-    console.error('初始化 UI 主题字符串失败:', e);
+  } catch (error: unknown) {
+    console.error('初始化 UI 主题字符串失败:', error);
     editableUiThemeString.value = '';
   }
 };
@@ -144,8 +144,8 @@ const formattedEditableUiThemeJson = computed(() => {
       return `${key}: ${value}`;
     });
     return lines.join('\n');
-  } catch (e) {
-    console.error('序列化可编辑 UI 主题键值对失败:', e);
+  } catch (error: unknown) {
+    console.error('序列化可编辑 UI 主题键值对失败:', error);
     return '';
   }
 });

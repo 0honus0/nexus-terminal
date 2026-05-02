@@ -27,7 +27,7 @@ export class AuditLogService {
       // 使用 'await' 确保日志记录完成（如果需要保证顺序或处理错误）
       // 或者不使用 'await' 让其在后台执行
       await this.repository.addLog(actionType, details, userId);
-    } catch (error) {
+    } catch (error: unknown) {
       // Repository 内部已经处理了错误打印，这里可以根据需要再次处理或忽略
       console.error(`[Audit Service] Failed to log action ${actionType}:`, error);
     }

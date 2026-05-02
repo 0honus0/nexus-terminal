@@ -107,6 +107,7 @@
     "vue": ">=3.0.0",
     "@types/express": "^4.17.21",
     "@types/express-serve-static-core": "^4.19.0",
-    "@tootallnate/once": "^3.0.1"
+    "@tootallnate/once": "^3.0.1",
+    "glob": ">=10.4.6"
   }
 }

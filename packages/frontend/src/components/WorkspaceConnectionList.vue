@@ -70,8 +70,8 @@ const loadInitialExpandedGroups = (): Record<string, boolean> => {
         return parsedState;
       }
     }
-  } catch (e) {
-    console.error('Failed to load or parse expanded groups state from localStorage:', e);
+  } catch (error: unknown) {
+    console.error('Failed to load or parse expanded groups state from localStorage:', error);
     localStorage.removeItem(EXPANDED_GROUPS_STORAGE_KEY); // 清除无效状态
   }
   // 默认返回空对象，让 computed 属性处理默认展开
@@ -296,8 +296,8 @@ watch(
     if (showConnectionTagsBoolean.value) {
       try {
         localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, JSON.stringify(newState));
-      } catch (e) {
-        console.error('Failed to save expanded groups state to localStorage:', e);
+      } catch (error: unknown) {
+        console.error('Failed to save expanded groups state to localStorage:', error);
       }
     }
   },

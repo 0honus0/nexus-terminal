@@ -281,7 +281,7 @@ const copyCommand = async (command: string) => {
   try {
     await navigator.clipboard.writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('复制命令失败:', err);
     uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败'));
   }

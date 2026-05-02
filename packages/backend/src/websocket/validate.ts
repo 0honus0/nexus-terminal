@@ -88,7 +88,7 @@ export function validateWebSocketMessage(message: unknown): ValidationResult {
       success: true,
       data: messageEnvelope,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       // 提取关键错误信息
       const errorMessages = error.issues.map((err: z.ZodIssue) => {

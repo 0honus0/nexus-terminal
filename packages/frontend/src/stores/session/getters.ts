@@ -19,8 +19,8 @@ export const sessionTabsWithStatus = computed((): SessionTabInfoWithStatus[] => 
     try {
       sessionOrder = JSON.parse(sessionOrderStr);
       console.info('[SessionGetters] 使用本地存储的用户自定义标签顺序');
-    } catch (e) {
-      console.error('[SessionGetters] 解析本地存储的标签顺序失败:', e);
+    } catch (error: unknown) {
+      console.error('[SessionGetters] 解析本地存储的标签顺序失败:', error);
       sessionOrder = [];
     }
   }

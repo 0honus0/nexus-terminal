@@ -8,6 +8,14 @@ import {
 } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 
+// H-19: 会话级清理回调注册表，避免模块间循环依赖
+type SessionCleanupCallback = (sessionId: string) => void;
+const sessionCleanupCallbacks = new Set<SessionCleanupCallback>();
+
+export const registerSessionCleanup = (callback: SessionCleanupCallback): void => {
+  sessionCleanupCallbacks.add(callback);
+};
+
 const SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY = 'sshSuspendKeepAliveSeconds';
 const DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS = 0;
 
@@ -26,7 +34,7 @@ const getSshSuspendKeepAliveSecondsFromSettings = async (): Promise<number> => {
   try {
     const rawSetting = await settingsService.getSetting(SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY);
     return parseSshSuspendKeepAliveSeconds(rawSetting);
-  } catch (error) {
+  } catch (error: unknown) {
     console.warn(
       `[WebSocket] 读取 ${SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY} 失败，将使用默认值 ${DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS}:`,
       error
@@ -128,6 +136,8 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         `WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`
       );
       try {
+        // H-16: CAS 模式 - await 前原子清除标志，防止双重清理竞态
+        state.isMarkedForSuspend = false;
         const keepAliveSeconds = await getSshSuspendKeepAliveSecondsFromSettings();
         const takeoverDetails = {
           userId: state.ws.userId,
@@ -175,7 +185,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
           sshClientToPass?.end();
           state.isSuspendedByService = false; // 重置标记，因为接管失败
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(`WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 时发生错误:`, error);
         // 发生错误，也执行常规关闭以防资源泄露
         if (state.sshClient) state.sshClient.end(); // 如果引用还在，尝试关闭
@@ -206,6 +216,15 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       clearInterval(state.dockerStatusIntervalId);
       console.debug(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
     }
+
+    // H-19: 执行已注册的会话级清理回调（如 silent exec 定时器）
+    sessionCleanupCallbacks.forEach((cb) => {
+      try {
+        cb(sessionId);
+      } catch (callbackError: unknown) {
+        console.warn(`[WebSocket] 会话 ${sessionId} 清理回调执行失败:`, callbackError);
+      }
+    });
 
     // 5. 从状态 Map 中移除
     clientStates.delete(sessionId);

@@ -20,6 +20,7 @@ import type {
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository } from '../user/user.repository';
 import { config, type PasskeyRpConfig } from '../config/app.config';
+import { SECURITY_CONFIG } from '../config/security.config';
 import { getErrorMessage } from '../utils/AppError';
 import { getHostnameFromOrigin, normalizeOrigin } from '../utils/url';
 
@@ -48,8 +49,8 @@ function base64UrlToUint8Array(base64urlString: string): Uint8Array {
   // Buffer.from will handle padding correctly for base64
   try {
     return Buffer.from(base64, 'base64');
-  } catch (e) {
-    console.error('Failed to decode base64url string to Buffer:', base64urlString, e);
+  } catch (error: unknown) {
+    console.error('Failed to decode base64url string to Buffer:', base64urlString, error);
     throw new Error('Invalid base64url string for Buffer conversion');
   }
 }
@@ -165,7 +166,7 @@ export class PasskeyService {
       userID: textEncoder.encode(userId.toString()),
       userName: username,
       userDisplayName: username,
-      timeout: 60000,
+      timeout: SECURITY_CONFIG.PASSKEY_CHALLENGE_TIMEOUT_MS,
       attestationType: 'none',
       excludeCredentials,
       authenticatorSelection: {
@@ -284,7 +285,7 @@ export class PasskeyService {
 
     const options: GenerateAuthenticationOptionsOpts = {
       rpID: rpConfig.rpId,
-      timeout: 60000,
+      timeout: SECURITY_CONFIG.PASSKEY_CHALLENGE_TIMEOUT_MS,
       allowCredentials,
       userVerification: 'preferred',
     };
@@ -310,10 +311,10 @@ export class PasskeyService {
         if (authenticatorDataBytes.length < 37) {
           // console.warn(`[PasskeyService] WARNING: Decoded authenticatorData length (${authenticatorDataBytes.length} bytes) is less than the expected minimum of 37 bytes. This may lead to CBOR parsing errors and subsequent failures (e.g., 'cannot read counter').`);
         }
-      } catch (e: unknown) {
+      } catch (error: unknown) {
         console.error(
           '[PasskeyService] Error decoding authenticatorData from client response:',
-          getErrorMessage(e)
+          getErrorMessage(error)
         );
         // Potentially re-throw or handle as a critical error, as this is unexpected.
       }
@@ -339,11 +340,11 @@ export class PasskeyService {
     let authenticatorCredentialID: Uint8Array;
     try {
       authenticatorCredentialID = base64UrlToUint8Array(passkey.credential_id);
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       console.error(
         '[PasskeyService] Error decoding credential_id to Uint8Array:',
         passkey.credential_id,
-        getErrorMessage(e)
+        getErrorMessage(error)
       );
       throw new Error('Failed to decode credential_id.');
     }
@@ -357,11 +358,11 @@ export class PasskeyService {
         pkBuffer.byteOffset,
         pkBuffer.byteLength
       );
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       console.error(
         '[PasskeyService] Error decoding public_key to Uint8Array:',
         passkey.public_key,
-        getErrorMessage(e)
+        getErrorMessage(error)
       );
       throw new Error('Failed to decode public_key.');
     }
@@ -371,11 +372,11 @@ export class PasskeyService {
       authenticatorTransports = passkey.transports
         ? (JSON.parse(passkey.transports) as AuthenticatorTransportFuture[])
         : undefined;
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       console.error(
         '[PasskeyService] Error parsing transports JSON:',
         passkey.transports,
-        getErrorMessage(e)
+        getErrorMessage(error)
       );
       authenticatorTransports = undefined;
     }

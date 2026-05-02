@@ -32,8 +32,8 @@ export const useQuickCommandTagsStore = defineStore('quickCommandTags', () => {
       } else {
         isLoading.value = true;
       }
-    } catch (e) {
-      console.error('[QuickCmdTagStore] Failed to load or parse cache:', e);
+    } catch (error: unknown) {
+      console.error('[QuickCmdTagStore] Failed to load or parse cache:', error);
       localStorage.removeItem(cacheKey);
       isLoading.value = true;
     }

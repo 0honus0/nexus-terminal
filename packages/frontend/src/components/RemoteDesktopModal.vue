@@ -354,10 +354,10 @@ const removeInputListeners = () => {
         displayEl.style.cursor = 'default';
         displayEl.removeEventListener('focus', trySyncClipboardOnDisplayFocus);
       }
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       console.warn(
         'Could not reset cursor or remove listeners on display element during listener removal:',
-        e
+        error
       );
     }
   }

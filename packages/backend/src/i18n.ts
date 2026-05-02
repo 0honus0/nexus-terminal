@@ -13,7 +13,7 @@ try {
     .filter((dirent) => dirent.isFile() && dirent.name.endsWith('.json'))
     .map((dirent) => dirent.name.replace('.json', '')); // Extract lang code from filename
   console.info('[i18next] 动态检测到的语言:', dynamicSupportedLngs);
-} catch (err) {
+} catch (err: unknown) {
   console.error('[i18next] 读取 locales 目录时出错:', err);
   dynamicSupportedLngs = ['en-US']; // Fallback
 }

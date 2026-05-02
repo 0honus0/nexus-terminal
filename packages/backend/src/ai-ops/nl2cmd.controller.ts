@@ -71,7 +71,7 @@ export const generateCommand = async (req: Request, res: Response): Promise<void
         shellType: request.shellType,
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[NL2CMD Controller] 生成命令失败:', error);
     const durationMs = Date.now() - start;
     if (shouldLogTiming(durationMs)) {
@@ -118,7 +118,7 @@ export const getAISettings = async (req: Request, res: Response): Promise<void> 
     };
 
     res.status(200).json({ success: true, settings: maskedSettings });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[NL2CMD Controller] 获取 AI 配置失败:', error);
     res.status(500).json({ success: false, error: '获取 AI 配置失败', code: 'INTERNAL_ERROR' });
   }
@@ -200,7 +200,7 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
     NL2CMDService.clearAxiosClientCache();
 
     res.status(200).json({ success: true, message: 'AI 配置已保存' });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[NL2CMD Controller] 保存 AI 配置失败:', error);
     res.status(500).json({ success: false, error: '保存 AI 配置失败', code: 'INTERNAL_ERROR' });
   }
@@ -284,7 +284,7 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
         baseUrl: safeBaseUrlForLog(baseUrl),
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[NL2CMD Controller] 测试连接失败:', error);
     const durationMs = Date.now() - start;
     if (shouldLogTiming(durationMs)) {

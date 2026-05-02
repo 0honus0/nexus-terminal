@@ -18,6 +18,7 @@ import StyleCustomizer from './components/StyleCustomizer.vue';
 import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
+import { GITHUB_REPO_URL } from './utils/constants';
 
 // 延迟加载重型组件（包含 guacamole-common-js ~200KB）
 const RemoteDesktopModal = defineAsyncComponent(
@@ -357,7 +358,7 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
           <!-- GitHub Icon (Hide on mobile) -->
           <a
             v-if="!isMobile"
-            href="https://github.com/Silentely/nexus-terminal"
+            :href="GITHUB_REPO_URL"
             target="_blank"
             rel="noopener noreferrer"
             title="Silentely/nexus-terminal"

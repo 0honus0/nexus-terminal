@@ -13,7 +13,7 @@ export const getAllQuickCommandTags = async (
   try {
     const tags = await QuickCommandTagService.getAllQuickCommandTags();
     res.status(200).json(tags);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 获取快捷指令标签列表失败:', error);
     next(error);
   }
@@ -45,7 +45,7 @@ export const addQuickCommandTag = async (
       console.error(`[Controller] 添加快捷指令标签后未能找到 ID: ${newId}`);
       res.status(201).json({ message: '快捷指令标签已添加，但无法检索新记录', id: newId });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 添加快捷指令标签失败:', error);
     next(error);
   }
@@ -94,7 +94,7 @@ export const updateQuickCommandTag = async (
         return;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 更新快捷指令标签失败:', error);
     next(error);
   }
@@ -132,7 +132,7 @@ export const deleteQuickCommandTag = async (
       next(ErrorFactory.internalError('删除快捷指令标签时发生未知错误'));
       return;
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('[Controller] 删除快捷指令标签失败:', error);
     next(error);
   }
