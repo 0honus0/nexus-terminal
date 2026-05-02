@@ -8,6 +8,8 @@ import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.
 import { useAuditLogStore } from '../stores/audit.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useAuthStore } from '../stores/auth.store';
+import { useSessionStore } from '../stores/session.store';
+import { useRouter } from 'vue-router';
 import SessionDurationChart from '../components/dashboard/SessionDurationChart.vue';
 import SystemResourcesHistoryChart from '../components/dashboard/SystemResourcesHistoryChart.vue';
 
@@ -21,6 +23,8 @@ const connectionsStore = useConnectionsStore();
 const auditLogStore = useAuditLogStore();
 const uiNotifications = useUiNotificationsStore();
 const authStore = useAuthStore();
+const sessionStore = useSessionStore();
+const router = useRouter();
 
 const {
   stats,
@@ -239,6 +243,10 @@ const handleFormClose = () => {
   connectionToEdit.value = null;
 };
 
+const handleConnectRecent = (conn: ConnectionInfo) => {
+  sessionStore.handleConnectRequest(conn);
+};
+
 const handleConnectionModified = async () => {
   try {
     showAddEditConnectionForm.value = false;
@@ -438,6 +446,122 @@ const formatDuration = (seconds: number | null | undefined): string => {
       </div>
     </div>
 
+    <!-- Health & Recent Connections Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- Asset Health -->
+      <div class="content-card">
+        <div class="card-header border-b border-border/50 bg-surface/30">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-md bg-red-500/10 text-red-500">
+              <i class="fas fa-heartbeat"></i>
+            </div>
+            <h3 class="font-semibold text-lg">{{ t('dashboard.assetHealth') }}</h3>
+          </div>
+          <div v-if="assetHealth" class="flex gap-2">
+            <span
+              class="px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-500 border border-green-500/20"
+              >{{ t('dashboard.healthy') }}: {{ assetHealth.healthy }}</span
+            >
+            <span
+              class="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-500 border border-red-500/20"
+              >{{ t('dashboard.unreachable') }}: {{ assetHealth.unreachable }}</span
+            >
+          </div>
+        </div>
+        <div v-if="assetHealth" class="p-0">
+          <div class="max-h-[300px] overflow-y-auto custom-scrollbar p-2">
+            <div
+              v-for="asset in assetHealth.assets"
+              :key="asset.id"
+              class="flex items-center justify-between p-3 mb-1 rounded-lg hover:bg-surface/50 transition-colors"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-2 h-2 rounded-full"
+                  :class="
+                    asset.status === 'online'
+                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'
+                      : 'bg-red-500'
+                  "
+                ></div>
+                <span class="font-medium">{{ asset.name }}</span>
+              </div>
+              <span v-if="asset.latency" class="text-xs font-mono text-muted"
+                >{{ asset.latency }}ms</span
+              >
+            </div>
+          </div>
+        </div>
+        <div v-else class="p-6">
+          <el-skeleton :rows="4" animated />
+        </div>
+      </div>
+
+      <!-- Recent Connections -->
+      <div class="content-card">
+        <div class="card-header border-b border-border/50 bg-surface/30">
+          <div class="flex justify-between items-center w-full">
+            <div class="flex items-center gap-3">
+              <div class="p-2 rounded-md bg-green-500/10 text-green-500">
+                <i class="fas fa-network-wired"></i>
+              </div>
+              <h3 class="font-semibold text-lg">{{ t('dashboard.recentConnections') }}</h3>
+            </div>
+            <el-button
+              type="primary"
+              link
+              @click="openAddConnectionForm"
+              class="!text-primary hover:!text-primary/80"
+            >
+              <i class="fas fa-plus mr-1"></i> {{ t('dashboard.addConnection') }}
+            </el-button>
+          </div>
+        </div>
+        <div
+          v-if="recentConnections.length > 0"
+          class="max-h-[300px] overflow-y-auto custom-scrollbar p-2"
+        >
+          <div
+            v-for="conn in recentConnections"
+            :key="conn.id"
+            class="group flex items-center justify-between p-3 mb-1 rounded-lg hover:bg-surface/50 border border-transparent hover:border-border/50 transition-all cursor-pointer"
+            @click="handleConnectRecent(conn)"
+          >
+            <div class="flex items-center gap-4">
+              <div
+                class="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-muted group-hover:text-primary group-hover:bg-primary/10 transition-colors"
+              >
+                <i
+                  class="fas"
+                  :class="
+                    conn.type === 'SSH'
+                      ? 'fa-terminal'
+                      : conn.type === 'RDP'
+                        ? 'fa-desktop'
+                        : 'fa-network-wired'
+                  "
+                ></i>
+              </div>
+              <div>
+                <div class="font-medium text-foreground">{{ conn.name || conn.host }}</div>
+                <div class="text-xs text-muted font-mono">
+                  {{ conn.username }}@{{ conn.host }}:{{ conn.port }}
+                </div>
+              </div>
+            </div>
+            <span
+              class="px-2 py-1 rounded text-xs font-medium bg-surface border border-border"
+              :class="conn.type === 'SSH' ? 'text-orange-400' : 'text-blue-400'"
+              >{{ conn.type }}</span
+            >
+          </div>
+        </div>
+        <div v-else class="p-8 text-center text-muted">
+          {{ t('dashboard.noConnections') }}
+        </div>
+      </div>
+    </div>
+
     <!-- Charts & Resources Row -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       <!-- Session Duration Chart -->
@@ -532,121 +656,6 @@ const formatDuration = (seconds: number | null | undefined): string => {
         </div>
         <div v-else class="p-6">
           <el-skeleton :rows="3" animated />
-        </div>
-      </div>
-    </div>
-
-    <!-- Bottom Row: Health & Storage -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-      <!-- Asset Health -->
-      <div class="content-card">
-        <div class="card-header border-b border-border/50 bg-surface/30">
-          <div class="flex items-center gap-3">
-            <div class="p-2 rounded-md bg-red-500/10 text-red-500">
-              <i class="fas fa-heartbeat"></i>
-            </div>
-            <h3 class="font-semibold text-lg">{{ t('dashboard.assetHealth') }}</h3>
-          </div>
-          <div v-if="assetHealth" class="flex gap-2">
-            <span
-              class="px-2 py-0.5 rounded text-xs bg-green-500/10 text-green-500 border border-green-500/20"
-              >{{ t('dashboard.healthy') }}: {{ assetHealth.healthy }}</span
-            >
-            <span
-              class="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-500 border border-red-500/20"
-              >{{ t('dashboard.unreachable') }}: {{ assetHealth.unreachable }}</span
-            >
-          </div>
-        </div>
-        <div v-if="assetHealth" class="p-0">
-          <div class="max-h-[300px] overflow-y-auto custom-scrollbar p-2">
-            <div
-              v-for="asset in assetHealth.assets"
-              :key="asset.id"
-              class="flex items-center justify-between p-3 mb-1 rounded-lg hover:bg-surface/50 transition-colors"
-            >
-              <div class="flex items-center gap-3">
-                <div
-                  class="w-2 h-2 rounded-full"
-                  :class="
-                    asset.status === 'online'
-                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'
-                      : 'bg-red-500'
-                  "
-                ></div>
-                <span class="font-medium">{{ asset.name }}</span>
-              </div>
-              <span v-if="asset.latency" class="text-xs font-mono text-muted"
-                >{{ asset.latency }}ms</span
-              >
-            </div>
-          </div>
-        </div>
-        <div v-else class="p-6">
-          <el-skeleton :rows="4" animated />
-        </div>
-      </div>
-
-      <!-- Recent Connections -->
-      <div class="content-card">
-        <div class="card-header border-b border-border/50 bg-surface/30">
-          <div class="flex justify-between items-center w-full">
-            <div class="flex items-center gap-3">
-              <div class="p-2 rounded-md bg-green-500/10 text-green-500">
-                <i class="fas fa-network-wired"></i>
-              </div>
-              <h3 class="font-semibold text-lg">{{ t('dashboard.recentConnections') }}</h3>
-            </div>
-            <el-button
-              type="primary"
-              link
-              @click="openAddConnectionForm"
-              class="!text-primary hover:!text-primary/80"
-            >
-              <i class="fas fa-plus mr-1"></i> {{ t('dashboard.addConnection') }}
-            </el-button>
-          </div>
-        </div>
-        <div
-          v-if="recentConnections.length > 0"
-          class="max-h-[300px] overflow-y-auto custom-scrollbar p-2"
-        >
-          <div
-            v-for="conn in recentConnections"
-            :key="conn.id"
-            class="group flex items-center justify-between p-3 mb-1 rounded-lg hover:bg-surface/50 border border-transparent hover:border-border/50 transition-all"
-          >
-            <div class="flex items-center gap-4">
-              <div
-                class="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-muted group-hover:text-primary group-hover:bg-primary/10 transition-colors"
-              >
-                <i
-                  class="fas"
-                  :class="
-                    conn.type === 'SSH'
-                      ? 'fa-terminal'
-                      : conn.type === 'RDP'
-                        ? 'fa-desktop'
-                        : 'fa-network-wired'
-                  "
-                ></i>
-              </div>
-              <div>
-                <div class="font-medium text-foreground">{{ conn.name || conn.host }}</div>
-                <div class="text-xs text-muted font-mono">
-                  {{ conn.username }}@{{ conn.host }}:{{ conn.port }}
-                </div>
-              </div>
-            </div>
-            <span
-              class="px-2 py-1 rounded text-xs font-medium bg-surface border border-border"
-              :class="conn.type === 'SSH' ? 'text-orange-400' : 'text-blue-400'"
-              >{{ conn.type }}</span
-            >
-          </div>
-        </div>
-        <div v-else class="p-8 text-center text-muted">
-          {{ t('dashboard.noConnections') }}
         </div>
       </div>
     </div>
