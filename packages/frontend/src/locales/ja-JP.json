@@ -952,7 +952,7 @@
       "fileManagerDeleteConfirmError": "ファイルマネージャーの削除確認設定の保存に失敗しました。",
       "fileManagerOpenFileModeTitle": "ファイルの開き方",
       "fileManagerSingleClickOpenFileLabel": "ファイルをシングルクリックで開く（無効時はダブルクリック）",
-      "fileManagerOpenFileModeDescription": "ディレクトリは常にシングルクリックで開きます。この設定はファイルやシンボリックリンクなど非ディレクトリ項目のみに適用されます。",
+      "fileManagerOpenFileModeDescription": "ディレクトリは常にシングルクリックで開きます。この設定はファイルやシンボリックリンクなど非ディレクトリ項目のみに適用されます。モバイルでは長押しで常にコンテキストメニュー（右クリック相当）を表示し、ファイルの開閉はタップ動作で制御されます。",
       "fileManagerSingleClickOpenFileSuccess": "ファイルの開き方設定を保存しました。",
       "fileManagerSingleClickOpenFileError": "ファイルの開き方設定の保存に失敗しました。",
       "terminalRightClickPasteTitle": "ターミナル右クリック貼り付け",

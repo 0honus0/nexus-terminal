@@ -952,7 +952,7 @@
       "fileManagerDeleteConfirmError": "Failed to save file manager delete confirmation setting.",
       "fileManagerOpenFileModeTitle": "File Open Behavior",
       "fileManagerSingleClickOpenFileLabel": "Open files on single click (disable for double click)",
-      "fileManagerOpenFileModeDescription": "Directories always open on single click; this setting only affects non-directory items such as files and symlinks.",
+      "fileManagerOpenFileModeDescription": "Directories always open on single click; this setting only affects non-directory items such as files and symlinks. On mobile, long-press always shows the context menu (equivalent to right-click), and file opening is controlled by the tap behavior.",
       "fileManagerSingleClickOpenFileSuccess": "File open behavior setting saved.",
       "fileManagerSingleClickOpenFileError": "Failed to save file open behavior setting.",
       "terminalRightClickPasteTitle": "Terminal Right Click Paste",

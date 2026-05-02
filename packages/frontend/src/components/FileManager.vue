@@ -366,12 +366,9 @@ setItemActionSelectionDeps({
   originalHandleItemDoubleClick,
 });
 
-/** 移动端长按处理：触发右键菜单 + 当单击打开设置关闭时同时打开文件 */
+/** 移动端长按处理：等同 PC 右键，仅显示上下文菜单 */
 const handleItemLongPress = (event: TouchEvent, item: FileListItem) => {
   if (item.filename === '..') return;
-  // 触发双击动作（当单击打开设置关闭时打开文件）
-  handleItemDoubleClick({} as MouseEvent, item);
-  // 触发右键菜单（使用触摸点坐标）
   const touch = event.changedTouches?.[0];
   if (touch) {
     showContextMenu(
