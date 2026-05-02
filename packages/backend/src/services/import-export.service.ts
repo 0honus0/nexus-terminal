@@ -371,9 +371,9 @@ export const exportConnectionsAsEncryptedZip = async (
           console.info('Archiver finalized successfully.');
           resolve(Buffer.concat(buffers));
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.error('Error during archive.finalize():', err);
-          reject(new Error(`Failed to finalize archive: ${err.message}`));
+          reject(new Error(`Failed to finalize archive: ${getErrorMessage(err)}`));
         });
     });
   } catch (error: unknown) {
@@ -518,9 +518,9 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
         );
         if (validTagIds.length > 0) {
           const tagPromises = validTagIds.map((tagId) =>
-            runDb(db, insertTagSql, [result.connectionId, tagId]).catch((tagError) => {
+            runDb(db, insertTagSql, [result.connectionId, tagId]).catch((tagError: unknown) => {
               console.warn(
-                `Service: 导入连接 ${result.originalData.name}: 关联标签 ID ${tagId} 失败: ${tagError.message}`
+                `Service: 导入连接 ${result.originalData.name}: 关联标签 ID ${tagId} 失败: ${getErrorMessage(tagError)}`
               );
             })
           );

@@ -531,7 +531,8 @@ export const exportSshSessionLog = async (suspendSessionId: string): Promise<voi
           const errorJson = JSON.parse(await responseData.text()) as { message?: string };
           errorMessage = errorJson.message || errorMessage;
         } catch {
-          // Blob 不是有效的 JSON，使用通用错误
+          // Blob 不是有效的 JSON，使用通用错误信息
+          console.debug('[SSH挂起] 错误响应 Blob 解析失败:', error);
         }
       } else if (typeof responseData === 'object' && responseData !== null) {
         errorMessage = extractErrorMessage(error, errorMessage);

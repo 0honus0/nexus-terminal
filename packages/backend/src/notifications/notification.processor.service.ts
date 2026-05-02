@@ -57,7 +57,7 @@ class NotificationProcessorService extends EventEmitter {
         eventService.onEvent(eventType, (payload) => {
           // 使用 setImmediate 或 process.nextTick 避免阻塞事件循环
           setImmediate(() => {
-            this.processStandardEvent(eventType, payload).catch((error) => {
+            this.processStandardEvent(eventType, payload).catch((error: unknown) => {
               console.error(`[NotificationProcessor] 处理事件 ${eventType} 时出错:`, error);
             });
           });
@@ -66,7 +66,7 @@ class NotificationProcessorService extends EventEmitter {
     });
     eventService.onEvent(AppEventType.TestNotification, (payload) => {
       setImmediate(() => {
-        this.processTestEvent(payload).catch((error) => {
+        this.processTestEvent(payload).catch((error: unknown) => {
           console.error(`[NotificationProcessor] 处理测试事件时出错:`, error);
         });
       });

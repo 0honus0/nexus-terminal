@@ -374,7 +374,10 @@ async function analyzeSecurityEvents(_userId?: number | string): Promise<AIInsig
         const details = JSON.parse(log.details || '{}');
         const ip = details.ip || 'unknown';
         ipCounts.set(ip, (ipCounts.get(ip) || 0) + 1);
-      } catch {}
+      } catch (error: unknown) {
+        // JSON 解析失败，跳过该条审计日志
+        console.debug('[AI服务] 审计日志详情解析失败:', error);
+      }
     });
 
     const topIp = [...ipCounts.entries()].sort((a, b) => b[1] - a[1])[0];

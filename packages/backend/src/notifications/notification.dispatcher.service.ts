@@ -54,7 +54,7 @@ class NotificationDispatcherService {
       (processedNotification: ProcessedNotification) => {
         // 使用 setImmediate 避免阻塞
         setImmediate(() => {
-          this.dispatchNotification(processedNotification).catch((error) => {
+          this.dispatchNotification(processedNotification).catch((error: unknown) => {
             console.error(
               `[NotificationDispatcher] 分发通道 ${processedNotification.channelType} 的通知时出错:`,
               error

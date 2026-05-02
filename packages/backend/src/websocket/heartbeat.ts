@@ -85,8 +85,9 @@ export function initializeHeartbeat(
           if (extWs.readyState === WebSocket.CLOSING) {
             try {
               extWs.terminate();
-            } catch {
-              // 忽略已损坏的连接
+            } catch (error: unknown) {
+              // 已损坏的连接，终止失败不影响心跳流程
+              console.debug('[心跳] 终止 CLOSING 状态连接失败:', error);
             }
           }
           return; // 跳过非活动连接

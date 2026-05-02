@@ -168,7 +168,7 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
           showError(errorMsg);
         }
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error(`${logPrefix.value} Network error during directory download:`, error);
         showError(error instanceof Error ? error.message : String(error));
       });

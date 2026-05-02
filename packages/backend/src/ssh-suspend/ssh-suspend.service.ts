@@ -25,7 +25,7 @@ export class SshSuspendService extends EventEmitter {
     super(); // 调用 EventEmitter 的构造函数
     this.logStorageService = logStorage || temporaryLogStorageService;
     // 在服务启动时从日志目录加载持久化的 'disconnected_by_backend' 会话信息
-    this.loadPersistedSessions().catch((err) => {
+    this.loadPersistedSessions().catch((err: unknown) => {
       console.error('[SshSuspendService ERROR] Failed to load persisted sessions on startup:', err);
     });
   }
@@ -264,12 +264,14 @@ export class SshSuspendService extends EventEmitter {
       const currentDetails = userSessions.get(suspendSessionId);
       if (currentDetails?.backendSshStatus === 'hanging') {
         // console.info(`[SshSuspendService DEBUG] channel.on('data') for suspendSessionId=${suspendSessionId}: Writing to log ${logIdentifier}`);
-        this.logStorageService.writeToLog(logIdentifier, data.toString('utf-8')).catch((err) => {
-          console.error(
-            `[SshSuspendService ERROR] channel.on('data') for suspendSessionId=${suspendSessionId}, log=${logIdentifier}: Failed to write to log:`,
-            err
-          );
-        });
+        this.logStorageService
+          .writeToLog(logIdentifier, data.toString('utf-8'))
+          .catch((err: unknown) => {
+            console.error(
+              `[SshSuspendService ERROR] channel.on('data') for suspendSessionId=${suspendSessionId}, log=${logIdentifier}: Failed to write to log:`,
+              err
+            );
+          });
       } else {
         // console.info(`[SshSuspendService DEBUG] channel.on('data') for suspendSessionId=${suspendSessionId}: Backend status is ${currentDetails?.backendSshStatus}, not writing to log.`);
       }
@@ -300,7 +302,7 @@ export class SshSuspendService extends EventEmitter {
           backendSshStatus: 'disconnected_by_backend',
           disconnectionTimestamp: currentSession.disconnectionTimestamp,
         };
-        this.logStorageService.writeMetadata(suspendSessionId, metadata).catch((err) => {
+        this.logStorageService.writeMetadata(suspendSessionId, metadata).catch((err: unknown) => {
           console.error(
             `[SshSuspendService ERROR] Failed to persist metadata for ${suspendSessionId}:`,
             err
@@ -469,9 +471,12 @@ export class SshSuspendService extends EventEmitter {
       // 删除以 session.tempLogPath (logIdentifier) 命名的日志文件
       await this.logStorageService.deleteLog(session.tempLogPath);
       // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 已删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath})。`);
-    } catch {
-      // console.warn(`[SshSuspendService][用户: ${userId}] resumeSession: 删除挂起会话 ${suspendSessionId} 的日志文件 (路径: ${session.tempLogPath}) 失败:`, error);
+    } catch (error: unknown) {
       // 日志删除失败不应阻止恢复流程继续
+      console.debug(
+        `[SshSuspendService] 删除挂起会话日志文件失败 (${session.tempLogPath}):`,
+        error
+      );
     }
 
     // console.info(`[SshSuspendService][用户: ${userId}] resumeSession: 挂起会话 ${suspendSessionId} 准备返回恢复数据。`);
@@ -677,7 +682,7 @@ export class SshSuspendService extends EventEmitter {
         backendSshStatus: 'disconnected_by_backend',
         disconnectionTimestamp: session.disconnectionTimestamp,
       };
-      this.logStorageService.writeMetadata(suspendSessionId, metadata).catch((err) => {
+      this.logStorageService.writeMetadata(suspendSessionId, metadata).catch((err: unknown) => {
         console.error(
           `[SshSuspendService ERROR] Failed to persist metadata for ${suspendSessionId} in handleUnexpectedDisconnection:`,
           err

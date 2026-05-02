@@ -69,11 +69,19 @@ vi.mock('../logging/logger', () => ({
   setLogLevel: vi.fn(),
 }));
 
-vi.mock('../utils/AppError', () => ({
-  getErrorMessage: vi.fn((err: unknown) => (err instanceof Error ? err.message : String(err))),
-}));
+vi.mock('../utils/AppError', async () => {
+  // 保留真实的 AppError 类，确保 instanceof 检查正常工作
+  const actual = await vi.importActual<typeof import('../utils/AppError')>('../utils/AppError');
+  return {
+    ...actual,
+    getErrorMessage: vi.fn((err: unknown) => (err instanceof Error ? err.message : String(err))),
+  };
+});
 
 // --- 辅助函数 ---
+
+/** 刷新微任务队列，等待 asyncHandler 中的 .catch(next) 执行完成 */
+const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function createMockRes() {
   const res: {
@@ -177,7 +185,8 @@ describe('settingsController', () => {
       const res = createMockRes();
       const next = vi.fn();
 
-      await settingsController.updateSettings(req as any, res as any, next);
+      settingsController.updateSettings(req as any, res as any, next);
+      await flushMicrotasks();
 
       expect(next).toHaveBeenCalledWith(error);
     });
@@ -209,7 +218,8 @@ describe('settingsController', () => {
       const res = createMockRes();
       const next = vi.fn();
 
-      await settingsController.getAllSettings(req, res as any, next);
+      settingsController.getAllSettings(req, res as any, next);
+      await flushMicrotasks();
 
       expect(next).toHaveBeenCalledWith(error);
     });
@@ -241,12 +251,10 @@ describe('settingsController', () => {
       const res = createMockRes();
       const next = vi.fn();
 
-      await settingsController.setFocusSwitcherSequence(req as any, res as any, next);
+      settingsController.setFocusSwitcherSequence(req as any, res as any, next);
+      await flushMicrotasks();
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'INVALID_REQUEST_BODY' })
-      );
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
       expect(settingsService.setFocusSwitcherSequence).not.toHaveBeenCalled();
     });
 
@@ -347,12 +355,10 @@ describe('settingsController', () => {
       const res = createMockRes();
       const next = vi.fn();
 
-      await settingsController.setLayoutTree(req as any, res as any, next);
+      settingsController.setLayoutTree(req as any, res as any, next);
+      await flushMicrotasks();
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'INVALID_REQUEST_BODY' })
-      );
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
       expect(settingsService.setLayoutTree).not.toHaveBeenCalled();
     });
 
@@ -470,12 +476,10 @@ describe('settingsController', () => {
       const res = createMockRes();
       const next = vi.fn();
 
-      await settingsController.setSidebarConfig(req as any, res as any, next);
+      settingsController.setSidebarConfig(req as any, res as any, next);
+      await flushMicrotasks();
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'INVALID_REQUEST_BODY' })
-      );
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
       expect(settingsService.setSidebarConfig).not.toHaveBeenCalled();
     });
 
@@ -501,12 +505,10 @@ describe('settingsController', () => {
       const res = createMockRes();
       const next = vi.fn();
 
-      await settingsController.setCaptchaConfig(req as any, res as any, next);
+      settingsController.setCaptchaConfig(req as any, res as any, next);
+      await flushMicrotasks();
 
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ code: 'INVALID_REQUEST_BODY' })
-      );
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
       expect(settingsService.setCaptchaConfig).not.toHaveBeenCalled();
     });
 

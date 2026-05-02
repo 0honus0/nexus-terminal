@@ -134,7 +134,7 @@ export class IpBlacklistService {
               duration: banDuration,
               blockedUntil: new Date(blockedUntil * 1000).toISOString(),
             })
-            .catch((err) =>
+            .catch((err: unknown) =>
               console.error(`[IP Blacklist] 发送 IP_BLACKLISTED 通知失败 for IP ${ip}:`, err)
             );
         }
@@ -166,7 +166,7 @@ export class IpBlacklistService {
               duration: banDuration,
               blockedUntil: new Date(blockedUntil * 1000).toISOString(),
             })
-            .catch((err) =>
+            .catch((err: unknown) =>
               console.error(`[IP Blacklist] 发送 IP_BLACKLISTED 通知失败 for IP ${ip}:`, err)
             );
         }

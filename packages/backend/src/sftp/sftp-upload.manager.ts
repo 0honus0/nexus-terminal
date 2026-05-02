@@ -154,8 +154,9 @@ export class SftpUploadManager {
           });
         });
         existingMode = fileStats.mode;
-      } catch {
+      } catch (error: unknown) {
         // 文件不存在（新上传），使用默认权限
+        console.debug('[SFTP上传] 远程文件 stat 失败，使用默认权限:', error);
       }
 
       const stream = state.sftp.createWriteStream(

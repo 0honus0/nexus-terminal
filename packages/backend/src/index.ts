@@ -373,7 +373,7 @@ const main = async () => {
   startServer(); // 最后启动服务器
 };
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   logger.error(error, '启动过程中发生未处理的错误');
   process.exit(1);
 });

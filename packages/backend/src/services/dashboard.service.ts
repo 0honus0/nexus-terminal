@@ -128,7 +128,7 @@ export const getDashboardStats = async (timeRange?: { start: number; end: number
   // 活跃会话数
   const activeSessions = clientStates.size;
 
-  // 连接数（默认“今日”，当传入 timeRange 时表示“时间范围内”）
+  // 连接数（默认"今日"，当传入 timeRange 时表示"时间范围内"）
   const rangeConnections = await countAuditLogs(
     db,
     effectiveRange,
@@ -273,8 +273,9 @@ const tcpProbe = async (
       try {
         socket.removeAllListeners();
         socket.destroy();
-      } catch {
-        // ignore
+      } catch (error: unknown) {
+        // Socket 清理失败不影响结果
+        console.debug('[仪表盘] Socket 清理失败:', error);
       }
       resolve(ok ? { ok, latency } : { ok });
     };
@@ -521,13 +522,15 @@ const getDirSize = (dir: string): number => {
       } else if (entry.isFile()) {
         try {
           total += fs.statSync(fullPath).size;
-        } catch {
-          // 忽略读取错误
+        } catch (error: unknown) {
+          // 文件可能已被删除或权限不足
+          console.debug('[仪表盘] 文件大小读取失败:', fullPath, error);
         }
       }
     }
-  } catch {
-    // 忽略访问错误
+  } catch (error: unknown) {
+    // 目录不可访问（权限或已被删除）
+    console.debug('[仪表盘] 目录访问失败:', dir, error);
   }
 
   return total;
@@ -547,7 +550,7 @@ export const getSystemResources = async (): Promise<{
   loadAvg: number[];
   timestamp: number;
 }> => {
-  // CPU：基于两次采样差值，避免 process.cpuUsage() 的“自进程启动累计值”导致的失真
+  // CPU：基于两次采样差值，避免 process.cpuUsage() 的"自进程启动累计值"导致的失真
   const readCpuSample = (): CpuSample => {
     const cpus = os.cpus();
     let idle = 0;
@@ -592,8 +595,9 @@ export const getSystemResources = async (): Promise<{
       const diskFree = stat.bfree * stat.bsize;
       diskUsed = Math.max(0, diskTotal - diskFree);
     }
-  } catch {
-    // 忽略错误
+  } catch (error: unknown) {
+    // statfsSync 可能不可用或目录不存在
+    console.debug('[仪表盘] 磁盘信息获取失败:', error);
   }
   const diskPercent =
     diskTotal > 0 ? Math.max(0, Math.min(100, Math.round((diskUsed / diskTotal) * 100))) : 0;

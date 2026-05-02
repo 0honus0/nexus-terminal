@@ -186,7 +186,7 @@ export const importThemeController = async (
     if (fs.existsSync(filePath)) {
       await fs.promises
         .unlink(filePath)
-        .catch((unlinkErr) => console.error('删除临时导入文件失败:', unlinkErr));
+        .catch((unlinkErr: unknown) => console.error('删除临时导入文件失败:', unlinkErr));
     }
 
     if (error instanceof SyntaxError) {

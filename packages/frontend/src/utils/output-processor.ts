@@ -159,8 +159,9 @@ export class OutputProcessor {
       try {
         JSON.parse(trimmed);
         return OutputType.JSON;
-      } catch {
-        // fallthrough
+      } catch (error: unknown) {
+        // 非合法 JSON，继续后续格式检测
+        console.debug('[输出处理] JSON 格式检测解析失败:', error);
       }
     }
 

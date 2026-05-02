@@ -39,8 +39,9 @@ const setupWebManifestLink = async () => {
     manifestLink.rel = 'manifest';
     manifestLink.href = '/manifest.json';
     document.head.appendChild(manifestLink);
-  } catch {
-    // 在受保护网关场景中，manifest 可能被重定向到登录页，这里静默跳过以避免控制台噪音
+  } catch (error: unknown) {
+    // 在受保护网关场景中，manifest 可能被重定向到登录页
+    console.debug('[main.ts] manifest 链接添加失败（可能被网关拦截）:', error);
   }
 };
 
@@ -149,7 +150,7 @@ const setupWebManifestLink = async () => {
             });
           });
         })
-        .catch((registrationError) => {
+        .catch((registrationError: unknown) => {
           console.info('SW registration failed: ', registrationError);
         });
     });

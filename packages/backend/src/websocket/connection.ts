@@ -303,7 +303,7 @@ export function initializeConnectionHandler(
                       // console.info(`[WebSocket Handler][${type}] SFTP 初始化调用完成 (可能异步) for ${newFrontendSessionId}。`);
                       // sftp_ready 消息会由 sftpService 内部发送
                     })
-                    .catch((sftpInitErr) => {
+                    .catch((sftpInitErr: unknown) => {
                       console.error(
                         `[WebSocket Handler][${type}] 为恢复的会话 ${newFrontendSessionId} 初始化 SFTP 失败:`,
                         sftpInitErr

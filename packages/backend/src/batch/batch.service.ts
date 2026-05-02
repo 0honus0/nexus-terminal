@@ -105,8 +105,8 @@ export async function execCommandBatch(
   taskAbortControllers.set(taskId, abortController);
 
   // 异步执行任务（不阻塞返回）
-  processTask(taskId, userId, payload, abortController.signal).catch((error) => {
-    if (error.name !== 'AbortError') {
+  processTask(taskId, userId, payload, abortController.signal).catch((error: unknown) => {
+    if (!(error instanceof Error && error.name === 'AbortError')) {
       console.error(`[BatchService] 任务 ${taskId} 后台处理出错:`, error);
     }
   });
@@ -447,8 +447,9 @@ async function runSubTask(
     if (sshClient) {
       try {
         sshClient.end();
-      } catch {
-        // 忽略关闭错误
+      } catch (error: unknown) {
+        // SSH 客户端关闭错误，不影响主流程
+        console.debug('[批量服务] SSH 客户端关闭失败:', error);
       }
     }
   }
@@ -487,13 +488,15 @@ function executeCommand(
         try {
           // 发送 SIGKILL 信号终止远端进程
           stream.signal('KILL');
-        } catch {
-          // 某些情况下信号发送可能失败
+        } catch (error: unknown) {
+          // 信号发送可能在已断开的连接上失败
+          console.debug('[批量服务] 远端信号发送失败:', error);
         }
         try {
           stream.close();
-        } catch {
-          // 忽略关闭错误
+        } catch (error: unknown) {
+          // 流关闭错误，不影响主流程
+          console.debug('[批量服务] 流关闭失败:', error);
         }
       }
     };

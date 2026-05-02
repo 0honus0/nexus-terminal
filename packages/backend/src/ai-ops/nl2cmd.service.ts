@@ -300,8 +300,9 @@ async function parseStreamResponse(data: unknown): Promise<string> {
           if (content) {
             chunks.push(content);
           }
-        } catch {
-          // 忽略解析错误
+        } catch (error: unknown) {
+          // SSE 数据块解析失败，跳过继续处理后续数据
+          console.debug('[NL2CMD] SSE 数据块解析失败:', error);
         }
       }
     }
@@ -319,8 +320,9 @@ async function parseStreamResponse(data: unknown): Promise<string> {
           if (content) {
             chunks.push(content);
           }
-        } catch {
-          // 忽略解析错误
+        } catch (error: unknown) {
+          // SSE 数据块解析失败，跳过继续处理后续数据
+          console.debug('[NL2CMD] Buffer 数据块解析失败:', error);
         }
       }
     }

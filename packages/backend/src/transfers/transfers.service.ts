@@ -70,11 +70,12 @@ export class TransfersService {
     );
 
     // 异步启动传输，不阻塞当前请求
-    this.processTransferTask(taskId, abortController.signal).catch((error) => {
+    this.processTransferTask(taskId, abortController.signal).catch((error: unknown) => {
       // +++ 传递 signal +++
       console.error(`[TransfersService] Error processing task ${taskId} in background:`, error);
       // 如果不是因为终止操作导致的错误，则更新状态
-      if (error.name !== 'AbortError') {
+      const isAbortError = error instanceof Error && error.name === 'AbortError';
+      if (!isAbortError) {
         this.updateOverallTaskStatus(
           taskId,
           'failed',
