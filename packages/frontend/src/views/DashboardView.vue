@@ -72,7 +72,16 @@ const getConnectionTypeStyle = (type: string) =>
 
 // Computed 缓存优化列表渲染
 const recentTimeline = computed(() => timeline.value?.slice(0, 10) || []);
-const recentConnections = computed(() => connections.value?.slice(0, 10) || []);
+const recentConnections = computed(() => {
+  if (!connections.value?.length) return [];
+  return [...connections.value]
+    .sort((a, b) => {
+      const timeA = a.last_connected_at ?? 0;
+      const timeB = b.last_connected_at ?? 0;
+      return timeB - timeA;
+    })
+    .slice(0, 10);
+});
 
 const startOfToday = () => {
   const d = new Date();

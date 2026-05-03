@@ -122,11 +122,22 @@ const virtualListSource = computed(() => {
   return props.hasParentLink ? [PARENT_DIR_ITEM, ...props.files] : props.files;
 });
 
+// --- 移动端默认列宽（隐藏权限列，缩小其他列）---
+const MOBILE_COL_WIDTHS = { type: 36, name: 160, size: 64, modified: 72 } as const;
+
 // --- CSS Grid 样式 ---
-const gridStyle = computed(() => ({
-  display: 'grid',
-  gridTemplateColumns: `${props.colWidths.type}px ${props.colWidths.name}px ${props.colWidths.size}px ${props.colWidths.permissions}px ${props.colWidths.modified}px`,
-}));
+const gridStyle = computed(() => {
+  if (props.isMobile) {
+    return {
+      display: 'grid',
+      gridTemplateColumns: `${MOBILE_COL_WIDTHS.type}px ${MOBILE_COL_WIDTHS.name}px ${MOBILE_COL_WIDTHS.size}px ${MOBILE_COL_WIDTHS.modified}px`,
+    };
+  }
+  return {
+    display: 'grid',
+    gridTemplateColumns: `${props.colWidths.type}px ${props.colWidths.name}px ${props.colWidths.size}px ${props.colWidths.permissions}px ${props.colWidths.modified}px`,
+  };
+});
 
 // --- 单行高度（受 rowSizeMultiplier 影响）---
 const itemHeight = computed(() => Math.round(36 * props.rowSizeMultiplier));
@@ -278,8 +289,9 @@ defineExpose({
           @click.stop
         ></span>
       </div>
-      <!-- 权限 -->
+      <!-- 权限（移动端隐藏） -->
       <div
+        v-if="!isMobile"
         class="relative border-r border-border/10 flex items-center truncate"
         :style="{
           padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`,
@@ -415,8 +427,9 @@ defineExpose({
             {{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}
           </div>
 
-          <!-- 权限 -->
+          <!-- 权限（移动端隐藏） -->
           <div
+            v-if="!isMobile"
             class="truncate font-mono flex items-center min-w-0"
             :class="[
               selectedItems.has(item.filename) || index === selectedIndex

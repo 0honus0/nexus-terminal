@@ -156,23 +156,28 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex items-center justify-between flex-wrap gap-2 p-2 bg-header flex-shrink-0">
+  <div
+    class="flex items-center justify-between flex-wrap p-2 bg-header flex-shrink-0"
+    :class="isMobile ? 'gap-1' : 'gap-2'"
+  >
     <!-- 左侧：路径操作按钮 + 路径栏 -->
-    <div class="flex items-center gap-2 flex-grow min-w-0">
+    <div class="flex items-center flex-grow min-w-0" :class="isMobile ? 'gap-1' : 'gap-2'">
       <!-- 路径操作按钮组 -->
-      <div class="flex items-center flex-shrink-0">
+      <div class="flex items-center flex-shrink-0" :class="isMobile ? 'gap-0.5' : 'gap-0'">
         <!-- CD 到终端按钮 -->
         <button
-          class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          class="flex items-center justify-center text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          :class="isMobile ? 'w-6 h-6' : 'w-7 h-7'"
           @click.stop="emit('cd-to-terminal')"
           :disabled="!isConnected || isEditingPath"
           :title="t('fileManager.actions.cdToTerminal', '将终端路径切换到文件管理器当前路径')"
         >
-          <i class="fas fa-terminal text-base"></i>
+          <i class="fas fa-terminal" :class="isMobile ? 'text-sm' : 'text-base'"></i>
         </button>
         <!-- 从终端同步路径按钮 -->
         <button
-          class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          class="flex items-center justify-center text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          :class="isMobile ? 'w-6 h-6' : 'w-7 h-7'"
           @click.stop="emit('sync-from-terminal')"
           :disabled="!isConnected || isEditingPath || isSyncingFromTerminal"
           :title="
@@ -183,38 +188,41 @@ onBeforeUnmount(() => {
             :class="[
               'fas',
               isSyncingFromTerminal ? 'fa-spinner fa-spin' : 'fa-folder-open',
-              'text-base',
+              isMobile ? 'text-sm' : 'text-base',
             ]"
           ></i>
         </button>
         <!-- 刷新按钮 -->
         <button
-          class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          class="flex items-center justify-center text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          :class="isMobile ? 'w-6 h-6' : 'w-7 h-7'"
           @click.stop="emit('refresh')"
           :disabled="!isConnected || isEditingPath"
           :title="t('fileManager.actions.refresh')"
         >
-          <i class="fas fa-sync-alt text-base"></i>
+          <i class="fas fa-sync-alt" :class="isMobile ? 'text-sm' : 'text-base'"></i>
         </button>
         <!-- 返回上级目录按钮 -->
         <button
-          class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          class="flex items-center justify-center text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+          :class="isMobile ? 'w-6 h-6' : 'w-7 h-7'"
           @click.stop="emit('go-to-parent')"
           :disabled="!isConnected || isAtRoot || isEditingPath"
           :title="t('fileManager.actions.parentDirectory')"
         >
-          <i class="fas fa-arrow-up text-base"></i>
+          <i class="fas fa-arrow-up" :class="isMobile ? 'text-sm' : 'text-base'"></i>
         </button>
         <!-- 搜索区域 -->
         <div class="flex items-center flex-shrink-0">
           <button
             v-if="!isSearchActive"
-            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+            class="flex items-center justify-center text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+            :class="isMobile ? 'w-6 h-6' : 'w-7 h-7'"
             @click.stop="emit('activate-search')"
             :disabled="!isConnected"
             :title="t('fileManager.searchPlaceholder')"
           >
-            <i class="fas fa-search text-base"></i>
+            <i class="fas fa-search" :class="isMobile ? 'text-sm' : 'text-base'"></i>
           </button>
           <div v-else class="relative flex items-center min-w-[150px] flex-shrink">
             <i
@@ -240,10 +248,11 @@ onBeforeUnmount(() => {
         <div class="relative flex-shrink-0">
           <button
             ref="favoritePathsButtonRef"
-            class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 hover:enabled:bg-black/10 hover:enabled:text-foreground"
+            class="flex items-center justify-center text-text-secondary rounded transition-colors duration-200 hover:enabled:bg-black/10 hover:enabled:text-foreground"
+            :class="isMobile ? 'w-6 h-6' : 'w-7 h-7'"
             @click="toggleFavoritePathsModal"
           >
-            <i class="fas fa-star text-base"></i>
+            <i class="fas fa-star" :class="isMobile ? 'text-sm' : 'text-base'"></i>
           </button>
           <FavoritePathsModal
             :is-visible="showFavoritePathsModal"
@@ -301,7 +310,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <!-- 右侧：操作按钮组 -->
-    <div class="flex items-center gap-2 flex-shrink-0">
+    <div class="flex items-center flex-shrink-0" :class="isMobile ? 'gap-1' : 'gap-2'">
       <!-- 打开编辑器按钮 -->
       <button
         v-if="showPopupEditor"
