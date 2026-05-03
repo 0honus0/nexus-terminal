@@ -154,11 +154,11 @@ watch(
   () => props.wsDeps.isSftpReady.value,
   (ready) => {
     if (ready && currentSftpManager.value) {
-      // 重映射后跳过：目录加载由连接 watcher（initialLoadDone 分支）负责
-      // 避免与连接 watcher 产生竞争导致重复加载和 UI 闪烁
-      if (justRemapped.value) {
+      // 初始加载（initialLoadDone === false）统一由 watchEffect 通过 sftp:realpath 处理
+      // 避免此处 loadDirectory('/') 与 watchEffect 的 loadDirectory(absolutePath) 产生竞争导致 UI 闪烁
+      if (justRemapped.value || !currentSftpManager.value.initialLoadDone.value) {
         console.info(
-          `[FileManager ${effectiveSessionId.value}-${props.instanceId}] SFTP 已就绪，但跳过自动加载（刚完成 session 重映射，由连接 watcher 处理）`
+          `[FileManager ${effectiveSessionId.value}-${props.instanceId}] SFTP 已就绪，但跳过自动加载（初始加载由 watchEffect 处理）`
         );
         return;
       }
