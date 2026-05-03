@@ -137,7 +137,7 @@
 | M-16    | 硬编码 `50000` 作为审计日志最大条目                   | `settings.service.ts:806` | 定义 `DEFAULT_AUDIT_LOG_MAX_ENTRIES` 常量                        |
 | M-17    | `index.ts` 后端入口 598 行单体文件                    | `backend/src/index.ts`    | 提取中间件配置、路由注册、服务器启动                             |
 | M-18    | Catch 块仅 `console.warn/error` 不传播错误            | 多处                      | 评估是否应传播 / 设置 UI 状态 / 记录理由注释                     |
-| M-19    | `SuspendedSshSessionsView.vue` 模板嵌套 13 层         | 前端 view                 | 提取子组件，使用 `v-if` 守卫减少嵌套                             |
+| ~~M-19~~    | ~~`SuspendedSshSessionsView.vue` 模板嵌套 13 层~~         | ~~前端 view~~                 | ✅ 已提取 SuspendedSessionItem 子组件，模板仅 25 行              |
 | M-20    | 后端 `logging/` 和 `middleware/` 模块零测试           | 后端                      | 为中间件行为和日志配置添加测试                                   |
 
 ### 边界条件类（10 项）
@@ -163,7 +163,7 @@
 
 | ID  | 问题                              | 位置                      | 修复建议                                |
 | --- | --------------------------------- | ------------------------- | --------------------------------------- |
-| L-1 | Swagger 在非生产环境暴露 API 结构 | `index.ts:466-489`        | 文档说明 `NODE_ENV=production` 必须设置 |
+| ~~L-1~~ | ~~Swagger 在非生产环境暴露 API 结构~~ | ~~`index.ts:466-489`~~        | ✅ 已有 NODE_ENV=production 环境保护 |
 | L-2 | uuid 依赖缓冲区边界检查           | `node_modules/uuid`       | `npm audit fix --force`                 |
 | L-3 | 错误消息可能泄露内部路径          | `error.middleware.ts:100` | 生产环境仅返回通用错误消息              |
 
