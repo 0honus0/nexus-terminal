@@ -56,9 +56,7 @@ import {
   onActivated,
   onDeactivated,
   computed,
-  nextTick,
-  watch,
-} from 'vue'; // +++ 导入 nextTick, watch、KeepAlive 生命周期和 onUnmounted +++
+} from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '../stores/session.store';
@@ -75,25 +73,9 @@ const { suspendedSshSessions: storeSuspendedSshSessions, isLoadingSuspendedSessi
 
 const searchTerm = ref('');
 
-// +++ 组件级编辑状态 +++
+// +++ 组件级编辑状态（聚焦逻辑已迁移至 SuspendedSessionItem 子组件）+++
 const editingSuspendSessionId = ref<string | null>(null);
 const currentEditingNameValue = ref<string>('');
-const nameInputRef = ref<HTMLInputElement | null>(null);
-
-// +++ 监听编辑ID变化以聚焦输入框 +++
-watch(editingSuspendSessionId, async (newId) => {
-  if (newId !== null) {
-    await nextTick(); // 确保DOM已更新，输入框已渲染
-    if (nameInputRef.value && typeof nameInputRef.value.focus === 'function') {
-      nameInputRef.value.focus();
-      // nameInputRef.value.select(); // 可选：如果希望选中所有文本
-    } else {
-      console.warn(
-        '[SuspendedSshSessionsView] Watcher: nameInputRef.value is not a focusable input after nextTick.'
-      );
-    }
-  }
-});
 
 // filteredSessions 现在直接基于 storeSuspendedSshSessions
 const filteredSessions = computed(() => {

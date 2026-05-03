@@ -142,15 +142,21 @@ router.get('/needs-setup', needsSetup);
  *             required:
  *               - username
  *               - password
+ *               - confirmPassword
  *             properties:
  *               username:
  *                 type: string
- *                 description: 管理员用户名
+ *                 description: 管理员用户名（3-64字符，仅字母数字下划线连字符）
  *                 example: admin
  *               password:
  *                 type: string
  *                 format: password
- *                 description: 管理员密码（建议使用强密码）
+ *                 description: 管理员密码（≥8位，必须包含字母和数字）
+ *                 example: MySecurePassword123!
+ *               confirmPassword:
+ *                 type: string
+ *                 format: password
+ *                 description: 确认密码（必须与密码一致）
  *                 example: MySecurePassword123!
  *     responses:
  *       201:
@@ -166,7 +172,7 @@ router.get('/needs-setup', needsSetup);
  *                 message:
  *                   type: string
  *                   example: 管理员账户创建成功
- *       422:
+ *       400:
  *         description: 参数验证失败
  *         content:
  *           application/json:

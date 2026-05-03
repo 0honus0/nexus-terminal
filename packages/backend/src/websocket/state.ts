@@ -14,7 +14,7 @@ export const clientStates = new Map<string, ClientState>();
 // 注意：userSockets 支持同一用户多设备连接（多 WebSocket），但 clientStates 按 sessionId（1:1）映射。
 // 这意味着同一用户在不同设备上会创建独立的 SSH 会话（各自有独立的 clientStates 条目），
 // 但共享同一 userId 的 WebSocket 广播通道。切换设备不会自动迁移或同步 SSH 会话状态。
-// 如需跨设备会话列表，可通过 /api/v1/ssh-suspend/list 获取当前用户的挂起会话。
+// 如需跨设备会话列表，可通过 /api/v1/ssh-suspend/suspended-sessions 获取当前用户的挂起会话。
 
 // --- Per-session 互斥锁 ---
 // Map 中的 ClientState 可能被多个异步上下文（WebSocket 消息处理器、定时器、SFTP 操作等）并发访问。
