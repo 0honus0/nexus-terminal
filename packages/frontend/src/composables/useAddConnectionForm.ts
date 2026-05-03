@@ -9,8 +9,11 @@ import { useSshKeysStore } from '../stores/sshKeys.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useConfirmDialog } from './useConfirmDialog';
 import { useAlertDialog } from './useAlertDialog';
-import { extractErrorMessage } from '../utils/errorExtractor';
 import { createScriptModeSubmit } from './useAddConnectionFormScriptMode';
+import { type ConnectionType, type AuthMethod, parseIpRange } from './useAddConnectionFormParsers';
+import { createSubmitHandler, createDeleteHandler } from './useAddConnectionFormSubmit';
+import { createTagHandlers } from './useAddConnectionFormTags';
+import { createTestConnection } from './useAddConnectionFormTest';
 
 // Define Props interface based on the component's props
 interface AddConnectionFormProps {
@@ -25,26 +28,7 @@ type AddConnectionFormEmits = {
   (e: 'connection-deleted'): void;
 };
 
-type ConnectionType = 'SSH' | 'RDP' | 'VNC';
-type AuthMethod = 'password' | 'key';
 type JumpChain = Array<number | null> | null;
-
-interface ConnectionPayload {
-  type: ConnectionType;
-  name: string;
-  host: string;
-  port: number;
-  username: string;
-  notes?: string;
-  proxy_id?: number | null;
-  proxy_type?: 'proxy' | 'jump' | null;
-  tag_ids?: number[];
-  jump_chain?: number[] | null;
-  force_keyboard_interactive?: boolean;
-  auth_method: AuthMethod;
-  password?: string;
-  ssh_key_id?: number | null;
-}
 
 export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddConnectionFormEmits) {
   const { connectionToEdit } = toRefs(props);
@@ -248,328 +232,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     { immediate: true }
   );
 
-  // Helper function to parse IP range
-  const parseIpRange = (ipRangeStr: string): string[] | { error: string } => {
-    if (!ipRangeStr.includes('~')) {
-      return { error: 'not_a_range' };
-    }
-    const parts = ipRangeStr.split('~');
-    if (parts.length !== 2) {
-      return {
-        error: t('connections.form.errorInvalidIpRangeFormat', 'IP 范围格式应为 start_ip~end_ip'),
-      };
-    }
-
-    const [startIpStr, endIpStr] = parts.map((p) => p.trim());
-
-    const ipRegex = /^((\d{1,3}\.){3})\d{1,3}$/;
-    if (!ipRegex.test(startIpStr) || !ipRegex.test(endIpStr)) {
-      return { error: t('connections.form.errorInvalidIpFormat', '起始或结束 IP 地址格式无效') };
-    }
-
-    const startIpParts = startIpStr.split('.');
-    const endIpParts = endIpStr.split('.');
-
-    if (startIpParts.slice(0, 3).join('.') !== endIpParts.slice(0, 3).join('.')) {
-      return {
-        error: t(
-          'connections.form.errorIpRangeNotSameSubnet',
-          'IP 范围必须在同一个C段子网中 (例如 1.2.3.x ~ 1.2.3.y)'
-        ),
-      };
-    }
-
-    const startSuffix = parseInt(startIpParts[3], 10);
-    const endSuffix = parseInt(endIpParts[3], 10);
-
-    if (
-      Number.isNaN(startSuffix) ||
-      Number.isNaN(endSuffix) ||
-      startSuffix < 0 ||
-      startSuffix > 255 ||
-      endSuffix < 0 ||
-      endSuffix > 255
-    ) {
-      return {
-        error: t('connections.form.errorInvalidIpSuffix', 'IP 地址最后一段必须是 0-255 之间的数字'),
-      };
-    }
-
-    if (startSuffix > endSuffix) {
-      return {
-        error: t('connections.form.errorIpRangeStartAfterEnd', 'IP 范围的起始 IP 不能大于结束 IP'),
-      };
-    }
-
-    const numIps = endSuffix - startSuffix + 1;
-    if (numIps <= 0) {
-      return { error: t('connections.form.errorIpRangeEmpty', 'IP 范围不能为空。') };
-    }
-
-    const baseIp = startIpParts.slice(0, 3).join('.');
-    const ips: string[] = [];
-    for (let i = startSuffix; i <= endSuffix; i++) {
-      ips.push(`${baseIp}.${i}`);
-    }
-    return ips;
-  };
-
-  // Helper function to parse a single script line using minimist
-
-  const _parseScriptLine = (
-    line: string
-  ): {
-    type: 'SSH' | 'RDP' | 'VNC';
-    userHostPort: string;
-    name: string;
-    password: string | null;
-    keyName: string | null;
-    proxyName: string | null;
-    tags: string[];
-    note: string | null;
-    error?: string;
-  } => {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      return {
-        type: 'SSH',
-        userHostPort: '',
-        name: '',
-        password: null,
-        keyName: null,
-        proxyName: null,
-        tags: [],
-        note: null,
-        error: t('connections.form.scriptErrorEmptyLine', 'Input line cannot be empty'),
-      };
-    }
-
-    // 1. Extract user@host:port
-    const firstSpaceIndex = trimmedLine.indexOf(' ');
-    const userHostPortPart =
-      firstSpaceIndex === -1 ? trimmedLine : trimmedLine.substring(0, firstSpaceIndex);
-    const optionsString =
-      firstSpaceIndex === -1 ? '' : trimmedLine.substring(firstSpaceIndex + 1).trim();
-
-    // 2. Validate user@host:port (allow user@host without port)
-    const userHostPortRegex = /^([^@\s]+)@([^:\s]+)(?::([0-9]+))?$/;
-    const match = userHostPortPart.match(userHostPortRegex);
-    if (!match) {
-      return {
-        type: 'SSH',
-        userHostPort: userHostPortPart,
-        name: '',
-        password: null,
-        keyName: null,
-        proxyName: null,
-        tags: [],
-        note: null,
-        error: t('connections.form.scriptErrorInvalidUserHostPortFormat', {
-          part: userHostPortPart,
-        }),
-      };
-    }
-    const [, user, host /* , portStr */] = match; // portStr not used for now
-    const defaultName = `${user}@${host}`; // Default name
-
-    // 3. Initialize results and defaults
-    let type: 'SSH' | 'RDP' | 'VNC' = 'SSH';
-    let name: string = defaultName;
-    let password: string | null = null;
-    let keyName: string | null = null;
-    let proxyName: string | null = null;
-    let scriptTags: string[] = [];
-    let note: string | null = null;
-
-    // 4. Parse optionsString
-    // Regex to split by space, respecting quotes
-    const args = optionsString.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-    let i = 0;
-    while (i < args.length) {
-      const arg = args[i];
-      if (arg.startsWith('-')) {
-        const key = arg.substring(1).toLowerCase();
-        i++; // Move to the expected position of the value
-
-        if (key === 'tags') {
-          // Handle -tags, which can be followed by zero or more tags
-          scriptTags = [];
-          while (i < args.length && !args[i].startsWith('-')) {
-            scriptTags.push(args[i].replace(/^"|"$/g, '')); // Remove surrounding quotes
-            i++;
-          }
-          // No need to i++ here, the next loop iteration or outer loop handles it
-        } else if (key === 'note') {
-          // Handle -note, which consumes the rest of the line
-          const noteParts = [];
-          while (i < args.length) {
-            noteParts.push(args[i]);
-            i++;
-          }
-          note = noteParts.join(' ').replace(/^"|"$/g, ''); // Join parts and remove quotes
-          break; // Exit the outer loop as note consumes the rest
-        } else if (i >= args.length) {
-          // All other options require a value
-          return {
-            type,
-            userHostPort: userHostPortPart,
-            name,
-            password,
-            keyName,
-            proxyName,
-            tags: scriptTags,
-            note,
-            error: t('connections.form.scriptErrorMissingValueForKey', { key: arg }),
-          };
-        } else {
-          // Handle options that require a single value
-          const value = args[i].replace(/^"|"$/g, ''); // Remove surrounding quotes
-          switch (key) {
-            case 'type':
-              const typeValue = value.toUpperCase();
-              if (typeValue === 'SSH' || typeValue === 'RDP' || typeValue === 'VNC') {
-                type = typeValue;
-              } else {
-                return {
-                  type,
-                  userHostPort: userHostPortPart,
-                  name,
-                  password,
-                  keyName,
-                  proxyName,
-                  tags: scriptTags,
-                  note,
-                  error: t('connections.form.scriptErrorInvalidType', { value: args[i] }),
-                };
-              }
-              break;
-            case 'name':
-              name = value;
-              break;
-            case 'p': // password
-              password = value;
-              break;
-            case 'k': // key name
-              keyName = value;
-              break;
-            case 'proxy':
-              proxyName = value;
-              break;
-            default:
-              return {
-                type,
-                userHostPort: userHostPortPart,
-                name,
-                password,
-                keyName,
-                proxyName,
-                tags: scriptTags,
-                note,
-                error: t('connections.form.scriptErrorUnknownOption', { option: arg }),
-              };
-          }
-          i++; // Move past the value
-        }
-      } else {
-        // Arguments after user@host:port must start with '-'
-        return {
-          type,
-          userHostPort: userHostPortPart,
-          name,
-          password,
-          keyName,
-          proxyName,
-          tags: scriptTags,
-          note,
-          error: t('connections.form.scriptErrorUnexpectedArgument', { argument: arg }),
-        };
-      }
-    }
-
-    // 5. Validation based on type
-    if (type === 'SSH') {
-      if (!password && !keyName) {
-        return {
-          type,
-          userHostPort: userHostPortPart,
-          name,
-          password,
-          keyName,
-          proxyName,
-          tags: scriptTags,
-          note,
-          error: t('connections.form.scriptErrorMissingAuthForSsh'),
-        };
-      }
-      // Allow both password and key, handle precedence in handleScriptModeSubmit
-    } else if (type === 'RDP') {
-      if (!password) {
-        return {
-          type,
-          userHostPort: userHostPortPart,
-          name,
-          password,
-          keyName,
-          proxyName,
-          tags: scriptTags,
-          note,
-          error: t('connections.form.scriptErrorMissingPasswordForRdp'),
-        };
-      }
-      if (keyName) {
-        return {
-          type,
-          userHostPort: userHostPortPart,
-          name,
-          password,
-          keyName,
-          proxyName,
-          tags: scriptTags,
-          note,
-          error: t('connections.form.scriptErrorKeyNotApplicableForRdp'),
-        };
-      }
-    } else if (type === 'VNC') {
-      if (!password) {
-        return {
-          type,
-          userHostPort: userHostPortPart,
-          name,
-          password,
-          keyName,
-          proxyName,
-          tags: scriptTags,
-          note,
-          error: t('connections.form.scriptErrorMissingPasswordForVnc'),
-        };
-      }
-      if (keyName) {
-        return {
-          type,
-          userHostPort: userHostPortPart,
-          name,
-          password,
-          keyName,
-          proxyName,
-          tags: scriptTags,
-          note,
-          error: t('connections.form.scriptErrorKeyNotApplicableForVnc'),
-        };
-      }
-    }
-
-    return {
-      type,
-      userHostPort: userHostPortPart,
-      name,
-      password,
-      keyName,
-      proxyName,
-      tags: scriptTags,
-      note,
-    };
-  };
-
   // 脚本模式提交处理器（委托给子模块）
   const handleScriptModeSubmit = createScriptModeSubmit({
     scriptInputText,
@@ -584,398 +246,55 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     sshKeys,
   });
 
-  const handleSubmit = async () => {
-    if (isScriptModeActive.value) {
-      await handleScriptModeSubmit();
-      return;
-    }
+  // 绑定 t 函数到纯函数解析器
+  const parseIpRangeBound = (ipRangeStr: string) => parseIpRange(ipRangeStr, t);
 
-    formError.value = null;
-    connectionsStore.error = null;
-    proxiesStore.error = null;
-
-    const availableTagIds = tags.value.map((t_) => t_.id);
-    const currentSelectedValidTagIds = formData.tag_ids.filter((id) =>
-      availableTagIds.includes(id)
-    );
-
-    if (!formData.host || !formData.username) {
-      uiNotificationsStore.showError(t('connections.form.errorRequiredFields'));
-      return;
-    }
-    if (formData.port <= 0 || formData.port > 65535) {
-      uiNotificationsStore.showError(t('connections.form.errorPort'));
-      return;
-    }
-
-    if (formData.type === 'SSH') {
-      if (!isEditMode.value) {
-        if (
-          formData.auth_method === 'password' &&
-          !formData.password &&
-          !formData.host.includes('~')
-        ) {
-          uiNotificationsStore.showError(t('connections.form.errorPasswordRequired'));
-          return;
-        }
-        if (
-          formData.auth_method === 'key' &&
-          !formData.selected_ssh_key_id &&
-          !formData.host.includes('~')
-        ) {
-          uiNotificationsStore.showError(t('connections.form.errorSshKeyRequired'));
-          return;
-        }
-      } else {
-        if (
-          formData.auth_method === 'password' &&
-          !formData.password &&
-          connectionToEdit.value?.auth_method !== 'password'
-        ) {
-          uiNotificationsStore.showError(t('connections.form.errorPasswordRequiredOnSwitch'));
-          return;
-        }
-        if (
-          formData.auth_method === 'key' &&
-          !formData.selected_ssh_key_id &&
-          connectionToEdit.value?.auth_method !== 'key'
-        ) {
-          uiNotificationsStore.showError(t('connections.form.errorSshKeyRequiredOnSwitch'));
-          return;
-        }
-      }
-    } else if (formData.type === 'RDP') {
-      if (!isEditMode.value && !formData.password && !formData.host.includes('~')) {
-        uiNotificationsStore.showError(t('connections.form.errorPasswordRequired'));
-        return;
-      }
-    } else if (formData.type === 'VNC') {
-      if (!isEditMode.value && !formData.vncPassword && !formData.host.includes('~')) {
-        uiNotificationsStore.showError(
-          t('connections.form.errorVncPasswordRequired', 'VNC 密码是必填项。')
-        );
-        return;
-      }
-    }
-
-    if (!isEditMode.value && formData.host.includes('~')) {
-      const parsedIpsResult = parseIpRange(formData.host);
-
-      if (Array.isArray(parsedIpsResult)) {
-        const ips = parsedIpsResult;
-        if (
-          formData.type === 'SSH' &&
-          formData.auth_method === 'key' &&
-          !formData.selected_ssh_key_id
-        ) {
-          uiNotificationsStore.showError(
-            t(
-              'connections.form.errorSshKeyRequiredForBatch',
-              '批量添加 SSH (密钥认证) 连接时，必须选择一个 SSH 密钥。'
-            )
-          );
-          return;
-        }
-        if (formData.type === 'SSH' && formData.auth_method === 'password' && !formData.password) {
-          uiNotificationsStore.showError(
-            t(
-              'connections.form.errorPasswordRequiredForBatchSSH',
-              '批量添加 SSH (密码认证) 连接时，必须提供密码。'
-            )
-          );
-          return;
-        }
-        if (formData.type === 'RDP' && !formData.password) {
-          uiNotificationsStore.showError(
-            t(
-              'connections.form.errorPasswordRequiredForBatchRDP',
-              '批量添加 RDP 连接时，必须提供密码。'
-            )
-          );
-          return;
-        }
-        if (formData.type === 'VNC' && !formData.vncPassword) {
-          uiNotificationsStore.showError(
-            t(
-              'connections.form.errorPasswordRequiredForBatchVNC',
-              '批量添加 VNC 连接时，必须提供 VNC 密码。'
-            )
-          );
-          return;
-        }
-
-        let successCount = 0;
-        let errorCount = 0;
-        let firstErrorEncountered: string | null = null;
-
-        for (let i = 0; i < ips.length; i++) {
-          const currentIp = ips[i];
-          const ipSuffix = currentIp.split('.').pop() || `${i + 1}`;
-
-          const dataForThisIp: ConnectionPayload = {
-            type: formData.type,
-            name: formData.name ? `${formData.name}-${ipSuffix}` : currentIp,
-            host: currentIp,
-            port: formData.port,
-            username: formData.username,
-            auth_method: formData.auth_method,
-            notes: formData.notes,
-            proxy_id: formData.proxy_id || null,
-            tag_ids: currentSelectedValidTagIds,
-            proxy_type: formData.proxy_type,
-          };
-
-          if (formData.type === 'SSH') {
-            dataForThisIp.auth_method = formData.auth_method;
-            if (formData.auth_method === 'password') {
-              dataForThisIp.password = formData.password;
-            } else if (formData.auth_method === 'key') {
-              dataForThisIp.ssh_key_id = formData.selected_ssh_key_id;
-            }
-          } else if (formData.type === 'RDP') {
-            dataForThisIp.password = formData.password;
-          } else if (formData.type === 'VNC') {
-            dataForThisIp.password = formData.vncPassword;
-          }
-
-          if (dataForThisIp.type !== 'SSH' || dataForThisIp.auth_method !== 'key')
-            delete dataForThisIp.ssh_key_id;
-          if (dataForThisIp.type === 'SSH' && dataForThisIp.auth_method === 'key')
-            delete dataForThisIp.password;
-
-          const success = await connectionsStore.addConnection(dataForThisIp);
-          if (success) {
-            successCount++;
-          } else {
-            errorCount++;
-            if (!firstErrorEncountered) {
-              firstErrorEncountered = connectionsStore.error || t('errors.unknown', '未知错误');
-            }
-          }
-        }
-
-        if (errorCount > 0) {
-          const message = t('connections.form.errorBatchAddResult', {
-            successCount,
-            errorCount,
-            firstErrorEncountered: firstErrorEncountered || t('errors.unknown', '未知错误'),
-          });
-          if (successCount > 0) {
-            uiNotificationsStore.showWarning(message);
-          } else {
-            uiNotificationsStore.showError(message);
-          }
-        } else if (successCount > 0) {
-          uiNotificationsStore.showSuccess(
-            t('connections.form.successBatchAddResult', { successCount })
-          );
-          emit('connection-added');
-        }
-        return;
-      }
-      if (parsedIpsResult.error && parsedIpsResult.error !== 'not_a_range') {
-        uiNotificationsStore.showError(parsedIpsResult.error);
-        return;
-      }
-    }
-
-    if (isEditMode.value && formData.host.includes('~')) {
-      uiNotificationsStore.showError(
-        t(
-          'connections.form.errorIpRangeNotAllowedInEditMode',
-          '编辑模式下不支持 IP 范围。请使用单个 IP 地址。'
-        )
-      );
-      return;
-    }
-
-    const dataToSend: ConnectionPayload = {
-      type: formData.type,
-      name: formData.name,
-      host: formData.host.trim(),
-      port: formData.port,
-      notes: formData.notes,
-      username: formData.username,
-      auth_method: formData.auth_method,
-      proxy_id: formData.proxy_id || null,
-      proxy_type: formData.proxy_type,
-      tag_ids: currentSelectedValidTagIds,
-      jump_chain: formData.jump_chain
-        ? (JSON.parse(JSON.stringify(formData.jump_chain)) as number[] | null)
-        : null,
-      force_keyboard_interactive: formData.force_keyboard_interactive,
-    };
-
-    if (formData.type === 'SSH') {
-      if (formData.auth_method === 'password') {
-        if (formData.password) dataToSend.password = formData.password;
-      } else if (formData.auth_method === 'key') {
-        if (formData.selected_ssh_key_id) {
-          dataToSend.ssh_key_id = formData.selected_ssh_key_id;
-        }
-      }
-    } else if (formData.type === 'RDP') {
-      if (formData.password) dataToSend.password = formData.password;
-      delete dataToSend.force_keyboard_interactive;
-    } else if (formData.type === 'VNC') {
-      if (formData.vncPassword) dataToSend.password = formData.vncPassword;
-      delete dataToSend.force_keyboard_interactive;
-    }
-
-    if (dataToSend.type !== 'SSH' || dataToSend.auth_method !== 'key') delete dataToSend.ssh_key_id;
-    if (dataToSend.type === 'SSH' && dataToSend.auth_method === 'key') delete dataToSend.password;
-
-    let success = false;
-    if (isEditMode.value && connectionToEdit.value) {
-      success = await connectionsStore.updateConnection(connectionToEdit.value.id, dataToSend);
-      if (success) {
-        emit('connection-updated');
-      } else {
-        uiNotificationsStore.showError(
-          t('connections.form.errorUpdate', { error: connectionsStore.error || '未知错误' })
-        );
-      }
-    } else {
-      success = await connectionsStore.addConnection(dataToSend);
-      if (success) {
-        emit('connection-added');
-      } else {
-        uiNotificationsStore.showError(
-          t('connections.form.errorAdd', { error: connectionsStore.error || '未知错误' })
-        );
-      }
-    }
-  };
-
-  // 处理删除连接
-  const handleDeleteConnection = async () => {
-    if (!isEditMode.value || !connectionToEdit.value) return;
-
-    const connectionName = connectionToEdit.value.name || `ID: ${connectionToEdit.value.id}`;
-    const confirmedDeleteConnection = await showConfirmDialog({
-      message: t('connections.prompts.confirmDelete', { name: connectionName }),
-    });
-    if (!confirmedDeleteConnection) {
-      return;
-    }
-
-    formError.value = null;
-    connectionsStore.error = null;
-
-    const success = await connectionsStore.deleteConnection(connectionToEdit.value.id);
-    if (success) {
-      emit('connection-deleted');
-      emit('close');
-    } else {
-      uiNotificationsStore.showError(
-        t('connections.form.errorDelete', {
-          error: connectionsStore.error || t('errors.unknown', '未知错误'),
-        })
-      );
-    }
-  };
-
-  // --- Tag Creation/Deletion Handling ---
-  const handleCreateTag = async (tagName: string) => {
-    if (!tagName || tagName.trim().length === 0) return;
-    const newTag = await tagsStore.addTag(tagName.trim());
-    if (newTag && !formData.tag_ids.includes(newTag.id)) {
-      formData.tag_ids.push(newTag.id);
-    }
-  };
-
-  const handleDeleteTag = async (tagId: number) => {
-    const tagToDelete = tags.value.find((t_) => t_.id === tagId);
-    if (!tagToDelete) return;
-
-    const confirmedDeleteTag = await showConfirmDialog({
-      message: t('tags.prompts.confirmDelete', { name: tagToDelete.name }),
-    });
-    if (confirmedDeleteTag) {
-      const success = await tagsStore.deleteTag(tagId);
-      if (!success) {
-        showAlertDialog({
-          title: t('common.error', '错误'),
-          message: t('tags.errorDelete', { error: tagsStore.error || '未知错误' }),
-        });
-      }
-    }
-  };
-
-  // 处理测试连接
-  const handleTestConnection = async () => {
-    testStatus.value = 'testing';
-    testResult.value = null;
-    testLatency.value = null;
-
-    try {
-      let response;
-      if (isEditMode.value && connectionToEdit.value) {
-        response = await apiClient.post(`/connections/${connectionToEdit.value.id}/test`);
-      } else {
-        const dataToSend = {
-          host: formData.host,
-          port: formData.port,
-          username: formData.username,
-          auth_method: formData.auth_method,
-          password: formData.auth_method === 'password' ? formData.password : undefined,
-          proxy_id: formData.proxy_id || null,
-          ssh_key_id: formData.auth_method === 'key' ? formData.selected_ssh_key_id : undefined,
-        };
-
-        if (
-          !dataToSend.host ||
-          !dataToSend.port ||
-          !dataToSend.username ||
-          !dataToSend.auth_method
-        ) {
-          throw new Error(t('connections.test.errorMissingFields'));
-        }
-        if (dataToSend.auth_method === 'password' && !formData.password) {
-          throw new Error(t('connections.form.errorPasswordRequired'));
-        }
-        if (dataToSend.auth_method === 'key' && !dataToSend.ssh_key_id) {
-          throw new Error(t('connections.form.errorSshKeyRequired'));
-        }
-        response = await apiClient.post('/connections/test-unsaved', dataToSend);
-      }
-
-      if (response.data.success) {
-        testStatus.value = 'success';
-        testLatency.value = response.data.latency;
-        testResult.value = `${response.data.latency} ms`;
-      } else {
-        testStatus.value = 'error';
-        const errorMessage = response.data.message || t('connections.test.errorUnknown');
-        testResult.value = errorMessage;
-        uiNotificationsStore.showError(errorMessage);
-      }
-    } catch (error: unknown) {
-      console.error('测试连接失败:', error);
-      testStatus.value = 'error';
-      const errorMessageToShow = extractErrorMessage(error, t('connections.test.errorNetwork'));
-      testResult.value = errorMessageToShow;
-      uiNotificationsStore.showError(errorMessageToShow);
-    }
-  };
-
-  // 计算延迟颜色
-  const latencyColor = computed(() => {
-    if (testStatus.value !== 'success' || testLatency.value === null) {
-      return 'inherit';
-    }
-    const latency = testLatency.value;
-    if (latency < 100) return 'var(--color-success, #28a745)';
-    if (latency < 500) return 'var(--color-warning, #ffc107)';
-    return 'var(--color-danger, #dc3545)';
+  // 表单提交处理器（委托给子模块）
+  const handleSubmit = createSubmitHandler({
+    formData,
+    isEditMode,
+    connectionToEdit,
+    isScriptModeActive,
+    handleScriptModeSubmit,
+    parseIpRange: parseIpRangeBound,
+    formError,
+    connectionsStore,
+    proxiesStore,
+    uiNotificationsStore,
+    tags,
+    emit,
   });
 
-  // 计算测试按钮文本
-  const testButtonText = computed(() => {
-    if (testStatus.value === 'testing') {
-      return t('connections.form.testing');
-    }
-    return t('connections.form.testConnection');
+  // 删除连接处理器（委托给子模块）
+  const handleDeleteConnection = createDeleteHandler({
+    isEditMode,
+    connectionToEdit,
+    showConfirmDialog,
+    formError,
+    connectionsStore,
+    uiNotificationsStore,
+    emit,
+  });
+
+  // 标签管理处理器（委托给子模块）
+  const { handleCreateTag, handleDeleteTag } = createTagHandlers({
+    formData,
+    tags,
+    tagsStore,
+    showConfirmDialog,
+    showAlertDialog,
+  });
+
+  // 测试连接处理器（委托给子模块）
+  const { handleTestConnection, latencyColor, testButtonText } = createTestConnection({
+    formData,
+    isEditMode,
+    connectionToEdit,
+    testStatus,
+    testResult,
+    testLatency,
+    uiNotificationsStore,
+    apiClient,
   });
 
   // --- Jump Host Chain Management ---

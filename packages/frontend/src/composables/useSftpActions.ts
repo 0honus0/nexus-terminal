@@ -1,20 +1,11 @@
 import { ref, reactive, computed, type Ref, type ComputedRef } from 'vue';
-import type {
-  FileListItem,
-  FileAttributes,
-  SftpReadFileSuccessPayload,
-  SftpReadFileRequestPayload,
-} from '../types/sftp.types';
-import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/websocket.types';
+import type { FileListItem, FileAttributes, SftpReadFileSuccessPayload } from '../types/sftp.types';
+import type { WebSocketMessage, MessageHandler } from '../types/websocket.types';
 
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
-import {
-  findNodeByPath,
-  removeNodeFromTree as _removeNodeFromTree,
-  addOrUpdateNodeInTree as _addOrUpdateNodeInTree,
-  sortFiles as _sortFiles,
-} from './useSftpTreeUtils';
+import { findNodeByPath } from './useSftpTreeUtils';
 import { createMessageHandlers } from './useSftpMessageHandlers';
+import { createSftpOperations } from './useSftpOperations';
 
 /**
  * @interface WebSocketDependencies
@@ -59,15 +50,9 @@ export interface SftpManagerInstance {
   cleanup: () => void;
 }
 
-// Helper function
+// 辅助函数：生成唯一请求 ID
 const generateRequestId = (): string =>
   `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-// Helper function
-const joinPath = (base: string, name: string): string => {
-  if (base === '/') return `/${name}`;
-  return base.endsWith('/') ? `${base}${name}` : `${base}/${name}`;
-};
 
 // *** 文件树节点接口 ***
 export interface FileTreeNode {
@@ -123,7 +108,7 @@ export function createSftpActionsManager(
     unregisterCallbacks.length = 0;
   };
 
-  // --- Action Methods ---
+  // --- 目录加载 ---
 
   const loadDirectory = (path: string, forceRefresh: boolean = false) => {
     const targetNode = findNodeByPath(fileTree, path, instanceSessionId);
@@ -174,383 +159,17 @@ export function createSftpActionsManager(
     );
   };
 
-  const createDirectory = (newDirName: string) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试创建目录 ${newDirName} 但 SFTP 未就绪。`);
-      return;
-    }
-    const newFolderPath = joinPath(currentPathRef.value, newDirName);
-    const requestId = generateRequestId();
-    sendMessage({ type: 'sftp:mkdir', requestId, payload: { path: newFolderPath } });
-  };
-
-  const createFile = (newFileName: string) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试创建文件 ${newFileName} 但 SFTP 未就绪。`);
-      return;
-    }
-    const newFilePath = joinPath(currentPathRef.value, newFileName);
-    const requestId = generateRequestId();
-    sendMessage({
-      type: 'sftp:writefile',
-      requestId,
-      payload: { path: newFilePath, content: '', encoding: 'utf8' },
-    });
-  };
-
-  const deleteItems = (items: FileListItem[]) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试删除项目但 SFTP 未就绪。`);
-      return;
-    }
-    if (items.length === 0) return;
-    items.forEach((item) => {
-      const targetPath = joinPath(currentPathRef.value, item.filename);
-      const actionType = item.attrs.isDirectory ? 'sftp:rmdir' : 'sftp:unlink';
-      const requestId = generateRequestId();
-      sendMessage({ type: actionType, requestId, payload: { path: targetPath } });
-    });
-  };
-
-  const renameItem = (item: FileListItem, newName: string) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试重命名项目 ${item.filename} 但 SFTP 未就绪。`);
-      return;
-    }
-    if (!newName || item.filename === newName) return;
-    const oldPath = joinPath(currentPathRef.value, item.filename);
-    const newPath = newName.startsWith('/') ? newName : joinPath(currentPathRef.value, newName);
-    const requestId = generateRequestId();
-    sendMessage({ type: 'sftp:rename', requestId, payload: { oldPath, newPath } });
-  };
-
-  const changePermissions = (item: FileListItem, mode: number) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试修改 ${item.filename} 的权限但 SFTP 未就绪。`);
-      return;
-    }
-    const targetPath = joinPath(currentPathRef.value, item.filename);
-    const requestId = generateRequestId();
-    sendMessage({
-      type: 'sftp:chmod',
-      requestId,
-      payload: { path: targetPath, mode },
-    });
-  };
-
-  const readFile = (path: string, encoding?: string): Promise<SftpReadFileSuccessPayload> => {
-    return new Promise((resolve, reject) => {
-      if (!isSftpReady.value) {
-        const errMsg = t('fileManager.errors.sftpNotReady');
-        console.warn(`[SFTP ${instanceSessionId}] 尝试读取文件 ${path} 但 SFTP 未就绪。`);
-        uiNotificationsStore.showError(errMsg);
-        return reject(new Error(errMsg));
-      }
-      const requestId = generateRequestId();
-      let unregisterSuccess: (() => void) | null = null;
-      let unregisterError: (() => void) | null = null;
-
-      const timeoutId = setTimeout(() => {
-        unregisterSuccess?.();
-        unregisterError?.();
-        const errMsg = t('fileManager.errors.readFileTimeout');
-        uiNotificationsStore.showError(errMsg);
-        reject(new Error(errMsg));
-      }, 20000);
-
-      unregisterSuccess = onMessage(
-        'sftp:readfile:success',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          const successPayload = payload as unknown as SftpReadFileSuccessPayload;
-          if (message.requestId === requestId && message.path === path) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            resolve({
-              rawContentBase64: successPayload.rawContentBase64,
-              encodingUsed: successPayload.encodingUsed,
-            });
-          }
-        }
-      );
-
-      unregisterError = onMessage(
-        'sftp:readfile:error',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as unknown as string;
-          if (message.requestId === requestId && message.path === path) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            const errorMsg = errorPayload || t('fileManager.errors.readFileFailed');
-            uiNotificationsStore.showError(`${t('fileManager.errors.readFileError')}: ${errorMsg}`);
-            reject(new Error(errorMsg));
-          }
-        }
-      );
-
-      const requestPayload: SftpReadFileRequestPayload = { path };
-      if (encoding) {
-        requestPayload.encoding = encoding;
-      }
-      sendMessage({ type: 'sftp:readfile', requestId, payload: requestPayload });
-    });
-  };
-
-  const writeFile = (path: string, content: string, encoding?: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!isSftpReady.value) {
-        const errMsg = t('fileManager.errors.sftpNotReady');
-        console.warn(`[SFTP ${instanceSessionId}] 尝试写入文件 ${path} 但 SFTP 未就绪。`);
-        uiNotificationsStore.showError(errMsg);
-        return reject(new Error(errMsg));
-      }
-      const requestId = generateRequestId();
-      const finalEncoding = encoding || 'utf8';
-      let unregisterSuccess: (() => void) | null = null;
-      let unregisterError: (() => void) | null = null;
-
-      const timeoutId = setTimeout(() => {
-        unregisterSuccess?.();
-        unregisterError?.();
-        const errMsg = t('fileManager.errors.saveTimeout');
-        uiNotificationsStore.showError(errMsg);
-        reject(new Error(errMsg));
-      }, 20000);
-
-      unregisterSuccess = onMessage(
-        'sftp:writefile:success',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          if (message.requestId === requestId && message.path === path) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            resolve();
-          }
-        }
-      );
-
-      unregisterError = onMessage(
-        'sftp:writefile:error',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as unknown as string;
-          if (message.requestId === requestId && message.path === path) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            const errorMsg = errorPayload || t('fileManager.errors.saveFailed');
-            uiNotificationsStore.showError(errorMsg);
-            reject(new Error(errorMsg));
-          }
-        }
-      );
-
-      sendMessage({
-        type: 'sftp:writefile',
-        requestId,
-        payload: { path, content, encoding: finalEncoding },
-      });
-    });
-  };
-
-  const copyItems = (sourcePaths: string[], destinationDir: string) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试复制项目但 SFTP 未就绪。`);
-      return;
-    }
-    if (sourcePaths.length === 0) return;
-    const requestId = generateRequestId();
-    sendMessage({
-      type: 'sftp:copy',
-      requestId,
-      payload: { sources: sourcePaths, destination: destinationDir },
-    });
-    console.info(
-      `[SFTP ${instanceSessionId}] 发送 sftp:copy 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
-    );
-  };
-
-  const moveItems = (sourcePaths: string[], destinationDir: string) => {
-    if (!isSftpReady.value) {
-      uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试移动项目但 SFTP 未就绪。`);
-      return;
-    }
-    if (sourcePaths.length === 0) return;
-    const requestId = generateRequestId();
-    sendMessage({
-      type: 'sftp:move',
-      requestId,
-      payload: { sources: sourcePaths, destination: destinationDir },
-    });
-    console.info(
-      `[SFTP ${instanceSessionId}] 发送 sftp:move 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
-    );
-  };
-
-  const compressItems = (
-    items: FileListItem[],
-    format: 'zip' | 'targz' | 'tarbz2'
-  ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!isSftpReady.value) {
-        const errMsg = t('fileManager.errors.sftpNotReady');
-        uiNotificationsStore.showError(errMsg);
-        console.warn(`[SFTP ${instanceSessionId}] 尝试压缩项目但 SFTP 未就绪。`);
-        return reject(new Error(errMsg));
-      }
-      const sourcePaths = items.map((item) => joinPath(currentPathRef.value, item.filename));
-      const requestId = generateRequestId();
-      const parentDir = currentPathRef.value;
-      let archiveBaseName = 'archive';
-      if (items.length === 1) {
-        archiveBaseName = items[0].filename.split('.')[0];
-      } else if (items.length > 1) {
-        const parentFolderName = parentDir.split('/').pop();
-        if (parentFolderName && parentFolderName !== 'root' && parentFolderName !== '') {
-          archiveBaseName = parentFolderName;
-        }
-      }
-      let archiveExtension: string = format;
-      if (format === 'targz') {
-        archiveExtension = 'tar.gz';
-      } else if (format === 'tarbz2') {
-        archiveExtension = 'tar.bz2';
-      }
-      const archiveName = `${archiveBaseName}.${archiveExtension}`;
-      const destinationPath = joinPath(parentDir, archiveName);
-
-      let unregisterSuccess: (() => void) | null = null;
-      let unregisterError: (() => void) | null = null;
-
-      const timeoutId = setTimeout(() => {
-        unregisterSuccess?.();
-        unregisterError?.();
-        const errMsg = t('fileManager.errors.compressTimeout');
-        uiNotificationsStore.showError(errMsg);
-        reject(new Error(errMsg));
-      }, 60000);
-
-      unregisterSuccess = onMessage(
-        'sftp:compress:success',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          if (message.requestId === requestId) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            uiNotificationsStore.showSuccess(
-              t('fileManager.notifications.compressSuccess', { name: archiveName })
-            );
-            loadDirectory(currentPathRef.value, true);
-            resolve();
-          }
-        }
-      );
-
-      unregisterError = onMessage(
-        'sftp:compress:error',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as unknown as { error: string; details?: string };
-          if (message.requestId === requestId) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            const errorMsg =
-              errorPayload.details || errorPayload.error || t('fileManager.errors.compressFailed');
-            uiNotificationsStore.showError(
-              t('fileManager.errors.compressErrorDetailed', { error: errorMsg })
-            );
-            reject(new Error(errorMsg));
-          }
-        }
-      );
-
-      console.info(
-        `[SFTP ${instanceSessionId}] 发送 sftp:compress 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationPath}, Format: ${format}`
-      );
-      sendMessage({
-        type: 'sftp:compress',
-        requestId,
-        payload: { sources: sourcePaths, destination: destinationPath, format },
-      });
-    });
-  };
-
-  const decompressItem = (item: FileListItem): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (!isSftpReady.value) {
-        const errMsg = t('fileManager.errors.sftpNotReady');
-        uiNotificationsStore.showError(errMsg);
-        console.warn(`[SFTP ${instanceSessionId}] 尝试解压项目 ${item.filename} 但 SFTP 未就绪。`);
-        return reject(new Error(errMsg));
-      }
-      const sourcePath = joinPath(currentPathRef.value, item.filename);
-      const destinationDir = currentPathRef.value;
-      const requestId = generateRequestId();
-
-      let unregisterSuccess: (() => void) | null = null;
-      let unregisterError: (() => void) | null = null;
-
-      const timeoutId = setTimeout(() => {
-        unregisterSuccess?.();
-        unregisterError?.();
-        const errMsg = t('fileManager.errors.decompressTimeout');
-        uiNotificationsStore.showError(errMsg);
-        reject(new Error(errMsg));
-      }, 60000);
-
-      unregisterSuccess = onMessage(
-        'sftp:decompress:success',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          if (message.requestId === requestId) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            uiNotificationsStore.showSuccess(
-              t('fileManager.notifications.decompressSuccess', { name: item.filename })
-            );
-            loadDirectory(currentPathRef.value, true);
-            resolve();
-          }
-        }
-      );
-
-      unregisterError = onMessage(
-        'sftp:decompress:error',
-        (payload: MessagePayload, message: WebSocketMessage) => {
-          const errorPayload = payload as unknown as { error: string; details?: string };
-          if (message.requestId === requestId) {
-            clearTimeout(timeoutId);
-            unregisterSuccess?.();
-            unregisterError?.();
-            const errorMsg =
-              errorPayload.details ||
-              errorPayload.error ||
-              t('fileManager.errors.decompressFailed');
-            uiNotificationsStore.showError(
-              t('fileManager.errors.decompressErrorDetailed', { error: errorMsg })
-            );
-            reject(new Error(errorMsg));
-          }
-        }
-      );
-
-      console.info(
-        `[SFTP ${instanceSessionId}] 发送 sftp:decompress 请求 (ID: ${requestId}) Source: ${sourcePath}, Dest: ${destinationDir}`
-      );
-      sendMessage({
-        type: 'sftp:decompress',
-        requestId,
-        payload: { source: sourcePath, destination: destinationDir },
-      });
-    });
-  };
+  // --- 文件操作（委托给子模块） ---
+  const operations = createSftpOperations({
+    sendMessage,
+    onMessage,
+    isSftpReady,
+    currentPathRef,
+    instanceSessionId,
+    uiNotificationsStore,
+    t,
+    loadDirectory,
+  });
 
   // --- Message Handlers (委托给子模块) ---
   const { registrations } = createMessageHandlers({
@@ -589,18 +208,18 @@ export function createSftpActionsManager(
     fileTree,
     initialLoadDone,
     loadDirectory,
-    createDirectory,
-    createFile,
-    deleteItems,
-    renameItem,
-    changePermissions,
-    readFile,
-    writeFile,
-    copyItems,
-    moveItems,
-    compressItems,
-    decompressItem,
-    joinPath,
+    createDirectory: operations.createDirectory,
+    createFile: operations.createFile,
+    deleteItems: operations.deleteItems,
+    renameItem: operations.renameItem,
+    changePermissions: operations.changePermissions,
+    readFile: operations.readFile,
+    writeFile: operations.writeFile,
+    copyItems: operations.copyItems,
+    moveItems: operations.moveItems,
+    compressItems: operations.compressItems,
+    decompressItem: operations.decompressItem,
+    joinPath: operations.joinPath,
     currentPath: currentPathRef,
     setInitialLoadDone: (value: boolean) => {
       initialLoadDone.value = value;

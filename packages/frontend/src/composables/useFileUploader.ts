@@ -5,6 +5,7 @@ import type { UploadItem } from '../types/upload.types';
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 
 import type { WebSocketDependencies } from './useSftpActions';
+import { sendFileChunks, type ChunkManagerDeps } from './useUploadChunkManager';
 
 const generateUploadId = (): string => {
   return `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -28,155 +29,12 @@ export function useFileUploader(
   // 对 uploads 字典使用 reactive 以获得更好的深度响应性
   const uploads = reactive<Record<string, UploadItem>>({});
 
-  // --- 上传逻辑 ---
-
-  const sendFileChunks = (uploadId: string, file: File, startByte = 0) => {
-    const upload = uploads[uploadId];
-    // 在继续之前检查连接和上传状态
-    if (!wsDeps.value.isConnected.value || !upload || upload.status !== 'uploading') {
-      console.warn(
-        `[FileUploader ${sessionIdForLog.value}] Cannot send chunk for ${uploadId}. Connection: ${wsDeps.value.isConnected.value}, Upload status: ${upload?.status}`
-      );
-      return;
-    }
-
-    const CHUNK_SIZE = 1024 * 256; // 256KB 块大小（优化：减少消息数量，降低内存压力）
-    const WINDOW_SIZE = 8; // 滑动窗口大小：允许同时在途的最大块数量
-    const ACK_TIMEOUT_MS = 3000; // ACK 超时回退时间（兼容旧后端不发送 ack 的场景）
-    let offset = startByte;
-    let inFlight = 0; // 当前在途（已发送未确认）的块数量
-    let ackReceived = false; // 标记是否收到过 ack（用于判断后端是否支持滑动窗口）
-    let ackFallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-    // 每个块创建独立的 FileReader，避免 InvalidStateError（FileReader 状态机限制）
-    const readAndSendChunk = () => {
-      if (offset >= file.size || uploads[uploadId]?.status !== 'uploading') return;
-
-      const currentOffset = offset;
-      const slice = file.slice(currentOffset, currentOffset + CHUNK_SIZE);
-      const currentChunkSize = slice.size;
-      offset += currentChunkSize;
-      inFlight++;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const currentUpload = uploads[uploadId];
-        if (
-          !wsDeps.value.isConnected.value ||
-          !currentUpload ||
-          currentUpload.status !== 'uploading'
-        ) {
-          console.warn(
-            `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} status changed or disconnected before sending chunk at offset ${currentOffset}.`
-          );
-          inFlight = Math.max(0, inFlight - 1);
-          return;
-        }
-
-        const chunkResult = e.target?.result as string;
-        if (typeof chunkResult === 'string' && chunkResult.startsWith('data:')) {
-          const chunkBase64 = chunkResult.split(',')[1];
-          const isLast = currentOffset + CHUNK_SIZE >= file.size;
-          const chunkIndex = Math.floor(currentOffset / CHUNK_SIZE);
-
-          wsDeps.value.sendMessage({
-            type: 'sftp:upload:chunk',
-            payload: { uploadId, chunkIndex, data: chunkBase64, isLast },
-          });
-        } else {
-          console.error(
-            `[FileUploader ${sessionIdForLog.value}] FileReader returned unexpected result for ${uploadId}:`,
-            chunkResult
-          );
-          currentUpload.status = 'error';
-          currentUpload.error = t('fileManager.errors.readFileError');
-          inFlight = Math.max(0, inFlight - 1);
-        }
-      };
-
-      reader.onerror = () => {
-        console.error(
-          `[FileUploader ${sessionIdForLog.value}] FileReader error for upload ID: ${uploadId}`
-        );
-        const failedUpload = uploads[uploadId];
-        if (failedUpload) {
-          failedUpload.status = 'error';
-          failedUpload.error = t('fileManager.errors.readFileError');
-        }
-        inFlight = Math.max(0, inFlight - 1);
-      };
-
-      reader.readAsDataURL(slice);
-    };
-
-    // ACK 超时回退：兼容旧后端（不发送 ack 的场景），超时后视为隐式确认
-    const resetAckFallbackTimer = () => {
-      if (ackFallbackTimer) clearTimeout(ackFallbackTimer);
-      ackFallbackTimer = setTimeout(() => {
-        if (!ackReceived && uploads[uploadId]?.status === 'uploading') {
-          console.warn(
-            `[FileUploader ${sessionIdForLog.value}] ACK timeout for ${uploadId}, using fallback (treating as implicit ack).`
-          );
-          // 旧后端不支持 ack，回退为每确认一个就补一个
-          inFlight = Math.max(0, inFlight - 1);
-          while (inFlight < WINDOW_SIZE && offset < file.size) {
-            readAndSendChunk();
-          }
-        }
-      }, ACK_TIMEOUT_MS);
-    };
-
-    // 后端 chunk ack 处理器：接收窗口槽位信息，触发下一批读取
-    const onChunkAck = (payload: MessagePayload, message: WebSocketMessage) => {
-      const ackUploadId =
-        message.uploadId ||
-        (typeof payload === 'object' && payload !== null
-          ? (payload as Record<string, unknown>).uploadId
-          : undefined);
-      if (ackUploadId !== uploadId) return;
-
-      ackReceived = true;
-      if (ackFallbackTimer) {
-        clearTimeout(ackFallbackTimer);
-        ackFallbackTimer = null;
-      }
-
-      inFlight = Math.max(0, inFlight - 1);
-
-      // serverSlots 表示后端剩余可用窗口槽位（例如 6 表示还可以发 6 个块）
-      const payloadObj =
-        typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
-      const serverSlots =
-        typeof payloadObj.windowSlots === 'number' ? payloadObj.windowSlots : WINDOW_SIZE;
-
-      // 在窗口允许范围内继续读取
-      while (inFlight < serverSlots && offset < file.size) {
-        readAndSendChunk();
-      }
-    };
-
-    // 注册 ack 处理器
-    const unregisterAck = wsDeps.value.onMessage('sftp:upload:chunk:ack', onChunkAck);
-
-    // 保存注销函数到 upload 对象，以便取消时清理
-    (upload as UploadItem & { _unregisterAck?: () => void })._unregisterAck = unregisterAck;
-
-    // 初始填充窗口：读取 WINDOW_SIZE 个块
-    if (file.size > 0) {
-      for (let i = 0; i < WINDOW_SIZE && offset < file.size; i++) {
-        readAndSendChunk();
-      }
-      // 启动 ACK 超时回退定时器（仅在初始批次后启动）
-      resetAckFallbackTimer();
-    } else {
-      // 零字节文件直接发送
-      console.info(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
-      wsDeps.value.sendMessage({
-        type: 'sftp:upload:chunk',
-        payload: { uploadId, chunkIndex: 0, data: '', isLast: true },
-      });
-      upload.progress = 100;
-    }
+  // --- 分块上传管理器依赖（委托给 useUploadChunkManager） ---
+  const chunkDeps: ChunkManagerDeps = {
+    uploads,
+    wsDeps,
+    sessionIdForLog,
+    t,
   };
 
   const startFileUpload = (file: File, relativePath?: string) => {
@@ -288,7 +146,7 @@ export function useFileUploader(
         `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} ready, starting chunk sending.`
       );
       upload.status = 'uploading';
-      sendFileChunks(uploadId, upload.file); // 开始发送块
+      sendFileChunks(chunkDeps, uploadId, upload.file); // 开始发送块
     } else {
       console.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:ready for unknown or non-pending upload ID: ${uploadId}`
@@ -397,7 +255,7 @@ export function useFileUploader(
     if (upload && upload.status === 'paused') {
       console.info(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
       upload.status = 'uploading';
-      sendFileChunks(uploadId, upload.file);
+      sendFileChunks(chunkDeps, uploadId, upload.file);
     }
   };
 

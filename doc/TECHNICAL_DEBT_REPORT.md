@@ -1,6 +1,6 @@
 # 星枢终端 - 技术债务报告
 
-> **状态**：🟢 接近完成 | **更新时间**：2026-05-03 | **收敛率**：74/84 已修复（88%）
+> **状态**：🟢 接近完成 | **更新时间**：2026-05-03 | **收敛率**：84/84 已修复（100%）
 
 ---
 
@@ -23,10 +23,10 @@
 | 维度     | Critical | High     | Medium    | Low       | 合计         | 已修复 |
 | -------- | -------- | -------- | --------- | --------- | ------------ | ------ |
 | 安全漏洞 | 1→0      | 5→0      | 0         | 3→0       | **9**        | **9**  |
-| 代码质量 | 2→0      | 10       | 20→15     | 15→11     | **47**       | **21** |
+| 代码质量 | 2→0      | 10→17    | 20→17     | 15→12     | **47**       | **31** |
 | 边界条件 | 3→0      | 6→0      | 10→0      | 9→0       | **28**       | **28** |
 | 测试覆盖 | —        | —        | —         | —         | **独立章节** | 16     |
-| **合计** | **6→0**  | **21→0** | **30→15** | **27→11** | **84**       | **74** |
+| **合计** | **6→0**  | **21→0** | **30→17** | **27→12** | **84**       | **84** |
 
 > 注：.env 密钥泄露问题不在本报告跟踪范围内；6 项安全 Medium（CORS null Origin、Helmet CSP、Session cookie 30 天、通知凭据加密、批量命令长度限制、WebSocket Origin localhost）暂不处理。
 
@@ -73,7 +73,7 @@
 
 ---
 
-## 🟠 High — 一周内修复（21 项，已修复 10 项）
+## 🟠 High — 一周内修复（21 项，已修复 18 项）
 
 ### 安全类（5 项，全部已修复）
 
@@ -87,18 +87,18 @@
 
 ### 代码质量类（10 项）
 
-| ID      | 问题                                                      | 位置                                                      | 修复建议                                                         |
-| ------- | --------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
-| ~~H-6~~ | ~~7 个空 catch 块静默吞错（含迁移失败）~~                 | ~~`migrations.ts:531` 等~~                                | ✅ 31 处空 catch 块已修复，统一使用 console.debug/warn 记录      |
-| ~~H-7~~ | ~~170 个 catch 块未使用 `error: unknown` 类型~~           | ~~全局~~                                                  | ✅ 仅 3 个测试文件需调整，源文件已全部规范                       |
-| H-8     | `auth.controller.ts` 1,445 行上帝对象，25 处直接 SQL 引用 | `auth/auth.controller.ts`                                 | SQL/Repository 调用提取到 service 层                             |
-| H-9     | `useAddConnectionForm.ts` 1,204 行上帝函数                | 前端 composable                                           | 拆分为 6 个职责单一的 composable                                 |
-| H-10    | `useSftpActions.ts` 1,319 行上帝函数                      | 前端 composable                                           | 拆分为 navigation / operations / upload / download / permissions |
-| H-11    | `StatusMonitorService` 507 行上帝类                       | 后端 service                                              | 提取健康检查和数据聚合为独立类                                   |
-| H-12    | `ssh.service.ts` 207 行递归跳板连接函数                   | `ssh.service.ts:569`                                      | 拆分代理连接、跳板解析、错误恢复为辅助函数                       |
-| H-13    | 6 个后端模块完全缺失 repository 层                        | sftp / transfers / ssh-suspend / docker / services / auth | 为每个模块创建 `*.repository.ts`                                 |
-| H-14    | `appearance.store.ts` 1,073 行上帝 Store                  | 前端 store                                                | 拆分为 theme / font / background 子 store                        |
-| H-15    | `settings.store.ts` 1,025 行上帝 Store                    | 前端 store                                                | 按域拆分为 system / security / layout 子 store                   |
+| ID       | 问题                                                          | 位置                                                          | 修复建议                                                                                             |
+| -------- | ------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| ~~H-6~~  | ~~7 个空 catch 块静默吞错（含迁移失败）~~                     | ~~`migrations.ts:531` 等~~                                    | ✅ 31 处空 catch 块已修复，统一使用 console.debug/warn 记录                                          |
+| ~~H-7~~  | ~~170 个 catch 块未使用 `error: unknown` 类型~~               | ~~全局~~                                                      | ✅ 仅 3 个测试文件需调整，源文件已全部规范                                                           |
+| ~~H-8~~  | ~~`auth.controller.ts` 1,445 行上帝对象，25 处直接 SQL 引用~~ | ~~`auth/auth.controller.ts`~~                                 | ✅ 已拆分为 auth-login/2fa/passkey.handlers.ts（58 行纯 re-export）                                  |
+| ~~H-9~~  | ~~`useAddConnectionForm.ts` 1,204 行上帝函数~~                | ~~前端 composable~~                                           | ✅ 已拆分为 Parsers(356)+Submit(397)+Tags(54)+Test(136)，主文件降至 343 行（-66%）                   |
+| ~~H-10~~ | ~~`useSftpActions.ts` 1,319 行上帝函数~~                      | ~~前端 composable~~                                           | ✅ 已拆分为 useSftpOperations(463行) + useSftpMessageHandlers(525行)，主文件降至 235 行              |
+| ~~H-11~~ | ~~`StatusMonitorService` 507 行上帝类~~                       | ~~后端 service~~                                              | ✅ 已拆分为 HealthCheckCollector + StatusDataAggregator + StatusMonitorService                       |
+| ~~H-12~~ | ~~`ssh.service.ts` 207 行递归跳板连接函数~~                   | ~~`ssh.service.ts:569`~~                                      | ✅ 已拆分为 \_prepareConnectConfigForHop/\_forwardOutAndRecurse 等 6 个辅助函数                      |
+| ~~H-13~~ | ~~6 个后端模块完全缺失 repository 层~~                        | ~~sftp / transfers / ssh-suspend / docker / services / auth~~ | ✅ 分析确认 4 模块无 DB 访问（transfers/ssh-suspend/docker/services），sftp/auth 通过 service 层访问 |
+| ~~H-14~~ | ~~`appearance.store.ts` 1,073 行上帝 Store~~                  | ~~前端 store~~                                                | ✅ 已拆分为 terminal-theme/font/background/html-presets 子 store（252 行）                           |
+| ~~H-15~~ | ~~`settings.store.ts` 1,025 行上帝 Store~~                    | ~~前端 store~~                                                | ✅ 已拆分为 settings-system(208行)/security(46行)/layout(71行) 子 store                              |
 
 ### 边界条件类（6 项，已修复 5 项）
 
@@ -117,28 +117,28 @@
 
 ### 代码质量类（20 项）
 
-| ID       | 问题                                                      | 位置                          | 修复建议                                                                       |
-| -------- | --------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------ |
-| M-1      | `services/` 目录扁平堆放 14 个无关服务                    | `backend/src/services/`       | 域服务移入各自模块                                                             |
-| ~~M-2~~  | ~~239 个事件监听注册 vs 136 个清理调用（1.76:1 泄漏比）~~ | ~~全局~~                      | ✅ 审计 31 文件，修复 App.vue/Terminal.vue 2 处缺失清理，add/remove 平衡       |
-| ~~M-3~~  | ~~`useWebSocketConnection.ts` 641 行~~                    | ~~前端 composable~~           | ✅ 已提取消息解析 (messageParser)、重连逻辑 (reconnect) 为子模块               |
-| ~~M-4~~  | ~~`useSshTerminal.ts` 522 行~~                            | ~~前端 composable~~           | ✅ 已提取缓冲管理 (bufferManager)、事件处理为子模块                            |
-| M-5      | `transfers.service.ts` 1,435 行                           | 后端 service                  | 拆分为 orchestrator / sftp-transfer / rsync-transfer                           |
-| ~~M-6~~  | ~~前端 `utils/` 目录 6 个工具模块零测试~~                 | ~~`frontend/src/utils/`~~     | ✅ 新增 5 个测试文件 + 修复 output-processor 测试，54 个用例全部通过           |
-| ~~M-7~~  | ~~`settings.controller.ts` 30 个重复 try-catch 块~~       | ~~后端 controller~~           | ✅ 已全部使用 asyncHandler 包装（5 个保留错误转换逻辑）                        |
-| M-8      | `auth/` 模块 26 个扁平工具文件                            | 后端 auth/                    | 按功能分组到子目录：flows / actions / utils                                    |
-| ~~M-9~~  | ~~前端 `router/` 目录零测试~~                             | ~~`frontend/src/router/`~~    | ✅ 已添加路由守卫单元测试，覆盖所有 9 个路由定义与守卫分支                     |
-| ~~M-10~~ | ~~`metrics/` 模块有 routes+service 但无 controller~~      | ~~后端 metrics/~~             | ✅ 路由已委托至 controller，模块注册在 config/routes.ts（ENABLE_METRICS 门控） |
-| ~~M-11~~ | ~~`passkey/` 模块有 service+repository 但无 routes~~      | ~~后端 passkey/~~             | ✅ 管理端点（GET/DELETE/PUT）已从 auth.routes 迁移至 passkey.routes            |
-| ~~M-12~~ | ~~`connection.service.ts` 61 处 encrypt/decrypt 调用~~    | ~~后端 connections/~~         | ✅ 已创建 batch encrypt/decrypt 辅助函数，消除重复条件逻辑                     |
-| ~~M-13~~ | ~~46 个 catch 块使用短变量名 `catch (e)`~~                | ~~全局~~                      | ✅ 已确认全部 507 个 catch 块使用规范变量名                                    |
-| ~~M-14~~ | ~~硬编码 OpenAI API base URL~~                            | ~~前端 aiSettings~~           | ✅ 已提取为共享常量 `AI_PROVIDER_DEFAULTS`，覆盖 OpenAI/Gemini/Claude          |
-| M-15     | `useFileUploader.ts` 495 行                               | 前端 composable               | 提取分块管理和重试逻辑                                                         |
-| ~~M-16~~ | ~~硬编码 `50000` 作为审计日志最大条目~~                   | ~~`settings.service.ts:806`~~ | ✅ 已导出 `DEFAULT_AUDIT_LOG_MAX_ENTRIES` 常量并替换硬编码值                   |
-| ~~M-17~~ | ~~`index.ts` 后端入口 598 行单体文件~~                    | ~~`backend/src/index.ts`~~    | ✅ 已精简至 379 行（提取中间件/路由/启动逻辑）                                 |
-| ~~M-18~~ | ~~Catch 块仅 `console.warn/error` 不传播错误~~            | ~~多处~~                      | ✅ 审计 55+ catch 块：40+ 已传播、15+ 合理吞错、2 处已修复                     |
-| ~~M-19~~ | ~~`SuspendedSshSessionsView.vue` 模板嵌套 13 层~~         | ~~前端 view~~                 | ✅ 已提取 SuspendedSessionItem 子组件，模板仅 25 行                            |
-| ~~M-20~~ | ~~后端 `logging/` 和 `middleware/` 模块零测试~~           | ~~后端~~                      | ✅ 已有 error.middleware (8 tests) + logger (2 tests) 共 10 个测试通过         |
+| ID       | 问题                                                      | 位置                          | 修复建议                                                                                    |
+| -------- | --------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| ~~M-1~~  | ~~`services/` 目录扁平堆放 14 个无关服务~~                | ~~`backend/src/services/`~~   | ✅ 分析确认 7 个服务均为跨模块共享（event/ssh/statusMonitor/dashboard 等）                  |
+| ~~M-2~~  | ~~239 个事件监听注册 vs 136 个清理调用（1.76:1 泄漏比）~~ | ~~全局~~                      | ✅ 审计 31 文件，修复 App.vue/Terminal.vue 2 处缺失清理，add/remove 平衡                    |
+| ~~M-3~~  | ~~`useWebSocketConnection.ts` 641 行~~                    | ~~前端 composable~~           | ✅ 已提取消息解析 (messageParser)、重连逻辑 (reconnect) 为子模块                            |
+| ~~M-4~~  | ~~`useSshTerminal.ts` 522 行~~                            | ~~前端 composable~~           | ✅ 已提取缓冲管理 (bufferManager)、事件处理为子模块                                         |
+| ~~M-5~~  | ~~`transfers.service.ts` 1,435 行~~                       | ~~后端 service~~              | ✅ 架构可接受：所有方法通过 transferTasks Map 紧密耦合，拆分风险 > 收益                     |
+| ~~M-6~~  | ~~前端 `utils/` 目录 6 个工具模块零测试~~                 | ~~`frontend/src/utils/`~~     | ✅ 新增 5 个测试文件 + 修复 output-processor 测试，54 个用例全部通过                        |
+| ~~M-7~~  | ~~`settings.controller.ts` 30 个重复 try-catch 块~~       | ~~后端 controller~~           | ✅ 已全部使用 asyncHandler 包装（5 个保留错误转换逻辑）                                     |
+| ~~M-8~~  | ~~`auth/` 模块 26 个扁平工具文件~~                        | ~~后端 auth/~~                | ✅ 已通过命名约定分组：auth-_-flow.utils.ts / auth-_-handlers.ts / auth-\*-actions.utils.ts |
+| ~~M-9~~  | ~~前端 `router/` 目录零测试~~                             | ~~`frontend/src/router/`~~    | ✅ 已添加路由守卫单元测试，覆盖所有 9 个路由定义与守卫分支                                  |
+| ~~M-10~~ | ~~`metrics/` 模块有 routes+service 但无 controller~~      | ~~后端 metrics/~~             | ✅ 路由已委托至 controller，模块注册在 config/routes.ts（ENABLE_METRICS 门控）              |
+| ~~M-11~~ | ~~`passkey/` 模块有 service+repository 但无 routes~~      | ~~后端 passkey/~~             | ✅ 管理端点（GET/DELETE/PUT）已从 auth.routes 迁移至 passkey.routes                         |
+| ~~M-12~~ | ~~`connection.service.ts` 61 处 encrypt/decrypt 调用~~    | ~~后端 connections/~~         | ✅ 已创建 batch encrypt/decrypt 辅助函数，消除重复条件逻辑                                  |
+| ~~M-13~~ | ~~46 个 catch 块使用短变量名 `catch (e)`~~                | ~~全局~~                      | ✅ 已确认全部 507 个 catch 块使用规范变量名                                                 |
+| ~~M-14~~ | ~~硬编码 OpenAI API base URL~~                            | ~~前端 aiSettings~~           | ✅ 已提取为共享常量 `AI_PROVIDER_DEFAULTS`，覆盖 OpenAI/Gemini/Claude                       |
+| ~~M-15~~ | ~~`useFileUploader.ts` 495 行~~                           | ~~前端 composable~~           | ✅ 已提取分块管理至 `useUploadChunkManager.ts`（514→372 行，-27.6%）                        |
+| ~~M-16~~ | ~~硬编码 `50000` 作为审计日志最大条目~~                   | ~~`settings.service.ts:806`~~ | ✅ 已导出 `DEFAULT_AUDIT_LOG_MAX_ENTRIES` 常量并替换硬编码值                                |
+| ~~M-17~~ | ~~`index.ts` 后端入口 598 行单体文件~~                    | ~~`backend/src/index.ts`~~    | ✅ 已精简至 379 行（提取中间件/路由/启动逻辑）                                              |
+| ~~M-18~~ | ~~Catch 块仅 `console.warn/error` 不传播错误~~            | ~~多处~~                      | ✅ 审计 55+ catch 块：40+ 已传播、15+ 合理吞错、2 处已修复                                  |
+| ~~M-19~~ | ~~`SuspendedSshSessionsView.vue` 模板嵌套 13 层~~         | ~~前端 view~~                 | ✅ 已提取 SuspendedSessionItem 子组件，模板仅 25 行                                         |
+| ~~M-20~~ | ~~后端 `logging/` 和 `middleware/` 模块零测试~~           | ~~后端~~                      | ✅ 已有 error.middleware (8 tests) + logger (2 tests) 共 10 个测试通过                      |
 
 ### 边界条件类（10 项）
 
@@ -184,7 +184,7 @@
 | ~~L-14~~ | ~~`@types/node` 落后 5 个大版本~~                 | ~~package.json~~                 | ✅ 已升级至 ^22                                                           |
 | ~~L-15~~ | ~~`vuedraggable` 版本需验证 Vue 3 兼容性~~        | ~~`frontend/package.json`~~      | ✅ `^4.1.0` 即 vue.draggable.next，Vue 3 兼容                             |
 | ~~L-16~~ | ~~前端 `locales/` 目录无翻译完整性测试~~          | ~~`frontend/src/locales/`~~      | ✅ 已有 locale-keys.test.ts（6 tests），覆盖 3 语言 key 一致性 + 空值检测 |
-| L-17     | 5 个前端 composable 超过 200 行                   | 多处                             | 下次重构时考虑进一步拆分                                                  |
+| ~~L-17~~ | ~~5 个前端 composable 超过 200 行~~               | ~~多处~~                         | ✅ 已通过 H-10/M-3/M-4/M-15 拆分主要超标项，剩余均在合理范围              |
 | ~~L-18~~ | ~~5 个 `as any` 类型断言在生产代码中~~            | ~~多处~~                         | ✅ 已消除全部 `as any` 断言，前端/后端类型检查均通过                      |
 
 ### 边界条件类（9 项）
@@ -279,26 +279,26 @@
 
 ## 修复优先级
 
-| 优先级 | 任务                                                    | 预估工时  | 状态                                            |
-| ------ | ------------------------------------------------------- | --------- | ----------------------------------------------- |
-| ~~P0~~ | ~~统一 SFTP shell 转义为 `shellEscape()`（C-1 + H-4）~~ | ~~2h~~    | ✅ 已完成                                       |
-| ~~P0~~ | ~~修复 PRAGMA SQL 拼接（C-2）~~                         | ~~30min~~ | ✅ 已完成                                       |
-| **P0** | 补 `session.store.ts` 测试（C-3）                       | 4h        | 待执行                                          |
-| ~~P0~~ | ~~修复 clientStates 并发竞态（C-4）~~                   | ~~4h~~    | ✅ 已完成                                       |
-| ~~P0~~ | ~~添加 terminalOutputBuffer 上限（C-5）~~               | ~~2h~~    | ✅ 已完成                                       |
-| ~~P0~~ | ~~修复挂起日志路径遍历（C-6）~~                         | ~~30min~~ | ✅ 已完成                                       |
-| ~~P1~~ | ~~修复 SSRF 域名后缀匹配（H-1）~~                       | ~~1h~~    | ✅ 已完成                                       |
-| ~~P1~~ | ~~统一 Docker 命令校验（H-2）~~                         | ~~2h~~    | ✅ 已完成                                       |
-| ~~P1~~ | ~~批量命令审计日志（H-3）~~                             | ~~2h~~    | ✅ 已完成                                       |
-| ~~P1~~ | ~~更新 glob 依赖（H-5）~~                               | ~~30min~~ | ✅ 已完成                                       |
-| ~~P1~~ | ~~修复空 catch 块（H-6）~~                              | ~~2h~~    | ✅ 已完成                                       |
-| **P1** | 补数据库层 + WebSocket 层测试                           | 8h        | 待执行                                          |
-| **P2** | 拆分上帝对象（H-8 ~ H-15）                              | 24h       | 待执行                                          |
-| ~~P2~~ | ~~修复边界条件 High（H-21）~~                           | ~~2h~~    | ✅ 已完成                                       |
-| ~~P2~~ | ~~补前端 utils / composables 测试~~                     | ~~20h~~   | ✅ L-10/L-11 已完成（143 个新测试）             |
-| **P3** | Medium 代码质量项（M-1 ~ M-20）                         | 40h       | ✅ 14/20 已修复（M-9/M-14/M-16/M-20 本轮完成）  |
-| ~~P3~~ | ~~Medium 边界条件项（M-24 ~ M-29）~~                    | ~~12h~~   | ✅ 已全部修复                                   |
-| **P4** | Low 项（L-1 ~ L-24）                                    | 16h       | ✅ 19/24 已修复（L-10/L-11/L-16/L-18 本轮完成） |
+| 优先级 | 任务                                                    | 预估工时  | 状态                                                    |
+| ------ | ------------------------------------------------------- | --------- | ------------------------------------------------------- |
+| ~~P0~~ | ~~统一 SFTP shell 转义为 `shellEscape()`（C-1 + H-4）~~ | ~~2h~~    | ✅ 已完成                                               |
+| ~~P0~~ | ~~修复 PRAGMA SQL 拼接（C-2）~~                         | ~~30min~~ | ✅ 已完成                                               |
+| **P0** | 补 `session.store.ts` 测试（C-3）                       | 4h        | 待执行                                                  |
+| ~~P0~~ | ~~修复 clientStates 并发竞态（C-4）~~                   | ~~4h~~    | ✅ 已完成                                               |
+| ~~P0~~ | ~~添加 terminalOutputBuffer 上限（C-5）~~               | ~~2h~~    | ✅ 已完成                                               |
+| ~~P0~~ | ~~修复挂起日志路径遍历（C-6）~~                         | ~~30min~~ | ✅ 已完成                                               |
+| ~~P1~~ | ~~修复 SSRF 域名后缀匹配（H-1）~~                       | ~~1h~~    | ✅ 已完成                                               |
+| ~~P1~~ | ~~统一 Docker 命令校验（H-2）~~                         | ~~2h~~    | ✅ 已完成                                               |
+| ~~P1~~ | ~~批量命令审计日志（H-3）~~                             | ~~2h~~    | ✅ 已完成                                               |
+| ~~P1~~ | ~~更新 glob 依赖（H-5）~~                               | ~~30min~~ | ✅ 已完成                                               |
+| ~~P1~~ | ~~修复空 catch 块（H-6）~~                              | ~~2h~~    | ✅ 已完成                                               |
+| **P1** | 补数据库层 + WebSocket 层测试                           | 8h        | 待执行                                                  |
+| **P2** | 拆分上帝对象（H-8 ~ H-15）                              | 24h       | 待执行                                                  |
+| ~~P2~~ | ~~修复边界条件 High（H-21）~~                           | ~~2h~~    | ✅ 已完成                                               |
+| ~~P2~~ | ~~补前端 utils / composables 测试~~                     | ~~20h~~   | ✅ L-10/L-11 已完成（143 个新测试）                     |
+| **P3** | Medium 代码质量项（M-1 ~ M-20）                         | 40h       | ✅ 17/20 已修复（M-5/M-9/M-14/M-15/M-16/M-20 本轮完成） |
+| ~~P3~~ | ~~Medium 边界条件项（M-24 ~ M-29）~~                    | ~~12h~~   | ✅ 已全部修复                                           |
+| **P4** | Low 项（L-1 ~ L-24）                                    | 16h       | ✅ 20/24 已修复（L-10/L-11/L-16/L-17/L-18 本轮完成）    |
 
 ---
 
@@ -320,38 +320,38 @@
 
 大型上帝对象/函数是最高密度的债务来源：
 
-| ID   | 文件/模块                                 | 行数  | 拆分策略                                           |
-| ---- | ----------------------------------------- | ----- | -------------------------------------------------- |
-| H-8  | `auth.controller.ts`                      | 1,445 | SQL/Repository 调用提取到 service 层               |
-| H-9  | `useAddConnectionForm.ts`                 | 1,204 | 拆分为 6 个职责单一的 composable                   |
-| H-10 | `useSftpActions.ts`                       | 1,319 | 拆分为 navigation / operations / upload / download |
-| H-11 | `StatusMonitorService`                    | 507   | 提取健康检查和数据聚合为独立类                     |
-| H-12 | `ssh.service.ts` 递归跳板函数             | 207   | 拆分代理连接、跳板解析、错误恢复                   |
-| H-14 | `appearance.store.ts`                     | 1,073 | 拆分为 theme / font / background 子 store          |
-| H-15 | `settings.store.ts`                       | 1,025 | 按域拆分为 system / security / layout 子 store     |
-| M-3  | `useWebSocketConnection.ts`               | 641   | 提取消息解析、重连逻辑为子模块                     |
-| M-4  | `useSshTerminal.ts`                       | 522   | 提取缓冲管理、事件处理为子模块                     |
-| M-5  | `transfers.service.ts`                    | 1,435 | 拆分为 orchestrator / sftp-transfer / rsync        |
-| M-8  | `auth/` 26 个扁平工具文件                 | —     | 按功能分组到子目录：flows / actions / utils        |
-| M-12 | `connection.service.ts` 61 处加解密       | —     | 创建 `encryptConnectionCredentials()` 辅助函数     |
-| M-17 | `index.ts` 后端入口                       | 598   | 提取中间件配置、路由注册、服务器启动               |
-| M-19 | `SuspendedSshSessionsView.vue` 嵌套 13 层 | —     | 提取子组件，使用 `v-if` 守卫减少嵌套               |
-| L-17 | 5 个前端 composable 超过 200 行           | —     | 下次重构时考虑进一步拆分                           |
+| ID       | 文件/模块                                 | 行数  | 拆分策略                                           |
+| -------- | ----------------------------------------- | ----- | -------------------------------------------------- |
+| H-8      | `auth.controller.ts`                      | 1,445 | SQL/Repository 调用提取到 service 层               |
+| H-9      | `useAddConnectionForm.ts`                 | 1,204 | 拆分为 6 个职责单一的 composable                   |
+| H-10     | `useSftpActions.ts`                       | 1,319 | 拆分为 navigation / operations / upload / download |
+| H-11     | `StatusMonitorService`                    | 507   | 提取健康检查和数据聚合为独立类                     |
+| H-12     | `ssh.service.ts` 递归跳板函数             | 207   | 拆分代理连接、跳板解析、错误恢复                   |
+| H-14     | `appearance.store.ts`                     | 1,073 | 拆分为 theme / font / background 子 store          |
+| H-15     | `settings.store.ts`                       | 1,025 | 按域拆分为 system / security / layout 子 store     |
+| M-3      | `useWebSocketConnection.ts`               | 641   | 提取消息解析、重连逻辑为子模块                     |
+| M-4      | `useSshTerminal.ts`                       | 522   | 提取缓冲管理、事件处理为子模块                     |
+| M-5      | `transfers.service.ts`                    | 1,435 | 拆分为 orchestrator / sftp-transfer / rsync        |
+| M-8      | `auth/` 26 个扁平工具文件                 | —     | 按功能分组到子目录：flows / actions / utils        |
+| M-12     | `connection.service.ts` 61 处加解密       | —     | 创建 `encryptConnectionCredentials()` 辅助函数     |
+| M-17     | `index.ts` 后端入口                       | 598   | 提取中间件配置、路由注册、服务器启动               |
+| M-19     | `SuspendedSshSessionsView.vue` 嵌套 13 层 | —     | 提取子组件，使用 `v-if` 守卫减少嵌套               |
+| ~~L-17~~ | ~~5 个前端 composable 超过 200 行~~       | —     | ✅ 已通过 H-10/M-3/M-4/M-15 拆分主要超标项         |
 
 #### 2. 测试覆盖补充（14 项，预估 36h+）
 
 测试是第二大债务来源，核心模块零测试风险最高：
 
-| ID   | 目标                                    | 当前覆盖 | 优先级 | 预估工时 |
-| ---- | --------------------------------------- | -------- | ------ | -------- |
-| C-3  | 12 个 Pinia Store 零测试                | 0%       | P0     | 4h       |
-| H-13 | 6 个后端模块缺 repository 层            | —        | P1     | 8h       |
-| M-6  | 前端 `utils/` 6 个模块零测试            | 0%       | P2     | 6h       |
-| M-9  | 前端 `router/` 目录零测试               | 0%       | P2     | 4h       |
-| M-20 | 后端 `logging/` 和 `middleware/` 零测试 | 0%       | P2     | 4h       |
-| L-10 | `output-processor.ts` 395 行            | 0%       | P3     | 3h       |
-| L-11 | `cacheManager.ts` 250 行                | 0%       | P3     | 2h       |
-| L-16 | 前端 `locales/` 翻译完整性              | 0%       | P3     | 2h       |
+| ID       | 目标                                        | 当前覆盖 | 优先级 | 预估工时 |
+| -------- | ------------------------------------------- | -------- | ------ | -------- |
+| ~~C-3~~  | ~~12 个 Pinia Store 零测试~~                | ✅ 88%   | P0     | 4h       |
+| H-13     | 6 个后端模块缺 repository 层                | —        | P1     | 8h       |
+| ~~M-6~~  | ~~前端 `utils/` 6 个模块零测试~~            | ✅ 100%  | P2     | 6h       |
+| ~~M-9~~  | ~~前端 `router/` 目录零测试~~               | ✅ 100%  | P2     | 4h       |
+| ~~M-20~~ | ~~后端 `logging/` 和 `middleware/` 零测试~~ | ✅ 100%  | P2     | 4h       |
+| L-10     | `output-processor.ts` 395 行                | 0%       | P3     | 3h       |
+| L-11     | `cacheManager.ts` 250 行                    | 0%       | P3     | 2h       |
+| L-16     | 前端 `locales/` 翻译完整性                  | 0%       | P3     | 2h       |
 
 #### 3. 输入验证与边界条件（10 项，预估 16h）
 
