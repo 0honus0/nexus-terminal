@@ -135,7 +135,9 @@ const _onSessionRemapped = (payload: { oldSessionId: string; newSessionId: strin
     );
     // 清理旧 manager 的监听器
     currentSftpManager.value?.cleanup?.();
-    sessionStore.removeSftpManager(payload.oldSessionId, props.instanceId);
+    // sessionActions 已将 session 对象从 oldSessionId 移到 newSessionId，
+    // 因此必须用 newSessionId 才能从 sftpManagers Map 中移除旧 manager
+    sessionStore.removeSftpManager(payload.newSessionId, props.instanceId);
     effectiveSessionId.value = payload.newSessionId;
     // 标记为刚重映射，阻止 isSftpReady watcher 触发冗余的 loadDirectory
     // 目录加载由连接 watcher（initialLoadDone 分支）负责
