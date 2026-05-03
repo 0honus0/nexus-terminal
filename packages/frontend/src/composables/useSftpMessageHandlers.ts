@@ -6,6 +6,7 @@ import type { Ref } from 'vue';
 import type { FileListItem } from '../types/sftp.types';
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 import type { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import type { TranslateFn } from '../types/i18n.types';
 import type { FileTreeNode } from './useSftpActions';
 import {
   findNodeByPath,
@@ -22,7 +23,7 @@ export interface MessageHandlerDeps {
   isLoading: Ref<boolean>;
   loadingRequestId: Ref<string | null>;
   uiNotificationsStore: ReturnType<typeof useUiNotificationsStore>;
-  t: Function;
+  t: TranslateFn;
   loadDirectory: (path: string, forceRefresh?: boolean) => void;
   scheduleDirectoryRefresh: (path: string, delay?: number) => void;
 }

@@ -1,6 +1,7 @@
 import { ref, reactive, computed, type Ref, type ComputedRef } from 'vue';
 import type { FileListItem, FileAttributes, SftpReadFileSuccessPayload } from '../types/sftp.types';
 import type { WebSocketMessage, MessageHandler } from '../types/websocket.types';
+import type { TranslateFn } from '../types/i18n.types';
 
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { findNodeByPath } from './useSftpTreeUtils';
@@ -71,7 +72,7 @@ export function createSftpActionsManager(
   sessionId: string,
   currentPathRef: Ref<string>,
   wsDeps: WebSocketDependencies,
-  t: Function
+  t: TranslateFn
 ): SftpManagerInstance {
   const { sendMessage, onMessage, isSftpReady } = wsDeps;
 

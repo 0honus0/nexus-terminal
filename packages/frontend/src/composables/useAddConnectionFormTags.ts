@@ -2,9 +2,9 @@
  * 连接表单 - 标签管理处理器模块
  * 职责：创建标签、删除标签（含确认对话框）
  */
-import { useI18n } from 'vue-i18n';
 import type { Ref } from 'vue';
 import type { useTagsStore } from '../stores/tags.store';
+import type { TranslateFn } from '../types/i18n.types';
 
 /** 标签管理处理器依赖 */
 export interface TagDeps {
@@ -13,6 +13,7 @@ export interface TagDeps {
   tagsStore: ReturnType<typeof useTagsStore>;
   showConfirmDialog: (opts: { message: string }) => Promise<boolean>;
   showAlertDialog: (opts: { title: string; message: string }) => void;
+  t: TranslateFn;
 }
 
 /**
@@ -21,8 +22,7 @@ export interface TagDeps {
  * handleDeleteTag: 删除标签（含确认对话框）
  */
 export function createTagHandlers(deps: TagDeps) {
-  const { t } = useI18n();
-  const { formData, tags, tagsStore, showConfirmDialog, showAlertDialog } = deps;
+  const { formData, tags, tagsStore, showConfirmDialog, showAlertDialog, t } = deps;
 
   const handleCreateTag = async (tagName: string) => {
     if (!tagName || tagName.trim().length === 0) return;

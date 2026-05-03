@@ -244,6 +244,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     proxies,
     tags,
     sshKeys,
+    t,
   });
 
   // 绑定 t 函数到纯函数解析器
@@ -263,6 +264,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     uiNotificationsStore,
     tags,
     emit,
+    t,
   });
 
   // 删除连接处理器（委托给子模块）
@@ -274,6 +276,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     connectionsStore,
     uiNotificationsStore,
     emit,
+    t,
   });
 
   // 标签管理处理器（委托给子模块）
@@ -283,6 +286,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     tagsStore,
     showConfirmDialog,
     showAlertDialog,
+    t,
   });
 
   // 测试连接处理器（委托给子模块）
@@ -295,6 +299,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     testLatency,
     uiNotificationsStore,
     apiClient,
+    t,
   });
 
   // --- Jump Host Chain Management ---

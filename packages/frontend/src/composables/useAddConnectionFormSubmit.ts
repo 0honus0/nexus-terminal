@@ -2,11 +2,11 @@
  * 连接表单 - 提交与删除处理器模块
  * 职责：表单验证、批量 IP 创建、单条 CRUD 操作、删除连接
  */
-import { useI18n } from 'vue-i18n';
 import type { Ref, ComputedRef } from 'vue';
 import type { ConnectionInfo, useConnectionsStore } from '../stores/connections.store';
 import type { useProxiesStore } from '../stores/proxies.store';
 import type { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import type { TranslateFn } from '../types/i18n.types';
 import type { ConnectionPayload, ConnectionType, AuthMethod } from './useAddConnectionFormParsers';
 
 /** 表单数据形状（仅包含提交处理器需要的字段） */
@@ -50,6 +50,7 @@ export interface SubmitDeps {
   uiNotificationsStore: ReturnType<typeof useUiNotificationsStore>;
   tags: Ref<Array<{ id: number }>>;
   emit: SubmitEmits;
+  t: TranslateFn;
 }
 
 /** 删除处理器依赖 */
@@ -64,6 +65,7 @@ export interface DeleteDeps {
     (e: 'close'): void;
     (e: 'connection-deleted'): void;
   };
+  t: TranslateFn;
 }
 
 /**
@@ -71,7 +73,6 @@ export interface DeleteDeps {
  * 包含脚本模式委托、表单验证、批量 IP 创建、单条创建/更新
  */
 export function createSubmitHandler(deps: SubmitDeps) {
-  const { t } = useI18n();
   const {
     formData,
     isEditMode,
@@ -79,6 +80,7 @@ export function createSubmitHandler(deps: SubmitDeps) {
     isScriptModeActive,
     handleScriptModeSubmit,
     parseIpRange,
+    t,
     formError,
     connectionsStore,
     proxiesStore,
@@ -356,7 +358,6 @@ export function createSubmitHandler(deps: SubmitDeps) {
  * 包含确认对话框、删除操作与错误处理
  */
 export function createDeleteHandler(deps: DeleteDeps) {
-  const { t } = useI18n();
   const {
     isEditMode,
     connectionToEdit,
@@ -365,6 +366,7 @@ export function createDeleteHandler(deps: DeleteDeps) {
     connectionsStore,
     uiNotificationsStore,
     emit,
+    t,
   } = deps;
 
   return async () => {

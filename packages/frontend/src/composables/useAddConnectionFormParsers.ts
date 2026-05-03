@@ -27,8 +27,7 @@ export interface ConnectionPayload {
   ssh_key_id?: number | null;
 }
 
-/** vue-i18n 翻译函数类型 */
-type TranslateFn = (...args: unknown[]) => string;
+import type { TranslateFn } from '../types/i18n.types';
 
 /**
  * 解析 IP 范围字符串（如 "192.168.1.1~192.168.1.10"）
@@ -233,41 +232,25 @@ export function parseScriptLine(
             name = value;
             break;
           case 'p':
+          case 'password':
             password = value;
             break;
           case 'k':
+          case 'key':
             keyName = value;
             break;
           case 'proxy':
             proxyName = value;
             break;
           default:
-            return {
-              type,
-              userHostPort: userHostPortPart,
-              name,
-              password,
-              keyName,
-              proxyName,
-              tags: scriptTags,
-              note,
-              error: t('connections.form.scriptErrorUnknownOption', { option: arg }),
-            };
+            // 未知选项忽略（兼容未来扩展）
+            break;
         }
         i++;
       }
     } else {
-      return {
-        type,
-        userHostPort: userHostPortPart,
-        name,
-        password,
-        keyName,
-        proxyName,
-        tags: scriptTags,
-        note,
-        error: t('connections.form.scriptErrorUnexpectedArgument', { argument: arg }),
-      };
+      // 非选项参数忽略（兼容位置参数）
+      i++;
     }
   }
 

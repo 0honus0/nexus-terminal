@@ -5,6 +5,7 @@
 import type { Ref } from 'vue';
 import type { UploadItem } from '../types/upload.types';
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
+import type { TranslateFn } from '../types/i18n.types';
 import type { WebSocketDependencies } from './useSftpActions';
 
 /** 分块大小：256KB（优化：减少消息数量，降低内存压力） */
@@ -25,7 +26,7 @@ export interface ChunkManagerDeps {
   /** 会话标识（用于日志前缀） */
   sessionIdForLog: Ref<string>;
   /** 国际化翻译函数 */
-  t: Function;
+  t: TranslateFn;
 }
 
 /**

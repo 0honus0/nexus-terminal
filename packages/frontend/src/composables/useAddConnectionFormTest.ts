@@ -3,10 +3,10 @@
  * 职责：测试连接、延迟颜色计算、测试按钮文本
  */
 import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
 import type { Ref, ComputedRef } from 'vue';
 import type { ConnectionInfo } from '../stores/connections.store';
 import type { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import type { TranslateFn } from '../types/i18n.types';
 import { extractErrorMessage } from '../utils/errorExtractor';
 
 /** 测试连接响应结构 */
@@ -36,6 +36,7 @@ export interface TestDeps {
   apiClient: {
     post: (url: string, data?: unknown) => Promise<{ data: TestConnectionResponse }>;
   };
+  t: TranslateFn;
 }
 
 /**
@@ -45,7 +46,6 @@ export interface TestDeps {
  * testButtonText: 根据测试状态返回按钮文本
  */
 export function createTestConnection(deps: TestDeps) {
-  const { t } = useI18n();
   const {
     formData,
     isEditMode,
@@ -55,6 +55,7 @@ export function createTestConnection(deps: TestDeps) {
     testLatency,
     uiNotificationsStore,
     apiClient,
+    t,
   } = deps;
 
   const handleTestConnection = async () => {

@@ -11,6 +11,7 @@ import type {
 } from '../types/sftp.types';
 import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/websocket.types';
 import type { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import type { TranslateFn } from '../types/i18n.types';
 
 /** 文件操作模块的依赖注入接口 */
 export interface SftpOperationsDeps {
@@ -20,7 +21,7 @@ export interface SftpOperationsDeps {
   currentPathRef: Ref<string>;
   instanceSessionId: string;
   uiNotificationsStore: ReturnType<typeof useUiNotificationsStore>;
-  t: Function;
+  t: TranslateFn;
   loadDirectory: (path: string, forceRefresh?: boolean) => void;
 }
 

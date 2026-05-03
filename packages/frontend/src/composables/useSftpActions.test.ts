@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, computed, type Ref } from 'vue';
 import { createSftpActionsManager, type WebSocketDependencies } from './useSftpActions';
+import type { TranslateFn } from '../types/i18n.types';
 
 // Mock vue-i18n
 vi.mock('vue-i18n', () => ({
@@ -41,10 +42,10 @@ describe('useSftpActions (createSftpActionsManager)', () => {
   let messageHandlers: Map<string, TestMessageHandler[]>;
 
   // 模拟 i18n 翻译函数
-  const mockT = (key: string, params?: Record<string, any>) => {
+  const mockT: TranslateFn = ((key: string, params?: Record<string, any>) => {
     if (params) return `${key}:${JSON.stringify(params)}`;
     return key;
-  };
+  }) as TranslateFn;
 
   // 辅助函数：创建 WebSocket 依赖
   function createWsDeps(): WebSocketDependencies {
