@@ -135,12 +135,12 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Passkey Management
+// Passkey Management（已迁移至 /api/v1/passkey 模块）
 export const fetchPasskeys = () => {
-  return apiClient.get('/auth/user/passkeys');
+  return apiClient.get('/passkey');
 };
 
 export const deletePasskey = (credentialID: string) => {
-  return apiClient.delete(`/auth/user/passkeys/${credentialID}`);
+  return apiClient.delete(`/passkey/${credentialID}`);
 };
 export default apiClient;

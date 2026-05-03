@@ -12,15 +12,11 @@ import {
   logout,
   getPublicCaptchaConfig,
   getInitData,
-  // Passkey handlers
+  // Passkey 认证流程处理器（注册/认证仍由 auth 模块管理）
   generatePasskeyRegistrationOptionsHandler,
   verifyPasskeyRegistrationHandler,
   generatePasskeyAuthenticationOptionsHandler,
   verifyPasskeyAuthenticationHandler,
-  // 新的 Passkey 管理处理器
-  listUserPasskeysHandler,
-  deleteUserPasskeyHandler,
-  updateUserPasskeyNameHandler, // 更新 Passkey 名称的处理器
   checkHasPasskeys,
 } from './auth.controller';
 import { isAuthenticated } from './auth.middleware';
@@ -395,15 +391,9 @@ router.post(
 // GET /api/v1/auth/passkey/has-configured - 检查是否配置了 Passkey (公开)
 router.get('/passkey/has-configured', checkHasPasskeys);
 
-// --- User's Passkey Management Routes (New) ---
-// GET /api/v1/auth/user/passkeys - 获取当前用户的所有 Passkey (需要认证)
-router.get('/user/passkeys', isAuthenticated, listUserPasskeysHandler);
-
-// DELETE /api/v1/auth/user/passkeys/:credentialID - 删除当前用户指定的 Passkey (需要认证)
-router.delete('/user/passkeys/:credentialID', isAuthenticated, deleteUserPasskeyHandler);
-
-// PUT /api/v1/auth/user/passkeys/:credentialID/name - 更新当前用户指定的 Passkey 名称 (需要认证)
-router.put('/user/passkeys/:credentialID/name', isAuthenticated, updateUserPasskeyNameHandler);
+// --- 用户 Passkey 管理路由已迁移至 /api/v1/passkey ---
+// listUserPasskeysHandler / deleteUserPasskeyHandler / updateUserPasskeyNameHandler
+// 已移至 packages/backend/src/passkey/passkey.controller.ts
 
 /**
  * @swagger

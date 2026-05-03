@@ -25,6 +25,7 @@ import pathHistoryRoutes from '../path-history/path-history.routes';
 import favoritePathsRouter from '../favorite-paths/favorite-paths.routes';
 import batchRoutes from '../batch/batch.routes';
 import aiRoutes from '../ai-ops/ai.routes';
+import passkeyRoutes from '../passkey/passkey.routes';
 import dashboardRoutes from '../services/dashboard.routes';
 import metricsRoutes from '../metrics/metrics.routes';
 import { errorHandler, notFoundHandler } from '../middleware/error.middleware';
@@ -63,6 +64,7 @@ export const registerRoutes = (
   app.use('/api/v1/transfers', apiLimiter, transfersRoutes());
   app.use('/api/v1/path-history', apiLimiter, pathHistoryRoutes);
   app.use('/api/v1/favorite-paths', apiLimiter, favoritePathsRouter);
+  app.use('/api/v1/passkey', apiLimiter, passkeyRoutes);
   app.use('/api/v1/batch', apiLimiter, batchRoutes);
   app.use('/api/v1/ai', apiLimiter, aiRoutes);
   app.use('/api/v1/dashboard', apiLimiter, dashboardRoutes);

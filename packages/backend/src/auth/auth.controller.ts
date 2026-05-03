@@ -45,14 +45,14 @@ export {
   changePassword,
 } from './auth-2fa-password.handlers';
 
-// --- Passkey 注册、认证、管理 ---
+// --- Passkey 认证流程（注册/认证仍由 auth 模块管理） ---
 export {
   generatePasskeyRegistrationOptionsHandler,
   verifyPasskeyRegistrationHandler,
   generatePasskeyAuthenticationOptionsHandler,
   verifyPasskeyAuthenticationHandler,
-  listUserPasskeysHandler,
-  deleteUserPasskeyHandler,
-  updateUserPasskeyNameHandler,
   checkHasPasskeys,
 } from './auth-passkey.handlers';
+
+// --- Passkey 管理操作已迁移至 packages/backend/src/passkey/passkey.controller.ts ---
+// listUserPasskeysHandler / deleteUserPasskeyHandler / updateUserPasskeyNameHandler

@@ -29,7 +29,7 @@ export interface PasskeyInfo {
 interface LoginPayload {
   username: string;
   password: string;
-  rememberMe?: boolean; // 可选的“记住我”标志
+  rememberMe?: boolean; // 可选的"记住我"标志
 }
 
 // Public CAPTCHA Config Interface (mirrors backend public config)
@@ -475,7 +475,7 @@ export const useAuthStore = defineStore('auth', {
           last_used_at: string; // Backend uses snake_case
           name?: string;
         }
-        const response = await apiClient.get<BackendPasskeyInfo[]>('/auth/user/passkeys');
+        const response = await apiClient.get<BackendPasskeyInfo[]>('/passkey');
         // Map backend response to frontend PasskeyInfo structure
         this.passkeys = response.data.map((pk) => ({
           credentialID: pk.credential_id,
@@ -504,7 +504,7 @@ export const useAuthStore = defineStore('auth', {
       this.isLoading = true; // Use general isLoading or a specific one for this action
       this.error = null;
       try {
-        await apiClient.delete(`/auth/user/passkeys/${credentialID}`);
+        await apiClient.delete(`/passkey/${credentialID}`);
         console.info(`Passkey ${credentialID} deleted successfully.`);
         // Refresh the passkey list
         await this.fetchPasskeys();
@@ -526,7 +526,7 @@ export const useAuthStore = defineStore('auth', {
       // Consider using a specific loading state for this if needed, e.g., this.passkeyNameUpdateLoading = true;
       this.error = null;
       try {
-        await apiClient.put(`/auth/user/passkeys/${credentialID}/name`, { name: newName });
+        await apiClient.put(`/passkey/${credentialID}/name`, { name: newName });
         console.info(`Passkey ${credentialID} name updated to "${newName}".`);
         // Refresh the passkey list to show the new name
         await this.fetchPasskeys();

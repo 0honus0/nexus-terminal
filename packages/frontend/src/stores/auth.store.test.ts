@@ -489,7 +489,7 @@ describe('auth.store', () => {
       const result = await store.deletePasskey('cred-1');
 
       expect(result).toEqual({ success: true });
-      expect(apiClient.delete).toHaveBeenCalledWith('/auth/user/passkeys/cred-1');
+      expect(apiClient.delete).toHaveBeenCalledWith('/passkey/cred-1');
     });
 
     it('updatePasskeyName 成功应刷新列表', async () => {
@@ -502,7 +502,7 @@ describe('auth.store', () => {
       const result = await store.updatePasskeyName('cred-1', 'New Name');
 
       expect(result).toEqual({ success: true });
-      expect(apiClient.put).toHaveBeenCalledWith('/auth/user/passkeys/cred-1/name', {
+      expect(apiClient.put).toHaveBeenCalledWith('/passkey/cred-1/name', {
         name: 'New Name',
       });
     });
