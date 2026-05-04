@@ -210,7 +210,7 @@ sequenceDiagram
 | 文档                                                       | 描述                                                                                                                           |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | [PERSONAL_ROADMAP.md](./doc/PERSONAL_ROADMAP.md)           | **个人版功能规划**：Phase 6-11 详细实施计划，包含命令模板、工作区快照、AI 推荐、知识库等功能的数据库设计、模块架构、工作量评估 |
-| [TECHNICAL_DEBT_REPORT.md](./doc/TECHNICAL_DEBT_REPORT.md) | **技术债务报告**：84 项债务全部清零（收敛率 100%），含 Critical/High/Medium/Low 四级分类与 Codex 审查补漏 |
+| [TECHNICAL_DEBT_REPORT.md](./doc/TECHNICAL_DEBT_REPORT.md) | **技术债务报告**：84 项债务全部清零（收敛率 100%），含 Critical/High/Medium/Low 四级分类与 Codex 审查补漏                      |
 
 ---
 
@@ -271,6 +271,7 @@ npm run build
   - `ENCRYPTION_KEY`：数据库敏感信息加密密钥（32字节 hex，支持密钥轮换）
   - `SESSION_SECRET`：会话密钥（自动生成）
   - `GUACD_HOST` / `GUACD_PORT`：Guacamole daemon 地址（默认 localhost:4822）
+  - `ENABLE_GEO_LOOKUP`：登录事件 IP 地理位置查询开关（默认 true）
   - `RP_ID` / `RP_ORIGIN`：Passkey 登录配置
 - **安全配置常量**：详见 [Backend CLAUDE.md](./packages/backend/CLAUDE.md#安全配置常量srcconfgsecurityconfigts)
 

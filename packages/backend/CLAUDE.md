@@ -6,6 +6,26 @@
 
 ## 变更记录 (Changelog)
 
+### 2026-05-04 (性能优化与数据备份)
+
+- **SSH 批量状态采集**：7+ 次独立 exec 合并为单次批量执行，高延迟场景提升 70-85%
+  - `services/status-monitor.service.ts`：新增 `executeBatchCollect()`、`splitSections()` 等方法
+  - 保留 `fetchServerStatusLegacy()` 作为降级路径
+- **SSH 路由规划日志**：跳板链路结构化路由汇总
+  - `types/connection.types.ts`：新增 `RouteHop`、`ConnectionRoutePlan` 类型
+  - `services/ssh.service.ts`：递归跳板连接中收集路由信息
+  - `websocket/handlers/ssh.handler.ts`：发送 `ssh:route_plan` 消息
+- **登录地理定位增强**：
+  - `auth/ip-geo.service.ts`（新建）：IP 地理位置查询 + 24h 缓存
+  - `auth/auth-main-flow.utils.ts`：非阻塞 fire-and-forget 写入审计日志
+  - 新增环境变量：`ENABLE_GEO_LOOKUP=false` 可禁用
+- **数据备份模块**：
+  - `backup/backup.types.ts`：备份数据类型定义
+  - `backup/backup.service.ts`：导出/导入 14 类核心业务数据
+  - `backup/backup.routes.ts`：3 个 API 端点
+- **Docker standalone 镜像**：`Dockerfile.standalone` + `entrypoint-standalone.sh`
+- **API 端点更新**：新增 `/api/v1/backup`（3 端点），总计 23 个路由模块
+
 ### 2026-05-03 (仪表盘与监控模块新增)
 
 - **新增 dashboard 模块**：
@@ -119,8 +139,8 @@
 | 认证       | bcrypt, speakeasy (2FA), @simplewebauthn/server (Passkey) |
 | 会话存储   | session-file-store                                        |
 | 国际化     | i18next                                                   |
-| 监控       | prom-client (Prometheus)                                   |
-| 日志       | pino, 自定义 console 重写（含敏感信息脱敏）                |
+| 监控       | prom-client (Prometheus)                                  |
+| 日志       | pino, 自定义 console 重写（含敏感信息脱敏）               |
 
 ---
 
@@ -242,32 +262,33 @@ packages/backend/
 
 ## API 端点索引
 
-| 路由前缀                     | 模块               | 功能描述                              |
-| ---------------------------- | ------------------ | ------------------------------------- |
-| `/api/v1/auth`               | auth               | 用户登录/注册/登出、2FA、Passkey      |
-| `/api/v1/connections`        | connections        | SSH/RDP/VNC 连接 CRUD                 |
-| `/api/v1/sftp`               | sftp               | 文件上传/下载/列表/删除/权限          |
-| `/api/v1/ssh-suspend`        | ssh-suspend        | 会话挂起与恢复                        |
-| `/api/v1/proxies`            | proxies            | 代理配置管理                          |
-| `/api/v1/tags`               | tags               | 连接标签 CRUD                         |
-| `/api/v1/settings`           | settings           | 系统设置读写                          |
-| `/api/v1/notifications`      | notifications      | 通知渠道配置                          |
-| `/api/v1/audit-logs`         | audit              | 审计日志查询                          |
-| `/api/v1/command-history`    | command-history    | 命令历史记录                          |
-| `/api/v1/quick-commands`     | quick-commands     | 快捷指令 CRUD                         |
-| `/api/v1/quick-command-tags` | quick-command-tags | 快捷指令标签                          |
-| `/api/v1/terminal-themes`    | terminal-themes    | 终端主题配置                          |
-| `/api/v1/appearance`         | appearance         | 外观设置                              |
-| `/api/v1/ssh-keys`           | ssh-keys           | SSH 密钥管理                          |
-| `/api/v1/transfers`          | transfers          | 文件传输状态                          |
-| `/api/v1/path-history`       | path-history       | 路径浏览历史                          |
-| `/api/v1/favorite-paths`     | favorite-paths     | 收藏路径管理                          |
-| `/api/v1/passkey`            | passkey            | Passkey 注册/认证                     |
-| `/api/v1/batch`              | batch              | 批量命令执行、任务状态查询、取消/删除 |
-| `/api/v1/ai`                 | ai-ops             | AI 会话管理、智能分析查询             |
+| 路由前缀                     | 模块               | 功能描述                               |
+| ---------------------------- | ------------------ | -------------------------------------- |
+| `/api/v1/auth`               | auth               | 用户登录/注册/登出、2FA、Passkey       |
+| `/api/v1/connections`        | connections        | SSH/RDP/VNC 连接 CRUD                  |
+| `/api/v1/sftp`               | sftp               | 文件上传/下载/列表/删除/权限           |
+| `/api/v1/ssh-suspend`        | ssh-suspend        | 会话挂起与恢复                         |
+| `/api/v1/proxies`            | proxies            | 代理配置管理                           |
+| `/api/v1/tags`               | tags               | 连接标签 CRUD                          |
+| `/api/v1/settings`           | settings           | 系统设置读写                           |
+| `/api/v1/notifications`      | notifications      | 通知渠道配置                           |
+| `/api/v1/audit-logs`         | audit              | 审计日志查询                           |
+| `/api/v1/command-history`    | command-history    | 命令历史记录                           |
+| `/api/v1/quick-commands`     | quick-commands     | 快捷指令 CRUD                          |
+| `/api/v1/quick-command-tags` | quick-command-tags | 快捷指令标签                           |
+| `/api/v1/terminal-themes`    | terminal-themes    | 终端主题配置                           |
+| `/api/v1/appearance`         | appearance         | 外观设置                               |
+| `/api/v1/ssh-keys`           | ssh-keys           | SSH 密钥管理                           |
+| `/api/v1/transfers`          | transfers          | 文件传输状态                           |
+| `/api/v1/path-history`       | path-history       | 路径浏览历史                           |
+| `/api/v1/favorite-paths`     | favorite-paths     | 收藏路径管理                           |
+| `/api/v1/passkey`            | passkey            | Passkey 注册/认证                      |
+| `/api/v1/batch`              | batch              | 批量命令执行、任务状态查询、取消/删除  |
+| `/api/v1/ai`                 | ai-ops             | AI 会话管理、智能分析查询              |
 | `/api/v1/dashboard`          | services           | 仪表盘统计、时间线、资产健康、系统资源 |
-| `/api/v1/metrics`            | metrics            | Prometheus 指标（受环境变量控制）     |
-| `/api/v1/health`             | (内置)             | 健康检查（含 SQLite 连通性检测）      |
+| `/api/v1/metrics`            | metrics            | Prometheus 指标（受环境变量控制）      |
+| `/api/v1/backup`             | backup             | 数据导出/导入/验证                     |
+| `/api/v1/health`             | (内置)             | 健康检查（含 SQLite 连通性检测）       |
 
 ---
 
@@ -391,18 +412,19 @@ npm start
 | `GUACD_PORT`        | 4822        | Guacamole daemon 端口                                              |
 | `RP_ID`             | -           | Passkey RP ID。可单值（跨域共享 Passkey 推荐）或多值（按顺序映射） |
 | `RP_ORIGIN`         | -           | Passkey Origin，支持逗号分隔多值（完整 URL）                       |
-| `ENABLE_METRICS`    | false       | 启用 Prometheus 指标端点（/api/v1/metrics）                       |
+| `ENABLE_METRICS`    | false       | 启用 Prometheus 指标端点（/api/v1/metrics）                        |
+| `ENABLE_GEO_LOOKUP` | true        | 启用登录事件 IP 地理位置查询（设为 false 禁用）                    |
 | `LOG_LEVEL`         | info        | 运行时日志等级（debug/info/warn/error/silent）                     |
 
 ### 安全配置常量（`src/config/security.config.ts`）
 
-| 常量名                   | 值               | 描述                                 |
-| ------------------------ | ---------------- | ------------------------------------ |
-| `CHALLENGE_TIMEOUT`      | 5 分钟           | WebAuthn Challenge 超时              |
-| `PENDING_AUTH_TIMEOUT`   | 5 分钟           | 2FA 临时认证超时                     |
-| `TEMP_TOKEN_LENGTH`      | 32 字节          | 临时令牌长度                         |
-| `SESSION_COOKIE_MAX_AGE` | 30 天            | Session Cookie 最大存活时间          |
-| `BCRYPT_SALT_ROUNDS`     | 12               | bcrypt 盐轮次（2025年推荐值：12-14） |
+| 常量名                   | 值               | 描述                                                 |
+| ------------------------ | ---------------- | ---------------------------------------------------- |
+| `CHALLENGE_TIMEOUT`      | 5 分钟           | WebAuthn Challenge 超时                              |
+| `PENDING_AUTH_TIMEOUT`   | 5 分钟           | 2FA 临时认证超时                                     |
+| `TEMP_TOKEN_LENGTH`      | 32 字节          | 临时令牌长度                                         |
+| `SESSION_COOKIE_MAX_AGE` | 30 天            | Session Cookie 最大存活时间                          |
+| `BCRYPT_SALT_ROUNDS`     | 12               | bcrypt 盐轮次（2025年推荐值：12-14）                 |
 | `ALLOWED_WS_ORIGINS`     | localhost:5173等 | WebSocket 允许的 Origin 白名单（逗号分隔，含端口号） |
 
 ---
