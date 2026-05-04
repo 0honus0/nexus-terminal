@@ -19,7 +19,9 @@ RUN npm prune --production
 # --- Stage 2: 基于 guacd 镜像构建最终镜像 ---
 FROM guacamole/guacd:latest
 
-# 安装 Node.js 20.x（Alpine-based guacd 镜像，以 root 运行）
+# 安装 Node.js 20.x（Alpine-based guacd 镜像）
+# guacd 镜像以非 root 用户运行，需要显式切 root 安装依赖
+USER root
 RUN apk add --no-cache nodejs npm curl ca-certificates bash netcat-openbsd
 
 WORKDIR /app
