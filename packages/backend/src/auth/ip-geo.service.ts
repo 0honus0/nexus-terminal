@@ -14,6 +14,7 @@ export interface GeoInfo {
   regionName: string;
   city: string;
   isp: string;
+  asn: string;
   query: string;
 }
 
@@ -28,6 +29,7 @@ interface DbCacheRow {
   region_name: string;
   city: string;
   isp: string;
+  asn: string;
   provider: string;
   queried_at: number;
 }
@@ -55,7 +57,7 @@ const ipApiAdapter: GeoProviderAdapter = {
   name: 'ip-api',
 
   buildUrl(ip: string): string {
-    return `http://ip-api.com/json/${ip}?fields=country,regionName,city,isp,query`;
+    return `http://ip-api.com/json/${ip}?fields=country,regionName,city,isp,as,query`;
   },
 
   parseResponse(data: unknown, ip: string): GeoInfo | null {
@@ -66,6 +68,7 @@ const ipApiAdapter: GeoProviderAdapter = {
       regionName: (d.regionName as string) || '',
       city: (d.city as string) || '',
       isp: (d.isp as string) || '',
+      asn: (d.as as string) || '',
       query: (d.query as string) || ip,
     };
   },
@@ -83,12 +86,16 @@ const ipinfoAdapter: GeoProviderAdapter = {
   parseResponse(data: unknown, ip: string): GeoInfo | null {
     const d = data as Record<string, unknown>;
     if (d.bogon) return null;
-    // ipinfo 的 loc 字段格式为 "lat,lon"，不包含 regionName，用 region 代替
+    // ipinfo 的 org 字段格式为 "AS9269 Hong Kong Broadband Network Ltd."
+    // 同时包含 ASN 和组织名，拆分后 asn 存完整 ASN 字符串，isp 存纯组织名
+    const org = (d.org as string) || '';
+    const asnMatch = org.match(/^(AS\d+)\s+(.+)$/);
     return {
       country: (d.country as string) || '',
       regionName: (d.region as string) || '',
       city: (d.city as string) || '',
-      isp: (d.org as string) || '',
+      isp: asnMatch ? asnMatch[2] : org,
+      asn: asnMatch ? `${asnMatch[1]} ${asnMatch[2]}` : org,
       query: ip,
     };
   },
@@ -174,6 +181,7 @@ class IpGeoService {
         regionName: row.region_name,
         city: row.city,
         isp: row.isp,
+        asn: row.asn || '',
         query: row.ip,
       };
     } catch {
@@ -188,16 +196,17 @@ class IpGeoService {
       const now = Math.floor(Date.now() / 1000);
       await runDb(
         db,
-        `INSERT INTO ip_geo_cache (ip, country, region_name, city, isp, provider, queried_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO ip_geo_cache (ip, country, region_name, city, isp, asn, provider, queried_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(ip) DO UPDATE SET
            country = excluded.country,
            region_name = excluded.region_name,
            city = excluded.city,
            isp = excluded.isp,
+           asn = excluded.asn,
            provider = excluded.provider,
            queried_at = excluded.queried_at`,
-        [ip, geo.country, geo.regionName, geo.city, geo.isp, this.adapter.name, now]
+        [ip, geo.country, geo.regionName, geo.city, geo.isp, geo.asn, this.adapter.name, now]
       );
     } catch (err: unknown) {
       console.debug('[IpGeo] 写入 SQLite 缓存失败:', err instanceof Error ? err.message : err);
@@ -269,7 +278,10 @@ export async function lookupGeoInfo(ip: string | undefined | null): Promise<stri
   try {
     const geo = await ipGeoService.lookup(ip);
     if (geo) {
-      return `${geo.country} ${geo.city} ${geo.isp}`;
+      const asnOrIsp = geo.asn || geo.isp;
+      const parts = [geo.country, geo.city].filter(Boolean);
+      const location = parts.join(', ');
+      return location ? `${location} | ${asnOrIsp}` : asnOrIsp;
     }
   } catch {
     /* 静默忽略 */

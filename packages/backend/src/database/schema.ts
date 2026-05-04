@@ -358,6 +358,7 @@ CREATE TABLE IF NOT EXISTS ip_geo_cache (
     region_name TEXT NOT NULL DEFAULT '',
     city TEXT NOT NULL DEFAULT '',
     isp TEXT NOT NULL DEFAULT '',
+    asn TEXT NOT NULL DEFAULT '',
     provider TEXT NOT NULL DEFAULT 'ip-api',
     queried_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );

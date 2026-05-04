@@ -367,6 +367,17 @@ const definedMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
         `,
   },
+  {
+    id: 13,
+    name: 'Add asn column to ip_geo_cache table',
+    check: async (db: Database): Promise<boolean> => {
+      const columnAlreadyExists = await columnExists(db, 'ip_geo_cache', 'asn');
+      return !columnAlreadyExists;
+    },
+    sql: `
+            ALTER TABLE ip_geo_cache ADD COLUMN asn TEXT NOT NULL DEFAULT '';
+        `,
+  },
 ];
 
 /**
