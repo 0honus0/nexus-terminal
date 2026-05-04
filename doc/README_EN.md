@@ -18,7 +18,7 @@
 
 > This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal).
 > Upstream baseline: `Heavrnl/nexus-terminal:main`
-> Snapshot (2026-04-25): this fork is `ahead 369+ / behind 0` vs upstream.
+> Snapshot (2026-05-04): this fork is `ahead 400+ / behind 0` vs upstream.
 > Compare URL: <https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
 
 ### ✅ Verifiable Current State
@@ -26,7 +26,7 @@
 - `npm run -s debt:check` passes (code markers / E2E skip / console.log / any = 0)
 - `npm run -s quality:check` passes (debt + 3-way typecheck + lint + format)
 - `import/no-cycle` controlled waivers converged to 0
-- 2026-04-24 full audit: 24/26 items fixed (92%), remaining L4/L6 pending planning
+- 2026-04-24 full audit: all 26 items fixed. 2026-05-03: 84 technical debt items fully cleared (100% convergence rate)
 
 ---
 
@@ -56,11 +56,12 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **Structured Logging**: JSON structured log output for log aggregation and analysis
 - **Prometheus Metrics Endpoint**: Built-in application metrics collection, compatible with Grafana and other monitoring platforms
 - **Data Import**: Settings page supports data import (alongside existing export), with database backup download
+- **Data Backup API**: Export/import 14 core data types including connections, keys, and tags (`/api/v1/backup`)
 - **Command Palette**: Built-in Command Palette component for quick action search and execution
 
 ### 🏗️ Architecture Refactoring
 
-- **Technical Debt Fully Governed**: Historical 24/24 items cleared + 2026-04-24 audit 24/26 items fixed (92%)
+- **Technical Debt Fully Governed**: 84 technical debt items fully cleared (100% convergence rate), including 7 Codex review fixes
 - **Type Safety Governance**: All `@ts-ignore` removed, `any` and weak typing cleared within business source code
 - **SFTP Service Deep Decomposition**: `sftp.service.ts` reduced from 1884 to 243 lines (**-87%**), split into readdir/move/copy/path-operations/session executor modules
 - **Auth Controller Layered Refactoring**: `auth.controller.ts` reduced from 1592 to 1366 lines (**-14%**), split into login/passkey/2FA/password action-layer utils with SQL assembly unified
@@ -73,13 +74,15 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **Unified Error Response Format**: Global ErrorResponse type, eliminating `{ message }` vs `{ success, error }` inconsistency
 - **Security Config Environment Variables**: `security.config.ts` supports env var overrides, no longer hardcoded
 - **Docker Compose Production-Ready**: Added healthcheck, resource limits, restart policy, and log rotation
+- **Docker Deployment Simplified**: guacd embedded in remote-gateway container, deployment reduced from 4 to 3 containers
+- **IP Geolocation Enhanced**: SQLite persistent cache + ASN support + multi-provider adapters (ip-api/ipinfo)
 
 ### 🧪 Test Coverage
 
-- **Comprehensive Test Framework**: From near-zero tests to 1500+ test cases, 100% pass rate
+- **Comprehensive Test Framework**: From near-zero tests to 2000+ test cases, 100% pass rate
 - **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
 - **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
-- **Unit Tests**: Backend 123 test files, Frontend 47 test files
+- **Unit Tests**: Backend 127 test files, Frontend 62 test files
 - **New Store Tests**: settings / fileEditor / audit store test coverage
 - **New Controller Tests**: 39 test cases for settings.controller
 - **Quality Gate**: `quality:check` covers debt + 3-way typecheck + lint + format
@@ -111,6 +114,10 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - Focus Switcher: Allows switching between input components on the page, supporting customizable switching order and hotkeys.
 - **Batch Command Execution**: Execute commands across multiple servers simultaneously with real-time progress and results display
 - **AI Smart Assistant**: Built-in AI operations analysis providing system health diagnostics, command pattern analysis, and security event detection
+- **Data Backup & Restore**: Export/import 14 core data types including connections, keys, and tags
+- **IP Geolocation**: Automatic IP geolocation on login events with SQLite persistent cache, supporting multiple providers (ip-api/ipinfo)
+- **SSH Jump Host Route Visualization**: Structured route summary showing jump host paths and latency
+- **SSH Batch Status Collection**: Consolidated into a single execution, 70-85% performance improvement on high-latency scenarios
 
 ## 📸 Screenshots
 
@@ -154,7 +161,7 @@ wget https://raw.githubusercontent.com/Silentely/nexus-terminal/refs/heads/main/
 
 > ⚠️ **Note:**
 >
-> - For **arm64** users, replace `guacamole/guacd:latest` with `guacamole/guacd:1.6.0-RC1` in the `docker-compose.yml` file.
+> - For **arm64** users: the remote-gateway image now embeds guacd, no need to replace the guacd image.
 > - For **armv7** users, please refer to the additional notes below.
 
 Configure nginx
@@ -289,7 +296,7 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 3.  For **ARMv7** users, please use the [docker-compose.yml](https://github.com/Silentely/nexus-terminal/blob/main/doc/arm/docker-compose.yml) provided here.
     Since Apache Guacamole does not provide an ARMv7-compatible image for `guacd`, the RDP/VNC feature has been disabled, and related images will not be pulled for now.
 4.  Since I don't have an ARM machine on hand, I haven't conducted actual testing, so unexpected bugs may occur during runtime.
-5.  For data backup, please back up the **data** folder in the directory yourself. This project does not provide any backup functionality.
+5.  Data backup can be done via the built-in API (`/api/v1/backup`) for export/import, or by manually backing up the `data` directory.
 
 ## 💐 Acknowledgements
 

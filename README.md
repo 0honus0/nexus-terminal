@@ -18,7 +18,7 @@
 
 > 本项目 Fork 自 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)。
 > 上游对比基线：`Heavrnl/nexus-terminal:main`
-> 当前对比快照（2026-04-25）：本仓库相对上游 `ahead 369+ / behind 0`。
+> 当前对比快照（2026-05-04）：本仓库相对上游 `ahead 400+ / behind 0`。
 > 在线对比链接：<https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
 
 ### ✅ 当前可验证工程状态
@@ -26,7 +26,7 @@
 - `npm run -s debt:check` 通过（代码标记 / E2E skip / console.log / any 均为 0）
 - `npm run -s quality:check` 通过（debt + 三端 typecheck + lint + format）
 - `import/no-cycle` 受控豁免已收敛至 0
-- 2026-04-24 全面审计 26 项中已修复 24 项（92%），剩余 L4/L6 待规划
+- 2026-04-24 全面审计 26 项全部修复，2026-05-03 技术债务 84 项全部清零
 
 ---
 
@@ -56,11 +56,12 @@
 - **结构化日志**：日志系统支持 JSON 结构化输出，便于日志聚合与分析
 - **Prometheus Metrics 端点**：内置应用指标采集，支持 Grafana 等监控平台对接
 - **数据导入功能**：设置页面支持数据导入（配合已有导出功能），支持数据库备份下载
+- **数据备份 API**：支持导出/导入连接、密钥、标签等 14 类核心数据（`/api/v1/backup`）
 - **命令面板**：内置 Command Palette 组件，支持快捷操作检索与执行
 
 ### 🏗️ 架构重构
 
-- **技术债务全面治理**：历史 24/24 项清理完成 + 2026-04-24 审计 26 项修复 24 项（92%）
+- **技术债务全面治理**：84 项技术债务全部清零（收敛率 100%），含 Codex 审查补漏 7 项
 - **类型安全治理**：`@ts-ignore` 全部清除，`any` 与弱类型用法已清零（业务源码范围内）
 - **SFTP 服务深度拆分**：`sftp.service.ts` 从 1884 行缩减至 243 行（**-87%**），拆分为 readdir/move/copy/path-operations/session 等独立执行器模块
 - **认证控制器分层重构**：`auth.controller.ts` 从 1592 行缩减至 1366 行（**-14%**），拆分为 login/passkey/2FA/password 等动作层 utils，SQL 组装统一下沉
@@ -73,10 +74,12 @@
 - **统一错误响应格式**：全局 ErrorResponse 类型统一，消除 `{ message }` vs `{ success, error }` 混用
 - **安全配置环境变量化**：`security.config.ts` 支持环境变量覆盖，不再硬编码
 - **Docker Compose 生产就绪**：添加 healthcheck、资源限制、restart policy、日志轮转
+- **Docker 部署精简**：guacd 内嵌于 remote-gateway 容器，部署从 4 容器精简为 3 容器
+- **IP 地理定位增强**：SQLite 持久化缓存 + ASN 支持 + 多提供商适配器（ip-api/ipinfo）
 
 ### 🧪 测试覆盖
 
-- **测试框架全面建设**：从几乎零测试到 1500+ 测试用例，100% 通过率
+- **测试框架全面建设**：从几乎零测试到 2000+ 测试用例，100% 通过率
 - **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
 - **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
 - **单元测试**：Backend 127 测试文件，Frontend 62 测试文件
@@ -111,6 +114,10 @@
 - **批量命令执行**：支持多服务器同时执行命令，实时显示执行进度与结果
 - **焦点切换器**：允许在页面上的输入组件之间切换，支持自定义切换顺序和快捷键
 - **AI 智能助手**：内置 AI 运维分析，提供系统健康诊断、命令模式分析、安全事件检测
+- **数据备份与恢复**：支持导出/导入连接、密钥、标签等 14 类核心数据
+- **IP 地理定位**：登录事件自动查询 IP 地理位置，SQLite 持久化缓存，支持多提供商（ip-api/ipinfo）
+- **SSH 跳板路由可视化**：结构化路由汇总，前端显示跳板路径与延迟
+- **SSH 批量状态采集**：合并为单次执行，高延迟场景性能提升 70-85%
 
 ## 📸 截图
 
@@ -154,7 +161,7 @@ wget https://raw.githubusercontent.com/Silentely/nexus-terminal/refs/heads/main/
 
 > ⚠️ **注意：**
 >
-> - **arm64 用户**请将 `docker-compose.yml` 中的镜像 `guacamole/guacd:latest` 替换为 `guacamole/guacd:1.6.0-RC1`。
+> - **arm64 用户**：remote-gateway 镜像已内嵌 guacd，无需额外替换 guacd 镜像。
 > - **armv7 用户**请参考下方注意事项。
 
 配置 nginx
@@ -311,7 +318,7 @@ remote-gateway:
 1.  **双文件管理器**：可以在布局中添加两个文件管理器组件（实验性功能，可能存在不稳定情况）。
 2.  **多文本编辑器**：在同一布局中添加多个文本编辑器的功能尚未实现。
 3.  ARMv7 用户请使用此处的 [docker-compose.yml](https://github.com/Silentely/nexus-terminal/blob/main/doc/arm/docker-compose.yml)。由于 Apache Guacamole 未提供 guacd 的 ARMv7 架构镜像，所以禁用 RDP 功能，相关镜像暂时不再拉取。
-4.  关于数据备份，请自行备份目录下的 data 文件夹，本项目不提供相关备份功能。
+4.  数据备份可通过内置 API（`/api/v1/backup`）导出/导入，也可自行备份 `data` 目录。
 5.  由于浏览器限制，非https或者localhost无法复制终端内容，请使用https访问
 
 ## 💐 致谢
