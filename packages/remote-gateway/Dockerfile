@@ -1,56 +1,54 @@
-# Use a lightweight Node.js image
+# 内嵌 guacd + Node.js 远程网关
+# 将 guacd 与 remote-gateway 合并到单个容器，简化部署
+
+# --- Stage 1: 构建 remote-gateway TypeScript ---
 FROM node:20-alpine AS builder
 
-# Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
 COPY packages/remote-gateway/package.json packages/remote-gateway/package-lock.json* ./
-
-# Install ALL dependencies (including devDependencies like typescript)
 RUN npm install
 
-# Copy source code and tsconfig
 COPY packages/remote-gateway/src ./src
 COPY packages/remote-gateway/tsconfig.json ./tsconfig.json
 COPY packages/remote-gateway/guacamole-lite.d.ts ./guacamole-lite.d.ts
 
-# Build the TypeScript code
 RUN npm run build
-
-# Remove development dependencies after build
 RUN npm prune --production
 
-# --- Production Stage ---
-FROM node:20-alpine
+# --- Stage 2: 基于 guacd 镜像构建最终镜像 ---
+FROM guacamole/guacd:latest
+
+# 安装 Node.js 20.x（Debian-based guacd 镜像）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy built code and node_modules from builder stage
+# 从 builder 阶段复制编译产物
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY packages/remote-gateway/package.json ./package.json
+COPY --from=builder /app/package.json ./package.json
 
-# --- Add patch application steps ---
-# Copy the patches directory from the build context (relative to project root)
+# 复制并应用补丁
 COPY patches ./patches
+RUN npm install patch-package --no-save && \
+    npx patch-package --error-on-fail && \
+    npm uninstall patch-package && \
+    rm -rf patches
 
-# Install patch-package temporarily to apply patches
-# Note: We install it here again in case prune removed it, and ensure it's available in the final stage.
-# Using --no-save as we don't need it in the final package.json dependencies.
-RUN npm install patch-package --no-save
+# 复制启动脚本
+COPY packages/remote-gateway/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Apply patches
-RUN npx patch-package --error-on-fail
+# 暴露端口：9090=API, 8080=WebSocket, 4822=guacd（可选，供外部调试）
+EXPOSE 9090 8080
 
-# Uninstall patch-package after applying to keep the image clean
-RUN npm uninstall patch-package
-# --- End patch application steps ---
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD wget -qO- http://localhost:9090/health > /dev/null 2>&1 || exit 1
 
-# Expose the API and WebSocket ports
-# These will be configurable via environment variables, but good to have defaults
-EXPOSE 9090
-EXPOSE 8080
-
-# Command to run the application
-CMD ["node", "dist/server.js"]
+ENTRYPOINT ["/entrypoint.sh"]

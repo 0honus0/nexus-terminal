@@ -143,17 +143,12 @@ graph TD
         A["nexus-terminal (根)"] --> B["packages"]
         B --> C["backend<br/>Express + SQLite<br/>(207 TS文件, 23 数据表, 127 测试)"]
         B --> D["frontend<br/>Vue 3 + Vite<br/>(143 TS + 97 Vue, 24 Stores, 62 测试)"]
-        B --> E["remote-gateway<br/>Guacamole Lite<br/>(2 源文件, 1 测试)"]
+        B --> E["remote-gateway<br/>Guacamole Lite + 内嵌 guacd<br/>(2 源文件, 1 测试)"]
         A --> F["doc<br/>(技术债务、路线图)"]
-    end
-
-    subgraph "外部依赖"
-        G["guacd<br/>RDP/VNC 协议"]
     end
 
     D -- "HTTP/WS<br/>API 调用" --> C
     D -- "WebSocket<br/>远程桌面" --> E
-    E -- "TCP 4822" --> G
 
     click C "./packages/backend/CLAUDE.md" "查看 backend 模块文档"
     click D "./packages/frontend/CLAUDE.md" "查看 frontend 模块文档"
@@ -163,7 +158,6 @@ graph TD
     style C fill:#c8e6c9
     style D fill:#fff9c4
     style E fill:#f3e5f5
-    style G fill:#ffccbc
 ```
 
 ### 模块通信流程图
@@ -173,10 +167,9 @@ sequenceDiagram
     participant U as 用户浏览器
     participant F as Frontend (Vue)
     participant B as Backend (Express)
-    participant RG as Remote Gateway
-    participant G as Guacd
+    participant RG as Remote Gateway<br/>(内嵌 Guacd)
 
-    Note over U,G: SSH 连接流程
+    Note over U,RG: SSH 连接流程
     U->>F: 选择 SSH 连接
     F->>B: POST /api/v1/connections
     B-->>F: 连接配置
@@ -184,14 +177,12 @@ sequenceDiagram
     B->>B: SSH2 建立连接
     B-->>F: 终端数据流
 
-    Note over U,G: RDP/VNC 连接流程
+    Note over U,RG: RDP/VNC 连接流程
     U->>F: 选择 RDP/VNC 连接
     F->>RG: POST /api/remote-desktop/token
     RG-->>F: 加密令牌
     F->>RG: WebSocket (Guacamole)
-    RG->>G: TCP 连接
-    G->>G: RDP/VNC 协议转换
-    G-->>RG: 图像数据
+    RG->>RG: Guacd RDP/VNC 协议转换
     RG-->>F: 渲染指令
 ```
 
@@ -773,15 +764,11 @@ class LoginPage {
 ### 部署架构
 
 ```
-Nginx (80/443)
-  ↓
-Frontend Container (80) → 静态资源 (Vite build)
+Frontend Container (18111:80) → 静态资源 (Vite build + Nginx)
   ↓ API 代理
 Backend Container (3001) → Express + SQLite + SSH2
   ↓ WebSocket
-Remote Gateway (8080/9090) → Guacamole Lite
-  ↓
-Guacd (4822) → RDP/VNC 协议转换
+Remote Gateway (8080/9090) → Guacamole Lite + 内嵌 Guacd (4822)
 ```
 
 ### 数据持久化

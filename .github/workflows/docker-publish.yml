@@ -344,11 +344,11 @@ jobs:
             type=ref,event=tag,enable=${{ steps.build_type.outputs.IS_TAG_PUSH != 'true' }}
             type=sha,enable=${{ steps.build_type.outputs.IS_TAG_PUSH != 'true' }}
 
-      - name: Build and push remote-gateway (standalone, 内嵌 guacd)
+      - name: Build and push remote-gateway (内嵌 guacd)
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/remote-gateway/Dockerfile.standalone
+          file: packages/remote-gateway/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

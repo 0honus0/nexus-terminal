@@ -6,6 +6,14 @@
 
 ## 变更记录 (Changelog)
 
+### 2026-05-04 (内嵌 guacd 成为默认部署模式)
+
+- **Dockerfile 重命名**：`Dockerfile.standalone` → `Dockerfile`，旧 `Dockerfile`（纯 Node.js）已删除
+- **启动脚本重命名**：`entrypoint-standalone.sh` → `entrypoint.sh`
+- **架构变更**：guacd 内嵌为默认部署模式，容器基础镜像改为 `guacamole/guacd:latest`
+- **删除冗余**：移除 `docker-compose.standalone.yml`（主 `docker-compose.yml` 已统一为 3 容器部署）
+- **文档更新**：架构图、依赖说明、Docker 部署章节同步更新
+
 ### 2025-12-20 22:27:42
 
 - **初始化模块文档**：完成远程网关模块架构分析与文档建立
@@ -23,6 +31,7 @@
 - VNC (Virtual Network Computing) 连接代理
 - 安全的令牌加密机制
 - WebSocket 到 Guacamole 协议转换
+- 内嵌 guacd 进程（无需独立容器部署）
 
 ---
 
@@ -43,39 +52,34 @@
 ## 架构概述
 
 ```
-                                      ┌─────────────────────────────────────┐
-                                      │         Remote Gateway               │
-                                      │                                     │
-┌──────────────┐    HTTP POST         │  ┌─────────────────────────────┐   │
-│   Frontend   │ ──────────────────── │  │    Express API Server       │   │
-│              │   /api/remote-       │  │    (Port 9090)              │   │
-│              │   desktop/token      │  │                             │   │
-└──────────────┘                      │  │  • 接收连接参数             │   │
-       │                              │  │  • 加密生成令牌             │   │
-       │ WebSocket                    │  │  • 返回加密 Token           │   │
-       │ (with token)                 │  └─────────────────────────────┘   │
-       │                              │                                     │
-       ▼                              │  ┌─────────────────────────────┐   │
-┌──────────────┐    Guacamole WS      │  │    GuacamoleLite Server     │   │
-│   Browser    │ ──────────────────── │  │    (Port 8080)              │   │
-│  guacamole-  │                      │  │                             │   │
-│  common-js   │                      │  │  • 解密验证 Token           │   │
-└──────────────┘                      │  │  • 建立 Guacd 连接          │   │
-                                      │  │  • 协议转换与转发           │   │
-                                      │  └──────────────┬──────────────┘   │
-                                      │                 │                   │
-                                      └─────────────────│───────────────────┘
-                                                        │
-                                                        │ TCP
-                                                        ▼
-                                      ┌─────────────────────────────────────┐
-                                      │              Guacd                   │
-                                      │         (Port 4822)                  │
-                                      │                                     │
-                                      │  • RDP/VNC 协议实现                 │
-                                      │  • 连接目标服务器                   │
-                                      └─────────────────────────────────────┘
-                                                        │
+                                      ┌─────────────────────────────────────────┐
+                                      │       Remote Gateway（内嵌 Guacd）       │
+                                      │                                         │
+┌──────────────┐    HTTP POST         │  ┌─────────────────────────────────┐   │
+│   Frontend   │ ──────────────────── │  │    Express API Server           │   │
+│              │   /api/remote-       │  │    (Port 9090)                  │   │
+│              │   desktop/token      │  │                                 │   │
+└──────────────┘                      │  │  • 接收连接参数                 │   │
+       │                              │  │  • 加密生成令牌                 │   │
+       │ WebSocket                    │  │  • 返回加密 Token               │   │
+       │ (with token)                 │  └─────────────────────────────────┘   │
+       │                              │                                         │
+       ▼                              │  ┌─────────────────────────────────┐   │
+┌──────────────┐    Guacamole WS      │  │    GuacamoleLite Server         │   │
+│   Browser    │ ──────────────────── │  │    (Port 8080)                  │   │
+│  guacamole-  │                      │  │                                 │   │
+│  common-js   │                      │  │  • 解密验证 Token               │   │
+└──────────────┘                      │  │  • 建立 Guacd 连接（localhost） │   │
+                                      │  │  • 协议转换与转发               │   │
+                                      │  └──────────────┬──────────────────┘   │
+                                      │                 │                       │
+                                      │  ┌──────────────▼──────────────────┐   │
+                                      │  │    Guacd (Port 4822)            │   │
+                                      │  │    • RDP/VNC 协议实现           │   │
+                                      │  │    • 连接目标服务器             │   │
+                                      │  └──────────────┬──────────────────┘   │
+                                      │                 │                       │
+                                      └─────────────────│───────────────────────┘
                                                         │ RDP/VNC
                                                         ▼
                                       ┌─────────────────────────────────────┐
@@ -94,7 +98,8 @@ packages/remote-gateway/
 │   └── server.ts                   # 服务入口（API + Guacamole）
 │
 ├── guacamole-lite.d.ts             # TypeScript 类型声明
-├── Dockerfile                      # Docker 构建配置
+├── Dockerfile                      # Docker 构建配置（内嵌 guacd）
+├── entrypoint.sh                   # 容器启动脚本（guacd + Node.js）
 ├── tsconfig.json                   # TypeScript 配置
 └── package.json                    # 包配置
 ```
@@ -182,7 +187,8 @@ packages/remote-gateway/
 ### 配置文件
 
 - `guacamole-lite.d.ts` - guacamole-lite 的 TypeScript 类型声明
-- `Dockerfile` - Docker 构建配置
+- `Dockerfile` - Docker 构建配置（内嵌 guacd）
+- `entrypoint.sh` - 容器启动脚本（guacd + Node.js）
 
 ---
 
@@ -225,11 +231,11 @@ npm start
 | ws             | ^8.18.1 | WebSocket 库         |
 | cors           | ^2.8.5  | 跨域资源共享         |
 
-### 外部依赖
+### 内嵌组件
 
-| 服务      | 说明                                               |
-| --------- | -------------------------------------------------- |
-| **Guacd** | Apache Guacamole 守护进程，处理实际的 RDP/VNC 协议 |
+| 组件      | 说明                                                         |
+| --------- | ------------------------------------------------------------ |
+| **Guacd** | Apache Guacamole 守护进程，内嵌于同一容器，处理 RDP/VNC 协议 |
 
 ---
 
@@ -246,10 +252,10 @@ npm start
 - 传递令牌进行身份验证
 - 接收并渲染远程桌面画面
 
-### 依赖：Guacd
+### 依赖：Guacd（内嵌）
 
-- 必须运行 Guacd 服务（Docker 部署时通过 `guacamole/guacd` 镜像）
-- 通过 TCP 连接 Guacd 进行协议转换
+- Guacd 已内嵌于同一容器，通过 localhost 连接（无需单独部署）
+- 容器启动时 `entrypoint.sh` 自动启动 guacd 守护进程
 
 ---
 
@@ -260,14 +266,14 @@ npm start
 ```bash
 docker build -t nexus-terminal-remote-gateway .
 docker run -p 8080:8080 -p 9090:9090 \
-  -e GUACD_HOST=guacd \
+  -e GUACD_HOST=localhost \
   -e GUACD_PORT=4822 \
   nexus-terminal-remote-gateway
 ```
 
 ### Docker Compose（推荐）
 
-参见根目录 `docker-compose.yml`，remote-gateway 作为独立服务运行，与 guacd 服务通过 Docker 网络通信。
+参见根目录 `docker-compose.yml`，remote-gateway 容器内嵌 guacd，通过 `localhost:4822` 连接。
 
 ---
 
