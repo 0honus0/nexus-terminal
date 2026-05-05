@@ -20,18 +20,15 @@ vi.mock('@vscode/iconv-lite-umd', () => ({
 
 vi.mock('buffer/', () => ({
   Buffer: {
-    from: vi.fn((input: string | ArrayBuffer, encoding?: string) => {
-      // 模拟真实 Buffer 行为：传入字符串 + encoding 时按 encoding 编码，否则默认 UTF-8
-      const actualEncoding = encoding || 'utf-8';
+    from: vi.fn((input: string | ArrayBuffer, _encoding?: string) => {
       const str = typeof input === 'string' ? input : String(input);
       return {
         toString: (enc: string) => {
           if (enc === 'base64') {
-            // 简单的 base64 模拟：用 btoa 或手动编码
             try {
-              return globalThis.btoa(unencodeURIComponent(encodeURIComponent(str)));
+              return globalThis.btoa(decodeURIComponent(encodeURIComponent(str)));
             } catch {
-              return Buffer.from(str, actualEncoding).toString('base64');
+              return globalThis.btoa(str);
             }
           }
           return str;
