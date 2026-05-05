@@ -281,7 +281,6 @@ describe('SFTP WebSocket Handler', () => {
     });
 
     it('writefile 当 payload 非对象时应安全降级', async () => {
-      const { sftpService } = await import('../state');
       mockWs.sessionId = 'test-session';
       const state = createMockClientState(mockWs);
       clientStates.set('test-session', state);

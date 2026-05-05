@@ -462,7 +462,7 @@ describe('fileEditor.store', () => {
         rawContentBase64: Buffer.from('original content').toString('base64'),
         encodingUsed: 'utf-8',
       });
-      const sftpManager = setupSessionWithSftpManager('s1', {
+      setupSessionWithSftpManager('s1', {
         writeFile: writeFileMock,
         readFile: readFileMock,
       });
@@ -472,6 +472,7 @@ describe('fileEditor.store', () => {
       const tabId = 's1:/root/test.txt';
       const tab = store.tabs.get(tabId);
       expect(tab).toBeTruthy();
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       expect(tab!.isLoading).toBe(false);
 
       // 修改内容
@@ -484,6 +485,7 @@ describe('fileEditor.store', () => {
       expect(writeFileMock).toHaveBeenCalledWith('/root/test.txt', 'modified content', 'utf-8');
 
       // 验证标签页状态更新
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const savedTab = store.tabs.get(tabId)!;
       expect(savedTab.isModified).toBe(false);
       expect(savedTab.originalContent).toBe('modified content');
@@ -503,11 +505,13 @@ describe('fileEditor.store', () => {
       const tabId = 's1:/root/test.txt';
 
       // 记录保存前的 rawContentBase64
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const rawBefore = store.tabs.get(tabId)!.rawContentBase64;
 
       store.updateFileContent(tabId, 'new content after save');
       await store.saveFile(tabId);
 
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const tab = store.tabs.get(tabId)!;
       // rawContentBase64 应该被更新（重新编码了保存后的内容）
       expect(tab.rawContentBase64).toBeTruthy();
@@ -530,6 +534,7 @@ describe('fileEditor.store', () => {
 
       await store.saveFile(tabId);
 
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const tab = store.tabs.get(tabId)!;
       expect(tab.saveStatus).toBe('error');
       expect(tab.saveError).toBeTruthy();
@@ -573,6 +578,7 @@ describe('fileEditor.store', () => {
       const tabId = 's1:/root/test.txt';
 
       // 验证 tab 的 instanceId 被正确设置
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const tab = store.tabs.get(tabId)!;
       expect(tab.instanceId).toBe('inst-abc');
 
@@ -606,6 +612,7 @@ describe('fileEditor.store', () => {
 
       await store.saveFile(tabId);
 
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const tab = store.tabs.get(tabId)!;
       expect(tab.saveStatus).toBe('error');
       expect(tab.saveError).toBeTruthy();

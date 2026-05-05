@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { validateBackup, importData } from './backup.service';
 import { BACKUP_FORMAT_VERSION } from './backup.types';
-import { getDbInstance, allDb, runDb } from '../database/connection';
+import { getDbInstance, runDb } from '../database/connection';
 
 vi.mock('../database/connection', () => ({
   getDbInstance: vi.fn(),

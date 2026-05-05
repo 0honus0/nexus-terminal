@@ -573,7 +573,7 @@ describe('StatusMonitorService', () => {
 
   describe('批量采集模式', () => {
     // 构造模拟批量采集输出（包含所有分段标识符）
-    function buildBatchOutput(overrides: Record<string, string> = {}) {
+    function buildBatchOutputInner(overrides: Record<string, string> = {}) {
       const defaults: Record<string, string> = {
         OS_RELEASE: 'PRETTY_NAME="Ubuntu 22.04 LTS"\nNAME="Ubuntu"',
         CPU_MODEL: 'model name\t: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz',
@@ -609,7 +609,7 @@ describe('StatusMonitorService', () => {
 
     it('应通过单次 SSH exec 获取所有状态数据', async () => {
       const mockClient = createMockSshClient();
-      const batchOutput = buildBatchOutput();
+      const batchOutput = buildBatchOutputInner();
 
       mockClient.exec.mockImplementation(
         (cmd: string, optionsOrCallback: unknown, callback?: Function) => {

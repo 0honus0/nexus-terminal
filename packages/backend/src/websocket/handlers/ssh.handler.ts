@@ -624,6 +624,7 @@ export async function handleSshConnect(
     );
 
     // 发送路由规划信息（跳板链路可视化）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const routePlan = (sshClient as any)._routePlan;
     if (routePlan && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'ssh:route_plan', payload: routePlan }));
