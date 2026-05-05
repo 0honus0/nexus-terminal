@@ -31,6 +31,8 @@ const ignores = [
   '**/.lintstagedrc.js',
   'eslint.config.js',
   '**/eslint.config.js',
+  'vitest.workspace.ts',
+  '**/vitest.workspace.ts',
 ];
 
 const baseRules = {
