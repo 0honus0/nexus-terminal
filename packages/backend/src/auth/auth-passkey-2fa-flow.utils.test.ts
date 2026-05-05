@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Request, Response } from 'express';
 import { SECURITY_CONFIG } from '../config/security.config';
+
+// Mock 地理定位服务，使 lookupGeoInfo 立即返回 null 避免异步延迟
+vi.mock('./ip-geo.service', () => ({
+  lookupGeoInfo: vi.fn().mockResolvedValue(null),
+}));
+
 import {
   completePasskeyAuthenticatedSession,
   recordPasskeyAuthenticationFailure,
@@ -19,7 +25,7 @@ const createServices = () => ({
 });
 
 describe('auth-passkey-2fa-flow.utils', () => {
-  it('recordPasskeyAuthenticationSuccess 应记录审计与登录通知', () => {
+  it('recordPasskeyAuthenticationSuccess 应记录审计与登录通知', async () => {
     const services = createServices();
     const req = {
       ip: '10.0.0.1',
@@ -32,22 +38,25 @@ describe('auth-passkey-2fa-flow.utils', () => {
       username: 'alice',
       credentialId: 'cred-1',
     });
+    await new Promise(process.nextTick);
 
     expect(services.auditLogService.logAction).toHaveBeenCalledWith('PASSKEY_AUTH_SUCCESS', {
       userId: 7,
       username: 'alice',
       credentialId: 'cred-1',
       ip: '10.0.0.1',
+      method: 'Passkey',
     });
     expect(services.notificationService.sendNotification).toHaveBeenCalledWith('LOGIN_SUCCESS', {
       userId: 7,
       username: 'alice',
+      credentialId: 'cred-1',
       ip: '10.0.0.1',
       method: 'Passkey',
     });
   });
 
-  it('recordPasskeyAuthenticationFailure 应记录失败审计与失败通知', () => {
+  it('recordPasskeyAuthenticationFailure 应记录失败审计与失败通知', async () => {
     const services = createServices();
     const req = {
       ip: '',
@@ -59,6 +68,7 @@ describe('auth-passkey-2fa-flow.utils', () => {
       credentialId: 'cred-2',
       reason: 'Verification failed',
     });
+    await new Promise(process.nextTick);
 
     expect(services.auditLogService.logAction).toHaveBeenCalledWith('PASSKEY_AUTH_FAILURE', {
       credentialId: 'cred-2',
@@ -168,7 +178,7 @@ describe('auth-passkey-2fa-flow.utils', () => {
     });
   });
 
-  it('recordTwoFactorEnabledEvent 应写入启用事件', () => {
+  it('recordTwoFactorEnabledEvent 应写入启用事件', async () => {
     const services = createServices();
     const req = {
       ip: '10.0.0.1',
@@ -176,6 +186,7 @@ describe('auth-passkey-2fa-flow.utils', () => {
     } as unknown as Request;
 
     recordTwoFactorEnabledEvent(services, { req, userId: 9 });
+    await new Promise(process.nextTick);
 
     expect(services.auditLogService.logAction).toHaveBeenCalledWith('2FA_ENABLED', {
       userId: 9,
@@ -187,13 +198,14 @@ describe('auth-passkey-2fa-flow.utils', () => {
     });
   });
 
-  it('recordTwoFactorDisabledEvent 应写入禁用事件', () => {
+  it('recordTwoFactorDisabledEvent 应写入禁用事件', async () => {
     const services = createServices();
     const req = {
       ip: '10.0.0.4',
     } as unknown as Request;
 
     recordTwoFactorDisabledEvent(services, { req, userId: 12 });
+    await new Promise(process.nextTick);
 
     expect(services.auditLogService.logAction).toHaveBeenCalledWith('2FA_DISABLED', {
       userId: 12,

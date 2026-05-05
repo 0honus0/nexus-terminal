@@ -2,11 +2,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Request, Response } from 'express';
 import { SECURITY_CONFIG } from '../config/security.config';
 
-// Mock 地理定位服务，使 lookup 立即返回 null 避免异步延迟
+// Mock 地理定位服务，使 lookupGeoInfo 立即返回 null 避免异步延迟
 vi.mock('./ip-geo.service', () => ({
-  ipGeoService: {
-    lookup: vi.fn().mockResolvedValue(null),
-  },
+  lookupGeoInfo: vi.fn().mockResolvedValue(null),
 }));
 
 import {

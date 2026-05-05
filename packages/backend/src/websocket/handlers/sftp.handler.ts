@@ -89,10 +89,13 @@ export async function handleSftpOperation(
         }
         break;
       case 'sftp:writefile':
-        const fileContent = payload?.content ?? payload?.data ?? '';
+        const fileContent = payload?.content ?? payload?.data;
         const encoding = payload?.encoding;
         if (payload?.path) {
-          const dataToSend = typeof fileContent === 'string' ? fileContent : '';
+          if (fileContent === undefined || fileContent === null) {
+            throw new Error("Missing 'content' or 'data' in payload for writefile");
+          }
+          const dataToSend = typeof fileContent === 'string' ? fileContent : String(fileContent);
           await sftpService.writefile(sessionId, payload.path, dataToSend, requestId, encoding);
         } else throw new Error("Missing 'path' in payload for writefile");
         break;

@@ -92,7 +92,10 @@ const sftpWritefilePayloadSchema = z
     data: z.string().max(10485760).optional(),
     encoding: z.string().max(64).optional(),
   })
-  .strict();
+  .strict()
+  .refine((obj) => obj.content !== undefined || obj.data !== undefined, {
+    message: 'writefile payload 必须包含 content 或 data 字段',
+  });
 
 const sftpRenamePayloadSchema = z
   .object({

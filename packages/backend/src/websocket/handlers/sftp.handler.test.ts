@@ -265,7 +265,7 @@ describe('SFTP WebSocket Handler', () => {
       );
     });
 
-    it('writefile 当 content 和 data 都不存在时应写入空字符串', async () => {
+    it('writefile 当 content 和 data 都不存在时应拒绝写入', async () => {
       const { sftpService } = await import('../state');
       mockWs.sessionId = 'test-session';
       const state = createMockClientState(mockWs);
@@ -273,12 +273,10 @@ describe('SFTP WebSocket Handler', () => {
 
       await handleSftpOperation(mockWs, 'sftp:writefile', { path: '/home/test.txt' }, 'req-4g');
 
-      expect(sftpService.writefile).toHaveBeenCalledWith(
-        'test-session',
-        '/home/test.txt',
-        '',
-        'req-4g',
-        undefined
+      // 缺少 content/data 时不应调用 writefile，而是发送错误
+      expect(sftpService.writefile).not.toHaveBeenCalled();
+      expect(mockWs.send).toHaveBeenCalledWith(
+        expect.stringContaining("Missing 'content' or 'data'")
       );
     });
 

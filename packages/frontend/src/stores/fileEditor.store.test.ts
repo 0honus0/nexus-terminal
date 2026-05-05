@@ -20,14 +20,29 @@ vi.mock('@vscode/iconv-lite-umd', () => ({
 
 vi.mock('buffer/', () => ({
   Buffer: {
-    from: vi.fn().mockReturnValue({
-      toString: vi.fn().mockReturnValue('mock base64'),
+    from: vi.fn((input: string | ArrayBuffer, encoding?: string) => {
+      // 模拟真实 Buffer 行为：传入字符串 + encoding 时按 encoding 编码，否则默认 UTF-8
+      const actualEncoding = encoding || 'utf-8';
+      const str = typeof input === 'string' ? input : String(input);
+      return {
+        toString: (enc: string) => {
+          if (enc === 'base64') {
+            // 简单的 base64 模拟：用 btoa 或手动编码
+            try {
+              return globalThis.btoa(unencodeURIComponent(encodeURIComponent(str)));
+            } catch {
+              return Buffer.from(str, actualEncoding).toString('base64');
+            }
+          }
+          return str;
+        },
+      };
     }),
   },
 }));
 
 const mockGetOrCreateSftpManager = vi.fn();
-const mockSessions = new Map();
+const mockSessions = new Map<string, any>();
 
 vi.mock('./session.store', () => ({
   useSessionStore: () => ({
@@ -421,6 +436,182 @@ describe('fileEditor.store', () => {
 
       expect(store.tabs.size).toBe(2);
       expect(store.activeTabId).toBe(tabId);
+    });
+  });
+
+  describe('saveFile', () => {
+    /**
+     * 创建带有效 SFTP 管理器的会话，使 saveFile 能走通真实路径
+     */
+    function setupSessionWithSftpManager(
+      sessionId: string,
+      sftpManager: { writeFile: ReturnType<typeof vi.fn>; readFile: ReturnType<typeof vi.fn> }
+    ) {
+      mockSessions.set(sessionId, {
+        wsManager: {
+          isConnected: { value: true },
+          isSftpReady: { value: true },
+        },
+        sftpManagers: new Map([['primary', sftpManager]]),
+      });
+      mockGetOrCreateSftpManager.mockReturnValue(sftpManager);
+      return sftpManager;
+    }
+
+    it('保存成功时应调用 writeFile 并更新标签页状态', async () => {
+      const store = useFileEditorStore();
+      const writeFileMock = vi.fn().mockResolvedValue(undefined);
+      const readFileMock = vi.fn().mockResolvedValue({
+        rawContentBase64: Buffer.from('original content').toString('base64'),
+        encodingUsed: 'utf-8',
+      });
+      const sftpManager = setupSessionWithSftpManager('s1', {
+        writeFile: writeFileMock,
+        readFile: readFileMock,
+      });
+
+      // 打开文件并加载内容
+      await store.openFile('/root/test.txt', 's1', 'primary');
+      const tabId = 's1:/root/test.txt';
+      const tab = store.tabs.get(tabId);
+      expect(tab).toBeTruthy();
+      expect(tab!.isLoading).toBe(false);
+
+      // 修改内容
+      store.updateFileContent(tabId, 'modified content');
+
+      // 保存
+      await store.saveFile(tabId);
+
+      // 验证 writeFile 被调用
+      expect(writeFileMock).toHaveBeenCalledWith('/root/test.txt', 'modified content', 'utf-8');
+
+      // 验证标签页状态更新
+      const savedTab = store.tabs.get(tabId)!;
+      expect(savedTab.isModified).toBe(false);
+      expect(savedTab.originalContent).toBe('modified content');
+      expect(savedTab.rawContentBase64).toBeTruthy();
+    });
+
+    it('保存后 rawContentBase64 应重新编码（确保切换编码不回退）', async () => {
+      const store = useFileEditorStore();
+      const writeFileMock = vi.fn().mockResolvedValue(undefined);
+      const readFileMock = vi.fn().mockResolvedValue({
+        rawContentBase64: Buffer.from('original').toString('base64'),
+        encodingUsed: 'utf-8',
+      });
+      setupSessionWithSftpManager('s1', { writeFile: writeFileMock, readFile: readFileMock });
+
+      await store.openFile('/root/test.txt', 's1', 'primary');
+      const tabId = 's1:/root/test.txt';
+
+      // 记录保存前的 rawContentBase64
+      const rawBefore = store.tabs.get(tabId)!.rawContentBase64;
+
+      store.updateFileContent(tabId, 'new content after save');
+      await store.saveFile(tabId);
+
+      const tab = store.tabs.get(tabId)!;
+      // rawContentBase64 应该被更新（重新编码了保存后的内容）
+      expect(tab.rawContentBase64).toBeTruthy();
+      expect(tab.rawContentBase64).not.toBe(rawBefore);
+      expect(tab.rawContentBase64).not.toBeNull();
+    });
+
+    it('保存失败时应设置错误状态', async () => {
+      const store = useFileEditorStore();
+      const writeFileMock = vi.fn().mockRejectedValue(new Error('write failed'));
+      const readFileMock = vi.fn().mockResolvedValue({
+        rawContentBase64: Buffer.from('content').toString('base64'),
+        encodingUsed: 'utf-8',
+      });
+      setupSessionWithSftpManager('s1', { writeFile: writeFileMock, readFile: readFileMock });
+
+      await store.openFile('/root/test.txt', 's1', 'primary');
+      const tabId = 's1:/root/test.txt';
+      store.updateFileContent(tabId, 'some content');
+
+      await store.saveFile(tabId);
+
+      const tab = store.tabs.get(tabId)!;
+      expect(tab.saveStatus).toBe('error');
+      expect(tab.saveError).toBeTruthy();
+      expect(tab.isSaving).toBe(false);
+    });
+
+    it('没有活动标签页时不应报错', async () => {
+      const store = useFileEditorStore();
+      // 无标签页，直接调用 saveFile
+      await store.saveFile();
+      // 不应抛出错误
+    });
+
+    it('tab 不存在时不应报错', async () => {
+      const store = useFileEditorStore();
+      await store.saveFile('nonexistent-tab-id');
+      // 不应抛出错误
+    });
+
+    it('应使用 tab.instanceId 查找对应的 SFTP 管理器', async () => {
+      const store = useFileEditorStore();
+      const writeFileMock = vi.fn().mockResolvedValue(undefined);
+      const readFileMock = vi.fn().mockResolvedValue({
+        rawContentBase64: Buffer.from('content').toString('base64'),
+        encodingUsed: 'utf-8',
+      });
+
+      // 创建一个带 instanceId 的会话
+      const sftpManager = { writeFile: writeFileMock, readFile: readFileMock };
+      mockSessions.set('s1', {
+        wsManager: {
+          isConnected: { value: true },
+          isSftpReady: { value: true },
+        },
+        sftpManagers: new Map([['inst-abc', sftpManager]]),
+      });
+      mockGetOrCreateSftpManager.mockReturnValue(sftpManager);
+
+      // 打开文件时传入 instanceId
+      await store.openFile('/root/test.txt', 's1', 'inst-abc');
+      const tabId = 's1:/root/test.txt';
+
+      // 验证 tab 的 instanceId 被正确设置
+      const tab = store.tabs.get(tabId)!;
+      expect(tab.instanceId).toBe('inst-abc');
+
+      store.updateFileContent(tabId, 'test content');
+      await store.saveFile(tabId);
+
+      // writeFile 应该被调用
+      expect(writeFileMock).toHaveBeenCalled();
+    });
+
+    it('会话未连接时应设置错误状态', async () => {
+      const store = useFileEditorStore();
+      const readFileMock = vi.fn().mockResolvedValue({
+        rawContentBase64: Buffer.from('content').toString('base64'),
+        encodingUsed: 'utf-8',
+      });
+
+      // 会话未连接
+      mockSessions.set('s1', {
+        wsManager: {
+          isConnected: { value: false },
+          isSftpReady: { value: false },
+        },
+        sftpManagers: new Map([['primary', { writeFile: vi.fn(), readFile: readFileMock }]]),
+      });
+      mockGetOrCreateSftpManager.mockReturnValue({ writeFile: vi.fn(), readFile: readFileMock });
+
+      await store.openFile('/root/test.txt', 's1', 'primary');
+      const tabId = 's1:/root/test.txt';
+      store.updateFileContent(tabId, 'content');
+
+      await store.saveFile(tabId);
+
+      const tab = store.tabs.get(tabId)!;
+      expect(tab.saveStatus).toBe('error');
+      expect(tab.saveError).toBeTruthy();
     });
   });
 

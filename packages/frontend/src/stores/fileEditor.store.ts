@@ -171,9 +171,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       // 就地修改属性
       tab.sessionId = newSessionId;
       tab.id = newTabId;
-      console.info(
-        `[文件编辑器 Store] 标签页 ${oldTabId} → ${newTabId} (文件: ${tab.filename})`
-      );
+      console.info(`[文件编辑器 Store] 标签页 ${oldTabId} → ${newTabId} (文件: ${tab.filename})`);
 
       // 更新 activeTabId
       if (activeTabId.value === oldTabId) {
@@ -252,9 +250,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
         for (const [, t] of tabs.value) {
           if (t === originalTabRef) {
             tabToUpdate = t;
-            console.info(
-              `[文件编辑器 Store] 通过对象引用定位到重映射后的标签页: ${t.id}`
-            );
+            console.info(`[文件编辑器 Store] 通过对象引用定位到重映射后的标签页: ${t.id}`);
             break;
           }
         }
@@ -450,34 +446,14 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       return;
     }
 
-    // 修改：从 sftpManagers Map 获取第一个可用的管理器
+    // 修改：优先使用 tab.instanceId 查找对应的 SFTP 管理器，避免多实例时路由错误
     const sftpManagersMap = session.sftpManagers;
     if (!sftpManagersMap || sftpManagersMap.size === 0) {
       console.error(
         `[文件编辑器 Store] 保存失败：会话 ${tab.sessionId} 没有可用的 SFTP 管理器实例。`
       );
       tab.saveStatus = 'error';
-      tab.saveError = t('fileManager.errors.sftpManagerNotFound'); // 复用错误消息
-      // 添加短暂错误提示
-      setTimeout(() => {
-        if (tab.saveStatus === 'error') {
-          tab.saveStatus = 'idle';
-          tab.saveError = null;
-        }
-      }, 5000);
-      return;
-    }
-    // 获取 Map 中的第一个条目 [instanceId, sftpManager]
-    const firstEntry = sftpManagersMap.entries().next().value;
-
-    // +++ 检查是否成功获取到条目 +++
-    if (!firstEntry || firstEntry.length < 2) {
-      console.error(
-        `[文件编辑器 Store] 保存失败：无法从会话 ${tab.sessionId} 的 sftpManagers Map 中获取任何 SFTP 管理器条目。`
-      );
-      tab.saveStatus = 'error';
-      tab.saveError = t('fileManager.errors.sftpManagerNotFound'); // 复用错误消息
-      // 添加短暂错误提示
+      tab.saveError = t('fileManager.errors.sftpManagerNotFound');
       setTimeout(() => {
         if (tab.saveStatus === 'error') {
           tab.saveStatus = 'idle';
@@ -487,7 +463,19 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       return;
     }
 
-    const [instanceId, sftpManager] = firstEntry; // 解构获取 instanceId 和 sftpManager
+    // 优先按 tab.instanceId 查找；若找不到则回退到第一个可用实例
+    const targetInstanceId = tab.instanceId || 'primary';
+    let sftpManager = sftpManagersMap.get(targetInstanceId);
+    let instanceId = targetInstanceId;
+    if (!sftpManager) {
+      const fallback = sftpManagersMap.entries().next().value;
+      if (fallback && fallback[1]) {
+        [instanceId, sftpManager] = fallback;
+        console.warn(
+          `[文件编辑器 Store] 未找到实例 ${targetInstanceId} 的 SFTP 管理器，回退到实例 ${instanceId}`
+        );
+      }
+    }
 
     // +++ 再次检查 sftpManager 是否有效 (虽然理论上 Map 不应存储 undefined 值) +++
     if (!sftpManager) {
@@ -552,7 +540,9 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
     // 防御性检查：content 不应为 undefined/null（空字符串是合法的空文件内容）
     if (contentToSave == null) {
-      console.error(`[文件编辑器 Store] 保存中止：content 为 null/undefined。Tab ID: ${resolvedTab.id}`);
+      console.error(
+        `[文件编辑器 Store] 保存中止：content 为 null/undefined。Tab ID: ${resolvedTab.id}`
+      );
       resolvedTab.isSaving = false;
       resolvedTab.saveStatus = 'error';
       resolvedTab.saveError = t('fileManager.errors.saveFailed');
@@ -562,11 +552,22 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     try {
       // --- 修改：传递 selectedEncoding 给 writeFile ---
       await sftpManager.writeFile(resolvedTab.filePath, contentToSave, encodingToUse);
-      console.info(`[文件编辑器 Store] 文件 ${resolvedTab.filePath} 使用编码 ${encodingToUse} 保存成功。`);
+      console.info(
+        `[文件编辑器 Store] 文件 ${resolvedTab.filePath} 使用编码 ${encodingToUse} 保存成功。`
+      );
       resolvedTab.isSaving = false;
       resolvedTab.saveStatus = 'success';
       resolvedTab.saveError = null;
       resolvedTab.originalContent = contentToSave; // 更新原始内容
+      // 重新编码保存后的内容到 rawContentBase64，确保切换编码时不会回退到旧数据
+      try {
+        const { Buffer: SafeBuffer } = await import('buffer/');
+        resolvedTab.rawContentBase64 = SafeBuffer.from(contentToSave).toString('base64');
+      } catch {
+        // iconv-lite 在前端环境不可用时回退到 UTF-8
+        const { Buffer: SafeBuffer } = await import('buffer/');
+        resolvedTab.rawContentBase64 = SafeBuffer.from(contentToSave, 'utf-8').toString('base64');
+      }
       resolvedTab.isModified = false; // 重置修改状态
 
       setTimeout(() => {
