@@ -48,7 +48,7 @@ const BATCH_STAT_COMMAND = [
   `echo "${BATCH_DELIMITERS.OS_RELEASE}"`,
   "cat /proc/cpuinfo 2>/dev/null | grep 'model name' | head -n 1 || lscpu 2>/dev/null | grep 'Model name:'",
   `echo "${BATCH_DELIMITERS.CPU_MODEL}"`,
-  '(busybox --help 2>/dev/null | grep -q BusyBox && free || free -m) 2>/dev/null || echo FREE_FAIL',
+  '(busybox --help 2>/dev/null | grep -q BusyBox && free || free) 2>/dev/null || echo FREE_FAIL',
   `echo "${BATCH_DELIMITERS.FREE}"`,
   'df -kP / 2>/dev/null || df -k / 2>/dev/null || echo DF_FAIL',
   `echo "${BATCH_DELIMITERS.DF}"`,
@@ -180,16 +180,15 @@ class HealthCheckCollector {
         swapPercent: 0,
       };
     try {
-      let freeCommand = 'free -m';
+      let freeCommand = 'free';
       let isBusyBox = false;
       try {
         const busyboxCheck = await this.executeSshCommand(sshClient, 'busybox --help');
         if (busyboxCheck.includes('BusyBox')) {
-          freeCommand = 'free';
           isBusyBox = true;
         }
       } catch (error: unknown) {
-        /* 默认使用 free -m */
+        /* BusyBox 检测失败，使用默认 free 命令 */
         console.debug(
           '[StatusMonitor] 检测 BusyBox 环境失败，将使用默认 free 命令:',
           error instanceof Error ? error.message : error
@@ -205,12 +204,10 @@ class HealthCheckCollector {
         if (parts.length >= 3) {
           let totalVal = parseInt(parts[1], 10);
           let usedVal = parseInt(parts[2], 10);
-          // 仅 BusyBox 需要 KB→MB 转换；free -m 输出值已是 MB
-          const needsConversion = isBusyBox;
-          if (needsConversion) {
-            totalVal = Math.round(totalVal / 1024);
-            usedVal = Math.round(usedVal / 1024);
-          }
+          // free 输出单位：BusyBox 为字节，标准 Linux 为 KB，统一转换为 MB
+          const divisor = isBusyBox ? 1048576 : 1024;
+          totalVal = Math.round(totalVal / divisor);
+          usedVal = Math.round(usedVal / divisor);
           if (!Number.isNaN(totalVal) && !Number.isNaN(usedVal)) {
             result.memTotal = totalVal;
             result.memUsed = usedVal;
@@ -224,11 +221,9 @@ class HealthCheckCollector {
         if (parts.length >= 3) {
           let totalVal = parseInt(parts[1], 10);
           let usedVal = parseInt(parts[2], 10);
-          const swapNeedsConversion = isBusyBox;
-          if (swapNeedsConversion) {
-            totalVal = Math.round(totalVal / 1024);
-            usedVal = Math.round(usedVal / 1024);
-          }
+          const swapDivisor = isBusyBox ? 1048576 : 1024;
+          totalVal = Math.round(totalVal / swapDivisor);
+          usedVal = Math.round(usedVal / swapDivisor);
           if (!Number.isNaN(totalVal) && !Number.isNaN(usedVal)) {
             result.swapTotal = totalVal;
             result.swapUsed = usedVal;
@@ -719,9 +714,8 @@ export class StatusMonitorService {
 
       const freeRaw = sections.get('FREE');
       if (freeRaw && !freeRaw.includes('FREE_FAIL')) {
-        // 通过表头判断 free 输出单位：有标准表头 = free -m (MB)，无表头 = BusyBox free (KB)
-        const hasStandardHeader = /^\s*total\s+used\s+free/m.test(freeRaw);
-        const memStats = collector.parseMemoryStats(freeRaw, hasStandardHeader);
+        // free 命令输出单位为 KB（BusyBox 和标准 Linux 均如此），需转换为 MB
+        const memStats = collector.parseMemoryStats(freeRaw, false);
         console.debug(
           `[StatusMonitor] ${sessionId} parseMemoryStats 结果:`,
           `memTotal=${memStats.memTotal}MB memUsed=${memStats.memUsed}MB`,

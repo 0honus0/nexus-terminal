@@ -360,7 +360,7 @@ describe('StatusMonitorService', () => {
 
     it('应正确解析内存使用率', async () => {
       const batchOutput = buildBatchOutput({
-        FREE: '              total        used        free      shared  buff/cache   available\nMem:          16000        8000        8000          0        500       7500\nSwap:          2048         512        1536',
+        FREE: '              total        used        free      shared  buff/cache   available\nMem:       16384000    8192000    8192000          0     512000    7680000\nSwap:       2097152     524288    1572864',
       });
 
       mockClient.exec.mockImplementation(
@@ -542,7 +542,7 @@ describe('StatusMonitorService', () => {
       const mockClient = createMockSshClient();
       // free 输出中没有 Swap 行
       const batchOutput = buildBatchOutput({
-        FREE: '              total        used        free      shared  buff/cache   available\nMem:          16000        8000        8000          0        500       7500',
+        FREE: '              total        used        free      shared  buff/cache   available\nMem:       16384000    8192000    8192000          0     512000    7680000',
       });
 
       mockClient.exec.mockImplementation(
@@ -577,7 +577,7 @@ describe('StatusMonitorService', () => {
       const defaults: Record<string, string> = {
         OS_RELEASE: 'PRETTY_NAME="Ubuntu 22.04 LTS"\nNAME="Ubuntu"',
         CPU_MODEL: 'model name\t: Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz',
-        FREE: '              total        used        free      shared  buff/cache   available\nMem:          16000        8000        6000         500        2000        7500\nSwap:          2048         512        1536',
+        FREE: '              total        used        free      shared  buff/cache   available\nMem:       16384000    8192000    6144000     512000    2048000    7680000\nSwap:       2097152     524288    1572864',
         DF: 'Filesystem     1K-blocks    Used Available Use% Mounted on\n/dev/sda1      100000000 40000000  60000000  40% /',
         UPTIME: ' 14:30:01 up 10 days,  5:30,  2 users,  load average: 1.50, 2.00, 1.75',
         PROC_NET_DEV:
@@ -680,9 +680,9 @@ describe('StatusMonitorService', () => {
 
     it('应正确解析中文 locale 的 free 输出（内存：/交换：）', async () => {
       const mockClient = createMockSshClient();
-      // 模拟 Debian 13 中文 locale 的 free -m 输出
+      // 模拟 Debian 13 中文 locale 的 free 输出（单位 KB，原始值 = MiB * 1024）
       const batchOutput = buildBatchOutputInner({
-        FREE: '              total        used        free      shared  buff/cache   available\n内存：        4016760     450940      553884       472     3011936     3306628\n交换：          999936       1496      998440',
+        FREE: '              total        used        free      shared  buff/cache   available\n内存：        4113162240   461762560   567185408     483328  3084218368  3385585664\n交换：          1023934464     1531904  1022402560',
       });
 
       mockClient.exec.mockImplementation(
@@ -705,7 +705,7 @@ describe('StatusMonitorService', () => {
       await vi.advanceTimersByTimeAsync(3000);
 
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
-      // free -m 输出的值单位为 MB，不应再被转换
+      // free 输出 KB，转换后应为 MB（4113162240 KB / 1024 = 4016760 MB）
       expect(sentData.payload.status.memTotal).toBe(4016760);
       expect(sentData.payload.status.memUsed).toBe(450940);
       expect(sentData.payload.status.memPercent).toBeGreaterThan(0);
