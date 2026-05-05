@@ -367,7 +367,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             :loading="isLoading"
             circle
             size="small"
-            class="!bg-primary/10 !border-primary/20 !text-primary hover:!bg-primary hover:!text-white transition-all duration-300 hover:rotate-180"
+            class="!bg-primary/10 !border-primary/20 !text-primary hover:!bg-primary hover:!text-white transition-colors transition-transform duration-300 hover:scale-110"
           >
             <i class="fas fa-sync-alt"></i>
           </el-button>
@@ -387,7 +387,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             <h3 class="text-3xl font-bold text-foreground">{{ stats?.sessions?.active || 0 }}</h3>
           </div>
           <div
-            class="p-3 rounded-lg bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all duration-300 group-hover:scale-110 shadow-lg shadow-blue-500/20"
+            class="p-3 rounded-lg bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors transition-transform duration-300 group-hover:scale-105"
           >
             <i class="fas fa-terminal text-xl !text-current"></i>
           </div>
@@ -406,7 +406,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             </h3>
           </div>
           <div
-            class="p-3 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300 group-hover:scale-110 shadow-lg shadow-emerald-500/20"
+            class="p-3 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors transition-transform duration-300 group-hover:scale-105"
           >
             <i class="fas fa-plug text-xl !text-current"></i>
           </div>
@@ -425,7 +425,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             </h3>
           </div>
           <div
-            class="p-3 rounded-lg bg-amber-500/10 text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-all duration-300 group-hover:scale-110 shadow-lg shadow-amber-500/20"
+            class="p-3 rounded-lg bg-amber-500/10 text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-colors transition-transform duration-300 group-hover:scale-105"
           >
             <i class="fas fa-clock text-xl !text-current"></i>
           </div>
@@ -446,7 +446,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             </h3>
           </div>
           <i
-            class="fas fa-exclamation-circle text-red-500/80 text-2xl group-hover:scale-125 group-hover:text-red-500 transition-all duration-300 !text-current"
+            class="fas fa-exclamation-circle text-red-500/80 text-2xl group-hover:scale-110 group-hover:text-red-500 transition-colors transition-transform duration-300 !text-current"
           ></i>
         </div>
       </div>
@@ -461,7 +461,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             </h3>
           </div>
           <i
-            class="fas fa-ban text-orange-500/80 text-2xl group-hover:scale-125 group-hover:text-orange-500 transition-all duration-300 !text-current"
+            class="fas fa-ban text-orange-500/80 text-2xl group-hover:scale-110 group-hover:text-orange-500 transition-colors transition-transform duration-300 !text-current"
           ></i>
         </div>
       </div>
@@ -476,7 +476,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
             </h3>
           </div>
           <i
-            class="fas fa-bell text-yellow-500/80 text-2xl group-hover:scale-125 group-hover:text-yellow-500 transition-all duration-300 !text-current"
+            class="fas fa-bell text-yellow-500/80 text-2xl group-hover:scale-110 group-hover:text-yellow-500 transition-colors transition-transform duration-300 !text-current"
           ></i>
         </div>
       </div>
@@ -565,7 +565,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
           <div
             v-for="conn in recentConnections"
             :key="conn.id"
-            class="group relative flex items-center justify-between p-3 mb-1 rounded-lg hover:bg-surface/50 border-l-2 border-transparent transition-all duration-200 cursor-pointer active:scale-[0.98] active:bg-surface/70"
+            class="group relative flex items-center justify-between p-3 mb-1 rounded-lg hover:bg-surface/50 border-l-2 border-transparent transition-colors transition-transform duration-200 cursor-pointer active:scale-[0.98] active:bg-surface/70"
             :class="getConnectionTypeStyle(conn.type).border"
             @click="handleConnectRecent(conn)"
           >
@@ -657,7 +657,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
                 class="h-2.5 bg-surface rounded-full overflow-hidden border border-border/30 shadow-inner relative"
               >
                 <div
-                  class="h-full rounded-full transition-all duration-1000 ease-out resource-progress-flow"
+                  class="h-full rounded-full transition-[width] duration-1000 ease-out"
                   :style="{
                     width: `${systemResources.cpuPercent}%`,
                     backgroundColor: getProgressColor(systemResources.cpuPercent),
@@ -678,7 +678,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
                 class="h-2.5 bg-surface rounded-full overflow-hidden border border-border/30 shadow-inner relative"
               >
                 <div
-                  class="h-full rounded-full transition-all duration-1000 ease-out resource-progress-flow"
+                  class="h-full rounded-full transition-[width] duration-1000 ease-out"
                   :style="{
                     width: `${systemResources.memPercent}%`,
                     backgroundColor: getProgressColor(systemResources.memPercent),
@@ -699,7 +699,7 @@ const formatDuration = (seconds: number | null | undefined): string => {
                 class="h-2.5 bg-surface rounded-full overflow-hidden border border-border/30 shadow-inner relative"
               >
                 <div
-                  class="h-full rounded-full transition-all duration-1000 ease-out resource-progress-flow"
+                  class="h-full rounded-full transition-[width] duration-1000 ease-out"
                   :style="{
                     width: `${systemResources.diskPercent}%`,
                     backgroundColor: getProgressColor(systemResources.diskPercent),
@@ -756,7 +756,11 @@ const formatDuration = (seconds: number | null | undefined): string => {
   border: 1px solid var(--card-border, var(--border-color));
   border-radius: 1.25rem;
   padding: 1.5rem;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -798,7 +802,9 @@ const formatDuration = (seconds: number | null | undefined): string => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  transition: all 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 

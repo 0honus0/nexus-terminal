@@ -278,7 +278,7 @@ const handleTestConnection = async (connectionId: number) => {
                 </button>
                 <button
                   @click="emit('edit-connection', conn)"
-                  class="px-2.5 py-1 text-xs rounded border transition-colors duration-150 mr-1.5 bg-yellow-500 text-gray-800 border-yellow-500 hover:bg-yellow-600 hover:border-yellow-600"
+                  class="px-2.5 py-1 text-xs rounded border transition-colors duration-150 mr-1.5 bg-warning text-warning-text border-warning hover:bg-warning/80 hover:border-warning/80"
                 >
                   {{ t('connections.actions.edit') }}
                 </button>
