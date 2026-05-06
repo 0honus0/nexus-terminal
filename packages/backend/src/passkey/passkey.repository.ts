@@ -1,6 +1,6 @@
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { ErrorFactory } from '../utils/AppError';
-import { logger } from '../utils/logger';
+// logger 已移除，未使用
 
 export interface Passkey {
   id: number;

@@ -165,7 +165,7 @@ describe('NotificationProcessorService', () => {
   describe('processStandardEvent', () => {
     it('无匹配设置时应静默返回', async () => {
       mockRepository.getEnabledByEvent.mockResolvedValue([]);
-      const emitSpy = vi.spyOn(processorService, 'emit');
+      vi.spyOn(processorService, 'emit');
 
       // 触发事件
       mockEventService.emit(AppEventType.LoginSuccess, mockPayload);

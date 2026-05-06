@@ -2,7 +2,7 @@
 
 import { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } from '../state';
 import type { ConnectionInfo } from '../../connections.store'; // 路径: packages/frontend/src/stores/connections.store.ts
-import { log } from '@/utils/log';
+// log 已移除，未使用
 
 // --- RDP Modal Actions ---
 export const openRdpModal = (connection: ConnectionInfo) => {

@@ -248,10 +248,10 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       // 若找不到则通过对象身份匹配（_onSessionRemapped 就地修改了属性但对象引用不变）
       let tabToUpdate = tabs.value.get(tabId);
       if (!tabToUpdate) {
-        for (const [, tab] of tabs.value) {
-          if (tab === originalTabRef) {
-            tabToUpdate = tab;
-            log.info(`[文件编辑器 Store] 通过对象引用定位到重映射后的标签页: ${tab.id}`);
+        for (const [, tabEntry] of tabs.value) {
+          if (tabEntry === originalTabRef) {
+            tabToUpdate = tabEntry;
+            log.info(`[文件编辑器 Store] 通过对象引用定位到重映射后的标签页: ${tabToUpdate.id}`);
             break;
           }
         }
@@ -282,9 +282,9 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       // 错误处理同样需要定位当前 tab（对象身份匹配）
       let tabToUpdate = tabs.value.get(tabId);
       if (!tabToUpdate) {
-        for (const [, tab] of tabs.value) {
-          if (tab === originalTabRef) {
-            tabToUpdate = tab;
+        for (const [, tabEntry] of tabs.value) {
+          if (tabEntry === originalTabRef) {
+            tabToUpdate = tabEntry;
             break;
           }
         }

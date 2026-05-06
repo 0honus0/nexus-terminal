@@ -224,8 +224,8 @@ describe('NotificationDispatcherService', () => {
 
   describe('initialize', () => {
     it('应注册所有默认发送器并开始监听', () => {
-      const registerSpy = vi.spyOn(service, 'registerSender');
-      const listenSpy = vi.spyOn(service, 'listenForNotifications');
+      vi.spyOn(service, 'registerSender');
+      vi.spyOn(service, 'listenForNotifications');
 
       service.initialize();
 
