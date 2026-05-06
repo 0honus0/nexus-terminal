@@ -8,8 +8,9 @@ import { redactSensitiveData } from '../logging/redaction';
 
 /**
  * 日志脱敏开关：延迟求值，避免模块加载时 dotenv 尚未就绪
+ * 使用 getter 确保每次日志调用时读取最新的环境变量
  */
-const logRedact = process.env.LOG_REDACT !== 'false'; // 默认开启脱敏
+const isLogRedactEnabled = () => process.env.LOG_REDACT !== 'false'; // 默认开启脱敏
 
 // 持有 pino 实例的引用，供 setLogLevel / getLogLevel 访问
 // createLogger() 首次调用时自动填充
@@ -132,7 +133,7 @@ function createLogger() {
         }
       }
 
-      if (logRedact) {
+      if (isLogRedactEnabled()) {
         const redactedArgs = normalizedArgs.map((a) => redactSensitiveData(a));
         methodGetter()(redactedArgs[0], ...(redactedArgs.slice(1) as []));
       } else {

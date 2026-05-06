@@ -30,7 +30,9 @@ class NotificationProcessorService extends EventEmitter {
   constructor() {
     super();
     this.repository = new NotificationSettingsRepository();
-    this.initialize();
+    // 延迟到下一个 tick 初始化，确保 dotenv.config() 已加载环境变量
+    // 避免 logger 首次调用时读取到未加载 .env 的环境
+    process.nextTick(() => this.initialize());
     this.setMaxListeners(50);
   }
 
