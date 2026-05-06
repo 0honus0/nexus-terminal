@@ -61,20 +61,22 @@
 
 ### 可选配置
 
-| 变量名                       | 默认值   | 描述                                                                |
-| ---------------------------- | -------- | ------------------------------------------------------------------- |
-| `ALLOWED_ORIGINS`            | -        | 额外允许的 CORS 来源（逗号分隔多个域名）                            |
-| `ALLOWED_WS_ORIGINS`         | -        | 额外允许的 WebSocket 来源（逗号分隔多个域名）                       |
-| `ENABLE_GEO_LOOKUP`          | `true`   | 登录事件 IP 地理位置查询开关。设为 `false` 可禁用（节省外部请求）。 |
-| `GEO_PROVIDER`               | `ip-api` | IP 地理定位提供商：`ip-api`（默认，免费）或 `ipinfo`（ipinfo.io）。 |
-| `IPINFO_TOKEN`               | -        | ipinfo.io API Token（可选，提升请求配额至 50k/月）。                |
-| `HEARTBEAT_INTERVAL_DESKTOP` | `30000`  | 桌面端心跳间隔（毫秒）                                              |
-| `HEARTBEAT_INTERVAL_MOBILE`  | `12000`  | 移动端心跳间隔（毫秒）                                              |
-| `TRUST_PROXY`                | -        | 是否信任代理 (`true`/`false`)                                       |
-| `TRUST_PROXY_HOPS`           | -        | 信任的代理跳数                                                      |
-| `LOG_LEVEL`                  | `info`   | 后端日志等级（`debug/info/warn/error`）                             |
-| `LOG_TZ`                     | -        | 日志时间戳时区（优先级高于 `TZ`）                                   |
-| `TZ`                         | `UTC`    | 后端进程默认时区                                                    |
+| 变量名                       | 默认值   | 描述                                                                        |
+| ---------------------------- | -------- | --------------------------------------------------------------------------- |
+| `ALLOWED_ORIGINS`            | -        | 额外允许的 CORS 来源（逗号分隔多个域名）                                    |
+| `ALLOWED_WS_ORIGINS`         | -        | 额外允许的 WebSocket 来源（逗号分隔多个域名）                               |
+| `ENABLE_GEO_LOOKUP`          | `true`   | 登录事件 IP 地理位置查询开关。设为 `false` 可禁用（节省外部请求）。         |
+| `GEO_PROVIDER`               | `ip-api` | IP 地理定位提供商：`ip-api`（默认，免费）或 `ipinfo`（ipinfo.io）。         |
+| `IPINFO_TOKEN`               | -        | ipinfo.io API Token（可选，提升请求配额至 50k/月）。                        |
+| `HEARTBEAT_INTERVAL_DESKTOP` | `30000`  | 桌面端心跳间隔（毫秒）                                                      |
+| `HEARTBEAT_INTERVAL_MOBILE`  | `12000`  | 移动端心跳间隔（毫秒）                                                      |
+| `TRUST_PROXY`                | -        | 是否信任代理 (`true`/`false`)                                               |
+| `TRUST_PROXY_HOPS`           | -        | 信任的代理跳数                                                              |
+| `LOG_LEVEL`                  | `info`   | 后端日志等级（`debug/info/warn/error/silent`）                              |
+| `LOG_PRETTY`                 | -        | 日志格式化开关。`true`=pino-pretty 彩色输出，`false`=JSON。dev 模式默认开启 |
+| `LOG_REDACT`                 | -        | 日志脱敏开关。设为 `false` 可关闭敏感信息脱敏（默认开启）                   |
+| `LOG_TZ`                     | -        | 日志时间戳时区（优先级高于 `TZ`）                                           |
+| `TZ`                         | `UTC`    | 后端进程默认时区                                                            |
 
 ### NL2CMD 调试配置
 
@@ -285,4 +287,4 @@ services:
 
 ---
 
-**文档生成时间**：2025-12-26 | **最后更新**：2026-05-04（新增 GEO_PROVIDER、IPINFO_TOKEN 环境变量）
+**文档生成时间**：2025-12-26 | **最后更新**：2026-05-06（新增 LOG_PRETTY、LOG_REDACT 日志环境变量）

@@ -16,6 +16,11 @@
   - 138 个前端源文件、1,335 处 console 调用迁移到 log
   - 支持 `?log=debug` URL 参数激活 debug 级别输出
 - **测试修复**：15 个测试文件的 console spy 更新为 logger mock
+- **审查修复**：
+  - Greptile P1：`/key/i` 正则恢复（覆盖 sshKey/signingKey）、`isLogRedactEnabled()` 延迟求值
+  - CodeRabbit：`redaction.ts` 中 `instanceof Error` 检查提前到 `Object.keys` 之前，防止系统错误被转为普通对象
+  - Codex P1：Dockerfile 添加 `ENV NODE_ENV=production`，防止生产构建加载 pino-pretty 崩溃
+  - cubic-dev-ai P2：logger wrapper 自动追加多余字符串到 message（修复 pino 丢弃无 `%s` 参数）；error.middleware.ts 7 行日志合并为结构化单行
 - **验证结果**：后端 134 文件 / 2,283 测试通过，前端 62 文件 / 1,616 测试通过，生产构建 console 调用为 0
 
 ### 2026-05-03 (文档与技术债务全面治理)
