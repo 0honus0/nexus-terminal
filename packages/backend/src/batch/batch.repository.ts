@@ -4,6 +4,7 @@
  */
 
 import { getDbInstance, runDb, allDb, getDb } from '../database/connection';
+import { RepositoryUtils } from '../database/base.repository';
 import {
   BatchTask,
   BatchSubTask,
@@ -51,67 +52,72 @@ const rowToSubTask = (row: BatchSubTaskRow): BatchSubTask => ({
 });
 
 /**
- * 创建批量任务
+ * 创建批量任务（事务保证主任务与子任务原子性）
  */
 export const createTask = async (task: BatchTask): Promise<void> => {
-  const db = await getDbInstance();
   const now = Math.floor(Date.now() / 1000);
 
-  // 插入主任务
-  await runDb(
-    db,
-    `
-        INSERT INTO batch_tasks (
-            id, user_id, status, concurrency_limit, overall_progress,
-            total_subtasks, completed_subtasks, failed_subtasks, cancelled_subtasks,
-            message, payload_json, created_at, updated_at, started_at, ended_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      task.taskId,
-      task.userId,
-      task.status,
-      task.concurrencyLimit,
-      task.overallProgress,
-      task.totalSubTasks,
-      task.completedSubTasks,
-      task.failedSubTasks,
-      task.cancelledSubTasks,
-      task.message || null,
-      JSON.stringify(task.payload),
-      now,
-      now,
-      task.startedAt ? Math.floor(task.startedAt.getTime() / 1000) : null,
-      task.endedAt ? Math.floor(task.endedAt.getTime() / 1000) : null,
-    ]
-  );
-
-  // 批量插入子任务
-  for (const subTask of task.subTasks) {
-    await runDb(
-      db,
-      `
-            INSERT INTO batch_subtasks (
-                id, task_id, connection_id, connection_name, command,
-                status, progress, exit_code, output, message, started_at, ended_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  await RepositoryUtils.executeInTransaction(
+    async (db) => {
+      // 插入主任务
+      await runDb(
+        db,
+        `
+            INSERT INTO batch_tasks (
+                id, user_id, status, concurrency_limit, overall_progress,
+                total_subtasks, completed_subtasks, failed_subtasks, cancelled_subtasks,
+                message, payload_json, created_at, updated_at, started_at, ended_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-      [
-        subTask.subTaskId,
-        task.taskId,
-        subTask.connectionId,
-        subTask.connectionName || null,
-        subTask.command,
-        subTask.status,
-        subTask.progress,
-        subTask.exitCode ?? null,
-        subTask.output || null,
-        subTask.message || null,
-        subTask.startedAt ? Math.floor(subTask.startedAt.getTime() / 1000) : null,
-        subTask.endedAt ? Math.floor(subTask.endedAt.getTime() / 1000) : null,
-      ]
-    );
-  }
+        [
+          task.taskId,
+          task.userId,
+          task.status,
+          task.concurrencyLimit,
+          task.overallProgress,
+          task.totalSubTasks,
+          task.completedSubTasks,
+          task.failedSubTasks,
+          task.cancelledSubTasks,
+          task.message || null,
+          JSON.stringify(task.payload),
+          now,
+          now,
+          task.startedAt ? Math.floor(task.startedAt.getTime() / 1000) : null,
+          task.endedAt ? Math.floor(task.endedAt.getTime() / 1000) : null,
+        ]
+      );
+
+      // 批量插入子任务
+      for (const subTask of task.subTasks) {
+        await runDb(
+          db,
+          `
+                INSERT INTO batch_subtasks (
+                    id, task_id, connection_id, connection_name, command,
+                    status, progress, exit_code, output, message, started_at, ended_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          [
+            subTask.subTaskId,
+            task.taskId,
+            subTask.connectionId,
+            subTask.connectionName || null,
+            subTask.command,
+            subTask.status,
+            subTask.progress,
+            subTask.exitCode ?? null,
+            subTask.output || null,
+            subTask.message || null,
+            subTask.startedAt ? Math.floor(subTask.startedAt.getTime() / 1000) : null,
+            subTask.endedAt ? Math.floor(subTask.endedAt.getTime() / 1000) : null,
+          ]
+        );
+      }
+    },
+    '创建批量任务',
+    '批量任务创建失败'
+  );
 };
 
 /**
@@ -142,7 +148,7 @@ export const getTask = async (taskId: string): Promise<BatchTask | null> => {
 };
 
 /**
- * 获取用户的批量任务列表
+ * 获取用户的批量任务列表（单 SQL 查询消除 N+1）
  */
 export const getTasksByUser = async (
   userId: number | string,
@@ -150,30 +156,68 @@ export const getTasksByUser = async (
   offset: number = 0
 ): Promise<BatchTask[]> => {
   const db = await getDbInstance();
-  const taskRows = await allDb<BatchTaskRow>(
+
+  // 一次查询获取所有任务及关联的子任务
+  const rows = await allDb<
+    BatchTaskRow & {
+      sub_id: string | null;
+      sub_task_id: string | null;
+      sub_connection_id: string | null;
+      sub_connection_name: string | null;
+      sub_command: string | null;
+      sub_status: string | null;
+      sub_progress: number | null;
+      sub_exit_code: number | null;
+      sub_output: string | null;
+      sub_message: string | null;
+      sub_started_at: number | null;
+      sub_ended_at: number | null;
+    }
+  >(
     db,
     `
-        SELECT * FROM batch_tasks
-        WHERE user_id = ?
-        ORDER BY created_at DESC
+        SELECT t.*,
+               s.id as sub_id, s.task_id as sub_task_id, s.connection_id as sub_connection_id,
+               s.connection_name as sub_connection_name, s.command as sub_command,
+               s.status as sub_status, s.progress as sub_progress, s.exit_code as sub_exit_code,
+               s.output as sub_output, s.message as sub_message,
+               s.started_at as sub_started_at, s.ended_at as sub_ended_at
+        FROM batch_tasks t
+        LEFT JOIN batch_subtasks s ON t.id = s.task_id
+        WHERE t.user_id = ?
+        ORDER BY t.created_at DESC
         LIMIT ? OFFSET ?
     `,
     [userId, limit, offset]
   );
 
-  const tasks: BatchTask[] = [];
-  for (const row of taskRows) {
-    const subTaskRows = await allDb<BatchSubTaskRow>(
-      db,
-      `
-            SELECT * FROM batch_subtasks WHERE task_id = ?
-        `,
-      [row.id]
-    );
-    tasks.push(rowToTask(row, subTaskRows.map(rowToSubTask)));
+  // 按 taskId 聚合子任务
+  const taskMap = new Map<string, BatchTask>();
+  for (const row of rows) {
+    if (!taskMap.has(row.id)) {
+      taskMap.set(row.id, rowToTask(row, []));
+    }
+    if (row.sub_id) {
+      taskMap.get(row.id)!.subTasks.push(
+        rowToSubTask({
+          id: row.sub_id,
+          task_id: row.sub_task_id!,
+          connection_id: Number(row.sub_connection_id),
+          connection_name: row.sub_connection_name,
+          command: row.sub_command!,
+          status: row.sub_status as BatchSubTaskStatus,
+          progress: row.sub_progress!,
+          exit_code: row.sub_exit_code,
+          output: row.sub_output,
+          message: row.sub_message,
+          started_at: row.sub_started_at,
+          ended_at: row.sub_ended_at,
+        })
+      );
+    }
   }
 
-  return tasks;
+  return [...taskMap.values()];
 };
 
 /**

@@ -52,12 +52,12 @@ const GEO_DB_CACHE_TTL_SECONDS = 24 * 60 * 60; // 24 小时（秒）
 
 // ==================== 提供商适配器 ====================
 
-/** ip-api.com 适配器（免费，45 req/min，仅 HTTP） */
+/** ip-api.com 适配器（免费，45 req/min，优先 HTTPS） */
 const ipApiAdapter: GeoProviderAdapter = {
   name: 'ip-api',
 
   buildUrl(ip: string): string {
-    return `http://ip-api.com/json/${ip}?fields=country,regionName,city,isp,as,query`;
+    return `https://ip-api.com/json/${ip}?fields=country,regionName,city,isp,as,query`;
   },
 
   parseResponse(data: unknown, ip: string): GeoInfo | null {

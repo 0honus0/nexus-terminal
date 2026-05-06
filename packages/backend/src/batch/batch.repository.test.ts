@@ -61,14 +61,16 @@ describe('Batch Repository', () => {
       await batchRepository.createTask(mockTask);
 
       expect(getDbInstance).toHaveBeenCalled();
-      expect(runDb).toHaveBeenCalledTimes(2); // 1 主任务 + 1 子任务
+      // BEGIN TRANSACTION + 1 主任务 + 1 子任务 + COMMIT = 4 次
+      expect(runDb).toHaveBeenCalledTimes(4);
     });
 
     it('应正确序列化 payload', async () => {
       await batchRepository.createTask(mockTask);
 
       const calls = (runDb as any).mock.calls;
-      const insertTaskCall = calls[0];
+      // calls[0] = BEGIN TRANSACTION, calls[1] = INSERT task, calls[2] = INSERT subtask, calls[3] = COMMIT
+      const insertTaskCall = calls[1];
       expect(insertTaskCall[1]).toContain('INSERT INTO batch_tasks');
       expect(insertTaskCall[2]).toContain(JSON.stringify(mockPayload));
     });

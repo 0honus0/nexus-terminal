@@ -6,6 +6,19 @@ import { logger } from '../utils/logger';
 const IP_WHITELIST_SETTING_KEY = 'ipWhitelist';
 const IP_WHITELIST_ENABLED_SETTING_KEY = 'ipWhitelistEnabled';
 
+// 本地缓存：避免每请求两次 DB 读取，TTL 10 秒
+const CACHE_TTL_MS = 10_000;
+let whitelistCache: { enabled: boolean; entries: string[] } | null = null;
+let whitelistCacheExpiry = 0;
+
+/**
+ * 清除白名单缓存（测试用）
+ */
+export const clearWhitelistCache = (): void => {
+  whitelistCache = null;
+  whitelistCacheExpiry = 0;
+};
+
 // 本地开发环境的 IP 地址列表
 const LOCAL_IPS = [
   '127.0.0.1', // IPv4 本地回环
@@ -38,26 +51,28 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
       return next();
     }
 
-    const ipWhitelistEnabledValue = await settingsService.getSetting(
-      IP_WHITELIST_ENABLED_SETTING_KEY
-    );
-    // 默认启用白名单，仅当明确为 'false' 时关闭
-    if (ipWhitelistEnabledValue === 'false') {
+    // 使用本地缓存避免每请求两次 DB 读取
+    const now = Date.now();
+    if (!whitelistCache || now > whitelistCacheExpiry) {
+      const [enabledValue, whitelistString] = await Promise.all([
+        settingsService.getSetting(IP_WHITELIST_ENABLED_SETTING_KEY),
+        settingsService.getSetting(IP_WHITELIST_SETTING_KEY),
+      ]);
+
+      const entries = (whitelistString || '')
+        .split(/[\n,]+/)
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0);
+
+      whitelistCache = { enabled: enabledValue !== 'false', entries };
+      whitelistCacheExpiry = now + CACHE_TTL_MS;
+    }
+
+    if (!whitelistCache.enabled) {
       return next();
     }
 
-    const whitelistString = await settingsService.getSetting(IP_WHITELIST_SETTING_KEY);
-
-    // 如果白名单未设置或为空字符串，则允许所有请求
-    if (!whitelistString || whitelistString.trim() === '') {
-      return next();
-    }
-
-    // 解析白名单字符串 (假设以换行符或逗号分隔)
-    const whitelistEntries = whitelistString
-      .split(/[\n,]+/) // 按换行符或逗号分割
-      .map((entry) => entry.trim()) // 去除首尾空格
-      .filter((entry) => entry.length > 0); // 过滤空条目
+    const whitelistEntries = whitelistCache.entries;
 
     // 如果解析后白名单为空，也允许所有请求 (避免配置错误导致完全锁死)
     if (whitelistEntries.length === 0) {

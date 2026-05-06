@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
 
-import { ipWhitelistMiddleware } from './ipWhitelist.middleware';
+import { ipWhitelistMiddleware, clearWhitelistCache } from './ipWhitelist.middleware';
 import { settingsService } from '../settings/settings.service';
 
 // Mock settings.service
@@ -45,6 +45,7 @@ describe('IP Whitelist Middleware', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearWhitelistCache();
     mockRes = createMockResponse();
     mockNext = vi.fn();
   });
@@ -109,13 +110,15 @@ describe('IP Whitelist Middleware', () => {
     describe('白名单未设置', () => {
       it('白名单功能显式禁用时应允许所有请求', async () => {
         const mockReq = createMockRequest('192.168.1.100');
-        vi.mocked(settingsService.getSetting).mockResolvedValueOnce('false');
+        // 缓存未命中时 Promise.all 同时查询 enabled 和 whitelist
+        vi.mocked(settingsService.getSetting).mockImplementation(async (key: string) => {
+          return key === 'ipWhitelistEnabled' ? 'false' : '';
+        });
 
         await ipWhitelistMiddleware(mockReq as Request, mockRes as Response, mockNext);
 
         expect(mockNext).toHaveBeenCalledTimes(1);
-        expect(settingsService.getSetting).toHaveBeenCalledTimes(1);
-        expect(settingsService.getSetting).toHaveBeenCalledWith('ipWhitelistEnabled');
+        expect(settingsService.getSetting).toHaveBeenCalledTimes(2);
       });
 
       it('白名单为 null 时应允许所有请求', async () => {

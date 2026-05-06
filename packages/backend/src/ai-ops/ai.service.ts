@@ -195,33 +195,25 @@ export async function getSystemHealthSummary(
     [oneDayAgo]
   );
 
-  // 热门连接（基于 SSH 成功连接，单用户系统，不按用户过滤）
-  const topConnectionsData = await allDb<{ connection_id: number; count: number }>(
+  // 热门连接（单 SQL JOIN 查询消除 N+1）
+  const topConnections = await allDb<{ connection_id: number; count: number; name: string | null }>(
     db,
-    `SELECT json_extract(details, '$.connectionId') as connection_id, COUNT(*) as count
+    `SELECT al.conn_id as connection_id, al.count, c.name
+         FROM (
+           SELECT json_extract(details, '$.connectionId') as conn_id, COUNT(*) as count
            FROM audit_logs
            WHERE action_type = 'SSH_CONNECT_SUCCESS' AND timestamp >= ?
              AND json_extract(details, '$.connectionId') IS NOT NULL
-           GROUP BY connection_id ORDER BY count DESC LIMIT 5`,
+           GROUP BY conn_id ORDER BY count DESC LIMIT 5
+         ) al
+         LEFT JOIN connections c ON al.conn_id = c.id`,
     [oneDayAgo]
-  );
-
-  // 获取连接名称
-  const topConnections = await Promise.all(
-    topConnectionsData.map(async (item) => {
-      const conn = await getDb<{ name: string }>(
-        db,
-        `
-                SELECT name FROM connections WHERE id = ?
-            `,
-        [item.connection_id]
-      );
-      return {
-        connectionId: item.connection_id,
-        name: conn?.name || `连接 #${item.connection_id}`,
-        commandCount: item.count,
-      };
-    })
+  ).then((rows) =>
+    rows.map((item) => ({
+      connectionId: item.connection_id,
+      name: item.name || `连接 #${item.connection_id}`,
+      commandCount: item.count,
+    }))
   );
 
   // 确定整体状态

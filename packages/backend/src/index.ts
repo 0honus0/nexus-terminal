@@ -149,19 +149,7 @@ const initializeEnvironment = async () => {
     }
   }
 
-  // 5. 生产环境最终检查 (虽然理论上已被覆盖，但作为保险)
-  if (process.env.NODE_ENV === 'production') {
-    if (!process.env.ENCRYPTION_KEY) {
-      logger.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
-      process.exit(1);
-    }
-    if (!process.env.SESSION_SECRET) {
-      logger.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
-      process.exit(1);
-    }
-  }
-
-  // 6. 最终检查 (包括 Guacamole 相关)
+  // 5. 生产环境最终检查 (包括 Guacamole 相关)
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.ENCRYPTION_KEY) {
       logger.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');

@@ -31,9 +31,11 @@ import { ErrorFactory } from '../utils/AppError';
 const AI_SETTINGS_KEY = 'aiProviderConfig';
 
 /**
- * Axios 客户端缓存（按 baseUrl + apiKey 缓存）
+ * Axios 客户端缓存（按 baseUrl + apiKey 缓存，带 LRU 淘汰）
+ * 上限 16 个客户端，超出时淘汰最早的条目
  */
 const axiosClientCache = new Map<string, AxiosInstance>();
+const AXIOS_CACHE_MAX_SIZE = 16;
 
 /**
  * 获取或创建 Axios 客户端（单例复用）
@@ -52,6 +54,11 @@ function getAxiosClient(baseUrl: string, apiKey: string): AxiosInstance {
       timeout: NL2CMD_CONFIG.REQUEST_TIMEOUT_MS,
     });
     axiosClientCache.set(cacheKey, client);
+    // LRU 淘汰：超出上限时删除最早的条目
+    if (axiosClientCache.size > AXIOS_CACHE_MAX_SIZE) {
+      const oldestKey = axiosClientCache.keys().next().value;
+      if (oldestKey) axiosClientCache.delete(oldestKey);
+    }
   }
 
   return client;
