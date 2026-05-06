@@ -21,6 +21,7 @@ const SENSITIVE_FIELD_PATTERNS = [
   /session/i,
   /apikey/i,
   /api_key/i,
+  /key/i,
   /username/i,
 ];
 

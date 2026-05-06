@@ -103,7 +103,7 @@ export function useNL2CMD() {
 
         if (!command) {
           const msg = 'AI 未能生成命令，请尝试更详细地描述您的需求';
-          log.warn('[NL2CMD Debug] Empty command returned');
+          log.debug('[NL2CMD Debug] Empty command returned');
           ElMessage.warning(msg);
           return null;
         }
@@ -123,7 +123,7 @@ export function useNL2CMD() {
         return command;
       } else {
         const errorMsg = response.data.error || '生成命令失败';
-        log.error('[NL2CMD Debug] API Error:', errorMsg);
+        log.debug('[NL2CMD Debug] API Error:', errorMsg);
         ElMessage.error(errorMsg);
         return null;
       }
