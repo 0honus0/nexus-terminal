@@ -605,3 +605,13 @@ onBeforeUnmount(() => {
     <TransferProgressModal v-model:visible="showTransferProgressModal" />
   </div>
 </template>
+
+<style scoped>
+/* 隐藏标签栏滚动条，保留滚动功能 */
+:deep(.overflow-x-auto) {
+  scrollbar-width: none; /* Firefox */
+}
+:deep(.overflow-x-auto::-webkit-scrollbar) {
+  display: none; /* Chrome/Safari */
+}
+</style>
