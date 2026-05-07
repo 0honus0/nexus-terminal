@@ -216,6 +216,7 @@ import { useTagsStore, type TagInfo } from '../stores/tags.store';
 import apiClient from '../utils/apiClient';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents'; // +++ 导入事件发射器 +++
+import { log } from '@/utils/log';
 
 interface ItemToSend {
   name: string;
@@ -294,7 +295,7 @@ onMounted(async () => {
       await tagsStore.fetchTags();
     }
   } catch (error: unknown) {
-    console.error(t('sendFilesModal.errorFetchingData'), error);
+    log.error(t('sendFilesModal.errorFetchingData'), error);
     // Optionally, show a user-facing error message
   } finally {
     isLoadingConnections.value = false;
@@ -417,12 +418,12 @@ watch(
       if (connectionsStore.connections.length === 0) {
         connectionsStore
           .fetchConnections()
-          .catch((error) => console.error(t('sendFilesModal.errorFetchingConnections'), error));
+          .catch((error) => log.error(t('sendFilesModal.errorFetchingConnections'), error));
       }
       if (tagsStore.tags.length === 0) {
         tagsStore
           .fetchTags()
-          .catch((error) => console.error(t('sendFilesModal.errorFetchingTags'), error));
+          .catch((error) => log.error(t('sendFilesModal.errorFetchingTags'), error));
       }
     }
   }
@@ -446,7 +447,7 @@ const handleSend = async () => {
 
   // 验证 sourceConnectionId 是否存在
   if (payload.sourceConnectionId === null || payload.sourceConnectionId === undefined) {
-    console.error('Source Connection ID is missing in SendFilesModal payload:', payload);
+    log.error('Source Connection ID is missing in SendFilesModal payload:', payload);
     uiNotificationsStore.showError(
       t(
         'sendFilesModal.errorSourceConnectionMissing',
@@ -469,7 +470,7 @@ const handleSend = async () => {
     emitWorkspaceEvent('ui:openTransferProgressModal'); // +++ 触发打开传输进度模态框的事件 +++
     emit('update:visible', false);
   } catch (error: unknown) {
-    console.error('Failed to initiate transfer:', error);
+    log.error('Failed to initiate transfer:', error);
     const err = error as { response?: { data?: { message?: string } }; message?: string };
     const errorMessage =
       err.response?.data?.message || err.message || t('sendFilesModal.transferFailedError');

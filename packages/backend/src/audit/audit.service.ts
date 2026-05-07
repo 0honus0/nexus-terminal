@@ -1,5 +1,6 @@
 import { AuditLogRepository } from './audit.repository';
 import { AuditLogActionType, AuditLogEntry } from '../types/audit.types';
+import { logger } from '../utils/logger';
 
 export class AuditLogService {
   private repository: AuditLogRepository;
@@ -29,7 +30,7 @@ export class AuditLogService {
       await this.repository.addLog(actionType, details, userId);
     } catch (error: unknown) {
       // Repository 内部已经处理了错误打印，这里可以根据需要再次处理或忽略
-      console.error(`[Audit Service] Failed to log action ${actionType}:`, error);
+      logger.error(`[Audit Service] Failed to log action ${actionType}:`, error);
     }
   }
 

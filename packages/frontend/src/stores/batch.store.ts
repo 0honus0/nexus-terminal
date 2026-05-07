@@ -16,6 +16,7 @@ import type {
   BatchCancelResponse,
   BatchSubTaskStatus,
 } from '../types/batch.types';
+import { log } from '@/utils/log';
 
 export const useBatchStore = defineStore('batch', () => {
   // === State ===
@@ -77,7 +78,7 @@ export const useBatchStore = defineStore('batch', () => {
       }
       throw new Error(response.data.message || '执行失败');
     } catch (err: unknown) {
-      console.error('[BatchStore] 执行批量命令失败:', err);
+      log.error('[BatchStore] 执行批量命令失败:', err);
       error.value = extractErrorMessage(err, '执行批量命令失败');
       isExecuting.value = false;
       return null;
@@ -120,7 +121,7 @@ export const useBatchStore = defineStore('batch', () => {
       }
       return null;
     } catch (err: unknown) {
-      console.error('[BatchStore] 获取任务状态失败:', err);
+      log.error('[BatchStore] 获取任务状态失败:', err);
       // 设置错误状态，但不直接释放 isExecuting（任务可能仍在执行，只是查询失败）
       error.value = extractErrorMessage(err, '获取任务状态失败，请稍后重试');
       return null;
@@ -153,7 +154,7 @@ export const useBatchStore = defineStore('batch', () => {
         }));
       }
     } catch (err: unknown) {
-      console.error('[BatchStore] 获取任务列表失败:', err);
+      log.error('[BatchStore] 获取任务列表失败:', err);
       error.value = extractErrorMessage(err, '获取任务列表失败');
     } finally {
       isLoading.value = false;
@@ -174,7 +175,7 @@ export const useBatchStore = defineStore('batch', () => {
       }
       return false;
     } catch (err: unknown) {
-      console.error('[BatchStore] 取消任务失败:', err);
+      log.error('[BatchStore] 取消任务失败:', err);
       error.value = extractErrorMessage(err, '取消任务失败');
       return false;
     }
@@ -198,7 +199,7 @@ export const useBatchStore = defineStore('batch', () => {
 
       return true;
     } catch (err: unknown) {
-      console.error('[BatchStore] 删除任务失败:', err);
+      log.error('[BatchStore] 删除任务失败:', err);
       error.value = extractErrorMessage(err, '删除任务失败');
       return false;
     }

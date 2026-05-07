@@ -7,6 +7,7 @@ import { useConnectionsStore, ConnectionInfo } from '../stores/connections.store
 import { useTagsStore } from '../stores/tags.store';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useAlertDialog } from '../composables/useAlertDialog';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -37,7 +38,7 @@ watch(
   () => props.connections,
   (newVal: ConnectionInfo[]) => {
     // Add type annotation for newVal
-    console.info('[ConnectionList] Received connections prop:', JSON.stringify(newVal, null, 2));
+    log.info('[ConnectionList] Received connections prop:', JSON.stringify(newVal, null, 2));
   },
   { immediate: true, deep: true }
 );
@@ -316,7 +317,7 @@ const handleTestConnection = async (connectionId: number) => {
 export default {
   methods: {
     connectToServer(connectionId: number) {
-      console.info(`请求连接到服务器 ID: ${connectionId}`);
+      log.info(`请求连接到服务器 ID: ${connectionId}`);
       // 使用 router 实例进行导航
       this.$router.push({ name: 'Workspace', params: { connectionId: connectionId.toString() } });
     },

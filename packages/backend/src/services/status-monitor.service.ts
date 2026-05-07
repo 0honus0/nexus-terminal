@@ -3,6 +3,7 @@ import { WebSocket } from 'ws';
 import { ClientState } from '../websocket/types';
 import { settingsService } from '../settings/settings.service';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 export interface ServerStatus {
   cpuPercent?: number;
@@ -108,7 +109,7 @@ class HealthCheckCollector {
       }
       const end = raw.indexOf(delimiter, start);
       if (end === -1) {
-        console.warn(
+        logger.warn(
           `[StatusMonitor] splitSections: 未找到分隔符 "${delimiter}" (${key})，跳过该段`
         );
         continue;
@@ -126,7 +127,7 @@ class HealthCheckCollector {
       const nameMatch = output.match(/^PRETTY_NAME="?([^"]+)"?/m);
       return nameMatch ? nameMatch[1] : (output.match(/^NAME="?([^"]+)"?/m)?.[1] ?? 'Unknown');
     } catch (error: unknown) {
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 获取 OS 名称失败:',
         error instanceof Error ? error.message : error
       );
@@ -145,7 +146,7 @@ class HealthCheckCollector {
       if (model) return model;
     } catch (error: unknown) {
       /* 继续尝试 lscpu */
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 通过 /proc/cpuinfo 获取 CPU 型号失败，将尝试 lscpu:',
         error instanceof Error ? error.message : error
       );
@@ -156,7 +157,7 @@ class HealthCheckCollector {
       if (model) return model;
     } catch (error: unknown) {
       /* 忽略 lscpu 也不可用的情况 */
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 通过 lscpu 获取 CPU 型号失败:',
         error instanceof Error ? error.message : error
       );
@@ -189,7 +190,7 @@ class HealthCheckCollector {
         }
       } catch (error: unknown) {
         /* BusyBox 检测失败，使用默认 free 命令 */
-        console.debug(
+        logger.debug(
           '[StatusMonitor] 检测 BusyBox 环境失败，将使用默认 free 命令:',
           error instanceof Error ? error.message : error
         );
@@ -234,7 +235,7 @@ class HealthCheckCollector {
       }
     } catch (error: unknown) {
       /* 采集内存信息失败，返回默认值 */
-      console.warn(
+      logger.warn(
         '[StatusMonitor] 采集内存/Swap 信息失败:',
         error instanceof Error ? error.message : error
       );
@@ -251,14 +252,14 @@ class HealthCheckCollector {
       try {
         dfOutput = await this.executeSshCommand(sshClient, 'df -kP /');
       } catch (error: unknown) {
-        console.debug(
+        logger.debug(
           '[StatusMonitor] df -kP 命令失败，尝试 df -k:',
           error instanceof Error ? error.message : error
         );
         try {
           dfOutput = await this.executeSshCommand(sshClient, 'df -k /');
         } catch (error2: unknown) {
-          console.debug(
+          logger.debug(
             '[StatusMonitor] df -k 命令也失败:',
             error2 instanceof Error ? error2.message : error2
           );
@@ -285,7 +286,7 @@ class HealthCheckCollector {
       }
     } catch (error: unknown) {
       /* 采集磁盘信息失败，返回空对象 */
-      console.warn(
+      logger.warn(
         '[StatusMonitor] 采集磁盘信息失败:',
         error instanceof Error ? error.message : error
       );
@@ -301,7 +302,7 @@ class HealthCheckCollector {
       if (match) return [parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])];
     } catch (error: unknown) {
       /* 采集负载信息失败 */
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 采集系统负载信息失败:',
         error instanceof Error ? error.message : error
       );
@@ -326,7 +327,7 @@ class HealthCheckCollector {
       }
       return Object.keys(stats).length > 0 ? stats : null;
     } catch (error: unknown) {
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 解析 /proc/net/dev 失败:',
         error instanceof Error ? error.message : error
       );
@@ -344,7 +345,7 @@ class HealthCheckCollector {
       if (output.trim()) return output.trim();
     } catch (error: unknown) {
       /* ip route 不可用，继续 fallback */
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 通过 ip route 获取默认网络接口失败，将尝试解析 /proc/net/dev:',
         error instanceof Error ? error.message : error
       );
@@ -357,7 +358,7 @@ class HealthCheckCollector {
       }
     } catch (error: unknown) {
       /* 读取 /proc/net/dev 也不可用 */
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 解析 /proc/net/dev 获取网络接口失败:',
         error instanceof Error ? error.message : error
       );
@@ -377,7 +378,7 @@ class HealthCheckCollector {
       if (Number.isNaN(total) || Number.isNaN(idle)) return null;
       return { total, idle };
     } catch (error: unknown) {
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 解析 /proc/stat 失败:',
         error instanceof Error ? error.message : error
       );
@@ -435,7 +436,7 @@ class HealthCheckCollector {
       const memLine = lines.find((line) => /^\s*(Mem|内存|メモリ|RAM)[:：]/.test(line));
       const swapLine = lines.find((line) => /^\s*(Swap|交换|スワップ)[:：]/.test(line));
       if (!memLine) {
-        console.warn(
+        logger.warn(
           '[StatusMonitor] parseMemoryStats: 未找到内存行（Mem:/内存：），free 原始输出前 120 字符:',
           raw.substring(0, 120)
         );
@@ -639,11 +640,11 @@ export class StatusMonitorService {
     try {
       const intervalSeconds = await settingsService.getStatusMonitorIntervalSeconds();
       intervalMs = intervalSeconds * 1000;
-      console.info(
+      logger.info(
         `[StatusMonitor ${sessionId}] 使用配置的轮询间隔: ${intervalSeconds} 秒 (${intervalMs}ms)`
       );
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[StatusMonitor ${sessionId}] 获取轮询间隔设置失败，将使用默认值 3000ms:`,
         error
       );
@@ -717,14 +718,14 @@ export class StatusMonitorService {
         // free 命令输出单位为 KB（BusyBox 和标准 Linux 均如此），需转换为 MB
         const memStats = collector.parseMemoryStats(freeRaw, false);
         if (memStats.memTotal === undefined) {
-          console.warn(
+          logger.warn(
             `[StatusMonitor] ${sessionId} parseMemoryStats 返回无 memTotal，freeRaw 前 150 字符:`,
             freeRaw.substring(0, 150)
           );
         }
         Object.assign(status, memStats);
       } else {
-        console.warn(
+        logger.warn(
           `[StatusMonitor] ${sessionId} FREE 段落缺失或包含 FREE_FAIL:`,
           freeRaw ? '包含 FREE_FAIL' : '未找到 FREE 段落'
         );
@@ -771,7 +772,7 @@ export class StatusMonitorService {
       }
     } catch (error: unknown) {
       // 批量采集失败，降级到逐项采集
-      console.warn(
+      logger.warn(
         '[StatusMonitor] 批量采集失败，降级到逐项采集:',
         error instanceof Error ? error.message : error
       );
@@ -815,7 +816,7 @@ export class StatusMonitorService {
         status.cpuPercent = this.dataAggregator.calculateCpuPercent(sessionId, cpuTimes);
       }
     } catch (error: unknown) {
-      console.debug(
+      logger.debug(
         '[StatusMonitor] 采集 CPU 使用率失败:',
         error instanceof Error ? error.message : error
       );
@@ -840,7 +841,7 @@ export class StatusMonitorService {
           status.netTxRate = rates.netTxRate;
         }
       } catch (error: unknown) {
-        console.debug(
+        logger.debug(
           '[StatusMonitor] 计算网络速率失败:',
           error instanceof Error ? error.message : error
         );

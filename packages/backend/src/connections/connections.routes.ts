@@ -16,6 +16,7 @@ import {
   cloneConnection,
   addTagToConnections,
 } from './connections.controller';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -63,7 +64,7 @@ router.post(
           .json({ success: false, error: `文件上传错误: ${err.message}`, code: 'UPLOAD_ERROR' });
       }
       if (err) {
-        console.error('Unexpected error during file upload:', err);
+        logger.error('Unexpected error during file upload:', err);
         return res
           .status(500)
           .json({ success: false, error: '文件上传处理失败', code: 'INTERNAL_ERROR' });

@@ -6,6 +6,7 @@ import * as appearanceRepository from './appearance.repository';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 预设 HTML 主题的存储路径 (作为只读预设)
 const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
@@ -28,7 +29,7 @@ const ensurePresetHtmlThemesDirExists = async () => {
   } catch {
     // 目录不存在，创建它
     await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
-    console.debug(
+    logger.debug(
       `[AppearanceService] Created preset html-themes directory at ${PRESET_HTML_THEMES_DIR}`
     );
   }
@@ -43,7 +44,7 @@ const ensureUserCustomHtmlThemesDirExists = async () => {
   } catch {
     // 目录不存在，创建它
     await fs.mkdir(USER_CUSTOM_HTML_THEMES_DIR, { recursive: true });
-    console.debug(
+    logger.debug(
       `[AppearanceService] Created user custom_html_theme directory at ${USER_CUSTOM_HTML_THEMES_DIR}`
     );
   }
@@ -81,7 +82,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
     const themeIdNum = settingsDto.activeTerminalThemeId; // ID is now number | null
     // 验证 ID 是否为有效的数字
     if (typeof themeIdNum !== 'number') {
-      console.error(
+      logger.error(
         `[AppearanceService] 收到的 activeTerminalThemeId 不是有效的数字: ${themeIdNum}`
       );
       throw new Error(`无效的终端主题 ID 类型，应为数字。`);
@@ -90,12 +91,12 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
       // 直接使用数字 ID 调用 findThemeById 进行验证
       const themeExists = await terminalThemeRepository.findThemeById(themeIdNum);
       if (!themeExists) {
-        console.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeIdNum}`);
+        logger.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeIdNum}`);
         throw new Error(`指定的终端主题 ID 不存在: ${themeIdNum}`);
       }
-      console.debug(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
+      logger.debug(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`,
         getErrorMessage(error)
       );
@@ -106,7 +107,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
     settingsDto.activeTerminalThemeId === null
   ) {
     // 处理显式设置为 null (表示重置为默认/无用户主题)
-    console.debug(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
+    logger.debug(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
     // 仓库层会处理 null
   }
 
@@ -256,19 +257,19 @@ export const removePageBackground = async (): Promise<boolean> => {
 
     try {
       await fs.unlink(absolutePath);
-      console.info(`[AppearanceService] 已删除页面背景文件: ${absolutePath}`);
+      logger.info(`[AppearanceService] 已删除页面背景文件: ${absolutePath}`);
     } catch (error: unknown) {
       // 如果文件不存在或其他删除错误，记录日志但继续执行以清空数据库记录
       if (getNodeErrorCode(error) === 'ENOENT') {
-        console.warn(`[AppearanceService] 尝试删除页面背景文件但未找到: ${absolutePath}`);
+        logger.warn(`[AppearanceService] 尝试删除页面背景文件但未找到: ${absolutePath}`);
       } else {
-        console.error(`[AppearanceService] 删除页面背景文件时出错 (${absolutePath}):`, error);
+        logger.error(`[AppearanceService] 删除页面背景文件时出错 (${absolutePath}):`, error);
         // 可以选择抛出错误，或者仅记录并继续
         // throw new Error(`删除页面背景文件失败: ${getErrorMessage(error)}`);
       }
     }
   } else {
-    console.debug('[AppearanceService] 没有页面背景文件路径需要删除。');
+    logger.debug('[AppearanceService] 没有页面背景文件路径需要删除。');
   }
 
   // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
@@ -290,17 +291,17 @@ export const removeTerminalBackground = async (): Promise<boolean> => {
 
     try {
       await fs.unlink(absolutePath);
-      console.info(`[AppearanceService] 已删除终端背景文件: ${absolutePath}`);
+      logger.info(`[AppearanceService] 已删除终端背景文件: ${absolutePath}`);
     } catch (error: unknown) {
       if (getNodeErrorCode(error) === 'ENOENT') {
-        console.warn(`[AppearanceService] 尝试删除终端背景文件但未找到: ${absolutePath}`);
+        logger.warn(`[AppearanceService] 尝试删除终端背景文件但未找到: ${absolutePath}`);
       } else {
-        console.error(`[AppearanceService] 删除终端背景文件时出错 (${absolutePath}):`, error);
+        logger.error(`[AppearanceService] 删除终端背景文件时出错 (${absolutePath}):`, error);
         // throw new Error(`删除终端背景文件失败: ${getErrorMessage(error)}`);
       }
     }
   } else {
-    console.debug('[AppearanceService] 没有终端背景文件路径需要删除。');
+    logger.debug('[AppearanceService] 没有终端背景文件路径需要删除。');
   }
 
   // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
@@ -332,7 +333,7 @@ const sanitizeThemeNameInternal = (themeName: string): string => {
   ) {
     // Sanitize 会移除或替换非法字符，如果清理后的名字和原名不同，或原名包含路径字符，则认为非法。
     // 额外检查 '..' 防止即使 sanitize 未移除（不太可能）的情况。
-    console.warn(
+    logger.warn(
       `[AppearanceService] 检测到潜在不安全的主题文件名: ${themeName}, 清理后: ${safeName}`
     );
     throw new Error(`主题文件名 "${themeName}" 包含非法字符或路径。`);
@@ -359,10 +360,10 @@ export const listPresetHtmlThemes = async (): Promise<Array<{ name: string; type
       .filter((file) => file.endsWith('.html'))
       .map((name) => ({ name, type: 'preset' as const })); // Add type
   } catch (error: unknown) {
-    console.error('[AppearanceService] 列出预设 HTML 主题失败:', error);
+    logger.error('[AppearanceService] 列出预设 HTML 主题失败:', error);
     if (getNodeErrorCode(error) === 'ENOENT') {
       // 目录不存在
-      console.warn(`[AppearanceService] 预设 HTML 主题目录 (${PRESET_HTML_THEMES_DIR}) 未找到。`);
+      logger.warn(`[AppearanceService] 预设 HTML 主题目录 (${PRESET_HTML_THEMES_DIR}) 未找到。`);
       return [];
     }
     throw new Error('无法列出预设 HTML 主题。');
@@ -382,7 +383,7 @@ export const getPresetHtmlThemeContent = async (themeName: string): Promise<stri
     await ensurePresetHtmlThemesDirExists(); // 确保目录存在
     return await fs.readFile(filePath, 'utf-8');
   } catch (error: unknown) {
-    console.error(`[AppearanceService] 获取预设 HTML 主题 "${safeThemeName}" 内容失败:`, error);
+    logger.error(`[AppearanceService] 获取预设 HTML 主题 "${safeThemeName}" 内容失败:`, error);
     if (getNodeErrorCode(error) === 'ENOENT') {
       throw new Error(`预设 HTML 主题 "${safeThemeName}" 未找到。`);
     }
@@ -406,9 +407,9 @@ export const listUserCustomHtmlThemes = async (): Promise<
       .filter((file) => file.endsWith('.html'))
       .map((name) => ({ name, type: 'custom' as const })); // Add type
   } catch (error: unknown) {
-    console.error('[AppearanceService] 列出用户自定义 HTML 主题失败:', error);
+    logger.error('[AppearanceService] 列出用户自定义 HTML 主题失败:', error);
     if (getNodeErrorCode(error) === 'ENOENT') {
-      console.warn(
+      logger.warn(
         `[AppearanceService] 用户自定义 HTML 主题目录 (${USER_CUSTOM_HTML_THEMES_DIR}) 未找到。`
       );
       return [];
@@ -429,7 +430,7 @@ export const getUserCustomHtmlThemeContent = async (themeName: string): Promise<
     await ensureUserCustomHtmlThemesDirExists();
     return await fs.readFile(filePath, 'utf-8');
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[AppearanceService] 获取用户自定义 HTML 主题 "${safeThemeName}" 内容失败:`,
       error
     );
@@ -466,9 +467,9 @@ export const createUserCustomHtmlTheme = async (
       }
     }
     await fs.writeFile(filePath, content, 'utf-8');
-    console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 创建成功。`);
+    logger.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 创建成功。`);
   } catch (error: unknown) {
-    console.error(`[AppearanceService] 创建用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
+    logger.error(`[AppearanceService] 创建用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
     throw error; // 重新抛出原始错误或包装后的错误
   }
 };
@@ -497,9 +498,9 @@ export const updateUserCustomHtmlTheme = async (
       throw accessError;
     }
     await fs.writeFile(filePath, content, 'utf-8');
-    console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 更新成功。`);
+    logger.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 更新成功。`);
   } catch (error: unknown) {
-    console.error(`[AppearanceService] 更新用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
+    logger.error(`[AppearanceService] 更新用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
     throw error;
   }
 };
@@ -515,9 +516,9 @@ export const deleteUserCustomHtmlTheme = async (themeName: string): Promise<void
   try {
     await ensureUserCustomHtmlThemesDirExists(); // 确保目录存在
     await fs.unlink(filePath);
-    console.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 删除成功。`);
+    logger.info(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 删除成功。`);
   } catch (error: unknown) {
-    console.error(`[AppearanceService] 删除用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
+    logger.error(`[AppearanceService] 删除用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
     if (getNodeErrorCode(error) === 'ENOENT') {
       throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 未找到,无法删除。`);
     }
@@ -539,7 +540,7 @@ export const listAllHtmlThemes = async (): Promise<
     const customThemes = await listUserCustomHtmlThemes();
     return [...presetThemes, ...customThemes];
   } catch (error: unknown) {
-    console.error('[AppearanceService] 列出所有 HTML 主题失败:', error);
+    logger.error('[AppearanceService] 列出所有 HTML 主题失败:', error);
     throw new Error('无法列出所有 HTML 主题。');
   }
 };
@@ -553,7 +554,7 @@ export const listAllHtmlThemes = async (): Promise<
  *             The 'local' in its name is misleading under the new system.
  */
 export const createLocalHtmlPreset = async (themeName: string, content: string): Promise<void> => {
-  console.warn(
+  logger.warn(
     '[AppearanceService] createLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using createUserCustomHtmlTheme.'
   );
   return createUserCustomHtmlTheme(themeName, content);
@@ -564,7 +565,7 @@ export const createLocalHtmlPreset = async (themeName: string, content: string):
  *             The 'local' in its name is misleading under the new system.
  */
 export const updateLocalHtmlPreset = async (themeName: string, content: string): Promise<void> => {
-  console.warn(
+  logger.warn(
     '[AppearanceService] updateLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using updateUserCustomHtmlTheme.'
   );
   return updateUserCustomHtmlTheme(themeName, content);
@@ -575,7 +576,7 @@ export const updateLocalHtmlPreset = async (themeName: string, content: string):
  *             The 'local' in its name is misleading under the new system.
  */
 export const deleteLocalHtmlPreset = async (themeName: string): Promise<void> => {
-  console.warn(
+  logger.warn(
     '[AppearanceService] deleteLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using deleteUserCustomHtmlTheme.'
   );
   return deleteUserCustomHtmlTheme(themeName);
@@ -592,7 +593,7 @@ export const getRemoteHtmlPresetsRepositoryUrl = async (): Promise<string | null
     const settings = await getSettings();
     return settings.remoteHtmlPresetsUrl !== undefined ? settings.remoteHtmlPresetsUrl : null;
   } catch (error: unknown) {
-    console.error('[AppearanceService] 获取远程 HTML 主题仓库链接失败:', error);
+    logger.error('[AppearanceService] 获取远程 HTML 主题仓库链接失败:', error);
     throw new Error('无法获取远程 HTML 主题仓库链接。');
   }
 };
@@ -620,9 +621,9 @@ export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null): 
     }
 
     await updateSettings({ remoteHtmlPresetsUrl: finalUrl });
-    console.info(`[AppearanceService] 远程 HTML 主题仓库链接更新为: ${finalUrl}`);
+    logger.info('[AppearanceService] 远程 HTML 主题仓库链接已更新');
   } catch (error: unknown) {
-    console.error('[AppearanceService] 更新远程 HTML 主题仓库链接失败:', error);
+    logger.error('[AppearanceService] 更新远程 HTML 主题仓库链接失败:', error);
     throw error; // 重新抛出，让控制器处理
   }
 };
@@ -690,7 +691,7 @@ export const listRemoteHtmlPresets = async (
   const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${repoPath}?ref=${ref}`;
 
   try {
-    console.debug(`[AppearanceService] 正在从 GitHub API 获取远程主题列表: ${apiUrl}`);
+    logger.debug('[AppearanceService] 正在从 GitHub API 获取远程主题列表');
     const response = await axios.get(apiUrl, {
       headers: { Accept: 'application/vnd.github.v3+json' },
       // 对于公共仓库，通常不需要 token
@@ -703,19 +704,16 @@ export const listRemoteHtmlPresets = async (
           name: item.name,
           downloadUrl: item.download_url, // GitHub API 通常会提供 download_url
         }));
-      console.debug(`[AppearanceService] 成功获取 ${htmlFiles.length} 个远程 HTML 主题。`);
+      logger.debug(`[AppearanceService] 成功获取 ${htmlFiles.length} 个远程 HTML 主题。`);
       return htmlFiles;
     }
-    console.error(
+    logger.error(
       `[AppearanceService] 从 GitHub API 获取主题列表失败: 状态 ${response.status}`,
       response.data
     );
     throw new Error(`无法从 GitHub (${urlToFetch}) 获取主题列表。状态: ${response.status}`);
   } catch (error: unknown) {
-    console.error(
-      `[AppearanceService] 请求 GitHub API (${apiUrl}) 时出错:`,
-      getErrorMessage(error)
-    );
+    logger.error(`[AppearanceService] 请求 GitHub API (${apiUrl}) 时出错:`, getErrorMessage(error));
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       throw new Error(`远程仓库路径未找到: ${urlToFetch} (API: ${apiUrl})`);
     }
@@ -768,7 +766,7 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
   }
 
   try {
-    console.debug(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
+    logger.debug('[AppearanceService] 正在从远程 URL 获取主题内容');
     const response = await axios.get(fileUrl, {
       responseType: 'text', // 确保获取的是文本内容
       maxRedirects: 0, // 禁止重定向 (SSRF 防护)
@@ -776,16 +774,16 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
     });
 
     if (response.status === 200 && typeof response.data === 'string') {
-      console.debug(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
+      logger.debug(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
       return response.data;
     }
-    console.error(
+    logger.error(
       `[AppearanceService] 从 ${fileUrl} 获取内容失败: 状态 ${response.status}`,
       response.data
     );
     throw new Error(`无法从远程 URL (${fileUrl}) 获取内容。状态: ${response.status}`);
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[AppearanceService] 请求远程文件内容 (${fileUrl}) 时出错:`,
       getErrorMessage(error)
     );

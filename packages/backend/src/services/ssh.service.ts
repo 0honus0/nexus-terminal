@@ -8,6 +8,7 @@ import { decrypt } from '../utils/crypto';
 import * as SshKeyService from '../ssh-keys/ssh-keys.service';
 import { getErrorMessage } from '../utils/AppError';
 import type { ConnectionRoutePlan, RouteHop } from '../types/connection.types';
+import { logger } from '../utils/logger';
 
 // 扩展 Client 类型，附着路由规划信息
 interface ClientWithRoute extends Client {
@@ -73,11 +74,11 @@ export interface DecryptedConnectionDetails {
 export const getConnectionDetails = async (
   connectionId: number
 ): Promise<DecryptedConnectionDetails> => {
-  console.debug(`SshService: getConnectionDetails - 获取连接 ${connectionId} 的详细信息...`);
+  logger.debug(`SshService: getConnectionDetails - 获取连接 ${connectionId} 的详细信息...`);
   const rawConnInfo = await ConnectionRepository.findFullConnectionById(connectionId);
 
   if (!rawConnInfo) {
-    console.error(`SshService: 连接配置 ID ${connectionId} 未找到。`);
+    logger.error(`SshService: 连接配置 ID ${connectionId} 未找到。`);
     throw new Error(`连接配置 ID ${connectionId} 未找到。`);
   }
 
@@ -132,7 +133,7 @@ export const getConnectionDetails = async (
           typedRawConnInfo.ssh_key_id
         );
         if (!storedKeyDetails) {
-          console.error(
+          logger.error(
             `SshService: Error: Connection ${connectionId} references non-existent SSH key ID ${typedRawConnInfo.ssh_key_id}`
           );
           throw new Error(`关联的 SSH 密钥 (ID: ${typedRawConnInfo.ssh_key_id}) 未找到。`);
@@ -145,7 +146,7 @@ export const getConnectionDetails = async (
           fullConnInfo.passphrase = decrypt(typedRawConnInfo.encrypted_passphrase);
         }
       } else {
-        console.warn(
+        logger.warn(
           `SshService: Connection ${connectionId} uses key auth but has neither ssh_key_id nor encrypted_private_key.`
         );
       }
@@ -232,13 +233,13 @@ export const getConnectionDetails = async (
             fullConnInfo.jump_chain.push(decryptedHop);
           }
         } else {
-          console.debug(
+          logger.debug(
             `SshService: Parsed jump_chain for connection ${connectionId} is empty or not an array after parsing.`
           );
         }
       } catch (parseOrProcessError: unknown) {
         const parseOrProcessErrMsg = getErrorMessage(parseOrProcessError);
-        console.error(
+        logger.error(
           `SshService: Failed to parse or process jump_chain for connection ${connectionId}. Raw jump_chain: "${typedRawConnInfo.jump_chain}". Error:`,
           parseOrProcessError
         );
@@ -247,7 +248,7 @@ export const getConnectionDetails = async (
         );
       }
     } else {
-      console.debug(
+      logger.debug(
         `SshService: Connection ${connectionId} does not have jump_chain configuration in DB, or it is null/empty string.`
       );
     }
@@ -255,7 +256,7 @@ export const getConnectionDetails = async (
     return fullConnInfo;
   } catch (decryptError: unknown) {
     const decryptErrMsg = getErrorMessage(decryptError);
-    console.error(`SshService: 处理连接 ${connectionId} 凭证、代理或跳板机凭证失败:`, decryptError);
+    logger.error(`SshService: 处理连接 ${connectionId} 凭证、代理或跳板机凭证失败:`, decryptError);
     throw new Error(`处理凭证或配置失败: ${decryptErrMsg}`);
   }
 };
@@ -274,7 +275,7 @@ const _setupSshClientListenersAndConnect = (
     const eventHandlers = {
       ready: async () => {
         const successMessage = `${logPrefix} SSH connection successful. Target: ${config.host || (config.sock ? 'stream-based' : 'unknown')}`;
-        console.debug(successMessage);
+        logger.debug(successMessage);
         client.removeListener('error', eventHandlers.error);
         client.removeListener('close', eventHandlers.close);
 
@@ -287,7 +288,7 @@ const _setupSshClientListenersAndConnect = (
               currentTimeSeconds
             );
           } catch (updateError: unknown) {
-            console.error(
+            logger.error(
               `SshService: Failed to update last_connected_at for connection ID ${connectionIdForUpdate}:`,
               updateError
             );
@@ -299,11 +300,11 @@ const _setupSshClientListenersAndConnect = (
         client.removeListener('ready', eventHandlers.ready);
         client.removeListener('error', eventHandlers.error);
         client.removeListener('close', eventHandlers.close);
-        console.error(`${logPrefix} SSH connection error:`, err);
+        logger.error(`${logPrefix} SSH connection error:`, err);
         try {
           client.end();
         } catch (error: unknown) {
-          console.error(`${logPrefix} Error ending client in errorHandler:`, error);
+          logger.error(`${logPrefix} Error ending client in errorHandler:`, error);
         }
         // 为 DNS 解析失败提供友好的中文错误消息
         const dnsErrorMap: Record<string, string> = {
@@ -322,7 +323,7 @@ const _setupSshClientListenersAndConnect = (
         client.removeListener('ready', eventHandlers.ready);
         client.removeListener('error', eventHandlers.error);
         client.removeListener('close', eventHandlers.close);
-        console.warn(`${logPrefix} SSH connection closed.`);
+        logger.warn(`${logPrefix} SSH connection closed.`);
       },
     };
 
@@ -330,7 +331,7 @@ const _setupSshClientListenersAndConnect = (
     client.on('error', eventHandlers.error);
     client.on('close', eventHandlers.close);
 
-    console.debug(
+    logger.debug(
       `${logPrefix} Attempting to connect... Config: host=${config.host}, port=${config.port}, user=${config.username}, sock=${!!config.sock}`
     );
     client.connect(config);
@@ -363,7 +364,7 @@ const _establishDirectSshConnection = (
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
-      console.debug(
+      logger.debug(
         `SshService: Keyboard interactive authentication requested for ${connDetails.name}. Messages: ${JSON.stringify(messages)}`
       );
       // 对于 TOTP/2FA，通常只有一个提示信息
@@ -426,7 +427,7 @@ const _connectViaSocksProxy = (
         } else {
           errMsg = `通过 SOCKS5 代理 ${proxyDetails.host}:${proxyDetails.port} 连接目标 ${destinationHost}:${destinationPort} 失败: ${socksError.message}`;
         }
-        console.error(`SshService: ${errMsg}`);
+        logger.error(`SshService: ${errMsg}`);
         reject(new Error(errMsg));
       });
   });
@@ -475,7 +476,7 @@ const _connectViaHttpProxy = (
         } else {
           errMsg = `HTTP 代理 ${proxyDetails.host}:${proxyDetails.port} 拒绝连接到目标 ${destinationHost}:${destinationPort} (状态码: ${res.statusCode})`;
         }
-        console.error(`SshService: ${errMsg}`);
+        logger.error(`SshService: ${errMsg}`);
         reject(new Error(errMsg));
       }
     });
@@ -492,13 +493,13 @@ const _connectViaHttpProxy = (
       } else {
         errMsg = `HTTP 代理 ${proxyDetails.host}:${proxyDetails.port} 请求错误: ${err.message}`;
       }
-      console.error(`SshService: ${errMsg}`);
+      logger.error(`SshService: ${errMsg}`);
       reject(new Error(errMsg));
     });
     req.on('timeout', () => {
       req.destroy();
       const errMsg = `HTTP proxy ${proxyDetails.host}:${proxyDetails.port} connection timed out`;
-      console.error(`SshService: ${errMsg}`);
+      logger.error(`SshService: ${errMsg}`);
       reject(new Error(errMsg));
     });
     req.end();
@@ -552,13 +553,13 @@ const _establishProxyConnection = async (
     );
   } catch (proxyError: unknown) {
     const proxyErrMsg = getErrorMessage(proxyError);
-    console.error(
+    logger.error(
       `SshService: Proxy connection setup failed for ${connDetails.name}: ${proxyErrMsg}`
     );
     try {
       sshClient.end();
     } catch (cleanupError: unknown) {
-      console.debug(
+      logger.debug(
         '[SshService] 关闭代理连接失败:',
         cleanupError instanceof Error ? cleanupError.message : cleanupError
       );
@@ -595,7 +596,7 @@ function _prepareConnectConfigForHop(
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
-      console.debug(
+      logger.debug(
         `SshService: Keyboard interactive auth for jump host ${hopDetail.name}. Messages: ${JSON.stringify(messages)}`
       );
       if (hopDetail.password) {
@@ -625,14 +626,14 @@ function _cleanupJumpChainClients(
     try {
       clientOnError.end();
     } catch (error: unknown) {
-      console.error(`${logPrefix || 'SshService'}: 清理失败客户端时出错:`, getErrorMessage(error));
+      logger.error(`${logPrefix || 'SshService'}: 清理失败客户端时出错:`, getErrorMessage(error));
     }
   }
   activeClients.forEach((client) => {
     try {
       client.end();
     } catch (error: unknown) {
-      console.error(`${logPrefix || 'SshService'}: 清理活跃客户端时出错:`, getErrorMessage(error));
+      logger.error(`${logPrefix || 'SshService'}: 清理活跃客户端时出错:`, getErrorMessage(error));
     }
   });
   activeClients.length = 0;
@@ -664,7 +665,7 @@ function _connectToFinalTarget(
       messages: string[],
       finish: (responses: string[]) => void
     ) => {
-      console.debug(
+      logger.debug(
         `SshService: Keyboard interactive auth for final target ${finalTargetDetails.name}. Messages: ${JSON.stringify(messages)}`
       );
       if (finalTargetDetails.password) {
@@ -709,10 +710,10 @@ function _forwardOutAndRecurse(
     ? finalTargetDetails.port
     : jumpChainDetails[hopIndex + 1].port;
 
-  console.debug(`${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort}`);
+  logger.debug(`${currentHopLogPrefix}forwardOut to ${nextTargetHost}:${nextTargetPort}`);
   currentHopClient.forwardOut('127.0.0.1', 0, nextTargetHost, nextTargetPort, (err, nextStream) => {
     if (err) {
-      console.error(`${currentHopLogPrefix}forwardOut FAILED:`, err);
+      logger.error(`${currentHopLogPrefix}forwardOut FAILED:`, err);
       _cleanupJumpChainClients(activeClients, currentHopClient, currentHopLogPrefix);
       rejectOuter(
         new Error(
@@ -721,7 +722,7 @@ function _forwardOutAndRecurse(
       );
       return;
     }
-    console.debug(`${currentHopLogPrefix}forwardOut successful.`);
+    logger.debug(`${currentHopLogPrefix}forwardOut successful.`);
     _establishConnectionViaJumpChainRecursive(
       hopIndex + 1,
       nextStream,
@@ -752,7 +753,7 @@ async function _establishConnectionViaJumpChainRecursive(
     // Base case: 所有跳板已连接，连接到最终目标
     if (hopIndex === jumpChainDetails.length) {
       if (!previousStream) {
-        console.error(
+        logger.error(
           `${hopLogPrefix} Error - 跳板链耗尽但无可用流到最终目标 ${finalTargetDetails.name}.`
         );
         rejectOuter(new Error('SshService: 跳板链耗尽但无可用流到最终目标，内部逻辑错误。'));
@@ -781,7 +782,7 @@ async function _establishConnectionViaJumpChainRecursive(
 
           // 输出结构化路由规划日志
           const routeStr = collectedHops.map((h) => `${h.name || h.host}:${h.port}`).join(' -> ');
-          console.info(
+          logger.info(
             `[RoutePlan] ${finalTargetDetails.name}: ${routeStr} | 总延迟: ${routePlan.totalLatencyMs}ms | ${collectedHops.length} 跳`
           );
 
@@ -794,7 +795,7 @@ async function _establishConnectionViaJumpChainRecursive(
     // 递归步骤：连接当前跳板
     const currentJumpHostDetails = jumpChainDetails[hopIndex];
     const currentHopLogPrefix = `${hopLogPrefix} (${currentJumpHostDetails.name || currentJumpHostDetails.host}:${currentJumpHostDetails.port}) -> `;
-    console.debug(
+    logger.debug(
       `${currentHopLogPrefix}连接跳板: ${currentJumpHostDetails.host}:${currentJumpHostDetails.port} (User: ${currentJumpHostDetails.username}). PreviousStream: ${!!previousStream}`
     );
 
@@ -807,7 +808,7 @@ async function _establishConnectionViaJumpChainRecursive(
     );
 
     const cleanupAndReject = (error: Error, clientOnError?: Client) => {
-      console.error(`${currentHopLogPrefix}Error: ${error.message}`);
+      logger.error(`${currentHopLogPrefix}Error: ${error.message}`);
       _cleanupJumpChainClients(activeClients, clientOnError, currentHopLogPrefix);
       rejectOuter(error);
     };
@@ -828,7 +829,7 @@ async function _establishConnectionViaJumpChainRecursive(
         latencyMs: hopLatency,
       });
 
-      console.debug(`${currentHopLogPrefix}连接成功（${hopLatency}ms）。`);
+      logger.debug(`${currentHopLogPrefix}连接成功（${hopLatency}ms）。`);
       _forwardOutAndRecurse(
         currentHopClient,
         currentHopLogPrefix,
@@ -844,7 +845,7 @@ async function _establishConnectionViaJumpChainRecursive(
     };
 
     const errorHandler = (err: Error) => {
-      console.error(`${currentHopLogPrefix}Connection ERROR:`, err);
+      logger.error(`${currentHopLogPrefix}Connection ERROR:`, err);
       currentHopClient.removeListener('ready', readyHandler);
       currentHopClient.removeListener('close', closeHandler);
       cleanupAndReject(
@@ -856,14 +857,14 @@ async function _establishConnectionViaJumpChainRecursive(
     const closeHandler = () => {
       currentHopClient.removeListener('ready', readyHandler);
       currentHopClient.removeListener('error', errorHandler);
-      console.warn(`${currentHopLogPrefix}Connection closed unexpectedly.`);
+      logger.warn(`${currentHopLogPrefix}Connection closed unexpectedly.`);
     };
 
     currentHopClient.once('ready', readyHandler);
     currentHopClient.on('error', errorHandler);
     currentHopClient.on('close', closeHandler);
 
-    console.debug(
+    logger.debug(
       `${currentHopLogPrefix}连接配置: host=${connectConfigForThisHop.host}, port=${connectConfigForThisHop.port}, sock=${!!connectConfigForThisHop.sock}`
     );
     currentHopClient.connect(connectConfigForThisHop);
@@ -892,7 +893,7 @@ export const establishSshConnection = (
         timeout // timeoutPerHop (can be refined if needed per hop)
       );
     }
-    console.warn(
+    logger.warn(
       `SshService: Connection ${connDetails.name} set to 'jump' but jump_chain is MISSING or EMPTY. Attempting direct connection as fallback.`
     );
     return _establishDirectSshConnection(connDetails, timeout);
@@ -901,7 +902,7 @@ export const establishSshConnection = (
     if (connDetails.proxy) {
       return _establishProxyConnection(connDetails, timeout);
     }
-    console.warn(
+    logger.warn(
       `SshService: Connection ${connDetails.name} set to 'proxy' but proxy details are MISSING. Attempting direct connection as fallback.`
     );
     return _establishDirectSshConnection(connDetails, timeout);
@@ -930,7 +931,7 @@ export const openShell = (
     const timer = setTimeout(() => {
       if (!callbackCalled) {
         callbackCalled = true;
-        console.error(`SshService: 打开 Shell 超时（${timeoutMs}ms）。`);
+        logger.error(`SshService: 打开 Shell 超时（${timeoutMs}ms）。`);
         reject(new Error(`打开 Shell 超时（${timeoutMs}ms）。`));
       }
     }, timeoutMs);
@@ -940,10 +941,10 @@ export const openShell = (
       if (callbackCalled) return; // 超时已处理
       callbackCalled = true;
       if (err) {
-        console.error(`SshService: 打开 Shell 失败:`, err);
+        logger.error(`SshService: 打开 Shell 失败:`, err);
         return reject(new Error(`打开 Shell 失败: ${err.message}`));
       }
-      console.debug(`SshService: Shell 通道已打开。`);
+      logger.debug(`SshService: Shell 通道已打开。`);
       resolve(stream);
     });
   });
@@ -956,7 +957,7 @@ export const openShell = (
  * @throws Error 如果连接失败或配置错误
  */
 export const testConnection = async (connectionId: number): Promise<{ latency: number }> => {
-  console.debug(`SshService: 测试连接 ${connectionId}...`);
+  logger.debug(`SshService: 测试连接 ${connectionId}...`);
   let sshClient: Client | null = null;
   const startTime = Date.now();
   try {
@@ -964,15 +965,15 @@ export const testConnection = async (connectionId: number): Promise<{ latency: n
     sshClient = await establishSshConnection(connDetails, TEST_TIMEOUT);
     const endTime = Date.now();
     const latency = endTime - startTime;
-    console.debug(`SshService: 测试连接 ${connectionId} 成功，延迟: ${latency}ms。`);
+    logger.debug(`SshService: 测试连接 ${connectionId} 成功，延迟: ${latency}ms。`);
     return { latency };
   } catch (error: unknown) {
-    console.error(`SshService: 测试连接 ${connectionId} 失败:`, error);
+    logger.error(`SshService: 测试连接 ${connectionId} 失败:`, error);
     throw error;
   } finally {
     if (sshClient) {
       sshClient.end();
-      console.debug(`SshService: 测试连接 ${connectionId} 的客户端已关闭。`);
+      logger.debug(`SshService: 测试连接 ${connectionId} 的客户端已关闭。`);
     }
   }
 };
@@ -994,7 +995,7 @@ export const testUnsavedConnection = async (connectionConfig: {
   ssh_key_id?: number | null;
   proxy_id?: number | null;
 }): Promise<{ latency: number }> => {
-  console.debug(
+  logger.debug(
     `SshService: 测试未保存的连接到 ${connectionConfig.host}:${connectionConfig.port}...`
   );
   let sshClient: Client | null = null;
@@ -1017,7 +1018,7 @@ export const testUnsavedConnection = async (connectionConfig: {
     if (tempConnDetails.auth_method === 'password') {
       tempConnDetails.password = connectionConfig.password;
     } else if (connectionConfig.ssh_key_id) {
-      console.debug(
+      logger.debug(
         `SshService: Testing unsaved connection using stored SSH key ID: ${connectionConfig.ssh_key_id}...`
       );
       const storedKeyDetails = await SshKeyService.getDecryptedSshKeyById(
@@ -1034,7 +1035,7 @@ export const testUnsavedConnection = async (connectionConfig: {
     }
 
     if (connectionConfig.proxy_id) {
-      console.debug(`SshService: 测试连接需要获取代理 ${connectionConfig.proxy_id} 的信息...`);
+      logger.debug(`SshService: 测试连接需要获取代理 ${connectionConfig.proxy_id} 的信息...`);
       const rawProxyInfo = await ProxyRepository.findProxyById(connectionConfig.proxy_id);
       if (!rawProxyInfo) {
         throw new Error(`代理 ID ${connectionConfig.proxy_id} 未找到。`);
@@ -1077,10 +1078,10 @@ export const testUnsavedConnection = async (connectionConfig: {
             : undefined,
         };
         tempConnDetails.connection_proxy_setting = 'proxy'; // Ensure this is set
-        console.debug(`SshService: 代理 ${connectionConfig.proxy_id} 信息获取并解密成功。`);
+        logger.debug(`SshService: 代理 ${connectionConfig.proxy_id} 信息获取并解密成功。`);
       } catch (decryptError: unknown) {
         const decryptErrMsg = getErrorMessage(decryptError);
-        console.error(`SshService: 处理代理 ${connectionConfig.proxy_id} 凭证失败:`, decryptError);
+        logger.error(`SshService: 处理代理 ${connectionConfig.proxy_id} 凭证失败:`, decryptError);
         throw new Error(`处理代理凭证失败: ${decryptErrMsg}`);
       }
     } else {
@@ -1091,12 +1092,12 @@ export const testUnsavedConnection = async (connectionConfig: {
 
     const endTime = Date.now();
     const latency = endTime - startTime;
-    console.debug(
+    logger.debug(
       `SshService: 测试未保存的连接到 ${connectionConfig.host}:${connectionConfig.port} 成功，延迟: ${latency}ms。`
     );
     return { latency };
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `SshService: 测试未保存的连接到 ${connectionConfig.host}:${connectionConfig.port} 失败:`,
       error
     );
@@ -1104,7 +1105,7 @@ export const testUnsavedConnection = async (connectionConfig: {
   } finally {
     if (sshClient) {
       sshClient.end();
-      console.debug(`SshService: 测试未保存连接的客户端已关闭。`);
+      logger.debug(`SshService: 测试未保存连接的客户端已关闭。`);
     }
   }
 };

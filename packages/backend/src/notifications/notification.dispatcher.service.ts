@@ -6,6 +6,7 @@ import telegramSenderService from './senders/telegram.sender.service';
 import emailSenderService from './senders/email.sender.service';
 import webhookSenderService from './senders/webhook.sender.service';
 import type { INotificationSender } from './notification-sender.interface';
+import { logger } from '../utils/logger';
 
 class NotificationDispatcherService {
   // 使用 Map 来存储不同渠道类型的发送器实例
@@ -36,12 +37,12 @@ class NotificationDispatcherService {
    */
   registerSender(channelType: NotificationChannelType, sender: INotificationSender) {
     if (this.senders.has(channelType)) {
-      console.warn(
+      logger.warn(
         `[NotificationDispatcher] 通道类型 '${channelType}' 的发送器已注册。将进行覆盖。`
       );
     }
     this.senders.set(channelType, sender);
-    console.info(`[NotificationDispatcher] 已为通道类型 '${channelType}' 注册发送器。`);
+    logger.info(`[NotificationDispatcher] 已为通道类型 '${channelType}' 注册发送器。`);
   }
 
   listenForNotifications() {
@@ -55,7 +56,7 @@ class NotificationDispatcherService {
         // 使用 setImmediate 避免阻塞
         setImmediate(() => {
           this.dispatchNotification(processedNotification).catch((error: unknown) => {
-            console.error(
+            logger.error(
               `[NotificationDispatcher] 分发通道 ${processedNotification.channelType} 的通知时出错:`,
               error
             );
@@ -63,29 +64,29 @@ class NotificationDispatcherService {
         });
       }
     );
-    console.info('[NotificationDispatcher] 正在监听处理后的通知。');
+    logger.info('[NotificationDispatcher] 正在监听处理后的通知。');
   }
 
   async dispatchNotification(notification: ProcessedNotification): Promise<void> {
     if (!notification) {
-      console.error('[NotificationDispatcher] 收到空的通知对象');
+      logger.error('[NotificationDispatcher] 收到空的通知对象');
       return;
     }
     const sender = this.senders.get(notification.channelType);
 
     if (!sender) {
-      console.error(
+      logger.error(
         `[NotificationDispatcher] 没有为通道类型注册发送器: ${notification.channelType}。跳过通知。`
       );
       return;
     }
 
-    console.info(`[NotificationDispatcher] 正在通过 ${notification.channelType} 分发通知`);
+    logger.info(`[NotificationDispatcher] 正在通过 ${notification.channelType} 分发通知`);
     try {
       await sender.send(notification);
-      console.info(`[NotificationDispatcher] 已成功通过 ${notification.channelType} 发送通知`);
+      logger.info(`[NotificationDispatcher] 已成功通过 ${notification.channelType} 发送通知`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[NotificationDispatcher] 通过 ${notification.channelType} 发送通知失败:`,
         error
       );

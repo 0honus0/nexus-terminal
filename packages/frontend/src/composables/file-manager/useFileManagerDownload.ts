@@ -8,6 +8,7 @@ import type { useSessionStore } from '../../stores/session.store';
 import { getWsDepsFromSession } from './fileManagerWsUtils';
 import type { SftpManagerInstance } from '../../composables/useSftpActions';
 import type { FileListItem } from '../../types/sftp.types';
+import { log } from '@/utils/log';
 
 type SessionStore = ReturnType<typeof useSessionStore>;
 
@@ -48,19 +49,19 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
       return;
     }
     if (!dbConnectionId) {
-      console.error(`${logPrefix.value} Cannot download: Missing connection ID.`);
+      log.error(`${logPrefix.value} Cannot download: Missing connection ID.`);
       return;
     }
     let manager = currentSftpManager.value;
     if (!manager) {
-      console.warn(
+      log.warn(
         `${logPrefix.value} SFTP manager not available for download, attempting recovery...`
       );
       if (recoverManager?.()) {
         manager = currentSftpManager.value;
       }
       if (!manager) {
-        console.error(
+        log.error(
           `${logPrefix.value} Cannot download: SFTP manager is not available after recovery.`
         );
         showError('SFTP manager is not available.');
@@ -70,13 +71,13 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
 
     items.forEach((item) => {
       if (!item.attrs.isFile) {
-        console.warn(`${logPrefix.value} Skipping download for non-file item: ${item.filename}`);
+        log.warn(`${logPrefix.value} Skipping download for non-file item: ${item.filename}`);
         return;
       }
 
       const downloadPath = manager.joinPath(manager.currentPath.value, item.filename);
       const downloadUrl = `/api/v1/sftp/download?connectionId=${dbConnectionId}&remotePath=${encodeURIComponent(downloadPath)}`;
-      console.info(`${logPrefix.value} Triggering download for ${item.filename}: ${downloadUrl}`);
+      log.info(`${logPrefix.value} Triggering download for ${item.filename}: ${downloadUrl}`);
 
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -99,19 +100,19 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
       return;
     }
     if (!dbConnectionId) {
-      console.error(`${logPrefix.value} Cannot download directory: Missing connection ID.`);
+      log.error(`${logPrefix.value} Cannot download directory: Missing connection ID.`);
       return;
     }
     let manager = currentSftpManager.value;
     if (!manager) {
-      console.warn(
+      log.warn(
         `${logPrefix.value} SFTP manager not available for directory download, attempting recovery...`
       );
       if (recoverManager?.()) {
         manager = currentSftpManager.value;
       }
       if (!manager) {
-        console.error(
+        log.error(
           `${logPrefix.value} Cannot download directory: SFTP manager is not available after recovery.`
         );
         showError('SFTP manager is not available.');
@@ -120,7 +121,7 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
     }
 
     if (!item.attrs.isDirectory) {
-      console.warn(
+      log.warn(
         `${logPrefix.value} Skipping directory download for non-directory item: ${item.filename}`
       );
       return;
@@ -129,7 +130,7 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
     const directoryPath = manager.joinPath(manager.currentPath.value, item.filename);
     const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${dbConnectionId}&remotePath=${encodeURIComponent(directoryPath)}`;
 
-    console.info(
+    log.info(
       `${logPrefix.value} Attempting directory download for ${item.filename}: ${downloadUrl}`
     );
 
@@ -154,9 +155,9 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
           link.click();
           document.body.removeChild(link);
           URL.revokeObjectURL(link.href);
-          console.info(`${logPrefix.value} Directory download triggered for: ${filename}`);
+          log.info(`${logPrefix.value} Directory download triggered for: ${filename}`);
         } else {
-          console.error(
+          log.error(
             `${logPrefix.value} Directory download failed: ${response.status} ${response.statusText}`
           );
           let errorMsg = `Server responded with status ${response.status}`;
@@ -168,7 +169,7 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
               const textError = await response.text();
               if (textError) errorMsg = textError;
             } catch (textParseError: unknown) {
-              console.debug(
+              log.debug(
                 '[FileManager] 读取错误响应文本失败:',
                 textParseError instanceof Error ? textParseError.message : textParseError
               );
@@ -178,7 +179,7 @@ export function useFileManagerDownload(options: UseFileManagerDownloadOptions) {
         }
       })
       .catch((error: unknown) => {
-        console.error(`${logPrefix.value} Network error during directory download:`, error);
+        log.error(`${logPrefix.value} Network error during directory download:`, error);
         showError(error instanceof Error ? error.message : String(error));
       });
   };

@@ -1,5 +1,6 @@
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { ErrorFactory } from '../utils/AppError';
+// logger 已移除，未使用
 
 export interface Passkey {
   id: number;
@@ -117,7 +118,7 @@ export class PasskeyRepository {
     const sql = 'SELECT * FROM passkeys WHERE user_id = ? ORDER BY created_at DESC';
     const results = await allDb<PasskeyDbRow>(db, sql, [userId]);
     // Log the raw results from the database before mapping
-    // console.info(`[PasskeyRepository] Raw passkeys for user ${userId}:`, JSON.stringify(results, null, 2));
+    // logger.info(`[PasskeyRepository] Raw passkeys for user ${userId}:`, JSON.stringify(results, null, 2));
     return mapPasskeyResults(results);
   }
 

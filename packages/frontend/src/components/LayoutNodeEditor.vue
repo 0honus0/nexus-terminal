@@ -3,6 +3,7 @@ import { computed, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import draggable from 'vuedraggable';
 import { useLayoutStore, type LayoutNode, type PaneName } from '../stores/layout.store';
+import { log } from '@/utils/log';
 
 // --- Props ---
 const props = defineProps({
@@ -46,7 +47,7 @@ const childrenList = computed({
     // 移除下面的 emit 调用，因为它导致了事件风暴
     // emit('update:node', { ...props.node, children: newChildren });
     // 添加日志以确认 setter 被调用，并依赖 vuedraggable 的直接修改
-    console.info(
+    log.info(
       '[LayoutNodeEditor] childrenList setter called, relying on v-model/vuedraggable mutation.'
     );
   },
@@ -104,7 +105,7 @@ const handleChildUpdate = (updatedChildNode: LayoutNode, index: number) => {
 // 处理子节点移除事件
 const handleChildRemove = (payload: { parentNodeId: string | undefined; nodeIndex: number }) => {
   // 总是将移除事件向上传递，让顶层 LayoutConfigurator 处理
-  console.info(`[LayoutNodeEditor ${props.node.id}] Relaying removeNode event upwards:`, payload);
+  log.info(`[LayoutNodeEditor ${props.node.id}] Relaying removeNode event upwards:`, payload);
   emit('removeNode', payload);
 };
 </script>

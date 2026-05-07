@@ -6,6 +6,7 @@ import {
 } from '../types';
 import { clientStates, sftpService } from '../state';
 import { getErrorMessage } from '../../utils/AppError';
+import { logger } from '../../utils/logger';
 
 type SftpOperationPayload = {
   path?: string;
@@ -49,7 +50,7 @@ export async function handleSftpOperation(
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 
   if (!sessionId || !state) {
-    console.warn(`WebSocket: 收到来自 ${ws.username} 的 SFTP 请求 (${type})，但无活动会话。`);
+    logger.warn({ username: ws.username, type }, 'WebSocket: SFTP 请求收到但无活动会话');
     const errPayload: { message: string; requestId?: string } = { message: '无效的会话' };
     if (requestId) errPayload.requestId = requestId;
     if (ws.readyState === WebSocket.OPEN)
@@ -57,8 +58,9 @@ export async function handleSftpOperation(
     return;
   }
   if (!requestId) {
-    console.error(
-      `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 SFTP 请求 (${type})，但缺少 requestId。`
+    logger.error(
+      { username: ws.username, sessionId, type },
+      'WebSocket: SFTP 请求收到但缺少 requestId'
     );
     if (ws.readyState === WebSocket.OPEN)
       ws.send(
@@ -173,7 +175,7 @@ export async function handleSftpOperation(
         } else throw new Error("Missing 'source' or 'requestId' in payload for decompress");
         break;
       default:
-        console.warn(`WebSocket: Received unhandled SFTP message type in sftp.handler: ${type}`);
+        logger.warn(`WebSocket: Received unhandled SFTP message type in sftp.handler: ${type}`);
         if (ws.readyState === WebSocket.OPEN)
           ws.send(
             JSON.stringify({
@@ -185,7 +187,7 @@ export async function handleSftpOperation(
     }
   } catch (sftpCallError: unknown) {
     const sftpCallErrMsg = getErrorMessage(sftpCallError);
-    console.error(
+    logger.error(
       `WebSocket: Error preparing/calling SFTP service for ${type} (Request ID: ${requestId}):`,
       sftpCallError
     );
@@ -210,7 +212,7 @@ export function handleSftpUploadStart(
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 
   if (!sessionId || !state) {
-    console.warn(`WebSocket: 收到来自 ${ws.username} 的 SFTP 上传开始请求，但无活动会话。`);
+    logger.warn(`WebSocket: 收到来自 ${ws.username} 的 SFTP 上传开始请求，但无活动会话。`);
     if (ws.readyState === WebSocket.OPEN)
       ws.send(
         JSON.stringify({
@@ -221,7 +223,7 @@ export function handleSftpUploadStart(
     return;
   }
   if (!payload?.uploadId || !payload?.remotePath || typeof payload?.size !== 'number') {
-    console.error(
+    logger.error(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 sftp:upload:start 请求，但缺少 uploadId, remotePath 或 size。`
     );
     if (ws.readyState === WebSocket.OPEN)
@@ -234,7 +236,7 @@ export function handleSftpUploadStart(
     return;
   }
   const relativePath = payload?.relativePath;
-  console.info(
+  logger.info(
     `WebSocket: SFTP Upload Start - Session: ${sessionId}, UploadID: ${payload.uploadId}, RemotePath: ${payload.remotePath}, Size: ${payload.size}, RelativePath: ${relativePath}`
   );
   sftpService.startUpload(
@@ -259,7 +261,7 @@ export async function handleSftpUploadChunk(
     typeof payload?.chunkIndex !== 'number' ||
     typeof payload?.data !== 'string'
   ) {
-    console.error(
+    logger.error(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 sftp:upload:chunk 请求，但缺少 uploadId, chunkIndex 或 data。`
     );
     // Optionally send error to client, but be mindful of flooding for many chunks
@@ -283,7 +285,7 @@ export function handleSftpUploadCancel(
   if (!sessionId || !state) return; // Silently ignore
 
   if (!payload?.uploadId) {
-    console.error(
+    logger.error(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 sftp:upload:cancel 请求，但缺少 uploadId。`
     );
     if (ws.readyState === WebSocket.OPEN)

@@ -13,6 +13,7 @@ import {
   defineEmits,
 } from 'vue';
 import * as monaco from 'monaco-editor';
+import { log } from '@/utils/log';
 
 const FONT_SIZE_STORAGE_KEY = 'monacoEditorFontSize'; // localStorage key
 
@@ -116,7 +117,7 @@ onMounted(() => {
       contextMenuGroupId: 'navigation',
       contextMenuOrder: 1.5,
       run: () => {
-        console.info('[MonacoEditor] Save action triggered (Ctrl+S / Cmd+S)');
+        log.info('[MonacoEditor] Save action triggered (Ctrl+S / Cmd+S)');
         emit('request-save');
       },
     });
@@ -147,7 +148,7 @@ onMounted(() => {
     // --- 添加带防抖的鼠标滚轮缩放功能 ---
     const editorDomNode = editorInstance?.getDomNode();
     if (editorDomNode && editorInstance) {
-      // console.info('[MonacoEditor] Adding wheel event listener.');
+      // log.info('[MonacoEditor] Adding wheel event listener.');
       // 定义事件处理器并保存引用，以便在组件销毁时正确移除
       wheelEventHandler = (event: WheelEvent) => {
         if (event.ctrlKey && editorInstance) {
@@ -164,7 +165,7 @@ onMounted(() => {
           }
 
           if (newSize !== currentSize) {
-            // console.info(`[MonacoEditor] Updating font size to: ${newSize}`);
+            // log.info(`[MonacoEditor] Updating font size to: ${newSize}`);
             editorInstance.updateOptions({ fontSize: newSize });
             localStorage.setItem(FONT_SIZE_STORAGE_KEY, newSize.toString());
             internalEditorFontSize.value = newSize; // 更新 internal ref
@@ -174,7 +175,7 @@ onMounted(() => {
       };
       editorDomNode.addEventListener('wheel', wheelEventHandler, { passive: false });
     } else {
-      // console.error('[MonacoEditor] editorDomNode or editorInstance is null, cannot add wheel listener.');
+      // log.error('[MonacoEditor] editorDomNode or editorInstance is null, cannot add wheel listener.');
     }
 
     // --- 移除鼠标滚轮缩放功能 ---
@@ -244,7 +245,7 @@ watch(
   (newGlobalSize) => {
     // 只有当全局设置的 fontSize (通过 prop) 改变时，并且与 internalEditorFontSize (编辑器当前实际或本地调整后) 不同时才更新
     if (editorInstance && newGlobalSize !== internalEditorFontSize.value) {
-      // console.info(`[MonacoEditor] Global font size changed to: ${newGlobalSize}, updating editor.`);
+      // log.info(`[MonacoEditor] Global font size changed to: ${newGlobalSize}, updating editor.`);
       editorInstance.updateOptions({ fontSize: newGlobalSize });
       localStorage.setItem(FONT_SIZE_STORAGE_KEY, newGlobalSize.toString()); // 保持 localStorage 同步
       internalEditorFontSize.value = newGlobalSize;

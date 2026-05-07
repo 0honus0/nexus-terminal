@@ -8,6 +8,7 @@ import { useProxiesStore } from '../stores/proxies.store';
 import { useTagsStore, type TagInfo } from '../stores/tags.store';
 import { useSshKeysStore, type SshKeyBasicInfo } from '../stores/sshKeys.store';
 import TagInput from './TagInput.vue';
+import { log } from '@/utils/log';
 
 interface BatchUpdateData {
   port?: number | string | null;
@@ -168,7 +169,7 @@ const handleSave = async () => {
     }
     emit('update:visible', false);
   } catch (error: unknown) {
-    console.error('Batch update error:', error);
+    log.error('Batch update error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Batch update failed';
     uiNotificationsStore.addNotification({ message: errorMessage, type: 'error' });
   } finally {

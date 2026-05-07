@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as QuickCommandTagService from './quick-command-tag.service';
 import { ErrorFactory } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 /**
  * 处理获取所有快捷指令标签的请求
@@ -14,7 +15,7 @@ export const getAllQuickCommandTags = async (
     const tags = await QuickCommandTagService.getAllQuickCommandTags();
     res.status(200).json(tags);
   } catch (error: unknown) {
-    console.error('[Controller] 获取快捷指令标签列表失败:', error);
+    logger.error('[Controller] 获取快捷指令标签列表失败:', error);
     next(error);
   }
 };
@@ -42,11 +43,11 @@ export const addQuickCommandTag = async (
       res.status(201).json({ message: '快捷指令标签已添加', tag: newTag });
     } else {
       // 理论上不应该发生，但作为健壮性检查
-      console.error(`[Controller] 添加快捷指令标签后未能找到 ID: ${newId}`);
+      logger.error(`[Controller] 添加快捷指令标签后未能找到 ID: ${newId}`);
       res.status(201).json({ message: '快捷指令标签已添加，但无法检索新记录', id: newId });
     }
   } catch (error: unknown) {
-    console.error('[Controller] 添加快捷指令标签失败:', error);
+    logger.error('[Controller] 添加快捷指令标签失败:', error);
     next(error);
   }
 };
@@ -79,7 +80,7 @@ export const updateQuickCommandTag = async (
       if (updatedTag) {
         res.status(200).json({ message: '快捷指令标签已更新', tag: updatedTag });
       } else {
-        console.error(`[Controller] 更新快捷指令标签后未能找到 ID: ${id}`);
+        logger.error(`[Controller] 更新快捷指令标签后未能找到 ID: ${id}`);
         res.status(200).json({ message: '快捷指令标签已更新，但无法检索更新后的记录' });
       }
     } else {
@@ -89,13 +90,13 @@ export const updateQuickCommandTag = async (
         res.status(404).json({ message: '未找到要更新的快捷指令标签' });
       } else {
         // 如果标签存在但更新失败（理论上不太可能，除非并发问题），返回服务器错误
-        console.error(`[Controller] 更新快捷指令标签 ${id} 失败，但标签存在。`);
+        logger.error(`[Controller] 更新快捷指令标签 ${id} 失败，但标签存在。`);
         next(ErrorFactory.internalError('更新快捷指令标签时发生未知错误'));
         return;
       }
     }
   } catch (error: unknown) {
-    console.error('[Controller] 更新快捷指令标签失败:', error);
+    logger.error('[Controller] 更新快捷指令标签失败:', error);
     next(error);
   }
 };
@@ -128,12 +129,12 @@ export const deleteQuickCommandTag = async (
       res.status(200).json({ message: '快捷指令标签已删除' });
     } else {
       // 如果上面检查存在但删除失败，说明有内部错误
-      console.error(`[Controller] 删除快捷指令标签 ${id} 失败，但标签存在。`);
+      logger.error(`[Controller] 删除快捷指令标签 ${id} 失败，但标签存在。`);
       next(ErrorFactory.internalError('删除快捷指令标签时发生未知错误'));
       return;
     }
   } catch (error: unknown) {
-    console.error('[Controller] 删除快捷指令标签失败:', error);
+    logger.error('[Controller] 删除快捷指令标签失败:', error);
     next(error);
   }
 };

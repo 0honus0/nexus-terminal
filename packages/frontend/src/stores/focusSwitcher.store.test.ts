@@ -5,6 +5,15 @@ import { nextTick } from 'vue';
 import { useFocusSwitcherStore } from './focusSwitcher.store';
 import type { FocusSwitcherFullConfig } from './focusSwitcher.store';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 // Mock vue-i18n
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -364,23 +373,18 @@ describe('focusSwitcher.store', () => {
         status: 400,
         json: () => Promise.resolve({ message: 'Bad request' }),
       });
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       await store.saveConfigurationToBackend();
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLog.error).toHaveBeenCalled();
     });
 
     it('fetch 抛出异常时应记录错误', async () => {
       const store = useFocusSwitcherStore();
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       await store.saveConfigurationToBackend();
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLog.error).toHaveBeenCalled();
     });
 
     it('保存失败且响应体解析失败时应使用空对象', async () => {
@@ -390,12 +394,10 @@ describe('focusSwitcher.store', () => {
         status: 500,
         json: () => Promise.reject(new Error('Invalid JSON')),
       });
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       await store.saveConfigurationToBackend();
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLog.error).toHaveBeenCalled();
     });
   });
 

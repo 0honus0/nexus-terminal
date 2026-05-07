@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth.store';
 import apiClient from '../../utils/apiClient';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 interface TimeSkewApiError {
   response?: {
@@ -48,7 +49,7 @@ export function useTwoFactorAuth() {
       );
       setupData.value = response.data;
     } catch (error: unknown) {
-      console.error('开始设置 2FA 失败:', error);
+      log.error('开始设置 2FA 失败:', error);
       twoFactorMessage.value = extractErrorMessage(
         error,
         t('settings.twoFactor.error.setupFailed')
@@ -79,7 +80,7 @@ export function useTwoFactorAuth() {
       verificationCode.value = '';
       await authStore.checkAuthStatus(); // Refresh user data
     } catch (error: unknown) {
-      console.error('验证并激活 2FA 失败:', error);
+      log.error('验证并激活 2FA 失败:', error);
       const apiError = error as TimeSkewApiError;
       const errorCode = apiError?.response?.data?.code;
       const skewSeconds = apiError?.response?.data?.skewSeconds;
@@ -115,7 +116,7 @@ export function useTwoFactorAuth() {
       disablePassword.value = '';
       await authStore.checkAuthStatus(); // Refresh user data
     } catch (error: unknown) {
-      console.error('禁用 2FA 失败:', error);
+      log.error('禁用 2FA 失败:', error);
       twoFactorMessage.value = extractErrorMessage(
         error,
         t('settings.twoFactor.error.disableFailed')

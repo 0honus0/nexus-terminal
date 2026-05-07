@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settings.store';
 import { useAuthStore, type IpBlacklistEntry } from '../../stores/auth.store';
 import { useConfirmDialog } from '../useConfirmDialog';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 export function useIpBlacklist() {
   const settingsStore = useSettingsStore();
@@ -34,7 +35,7 @@ export function useIpBlacklist() {
       await settingsStore.updateSetting('ipBlacklistEnabled', nextValue ? 'true' : 'false');
       // Success: ipBlacklistEnabledBoolean will update via store watcher, syncing ipBlacklistEnabled.value
     } catch (error: unknown) {
-      console.error('更新 IP 黑名单启用状态失败:', error);
+      log.error('更新 IP 黑名单启用状态失败:', error);
       ipBlacklistEnabled.value = originalValue; // Revert on failure
       // Optionally, show an error message to the user
     }
@@ -78,7 +79,7 @@ export function useIpBlacklist() {
       blacklistSettingsMessage.value = t('settings.ipBlacklist.success.configUpdated');
       blacklistSettingsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新黑名单配置失败:', error);
+      log.error('更新黑名单配置失败:', error);
       blacklistSettingsMessage.value = extractErrorMessage(
         error,
         t('settings.ipBlacklist.error.updateConfigFailed')

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as Service from './dashboard.service';
+import { logger } from '../utils/logger';
 
 const parseTimestampSeconds = (raw: unknown): number | null => {
   if (raw === undefined || raw === null) return null;
@@ -29,7 +30,7 @@ export const getStats = async (req: Request, res: Response, next: NextFunction):
     const stats = await Service.getDashboardStats(timeRange);
     res.status(200).json(stats);
   } catch (error: unknown) {
-    console.error('Controller: 获取仪表盘统计失败:', error);
+    logger.error('Controller: 获取仪表盘统计失败:', error);
     next(error);
   }
 };
@@ -46,7 +47,7 @@ export const getAssetHealth = async (
     const health = await Service.getAssetHealth();
     res.status(200).json(health);
   } catch (error: unknown) {
-    console.error('Controller: 获取资产健康状态失败:', error);
+    logger.error('Controller: 获取资产健康状态失败:', error);
     next(error);
   }
 };
@@ -75,7 +76,7 @@ export const getTimeline = async (
     const timeline = await Service.getActivityTimeline(limit, timeRange);
     res.status(200).json({ events: timeline });
   } catch (error: unknown) {
-    console.error('Controller: 获取活动时间线失败:', error);
+    logger.error('Controller: 获取活动时间线失败:', error);
     next(error);
   }
 };
@@ -100,7 +101,7 @@ export const getStorage = async (
       },
     });
   } catch (error: unknown) {
-    console.error('Controller: 获取存储统计失败:', error);
+    logger.error('Controller: 获取存储统计失败:', error);
     next(error);
   }
 };
@@ -125,7 +126,7 @@ export const getSystemResources = async (
       },
     });
   } catch (error: unknown) {
-    console.error('Controller: 获取系统资源失败:', error);
+    logger.error('Controller: 获取系统资源失败:', error);
     next(error);
   }
 };

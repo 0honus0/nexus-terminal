@@ -11,11 +11,6 @@ import crypto from 'crypto';
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
 import { settingsService } from './settings/settings.service';
-import {
-  installConsoleLogging,
-  setLogLevel as setRuntimeLogLevel,
-  type LogLevel,
-} from './logging/logger';
 import { logger, setLogLevel as setPinoLogLevel } from './utils/logger';
 import { getDbInstance } from './database/connection';
 import { initializeWebSocket } from './websocket';
@@ -39,9 +34,6 @@ import './notifications/notification.processor.service';
 import './notifications/notification.dispatcher.service';
 
 type SwaggerConfigModule = typeof import('./config/swagger.config');
-
-// 统一安装 console 时间戳前缀 + 日志等级过滤（尽量早执行）
-installConsoleLogging();
 
 // --- 开始环境变量的早期加载 ---
 // 1. 加载根目录的 .env 文件 (定义部署模式等)
@@ -237,7 +229,6 @@ const initializeDatabase = async () => {
 const initializeRuntimeLogLevel = async () => {
   try {
     const level = await settingsService.getLogLevel();
-    setRuntimeLogLevel(level as LogLevel);
     setPinoLogLevel(level);
   } catch (error: unknown) {
     logger.warn(error as Error, '[Index] 初始化日志等级失败，将使用默认日志等级。');

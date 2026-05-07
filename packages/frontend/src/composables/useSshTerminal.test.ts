@@ -6,6 +6,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, computed, nextTick } from 'vue';
 import { createSshTerminalManager, type SshTerminalDependencies } from './useSshTerminal';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 // Mock vue-i18n
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -507,11 +516,11 @@ describe('useSshTerminal (createSshTerminalManager)', () => {
     it('应返回兼容的接口', async () => {
       const { useSshTerminal } = await import('./useSshTerminal');
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
       const result = useSshTerminal(mockT);
 
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('已弃用的 useSshTerminal()'));
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('已弃用的 useSshTerminal()')
+      );
 
       expect(result.terminalInstance).toBeDefined();
       expect(typeof result.handleTerminalReady).toBe('function');
@@ -519,8 +528,6 @@ describe('useSshTerminal (createSshTerminalManager)', () => {
       expect(typeof result.handleTerminalResize).toBe('function');
       expect(typeof result.registerSshHandlers).toBe('function');
       expect(typeof result.unregisterAllSshHandlers).toBe('function');
-
-      warnSpy.mockRestore();
     });
   });
 });

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 // Interface for basic SSH key info (for lists)
 export interface SshKeyBasicInfo {
   id: number;
@@ -36,9 +37,9 @@ export const useSshKeysStore = defineStore('sshKeys', () => {
     try {
       const response = await apiClient.get<SshKeyBasicInfo[]>('/ssh-keys');
       sshKeys.value = response.data;
-      console.info('SSH Keys fetched:', sshKeys.value);
+      log.info('SSH Keys fetched:', sshKeys.value);
     } catch (err: unknown) {
-      console.error('Failed to fetch SSH keys:', err);
+      log.error('Failed to fetch SSH keys:', err);
       error.value = extractErrorMessage(err, '获取 SSH 密钥列表失败。');
       // Ensure error.value is not null before passing
       // uiNotificationsStore.addNotification({ message: error.value ?? '未知错误', type: 'error' }); // Removed notification
@@ -62,7 +63,7 @@ export const useSshKeysStore = defineStore('sshKeys', () => {
       sshKeys.value.sort((a, b) => a.name.localeCompare(b.name));
       return true;
     } catch (err: unknown) {
-      console.error('Failed to add SSH key:', err);
+      log.error('Failed to add SSH key:', err);
       error.value = extractErrorMessage(err, '添加 SSH 密钥失败。');
       // Ensure error.value is not null before passing
       return false;
@@ -80,7 +81,7 @@ export const useSshKeysStore = defineStore('sshKeys', () => {
       const response = await apiClient.get<SshKeyDetails>(`/ssh-keys/${id}/details`);
       return response.data;
     } catch (err: unknown) {
-      console.error(`Failed to fetch decrypted SSH key ${id}:`, err);
+      log.error(`Failed to fetch decrypted SSH key ${id}:`, err);
       error.value = extractErrorMessage(err, `获取密钥 ${id} 详情失败。`);
       // Ensure error.value is not null before passing
       // uiNotificationsStore.addNotification({ message: error.value ?? '未知错误', type: 'error' }); // Removed notification
@@ -109,7 +110,7 @@ export const useSshKeysStore = defineStore('sshKeys', () => {
       // uiNotificationsStore.addNotification({ message: response.data.message || 'SSH 密钥更新成功。', type: 'success' }); // Removed notification
       return true;
     } catch (err: unknown) {
-      console.error(`Failed to update SSH key ${id}:`, err);
+      log.error(`Failed to update SSH key ${id}:`, err);
       error.value = extractErrorMessage(err, `更新 SSH 密钥 ${id} 失败。`);
       // Ensure error.value is not null before passing
       // uiNotificationsStore.addNotification({ message: error.value ?? '未知错误', type: 'error' }); // Removed notification
@@ -130,7 +131,7 @@ export const useSshKeysStore = defineStore('sshKeys', () => {
       // uiNotificationsStore.addNotification({ message: response.data.message || 'SSH 密钥删除成功。', type: 'success' }); // Removed notification
       return true;
     } catch (err: unknown) {
-      console.error(`Failed to delete SSH key ${id}:`, err);
+      log.error(`Failed to delete SSH key ${id}:`, err);
       error.value = extractErrorMessage(err, `删除 SSH 密钥 ${id} 失败。`);
       // Ensure error.value is not null before passing
       // uiNotificationsStore.addNotification({ message: error.value ?? '未知错误', type: 'error' }); // Removed notification

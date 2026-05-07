@@ -5,6 +5,7 @@ import * as net from 'net';
 import { clientStates } from '../websocket/state';
 import { getDbInstance, getDb as getDbRow, allDb } from '../database/connection';
 import { AuditLogActionType } from '../types/audit.types';
+import { logger } from '../utils/logger';
 
 /**
  * 存储统计缓存 - 避免频繁同步遍历目录阻塞事件循环
@@ -275,7 +276,7 @@ const tcpProbe = async (
         socket.destroy();
       } catch (error: unknown) {
         // Socket 清理失败不影响结果
-        console.debug('[仪表盘] Socket 清理失败:', error);
+        logger.debug('[仪表盘] Socket 清理失败:', error);
       }
       resolve(ok ? { ok, latency } : { ok });
     };
@@ -524,13 +525,13 @@ const getDirSize = (dir: string): number => {
           total += fs.statSync(fullPath).size;
         } catch (error: unknown) {
           // 文件可能已被删除或权限不足
-          console.debug('[仪表盘] 文件大小读取失败:', fullPath, error);
+          logger.debug('[仪表盘] 文件大小读取失败:', fullPath, error);
         }
       }
     }
   } catch (error: unknown) {
     // 目录不可访问（权限或已被删除）
-    console.debug('[仪表盘] 目录访问失败:', dir, error);
+    logger.debug('[仪表盘] 目录访问失败:', dir, error);
   }
 
   return total;
@@ -597,7 +598,7 @@ export const getSystemResources = async (): Promise<{
     }
   } catch (error: unknown) {
     // statfsSync 可能不可用或目录不存在
-    console.debug('[仪表盘] 磁盘信息获取失败:', error);
+    logger.debug('[仪表盘] 磁盘信息获取失败:', error);
   }
   const diskPercent =
     diskTotal > 0 ? Math.max(0, Math.min(100, Math.round((diskUsed / diskTotal) * 100))) : 0;

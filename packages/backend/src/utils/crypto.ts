@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { SECURITY_CONFIG } from '../config/security.config';
+import { logger } from '../utils/logger';
 
 const algorithm = 'aes-256-gcm';
 const ivLength = 16;
@@ -31,18 +32,18 @@ let isInitialized = false;
 export const getEncryptionKeyBuffer = (): Buffer => {
   const keyEnv = process.env.ENCRYPTION_KEY;
   if (!keyEnv) {
-    console.error('错误：ENCRYPTION_KEY 环境变量未设置！');
+    logger.error('错误：ENCRYPTION_KEY 环境变量未设置！');
     throw new Error('ENCRYPTION_KEY is not set.');
   }
   try {
     const keyBuffer = Buffer.from(keyEnv, 'hex');
     if (keyBuffer.length !== 32) {
-      console.error(`错误：加密密钥长度必须是 32 字节，当前长度为 ${keyBuffer.length}。`);
+      logger.error(`错误：加密密钥长度必须是 32 字节，当前长度为 ${keyBuffer.length}。`);
       throw new Error('Invalid ENCRYPTION_KEY length.');
     }
     return keyBuffer;
   } catch (error: unknown) {
-    console.error('错误：无法将 ENCRYPTION_KEY 从 hex 解码为 Buffer:', error);
+    logger.error('错误：无法将 ENCRYPTION_KEY 从 hex 解码为 Buffer:', error);
     throw new Error('Failed to decode ENCRYPTION_KEY.');
   }
 };
@@ -135,7 +136,7 @@ export const encrypt = (text: string): string => {
     // 组合格式：[keyVersion][iv][encrypted][tag]
     return Buffer.concat([keyIdBuffer, iv, encrypted, tag]).toString('base64');
   } catch (error: unknown) {
-    console.error('加密失败:', error);
+    logger.error('加密失败:', error);
     throw new Error('加密过程中发生错误');
   }
 };
@@ -182,7 +183,7 @@ export const decrypt = (encryptedText: string): string => {
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
     return decrypted.toString('utf8');
   } catch (error: unknown) {
-    console.error('解密失败:', error);
+    logger.error('解密失败:', error);
     throw new Error('解密过程中发生错误或数据无效');
   }
 };

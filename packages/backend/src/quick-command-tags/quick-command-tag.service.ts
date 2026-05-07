@@ -1,6 +1,7 @@
 import * as QuickCommandTagRepository from './quick-command-tag.repository';
 import { QuickCommandTag } from './quick-command-tag.repository';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 /**
  * 获取所有快捷指令标签
@@ -32,7 +33,7 @@ export const addQuickCommandTag = async (name: string): Promise<number> => {
     return newId;
   } catch (error: unknown) {
     // Service 层可以重新抛出或处理 Repository 抛出的错误
-    console.error(`[Service] 添加快捷指令标签 "${trimmedName}" 失败:`, getErrorMessage(error));
+    logger.error(`[Service] 添加快捷指令标签 "${trimmedName}" 失败:`, getErrorMessage(error));
     throw error; // 重新抛出，让 Controller 处理 HTTP 响应
   }
 };
@@ -53,11 +54,11 @@ export const updateQuickCommandTag = async (id: number, name: string): Promise<b
     const success = await QuickCommandTagRepository.updateQuickCommandTag(id, trimmedName);
     if (!success) {
       // 可能需要检查标签是否存在，或者让 Repository 处理
-      console.warn(`[Service] 尝试更新不存在的快捷指令标签 ID: ${id}`);
+      logger.warn(`[Service] 尝试更新不存在的快捷指令标签 ID: ${id}`);
     }
     return success;
   } catch (error: unknown) {
-    console.error(`[Service] 更新快捷指令标签 ${id} 失败:`, getErrorMessage(error));
+    logger.error(`[Service] 更新快捷指令标签 ${id} 失败:`, getErrorMessage(error));
     throw error;
   }
 };
@@ -71,11 +72,11 @@ export const deleteQuickCommandTag = async (id: number): Promise<boolean> => {
   try {
     const success = await QuickCommandTagRepository.deleteQuickCommandTag(id);
     if (!success) {
-      console.warn(`[Service] 尝试删除不存在的快捷指令标签 ID: ${id}`);
+      logger.warn(`[Service] 尝试删除不存在的快捷指令标签 ID: ${id}`);
     }
     return success;
   } catch (error: unknown) {
-    console.error(`[Service] 删除快捷指令标签 ${id} 失败:`, getErrorMessage(error));
+    logger.error(`[Service] 删除快捷指令标签 ${id} 失败:`, getErrorMessage(error));
     throw error;
   }
 };
@@ -99,7 +100,7 @@ export const setCommandTags = async (commandId: number, tagIds: number[]): Promi
     await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds);
     // Service 函数也返回 void，所以不需要 return
   } catch (error: unknown) {
-    console.error(`[Service] 设置快捷指令 ${commandId} 的标签失败:`, getErrorMessage(error));
+    logger.error(`[Service] 设置快捷指令 ${commandId} 的标签失败:`, getErrorMessage(error));
     throw error;
   }
 };
@@ -113,7 +114,7 @@ export const getTagsForCommand = async (commandId: number): Promise<QuickCommand
   try {
     return await QuickCommandTagRepository.findTagsByCommandId(commandId);
   } catch (error: unknown) {
-    console.error(`[Service] 获取快捷指令 ${commandId} 的标签失败:`, getErrorMessage(error));
+    logger.error(`[Service] 获取快捷指令 ${commandId} 的标签失败:`, getErrorMessage(error));
     throw error;
   }
 };

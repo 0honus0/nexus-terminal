@@ -30,6 +30,15 @@ const mockHelmetFn = vi.hoisted(() =>
   vi.fn(() => (_req: Request, _res: Response, next: NextFunction) => next())
 );
 
+// Logger mock for console replacement migration
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('helmet', () => ({
   default: mockHelmetFn,
 }));
@@ -278,16 +287,14 @@ describe('config/middleware', () => {
     });
 
     it('生产环境未设置 ALLOWED_ORIGINS 应发出警告', () => {
-      const originalWarn = console.warn;
-      console.warn = vi.fn();
+      // console.warn replaced with mockLogger.warn
       process.env.NODE_ENV = 'production';
       delete process.env.ALLOWED_ORIGINS;
       delete process.env.RP_ORIGIN;
 
       registerSecurityMiddleware(express());
 
-      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('[CORS]'));
-      console.warn = originalWarn;
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[CORS]'));
     });
   });
 });

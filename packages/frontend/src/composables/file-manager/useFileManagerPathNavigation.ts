@@ -6,6 +6,7 @@
 import { ref, computed, nextTick, type Ref, type ComputedRef } from 'vue';
 import { usePathHistoryStore } from '../../stores/pathHistory.store';
 import type { SftpManagerInstance } from '../../composables/useSftpActions';
+import { log } from '@/utils/log';
 
 type PathHistoryStore = ReturnType<typeof usePathHistoryStore>;
 
@@ -112,13 +113,13 @@ export const useFileManagerPathNavigation = (
 
     if (trimmedPath === manager.currentPath.value) return;
 
-    console.info(`${logPrefix.value} 尝试导航到新路径: ${trimmedPath}`);
+    log.info(`${logPrefix.value} 尝试导航到新路径: ${trimmedPath}`);
     try {
       await manager.loadDirectory(trimmedPath);
       pathHistoryStore.addPath(trimmedPath);
       editablePath.value = trimmedPath;
     } catch (error: unknown) {
-      console.error(`${logPrefix.value} 导航到路径 ${trimmedPath} 失败:`, error);
+      log.error(`${logPrefix.value} 导航到路径 ${trimmedPath} 失败:`, error);
     }
   };
 

@@ -8,6 +8,7 @@ import { ElMessage } from 'element-plus';
 import apiClient, { AI_REQUEST_TIMEOUT_MS } from '../../utils/apiClient';
 import type { NL2CMDRequest, NL2CMDResponse } from '../../types/nl2cmd.types';
 import { useAISettingsStore } from '../../stores/aiSettings.store';
+import { log } from '@/utils/log';
 
 // 远程服务器 OS/Shell 类型配置
 export interface RemoteSystemInfo {
@@ -89,24 +90,20 @@ export function useNL2CMD() {
         currentPath: remoteSystemInfo.value.currentPath,
       };
 
-      if (import.meta.env.DEV) {
-        console.info('[NL2CMD Debug] Request:', request);
-      }
+      log.debug('[NL2CMD Debug] Request:', request);
 
       const response = await apiClient.post<NL2CMDResponse>('/ai/nl2cmd', request, {
         timeout: AI_REQUEST_TIMEOUT_MS,
       });
 
-      if (import.meta.env.DEV) {
-        console.info('[NL2CMD Debug] Response:', response.data);
-      }
+      log.debug('[NL2CMD Debug] Response:', response.data);
 
       if (response.data.success) {
         const command = response.data.command;
 
         if (!command) {
           const msg = 'AI 未能生成命令，请尝试更详细地描述您的需求';
-          if (import.meta.env.DEV) console.warn('[NL2CMD Debug] Empty command returned');
+          log.debug('[NL2CMD Debug] Empty command returned');
           ElMessage.warning(msg);
           return null;
         }
@@ -126,12 +123,12 @@ export function useNL2CMD() {
         return command;
       } else {
         const errorMsg = response.data.error || '生成命令失败';
-        if (import.meta.env.DEV) console.error('[NL2CMD Debug] API Error:', errorMsg);
+        log.debug('[NL2CMD Debug] API Error:', errorMsg);
         ElMessage.error(errorMsg);
         return null;
       }
     } catch (error: unknown) {
-      console.error('[NL2CMD] 生成命令失败:', error);
+      log.error('[NL2CMD] 生成命令失败:', error);
       const err = error as { response?: { data?: { error?: string } }; message?: string };
       const errorMsg = err.response?.data?.error || err.message || '生成命令失败';
       ElMessage.error(errorMsg);

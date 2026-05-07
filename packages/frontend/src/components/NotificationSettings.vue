@@ -124,6 +124,7 @@ import {
 import NotificationSettingForm from './NotificationSettingForm.vue';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { log } from '@/utils/log';
 
 const store = useNotificationsStore();
 const { showConfirmDialog } = useConfirmDialog();
@@ -157,7 +158,7 @@ const getSingleEventDisplayName = (event: NotificationEvent): string => {
   const translated = t(i18nKey);
   // Fallback if translation is missing
   if (translated === i18nKey) {
-    console.warn(`Missing translation for notification event: ${i18nKey}`);
+    log.warn(`Missing translation for notification event: ${i18nKey}`);
     return event
       .replace(/_/g, ' ')
       .toLowerCase()
@@ -196,7 +197,7 @@ const closeForm = () => {
 
 // 保存回调：表单组件内部已处理 store 更新，此处仅需关闭表单
 const handleSave = (savedSetting: NotificationSetting) => {
-  console.info('Setting saved:', savedSetting);
+  log.info('Setting saved:', savedSetting);
   closeForm();
 };
 </script>

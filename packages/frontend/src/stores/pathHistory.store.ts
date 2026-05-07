@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
+import { log } from '@/utils/log';
 
 // 后端返回的原始路径历史记录条目接口
 interface PathHistoryEntryBE {
@@ -75,7 +76,7 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       historyList.value = response.data.sort((a, b) => b.timestamp - a.timestamp);
       error.value = null;
     } catch (err: unknown) {
-      console.error('[PathHistoryStore] 获取路径历史记录失败:', err);
+      log.error('[PathHistoryStore] 获取路径历史记录失败:', err);
       error.value = extractErrorMessage(err, '获取路径历史记录时发生错误');
       uiNotificationsStore.showError(error.value ?? '未知错误');
     } finally {
@@ -99,7 +100,7 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       // historyList.value.unshift(newEntry);
       // historyList.value.sort((a, b) => b.timestamp - a.timestamp); // 确保排序
     } catch (err: unknown) {
-      console.error('[PathHistoryStore] 添加路径历史记录失败:', err);
+      log.error('[PathHistoryStore] 添加路径历史记录失败:', err);
       const message = extractErrorMessage(err, '添加路径历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
@@ -116,7 +117,7 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       }
       uiNotificationsStore.showSuccess('路径历史记录已删除');
     } catch (err: unknown) {
-      console.error('[PathHistoryStore] 删除路径历史记录失败:', err);
+      log.error('[PathHistoryStore] 删除路径历史记录失败:', err);
       const message = extractErrorMessage(err, '删除路径历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
@@ -129,7 +130,7 @@ export const usePathHistoryStore = defineStore('pathHistory', () => {
       historyList.value = []; // 清空本地列表
       uiNotificationsStore.showSuccess('所有路径历史记录已清空');
     } catch (err: unknown) {
-      console.error('[PathHistoryStore] 清空路径历史记录失败:', err);
+      log.error('[PathHistoryStore] 清空路径历史记录失败:', err);
       const message = extractErrorMessage(err, '清空路径历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }

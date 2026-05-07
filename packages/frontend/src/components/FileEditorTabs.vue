@@ -3,6 +3,7 @@ import { ref, computed, type PropType, onBeforeUnmount } from 'vue'; // + ref, c
 import { useI18n } from 'vue-i18n';
 import type { FileTab } from '../stores/fileEditor.store';
 import TabBarContextMenu from './TabBarContextMenu.vue'; // + Import context menu
+import { log } from '@/utils/log';
 
 const props = defineProps({
   tabs: {
@@ -45,7 +46,7 @@ const handleClose = (event: MouseEvent, tabId: string) => {
 const showContextMenu = (event: MouseEvent, tabId: string) => {
   event.preventDefault();
   event.stopPropagation();
-  console.info(`[FileTabs] showContextMenu called with tabId: ${tabId}`); // ++ Log the received tabId
+  log.info(`[FileTabs] showContextMenu called with tabId: ${tabId}`); // ++ Log the received tabId
   contextTargetTabId.value = tabId; // Still set the original ref if needed elsewhere
   menuTargetId.value = tabId; // + Set the dedicated ref for the prop
   contextMenuPosition.value = { x: event.clientX, y: event.clientY };
@@ -70,15 +71,15 @@ const closeContextMenuOnClickOutside = (event: MouseEvent) => {
 // + Update function signature to receive payload
 const handleContextMenuAction = (payload: { action: string; targetId: string | number | null }) => {
   const { action, targetId } = payload;
-  console.info(`[FileTabs] handleContextMenuAction received payload:`, JSON.stringify(payload)); // + Log received payload
+  log.info(`[FileTabs] handleContextMenuAction received payload:`, JSON.stringify(payload)); // + Log received payload
   // const targetId = contextTargetTabId.value; // No longer needed
   if (!targetId || typeof targetId !== 'string') {
     // Ensure targetId is a string (tab ID)
-    console.warn('[FileTabs] handleContextMenuAction called but targetId is null or not a string.');
+    log.warn('[FileTabs] handleContextMenuAction called but targetId is null or not a string.');
     return;
   }
 
-  console.info(`[FileTabs] Context menu action '${action}' requested for tab ID: ${targetId}`); // Keep original log
+  log.info(`[FileTabs] Context menu action '${action}' requested for tab ID: ${targetId}`); // Keep original log
 
   switch (action) {
     case 'close':
@@ -94,7 +95,7 @@ const handleContextMenuAction = (payload: { action: string; targetId: string | n
       emit('close-tabs-to-left', targetId);
       break;
     default:
-      console.warn(`[FileTabs] Unknown context menu action: ${action}`);
+      log.warn(`[FileTabs] Unknown context menu action: ${action}`);
   }
 };
 
@@ -141,7 +142,7 @@ onBeforeUnmount(() => {
       @click="handleActivate(tab.id)"
       @contextmenu.prevent="
         (event) => {
-          console.info(`[FileTabs Template Debug] Context menu for tab.id: ${tab.id}`);
+          log.info(`[FileTabs Template Debug] Context menu for tab.id: ${tab.id}`);
           showContextMenu(event, tab.id);
         }
       "

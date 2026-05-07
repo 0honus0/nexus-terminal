@@ -1,5 +1,6 @@
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { logger } from '../utils/logger';
 
 // 定义数据库行的接口
 export interface SshKeyDbRow {
@@ -37,11 +38,11 @@ export const createSshKey = async (data: CreateSshKeyData): Promise<number> => {
         '创建 SSH 密钥后未能获取有效的 lastID'
       );
     }
-    console.info(`Repository: SSH 密钥创建成功，ID: ${result.lastID}`);
+    logger.info(`Repository: SSH 密钥创建成功，ID: ${result.lastID}`);
     return result.lastID;
   } catch (err: unknown) {
     // Catch potential errors from helpers
-    console.error('Repository: 创建 SSH 密钥失败:', getErrorMessage(err));
+    logger.error('Repository: 创建 SSH 密钥失败:', getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '创建 SSH 密钥失败',
       `创建 SSH 密钥失败: ${getErrorMessage(err)}`
@@ -61,7 +62,7 @@ export const findSshKeyById = async (id: number): Promise<SshKeyDbRow | null> =>
     const row = await getDbRow<SshKeyDbRow>(db, sql, [id]);
     return row || null;
   } catch (err: unknown) {
-    console.error(`Repository: 查找 SSH 密钥 ${id} 失败:`, getErrorMessage(err));
+    logger.error(`Repository: 查找 SSH 密钥 ${id} 失败:`, getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '查找 SSH 密钥失败',
       `查找 SSH 密钥失败: ${getErrorMessage(err)}`
@@ -80,7 +81,7 @@ export const findAllSshKeyNames = async (): Promise<{ id: number; name: string }
     const rows = await allDb<{ id: number; name: string }>(db, sql);
     return rows;
   } catch (err: unknown) {
-    console.error('Repository: 查找所有 SSH 密钥名称失败:', getErrorMessage(err));
+    logger.error('Repository: 查找所有 SSH 密钥名称失败:', getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '查找所有 SSH 密钥名称失败',
       `查找所有 SSH 密钥名称失败: ${getErrorMessage(err)}`
@@ -99,7 +100,7 @@ export const findAllSshKeys = async (): Promise<SshKeyDbRow[]> => {
     const rows = await allDb<SshKeyDbRow>(db, sql);
     return rows;
   } catch (err: unknown) {
-    console.error('Repository: 查找所有 SSH 密钥记录失败:', getErrorMessage(err));
+    logger.error('Repository: 查找所有 SSH 密钥记录失败:', getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '查找所有 SSH 密钥记录失败',
       `查找所有 SSH 密钥记录失败: ${getErrorMessage(err)}`
@@ -126,7 +127,7 @@ export const updateSshKey = async (id: number, data: UpdateSshKeyData): Promise<
     ); // Type assertion for index signature
 
   if (Object.keys(fieldsToUpdate).length === 0) {
-    console.info(`Repository: 更新 SSH 密钥 ${id} 时没有提供有效字段。`);
+    logger.info(`Repository: 更新 SSH 密钥 ${id} 时没有提供有效字段。`);
     return true; // 没有字段需要更新
   }
 
@@ -146,7 +147,7 @@ export const updateSshKey = async (id: number, data: UpdateSshKeyData): Promise<
     const result = await runDb(db, sql, params);
     return result.changes > 0; // 如果有行被改变则返回 true
   } catch (err: unknown) {
-    console.error(`Repository: 更新 SSH 密钥 ${id} 失败:`, getErrorMessage(err));
+    logger.error(`Repository: 更新 SSH 密钥 ${id} 失败:`, getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '更新 SSH 密钥失败',
       `更新 SSH 密钥失败: ${getErrorMessage(err)}`
@@ -166,7 +167,7 @@ export const deleteSshKey = async (id: number): Promise<boolean> => {
     const result = await runDb(db, sql, [id]);
     return result.changes > 0; // 如果有行被删除则返回 true
   } catch (err: unknown) {
-    console.error(`Repository: 删除 SSH 密钥 ${id} 失败:`, getErrorMessage(err));
+    logger.error(`Repository: 删除 SSH 密钥 ${id} 失败:`, getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '删除 SSH 密钥失败',
       `删除 SSH 密钥失败: ${getErrorMessage(err)}`

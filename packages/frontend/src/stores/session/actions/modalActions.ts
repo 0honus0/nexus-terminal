@@ -2,29 +2,30 @@
 
 import { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } from '../state';
 import type { ConnectionInfo } from '../../connections.store'; // 路径: packages/frontend/src/stores/connections.store.ts
+// log 已移除，未使用
 
 // --- RDP Modal Actions ---
 export const openRdpModal = (connection: ConnectionInfo) => {
-  // console.info(`[ModalActions] Opening RDP modal for connection: ${connection.name} (ID: ${connection.id})`);
+  // log.info(`[ModalActions] Opening RDP modal for connection: ${connection.name} (ID: ${connection.id})`);
   rdpConnectionInfo.value = connection;
   isRdpModalOpen.value = true;
 };
 
 export const closeRdpModal = () => {
-  // console.info('[ModalActions] Closing RDP modal.');
+  // log.info('[ModalActions] Closing RDP modal.');
   isRdpModalOpen.value = false;
   rdpConnectionInfo.value = null; // 清除连接信息
 };
 
 // --- VNC Modal Actions ---
 export const openVncModal = (connection: ConnectionInfo) => {
-  // console.info(`[ModalActions] Opening VNC modal for connection: ${connection.name} (ID: ${connection.id})`);
+  // log.info(`[ModalActions] Opening VNC modal for connection: ${connection.name} (ID: ${connection.id})`);
   vncConnectionInfo.value = connection;
   isVncModalOpen.value = true;
 };
 
 export const closeVncModal = () => {
-  // console.info('[ModalActions] Closing VNC modal.');
+  // log.info('[ModalActions] Closing VNC modal.');
   isVncModalOpen.value = false;
   vncConnectionInfo.value = null; // 清除连接信息
 };

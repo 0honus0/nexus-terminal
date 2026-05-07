@@ -1,6 +1,7 @@
 import type { Stats } from 'ssh2';
 import type { ClientState } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 interface PathItemPayload {
   filename: string;
@@ -43,7 +44,7 @@ export const executeStatPathQueryOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 stat (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 stat (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:stat:error',
@@ -55,11 +56,11 @@ export const executeStatPathQueryOperation = async (
     return;
   }
 
-  console.debug(`[SFTP ${sessionId}] Received stat request for ${path} (ID: ${requestId})`);
+  logger.debug(`[SFTP ${sessionId}] Received stat request for ${path} (ID: ${requestId})`);
   try {
     state.sftp.lstat(path, (err, stats: Stats) => {
       if (err) {
-        console.error(`[SFTP ${sessionId}] stat ${path} failed (ID: ${requestId}):`, err);
+        logger.error(`[SFTP ${sessionId}] stat ${path} failed (ID: ${requestId}):`, err);
         state.ws.send(
           JSON.stringify({
             type: 'sftp:stat:error',
@@ -92,7 +93,7 @@ export const executeStatPathQueryOperation = async (
       );
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] stat ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );
@@ -115,7 +116,7 @@ export const executeChmodPathQueryOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 chmod (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 chmod (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:chmod:error',
@@ -128,13 +129,13 @@ export const executeChmodPathQueryOperation = async (
   }
 
   const { sftp } = state;
-  console.debug(
+  logger.debug(
     `[SFTP ${sessionId}] Received chmod request for ${path} to ${mode.toString(8)} (ID: ${requestId})`
   );
   try {
     sftp.chmod(path, mode, (err) => {
       if (err) {
-        console.error(
+        logger.error(
           `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} failed (ID: ${requestId}):`,
           err
         );
@@ -151,7 +152,7 @@ export const executeChmodPathQueryOperation = async (
 
       sftp.lstat(path, (statErr, stats) => {
         if (statErr) {
-          console.error(
+          logger.error(
             `[SFTP ${sessionId}] lstat after chmod ${path} failed (ID: ${requestId}):`,
             statErr
           );
@@ -177,7 +178,7 @@ export const executeChmodPathQueryOperation = async (
       });
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] chmod ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );
@@ -200,7 +201,7 @@ export const executeRealpathPathQueryOperation = async (
   resolveCurrentState: () => ClientState | undefined
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 realpath (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 realpath (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:realpath:error',
@@ -212,11 +213,11 @@ export const executeRealpathPathQueryOperation = async (
     return;
   }
 
-  console.debug(`[SFTP ${sessionId}] Received realpath request for ${path} (ID: ${requestId})`);
+  logger.debug(`[SFTP ${sessionId}] Received realpath request for ${path} (ID: ${requestId})`);
   try {
     state.sftp.realpath(path, (err, absPath) => {
       if (err) {
-        console.error(`[SFTP ${sessionId}] realpath ${path} failed (ID: ${requestId}):`, err);
+        logger.error(`[SFTP ${sessionId}] realpath ${path} failed (ID: ${requestId}):`, err);
         state.ws.send(
           JSON.stringify({
             type: 'sftp:realpath:error',
@@ -230,7 +231,7 @@ export const executeRealpathPathQueryOperation = async (
 
       const currentState = resolveCurrentState();
       if (!currentState || !currentState.sftp) {
-        console.warn(
+        logger.warn(
           `[SFTP ${sessionId}] SFTP session for ${absPath} became invalid before stat call (ID: ${requestId}).`
         );
         state.ws.send(
@@ -250,7 +251,7 @@ export const executeRealpathPathQueryOperation = async (
 
       currentState.sftp.stat(absPath, (statErr, stats) => {
         if (statErr) {
-          console.error(
+          logger.error(
             `[SFTP ${sessionId}] stat on realpath target ${absPath} failed (ID: ${requestId}):`,
             statErr
           );
@@ -291,7 +292,7 @@ export const executeRealpathPathQueryOperation = async (
       });
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] realpath ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );

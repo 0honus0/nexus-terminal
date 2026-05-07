@@ -25,6 +25,7 @@ import { useSidebarResize } from '../composables/useSidebarResize';
 import { storeToRefs } from 'pinia';
 import DOMPurify from 'dompurify'; // +++ 导入 DOMPurify 进行 HTML 消毒 +++
 import type { FileTab } from '../stores/session/types';
+import { log } from '@/utils/log';
 
 // --- Props ---
 const props = defineProps({
@@ -300,25 +301,22 @@ const handlePaneResize = (eventData: {
   // +++ 更详细的日志 +++
   // +++ Log the entire layoutNode object if ID is undefined +++
   if (props.layoutNode && typeof props.layoutNode.id === 'undefined') {
-    console.warn(
+    log.warn(
       `[LayoutRenderer DEBUG] handlePaneResize triggered but props.layoutNode.id is undefined. Full layoutNode prop:`,
       JSON.parse(JSON.stringify(props.layoutNode))
     );
   }
-  // console.info(`[LayoutRenderer DEBUG] handlePaneResize triggered for node ID: ${props.layoutNode?.id}, direction: ${props.layoutNode?.direction ?? 'N/A'}`); // Use optional chaining for safety
-  // console.info('[LayoutRenderer DEBUG] Splitpanes resized event object:', eventData);
+  // log.info(`[LayoutRenderer DEBUG] handlePaneResize triggered for node ID: ${props.layoutNode?.id}, direction: ${props.layoutNode?.direction ?? 'N/A'}`); // Use optional chaining for safety
+  // log.info('[LayoutRenderer DEBUG] Splitpanes resized event object:', eventData);
   const paneSizes = eventData.panes; // 从事件对象中提取 panes 数组
 
-  // console.info('[LayoutRenderer DEBUG] Extracted paneSizes:', paneSizes); // 打印提取出的数组
+  // log.info('[LayoutRenderer DEBUG] Extracted paneSizes:', paneSizes); // 打印提取出的数组
 
   // +++ Use optional chaining for safety +++
   if (props.layoutNode?.type === 'container' && props.layoutNode?.children) {
     // 确保 paneSizes 是一个数组
     if (!Array.isArray(paneSizes)) {
-      console.error(
-        '[LayoutRenderer] handlePaneResize: 从事件对象提取的 panes 不是数组:',
-        paneSizes
-      );
+      log.error('[LayoutRenderer] handlePaneResize: 从事件对象提取的 panes 不是数组:', paneSizes);
       return;
     }
     // 构建传递给 store action 的数据结构
@@ -328,11 +326,11 @@ const handlePaneResize = (eventData: {
     }));
 
     // +++ 调用 store action 前的日志 +++
-    // console.info(`[LayoutRenderer DEBUG] Calling layoutStore.updateNodeSizes for node ID: ${props.layoutNode.id} with sizes:`, JSON.parse(JSON.stringify(childrenSizes)));
+    // log.info(`[LayoutRenderer DEBUG] Calling layoutStore.updateNodeSizes for node ID: ${props.layoutNode.id} with sizes:`, JSON.parse(JSON.stringify(childrenSizes)));
     // 调用 store action 来更新节点大小
     layoutStore.updateNodeSizes(props.layoutNode.id, childrenSizes);
   } else {
-    // console.info(`[LayoutRenderer DEBUG] handlePaneResize ignored for node ID: ${props.layoutNode.id} (type: ${props.layoutNode.type})`);
+    // log.info(`[LayoutRenderer DEBUG] handlePaneResize ignored for node ID: ${props.layoutNode.id} (type: ${props.layoutNode.type})`);
   }
 };
 
@@ -434,7 +432,7 @@ onMounted(() => {
     handleRef: leftResizeHandleRef,
     side: 'left',
     onResizeEnd: (newWidth) => {
-      console.info(`Left sidebar resize ended. New width: ${newWidth}px`);
+      log.info(`Left sidebar resize ended. New width: ${newWidth}px`);
       // +++ Update specific pane width +++
       if (activeLeftSidebarPane.value) {
         settingsStore.updateSidebarPaneWidth(activeLeftSidebarPane.value, `${newWidth}px`);
@@ -448,7 +446,7 @@ onMounted(() => {
     handleRef: rightResizeHandleRef,
     side: 'right',
     onResizeEnd: (newWidth) => {
-      console.info(`Right sidebar resize ended. New width: ${newWidth}px`);
+      log.info(`Right sidebar resize ended. New width: ${newWidth}px`);
       // +++ Update specific pane width +++
       if (activeRightSidebarPane.value) {
         settingsStore.updateSidebarPaneWidth(activeRightSidebarPane.value, `${newWidth}px`);

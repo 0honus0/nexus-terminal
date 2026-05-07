@@ -4,6 +4,7 @@ import axios from 'axios';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { AuditLogEntry, AuditLogApiResponse, AuditLogActionType } from '../types/server.types';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 export const useAuditLogStore = defineStore('auditLog', () => {
   const logs = ref<AuditLogEntry[]>([]);
@@ -42,7 +43,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       try {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
-          console.info('[AuditLogStore] Loading dashboard logs from cache.');
+          log.info('[AuditLogStore] Loading dashboard logs from cache.');
           // 仪表盘只关心日志列表，不关心 totalLogs 或 currentPage
           logs.value = JSON.parse(cachedData);
           isLoading.value = false; // 先显示缓存
@@ -50,7 +51,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
           isLoading.value = true; // 无缓存，初始加载
         }
       } catch (loadError: unknown) {
-        console.error('[AuditLogStore] Failed to load or parse dashboard logs cache:', loadError);
+        log.error('[AuditLogStore] Failed to load or parse dashboard logs cache:', loadError);
         localStorage.removeItem(cacheKey);
         isLoading.value = true; // 缓存无效，需要加载
       }
@@ -72,7 +73,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         ...(sortOrder && { sort_order: sortOrder }),
       };
 
-      console.info(
+      log.info(
         `[AuditLogStore] Fetching logs from server (isDashboard: ${isDashboardRequest}). Params:`,
         params
       );
@@ -86,16 +87,16 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         const currentLogsString = JSON.stringify(logs.value);
 
         if (currentLogsString !== freshLogsString) {
-          console.info('[AuditLogStore] Dashboard logs data changed, updating state and cache.');
+          log.info('[AuditLogStore] Dashboard logs data changed, updating state and cache.');
           logs.value = freshLogs;
           localStorage.setItem(cacheKey, freshLogsString); // 更新缓存
         } else {
-          console.info('[AuditLogStore] Dashboard logs data is up-to-date.');
+          log.info('[AuditLogStore] Dashboard logs data is up-to-date.');
         }
         // 仪表盘请求不更新 totalLogs 或 currentPage
       } else {
         // 非仪表盘请求，直接更新日志和总数
-        console.info('[AuditLogStore] Updating logs for full view.');
+        log.info('[AuditLogStore] Updating logs for full view.');
         logs.value = freshLogs;
         totalLogs.value = freshTotal;
       }
@@ -104,12 +105,12 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       const statusCode = axios.isAxiosError(err) ? err.response?.status : undefined;
       const isUpstreamUnavailable = statusCode === 502 || statusCode === 503 || statusCode === 504;
       if (isDashboardRequest && isUpstreamUnavailable) {
-        console.warn(
+        log.warn(
           `[AuditLogStore] Dashboard logs fetch skipped due to upstream unavailable (${statusCode}), using cache if present.`
         );
         error.value = null;
       } else {
-        console.error('[AuditLogStore] Error fetching audit logs:', err);
+        log.error('[AuditLogStore] Error fetching audit logs:', err);
         error.value = extractErrorMessage(err, '获取审计日志失败');
       }
       // 如果是仪表盘请求失败，保留缓存数据；否则清空

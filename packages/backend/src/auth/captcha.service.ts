@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { settingsService } from '../settings/settings.service';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // CAPTCHA 验证 API 端点
 const HCAPTCHA_VERIFY_URL = 'https://api.hcaptcha.com/siteverify';
@@ -16,14 +17,14 @@ export class CaptchaService {
    */
   async verifyToken(token: string): Promise<boolean> {
     if (!token) {
-      console.warn('[CaptchaService] 验证失败：未提供令牌。');
+      logger.warn('[CaptchaService] 验证失败：未提供令牌。');
       return false; // 没有令牌，直接视为无效
     }
 
     const captchaConfig = await settingsService.getCaptchaConfig();
 
     if (!captchaConfig.enabled) {
-      console.debug('[CaptchaService] CAPTCHA 未启用，跳过验证。');
+      logger.debug('[CaptchaService] CAPTCHA 未启用，跳过验证。');
       return true; // 未启用则视为验证通过
     }
 
@@ -39,10 +40,10 @@ export class CaptchaService {
         }
         return this._verifyReCaptcha(token, captchaConfig.recaptchaSecretKey);
       case 'none':
-        console.debug('[CaptchaService] CAPTCHA 提供商设置为 "none"，跳过验证。');
+        logger.debug('[CaptchaService] CAPTCHA 提供商设置为 "none"，跳过验证。');
         return true; // 提供商为 none 也视为通过
       default:
-        console.error(`[CaptchaService] 未知的 CAPTCHA 提供商: ${captchaConfig.provider}`);
+        logger.error(`[CaptchaService] 未知的 CAPTCHA 提供商: ${captchaConfig.provider}`);
         throw new Error(`未知的 CAPTCHA 提供商配置: ${captchaConfig.provider}`);
     }
   }
@@ -61,14 +62,14 @@ export class CaptchaService {
     secretKey: string
   ): Promise<boolean> {
     if (!siteKey || !secretKey) {
-      console.warn(`[CaptchaService] 凭据验证失败：${provider} 的 Site Key 或 Secret Key 为空。`);
+      logger.warn(`[CaptchaService] 凭据验证失败：${provider} 的 Site Key 或 Secret Key 为空。`);
       return false;
     }
 
     // 使用一个固定的、已知的无效令牌或一个不太可能有效的测试令牌
     const testToken = 'static_test_token_for_credential_verification_NexusTerminal';
 
-    console.debug(
+    logger.debug(
       `[CaptchaService] 正在验证 ${provider} 凭据 (SiteKey: ${siteKey.substring(0, 5)}...)`
     );
 
@@ -84,7 +85,7 @@ export class CaptchaService {
       return success;
     } catch (error: unknown) {
       // _verifyHCaptcha/_verifyReCaptcha 在凭据检查模式下会抛出特定错误
-      console.error(`[CaptchaService] ${provider} 凭据验证期间发生错误:`, getErrorMessage(error));
+      logger.error(`[CaptchaService] ${provider} 凭据验证期间发生错误:`, getErrorMessage(error));
       return false; // 任何在验证方法内部捕获并重新抛出的错误都意味着凭据无效
     }
   }
@@ -104,7 +105,7 @@ export class CaptchaService {
     isCredentialVerification = false
   ): Promise<boolean> {
     const mode = isCredentialVerification ? '凭据' : '令牌';
-    console.debug(`[CaptchaService] 正在验证 hCaptcha ${mode}...`);
+    logger.debug(`[CaptchaService] 正在验证 hCaptcha ${mode}...`);
     try {
       const params = new URLSearchParams();
       params.append('secret', secretKey);
@@ -118,14 +119,14 @@ export class CaptchaService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      console.debug(`[CaptchaService] hCaptcha ${mode}验证响应:`, response.data);
+      logger.debug(`[CaptchaService] hCaptcha ${mode}验证响应:`, response.data);
       const errorCodes: string[] = response.data['error-codes'] || [];
 
       if (response.data && response.data.success === true) {
-        console.debug(`[CaptchaService] hCaptcha ${mode}验证成功。`);
+        logger.debug(`[CaptchaService] hCaptcha ${mode}验证成功。`);
         return true;
       }
-      console.warn(
+      logger.warn(
         `[CaptchaService] hCaptcha ${mode}验证失败:`,
         errorCodes.join(', ') || '未知错误'
       );
@@ -154,7 +155,7 @@ export class CaptchaService {
           }
           // 如果是 'invalid-input-response' 这类关于测试令牌的错误，我们认为密钥"可能"是对的。
           // 但前端期望布尔值，如果不是 success:true，这里就返回false，表示"未严格验证通过"
-          console.warn(
+          logger.warn(
             `[CaptchaService] hCaptcha ${mode}验证失败，但错误可能与测试令牌有关而非密钥本身: ${errorCodes.join(', ')}`
           );
           return false; // 对于凭据验证，如果不是true，就严格返回false
@@ -167,7 +168,7 @@ export class CaptchaService {
         axios.isAxiosError(error) && error.response?.data?.message
           ? error.response.data.message
           : getErrorMessage(error);
-      console.error(
+      logger.error(
         `[CaptchaService] 调用 hCaptcha ${mode}验证 API 时出错:`,
         errorMessage,
         axios.isAxiosError(error) && error.response?.data ? error.response.data : ''
@@ -192,7 +193,7 @@ export class CaptchaService {
     isCredentialVerification = false
   ): Promise<boolean> {
     const mode = isCredentialVerification ? '凭据' : '令牌';
-    console.debug(
+    logger.debug(
       `[CaptchaService] 正在验证 Google reCAPTCHA ${mode}... (SiteKey: ${siteKey ? `${siteKey.substring(0, 5)}...` : 'N/A'})`
     );
     try {
@@ -206,14 +207,14 @@ export class CaptchaService {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      console.debug(`[CaptchaService] Google reCAPTCHA ${mode}验证响应:`, response.data);
+      logger.debug(`[CaptchaService] Google reCAPTCHA ${mode}验证响应:`, response.data);
       const errorCodes: string[] = response.data['error-codes'] || [];
 
       if (response.data && response.data.success === true) {
-        console.debug(`[CaptchaService] Google reCAPTCHA ${mode}验证成功。`);
+        logger.debug(`[CaptchaService] Google reCAPTCHA ${mode}验证成功。`);
         return true;
       }
-      console.warn(
+      logger.warn(
         `[CaptchaService] Google reCAPTCHA ${mode}验证失败:`,
         errorCodes.join(', ') || '未知错误'
       );
@@ -230,7 +231,7 @@ export class CaptchaService {
         // 如果是 'missing-input-response', 'invalid-input-response'
         // reCAPTCHA 倾向于对无效密钥返回 success: false 和 "invalid-input-secret"
         // 如果没有明确的密钥错误，并且不是 success，严格返回 false
-        console.warn(
+        logger.warn(
           `[CaptchaService] Google reCAPTCHA ${mode}验证失败，但错误可能与测试令牌有关而非密钥本身: ${errorCodes.join(', ')}`
         );
         return false; // 对于凭据验证，如果不是true，就严格返回false
@@ -241,7 +242,7 @@ export class CaptchaService {
         axios.isAxiosError(error) && error.response?.data?.message
           ? error.response.data.message
           : getErrorMessage(error);
-      console.error(
+      logger.error(
         `[CaptchaService] 调用 Google reCAPTCHA ${mode}验证 API 时出错:`,
         errorMessage,
         axios.isAxiosError(error) && error.response?.data ? error.response.data : ''

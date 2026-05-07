@@ -17,6 +17,7 @@ import {
 } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
 import { shellEscape } from '../utils/shell-escape';
+import { logger } from '../utils/logger';
 
 export class SftpArchiveManager {
   private clientStates: Map<string, ClientState>;
@@ -33,7 +34,7 @@ export class SftpArchiveManager {
     const { sources, destinationArchiveName, format, targetDirectory, requestId } = payload;
 
     if (!state || !state.sshClient) {
-      console.warn(
+      logger.warn(
         `[SFTP Compress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 compress (ID: ${requestId})`
       );
       this.sendCompressError(state?.ws, 'SSH 会话未就绪', requestId);
@@ -62,7 +63,7 @@ export class SftpArchiveManager {
       return;
     }
 
-    console.debug(
+    logger.debug(
       `[SFTP Compress ${sessionId}] Request (ID: ${requestId}). Sources: ${sources.join(', ')}, Format: ${format}`
     );
 
@@ -95,12 +96,12 @@ export class SftpArchiveManager {
         return;
     }
 
-    console.info(`[SFTP Compress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
+    logger.info(`[SFTP Compress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
 
     try {
       state.sshClient.exec(command, (err, stream) => {
         if (err) {
-          console.error(`[SFTP Compress ${sessionId}] Exec failed (ID: ${requestId}):`, err);
+          logger.error(`[SFTP Compress ${sessionId}] Exec failed (ID: ${requestId}):`, err);
           this.sendCompressError(state.ws, `执行压缩命令失败: ${err.message}`, requestId);
           return;
         }
@@ -114,9 +115,7 @@ export class SftpArchiveManager {
 
         stream.on('close', (exitCode: number | null) => {
           code = exitCode;
-          console.info(
-            `[SFTP Compress ${sessionId}] Finished with code ${code} (ID: ${requestId})`
-          );
+          logger.info(`[SFTP Compress ${sessionId}] Finished with code ${code} (ID: ${requestId})`);
           if (code === 0 && !this.isErrorInStdErr(stderrData)) {
             const successPayload: SftpCompressSuccessPayload = {
               message: '压缩成功',
@@ -133,22 +132,20 @@ export class SftpArchiveManager {
             }
           } else {
             const errorDetails = stderrData.trim() || `压缩命令退出，代码: ${code ?? 'N/A'}`;
-            console.error(
-              `[SFTP Compress ${sessionId}] Failed (ID: ${requestId}): ${errorDetails}`
-            );
+            logger.error(`[SFTP Compress ${sessionId}] Failed (ID: ${requestId}): ${errorDetails}`);
             this.sendCompressError(state.ws, '压缩失败', requestId, errorDetails);
           }
         });
 
         stream.on('error', (streamErr: Error) => {
-          console.error(`[SFTP Compress ${sessionId}] Stream error (ID: ${requestId}):`, streamErr);
-          if (!stderrData && code === undefined) {
+          logger.error(`[SFTP Compress ${sessionId}] Stream error (ID: ${requestId}):`, streamErr);
+          if (!stderrData && code === null) {
             this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamErr.message);
           }
         });
       });
     } catch (execError: unknown) {
-      console.error(`[SFTP Compress ${sessionId}] Unexpected error (ID: ${requestId}):`, execError);
+      logger.error(`[SFTP Compress ${sessionId}] Unexpected error (ID: ${requestId}):`, execError);
       this.sendCompressError(
         state.ws,
         `执行压缩时发生意外错误: ${getErrorMessage(execError)}`,
@@ -165,7 +162,7 @@ export class SftpArchiveManager {
     const { archivePath, requestId } = payload;
 
     if (!state || !state.sshClient) {
-      console.warn(
+      logger.warn(
         `[SFTP Decompress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 decompress (ID: ${requestId})`
       );
       this.sendDecompressError(state?.ws, 'SSH 会话未就绪', requestId);
@@ -210,7 +207,7 @@ export class SftpArchiveManager {
       return;
     }
 
-    console.debug(`[SFTP Decompress ${sessionId}] Request for ${archivePath} (ID: ${requestId})`);
+    logger.debug(`[SFTP Decompress ${sessionId}] Request for ${archivePath} (ID: ${requestId})`);
 
     const extractDir = pathModule.posix.dirname(archivePath);
     const archiveBasename = pathModule.posix.basename(archivePath);
@@ -230,12 +227,12 @@ export class SftpArchiveManager {
       return;
     }
 
-    console.info(`[SFTP Decompress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
+    logger.info(`[SFTP Decompress ${sessionId}] Executing: ${command} (ID: ${requestId})`);
 
     try {
       state.sshClient.exec(command, (err, stream) => {
         if (err) {
-          console.error(`[SFTP Decompress ${sessionId}] Exec failed (ID: ${requestId}):`, err);
+          logger.error(`[SFTP Decompress ${sessionId}] Exec failed (ID: ${requestId}):`, err);
           this.sendDecompressError(state.ws, `执行解压命令失败: ${err.message}`, requestId);
           return;
         }
@@ -249,7 +246,7 @@ export class SftpArchiveManager {
 
         stream.on('close', (exitCode: number | null) => {
           code = exitCode;
-          console.info(
+          logger.info(
             `[SFTP Decompress ${sessionId}] Finished with code ${code} (ID: ${requestId})`
           );
           if (code === 0 && !this.isErrorInStdErr(stderrData)) {
@@ -268,7 +265,7 @@ export class SftpArchiveManager {
             }
           } else {
             const errorDetails = stderrData.trim() || `解压命令退出，代码: ${code ?? 'N/A'}`;
-            console.error(
+            logger.error(
               `[SFTP Decompress ${sessionId}] Failed (ID: ${requestId}): ${errorDetails}`
             );
             this.sendDecompressError(state.ws, '解压失败', requestId, errorDetails);
@@ -276,17 +273,17 @@ export class SftpArchiveManager {
         });
 
         stream.on('error', (streamErr: Error) => {
-          console.error(
+          logger.error(
             `[SFTP Decompress ${sessionId}] Stream error (ID: ${requestId}):`,
             streamErr
           );
-          if (!stderrData && code === undefined) {
+          if (!stderrData && code === null) {
             this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
           }
         });
       });
     } catch (execError: unknown) {
-      console.error(
+      logger.error(
         `[SFTP Decompress ${sessionId}] Unexpected error (ID: ${requestId}):`,
         execError
       );

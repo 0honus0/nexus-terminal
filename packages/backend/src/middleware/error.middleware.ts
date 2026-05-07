@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/AppError';
 import { ErrorResponse, ErrorCode, ErrorSeverity } from '../types/error.types';
 import crypto from 'crypto';
+import { logger } from '../utils/logger';
 
 /**
  * 全局错误处理中间件
@@ -48,22 +49,21 @@ export const errorHandler = (
   const session = req.session as SessionWithUsername | undefined;
 
   // 记录错误日志（已经过 P1-5 敏感信息脱敏）
+  const logContext = {
+    requestId,
+    path: `${req.method} ${req.path}`,
+    user: session?.username || 'anonymous',
+    errorCode,
+    message: userMessage,
+  };
+
   if (severity === ErrorSeverity.HIGH || severity === ErrorSeverity.CRITICAL) {
-    console.error(`[ErrorHandler] [${severity.toUpperCase()}] Request ID: ${requestId}`);
-    console.error(`[ErrorHandler] Path: ${req.method} ${req.path}`);
-    console.error(`[ErrorHandler] User: ${session?.username || 'anonymous'}`);
-    console.error(`[ErrorHandler] Error Code: ${errorCode}`);
-    console.error(`[ErrorHandler] Message: ${userMessage}`);
-    if (technicalDetails) {
-      console.error(`[ErrorHandler] Technical Details: ${technicalDetails}`);
-    }
-    if (err.stack) {
-      console.error(`[ErrorHandler] Stack Trace:\n${err.stack}`);
-    }
+    logger.error(
+      { ...logContext, err, technicalDetails },
+      `[ErrorHandler] ${severity.toUpperCase()}`
+    );
   } else {
-    console.warn(`[ErrorHandler] [${severity.toUpperCase()}] Request ID: ${requestId}`);
-    console.warn(`[ErrorHandler] Path: ${req.method} ${req.path}`);
-    console.warn(`[ErrorHandler] Error Code: ${errorCode} - ${userMessage}`);
+    logger.warn({ ...logContext }, `[ErrorHandler] ${severity.toUpperCase()}`);
   }
 
   // 构建标准化错误响应

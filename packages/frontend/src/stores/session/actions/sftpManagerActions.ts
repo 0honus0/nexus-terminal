@@ -8,6 +8,7 @@ import {
   createSftpActionsManager,
   type WebSocketDependencies,
 } from '../../../composables/useSftpActions'; // 路径: packages/frontend/src/composables/useSftpActions.ts
+import { log } from '@/utils/log';
 
 export const getOrCreateSftpManager = (
   sessionId: string,
@@ -20,14 +21,14 @@ export const getOrCreateSftpManager = (
   const session = sessions.value.get(sessionId);
 
   if (!session) {
-    console.error(`[SftpManagerActions] 尝试为不存在的会话 ${sessionId} 获取 SFTP 管理器`);
+    log.error(`[SftpManagerActions] 尝试为不存在的会话 ${sessionId} 获取 SFTP 管理器`);
     return null;
   }
   const { t } = dependencies;
 
   let manager = session.sftpManagers.get(instanceId);
   if (!manager) {
-    console.info(
+    log.info(
       `[SftpManagerActions] 为会话 ${sessionId} 创建新的 SFTP 管理器实例: ${instanceId}` +
         (initialPath ? `，恢复路径: ${initialPath}` : '')
     );
@@ -51,7 +52,7 @@ export const removeSftpManager = (sessionId: string, instanceId: string) => {
     if (manager) {
       manager.cleanup();
       session.sftpManagers.delete(instanceId);
-      console.info(
+      log.info(
         `[SftpManagerActions] 已移除并清理会话 ${sessionId} 的 SFTP 管理器实例: ${instanceId}`
       );
     }

@@ -6,6 +6,7 @@
 import { ref, computed, nextTick, watch, type Ref, type ComputedRef } from 'vue';
 import type { useSessionStore } from '../../stores/session.store';
 import type { useFocusSwitcherStore } from '../../stores/focusSwitcher.store';
+import { log } from '@/utils/log';
 
 type SessionStore = ReturnType<typeof useSessionStore>;
 type FocusSwitcherStore = ReturnType<typeof useFocusSwitcherStore>;
@@ -60,7 +61,7 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
   /** 聚焦搜索输入框 */
   const focusSearchInput = (): boolean => {
     if (sessionId.value !== sessionStore.activeSessionId) {
-      console.info(`${logPrefix.value} Ignoring focus request for inactive session.`);
+      log.info(`${logPrefix.value} Ignoring focus request for inactive session.`);
       return false;
     }
 
@@ -69,21 +70,19 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
       nextTick(() => {
         if (toolbarRef.value?.searchInputRef) {
           toolbarRef.value.searchInputRef.focus();
-          console.info(`${logPrefix.value} Search activated and input focused.`);
+          log.info(`${logPrefix.value} Search activated and input focused.`);
         } else {
-          console.warn(
-            `${logPrefix.value} Search activated but input ref not found after nextTick.`
-          );
+          log.warn(`${logPrefix.value} Search activated but input ref not found after nextTick.`);
         }
       });
       return true;
     } else if (toolbarRef.value?.searchInputRef) {
       toolbarRef.value.searchInputRef.focus();
-      console.info(`${logPrefix.value} Search already active, input focused.`);
+      log.info(`${logPrefix.value} Search already active, input focused.`);
       return true;
     }
 
-    console.warn(`${logPrefix.value} Could not focus search input.`);
+    log.warn(`${logPrefix.value} Could not focus search input.`);
     return false;
   };
 
@@ -92,7 +91,7 @@ export function useFileManagerSearch(options: UseFileManagerSearchOptions) {
     () => focusSwitcherStore.activateFileManagerSearchTrigger,
     (newValue, oldValue) => {
       if (newValue > (oldValue ?? 0) && sessionId.value === sessionStore.activeSessionId) {
-        console.info(`${logPrefix.value} Received search activation trigger for active session.`);
+        log.info(`${logPrefix.value} Received search activation trigger for active session.`);
         activateSearch();
       }
     },

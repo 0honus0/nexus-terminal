@@ -8,6 +8,7 @@ import type { useSessionStore } from '../../stores/session.store';
 import { getWsDepsFromSession } from './fileManagerWsUtils';
 import type { SftpManagerInstance } from '../../composables/useSftpActions';
 import type { FileListItem } from '../../types/sftp.types';
+import { log } from '@/utils/log';
 
 type SessionStore = ReturnType<typeof useSessionStore>;
 
@@ -98,7 +99,7 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
           const newMode = parseInt(value, 8);
           manager.changePermissions(actionItem.value, newMode);
         } else if (value) {
-          console.error(`${logPrefix.value} Invalid chmod value from modal: ${value}`);
+          log.error(`${logPrefix.value} Invalid chmod value from modal: ${value}`);
           showError(`Invalid permission value: ${value}`);
           return;
         }
@@ -106,9 +107,7 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
       case 'newFile':
         if (value) {
           if (manager.fileList.value.some((item: FileListItem) => item.filename === value)) {
-            console.warn(
-              `${logPrefix.value} File ${value} already exists. Modal should prevent this.`
-            );
+            log.warn(`${logPrefix.value} File ${value} already exists. Modal should prevent this.`);
             showError(`File "${value}" already exists`);
             return;
           }
@@ -118,7 +117,7 @@ export function useFileManagerActionModal(options: UseFileManagerActionModalOpti
       case 'newFolder':
         if (value) {
           if (manager.fileList.value.some((item: FileListItem) => item.filename === value)) {
-            console.warn(
+            log.warn(
               `${logPrefix.value} Folder ${value} already exists. Modal should prevent this.`
             );
             showError(`Folder "${value}" already exists`);

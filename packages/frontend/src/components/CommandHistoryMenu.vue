@@ -66,6 +66,7 @@ import { useCommandHistoryStore, CommandHistoryEntryFE } from '../stores/command
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { log } from '@/utils/log';
 
 const commandHistoryStore = useCommandHistoryStore();
 const uiNotificationsStore = useUiNotificationsStore();
@@ -116,7 +117,7 @@ const copyCommand = async (command: string) => {
     // 可以选择性地显示一个复制成功的提示
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板')); // 使用独立的 uiNotificationsStore
   } catch (err: unknown) {
-    console.error('复制命令失败:', err);
+    log.error('复制命令失败:', err);
     uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败')); // 使用独立的 uiNotificationsStore
   }
 };

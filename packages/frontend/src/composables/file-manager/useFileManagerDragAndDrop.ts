@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 import type { FileListItem } from '../../types/sftp.types'; // 确保路径正确
+import { log } from '@/utils/log';
 
 // 定义 Composable 的输入参数类型
 export interface UseFileManagerDragAndDropOptions {
@@ -53,10 +54,10 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     const isExternalFileDrag = event.dataTransfer?.types.includes('Files') ?? false;
     if (isConnected.value && isExternalFileDrag && !draggedItem.value) {
       // 确保不是内部拖拽触发
-      // console.info("[DragDrop] External file drag entered container.");
+      // log.info("[DragDrop] External file drag entered container.");
       showExternalDropOverlay.value = true; // 显示蒙版
     } else if (draggedItem.value) {
-      // console.info("[DragDrop] Internal item drag entered container area.");
+      // log.info("[DragDrop] Internal item drag entered container area.");
       // 内部拖拽进入容器但不在行上，可能需要处理效果，但不显示蒙版
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; // 默认在容器空白处无效
     }
@@ -145,16 +146,16 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     const container = event.currentTarget as HTMLElement;
     // 检查是否真的离开了容器边界
     if (!target || !container.contains(target)) {
-      // console.info("[DragDrop] Drag left container boundary.");
+      // log.info("[DragDrop] Drag left container boundary.");
       if (showExternalDropOverlay.value) {
-        // console.info("[DragDrop] Hiding external drop overlay due to leaving container.");
+        // log.info("[DragDrop] Hiding external drop overlay due to leaving container.");
         showExternalDropOverlay.value = false; // 隐藏蒙版
       }
       // isDraggingOver.value = false; // 不再使用
       dragOverTarget.value = null; // 清除行高亮
       stopAutoScroll(); // 停止滚动
     } else {
-      // console.info("[DragDrop] Drag left fired but still inside container.");
+      // log.info("[DragDrop] Drag left fired but still inside container.");
       // 鼠标仍在容器内（可能移到了子元素上），不隐藏蒙版或清除状态
       // 但如果是内部拖拽移到了非行区域，需要清除行高亮
       if (draggedItem.value) {
@@ -174,14 +175,11 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       (item as FileSystemFileEntry).file(
         (file) => {
           // 调用上传函数，传递文件和相对路径
-          console.info(`[DragDrop] Uploading file: ${traversalPath}${file.name}`);
+          log.info(`[DragDrop] Uploading file: ${traversalPath}${file.name}`);
           onFileUpload(file, traversalPath); // 传递相对路径
         },
         (err) => {
-          console.error(
-            `[DragDrop] Error getting file from entry: ${traversalPath}${item.name}`,
-            err
-          );
+          log.error(`[DragDrop] Error getting file from entry: ${traversalPath}${item.name}`, err);
         }
       );
     } else if (item.isDirectory) {
@@ -190,7 +188,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       dirReader.readEntries(
         (entries) => {
           const dirRelativePath = traversalPath ? `${traversalPath}${item.name}/` : `${item.name}/`;
-          console.info(
+          log.info(
             `[DragDrop] Traversing directory: ${dirRelativePath}, found ${entries.length} entries.`
           );
           // 递归遍历目录中的每个条目，使用相对路径
@@ -199,7 +197,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
           });
         },
         (err) => {
-          console.error(
+          log.error(
             `[DragDrop] Error reading directory entries: ${traversalPath}${item.name}`,
             err
           );
@@ -216,11 +214,11 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     const items = event.dataTransfer?.items;
     if (!items || items.length === 0 || !isConnected.value) {
-      console.info('[DragDrop] Overlay drop ignored: No items or not connected.');
+      log.info('[DragDrop] Overlay drop ignored: No items or not connected.');
       return;
     }
 
-    console.info(`[DragDrop] Processing ${items.length} items from overlay drop.`);
+    log.info(`[DragDrop] Processing ${items.length} items from overlay drop.`);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (item.kind === 'file') {
@@ -228,7 +226,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
         if (entry) {
           traverseFileTree(entry); // 处理文件/文件夹
         } else {
-          console.warn(`[DragDrop] Could not get entry for item ${i} from overlay.`);
+          log.warn(`[DragDrop] Could not get entry for item ${i} from overlay.`);
         }
       }
     }
@@ -238,7 +236,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
   // 因为外部 drop 由蒙版处理，内部 drop 由行处理并阻止冒泡。
   // 保留一个空的或只做清理的函数以防万一。
   const handleDrop = (event: DragEvent) => {
-    // console.info("[DragDrop] Container drop event triggered (should be rare).");
+    // log.info("[DragDrop] Container drop event triggered (should be rare).");
     // 清理所有状态以防异常情况
     showExternalDropOverlay.value = false;
     draggedItem.value = null; // 清理内部拖拽状态
@@ -250,12 +248,12 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
   const handleDragStart = (item: FileListItem) => {
     if (item.filename === '..') return;
-    // console.info(`[DragDrop] Drag Start: ${item.filename}`);
+    // log.info(`[DragDrop] Drag Start: ${item.filename}`);
     draggedItem.value = item;
   };
 
   const handleDragEnd = () => {
-    // console.info(`[DragDrop] Drag End`);
+    // log.info(`[DragDrop] Drag End`);
     draggedItem.value = null;
     dragOverTarget.value = null;
     stopAutoScroll();
@@ -310,7 +308,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       sourceItem.filename === targetItem.filename ||
       targetItem.filename !== currentDragOverTarget
     ) {
-      console.info(
+      log.info(
         `[DragDrop] Internal drop on row ignored: Invalid conditions. Source: ${sourceItem?.filename}, Target: ${targetItem.filename}, Drop Target: ${currentDragOverTarget}`
       );
       if (sourceItem) draggedItem.value = null; // 清理拖拽状态
@@ -325,7 +323,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       const current = currentPath.value;
       if (current === '/') {
         // 不能从根目录移动到父目录
-        // console.warn(`[DragDrop] Cannot move item from root to its parent.`);
+        // log.warn(`[DragDrop] Cannot move item from root to its parent.`);
         draggedItem.value = null;
         return;
       }
@@ -341,7 +339,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     // 检查源路径和计算出的目标路径是否相同
     if (sourceFullPath === newFullPath) {
-      // console.warn(`[DragDrop] Source and destination paths are the same.`);
+      // log.warn(`[DragDrop] Source and destination paths are the same.`);
       draggedItem.value = null;
       return;
     }
@@ -351,7 +349,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     // 检查被拖拽的项是否在选区内
     if (selectedItems.value.has(sourceItem.filename)) {
       // 多选拖拽：移动所有选中的项
-      console.info(
+      log.info(
         `[DragDrop] Multi-item drop detected. Moving ${selectedItems.value.size} selected items.`
       );
       selectedItems.value.forEach((filename) => {
@@ -365,7 +363,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
           if (currentItemSourcePath !== currentItemNewPath) {
             itemsToMove.push(itemToMove);
           } else {
-            console.warn(
+            log.warn(
               `[DragDrop] Skipping move for ${itemToMove.filename}: Source and destination paths are the same.`
             );
           }
@@ -375,14 +373,12 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       // clearSelection(); // 需要从 useFileManagerSelection 引入或作为参数传入
     } else {
       // 单选拖拽 (拖拽了一个未选中的项)
-      console.info(
-        `[DragDrop] Single unselected item drop detected. Moving ${sourceItem.filename}.`
-      );
+      log.info(`[DragDrop] Single unselected item drop detected. Moving ${sourceItem.filename}.`);
       // 检查目标路径是否与源路径相同
       if (sourceFullPath !== newFullPath) {
         itemsToMove.push(sourceItem);
       } else {
-        console.warn(
+        log.warn(
           `[DragDrop] Skipping move for ${sourceItem.filename}: Source and destination paths are the same.`
         );
       }
@@ -390,16 +386,16 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     // 统一执行移动操作
     if (itemsToMove.length > 0) {
-      console.info(
+      log.info(
         `[DragDrop] Executing move for ${itemsToMove.length} items to target directory: ${targetDirectoryFullPath}`
       );
       itemsToMove.forEach((item) => {
         const itemNewFullPath = joinPath(targetDirectoryFullPath, item.filename);
-        console.info(`[DragDrop]   - Moving '${item.filename}' to '${itemNewFullPath}'`);
+        log.info(`[DragDrop]   - Moving '${item.filename}' to '${itemNewFullPath}'`);
         onItemMove(item, itemNewFullPath); // 调用移动回调
       });
     } else {
-      console.info('[DragDrop] No valid items to move.');
+      log.info('[DragDrop] No valid items to move.');
     }
 
     // 清理拖拽状态

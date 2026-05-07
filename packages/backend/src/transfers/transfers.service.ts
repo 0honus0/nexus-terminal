@@ -6,6 +6,7 @@ import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transf
 import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
 import { getErrorMessage, isError } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 type SshClientWithSocketState = Client & {
   _sock?: {
@@ -25,7 +26,7 @@ export class TransfersService {
   private readonly MAX_CONCURRENT_SUB_TASKS = 5;
 
   constructor() {
-    console.debug('[TransfersService] Initialized.');
+    logger.debug('[TransfersService] Initialized.');
   }
 
   public async initiateNewTransfer(
@@ -65,14 +66,14 @@ export class TransfersService {
     };
 
     this.transferTasks.set(taskId, newTask);
-    console.info(
+    logger.info(
       `[TransfersService] New transfer task created: ${taskId} for source ${payload.sourceConnectionId} with ${subTasks.length} sub-tasks.`
     );
 
     // 异步启动传输，不阻塞当前请求
     this.processTransferTask(taskId, abortController.signal).catch((error: unknown) => {
       // +++ 传递 signal +++
-      console.error(`[TransfersService] Error processing task ${taskId} in background:`, error);
+      logger.error(`[TransfersService] Error processing task ${taskId} in background:`, error);
       // 如果不是因为终止操作导致的错误，则更新状态
       const isAbortError = error instanceof Error && error.name === 'AbortError';
       if (!isAbortError) {
@@ -90,7 +91,7 @@ export class TransfersService {
   public async cancelTransferTask(taskId: string, userId: string | number): Promise<boolean> {
     const task = this.transferTasks.get(taskId);
     if (!task || task.userId !== userId) {
-      console.warn(
+      logger.warn(
         `[TransfersService] Attempt to cancel non-existent task ${taskId} or task not owned by user ${userId}.`
       );
       return false;
@@ -98,7 +99,7 @@ export class TransfersService {
 
     const abortController = this.taskAbortControllers.get(taskId);
     if (abortController) {
-      console.info(`[TransfersService] Cancelling task ${taskId}.`);
+      logger.info(`[TransfersService] Cancelling task ${taskId}.`);
       abortController.abort(); // 触发终止信号
 
       // 更新主任务状态
@@ -127,7 +128,7 @@ export class TransfersService {
 
       return true;
     }
-    console.warn(`[TransfersService] No AbortController found for task ${taskId} to cancel.`);
+    logger.warn(`[TransfersService] No AbortController found for task ${taskId} to cancel.`);
     return false;
   }
 
@@ -157,12 +158,12 @@ export class TransfersService {
     // +++ 接收 AbortSignal +++
     const task = this.transferTasks.get(taskId);
     if (!task) {
-      console.error(`[TransfersService] Task ${taskId} not found for processing.`);
+      logger.error(`[TransfersService] Task ${taskId} not found for processing.`);
       return;
     }
 
     if (signal.aborted) {
-      console.debug(`[TransfersService] Task ${taskId} was cancelled before processing started.`);
+      logger.debug(`[TransfersService] Task ${taskId} was cancelled before processing started.`);
       this.updateOverallTaskStatus(taskId, 'cancelled', 'Cancelled before start.');
       this.taskAbortControllers.delete(taskId); // 清理
       return;
@@ -202,14 +203,14 @@ export class TransfersService {
         activeSourceSshClient
           .on('ready', () => {
             signal.removeEventListener('abort', onAbort);
-            console.debug(
+            logger.debug(
               `[TransfersService] SSH connection established to source server ${sourceConnection.host} for task ${taskId}.`
             );
             resolve();
           })
           .on('error', (err) => {
             signal.removeEventListener('abort', onAbort);
-            console.error(
+            logger.error(
               `[TransfersService] SSH connection error to source server ${sourceConnection.host} for task ${taskId}:`,
               err
             );
@@ -217,7 +218,7 @@ export class TransfersService {
           })
           .on('close', () => {
             signal.removeEventListener('abort', onAbort);
-            console.debug(
+            logger.debug(
               `[TransfersService] SSH connection closed to source server ${sourceConnection.host} for task ${taskId}.`
             );
           })
@@ -233,7 +234,7 @@ export class TransfersService {
       let currentSubTaskIndex = 0; // Points to the next sub-task in task.subTasks to be processed
       const totalSubTasks = task.subTasks.length;
 
-      console.info(
+      logger.info(
         `[TransfersService] Task ${taskId}: Starting to process ${totalSubTasks} sub-tasks with max concurrency of ${maxConcurrentSubTasks}.`
       );
 
@@ -242,7 +243,7 @@ export class TransfersService {
         subTask: TransferSubTask,
         subTaskIndexForLog: number
       ): Promise<void> => {
-        console.debug(
+        logger.debug(
           `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} (index ${subTaskIndexForLog}) started. Active: ${currentlyActiveSubTasks}/${maxConcurrentSubTasks}`
         );
 
@@ -254,7 +255,7 @@ export class TransfersService {
             undefined,
             'Cancelled before start.'
           );
-          console.debug(
+          logger.debug(
             `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} cancelled before processing.`
           );
           return; // Do not process this sub-task
@@ -271,7 +272,7 @@ export class TransfersService {
             undefined,
             `Source item '${subTask.sourceItemName}' not found in payload.`
           );
-          console.warn(
+          logger.warn(
             `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} (item: ${subTask.sourceItemName}) - Source item not found.`
           );
           return;
@@ -286,7 +287,7 @@ export class TransfersService {
             undefined,
             `Preparing transfer for ${currentSourceItem.name} to target ID ${subTask.connectionId}`
           );
-          console.debug(
+          logger.debug(
             `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} (item: ${currentSourceItem.name}) - Connecting to target ID ${subTask.connectionId}.`
           );
 
@@ -328,12 +329,12 @@ export class TransfersService {
               undefined,
               'Sub-task cancelled by user.'
             );
-            console.debug(
+            logger.debug(
               `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} (item: ${currentSourceItem.name}) was cancelled.`
             );
           } else {
             const subTaskErrMsg = getErrorMessage(subTaskError);
-            console.error(
+            logger.error(
               `[TransfersService] Task ${taskId}: Error in sub-task ${subTask.subTaskId} (item: ${currentSourceItem.name}) wrapper:`,
               subTaskErrMsg,
               isError(subTaskError) ? subTaskError.stack : undefined
@@ -359,7 +360,7 @@ export class TransfersService {
 
       await new Promise<void>((resolveAllTasksCompleted, rejectAllTasksCompleted) => {
         const onAbortOverall = () => {
-          console.debug(
+          logger.debug(
             `[TransfersService] Task ${taskId}: Overall cancellation signal received during sub-task processing phase.`
           );
           // Attempt to clean up / signal running sub-tasks is handled by individual sub-task signal checks
@@ -370,7 +371,7 @@ export class TransfersService {
         const handleSubTaskSettled = () => {
           currentlyActiveSubTasks--;
           if (signal.aborted && currentlyActiveSubTasks === 0) {
-            console.debug(
+            logger.debug(
               `[TransfersService] Task ${taskId}: All active sub-tasks finished after main abort signal.`
             );
             signal.removeEventListener('abort', onAbortOverall);
@@ -380,7 +381,7 @@ export class TransfersService {
           if (currentSubTaskIndex < totalSubTasks && !signal.aborted) {
             launchNextSubTaskIfPossible();
           } else if (currentlyActiveSubTasks === 0) {
-            console.debug(
+            logger.debug(
               `[TransfersService] Task ${taskId}: All ${totalSubTasks} sub-tasks have completed or been skipped after processing.`
             );
             signal.removeEventListener('abort', onAbortOverall);
@@ -391,7 +392,7 @@ export class TransfersService {
         const launchNextSubTaskIfPossible = () => {
           if (signal.aborted) {
             // Check before launching new sub-tasks
-            console.debug(
+            logger.debug(
               `[TransfersService] Task ${taskId}: Abort signal detected, not launching more sub-tasks.`
             );
             if (currentlyActiveSubTasks === 0) resolveAllTasksCompleted(); // If no tasks are active, resolve.
@@ -405,7 +406,7 @@ export class TransfersService {
             const subTaskToProcess = task.subTasks[currentSubTaskIndex];
             // If sub-task is already marked (e.g. cancelled by overall cancel before it started), skip.
             if (subTaskToProcess.status === 'cancelled') {
-              console.debug(
+              logger.debug(
                 `[TransfersService] Task ${taskId}: Skipping already cancelled sub-task ${subTaskToProcess.subTaskId}`
               );
               currentSubTaskIndex++;
@@ -431,7 +432,7 @@ export class TransfersService {
             currentlyActiveSubTasks === 0 &&
             !signal.aborted
           ) {
-            console.debug(
+            logger.debug(
               `[TransfersService] Task ${taskId}: All sub-tasks processed (no active, no more to launch).`
             );
             signal.removeEventListener('abort', onAbortOverall);
@@ -440,14 +441,14 @@ export class TransfersService {
         };
 
         if (totalSubTasks === 0) {
-          console.debug(`[TransfersService] Task ${taskId}: No sub-tasks to process.`);
+          logger.debug(`[TransfersService] Task ${taskId}: No sub-tasks to process.`);
           signal.removeEventListener('abort', onAbortOverall);
           resolveAllTasksCompleted();
           return;
         }
         if (signal.aborted) {
           // Check if cancelled even before starting the loop
-          console.debug(
+          logger.debug(
             `[TransfersService] Task ${taskId}: Cancelled before sub-task loop initiation.`
           );
           task.subTasks.forEach((st) => {
@@ -469,10 +470,10 @@ export class TransfersService {
       });
     } catch (error: unknown) {
       if (isError(error) && error.name === 'AbortError') {
-        console.info(`[TransfersService] Task ${taskId} processing was aborted.`);
+        logger.info(`[TransfersService] Task ${taskId} processing was aborted.`);
         this.updateOverallTaskStatus(taskId, 'cancelled', 'Transfer cancelled by user.');
       } else {
-        console.error(
+        logger.error(
           `[TransfersService] Major error processing task ${taskId}: ${getErrorMessage(error)}`,
           isError(error) ? error.stack : undefined
         );
@@ -487,11 +488,11 @@ export class TransfersService {
         // 直接检查 sourceSshClient 是否存在
         try {
           sourceSshClient.end();
-          console.debug(
+          logger.debug(
             `[TransfersService] SSH connection to source server explicitly closed for task ${taskId}.`
           );
         } catch (error: unknown) {
-          console.warn(
+          logger.warn(
             `[TransfersService] Error ending sourceSshClient for task ${taskId}: ${getErrorMessage(error)}`
           );
         }
@@ -500,11 +501,11 @@ export class TransfersService {
       this.taskAbortControllers.delete(taskId);
       if (task) {
         // task 可能未定义如果 taskId 错误
-        console.debug(
+        logger.debug(
           `[TransfersService] Task ${taskId} processing finished. Final status: ${task.status}.`
         );
       } else {
-        console.debug(
+        logger.debug(
           `[TransfersService] Task ${taskId} processing finished (task object was not found at the end).`
         );
       }
@@ -547,20 +548,20 @@ export class TransfersService {
       await new Promise<void>((resolve, reject) => {
         targetClient
           .on('ready', () => {
-            console.debug(
+            logger.debug(
               `[TransfersService] SSH connection established to target server ${targetConnection.host} for command check.`
             );
             resolve();
           })
           .on('error', (err) => {
-            console.error(
+            logger.error(
               `[TransfersService] SSH connection error to target server ${targetConnection.host} for command check:`,
               err
             );
             reject(err);
           })
           .on('close', () => {
-            console.debug(
+            logger.debug(
               `[TransfersService] SSH connection closed to target server ${targetConnection.host} after command check.`
             );
           })
@@ -635,7 +636,7 @@ export class TransfersService {
         // Listen to 'close' instead of 'finish' for more reliability
         stream.on('close', () => {
           if (timeoutHandle) clearTimeout(timeoutHandle);
-          console.debug(
+          logger.debug(
             `[TransfersService] Private key for target successfully uploaded to source at ${remotePath}`
           );
           sftp.end();
@@ -686,7 +687,7 @@ export class TransfersService {
         sftp.unlink(remotePath, (unlinkErr) => {
           sftp.end();
           if (unlinkErr) {
-            console.warn(
+            logger.warn(
               `[TransfersService] Failed to delete temporary key ${remotePath} from source:`,
               unlinkErr
             );
@@ -694,7 +695,7 @@ export class TransfersService {
               new Error(`Failed to delete ${remotePath} from source: ${unlinkErr.message}`)
             );
           }
-          console.debug(`[TransfersService] Temporary key ${remotePath} deleted from source.`);
+          logger.debug(`[TransfersService] Temporary key ${remotePath} deleted from source.`);
           resolve();
         });
       });
@@ -947,7 +948,7 @@ export class TransfersService {
                     signal.removeEventListener('abort', onAbortMkdir);
                     targetClientForMkdir.end();
                     if (code === 0) {
-                      console.debug(
+                      logger.debug(
                         `[TransfersService] Sub-task ${subTaskId}: Target directory ${remoteTargetPathOnTarget} ensured on ${targetConnection.host}.`
                       );
                       resolveMkdir();
@@ -996,13 +997,13 @@ export class TransfersService {
           try {
             targetClientForMkdir.end();
           } catch (cleanupError: unknown) {
-            console.debug(
+            logger.debug(
               '[TransfersService] 关闭目标连接失败:',
               cleanupError instanceof Error ? cleanupError.message : cleanupError
             );
           }
         }
-        console.error(
+        logger.error(
           `[TransfersService] Sub-task ${subTaskId}: Failed to ensure target directory ${remoteTargetPathOnTarget} on ${targetConnection.host}:`,
           mkdirErrMsg
         );
@@ -1088,7 +1089,7 @@ export class TransfersService {
         let streamClosed = false;
         const onAbortCmd = () => {
           if (!streamClosed) {
-            console.warn(
+            logger.warn(
               `[TransfersService] Abort signal received for command stream of sub-task ${subTaskId}. Attempting to close stream.`
             );
           }
@@ -1190,7 +1191,7 @@ export class TransfersService {
       });
     } catch (error: unknown) {
       if (isError(error) && error.name === 'AbortError') {
-        console.debug(
+        logger.debug(
           `[TransfersService] executeRemoteTransferOnSource for sub-task ${subTaskId} (item: ${sourceItem.name}) was aborted.`
         );
         // Status will be updated to 'cancelled' by the caller or here if not already
@@ -1207,7 +1208,7 @@ export class TransfersService {
           );
         }
       } else {
-        console.error(
+        logger.error(
           `[TransfersService] executeRemoteTransferOnSource error for sub-task ${subTaskId} (item: ${sourceItem.name}): ${getErrorMessage(error)}`,
           isError(error) ? error.stack : undefined
         );
@@ -1225,7 +1226,7 @@ export class TransfersService {
         try {
           await this.deleteFileOnSourceViaSftp(sourceSshClient, tempTargetKeyPathOnSource, signal);
         } catch (cleanupError: unknown) {
-          console.warn(
+          logger.warn(
             `[TransfersService] Failed to cleanup temp key ${tempTargetKeyPathOnSource} on source for sub-task ${subTaskId}: ${getErrorMessage(cleanupError)}`
           );
         }
@@ -1239,7 +1240,7 @@ export class TransfersService {
     userId: string | number
   ): Promise<TransferTask | null> {
     const task = this.transferTasks.get(taskId);
-    console.debug(`[TransfersService] Retrieving details for task: ${taskId} for user: ${userId}`);
+    logger.debug(`[TransfersService] Retrieving details for task: ${taskId} for user: ${userId}`);
     if (task && task.userId === userId) {
       // Spread the task, then explicitly add top-level fields from payload
       const taskToReturn = {
@@ -1251,7 +1252,7 @@ export class TransfersService {
       return taskToReturn;
     }
     if (task && task.userId !== userId) {
-      console.warn(
+      logger.warn(
         `[TransfersService] User ${userId} attempted to access task ${taskId} owned by ${task.userId}.`
       );
       return null;
@@ -1260,7 +1261,7 @@ export class TransfersService {
   }
 
   public async getAllTransferTasks(userId: string | number): Promise<TransferTask[]> {
-    console.debug(`[TransfersService] Retrieving all transfer tasks for user: ${userId}.`);
+    logger.debug(`[TransfersService] Retrieving all transfer tasks for user: ${userId}.`);
     return Array.from(this.transferTasks.values())
       .filter((task) => task.userId === userId)
       .map((task) => {
@@ -1291,7 +1292,7 @@ export class TransfersService {
           newStatus !== 'completed' &&
           newStatus !== 'failed'
         ) {
-          console.warn(
+          logger.warn(
             `[TransfersService] Attempted to update final sub-task ${subTaskId} status '${subTask.status}' to '${newStatus}'. Ignoring.`
           );
           return;
@@ -1305,16 +1306,16 @@ export class TransfersService {
         }
         task.updatedAt = new Date();
         this.updateOverallTaskStatusBasedOnSubTasks(taskId); // Important: update overall task
-        console.debug(
+        logger.debug(
           `[TransfersService] Sub-task ${subTaskId} (task ${taskId}) updated: ${newStatus}, progress: ${subTask.progress}%, msg: "${subTask.message}"`
         );
       } else {
-        console.warn(
+        logger.warn(
           `[TransfersService] Sub-task ${subTaskId} not found for task ${taskId} during status update.`
         );
       }
     } else {
-      console.warn(`[TransfersService] Task ${taskId} not found during sub-task status update.`);
+      logger.warn(`[TransfersService] Task ${taskId} not found during sub-task status update.`);
     }
   }
 
@@ -1334,7 +1335,7 @@ export class TransfersService {
 
       if (isCurrentStatusFinal && isNewStatusTransient) {
         // If current status is final and new status is transient, ignore the update.
-        console.warn(
+        logger.warn(
           `[TransfersService] Attempted to update final task ${taskId} status '${task.status}' to transient '${newStatus}'. Ignoring.`
         );
         return;
@@ -1347,7 +1348,7 @@ export class TransfersService {
       task.updatedAt = new Date();
       // Overall task message could be an aggregation or just the first major error.
       // For simplicity, not adding detailed message aggregation here.
-      console.info(
+      logger.info(
         `[TransfersService] Overall status for task ${taskId} directly updated to: ${newStatus}${
           message ? ` (Msg: ${message})` : ''
         }`
@@ -1420,7 +1421,7 @@ export class TransfersService {
     }
 
     if (task.status !== newOverallStatus) {
-      console.info(
+      logger.info(
         `[TransfersService] Task ${taskId} overall status changing from ${task.status} to ${newOverallStatus} (P: ${task.overallProgress}%)`
       );
       task.status = newOverallStatus;
@@ -1432,7 +1433,7 @@ export class TransfersService {
     const task = this.transferTasks.get(taskId);
     if (!task) return;
     this.updateOverallTaskStatusBasedOnSubTasks(taskId); // Recalculate based on final sub-task states
-    console.info(
+    logger.info(
       `[TransfersService] Finalized overall status for task ${taskId}: ${task.status}, progress: ${task.overallProgress}%`
     );
   }

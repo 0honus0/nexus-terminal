@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { PropType } from 'vue';
 import { useLayoutStore, type PaneName } from '../stores/layout.store';
+import { log } from '@/utils/log';
 
 // --- Props ---
 const props = defineProps({
@@ -19,7 +20,7 @@ const layoutStore = useLayoutStore();
 
 // --- Methods ---
 const closePane = () => {
-  console.info(`[PaneTitleBar] Requesting to close pane: ${props.paneName}`);
+  log.info(`[PaneTitleBar] Requesting to close pane: ${props.paneName}`);
 };
 </script>
 

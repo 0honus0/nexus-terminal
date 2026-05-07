@@ -6,6 +6,7 @@ import {
   CreateTerminalThemeDto,
   UpdateTerminalThemeDto,
 } from '../types/terminal-theme.types';
+import { logger } from '../utils/logger';
 
 interface DbTerminalThemeRow {
   id: number;
@@ -40,7 +41,7 @@ interface DbTerminalThemeRow {
 const mapRowToTerminalTheme = (row: DbTerminalThemeRow): TerminalTheme => {
   // Basic check if row exists and has id property
   if (!row || typeof row.id === 'undefined') {
-    console.error('mapRowToTerminalTheme received invalid row:', row);
+    logger.error('mapRowToTerminalTheme received invalid row:', row);
     throw ErrorFactory.databaseError(
       'Invalid database row provided to mapRowToTerminalTheme',
       'Invalid database row provided to mapRowToTerminalTheme'
@@ -79,7 +80,7 @@ const mapRowToTerminalTheme = (row: DbTerminalThemeRow): TerminalTheme => {
       updatedAt: row.updated_at,
     };
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `Error mapping theme data for theme ID ${row.id}:`,
       getErrorMessage(error),
       'Raw row:',
@@ -108,16 +109,16 @@ export const findAllThemes = async (): Promise<TerminalTheme[]> => {
         try {
           return mapRowToTerminalTheme(row);
         } catch (mapError: unknown) {
-          console.error(`Error mapping row ID ${row?.id}:`, getErrorMessage(mapError));
+          logger.error(`Error mapping row ID ${row?.id}:`, getErrorMessage(mapError));
           return null;
         }
       })
       .filter((theme): theme is TerminalTheme => theme !== null);
   } catch (err: unknown) {
     const errMsg = getErrorMessage(err);
-    console.error('查询所有终端主题失败:', errMsg);
+    logger.error('查询所有终端主题失败:', errMsg);
     // 添加详细错误日志
-    console.error('详细错误:', err);
+    logger.error('详细错误:', err);
     throw ErrorFactory.databaseError('查询终端主题失败', '查询终端主题失败');
   }
 };
@@ -129,7 +130,7 @@ export const findAllThemes = async (): Promise<TerminalTheme[]> => {
  */
 export const findThemeById = async (id: number): Promise<TerminalTheme | null> => {
   if (Number.isNaN(id) || id <= 0) {
-    console.error('findThemeById called with invalid ID:', id);
+    logger.error('findThemeById called with invalid ID:', id);
     return null;
   }
   try {
@@ -139,7 +140,7 @@ export const findThemeById = async (id: number): Promise<TerminalTheme | null> =
     ]);
     return row ? mapRowToTerminalTheme(row) : null;
   } catch (err: unknown) {
-    console.error(`查询 ID 为 ${id} 的终端主题失败:`, getErrorMessage(err));
+    logger.error(`查询 ID 为 ${id} 的终端主题失败:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('查询终端主题失败', '查询终端主题失败');
   }
 };
@@ -233,7 +234,7 @@ export const createTheme = async (themeDto: CreateTerminalThemeDto): Promise<Ter
     );
   } catch (err: unknown) {
     const errMsg = getErrorMessage(err);
-    console.error('创建新终端主题失败:', errMsg);
+    logger.error('创建新终端主题失败:', errMsg);
     if (errMsg.includes('UNIQUE constraint failed')) {
       throw ErrorFactory.validationError(
         `主题名称 "${themeDto.name}" 已存在`,
@@ -323,7 +324,7 @@ export const updateTheme = async (
     return result.changes > 0;
   } catch (err: unknown) {
     const errMsg = getErrorMessage(err);
-    console.error(`更新 ID 为 ${id} 的终端主题失败:`, errMsg);
+    logger.error(`更新 ID 为 ${id} 的终端主题失败:`, errMsg);
     if (errMsg.includes('UNIQUE constraint failed')) {
       throw ErrorFactory.validationError(
         `主题名称 "${themeDto.name}" 已存在`,
@@ -347,7 +348,7 @@ export const deleteTheme = async (id: number): Promise<boolean> => {
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
   } catch (err: unknown) {
-    console.error(`删除 ID 为 ${id} 的终端主题失败:`, getErrorMessage(err));
+    logger.error(`删除 ID 为 ${id} 的终端主题失败:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('删除终端主题失败', '删除终端主题失败');
   }
 };
@@ -363,14 +364,14 @@ export const initializePresetThemes = async (
     Omit<TerminalTheme, '_id' | 'createdAt' | 'updatedAt' | 'isSystemDefault'> & { name: string }
   >
 ) => {
-  console.info('[DB Init] 开始检查并初始化预设主题...');
+  logger.info('[DB Init] 开始检查并初始化预设主题...');
   // 在这里添加日志，显示总共要处理多少个预设主题
-  console.info(`[DB Init] 发现 ${presets.length} 个预设主题定义。`);
+  logger.info(`[DB Init] 发现 ${presets.length} 个预设主题定义。`);
   const nowSeconds = Math.floor(Date.now() / 1000);
 
   for (const preset of presets) {
     // 在循环开始时添加日志，显示正在处理哪个主题
-    // console.info(`[DB Init] 正在处理预设主题: "${preset.name}"`);
+    // logger.info(`[DB Init] 正在处理预设主题: "${preset.name}"`);
     try {
       const existing = await getDb<{ id: number }>(
         db,
@@ -441,13 +442,13 @@ export const initializePresetThemes = async (
                     VALUES (${placeholders})
                 `;
         await runDb(db, insertSql, values);
-        // console.info(`[DB Init] 预设主题 "${preset.name}" 已初始化到数据库。`);
+        // logger.info(`[DB Init] 预设主题 "${preset.name}" 已初始化到数据库。`);
       } else {
-        //  console.info(`[DB Init] 预设主题 "${preset.name}" 已存在，跳过初始化。`);
+        //  logger.info(`[DB Init] 预设主题 "${preset.name}" 已存在，跳过初始化。`);
       }
     } catch (err: unknown) {
-      console.error(`[DB Init] 处理预设主题 "${preset.name}" 时出错:`, getErrorMessage(err));
+      logger.error(`[DB Init] 处理预设主题 "${preset.name}" 时出错:`, getErrorMessage(err));
     }
   }
-  console.info('[DB Init] 预设主题检查和初始化完成。');
+  logger.info('[DB Init] 预设主题检查和初始化完成。');
 };

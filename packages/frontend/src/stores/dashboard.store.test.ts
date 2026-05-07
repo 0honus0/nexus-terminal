@@ -11,6 +11,15 @@ import type {
 } from './dashboard.store';
 import apiClient from '../utils/apiClient';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 // Mock 依赖
 vi.mock('../utils/apiClient', () => ({
   default: {
@@ -29,7 +38,6 @@ describe('dashboard.store', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   // ---- Mock 数据 ----
@@ -289,12 +297,11 @@ describe('dashboard.store', () => {
 
     it('获取失败时应记录错误到控制台', async () => {
       const store = useDashboardStore();
-      const consoleSpy = vi.spyOn(console, 'error');
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('连接超时'));
 
       await store.fetchAssetHealth();
 
-      expect(consoleSpy).toHaveBeenCalledWith('获取资产健康状态失败:', expect.any(Error));
+      expect(mockLog.error).toHaveBeenCalledWith('获取资产健康状态失败:', expect.any(Error));
       expect(store.assetHealth).toBeNull();
     });
   });
@@ -367,12 +374,11 @@ describe('dashboard.store', () => {
 
     it('获取失败时应记录错误到控制台', async () => {
       const store = useDashboardStore();
-      const consoleSpy = vi.spyOn(console, 'error');
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('请求失败'));
 
       await store.fetchTimeline();
 
-      expect(consoleSpy).toHaveBeenCalledWith('获取活动时间线失败:', expect.any(Error));
+      expect(mockLog.error).toHaveBeenCalledWith('获取活动时间线失败:', expect.any(Error));
       expect(store.timeline).toEqual([]);
     });
   });
@@ -392,12 +398,11 @@ describe('dashboard.store', () => {
 
     it('获取失败时应记录错误到控制台', async () => {
       const store = useDashboardStore();
-      const consoleSpy = vi.spyOn(console, 'error');
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('存储查询失败'));
 
       await store.fetchStorage();
 
-      expect(consoleSpy).toHaveBeenCalledWith('获取存储统计失败:', expect.any(Error));
+      expect(mockLog.error).toHaveBeenCalledWith('获取存储统计失败:', expect.any(Error));
       expect(store.storage).toBeNull();
     });
   });
@@ -473,12 +478,11 @@ describe('dashboard.store', () => {
 
     it('获取失败时应记录错误到控制台', async () => {
       const store = useDashboardStore();
-      const consoleSpy = vi.spyOn(console, 'error');
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('系统资源获取失败'));
 
       await store.fetchSystemResources();
 
-      expect(consoleSpy).toHaveBeenCalledWith('获取系统资源失败:', expect.any(Error));
+      expect(mockLog.error).toHaveBeenCalledWith('获取系统资源失败:', expect.any(Error));
       expect(store.systemResources).toBeNull();
       expect(store.systemResourcesHistory).toEqual([]);
     });

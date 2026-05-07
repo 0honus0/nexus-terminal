@@ -4,6 +4,15 @@ import { useConnectionsStore, type ConnectionInfo } from './connections.store';
 import apiClient from '../utils/apiClient';
 import { cacheManager, CACHE_KEYS, CACHE_CONFIG } from '../utils/cacheManager';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 vi.mock('../utils/apiClient', () => ({
   default: {
     get: vi.fn(),
@@ -150,7 +159,6 @@ describe('connections.store', () => {
 
     it('未授权时应记录警告', async () => {
       const store = useConnectionsStore();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       vi.mocked(apiClient.get).mockRejectedValueOnce({
         response: { status: 401, data: { message: 'Unauthorized' } },
@@ -158,11 +166,9 @@ describe('connections.store', () => {
 
       await store.fetchConnections();
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect(mockLog.warn).toHaveBeenCalledWith(
         expect.stringContaining('未授权，需要登录才能获取连接列表')
       );
-
-      consoleWarnSpy.mockRestore();
     });
   });
 

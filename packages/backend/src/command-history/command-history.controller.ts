@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as CommandHistoryService from './command-history.service';
+import { logger } from '../utils/logger';
 
 /**
  * 处理添加新命令历史记录的请求
@@ -20,7 +21,7 @@ export const addCommand = async (
     const newId = await CommandHistoryService.addCommandHistory(command);
     res.status(201).json({ id: newId, message: '命令已添加到历史记录' });
   } catch (error: unknown) {
-    console.error('添加命令历史记录控制器出错:', error);
+    logger.error('添加命令历史记录控制器出错:', error);
     next(error);
   }
 };
@@ -38,7 +39,7 @@ export const getAllCommands = async (
     // 注意：前端要求最新在下，最旧在上。Repository 返回的是升序（旧->新），符合要求。
     res.status(200).json(history);
   } catch (error: unknown) {
-    console.error('获取命令历史记录控制器出错:', error);
+    logger.error('获取命令历史记录控制器出错:', error);
     next(error);
   }
 };
@@ -66,7 +67,7 @@ export const deleteCommand = async (
       res.status(404).json({ message: '未找到要删除的命令历史记录' });
     }
   } catch (error: unknown) {
-    console.error('删除命令历史记录控制器出错:', error);
+    logger.error('删除命令历史记录控制器出错:', error);
     next(error);
   }
 };
@@ -83,7 +84,7 @@ export const clearAllCommands = async (
     const count = await CommandHistoryService.clearAllCommandHistory();
     res.status(200).json({ count, message: `已清空 ${count} 条命令历史记录` });
   } catch (error: unknown) {
-    console.error('清空命令历史记录控制器出错:', error);
+    logger.error('清空命令历史记录控制器出错:', error);
     next(error);
   }
 };

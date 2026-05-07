@@ -249,6 +249,7 @@ import { storeToRefs } from 'pinia'; // 导入 storeToRefs
 import { useSettingsStore } from '../stores/settings.store'; //  导入设置 store
 import { useConnectionsStore } from '../stores/connections.store'; // 导入连接 store
 import { useUiNotificationsStore } from '../stores/uiNotifications.store'; // + 导入通知 store
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const sessionStore = useSessionStore();
@@ -450,7 +451,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     await navigator.clipboard.writeText(ipAddress);
     uiNotificationsStore.showSuccess(t('common.copied', '已复制!'));
   } catch (err: unknown) {
-    console.error('Failed to copy IP address: ', err);
+    log.error('Failed to copy IP address: ', err);
     uiNotificationsStore.showError(t('statusMonitor.copyIpError', '复制 IP 失败'));
   }
 };

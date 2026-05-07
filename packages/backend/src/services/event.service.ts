@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { logger } from '../utils/logger';
 
 // 定义支持的事件类型
 // 这里可以根据 packages/backend/src/locales/zh-CN.json 中的 event 部分来扩展
@@ -58,7 +59,7 @@ class EventService extends EventEmitter {
       timestamp: new Date(),
     };
     this.emit(eventType, fullPayload);
-    console.info(`Event emitted: ${eventType}`, fullPayload); // 日志记录，方便调试
+    logger.info(`Event emitted: ${eventType}`, fullPayload); // 日志记录，方便调试
   }
 
   /**

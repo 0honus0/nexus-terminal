@@ -6,6 +6,7 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 
 import type { WebSocketDependencies } from './useSftpActions';
 import { sendFileChunks, type ChunkManagerDeps } from './useUploadChunkManager';
+import { log } from '@/utils/log';
 
 const generateUploadId = (): string => {
   return `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -40,7 +41,7 @@ export function useFileUploader(
   const startFileUpload = (file: File, relativePath?: string) => {
     // Roo: 使用 .value 访问响应式的 sessionIdForLog
     if (!wsDeps.value.isConnected.value) {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] Cannot start upload: WebSocket not connected.`
       );
 
@@ -77,7 +78,7 @@ export function useFileUploader(
     }
     // 规范化路径，移除多余的斜杠 e.g. /root//dir -> /root/dir
     finalRemotePath = finalRemotePath.replace(/\/+/g, '/');
-    console.info(
+    log.info(
       `[FileUploader ${sessionIdForLog.value}] Calculated finalRemotePath: ${finalRemotePath} (current: ${currentPathRef.value}, relative: ${relativePath}, filename: ${file.name}) // wsDeps.isSftpReady: ${wsDeps.value.isSftpReady.value}`
     );
     // --- 结束修正 ---
@@ -91,7 +92,7 @@ export function useFileUploader(
       status: 'pending', // 初始状态
     };
 
-    console.info(
+    log.info(
       `[FileUploader ${sessionIdForLog.value}] Starting upload ${uploadId} to ${finalRemotePath}`
     );
     wsDeps.value.sendMessage({
@@ -109,7 +110,7 @@ export function useFileUploader(
   const cancelUpload = (uploadId: string, notifyBackend = true) => {
     const upload = uploads[uploadId];
     if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
-      console.info(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
+      log.info(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
       upload.status = 'cancelled'; // 立即更新状态
 
       // 清理滑动窗口 ack 监听器
@@ -142,13 +143,13 @@ export function useFileUploader(
 
     const upload = uploads[uploadId];
     if (upload && upload.status === 'pending') {
-      console.info(
+      log.info(
         `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} ready, starting chunk sending.`
       );
       upload.status = 'uploading';
       sendFileChunks(chunkDeps, uploadId, upload.file); // 开始发送块
     } else {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:ready for unknown or non-pending upload ID: ${uploadId}`
       );
     }
@@ -162,7 +163,7 @@ export function useFileUploader(
 
     const upload = uploads[uploadId];
     if (upload) {
-      console.info(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
+      log.info(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
       upload.status = 'success';
       upload.progress = 100;
 
@@ -178,7 +179,7 @@ export function useFileUploader(
         delete uploads[uploadId];
       }
     } else {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:success for unknown upload ID: ${uploadId}`
       );
     }
@@ -189,7 +190,7 @@ export function useFileUploader(
       typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
     const uploadId = message.uploadId || (payloadObj.uploadId as string | undefined);
     if (!uploadId) {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:error with missing uploadId:`,
         message
       );
@@ -207,10 +208,7 @@ export function useFileUploader(
         }
         return t('fileManager.errors.uploadFailed');
       })();
-      console.error(
-        `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`,
-        errorMessage
-      );
+      log.error(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`, errorMessage);
       upload.status = 'error';
       upload.error = errorMessage; // 使用 payload 作为错误消息
 
@@ -228,7 +226,7 @@ export function useFileUploader(
         }
       }, 5000);
     } else {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:error for unknown upload ID: ${uploadId}`
       );
     }
@@ -241,7 +239,7 @@ export function useFileUploader(
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload && upload.status === 'uploading') {
-      console.info(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused.`);
+      log.info(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused.`);
       upload.status = 'paused';
     }
   };
@@ -253,7 +251,7 @@ export function useFileUploader(
     if (!uploadId) return;
     const upload = uploads[uploadId];
     if (upload && upload.status === 'paused') {
-      console.info(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
+      log.info(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
       upload.status = 'uploading';
       sendFileChunks(chunkDeps, uploadId, upload.file);
     }
@@ -305,14 +303,14 @@ export function useFileUploader(
           Math.round((payloadObj.bytesWritten / payloadObj.totalSize) * 100)
         );
       } else {
-        console.warn(
+        log.warn(
           `[FileUploader ${sessionIdForLog.value}] Received upload:progress with incorrect payload format:`,
           payload
         );
       }
     } else if (upload) {
     } else {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] Received upload:progress for unknown upload ID: ${uploadId}`
       );
     }
@@ -322,7 +320,7 @@ export function useFileUploader(
   watchEffect((onCleanup) => {
     // 当 wsDeps.value 变化时，此 effect 会重新运行
     if (!wsDeps.value || !wsDeps.value.onMessage) {
-      console.warn(
+      log.warn(
         `[FileUploader ${sessionIdForLog.value}] wsDeps.value or wsDeps.value.onMessage is not available for registering listeners.`
       );
       return;

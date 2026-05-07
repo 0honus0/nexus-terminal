@@ -6,6 +6,7 @@
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import type { SftpManagerInstance } from '../../composables/useSftpActions';
 import type { ClipboardState } from './useFileManagerContextMenu';
+import { log } from '@/utils/log';
 
 export interface UseFileManagerClipboardOptions {
   /** SFTP 管理器实例（响应式） */
@@ -37,7 +38,7 @@ export function useFileManagerClipboard(options: UseFileManagerClipboardOptions)
     );
     clipboardState.value = { hasContent: true, operation: 'copy' };
     clipboardSourceBaseDir.value = manager.currentPath.value;
-    console.info(`${logPrefix.value} Copied to clipboard:`, clipboardSourcePaths.value);
+    log.info(`${logPrefix.value} Copied to clipboard:`, clipboardSourcePaths.value);
   };
 
   /** 剪切选中项到剪贴板 */
@@ -49,7 +50,7 @@ export function useFileManagerClipboard(options: UseFileManagerClipboardOptions)
     );
     clipboardState.value = { hasContent: true, operation: 'cut' };
     clipboardSourceBaseDir.value = manager.currentPath.value;
-    console.info(`${logPrefix.value} Cut to clipboard:`, clipboardSourcePaths.value);
+    log.info(`${logPrefix.value} Cut to clipboard:`, clipboardSourcePaths.value);
   };
 
   /** 粘贴剪贴板内容到当前目录 */
@@ -63,7 +64,7 @@ export function useFileManagerClipboard(options: UseFileManagerClipboardOptions)
     const sources = clipboardSourcePaths.value;
     const sourceBaseDir = clipboardSourceBaseDir.value;
 
-    console.info(
+    log.info(
       `${logPrefix.value} Pasting items. Operation: ${operation}, Sources: ${sources.join(', ')}, Destination: ${destinationDir}`
     );
 
@@ -71,7 +72,7 @@ export function useFileManagerClipboard(options: UseFileManagerClipboardOptions)
       manager.copyItems(sources, destinationDir);
     } else if (operation === 'cut') {
       if (sourceBaseDir === destinationDir) {
-        console.warn(`${logPrefix.value} Cannot cut and paste in the same directory.`);
+        log.warn(`${logPrefix.value} Cannot cut and paste in the same directory.`);
         return;
       }
       manager.moveItems(sources, destinationDir);

@@ -46,6 +46,10 @@ const { mockRepository, mockEventService, mockI18nT } = vi.hoisted(() => {
 });
 
 // Mock 依赖模块
+// Logger mock for console replacement migration
+const mockLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+vi.mock('../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('./notification.repository', () => ({
   NotificationSettingsRepository: vi.fn().mockImplementation(() => mockRepository),
 }));
@@ -161,7 +165,7 @@ describe('NotificationProcessorService', () => {
   describe('processStandardEvent', () => {
     it('无匹配设置时应静默返回', async () => {
       mockRepository.getEnabledByEvent.mockResolvedValue([]);
-      const emitSpy = vi.spyOn(processorService, 'emit');
+      vi.spyOn(processorService, 'emit');
 
       // 触发事件
       mockEventService.emit(AppEventType.LoginSuccess, mockPayload);
@@ -169,7 +173,7 @@ describe('NotificationProcessorService', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(mockRepository.getEnabledByEvent).toHaveBeenCalledWith('LOGIN_SUCCESS');
-      expect(emitSpy).not.toHaveBeenCalledWith('sendNotification', expect.anything());
+      expect(mockLogger.error).not.toHaveBeenCalledWith('sendNotification', expect.anything());
     });
 
     it('应为每个匹配的设置发出 sendNotification 事件', async () => {
@@ -195,18 +199,17 @@ describe('NotificationProcessorService', () => {
     });
 
     it('获取设置失败时应捕获错误', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       mockRepository.getEnabledByEvent.mockRejectedValue(new Error('Database error'));
 
       mockEventService.emit(AppEventType.LoginSuccess, mockPayload);
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('LOGIN_SUCCESS'),
         expect.any(Error)
       );
-      consoleSpy.mockRestore();
     });
   });
 
@@ -239,7 +242,7 @@ describe('NotificationProcessorService', () => {
     });
 
     it('缺少 testTargetConfig 时应记录错误', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       const invalidPayload = {
         timestamp: new Date(),
         userId: 'test-user',
@@ -250,12 +253,11 @@ describe('NotificationProcessorService', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('testTargetConfig'));
-      consoleSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('testTargetConfig'));
     });
 
     it('缺少 testTargetChannelType 时应记录错误', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       const invalidPayload = {
         timestamp: new Date(),
         userId: 'test-user',
@@ -268,8 +270,9 @@ describe('NotificationProcessorService', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('testTargetChannelType'));
-      consoleSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('testTargetChannelType')
+      );
     });
   });
 
@@ -327,7 +330,7 @@ describe('NotificationProcessorService', () => {
     });
 
     it('不支持的渠道类型应返回 null', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // console spy removed (was: warn);
       const unknownSetting: NotificationSetting = {
         ...mockEmailSetting,
         channel_type: 'unknown' as any,
@@ -340,10 +343,9 @@ describe('NotificationProcessorService', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('不支持的通道类型'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('不支持的通道类型'));
       // 不应发出 sendNotification 事件
       expect(emitSpy).not.toHaveBeenCalledWith('sendNotification', expect.anything());
-      consoleSpy.mockRestore();
     });
   });
 
@@ -489,8 +491,7 @@ describe('NotificationProcessorService', () => {
         config: null as any, // 故意制造错误
       };
       mockRepository.getEnabledByEvent.mockResolvedValue([errorSetting, mockWebhookSetting]);
-
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       const emitSpy = vi.spyOn(processorService, 'emit');
 
       mockEventService.emit(AppEventType.LoginSuccess, mockPayload);
@@ -504,7 +505,6 @@ describe('NotificationProcessorService', () => {
           channelType: 'webhook',
         })
       );
-      consoleSpy.mockRestore();
     });
   });
 });

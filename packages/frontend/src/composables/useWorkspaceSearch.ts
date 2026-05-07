@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue';
+import { log } from '@/utils/log';
 
 /**
  * @interface WorkspaceSearchDependencies
@@ -34,7 +35,7 @@ export function useWorkspaceSearch(deps: WorkspaceSearchDependencies) {
       handleCloseSearch();
       return;
     }
-    console.info(`[useWorkspaceSearch] Received search event: "${term}"`);
+    log.info(`[useWorkspaceSearch] Received search event: "${term}"`);
     handleFindNext();
   };
 
@@ -45,19 +46,19 @@ export function useWorkspaceSearch(deps: WorkspaceSearchDependencies) {
     const manager = activeSession.value?.terminalManager;
     if (manager && currentSearchTerm.value) {
       const mode = isMobile.value ? 'Mobile' : 'Desktop';
-      console.info(
+      log.info(
         `[useWorkspaceSearch ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`
       );
       const found = manager.searchNext(currentSearchTerm.value, { incremental: true });
-      console.info(`[useWorkspaceSearch ${mode}] findNext returned: ${found}`);
+      log.info(`[useWorkspaceSearch ${mode}] findNext returned: ${found}`);
       if (!found) {
-        console.info(
+        log.info(
           `[useWorkspaceSearch ${mode}] findNext: No more results for "${currentSearchTerm.value}"`
         );
       }
     } else {
       const mode = isMobile.value ? 'Mobile' : 'Desktop';
-      console.warn(
+      log.warn(
         `[useWorkspaceSearch ${mode}] Cannot findNext, no active session manager or search term.`
       );
     }
@@ -70,19 +71,19 @@ export function useWorkspaceSearch(deps: WorkspaceSearchDependencies) {
     const manager = activeSession.value?.terminalManager;
     if (manager && currentSearchTerm.value) {
       const mode = isMobile.value ? 'Mobile' : 'Desktop';
-      console.info(
+      log.info(
         `[useWorkspaceSearch ${mode}] Calling findPrevious for term: "${currentSearchTerm.value}"`
       );
       const found = manager.searchPrevious(currentSearchTerm.value, { incremental: true });
-      console.info(`[useWorkspaceSearch ${mode}] findPrevious returned: ${found}`);
+      log.info(`[useWorkspaceSearch ${mode}] findPrevious returned: ${found}`);
       if (!found) {
-        console.info(
+        log.info(
           `[useWorkspaceSearch ${mode}] findPrevious: No previous results for "${currentSearchTerm.value}"`
         );
       }
     } else {
       const mode = isMobile.value ? 'Mobile' : 'Desktop';
-      console.warn(
+      log.warn(
         `[useWorkspaceSearch ${mode}] Cannot findPrevious, no active session manager or search term.`
       );
     }
@@ -92,15 +93,15 @@ export function useWorkspaceSearch(deps: WorkspaceSearchDependencies) {
    * 关闭搜索并清除高亮
    */
   const handleCloseSearch = () => {
-    console.info(`[useWorkspaceSearch] Received close-search event.`);
+    log.info(`[useWorkspaceSearch] Received close-search event.`);
     currentSearchTerm.value = '';
     const manager = activeSession.value?.terminalManager;
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
     if (manager) {
       manager.clearTerminalSearch();
-      console.info(`[useWorkspaceSearch ${mode}] Search cleared.`);
+      log.info(`[useWorkspaceSearch ${mode}] Search cleared.`);
     } else {
-      console.warn(`[useWorkspaceSearch ${mode}] Cannot clear search, no active session manager.`);
+      log.warn(`[useWorkspaceSearch ${mode}] Cannot clear search, no active session manager.`);
     }
   };
 

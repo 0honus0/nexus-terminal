@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settings.store';
 import { availableLocales } from '../../i18n';
 import apiClient from '../../utils/apiClient';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 export function useSystemSettings() {
   const settingsStore = useSettingsStore();
@@ -38,7 +39,7 @@ export function useSystemSettings() {
       // The language change will be reflected globally by the i18n instance
       // when settingsStore.language updates.
     } catch (error: unknown) {
-      console.error('更新语言设置失败:', error);
+      log.error('更新语言设置失败:', error);
       languageMessage.value = extractErrorMessage(error, t('settings.language.error.saveFailed'));
       languageSuccess.value = false;
     } finally {
@@ -89,7 +90,7 @@ export function useSystemSettings() {
       timezoneMessage.value = t('settings.timezone.success.saved');
       timezoneSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新时区设置失败:', error);
+      log.error('更新时区设置失败:', error);
       timezoneMessage.value = extractErrorMessage(error, t('settings.timezone.error.saveFailed'));
       timezoneSuccess.value = false;
     } finally {
@@ -116,7 +117,7 @@ export function useSystemSettings() {
       statusMonitorMessage.value = t('settings.statusMonitor.success.saved');
       statusMonitorSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新状态监控间隔失败:', error);
+      log.error('更新状态监控间隔失败:', error);
       statusMonitorMessage.value = extractErrorMessage(
         error,
         t('settings.statusMonitor.error.saveFailed')
@@ -150,7 +151,7 @@ export function useSystemSettings() {
       dockerSettingsMessage.value = t('settings.docker.success.saved');
       dockerSettingsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新 Docker 设置失败:', error);
+      log.error('更新 Docker 设置失败:', error);
       dockerSettingsMessage.value = extractErrorMessage(
         error,
         t('settings.docker.error.saveFailed')
@@ -227,7 +228,7 @@ export function useSystemSettings() {
       const response = await apiClient.get('/settings/log-level');
       selectedLogLevel.value = response.data.level || 'info';
     } catch (error: unknown) {
-      console.error('获取日志等级失败:', error);
+      log.error('获取日志等级失败:', error);
     }
   };
 
@@ -240,7 +241,7 @@ export function useSystemSettings() {
       logLevelMessage.value = t('settings.logLevel.success.saved', '日志等级已保存');
       logLevelSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新日志等级失败:', error);
+      log.error('更新日志等级失败:', error);
       logLevelMessage.value = extractErrorMessage(
         error,
         t('settings.logLevel.error.saveFailed', '保存日志等级失败')

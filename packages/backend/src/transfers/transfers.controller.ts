@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { TransfersService } from './transfers.service';
 import { initiateTransferPayloadSchema } from './transfers.schema';
+import { logger } from '../utils/logger';
 
 type SessionWithUserId = Request['session'] & { userId?: number };
 
@@ -42,7 +43,7 @@ export class TransfersController {
       const task = await this.transfersService.initiateNewTransfer(payload, userId);
       res.status(202).json(task); // 202 Accepted 表示请求已接受处理，但尚未完成
     } catch (error: unknown) {
-      console.error('[TransfersController] Error initiating transfer:', error);
+      logger.error('[TransfersController] Error initiating transfer:', error);
       res.status(500).json({
         message: 'Failed to initiate transfer.',
         error: error instanceof Error ? error.message : String(error),
@@ -60,7 +61,7 @@ export class TransfersController {
       const tasks = await this.transfersService.getAllTransferTasks(userId);
       res.status(200).json(tasks);
     } catch (error: unknown) {
-      console.error('[TransfersController] Error getting all transfer statuses:', error);
+      logger.error('[TransfersController] Error getting all transfer statuses:', error);
       res.status(500).json({
         message: 'Failed to retrieve transfer statuses.',
         error: error instanceof Error ? error.message : String(error),
@@ -91,7 +92,7 @@ export class TransfersController {
         });
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[TransfersController] Error getting status for task ${req.params.taskId}:`,
         error
       );
@@ -126,7 +127,7 @@ export class TransfersController {
         });
       }
     } catch (error: unknown) {
-      console.error(`[TransfersController] Error cancelling task ${req.params.taskId}:`, error);
+      logger.error(`[TransfersController] Error cancelling task ${req.params.taskId}:`, error);
       res.status(500).json({
         message: 'Failed to cancel task.',
         error: error instanceof Error ? error.message : String(error),

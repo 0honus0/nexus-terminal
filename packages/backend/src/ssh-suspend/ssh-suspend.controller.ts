@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { sshSuspendService } from './ssh-suspend.service';
 import { SuspendedSessionInfo } from '../types/ssh-suspend.types';
+import { logger } from '../utils/logger';
 
 export class SshSuspendController {
   constructor() {
@@ -24,7 +25,7 @@ export class SshSuspendController {
         await sshSuspendService.listSuspendedSessions(userId);
       res.status(200).json(sessions);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[SshSuspendController] Error fetching suspended SSH sessions for user ID: ${req.session.userId}:`,
         error
       );
@@ -54,7 +55,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.info(
+      logger.info(
         `[SshSuspendController] terminateAndRemoveSession called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`
       );
 
@@ -72,7 +73,7 @@ export class SshSuspendController {
         });
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[SshSuspendController] Error terminating session for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
       );
@@ -102,7 +103,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.info(
+      logger.info(
         `[SshSuspendController] removeSessionEntry called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`
       );
 
@@ -122,7 +123,7 @@ export class SshSuspendController {
         });
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[SshSuspendController] Error removing session entry for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
       );
@@ -160,7 +161,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.info(
+      logger.info(
         `[SshSuspendController] editSessionNameHttp called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}, newName: "${customName}"`
       );
 
@@ -181,7 +182,7 @@ export class SshSuspendController {
         });
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[SshSuspendController] Error editing session name for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
       );
@@ -211,7 +212,7 @@ export class SshSuspendController {
         return;
       }
 
-      console.info(
+      logger.info(
         `[SshSuspendController] exportSessionLog called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`
       );
 
@@ -229,7 +230,7 @@ export class SshSuspendController {
         });
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[SshSuspendController] Error exporting session log for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`,
         error
       );

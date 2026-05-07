@@ -2,6 +2,7 @@
 import { ref, watch, computed, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useFavoritePathsStore, type FavoritePathItem } from '../stores/favoritePaths.store';
+import { log } from '@/utils/log';
 
 const props = defineProps({
   isVisible: {
@@ -89,7 +90,7 @@ const handleSubmit = async () => {
     emit('saveSuccess');
     closeModal();
   } catch (error: unknown) {
-    console.error('Error saving favorite path:', error);
+    log.error('Error saving favorite path:', error);
     const errMsg = error instanceof Error ? error.message : '';
     errorMessage.value =
       errMsg ||

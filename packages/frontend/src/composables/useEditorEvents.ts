@@ -1,5 +1,6 @@
 import { computed, type Ref } from 'vue';
 import type { FileTab } from '../stores/fileEditor.store';
+import { log } from '@/utils/log';
 
 /**
  * @interface EditorEventsDependencies
@@ -78,7 +79,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
    */
   const handleCloseEditorTab = (tabId: string) => {
     const isShared = shareFileEditorTabsBoolean.value;
-    console.info(`[useEditorEvents] handleCloseEditorTab: ${tabId}, Shared mode: ${isShared}`);
+    log.info(`[useEditorEvents] handleCloseEditorTab: ${tabId}, Shared mode: ${isShared}`);
     if (isShared) {
       fileEditorStore.closeTab(tabId);
     } else {
@@ -86,7 +87,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
       if (currentActiveSessionId) {
         sessionStore.closeEditorTabInSession(currentActiveSessionId, tabId);
       } else {
-        console.warn(
+        log.warn(
           '[useEditorEvents] Cannot close editor tab: No active session in independent mode.'
         );
       }
@@ -98,7 +99,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
    */
   const handleActivateEditorTab = (tabId: string) => {
     const isShared = shareFileEditorTabsBoolean.value;
-    console.info(`[useEditorEvents] handleActivateEditorTab: ${tabId}, Shared mode: ${isShared}`);
+    log.info(`[useEditorEvents] handleActivateEditorTab: ${tabId}, Shared mode: ${isShared}`);
     if (isShared) {
       fileEditorStore.setActiveTab(tabId);
     } else {
@@ -106,7 +107,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
       if (currentActiveSessionId) {
         sessionStore.setActiveEditorTabInSession(currentActiveSessionId, tabId);
       } else {
-        console.warn(
+        log.warn(
           '[useEditorEvents] Cannot activate editor tab: No active session in independent mode.'
         );
       }
@@ -118,7 +119,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
    */
   const handleUpdateEditorContent = (payload: { tabId: string; content: string }) => {
     const isShared = shareFileEditorTabsBoolean.value;
-    console.info(
+    log.info(
       `[useEditorEvents] handleUpdateEditorContent for tab ${payload.tabId}, Shared mode: ${isShared}`
     );
     if (isShared) {
@@ -132,7 +133,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
           payload.content
         );
       } else {
-        console.warn(
+        log.warn(
           '[useEditorEvents] Cannot update editor content: No active session in independent mode.'
         );
       }
@@ -144,7 +145,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
    */
   const handleSaveEditorTab = (tabId: string) => {
     const isShared = shareFileEditorTabsBoolean.value;
-    console.info(`[useEditorEvents] handleSaveEditorTab: ${tabId}, Shared mode: ${isShared}`);
+    log.info(`[useEditorEvents] handleSaveEditorTab: ${tabId}, Shared mode: ${isShared}`);
     if (isShared) {
       fileEditorStore.saveFile(tabId);
     } else {
@@ -152,7 +153,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
       if (currentActiveSessionId) {
         sessionStore.saveFileInSession(currentActiveSessionId, tabId);
       } else {
-        console.warn(
+        log.warn(
           '[useEditorEvents] Cannot save editor tab: No active session in independent mode.'
         );
       }
@@ -164,7 +165,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
    */
   const handleChangeEncoding = (payload: { tabId: string; encoding: string }) => {
     const isShared = shareFileEditorTabsBoolean.value;
-    console.info(
+    log.info(
       `[useEditorEvents] handleChangeEncoding for tab ${payload.tabId} to ${payload.encoding}, Shared mode: ${isShared}`
     );
     if (isShared) {
@@ -178,7 +179,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
           payload.encoding
         );
       } else {
-        console.warn(
+        log.warn(
           '[useEditorEvents] Cannot change editor encoding: No active session in independent mode.'
         );
       }
@@ -206,7 +207,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
           scrollLeft
         );
       } else {
-        console.warn(
+        log.warn(
           '[useEditorEvents] Cannot update editor scroll position: No active session in independent mode for tab:',
           tabId
         );

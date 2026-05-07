@@ -1,5 +1,6 @@
 import { Database } from 'sqlite3';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -181,12 +182,12 @@ const definedMigrations: Migration[] = [
           return !allowedTypes.includes('vnc'); // 如果 'vnc' 不在允许类型中，则需要运行迁移
         }
         // 如果没有找到明确的 CHECK 约束或格式不匹配，保守地运行迁移
-        console.warn(
+        logger.warn(
           '[Migrations] Check for VNC in connections.type: Could not parse CHECK constraint from SQL. Assuming migration is needed.'
         );
         return true;
       }
-      console.warn(
+      logger.warn(
         '[Migrations] Check for VNC in connections.type: Could not get table create SQL. Assuming migration is needed.'
       );
       return true; // 如果表不存在或无法获取 SQL，则运行迁移
@@ -387,28 +388,28 @@ const definedMigrations: Migration[] = [
  */
 export const runMigrations = (db: Database): Promise<void> => {
   return new Promise((resolve, reject) => {
-    console.debug('[Migrations] 开始检查和应用数据库迁移...');
+    logger.debug('[Migrations] 开始检查和应用数据库迁移...');
 
     db.serialize(() => {
       // 步骤 1: 确保 migrations 表存在
       db.run(createMigrationsTableSQL, (err) => {
         if (err) {
-          console.error('[Migrations] 创建 migrations 表失败:', err);
+          logger.error('[Migrations] 创建 migrations 表失败:', err);
           return reject(new Error(`创建 migrations 表失败: ${err.message}`));
         }
-        console.debug('[Migrations] migrations 表已确保存在。');
+        logger.debug('[Migrations] migrations 表已确保存在。');
 
         // 步骤 2: 获取当前数据库版本 (已应用的最大迁移 ID)
         db.get(
           'SELECT MAX(id) as currentVersion FROM migrations',
           (queryErr, row: { currentVersion: number | null }) => {
             if (queryErr) {
-              console.error('[Migrations] 查询当前数据库版本失败:', queryErr);
+              logger.error('[Migrations] 查询当前数据库版本失败:', queryErr);
               return reject(new Error(`查询当前数据库版本失败: ${queryErr.message}`));
             }
 
             const currentVersion = row?.currentVersion ?? 0; // 如果表为空或没有记录，则认为版本为 0
-            console.debug(`[Migrations] 当前数据库版本: ${currentVersion}`);
+            logger.debug(`[Migrations] 当前数据库版本: ${currentVersion}`);
 
             // 步骤 3: 确定需要应用的迁移
             const migrationsToApply = definedMigrations
@@ -416,11 +417,11 @@ export const runMigrations = (db: Database): Promise<void> => {
               .sort((a, b) => a.id - b.id); // 确保按 ID 升序应用
 
             if (migrationsToApply.length === 0) {
-              console.debug('[Migrations] 数据库已是最新版本，无需迁移。');
+              logger.debug('[Migrations] 数据库已是最新版本，无需迁移。');
               return resolve();
             }
 
-            console.debug(
+            logger.debug(
               `[Migrations] 发现 ${migrationsToApply.length} 个新迁移需要应用:`,
               migrationsToApply.map((m) => `  #${m.id}: ${m.name}`)
             );
@@ -429,13 +430,13 @@ export const runMigrations = (db: Database): Promise<void> => {
             const applyMigrationsSequentially = async () => {
               for (const migration of migrationsToApply) {
                 // 使用 for...of 循环
-                console.info(`[Migrations] 应用迁移 #${migration.id}: ${migration.name}...`);
+                logger.info(`[Migrations] 应用迁移 #${migration.id}: ${migration.name}...`);
 
                 // 开始事务
                 await new Promise<void>((resolveTx, rejectTx) => {
                   db.run('BEGIN TRANSACTION', (beginErr) => {
                     if (beginErr) {
-                      console.error(`[Migrations] 开始迁移 #${migration.id} 事务失败:`, beginErr);
+                      logger.error(`[Migrations] 开始迁移 #${migration.id} 事务失败:`, beginErr);
                       rejectTx(
                         new Error(`开始迁移 #${migration.id} 事务失败: ${beginErr.message}`)
                       );
@@ -449,27 +450,27 @@ export const runMigrations = (db: Database): Promise<void> => {
                   // 步骤 4.1: 执行前置检查 (如果存在)
                   let needsSqlExecution = true;
                   if (migration.check) {
-                    console.debug(`[Migrations] 执行迁移 #${migration.id} 的前置检查...`);
+                    logger.debug(`[Migrations] 执行迁移 #${migration.id} 的前置检查...`);
                     needsSqlExecution = await migration.check(db);
-                    console.debug(
+                    logger.debug(
                       `[Migrations] 迁移 #${migration.id} 前置检查结果: ${needsSqlExecution ? '需要执行 SQL' : '跳过 SQL 执行'}`
                     );
                   }
 
                   if (needsSqlExecution) {
                     // 步骤 4.2: 执行迁移 SQL
-                    console.debug(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
+                    logger.debug(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
                     await new Promise<void>((resolveSql, rejectSql) => {
                       db.exec(migration.sql, (execErr) => {
                         if (execErr) {
                           // 特别处理 "duplicate column name" 错误
                           if (execErr.message.includes('duplicate column name')) {
-                            console.warn(
+                            logger.warn(
                               `[Migrations] 迁移 #${migration.id} SQL 执行时出现 'duplicate column name' 错误，视为可接受并继续。`
                             );
                             resolveSql();
                           } else {
-                            console.error(
+                            logger.error(
                               `[Migrations] 执行迁移 #${migration.id} SQL 失败:`,
                               execErr
                             );
@@ -483,13 +484,13 @@ export const runMigrations = (db: Database): Promise<void> => {
                   }
 
                   // 步骤 4.3: 记录迁移到 migrations 表
-                  console.debug(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表...`);
+                  logger.debug(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表...`);
                   const insertSQL =
                     "INSERT INTO migrations (id, name, applied_at) VALUES (?, ?, strftime('%s', 'now'))";
                   await new Promise<void>((resolveInsert, rejectInsert) => {
                     db.run(insertSQL, [migration.id, migration.name], (insertErr) => {
                       if (insertErr) {
-                        console.error(
+                        logger.error(
                           `[Migrations] 记录迁移 #${migration.id} 到 migrations 表失败:`,
                           insertErr
                         );
@@ -501,17 +502,14 @@ export const runMigrations = (db: Database): Promise<void> => {
                   });
 
                   // 步骤 4.4: 提交事务
-                  console.debug(`[Migrations] 提交迁移 #${migration.id} 事务...`);
+                  logger.debug(`[Migrations] 提交迁移 #${migration.id} 事务...`);
                   await new Promise<void>((resolveCommit, rejectCommit) => {
                     db.run('COMMIT', (commitErr) => {
                       if (commitErr) {
-                        console.error(
-                          `[Migrations] 提交迁移 #${migration.id} 事务失败:`,
-                          commitErr
-                        );
+                        logger.error(`[Migrations] 提交迁移 #${migration.id} 事务失败:`, commitErr);
                         rejectCommit(commitErr);
                       } else {
-                        console.info(
+                        logger.info(
                           `[Migrations] 迁移 #${migration.id}: ${migration.name} 应用成功 (SQL 可能已跳过)。`
                         );
                         resolveCommit();
@@ -521,12 +519,12 @@ export const runMigrations = (db: Database): Promise<void> => {
                 } catch (migrationStepError: unknown) {
                   // 捕获 check, exec, insert 或 commit 中的任何错误
                   const migrationStepErrMsg = getErrorMessage(migrationStepError);
-                  console.error(`[Migrations] 迁移 #${migration.id} 步骤失败，正在回滚事务...`);
+                  logger.error(`[Migrations] 迁移 #${migration.id} 步骤失败，正在回滚事务...`);
                   await new Promise<void>((resolveRollback) => {
                     // No reject needed for rollback itself
                     db.run('ROLLBACK', (rollbackErr) => {
                       if (rollbackErr)
-                        console.error(
+                        logger.error(
                           `[Migrations] 回滚迁移 #${migration.id} 事务失败:`,
                           rollbackErr
                         );
@@ -540,7 +538,7 @@ export const runMigrations = (db: Database): Promise<void> => {
               }
 
               // 所有迁移成功应用
-              console.info('[Migrations] 所有新迁移已成功应用！');
+              logger.info('[Migrations] 所有新迁移已成功应用！');
               resolve();
             };
 

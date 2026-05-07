@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/auth.store';
 import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 import VueRecaptcha from 'vue3-recaptcha2'; // 使用默认导入
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -31,21 +32,21 @@ const recaptchaWidget = ref<InstanceType<typeof VueRecaptcha> | null>(null); // 
 
 // --- CAPTCHA Event Handlers ---
 const handleCaptchaVerified = (token: string) => {
-  // console.info('CAPTCHA verified, token:', token);
+  // log.info('CAPTCHA verified, token:', token);
   captchaToken.value = token;
   captchaError.value = null; // Clear error on successful verification
 };
 const handleCaptchaExpired = () => {
-  // console.info('CAPTCHA expired');
+  // log.info('CAPTCHA expired');
   captchaToken.value = null;
 };
 const handleCaptchaError = (errorDetails: unknown) => {
-  console.error('CAPTCHA error:', errorDetails);
+  log.error('CAPTCHA error:', errorDetails);
   captchaToken.value = null;
   captchaError.value = t('login.error.captchaLoadFailed');
 };
 const resetCaptchaWidget = () => {
-  // console.info('Resetting CAPTCHA widget...');
+  // log.info('Resetting CAPTCHA widget...');
   captchaToken.value = null;
   // Reset hCaptcha if it exists
   hcaptchaWidget.value?.reset();
@@ -91,7 +92,7 @@ const handleSubmit = async () => {
 
 // Fetch CAPTCHA config and check passkey availability on component mount
 onMounted(async () => {
-  // console.info('[LoginView] Component mounted, calling fetchCaptchaConfig and checkHasPasskeysConfigured...');
+  // log.info('[LoginView] Component mounted, calling fetchCaptchaConfig and checkHasPasskeysConfigured...');
   authStore.fetchCaptchaConfig();
   // Check if passkeys are available for login (uses the new public endpoint)
   // Optionally pass username if needed: await authStore.checkHasPasskeysConfigured(credentials.username);
@@ -133,7 +134,7 @@ const handlePasskeyLogin = async () => {
     // The backend should ideally identify the user from the assertion if an empty username is provided.
     await authStore.loginWithPasskey(credentials.username || '', authenticationResult);
   } catch (err: unknown) {
-    console.error('Passkey login error:', err);
+    log.error('Passkey login error:', err);
     error.value = extractErrorMessage(err, t('login.error.passkeyAuthFailed'));
     // Potentially reset CAPTCHA if it was involved, though typically not for passkey flows directly
     // if (publicCaptchaConfig.value?.enabled) {

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as TagService from './tag.service';
 import { AuditLogService } from '../audit/audit.service';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const auditLogService = new AuditLogService();
 
@@ -22,7 +23,7 @@ export const createTag = async (req: Request, res: Response, next: NextFunction)
     auditLogService.logAction('TAG_CREATED', { tagId: newTag.id, name: newTag.name });
     res.status(201).json({ message: '标签创建成功。', tag: newTag });
   } catch (error: unknown) {
-    console.error('Controller: 创建标签时发生错误:', error);
+    logger.error('Controller: 创建标签时发生错误:', error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('已存在')) {
       res.status(409).json({ message: errMsg });
@@ -40,7 +41,7 @@ export const getTags = async (req: Request, res: Response, next: NextFunction): 
     const tags = await TagService.getAllTags();
     res.status(200).json(tags);
   } catch (error: unknown) {
-    console.error('Controller: 获取标签列表时发生错误:', error);
+    logger.error('Controller: 获取标签列表时发生错误:', error);
     next(error);
   }
 };
@@ -68,7 +69,7 @@ export const getTagById = async (
       res.status(200).json(tag);
     }
   } catch (error: unknown) {
-    console.error(`Controller: 获取标签 ${tagId} 时发生错误:`, error);
+    logger.error(`Controller: 获取标签 ${tagId} 时发生错误:`, error);
     next(error);
   }
 };
@@ -99,7 +100,7 @@ export const updateTag = async (req: Request, res: Response, next: NextFunction)
       res.status(200).json({ message: '标签更新成功。', tag: updatedTag });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 更新标签 ${tagId} 时发生错误:`, error);
+    logger.error(`Controller: 更新标签 ${tagId} 时发生错误:`, error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('已存在')) {
       res.status(409).json({ message: errMsg });
@@ -132,7 +133,7 @@ export const deleteTag = async (req: Request, res: Response, next: NextFunction)
       res.status(200).json({ message: '标签删除成功。' });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 删除标签 ${tagId} 时发生错误:`, error);
+    logger.error(`Controller: 删除标签 ${tagId} 时发生错误:`, error);
     next(error);
   }
 };
@@ -168,7 +169,7 @@ export const updateTagConnections = async (
     await TagService.updateTagConnections(tagId, connection_ids);
     res.status(200).json({ message: '标签的连接关联更新成功。' });
   } catch (error: unknown) {
-    console.error(`Controller: 更新标签 ${tagId} 的连接关联时发生错误:`, error);
+    logger.error(`Controller: 更新标签 ${tagId} 的连接关联时发生错误:`, error);
     const errMsg = getErrorMessage(error);
     // 可以根据 TagService 抛出的错误类型来返回更具体的错误码和消息
     if (errMsg.includes('标签未找到')) {

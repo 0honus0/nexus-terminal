@@ -10,6 +10,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useSessionStore } from '../stores/session.store';
 import { useAppearanceStore } from '../stores/appearance.store';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const fileEditorStore = useFileEditorStore();
@@ -154,7 +155,7 @@ const updateSelectWidth = () => {
     // Set the select width (add extra space for dropdown arrow, adjust as needed)
     const arrowPadding = 25; // Increased padding for arrow and visual spacing
     selectElement.style.width = `${textWidth + arrowPadding}px`;
-    // console.info(`[EditorOverlay] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
+    // log.info(`[EditorOverlay] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
   });
 };
 
@@ -215,7 +216,7 @@ const activeEditorContent = computed({
       if (sessionId) {
         updateFileContentInSession(sessionId, currentActiveTab.id, value); // 会话 Store
       } else {
-        console.error('[FileEditorOverlay] 无法更新内容：非共享模式下缺少 sessionId。');
+        log.error('[FileEditorOverlay] 无法更新内容：非共享模式下缺少 sessionId。');
       }
     }
   },
@@ -305,7 +306,7 @@ const handleSaveRequest = () => {
     if (sessionId) {
       saveFileInSession(sessionId, currentActiveTab.id); // 会话 Store
     } else {
-      console.error('[FileEditorOverlay] 无法保存：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法保存：非共享模式下缺少 sessionId。');
     }
   }
 };
@@ -319,7 +320,7 @@ const handleActivateTab = (tabId: string) => {
     if (sessionId) {
       setActiveEditorTabInSession(sessionId, tabId); // 会话 Store
     } else {
-      console.error('[FileEditorOverlay] 无法激活标签页：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法激活标签页：非共享模式下缺少 sessionId。');
     }
   }
 };
@@ -333,14 +334,14 @@ const handleCloseTab = (tabId: string) => {
     if (sessionId) {
       closeEditorTabInSession(sessionId, tabId); // 会话 Store
     } else {
-      console.error('[FileEditorOverlay] 无法关闭标签页：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法关闭标签页：非共享模式下缺少 sessionId。');
     }
   }
 };
 
 // +++ 处理右键菜单事件 +++
 const handleCloseOtherTabs = (targetTabId: string) => {
-  console.info(`[FileEditorOverlay] handleCloseOtherTabs called for target: ${targetTabId}`); // Add log
+  log.info(`[FileEditorOverlay] handleCloseOtherTabs called for target: ${targetTabId}`); // Add log
   if (shareFileEditorTabsBoolean.value) {
     closeOtherTabs(targetTabId);
   } else {
@@ -348,13 +349,13 @@ const handleCloseOtherTabs = (targetTabId: string) => {
     if (sessionId) {
       closeOtherTabsInSession(sessionId, targetTabId); // 会话 Store
     } else {
-      console.error('[FileEditorOverlay] 无法关闭其他标签页：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法关闭其他标签页：非共享模式下缺少 sessionId。');
     }
   }
 };
 
 const handleCloseRightTabs = (targetTabId: string) => {
-  console.info(`[FileEditorOverlay] handleCloseRightTabs called for target: ${targetTabId}`); // Add log
+  log.info(`[FileEditorOverlay] handleCloseRightTabs called for target: ${targetTabId}`); // Add log
   if (shareFileEditorTabsBoolean.value) {
     closeTabsToTheRight(targetTabId);
   } else {
@@ -362,13 +363,13 @@ const handleCloseRightTabs = (targetTabId: string) => {
     if (sessionId) {
       closeTabsToTheRightInSession(sessionId, targetTabId); // 会话 Store
     } else {
-      console.error('[FileEditorOverlay] 无法关闭右侧标签页：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法关闭右侧标签页：非共享模式下缺少 sessionId。');
     }
   }
 };
 
 const handleCloseLeftTabs = (targetTabId: string) => {
-  console.info(`[FileEditorOverlay] handleCloseLeftTabs called for target: ${targetTabId}`); // Add log
+  log.info(`[FileEditorOverlay] handleCloseLeftTabs called for target: ${targetTabId}`); // Add log
   if (shareFileEditorTabsBoolean.value) {
     closeTabsToTheLeft(targetTabId); // 修正：调用正确的 action 名称
   } else {
@@ -376,7 +377,7 @@ const handleCloseLeftTabs = (targetTabId: string) => {
     if (sessionId) {
       closeTabsToTheLeftInSession(sessionId, targetTabId); // 会话 Store
     } else {
-      console.error('[FileEditorOverlay] 无法关闭左侧标签页：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法关闭左侧标签页：非共享模式下缺少 sessionId。');
     }
   }
 };
@@ -388,9 +389,7 @@ const handleEncodingChange = (event: Event) => {
   const currentActiveTab = activeTab.value;
 
   if (currentActiveTab && newEncoding && newEncoding !== currentSelectedEncoding.value) {
-    console.info(
-      `[EditorOverlay] Encoding changed to ${newEncoding} for tab ${currentActiveTab.id}`
-    );
+    log.info(`[EditorOverlay] Encoding changed to ${newEncoding} for tab ${currentActiveTab.id}`);
     if (shareFileEditorTabsBoolean.value) {
       changeGlobalEncoding(currentActiveTab.id, newEncoding); // 全局 Store
     } else {
@@ -398,7 +397,7 @@ const handleEncodingChange = (event: Event) => {
       if (sessionId) {
         changeEncodingInSession(sessionId, currentActiveTab.id, newEncoding); // 会话 Store
       } else {
-        console.error('[FileEditorOverlay] 无法更改编码：非共享模式下缺少 sessionId。');
+        log.error('[FileEditorOverlay] 无法更改编码：非共享模式下缺少 sessionId。');
       }
     }
   }
@@ -425,7 +424,7 @@ const handleEditorScroll = ({
       // 会话 Store
       updateTabScrollPositionInSession(sessionId, currentActiveTab.id, scrollTop, scrollLeft);
     } else {
-      console.error('[FileEditorOverlay] 无法更新滚动位置：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法更新滚动位置：非共享模式下缺少 sessionId。');
     }
   }
 };
@@ -465,7 +464,7 @@ const handleRefreshRequest = async () => {
     if (sessionId) {
       await reloadTabInSession(sessionId, currentActiveTab.id);
     } else {
-      console.error('[FileEditorOverlay] 无法刷新：非共享模式下缺少 sessionId。');
+      log.error('[FileEditorOverlay] 无法刷新：非共享模式下缺少 sessionId。');
     }
   }
 };
@@ -509,7 +508,7 @@ const stopResize = () => {
 // 监听 popupTrigger 的变化来显示弹窗
 watch(popupTrigger, () => {
   if (!showPopupFileEditorBoolean.value || !popupFileInfo.value) {
-    console.info(
+    log.info(
       '[FileEditorOverlay] Popup trigger changed, but overlay is disabled or file info is missing.'
     );
     isVisible.value = false;
@@ -517,7 +516,7 @@ watch(popupTrigger, () => {
   }
 
   const { filePath, sessionId } = popupFileInfo.value;
-  console.info(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
+  log.info(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
 
   isVisible.value = true;
 });

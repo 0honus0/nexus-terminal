@@ -36,6 +36,7 @@ const { t } = useI18n();
 import { useTerminalFit } from '../../composables/terminal/useTerminalFit';
 import { useTerminalSocket } from '../../composables/terminal/useTerminalSocket';
 import { OutputEnhancerAddon } from './addons/output-enhancer';
+import { log } from '@/utils/log';
 
 // 定义 props 和 emits
 const props = defineProps({
@@ -135,13 +136,13 @@ const debouncedSaveFontSize = debounce(async (size: number) => {
   try {
     if (isMobile.value) {
       await appearanceStore.setTerminalFontSizeMobile(size);
-      console.info(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
+      log.info(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
     } else {
       await appearanceStore.setTerminalFontSize(size);
-      console.info(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
+      log.info(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
     }
   } catch (error: unknown) {
-    console.error(`[Terminal ${props.sessionId}] Debounced font size save failed:`, error);
+    log.error(`[Terminal ${props.sessionId}] Debounced font size save failed:`, error);
   }
 }, 500);
 
@@ -203,7 +204,7 @@ const applyTerminalWrapMode = () => {
     fitAndEmitResizeNow();
     syncNoWrapContentWidth(term);
   } catch (error: unknown) {
-    console.warn(`[Terminal ${props.sessionId}] Failed to apply terminal wrap mode:`, error);
+    log.warn(`[Terminal ${props.sessionId}] Failed to apply terminal wrap mode:`, error);
   }
 };
 
@@ -224,7 +225,7 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
       await navigator.clipboard.writeText(selection);
       terminal.clearSelection();
     } catch (err: unknown) {
-      console.error('[Terminal] Failed to copy selection via Right Click:', err);
+      log.error('[Terminal] Failed to copy selection via Right Click:', err);
     }
     return;
   }
@@ -240,7 +241,7 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
       });
     }
   } catch (err: unknown) {
-    console.error('[Terminal] Failed to paste via Right Click:', err);
+    log.error('[Terminal] Failed to paste via Right Click:', err);
   }
 };
 
@@ -361,11 +362,11 @@ onMounted(() => {
         foldThreshold: 500,
       });
       term.loadAddon(outputEnhancerAddon);
-      console.info(
+      log.info(
         `[Terminal ${props.sessionId}] OutputEnhancerAddon 加载成功 (enabled: ${terminalOutputEnhancerEnabledBoolean.value})`
       );
     } catch (error: unknown) {
-      console.error(
+      log.error(
         `[Terminal ${props.sessionId}] OutputEnhancerAddon 加载失败，降级使用原始终端：`,
         error
       );
@@ -375,18 +376,16 @@ onMounted(() => {
     try {
       webglAddonInstance = new WebglAddon();
       webglAddonInstance.onContextLoss(() => {
-        console.warn(
-          `[Terminal ${props.sessionId}] WebGL context lost. Falling back to DOM renderer.`
-        );
+        log.warn(`[Terminal ${props.sessionId}] WebGL context lost. Falling back to DOM renderer.`);
         if (webglAddonInstance) {
           webglAddonInstance.dispose();
           webglAddonInstance = null; // 清除引用，标记上下文已丢失
         }
       });
       term.loadAddon(webglAddonInstance);
-      console.info(`[Terminal ${props.sessionId}] WebGL renderer enabled.`);
+      log.info(`[Terminal ${props.sessionId}] WebGL renderer enabled.`);
     } catch (error: unknown) {
-      console.warn(
+      log.warn(
         `[Terminal ${props.sessionId}] WebGL addon failed to load, falling back to canvas/dom renderer:`,
         error
       );
@@ -395,7 +394,7 @@ onMounted(() => {
 
     term.open(terminalRef.value);
     isTerminalDomReady.value = true;
-    console.info(`[Terminal ${props.sessionId}] Xterm open() called.`);
+    log.info(`[Terminal ${props.sessionId}] Xterm open() called.`);
 
     applyTerminalWrapMode();
 
@@ -420,7 +419,7 @@ onMounted(() => {
         if (newSelection && newSelection !== currentSelection) {
           currentSelection = newSelection;
           navigator.clipboard.writeText(newSelection).catch((err) => {
-            console.error('[Terminal] Auto-copy failed:', err);
+            log.error('[Terminal] Auto-copy failed:', err);
           });
         } else if (!newSelection) {
           currentSelection = '';
@@ -455,7 +454,7 @@ onMounted(() => {
                     term.refresh(0, term.rows - 1);
                   }
                 } catch (refreshError: unknown) {
-                  console.warn(
+                  log.warn(
                     `[Terminal ${props.sessionId}] WebGL refresh failed, WebGL context may be lost:`,
                     refreshError
                   );
@@ -473,7 +472,7 @@ onMounted(() => {
             }
             // Canvas/DOM 渲染器会自动处理主题更新，无需手动刷新
           } catch (error: unknown) {
-            console.warn(`[Terminal ${props.sessionId}] Theme update failed:`, error);
+            log.warn(`[Terminal ${props.sessionId}] Theme update failed:`, error);
           }
         }
       },
@@ -505,7 +504,7 @@ onMounted(() => {
           const selection = term?.getSelection();
           if (selection) {
             navigator.clipboard.writeText(selection).catch((err: unknown) => {
-              console.error('[Terminal] Copy failed:', err);
+              log.error('[Terminal] Copy failed:', err);
             });
           }
         } else if (event.ctrlKey && event.shiftKey && event.code === 'KeyV') {
@@ -525,7 +524,7 @@ onMounted(() => {
               }
             })
             .catch((err: unknown) => {
-              console.error('[Terminal] Paste failed:', err);
+              log.error('[Terminal] Paste failed:', err);
             });
         } else if (event.ctrlKey && event.shiftKey && event.code === 'KeyO') {
           // Ctrl+Shift+O: 展开最近折叠的输出
@@ -534,7 +533,7 @@ onMounted(() => {
           if (outputEnhancerAddon && outputEnhancerAddon.isEnabled()) {
             const expanded = outputEnhancerAddon.expandLastFold();
             if (!expanded) {
-              console.info('[Terminal] No folded content to expand');
+              log.info('[Terminal] No folded content to expand');
             }
           }
         }
@@ -556,7 +555,7 @@ onMounted(() => {
     watch(terminalOutputEnhancerEnabledBoolean, (newValue) => {
       if (outputEnhancerAddon) {
         outputEnhancerAddon.setEnabled(newValue);
-        console.info(`[Terminal ${props.sessionId}] OutputEnhancerAddon enabled: ${newValue}`);
+        log.info(`[Terminal ${props.sessionId}] OutputEnhancerAddon enabled: ${newValue}`);
       }
     });
 

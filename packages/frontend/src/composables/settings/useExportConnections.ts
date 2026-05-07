@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { isAxiosError } from 'axios';
 import apiClient from '../../utils/apiClient';
+import { log } from '@/utils/log';
 
 export function useExportConnections() {
   const { t } = useI18n();
@@ -47,7 +48,7 @@ export function useExportConnections() {
       );
       exportConnectionsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('导出连接失败:', error);
+      log.error('导出连接失败:', error);
       let message = t('settings.exportConnections.error', '导出连接时发生错误。');
       if (isAxiosError(error) && error.response && error.response.data) {
         if (
@@ -58,7 +59,7 @@ export function useExportConnections() {
             const errorJson = JSON.parse(await error.response.data.text());
             message = errorJson.message || message;
           } catch (parseError: unknown) {
-            console.debug(
+            log.debug(
               '[ExportConnections] Blob 响应非 JSON 格式:',
               parseError instanceof Error ? parseError.message : parseError
             );

@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // SQLite 性能优化常量
 const SQLITE_CACHE_SIZE_KB = 64_000; // 64MB 内存缓存（负值表示 KB）
@@ -17,7 +18,7 @@ if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   } catch (mkdirErr: unknown) {
     const mkdirErrMsg = getErrorMessage(mkdirErr);
-    console.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErrMsg);
+    logger.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErrMsg);
     throw new Error(`创建数据库目录失败: ${mkdirErrMsg}`);
   }
 } else {
@@ -39,9 +40,7 @@ export const runDb = (
   return new Promise((resolve, reject) => {
     db.run(sql, params, function runDbCallback(this: RunResult, err: Error | null) {
       if (err) {
-        console.error(
-          `[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`
-        );
+        logger.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${err.message}`);
         reject(err);
       } else {
         resolve({ lastID: this.lastID, changes: this.changes });
@@ -58,9 +57,7 @@ export const getDb = <T = unknown>(
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err: Error | null, row: T) => {
       if (err) {
-        console.error(
-          `[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`
-        );
+        logger.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${err.message}`);
         reject(err);
       } else {
         resolve(row);
@@ -77,9 +74,7 @@ export const allDb = <T = unknown>(
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err: Error | null, rows: T[]) => {
       if (err) {
-        console.error(
-          `[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`
-        );
+        logger.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${err.message}`);
         reject(err);
       } else {
         resolve(rows);
@@ -105,13 +100,13 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
   // 启用外键约束
   await runDb(db, 'PRAGMA foreign_keys = ON;');
 
-  console.debug('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
+  logger.debug('[DB Init] SQLite 性能优化配置已应用 (WAL模式, 64MB缓存)');
 
   // 开始事务（用于表创建）
   await new Promise<void>((resolveTx, rejectTx) => {
     db.run('BEGIN TRANSACTION', (beginErr) => {
       if (beginErr) {
-        console.error('[DB Init] 开始数据库初始化事务失败:', beginErr);
+        logger.error('[DB Init] 开始数据库初始化事务失败:', beginErr);
         rejectTx(new Error(`开始数据库初始化事务失败: ${beginErr.message}`));
       } else {
         resolveTx();
@@ -131,10 +126,10 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
     await new Promise<void>((resolveCommit, rejectCommit) => {
       db.run('COMMIT', (commitErr) => {
         if (commitErr) {
-          console.error('[DB Init] 提交数据库初始化事务失败:', commitErr);
+          logger.error('[DB Init] 提交数据库初始化事务失败:', commitErr);
           rejectCommit(commitErr);
         } else {
-          console.debug('[DB Init] 数据库初始化事务提交成功');
+          logger.debug('[DB Init] 数据库初始化事务提交成功');
           resolveCommit();
         }
       });
@@ -144,9 +139,9 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
     await new Promise<void>((resolveRollback) => {
       db.run('ROLLBACK', (rollbackErr) => {
         if (rollbackErr) {
-          console.error('[DB Init] 回滚数据库初始化事务失败:', rollbackErr);
+          logger.error('[DB Init] 回滚数据库初始化事务失败:', rollbackErr);
         }
-        console.error('[DB Init] 数据库初始化序列失败，已回滚事务:', error);
+        logger.error('[DB Init] 数据库初始化序列失败，已回滚事务:', error);
         resolveRollback();
       });
     });
@@ -164,7 +159,7 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
           // Mark callback as async
 
           if (err) {
-            console.error(`[数据库连接] 打开数据库文件 ${dbPath} 时出错:`, err.message);
+            logger.error(`[数据库连接] 打开数据库文件 ${dbPath} 时出错:`, err.message);
             dbInstancePromise = null;
             reject(err);
             return;
@@ -175,13 +170,13 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
             await runDatabaseInitializations(db);
             // +++ 运行数据库迁移 +++
             await runMigrations(db);
-            console.info('[数据库] 初始化和迁移完成。');
+            logger.info('[数据库] 初始化和迁移完成。');
             resolve(db);
           } catch (initError: unknown) {
-            console.error('[数据库] 连接后初始化失败，正在关闭连接...');
+            logger.error('[数据库] 连接后初始化失败，正在关闭连接...');
             dbInstancePromise = null;
             db.close((closeErr) => {
-              if (closeErr) console.error('[数据库] 初始化失败后关闭连接时出错:', closeErr.message);
+              if (closeErr) logger.error('[数据库] 初始化失败后关闭连接时出错:', closeErr.message);
               reject(initError);
             });
           }
@@ -194,23 +189,23 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
 
 process.on('SIGINT', async () => {
   if (dbInstancePromise) {
-    console.info('[DB] 收到 SIGINT，尝试关闭数据库连接...');
+    logger.info('[DB] 收到 SIGINT，尝试关闭数据库连接...');
     try {
       const db = await dbInstancePromise;
       db.close((err) => {
         if (err) {
-          console.error('[DB] 关闭数据库时出错:', err.message);
+          logger.error('[DB] 关闭数据库时出错:', err.message);
         } else {
-          console.info('[DB] 数据库连接已关闭。');
+          logger.info('[DB] 数据库连接已关闭。');
         }
         process.exit(err ? 1 : 0);
       });
     } catch (error: unknown) {
-      console.error('[DB] 获取数据库实例以关闭时出错 (可能初始化失败):', error);
+      logger.error('[DB] 获取数据库实例以关闭时出错 (可能初始化失败):', error);
       process.exit(1);
     }
   } else {
-    console.info('[DB] 收到 SIGINT，但数据库连接从未初始化或已失败。');
+    logger.info('[DB] 收到 SIGINT，但数据库连接从未初始化或已失败。');
     process.exit(0);
   }
 });

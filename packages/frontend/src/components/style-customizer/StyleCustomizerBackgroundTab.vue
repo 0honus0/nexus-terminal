@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { extractErrorMessage } from '../../utils/errorExtractor';
 import { GITHUB_REPO_URL } from '../../utils/constants';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -155,7 +156,7 @@ const handleRemoveTerminalBg = async () => {
       message: t('styleCustomizer.terminalBgRemoved'),
     });
   } catch (error: unknown) {
-    console.error('移除终端背景失败:', error);
+    log.error('移除终端背景失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.removeBgFailed', {
@@ -171,7 +172,7 @@ const handleToggleTerminalBackground = async () => {
   try {
     await appearanceStore.setTerminalBackgroundEnabled(newValue);
   } catch (error: unknown) {
-    console.error('更新终端背景启用状态失败:', error);
+    log.error('更新终端背景启用状态失败:', error);
     localTerminalBackgroundEnabled.value = !newValue;
     notificationsStore.addNotification({
       type: 'error',
@@ -198,7 +199,7 @@ const handleSaveTerminalBackgroundOverlayOpacity = async () => {
       message: t('styleCustomizer.terminalBgOverlayOpacitySaved'),
     });
   } catch (error: unknown) {
-    console.error('保存终端背景蒙版透明度失败:', error);
+    log.error('保存终端背景蒙版透明度失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.terminalBgOverlayOpacitySaveFailed', {
@@ -266,7 +267,7 @@ const openEditPresetEditor = (preset: { name: string; content: string }) => {
 // New function to handle "Edit" for a preset theme, which means creating a new custom theme based on it
 const handleEditPresetAsNew = async (preset: { name: string; type: 'preset' | 'custom' }) => {
   if (preset.type !== 'preset') {
-    console.warn('handleEditPresetAsNew called with a non-preset theme. This should not happen.');
+    log.warn('handleEditPresetAsNew called with a non-preset theme. This should not happen.');
     // Fallback to regular edit if it's somehow a custom theme
     const content = await getLocalHtmlPresetContent(preset.name);
     openEditPresetEditor({ name: preset.name, content });

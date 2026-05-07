@@ -8,6 +8,7 @@
 import express, { Router, Request, Response } from 'express';
 import { exportData, importData, validateBackup } from './backup.service';
 import { isAuthenticated } from '../auth/auth.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ router.post('/export', isAuthenticated, async (_req: Request, res: Response) => 
     res.json(backup);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '导出失败';
-    console.error('[Backup] 导出失败:', message);
+    logger.error('[Backup] 导出失败:', message);
     res.status(500).json({ message: '数据导出失败', error: message });
   }
 });
@@ -57,7 +58,7 @@ router.post('/import', isAuthenticated, importBodyParser, async (req: Request, r
     res.json({ message: '导入完成', result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '导入失败';
-    console.error('[Backup] 导入失败:', message);
+    logger.error('[Backup] 导入失败:', message);
     res.status(500).json({ message: '数据导入失败', error: message });
   }
 });

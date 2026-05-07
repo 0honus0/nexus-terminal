@@ -164,6 +164,7 @@ import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import TagInput from './TagInput.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useAlertDialog } from '../composables/useAlertDialog';
+import { log } from '@/utils/log';
 
 const props = defineProps<{
   commandToEdit?: QuickCommandFE | null; // 接收要编辑的指令对象 (应包含标签ID和变量)
@@ -245,18 +246,18 @@ onMounted(() => {
 });
 
 const handleCreateTag = async (tagName: string) => {
-  console.info(`[QuickCmdForm] Received create-tag event for: ${tagName}`);
+  log.info(`[QuickCmdForm] Received create-tag event for: ${tagName}`);
   if (!tagName || tagName.trim().length === 0) return;
-  console.info(`[QuickCmdForm] Calling quickCommandTagsStore.addTag...`);
+  log.info(`[QuickCmdForm] Calling quickCommandTagsStore.addTag...`);
   const newTag = await quickCommandTagsStore.addTag(tagName.trim());
   if (newTag && !formData.tagIds.includes(newTag.id)) {
-    console.info(`[QuickCmdForm] New tag created (ID: ${newTag.id}), adding to selection.`);
+    log.info(`[QuickCmdForm] New tag created (ID: ${newTag.id}), adding to selection.`);
     formData.tagIds.push(newTag.id);
   }
 };
 
 const handleDeleteTag = async (tagId: number) => {
-  console.info(`[QuickCmdForm] Received delete-tag event for ID: ${tagId}`);
+  log.info(`[QuickCmdForm] Received delete-tag event for ID: ${tagId}`);
   const tagToDelete = quickCommandTagsStore.tags.find((t) => t.id === tagId);
   if (!tagToDelete) return;
 
@@ -264,7 +265,7 @@ const handleDeleteTag = async (tagId: number) => {
     message: t('tags.prompts.confirmDelete', { name: tagToDelete.name }),
   });
   if (confirmed) {
-    console.info(`[QuickCmdForm] Calling quickCommandTagsStore.deleteTag...`);
+    log.info(`[QuickCmdForm] Calling quickCommandTagsStore.deleteTag...`);
     const success = await quickCommandTagsStore.deleteTag(tagId);
     if (success) {
       // 如果删除成功，TagInput的availableTags将会更新，
@@ -272,7 +273,7 @@ const handleDeleteTag = async (tagId: number) => {
       // 如果该标签已被选中，我们还需要从本地的formData.tagIds中移除它。
       const index = formData.tagIds.indexOf(tagId);
       if (index > -1) {
-        console.info(`[QuickCmdForm] Removing deleted tag ID ${tagId} from selection.`);
+        log.info(`[QuickCmdForm] Removing deleted tag ID ${tagId} from selection.`);
         formData.tagIds.splice(index, 1);
       }
     } else {
@@ -390,7 +391,7 @@ const handleExecute = () => {
     return;
   }
 
-  console.info(
+  log.info(
     `[QuickCmdForm] Executing processed command: "${processedCommand}" on session ${activeSessionId}`
   );
   emitWorkspaceEvent('quickCommand:executeProcessed', {

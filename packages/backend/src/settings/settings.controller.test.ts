@@ -65,7 +65,13 @@ vi.mock('../appearance/appearance.repository', () => ({
   updateAppearanceSettings: vi.fn(),
 }));
 
-vi.mock('../logging/logger', () => ({
+vi.mock('../utils/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
   setLogLevel: vi.fn(),
 }));
 
@@ -642,7 +648,7 @@ describe('settingsController', () => {
     });
 
     it('应该成功设置日志等级并更新运行时等级', async () => {
-      const { setLogLevel: setRuntimeLogLevel } = await import('../logging/logger');
+      const { setLogLevel: setPinoLogLevel } = await import('../utils/logger');
 
       const req = { body: { level: 'debug' } };
       const res = createMockRes();
@@ -651,7 +657,7 @@ describe('settingsController', () => {
       await settingsController.setLogLevel(req as any, res as any, next);
 
       expect(settingsService.setLogLevel).toHaveBeenCalledWith('debug');
-      expect(setRuntimeLogLevel).toHaveBeenCalledWith('debug');
+      expect(setPinoLogLevel).toHaveBeenCalledWith('debug');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ message: '日志等级已成功更新', level: 'debug' });
     });

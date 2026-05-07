@@ -2,6 +2,7 @@ import * as QuickCommandsRepository from './quick-commands.repository';
 import { QuickCommandWithTags } from './quick-commands.repository';
 import * as QuickCommandTagRepository from '../quick-command-tags/quick-command-tag.repository';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 定义排序类型
 export type QuickCommandSortBy = 'name' | 'usage_count';
@@ -37,7 +38,7 @@ export const addQuickCommand = async (
       await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds);
     } catch (tagError: unknown) {
       // 如果标签关联失败，可以选择记录警告或回滚（但通常不回滚主记录）
-      console.warn(
+      logger.warn(
         `[Service] 添加快捷指令 ${commandId} 成功，但设置标签关联失败:`,
         getErrorMessage(tagError)
       );
@@ -79,7 +80,7 @@ export const updateQuickCommand = async (
     try {
       await QuickCommandTagRepository.setCommandTagAssociations(id, tagIds);
     } catch (tagError: unknown) {
-      console.warn(
+      logger.warn(
         `[Service] 更新快捷指令 ${id} 成功，但更新标签关联失败:`,
         getErrorMessage(tagError)
       );
@@ -155,14 +156,14 @@ export const assignTagToCommands = async (commandIds: number[], tagId: number): 
 
     // 调用 Repository 函数执行批量关联
     // 注意：这里需要导入 QuickCommandTagRepository
-    console.info(
+    logger.info(
       `[Service] assignTagToCommands: Calling repo with commandIds: ${JSON.stringify(commandIds)}, tagId: ${tagId}`
     );
     await QuickCommandTagRepository.addTagToCommands(commandIds, tagId);
-    console.info(`[Service] assignTagToCommands: Repo call finished for tag ${tagId}.`); // +++ 修改日志 +++
+    logger.info(`[Service] assignTagToCommands: Repo call finished for tag ${tagId}.`);
     // 可以在这里添加额外的业务逻辑，例如发送事件通知等
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[Service] assignTagToCommands: 批量关联标签 ${tagId} 到指令时出错:`,
       getErrorMessage(error)
     );

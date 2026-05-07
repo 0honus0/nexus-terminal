@@ -1,5 +1,6 @@
 import * as TagRepository from './tag.repository';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // Re-export or define types
 export interface TagData extends TagRepository.TagData {}
@@ -94,7 +95,7 @@ export const updateTagConnections = async (
   } catch (error: unknown) {
     // 服务层可以进一步处理或包装错误
     const errMsg = getErrorMessage(error);
-    console.error(`Service: 更新标签 ${tagId} 的连接关联时发生错误:`, errMsg);
+    logger.error(`Service: 更新标签 ${tagId} 的连接关联时发生错误:`, errMsg);
     throw new Error(`服务层更新标签连接关联失败: ${errMsg}`);
   }
 };

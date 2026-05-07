@@ -18,6 +18,7 @@ import * as BatchRepository from './batch.repository';
 import * as SshService from '../services/ssh.service';
 import { broadcastToUser } from '../websocket/state';
 import * as ConnectionRepository from '../connections/connection.repository';
+import { logger } from '../utils/logger';
 
 // 默认配置
 const DEFAULT_CONCURRENCY = 5;
@@ -38,7 +39,7 @@ const taskAbortControllers = new Map<string, AbortController>();
 function sendBatchEvent(userId: number | string, message: BatchWsMessage): void {
   const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
   if (Number.isNaN(numericUserId)) {
-    console.warn(`[BatchService] 无效的 userId: ${userId}，跳过广播。`);
+    logger.warn(`[BatchService] 无效的 userId: ${userId}，跳过广播。`);
     return;
   }
   broadcastToUser(numericUserId, message);
@@ -98,17 +99,27 @@ export async function execCommandBatch(
 
   // 持久化到数据库
   await BatchRepository.createTask(task);
-  console.info(`[BatchService] 批量任务已创建: ${taskId}，包含 ${subTasks.length} 个子任务。`);
+  logger.info(`[BatchService] 批量任务已创建: ${taskId}，包含 ${subTasks.length} 个子任务。`);
 
   // 创建 AbortController
   const abortController = new AbortController();
   taskAbortControllers.set(taskId, abortController);
 
   // 异步执行任务（不阻塞返回）
-  processTask(taskId, userId, payload, abortController.signal).catch((error: unknown) => {
-    if (!(error instanceof Error && error.name === 'AbortError')) {
-      console.error(`[BatchService] 任务 ${taskId} 后台处理出错:`, error);
+  processTask(taskId, userId, payload, abortController.signal).catch(async (error: unknown) => {
+    taskAbortControllers.delete(taskId);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      return;
     }
+
+    logger.error(`[BatchService] 任务 ${taskId} 后台处理出错:`, error);
+    await updateTaskStatus(taskId, 'failed', {
+      endedAt: new Date(),
+      message: getErrorMessage(error),
+    }).catch((statusError: unknown) => {
+      logger.error(`[BatchService] 任务 ${taskId} 状态回写失败:`, statusError);
+    });
   });
 
   return task;
@@ -125,7 +136,7 @@ async function processTask(
 ): Promise<void> {
   const task = await BatchRepository.getTask(taskId);
   if (!task) {
-    console.error(`[BatchService] 任务 ${taskId} 未找到。`);
+    logger.error(`[BatchService] 任务 ${taskId} 未找到。`);
     return;
   }
 
@@ -161,7 +172,7 @@ async function processTask(
 
   await new Promise<void>((resolve) => {
     const onAbort = () => {
-      console.debug(`[BatchService] 任务 ${taskId} 收到取消信号。`);
+      logger.debug(`[BatchService] 任务 ${taskId} 收到取消信号。`);
       taskCancelled = true;
       // 将所有 queued 状态的子任务标记为取消
       for (let i = currentIndex; i < subTasks.length; i++) {
@@ -435,7 +446,7 @@ async function runSubTask(
     return 'failed';
   } catch (error: unknown) {
     const errorMsg = getErrorMessage(error);
-    console.error(`[BatchService] 子任务 ${subTaskId} 执行失败:`, errorMsg);
+    logger.error(`[BatchService] 子任务 ${subTaskId} 执行失败:`, errorMsg);
 
     await updateSubTask(taskId, subTaskId, 'failed', 0, {
       message: errorMsg,
@@ -449,7 +460,7 @@ async function runSubTask(
         sshClient.end();
       } catch (error: unknown) {
         // SSH 客户端关闭错误，不影响主流程
-        console.debug('[批量服务] SSH 客户端关闭失败:', error);
+        logger.debug('[批量服务] SSH 客户端关闭失败:', error);
       }
     }
   }
@@ -490,13 +501,13 @@ function executeCommand(
           stream.signal('KILL');
         } catch (error: unknown) {
           // 信号发送可能在已断开的连接上失败
-          console.debug('[批量服务] 远端信号发送失败:', error);
+          logger.debug('[批量服务] 远端信号发送失败:', error);
         }
         try {
           stream.close();
         } catch (error: unknown) {
           // 流关闭错误，不影响主流程
-          console.debug('[批量服务] 流关闭失败:', error);
+          logger.debug('[批量服务] 流关闭失败:', error);
         }
       }
     };
@@ -558,7 +569,7 @@ function executeCommand(
             const dbChunk = chunk.substring(0, dbAllowedSize);
             dbOutputSize += dbAllowedSize;
             BatchRepository.appendSubTaskOutput(subTaskId, dbChunk).catch((error: unknown) => {
-              console.warn(
+              logger.warn(
                 `[Batch] 追加子任务输出失败 (subTaskId=${subTaskId}): ${error instanceof Error ? error.message : String(error)}`
               );
             });
@@ -754,7 +765,7 @@ async function finalizeTask(
     },
   });
 
-  console.info(
+  logger.info(
     `[BatchService] 任务 ${taskId} 已完成，最终状态: ${finalStatus}，成功: ${completed}，失败: ${failed}，取消: ${cancelled}`
   );
 }
@@ -783,13 +794,13 @@ export async function getTasksByUser(
 export async function cancelTask(taskId: string, reason: string = '用户取消'): Promise<boolean> {
   const task = await BatchRepository.getTask(taskId);
   if (!task) {
-    console.warn(`[BatchService] 尝试取消不存在的任务: ${taskId}`);
+    logger.warn(`[BatchService] 尝试取消不存在的任务: ${taskId}`);
     return false;
   }
 
   // 检查任务是否可以取消
   if (['completed', 'failed', 'cancelled'].includes(task.status)) {
-    console.warn(`[BatchService] 任务 ${taskId} 状态为 ${task.status}，无法取消。`);
+    logger.warn(`[BatchService] 任务 ${taskId} 状态为 ${task.status}，无法取消。`);
     return false;
   }
 
@@ -801,7 +812,7 @@ export async function cancelTask(taskId: string, reason: string = '用户取消'
 
   // 取消排队中的子任务
   const cancelledCount = await BatchRepository.cancelSubTasks(taskId, reason);
-  console.info(`[BatchService] 已取消任务 ${taskId} 的 ${cancelledCount} 个排队子任务。`);
+  logger.info(`[BatchService] 已取消任务 ${taskId} 的 ${cancelledCount} 个排队子任务。`);
 
   // 注意：不在这里更新任务状态，让 processTask 的 finalizeTask 来处理
   // 这样可以确保状态计数准确
@@ -829,7 +840,7 @@ export async function deleteTask(taskId: string, userId: number | string): Promi
 
   // 验证所有权
   if (task.userId !== userId && String(task.userId) !== String(userId)) {
-    console.warn(`[BatchService] 用户 ${userId} 尝试删除不属于自己的任务 ${taskId}。`);
+    logger.warn(`[BatchService] 用户 ${userId} 尝试删除不属于自己的任务 ${taskId}。`);
     return false;
   }
 
@@ -840,7 +851,7 @@ export async function deleteTask(taskId: string, userId: number | string): Promi
 
   await BatchRepository.deleteTask(taskId);
   taskAbortControllers.delete(taskId);
-  console.info(`[BatchService] 任务 ${taskId} 已删除。`);
+  logger.info(`[BatchService] 任务 ${taskId} 已删除。`);
   return true;
 }
 
@@ -850,7 +861,7 @@ export async function deleteTask(taskId: string, userId: number | string): Promi
 export async function cleanupOldTasks(daysOld: number = 7): Promise<number> {
   const count = await BatchRepository.cleanupOldTasks(daysOld);
   if (count > 0) {
-    console.info(`[BatchService] 已清理 ${count} 个过期任务。`);
+    logger.info(`[BatchService] 已清理 ${count} 个过期任务。`);
   }
   return count;
 }

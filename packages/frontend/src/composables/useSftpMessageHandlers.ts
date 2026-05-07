@@ -14,6 +14,7 @@ import {
   addOrUpdateNodeInTree,
   sortFiles,
 } from './useSftpTreeUtils';
+import { log } from '@/utils/log';
 
 /** 消息处理器依赖 */
 export interface MessageHandlerDeps {
@@ -55,7 +56,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const { path } = message;
 
     if (!path) {
-      console.error(`[SFTP ${instanceSessionId}] Received readdir success without path!`);
+      log.error(`[SFTP ${instanceSessionId}] Received readdir success without path!`);
       if (message.requestId === loadingRequestId.value) {
         isLoading.value = false;
         loadingRequestId.value = null;
@@ -64,18 +65,18 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     }
 
     if (message.requestId !== loadingRequestId.value) {
-      console.info(
+      log.info(
         `[SFTP ${instanceSessionId}] Received stale readdir success for ${path} (ID: ${message.requestId}, expected: ${loadingRequestId.value}). Ignoring.`
       );
       return;
     }
 
-    console.info(`[SFTP ${instanceSessionId}] Received file list for directory ${path}`);
+    log.info(`[SFTP ${instanceSessionId}] Received file list for directory ${path}`);
 
     const targetNode = findNodeByPath(fileTree, path, instanceSessionId, true);
 
     if (!targetNode) {
-      console.error(
+      log.error(
         `[SFTP ${instanceSessionId}] Failed to find or create node for path ${path}. Cannot update tree.`
       );
       if (path === currentPathRef.value) {
@@ -94,7 +95,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
 
       if (existingNode && existingNode.childrenLoaded && existingNode.attrs.isDirectory) {
         mergedChildren.push(existingNode);
-        console.info(
+        log.info(
           `[SFTP ${instanceSessionId}] Merging: Kept existing loaded node ${path}/${existingNode.filename}`
         );
       } else {
@@ -120,11 +121,11 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
         };
         mergedChildren.push(newNode);
         if (existingNode && !existingNode.childrenLoaded) {
-          console.info(
+          log.info(
             `[SFTP ${instanceSessionId}] Merging: Updated placeholder node ${path}/${newNode.filename}`
           );
         } else if (!existingNode) {
-          console.info(
+          log.info(
             `[SFTP ${instanceSessionId}] Merging: Added new node ${path}/${newNode.filename}`
           );
         }
@@ -134,20 +135,16 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     mergedChildren.sort(sortFiles);
     targetNode.children = mergedChildren;
     targetNode.childrenLoaded = true;
-    console.info(
-      `[SFTP ${instanceSessionId}] File tree node ${path}'s children updated after merge.`
-    );
+    log.info(`[SFTP ${instanceSessionId}] File tree node ${path}'s children updated after merge.`);
 
     currentPathRef.value = path;
-    console.info(
+    log.info(
       `[SFTP ${instanceSessionId}] currentPathRef updated to ${path} after successful readdir.`
     );
 
     isLoading.value = false;
     loadingRequestId.value = null;
-    console.info(
-      `[SFTP ${instanceSessionId}] isLoading reset after successful readdir for ${path}.`
-    );
+    log.info(`[SFTP ${instanceSessionId}] isLoading reset after successful readdir for ${path}.`);
   };
 
   const onSftpReaddirError = (payload: MessagePayload, message: WebSocketMessage) => {
@@ -155,29 +152,27 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const errorPath = message.path;
 
     if (message.requestId !== loadingRequestId.value) {
-      console.info(
+      log.info(
         `[SFTP ${instanceSessionId}] Received stale readdir error for ${errorPath} (ID: ${message.requestId}, expected: ${loadingRequestId.value}). Ignoring.`
       );
       return;
     }
 
-    console.error(`[SFTP ${instanceSessionId}] 加载目录 ${errorPath} 出错:`, errorPayload);
+    log.error(`[SFTP ${instanceSessionId}] 加载目录 ${errorPath} 出错:`, errorPayload);
     uiNotificationsStore.showError(
       `${t('fileManager.errors.loadDirectoryFailed')}: ${errorPayload}`
     );
 
     isLoading.value = false;
     loadingRequestId.value = null;
-    console.info(
-      `[SFTP ${instanceSessionId}] isLoading reset after failed readdir for ${errorPath}.`
-    );
+    log.info(`[SFTP ${instanceSessionId}] isLoading reset after failed readdir for ${errorPath}.`);
   };
 
   const onMkdirSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
     const newItem = payload as unknown as FileListItem | null;
     const parentPath = message.path?.substring(0, message.path.lastIndexOf('/')) || '/';
 
-    console.info(`[SFTP ${instanceSessionId}] 创建目录成功: ${message.path}`);
+    log.info(`[SFTP ${instanceSessionId}] 创建目录成功: ${message.path}`);
 
     if (newItem) {
       addOrUpdateNodeInTree(fileTree, parentPath, newItem, instanceSessionId);
@@ -185,7 +180,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       const parentNode = findNodeByPath(fileTree, parentPath, instanceSessionId);
       if (parentNode) {
         parentNode.childrenLoaded = false;
-        console.warn(
+        log.warn(
           `[SFTP ${instanceSessionId}] Mkdir success for ${message.path} but no item details received. Marking parent ${parentPath} for reload.`
         );
         if (parentPath === currentPathRef.value) {
@@ -200,11 +195,11 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const parentPath = removedPath?.substring(0, removedPath.lastIndexOf('/')) || '/';
     const removedFilename = removedPath?.substring(removedPath.lastIndexOf('/') + 1);
 
-    console.info(`[SFTP ${instanceSessionId}] 删除成功: ${removedPath}`);
+    log.info(`[SFTP ${instanceSessionId}] 删除成功: ${removedPath}`);
     removeNodeFromTree(fileTree, parentPath, removedFilename || '', instanceSessionId);
     const removedNode = findNodeByPath(fileTree, removedPath || '', instanceSessionId);
     if (removedNode && removedNode.attrs.isDirectory) {
-      console.info(`[SFTP ${instanceSessionId}] 目录 ${removedPath} 已从树中移除`);
+      log.info(`[SFTP ${instanceSessionId}] 目录 ${removedPath} 已从树中移除`);
     }
   };
 
@@ -221,7 +216,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const oldFilename = renamePayload.oldPath.substring(renamePayload.oldPath.lastIndexOf('/') + 1);
     const { newItem } = renamePayload;
 
-    console.info(
+    log.info(
       `[SFTP ${instanceSessionId}] 重命名成功: ${renamePayload.oldPath} -> ${renamePayload.newPath}`
     );
 
@@ -234,7 +229,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
         const newParentNode = findNodeByPath(fileTree, newParentPath, instanceSessionId);
         if (newParentNode) {
           newParentNode.childrenLoaded = false;
-          console.warn(
+          log.warn(
             `[SFTP ${instanceSessionId}] Rename/Move success to ${renamePayload.newPath} but no item details. Marking parent ${newParentPath} for reload.`
           );
           if (newParentPath === currentPathRef.value) {
@@ -245,7 +240,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
         const parentNode = findNodeByPath(fileTree, oldParentPath, instanceSessionId);
         if (parentNode) {
           parentNode.childrenLoaded = false;
-          console.warn(
+          log.warn(
             `[SFTP ${instanceSessionId}] Rename success in ${oldParentPath} but no item details. Marking parent for reload.`
           );
           if (oldParentPath === currentPathRef.value) {
@@ -261,7 +256,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const targetPath = message.path;
     const parentPath = targetPath?.substring(0, targetPath.lastIndexOf('/')) || '/';
 
-    console.info(`[SFTP ${instanceSessionId}] 修改权限成功: ${targetPath}`);
+    log.info(`[SFTP ${instanceSessionId}] 修改权限成功: ${targetPath}`);
 
     if (updatedItem) {
       addOrUpdateNodeInTree(fileTree, parentPath, updatedItem, instanceSessionId);
@@ -269,7 +264,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       const parentNode = findNodeByPath(fileTree, parentPath, instanceSessionId);
       if (parentNode) {
         parentNode.childrenLoaded = false;
-        console.warn(
+        log.warn(
           `[SFTP ${instanceSessionId}] Chmod success for ${targetPath} but no item details received. Marking parent ${parentPath} for reload.`
         );
         if (parentPath === currentPathRef.value) {
@@ -284,7 +279,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const filePath = message.path;
     const parentPath = filePath?.substring(0, filePath.lastIndexOf('/')) || '/';
 
-    console.info(`[SFTP ${instanceSessionId}] 写入文件成功: ${filePath}`);
+    log.info(`[SFTP ${instanceSessionId}] 写入文件成功: ${filePath}`);
 
     if (updatedItem) {
       addOrUpdateNodeInTree(fileTree, parentPath, updatedItem, instanceSessionId);
@@ -292,7 +287,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       const parentNode = findNodeByPath(fileTree, parentPath, instanceSessionId);
       if (parentNode) {
         parentNode.childrenLoaded = false;
-        console.warn(
+        log.warn(
           `[SFTP ${instanceSessionId}] WriteFile success for ${filePath} but no item details received. Marking parent ${parentPath} for reload.`
         );
         if (parentPath === currentPathRef.value) {
@@ -307,7 +302,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const destinationDir = copyPayload.destination;
     const newItems = copyPayload.items;
 
-    console.info(`[SFTP ${instanceSessionId}] 复制成功到: ${destinationDir}`);
+    log.info(`[SFTP ${instanceSessionId}] 复制成功到: ${destinationDir}`);
     uiNotificationsStore.showSuccess(t('fileManager.notifications.copySuccess'));
 
     const destNode = findNodeByPath(fileTree, destinationDir, instanceSessionId);
@@ -318,7 +313,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
         );
       } else {
         destNode.childrenLoaded = false;
-        console.info(
+        log.info(
           `[SFTP ${instanceSessionId}] 复制成功，但目标目录 ${destinationDir} 未加载，标记为需要刷新`
         );
         if (destinationDir === currentPathRef.value) {
@@ -327,14 +322,14 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       }
     } else if (destNode && !newItems) {
       destNode.childrenLoaded = false;
-      console.warn(
+      log.warn(
         `[SFTP ${instanceSessionId}] Copy success to ${destinationDir} but no item details received. Marking parent for reload.`
       );
       if (destinationDir === currentPathRef.value) {
         loadDirectory(currentPathRef.value);
       }
     } else {
-      console.warn(
+      log.warn(
         `[SFTP ${instanceSessionId}] Copy success, but destination node ${destinationDir} not found in tree.`
       );
     }
@@ -350,7 +345,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const destinationDir = movePayload.destination;
     const newItems = movePayload.items;
 
-    console.info(`[SFTP ${instanceSessionId}] 移动成功到: ${destinationDir}`);
+    log.info(`[SFTP ${instanceSessionId}] 移动成功到: ${destinationDir}`);
     uiNotificationsStore.showSuccess(t('fileManager.notifications.moveSuccess'));
 
     sourcePaths.forEach((oldPath) => {
@@ -367,7 +362,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
         );
       } else {
         destNode.childrenLoaded = false;
-        console.info(
+        log.info(
           `[SFTP ${instanceSessionId}] 移动成功，但目标目录 ${destinationDir} 未加载，标记为需要刷新`
         );
         if (destinationDir === currentPathRef.value) {
@@ -376,14 +371,14 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       }
     } else if (destNode && !newItems) {
       destNode.childrenLoaded = false;
-      console.warn(
+      log.warn(
         `[SFTP ${instanceSessionId}] Move success to ${destinationDir} but no item details received. Marking parent for reload.`
       );
       if (destinationDir === currentPathRef.value) {
         loadDirectory(currentPathRef.value);
       }
     } else {
-      console.warn(
+      log.warn(
         `[SFTP ${instanceSessionId}] Move success, but destination node ${destinationDir} not found in tree.`
       );
     }
@@ -394,12 +389,12 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const fullPath = message.path;
 
     if (!fullPath) {
-      console.error(
+      log.error(
         `[SFTP ${instanceSessionId}] Received upload success but message is missing 'path'. Payload:`,
         payload
       );
       const filename = newItem?.filename;
-      console.warn(
+      log.warn(
         `[SFTP ${instanceSessionId}] Upload success for ${filename || '(unknown file)'} but cannot determine parent path. Reloading current directory.`
       );
       loadDirectory(currentPathRef.value);
@@ -409,11 +404,11 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
     const parentPath = fullPath.substring(0, fullPath.lastIndexOf('/')) || '/';
     const filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
 
-    console.info(`[SFTP ${instanceSessionId}] 上传文件成功: ${fullPath}`);
+    log.info(`[SFTP ${instanceSessionId}] 上传文件成功: ${fullPath}`);
 
     if (newItem) {
       if (newItem.filename !== filename) {
-        console.warn(
+        log.warn(
           `[SFTP ${instanceSessionId}] Upload success: filename mismatch between message.path ('${filename}') and payload.filename ('${newItem.filename}'). Using filename from path.`
         );
         newItem.filename = filename;
@@ -435,7 +430,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       const parentNode = findNodeByPath(fileTree, parentPath, instanceSessionId);
       if (parentNode && !parentNode.childrenLoaded) {
         parentNode.childrenLoaded = false;
-        console.warn(
+        log.warn(
           `[SFTP ${instanceSessionId}] Upload success for ${fullPath} but no item details received. Marking parent ${parentPath} for reload.`
         );
         if (
@@ -445,7 +440,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
           scheduleDirectoryRefresh(currentPathRef.value);
         }
       } else if (!parentNode) {
-        console.warn(
+        log.warn(
           `[SFTP ${instanceSessionId}] Upload success for ${fullPath}, no item details, and parent node ${parentPath} not found in tree.`
         );
         scheduleDirectoryRefresh(currentPathRef.value);
@@ -455,7 +450,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
 
   const onActionError = (payload: MessagePayload, message: WebSocketMessage) => {
     const errorPayload = payload as unknown as string;
-    console.error(`[SFTP ${instanceSessionId}] Action ${message.type} failed:`, errorPayload);
+    log.error(`[SFTP ${instanceSessionId}] Action ${message.type} failed:`, errorPayload);
     const actionTypeMap: Record<string, string> = {
       'sftp:mkdir:error': t('fileManager.errors.createFolderFailed'),
       'sftp:rmdir:error': t('fileManager.errors.deleteFailed'),
@@ -480,7 +475,7 @@ export function createMessageHandlers(deps: MessageHandlerDeps) {
       command: string;
       message?: string;
     };
-    console.error(
+    log.error(
       `[SFTP ${instanceSessionId}] Command '${command}' not found on server for ${operation}. Details: ${details}`
     );
     let errorMsgKey = '';

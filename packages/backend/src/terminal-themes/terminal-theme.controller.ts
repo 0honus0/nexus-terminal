@@ -6,6 +6,7 @@ import path from 'path';
 import { CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/terminal-theme.types';
 import * as terminalThemeService from './terminal-theme.service';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 配置 multer 用于处理 JSON 文件上传 (导入)
 const upload = multer({
@@ -186,7 +187,7 @@ export const importThemeController = async (
     if (fs.existsSync(filePath)) {
       await fs.promises
         .unlink(filePath)
-        .catch((unlinkErr: unknown) => console.error('删除临时导入文件失败:', unlinkErr));
+        .catch((unlinkErr: unknown) => logger.error('删除临时导入文件失败:', unlinkErr));
     }
 
     if (error instanceof SyntaxError) {

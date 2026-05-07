@@ -23,6 +23,7 @@ RUN npm run build --workspace=@nexus-terminal/backend
 
 FROM node:20-alpine
 
+ENV NODE_ENV=production
 
 # Install build dependencies including setuptools for node-gyp
 RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++

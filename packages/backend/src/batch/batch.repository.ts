@@ -209,26 +209,29 @@ export const getTasksByUser = async (
       taskMap.set(row.id, rowToTask(row, []));
     }
     if (row.sub_id) {
-      taskMap.get(row.id)!.subTasks.push(
-        rowToSubTask({
-          id: row.sub_id,
-          task_id: row.sub_task_id!,
-          connection_id: Number(row.sub_connection_id),
-          connection_name: row.sub_connection_name,
-          command: row.sub_command!,
-          status: row.sub_status as BatchSubTaskStatus,
-          progress: row.sub_progress!,
-          exit_code: row.sub_exit_code,
-          output: row.sub_output,
-          message: row.sub_message,
-          started_at: row.sub_started_at,
-          ended_at: row.sub_ended_at,
-        })
-      );
+      const task = taskMap.get(row.id);
+      if (task) {
+        task.subTasks.push(
+          rowToSubTask({
+            id: row.sub_id,
+            task_id: row.sub_task_id ?? '',
+            connection_id: Number(row.sub_connection_id),
+            connection_name: row.sub_connection_name,
+            command: row.sub_command ?? '',
+            status: row.sub_status as BatchSubTaskStatus,
+            progress: row.sub_progress ?? 0,
+            exit_code: row.sub_exit_code,
+            output: row.sub_output,
+            message: row.sub_message,
+            started_at: row.sub_started_at,
+            ended_at: row.sub_ended_at,
+          })
+        );
+      }
     }
   }
 
-  return taskIdRows.map((r) => taskMap.get(r.id)!).filter(Boolean);
+  return taskIdRows.map((r) => taskMap.get(r.id)).filter((t): t is BatchTask => t !== undefined);
 };
 
 /**

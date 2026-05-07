@@ -2,6 +2,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket, ClientType } from './types';
 import { cleanupClientConnection } from './utils';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 心跳配置接口
 interface HeartbeatConfig {
@@ -52,7 +53,7 @@ export function initializeHeartbeat(
   // 这样可以确保移动端连接得到及时检查
   const checkInterval = Math.min(config.desktopInterval, config.mobileInterval);
 
-  console.info(`WebSocket 心跳配置:
+  logger.info(`WebSocket 心跳配置:
   桌面端: 间隔 ${config.desktopInterval}ms, 容忍丢包 ${config.desktopMaxMissed} 次
   移动端: 间隔 ${config.mobileInterval}ms, 容忍丢包 ${config.mobileMaxMissed} 次
   检查间隔: ${checkInterval}ms`);
@@ -87,7 +88,7 @@ export function initializeHeartbeat(
               extWs.terminate();
             } catch (error: unknown) {
               // 已损坏的连接，终止失败不影响心跳流程
-              console.debug('[心跳] 终止 CLOSING 状态连接失败:', error);
+              logger.debug('[心跳] 终止 CLOSING 状态连接失败:', error);
             }
           }
           return; // 跳过非活动连接
@@ -98,12 +99,12 @@ export function initializeHeartbeat(
 
         // 检查是否超过容忍度（递增后检查）
         if (extWs.missedPongCount > maxMissed) {
-          console.info(
+          logger.info(
             `WebSocket 心跳检测：${clientType} 客户端 ${extWs.username} (会话: ${extWs.sessionId}) ` +
               `连续 ${extWs.missedPongCount} 次无响应（阈值: ${maxMissed}），正在终止...`
           );
           cleanupClientConnection(extWs.sessionId).catch((error: unknown) => {
-            console.debug(
+            logger.debug(
               '[WebSocket] 心跳超时清理连接失败:',
               error instanceof Error ? error.message : error
             );
@@ -117,7 +118,7 @@ export function initializeHeartbeat(
           extWs.ping(() => {});
           lastPingTime.set(extWs, now);
         } catch (error: unknown) {
-          console.warn(
+          logger.warn(
             `[WebSocket 心跳] ping 发送失败 (${extWs.username}):`,
             getErrorMessage(error)
           );
@@ -133,7 +134,7 @@ export function initializeHeartbeat(
 
   // 当 WebSocket 服务器关闭时，清除心跳定时器
   wss.on('close', () => {
-    console.info('WebSocket 服务器正在关闭，清理心跳定时器...');
+    logger.info('WebSocket 服务器正在关闭，清理心跳定时器...');
     clearInterval(heartbeatInterval);
     lastPingTime.clear();
   });

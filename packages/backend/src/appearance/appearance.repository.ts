@@ -4,6 +4,7 @@ import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.typ
 import { defaultUiTheme } from '../config/default-themes';
 import { findThemeById as findTerminalThemeById } from '../terminal-themes/terminal-theme.repository';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const TABLE_NAME = 'appearance_settings';
 
@@ -255,12 +256,12 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
 
       await runDb(db, sqlInsertOrIgnore, [entry.key, dbValue, nowSeconds, nowSeconds]);
     }
-    // console.info('[AppearanceRepo] 默认外观设置键值对检查完成。'); // 移除：信息不太关键
+    // logger.info('[AppearanceRepo] 默认外观设置键值对检查完成。'); // 移除：信息不太关键
 
     // 确保键存在后，如果当前为 null，则尝试设置默认主题 ID
     await findAndSetDefaultThemeIdIfNull(db);
   } catch (err: unknown) {
-    console.error(`[AppearanceRepo] 检查或插入默认外观设置键值对时出错:`, getErrorMessage(err));
+    logger.error(`[AppearanceRepo] 检查或插入默认外观设置键值对时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '初始化外观设置失败',
       `检查或插入默认外观设置失败: ${getErrorMessage(err)}`
@@ -289,7 +290,7 @@ const findAndSetDefaultThemeIdIfNull = async (db: sqlite3.Database): Promise<voi
 
       if (defaultThemeRow) {
         const defaultThemeIdNum = defaultThemeRow.id;
-        // console.info(`[AppearanceRepo] activeTerminalThemeId 为 null，尝试设置为默认主题 ID: ${defaultThemeIdNum}`); // 移除：信息不太关键
+        // logger.info(`[AppearanceRepo] activeTerminalThemeId 为 null，尝试设置为默认主题 ID: ${defaultThemeIdNum}`); // 移除：信息不太关键
         // 使用 INSERT OR REPLACE 更新设置
         const sqlReplace = `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value, updated_at) VALUES (?, ?, ?)`;
         await runDb(db, sqlReplace, [
@@ -298,12 +299,12 @@ const findAndSetDefaultThemeIdIfNull = async (db: sqlite3.Database): Promise<voi
           Math.floor(Date.now() / 1000),
         ]);
       } else {
-        // console.warn("[AppearanceRepo] 未找到名为 'default' 的预设终端主题，无法设置默认 activeTerminalThemeId。");
+        // logger.warn("[AppearanceRepo] 未找到名为 'default' 的预设终端主题，无法设置默认 activeTerminalThemeId。");
       }
     }
     // 如果 activeTerminalThemeId 已设置或键不存在，则不执行任何操作
   } catch (error: unknown) {
-    console.error('[AppearanceRepo] 设置默认终端主题 ID 时出错:', getErrorMessage(error));
+    logger.error('[AppearanceRepo] 设置默认终端主题 ID 时出错:', getErrorMessage(error));
     // 这里不抛出错误，只记录日志
   }
 };
@@ -323,12 +324,12 @@ export const getAppearanceSettings = async (): Promise<AppearanceSettings> => {
       `SELECT key, value, updated_at FROM ${TABLE_NAME}`
     );
     const mappedSettings = mapRowsToAppearanceSettings(rows); // 将键值对映射到设置对象
-    console.info(
+    logger.info(
       `[AppearanceRepo LOG] 映射后的 terminalBackgroundEnabled 值: ${mappedSettings.terminalBackgroundEnabled}`
     ); // 添加映射后值的日志
     return mappedSettings;
   } catch (err: unknown) {
-    console.error('[AppearanceRepo] 获取外观设置失败:', getErrorMessage(err));
+    logger.error('[AppearanceRepo] 获取外观设置失败:', getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '获取外观设置失败',
       `获取外观设置失败: ${getErrorMessage(err)}`
@@ -362,7 +363,7 @@ export const updateAppearanceSettings = async (
         );
       }
     } catch (validationError: unknown) {
-      console.error(
+      logger.error(
         `[AppearanceRepo] 验证主题 ID ${settingsDto.activeTerminalThemeId} 时出错:`,
         getErrorMessage(validationError)
       );
@@ -426,25 +427,25 @@ const updateAppearanceSettingsInternal = async (
 
       // 保存前验证 active_terminal_theme_id 类型 (基于 dtoKey 判断)
       if (dtoKey === 'activeTerminalThemeId' && value !== null && typeof value !== 'number') {
-        console.error(
+        logger.error(
           `[AppearanceRepo] 更新 activeTerminalThemeId 时收到无效类型值: ${value} (类型: ${typeof value})，应为数字或 null。跳过此字段。`
         );
         continue; // 跳过此键
       }
 
       // 对每个键值对执行 INSERT OR REPLACE，使用映射后的 dbKey
-      console.info(
+      logger.info(
         `[AppearanceRepo LOG] 准备更新/插入数据库键: '${dbKey}', 值: '${dbValue}' (来自 DTO 键: '${dtoKey}')`
       );
       const result = await runDb(db, sqlReplace, [dbKey, dbValue, nowSeconds]);
       if (result.changes > 0) {
-        console.info(`[AppearanceRepo LOG] 数据库键 '${dbKey}' 更新成功。`); // 添加成功日志
+        logger.info(`[AppearanceRepo LOG] 数据库键 '${dbKey}' 更新成功。`); // 添加成功日志
         changesMade = true;
       }
     }
     return changesMade; // 如果有任何行被插入或替换，则返回 true
   } catch (err: unknown) {
-    console.error('[AppearanceRepo] 更新外观设置失败:', getErrorMessage(err));
+    logger.error('[AppearanceRepo] 更新外观设置失败:', getErrorMessage(err));
     throw ErrorFactory.databaseError(
       '更新外观设置失败',
       `更新外观设置失败: ${getErrorMessage(err)}`

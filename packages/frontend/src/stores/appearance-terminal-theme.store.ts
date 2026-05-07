@@ -9,6 +9,7 @@ import { extractErrorMessage } from '../utils/errorExtractor';
 import { defaultXtermTheme } from '../features/appearance/config/default-themes';
 import type { TerminalTheme } from '../types/terminal-theme.types';
 import type { AppearanceSettings } from '../types/appearance.types';
+import { log } from '@/utils/log';
 
 /** 终端主题子 Store 的依赖参数 */
 export interface TerminalThemeDeps {
@@ -79,21 +80,16 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
     const previousActiveId = getSettings().activeTerminalThemeId;
     const idNum = parseInt(themeId, 10);
     if (Number.isNaN(idNum)) {
-      console.error(
-        `[AppearanceStore] setActiveTerminalTheme 接收到无效的数字 ID 字符串: ${themeId}`
-      );
+      log.error(`[AppearanceStore] setActiveTerminalTheme 接收到无效的数字 ID 字符串: ${themeId}`);
       throw new Error(`无效的主题 ID: ${themeId}`);
     }
     getSettings().activeTerminalThemeId = idNum;
-    console.info(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
+    log.info(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
     try {
       await updateAppearanceSettings({ activeTerminalThemeId: idNum });
-      console.info(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
+      log.info(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
     } catch (updateError: unknown) {
-      console.error(
-        '[AppearanceStore] Failed to update backend activeTerminalThemeId:',
-        updateError
-      );
+      log.error('[AppearanceStore] Failed to update backend activeTerminalThemeId:', updateError);
       getSettings().activeTerminalThemeId = previousActiveId;
       throw new Error(
         `应用主题失败: ${updateError instanceof Error ? updateError.message : String(updateError)}`
@@ -107,7 +103,7 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
       await apiClient.post('/terminal-themes', { name, themeData });
       await loadTerminalThemeList();
     } catch (err: unknown) {
-      console.error('创建终端主题失败:', err);
+      log.error('创建终端主题失败:', err);
       throw new Error(extractErrorMessage(err, '创建终端主题失败'));
     }
   }
@@ -118,7 +114,7 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
       await apiClient.put(`/terminal-themes/${id}`, { name, themeData });
       await loadTerminalThemeList();
     } catch (err: unknown) {
-      console.error('更新终端主题失败:', err);
+      log.error('更新终端主题失败:', err);
       throw new Error(extractErrorMessage(err, '更新终端主题失败'));
     }
   }
@@ -132,17 +128,17 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
         const defaultTheme = getThemes().find((t) => t.isSystemDefault || t.name === '默认');
         const defaultThemeId = defaultTheme?._id;
         if (defaultThemeId) {
-          console.info(
+          log.info(
             `[AppearanceStore] 删除的主题是当前激活主题，尝试切换到默认主题 ID: ${defaultThemeId}`
           );
           await setActiveTerminalTheme(defaultThemeId);
         } else {
-          console.warn('[AppearanceStore] 无法找到默认主题，保持当前状态');
+          log.warn('[AppearanceStore] 无法找到默认主题，保持当前状态');
         }
       }
       await loadTerminalThemeList();
     } catch (err: unknown) {
-      console.error('删除终端主题失败:', err);
+      log.error('删除终端主题失败:', err);
       throw new Error(extractErrorMessage(err, '删除终端主题失败'));
     }
   }
@@ -160,7 +156,7 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
       });
       await loadTerminalThemeList();
     } catch (err: unknown) {
-      console.error('导入终端主题失败:', err);
+      log.error('导入终端主题失败:', err);
       throw new Error(extractErrorMessage(err, '导入终端主题失败'));
     }
   }
@@ -188,7 +184,7 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      console.error('导出终端主题失败:', err);
+      log.error('导出终端主题失败:', err);
       throw new Error(extractErrorMessage(err, '导出终端主题失败'));
     }
   }
@@ -197,10 +193,10 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
   async function loadTerminalThemeData(themeId: string): Promise<ITheme | null> {
     const existingTheme = getThemes().find((t) => t._id === themeId);
     if (existingTheme?.themeData && Object.keys(existingTheme.themeData).length > 0) {
-      console.info(`[AppearanceStore] Theme data for ${themeId} already loaded.`);
+      log.info(`[AppearanceStore] Theme data for ${themeId} already loaded.`);
       return existingTheme.themeData;
     }
-    console.info(`[AppearanceStore] Loading theme data for ${themeId} from backend...`);
+    log.info(`[AppearanceStore] Loading theme data for ${themeId} from backend...`);
     try {
       const response = await apiClient.get<TerminalTheme>(`/terminal-themes/${themeId}`);
       const fullTheme = response.data;
@@ -211,20 +207,20 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
             ...getThemes()[index],
             themeData: fullTheme.themeData,
           };
-          console.info(`[AppearanceStore] Updated theme data for ${themeId} in local store.`);
+          log.info(`[AppearanceStore] Updated theme data for ${themeId} in local store.`);
         } else {
-          console.warn(
+          log.warn(
             `[AppearanceStore] Theme metadata for ${themeId} not found in initial list, but loaded data.`
           );
         }
         return fullTheme.themeData;
       }
-      console.error(
+      log.error(
         `[AppearanceStore] Loaded data for theme ${themeId} is invalid or missing themeData.`
       );
       return null;
     } catch (err: unknown) {
-      console.error(`加载终端主题 ${themeId} 数据失败:`, err);
+      log.error(`加载终端主题 ${themeId} 数据失败:`, err);
       error.value = extractErrorMessage(err, `加载主题 ${themeId} 数据失败`);
       return null;
     }
@@ -234,13 +230,13 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
   function startTerminalThemePreview(themeData: ITheme) {
     previewTerminalThemeData.value = themeData;
     isPreviewingTerminalTheme.value = true;
-    console.info('[AppearanceStore] Started terminal theme preview.');
+    log.info('[AppearanceStore] Started terminal theme preview.');
   }
 
   function stopTerminalThemePreview() {
     previewTerminalThemeData.value = null;
     isPreviewingTerminalTheme.value = false;
-    console.info('[AppearanceStore] Stopped terminal theme preview.');
+    log.info('[AppearanceStore] Stopped terminal theme preview.');
   }
 
   /** 从后端重新加载终端主题列表（仅元数据） */
@@ -249,7 +245,7 @@ export function createTerminalThemeStore(deps: TerminalThemeDeps) {
       const response = await apiClient.get<TerminalTheme[]>('/terminal-themes');
       allTerminalThemes.value = response.data;
     } catch (err: unknown) {
-      console.error('重新加载终端主题列表失败:', err);
+      log.error('重新加载终端主题列表失败:', err);
     }
   }
 

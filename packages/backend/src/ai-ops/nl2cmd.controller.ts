@@ -12,6 +12,7 @@ import {
 } from './nl2cmd.constants';
 import * as NL2CMDService from './nl2cmd.service';
 import { NL2CMDRequest, AIProviderConfig, AISettings } from './nl2cmd.types';
+import { logger } from '../utils/logger';
 
 type SessionWithUserId = Request['session'] & { userId?: number };
 
@@ -62,7 +63,7 @@ export const generateCommand = async (req: Request, res: Response): Promise<void
 
     const durationMs = Date.now() - start;
     if (shouldLogTiming(durationMs)) {
-      console.info('[NL2CMD HTTP] /nl2cmd', {
+      logger.info('[NL2CMD HTTP] /nl2cmd', {
         traceId,
         ok: response.success,
         durationMs,
@@ -72,10 +73,10 @@ export const generateCommand = async (req: Request, res: Response): Promise<void
       });
     }
   } catch (error: unknown) {
-    console.error('[NL2CMD Controller] 生成命令失败:', error);
+    logger.error('[NL2CMD Controller] 生成命令失败:', error);
     const durationMs = Date.now() - start;
     if (shouldLogTiming(durationMs)) {
-      console.warn('[NL2CMD HTTP] /nl2cmd failed', { traceId, durationMs });
+      logger.warn('[NL2CMD HTTP] /nl2cmd failed', { traceId, durationMs });
     }
     res.status(500).json({ success: false, error: '生成命令失败' });
   }
@@ -119,7 +120,7 @@ export const getAISettings = async (req: Request, res: Response): Promise<void> 
 
     res.status(200).json({ success: true, settings: maskedSettings });
   } catch (error: unknown) {
-    console.error('[NL2CMD Controller] 获取 AI 配置失败:', error);
+    logger.error('[NL2CMD Controller] 获取 AI 配置失败:', error);
     res.status(500).json({ success: false, error: '获取 AI 配置失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -201,7 +202,7 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
 
     res.status(200).json({ success: true, message: 'AI 配置已保存' });
   } catch (error: unknown) {
-    console.error('[NL2CMD Controller] 保存 AI 配置失败:', error);
+    logger.error('[NL2CMD Controller] 保存 AI 配置失败:', error);
     res.status(500).json({ success: false, error: '保存 AI 配置失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -275,7 +276,7 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
 
     const durationMs = Date.now() - start;
     if (shouldLogTiming(durationMs)) {
-      console.info('[NL2CMD HTTP] /test', {
+      logger.info('[NL2CMD HTTP] /test', {
         traceId,
         ok: success,
         durationMs,
@@ -285,10 +286,10 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
       });
     }
   } catch (error: unknown) {
-    console.error('[NL2CMD Controller] 测试连接失败:', error);
+    logger.error('[NL2CMD Controller] 测试连接失败:', error);
     const durationMs = Date.now() - start;
     if (shouldLogTiming(durationMs)) {
-      console.warn('[NL2CMD HTTP] /test failed', { traceId, durationMs });
+      logger.warn('[NL2CMD HTTP] /test failed', { traceId, durationMs });
     }
     res.status(500).json({ success: false, message: '连接测试失败' });
   }

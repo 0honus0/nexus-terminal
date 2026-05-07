@@ -4,6 +4,7 @@ import { startRegistration } from '@simplewebauthn/browser';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../../stores/auth.store';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 export function usePasskeyManagement() {
   const authStore = useAuthStore();
@@ -43,7 +44,7 @@ export function usePasskeyManagement() {
       passkeySuccess.value = true;
       await authStore.fetchPasskeys();
     } catch (error: unknown) {
-      console.error('Passkey 注册失败:', error);
+      log.error('Passkey 注册失败:', error);
       const maybeError = error as { name?: string; message?: string };
       if (
         maybeError.name === 'InvalidStateError' ||
@@ -91,7 +92,7 @@ export function usePasskeyManagement() {
       await authStore.fetchPasskeys();
       cancelEditPasskeyName();
     } catch (error: unknown) {
-      console.error(`更新 Passkey ${credentialID} 名称失败:`, error);
+      log.error(`更新 Passkey ${credentialID} 名称失败:`, error);
       passkeyMessage.value = extractErrorMessage(
         error,
         t('settings.passkey.error.nameUpdateFailed', '更新 Passkey 名称失败。')
@@ -107,7 +108,7 @@ export function usePasskeyManagement() {
       cancelEditPasskeyName();
     }
     if (!credentialID || typeof credentialID !== 'string') {
-      console.error(
+      log.error(
         'Attempted to delete a passkey with an invalid or undefined credentialID:',
         credentialID
       );
@@ -130,7 +131,7 @@ export function usePasskeyManagement() {
       passkeySuccess.value = true;
       // authStore.fetchPasskeys() is usually called within deletePasskey in the store
     } catch (error: unknown) {
-      console.error(`删除 Passkey ${credentialID} 失败:`, error);
+      log.error(`删除 Passkey ${credentialID} 失败:`, error);
       passkeyDeleteError.value = extractErrorMessage(
         error,
         t('settings.passkey.error.deleteFailedGeneral')
@@ -149,7 +150,7 @@ export function usePasskeyManagement() {
         ? date.toLocaleString()
         : t('statusMonitor.notAvailable', 'N/A');
     } catch (error: unknown) {
-      console.error('Error formatting date:', error);
+      log.error('Error formatting date:', error);
       return t('statusMonitor.notAvailable', 'N/A');
     }
   };

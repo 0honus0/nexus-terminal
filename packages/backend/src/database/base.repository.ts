@@ -6,6 +6,7 @@
 import sqlite3 from 'sqlite3';
 import { AppError, ErrorFactory, getErrorMessage, isAppError } from '../utils/AppError';
 import { getDbInstance, runDb, getDb, allDb } from './connection';
+import { logger } from '../utils/logger';
 
 /** 数据库运行结果 */
 export interface RunResult {
@@ -71,7 +72,7 @@ export class RepositoryUtils {
       }
 
       const errMsg = getErrorMessage(err);
-      console.error(`[仓库] ${context}:`, errMsg);
+      logger.error(`[仓库] ${context}:`, errMsg);
 
       // 如果提供了自定义错误处理器，尝试使用它
       if (errorHandler) {
@@ -111,7 +112,7 @@ export class RepositoryUtils {
       try {
         await runDb(db, 'ROLLBACK');
       } catch (rollbackErr: unknown) {
-        console.error(`[仓库] ${context} 回滚事务失败:`, getErrorMessage(rollbackErr));
+        logger.error(`[仓库] ${context} 回滚事务失败:`, getErrorMessage(rollbackErr));
       }
 
       // 如果已经是 AppError，直接重新抛出
@@ -120,7 +121,7 @@ export class RepositoryUtils {
       }
 
       const errMsg = getErrorMessage(err);
-      console.error(`[仓库] ${context}:`, errMsg);
+      logger.error(`[仓库] ${context}:`, errMsg);
       throw ErrorFactory.databaseError(userMessage, `${userMessage}: ${errMsg}`);
     }
   }

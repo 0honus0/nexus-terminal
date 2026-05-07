@@ -17,6 +17,7 @@ import {
 } from '../composables/workspaceEvents'; // +++ 导入 useWorkspaceEventOff +++
 
 import type { SessionTabInfoWithStatus } from '../stores/session/types'; // 路径修正
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
@@ -88,22 +89,22 @@ const togglePopup = () => {
 
 // 处理从弹出列表中选择连接的事件
 const handlePopupConnect = (connectionId: number) => {
-  console.info(`[TabBar] Popup connect request for ID: ${connectionId}`);
+  log.info(`[TabBar] Popup connect request for ID: ${connectionId}`);
   const connectionInfo = connectionsStore.connections.find((c) => c.id === connectionId);
   if (!connectionInfo) {
-    console.error(`[TabBar] handlePopupConnect: 未找到 ID 为 ${connectionId} 的连接信息。`);
+    log.error(`[TabBar] handlePopupConnect: 未找到 ID 为 ${connectionId} 的连接信息。`);
     showConnectionListPopup.value = false; // 关闭弹出窗口
     return;
   }
 
   // --- 修改：根据类型决定调用哪个 Action ---
   if (connectionInfo.type === 'RDP') {
-    console.info(
+    log.info(
       `[TabBar] Popup RDP connect request for ID: ${connectionId}. Calling sessionStore.openRdpModal.`
     );
     sessionStore.openRdpModal(connectionInfo);
   } else {
-    console.info(
+    log.info(
       `[TabBar] Popup non-RDP connect request for ID: ${connectionId}. Calling sessionStore.handleConnectRequest.`
     );
     sessionStore.handleConnectRequest(connectionInfo); // 非 RDP 保持原逻辑
@@ -113,7 +114,7 @@ const handlePopupConnect = (connectionId: number) => {
 
 // 处理从弹窗内部发出的添加连接请求
 const handleRequestAddFromPopup = () => {
-  console.info('[TabBar] Received request-add-connection from popup component.');
+  log.info('[TabBar] Received request-add-connection from popup component.');
   showConnectionListPopup.value = false; // 关闭弹窗
   emitWorkspaceEvent('connection:requestAdd'); // 向上发出事件
 };
@@ -121,7 +122,7 @@ const handleRequestAddFromPopup = () => {
 // 处理从弹窗内部发出的编辑连接请求
 const handleRequestEditFromPopup = (connection: ConnectionInfo) => {
   // 假设 WorkspaceConnectionList 传递了连接对象
-  console.info(
+  log.info(
     '[TabBar] Received request-edit-connection from popup component for connection:',
     connection
   );
@@ -164,15 +165,15 @@ const closeContextMenuOnClickOutside = (event: MouseEvent) => {
 // + Update function signature to receive payload
 const handleContextMenuAction = (payload: { action: string; targetId: string | number | null }) => {
   const { action, targetId } = payload;
-  console.info(`[TabBar] handleContextMenuAction received payload:`, JSON.stringify(payload)); // + Log received payload
+  log.info(`[TabBar] handleContextMenuAction received payload:`, JSON.stringify(payload)); // + Log received payload
   // const targetId = contextTargetSessionId.value; // No longer needed
   if (!targetId || typeof targetId !== 'string') {
     // Ensure targetId is a string (session ID)
-    console.warn('[TabBar] handleContextMenuAction called but targetId is null or not a string.');
+    log.warn('[TabBar] handleContextMenuAction called but targetId is null or not a string.');
     return;
   }
 
-  console.info(`[TabBar] Context menu action '${action}' requested for session ID: ${targetId}`); // Keep original log
+  log.info(`[TabBar] Context menu action '${action}' requested for session ID: ${targetId}`); // Keep original log
 
   switch (action) {
     case 'close':
@@ -190,29 +191,26 @@ const handleContextMenuAction = (payload: { action: string; targetId: string | n
       break;
     case 'mark-for-suspend': // +++ 修改 action 名称 +++
       if (typeof targetId === 'string') {
-        console.info(
+        log.info(
           `[TabBar] Context menu action 'mark-for-suspend' requested for session ID: ${targetId}`
         );
         sessionStore.requestStartSshSuspend(targetId); // 这个 action 现在是标记
       } else {
-        console.warn(`[TabBar] 'mark-for-suspend' action called with invalid targetId:`, targetId);
+        log.warn(`[TabBar] 'mark-for-suspend' action called with invalid targetId:`, targetId);
       }
       break;
     case 'unmark-for-suspend':
       if (typeof targetId === 'string') {
-        console.info(
+        log.info(
           `[TabBar] Context menu action 'unmark-for-suspend' requested for session ID: ${targetId}`
         );
         sessionStore.requestUnmarkSshSuspend(targetId);
       } else {
-        console.warn(
-          `[TabBar] 'unmark-for-suspend' action called with invalid targetId:`,
-          targetId
-        );
+        log.warn(`[TabBar] 'unmark-for-suspend' action called with invalid targetId:`, targetId);
       }
       break;
     default:
-      console.warn(`[TabBar] Unknown context menu action: ${action}`);
+      log.warn(`[TabBar] Unknown context menu action: ${action}`);
   }
   // closeContextMenu(); // TabBarContextMenu 内部点击后会触发 close 事件
 };
@@ -277,7 +275,7 @@ const contextMenuItems = computed(() => {
 
 // 处理打开布局配置器的事件
 const openLayoutConfigurator = () => {
-  console.info('[TabBar] Emitting open-layout-configurator event');
+  log.info('[TabBar] Emitting open-layout-configurator event');
   emitWorkspaceEvent('ui:openLayoutConfigurator'); // 发出事件
 };
 
@@ -291,7 +289,7 @@ watch(
     isWorkspaceRoute.value = newPath === '/workspace';
     if (isWorkspaceRoute.value) {
       // 进入 /workspace 时，不需要在这里加载 Header 状态，App.vue 会处理
-      console.info('[TabBar] Entered /workspace route. Header toggle button is now active.');
+      log.info('[TabBar] Entered /workspace route. Header toggle button is now active.');
     }
   }
 );
@@ -301,17 +299,17 @@ onMounted(() => {
   isWorkspaceRoute.value = route.path === '/workspace';
   if (isWorkspaceRoute.value) {
     // 初始加载时，不需要在这里加载 Header 状态，App.vue 会处理
-    console.info('[TabBar] Mounted on /workspace route. Header toggle button is now active.');
+    log.info('[TabBar] Mounted on /workspace route. Header toggle button is now active.');
   }
   // 监听连接事件
   onWorkspaceEvent('connection:connect', (payload) => {
-    console.info('[TabBar] Received connection:connect event:', payload);
+    log.info('[TabBar] Received connection:connect event:', payload);
     handlePopupConnect(payload.connectionId);
   });
 
   // +++ 监听打开传输进度模态框事件 +++
   const handleOpenTransferProgressModal = () => {
-    console.info('[TabBar] Received ui:openTransferProgressModal event, opening modal.');
+    log.info('[TabBar] Received ui:openTransferProgressModal event, opening modal.');
     showTransferProgressModal.value = true;
   };
   onWorkspaceEvent('ui:openTransferProgressModal', handleOpenTransferProgressModal);
@@ -336,15 +334,15 @@ const handleSessionsUpdate = (newSessions: SessionTabInfoWithStatus[]) => {
   // 保存用户自定义顺序到本地存储
   const sessionOrder = newSessions.map((session) => session.sessionId);
   localStorage.setItem('sessionOrder', JSON.stringify(sessionOrder));
-  console.info('[TabBar] 已保存用户自定义标签顺序到本地存储');
+  log.info('[TabBar] 已保存用户自定义标签顺序到本地存储');
 };
 const toggleHeader = () => {
   if (isWorkspaceRoute.value) {
-    console.info('[TabBar] Toggling header visibility');
+    log.info('[TabBar] Toggling header visibility');
     // 调用 store action
     layoutStore.toggleHeaderVisibility();
   } else {
-    console.info('[TabBar] Not on /workspace route, toggle ignored.');
+    log.info('[TabBar] Not on /workspace route, toggle ignored.');
   }
 };
 
@@ -388,10 +386,10 @@ const handleTouchStart = (event: TouchEvent, sessionId: string) => {
       if (touchedSessionId === sessionId) {
         const sessionState = sessionStore.sessions.get(sessionId);
         if (sessionState && sessionState.isMarkedForSuspend) {
-          console.info(`[TabBar] Long press to unmark suspend for session ID: ${sessionId}`);
+          log.info(`[TabBar] Long press to unmark suspend for session ID: ${sessionId}`);
           sessionStore.requestUnmarkSshSuspend(sessionId);
         } else if (sessionState) {
-          console.info(`[TabBar] Long press to mark suspend for session ID: ${sessionId}`);
+          log.info(`[TabBar] Long press to mark suspend for session ID: ${sessionId}`);
           sessionStore.requestStartSshSuspend(sessionId);
         }
       }

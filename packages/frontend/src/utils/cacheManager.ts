@@ -2,6 +2,7 @@
  * 统一的本地缓存管理器
  * 提供类型安全的 localStorage 操作，支持版本控制和过期管理
  */
+import { log } from '@/utils/log';
 
 // 缓存键前缀，避免与其他应用冲突
 const CACHE_PREFIX = 'nexus_';
@@ -66,7 +67,7 @@ export class CacheManager {
 
       // 版本检查
       if (cached.version !== version) {
-        console.debug(
+        log.debug(
           `[CacheManager] 缓存版本不匹配: ${key} (期望: ${version}, 实际: ${cached.version})`
         );
         this.remove(key);
@@ -75,14 +76,14 @@ export class CacheManager {
 
       // TTL 检查
       if (ttl > 0 && Date.now() - cached.timestamp > ttl) {
-        console.debug(`[CacheManager] 缓存已过期: ${key}`);
+        log.debug(`[CacheManager] 缓存已过期: ${key}`);
         this.remove(key);
         return defaultValue;
       }
 
       return cached.data;
     } catch (error: unknown) {
-      console.error(`[CacheManager] 读取缓存失败: ${key}`, error);
+      log.error(`[CacheManager] 读取缓存失败: ${key}`, error);
       this.remove(key);
       return defaultValue;
     }
@@ -107,7 +108,7 @@ export class CacheManager {
       localStorage.setItem(fullKey, JSON.stringify(cached));
       return true;
     } catch (error: unknown) {
-      console.error(`[CacheManager] 写入缓存失败: ${key}`, error);
+      log.error(`[CacheManager] 写入缓存失败: ${key}`, error);
       // 可能是存储空间不足，尝试清理过期缓存
       this.clearExpired();
       return false;
@@ -159,7 +160,7 @@ export class CacheManager {
       }
     }
     keysToRemove.forEach((key) => localStorage.removeItem(key));
-    console.debug(`[CacheManager] 已清除 ${keysToRemove.length} 个缓存项`);
+    log.debug(`[CacheManager] 已清除 ${keysToRemove.length} 个缓存项`);
   }
 
   /**
@@ -192,7 +193,7 @@ export class CacheManager {
 
     keysToRemove.forEach((key) => localStorage.removeItem(key));
     if (keysToRemove.length > 0) {
-      console.debug(`[CacheManager] 已清除 ${keysToRemove.length} 个过期/无效缓存项`);
+      log.debug(`[CacheManager] 已清除 ${keysToRemove.length} 个过期/无效缓存项`);
     }
   }
 

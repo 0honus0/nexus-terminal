@@ -1,5 +1,6 @@
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { logger } from '../utils/logger';
 
 // 定义 Quick Command Tag 类型
 export interface QuickCommandTag {
@@ -21,7 +22,7 @@ export const findAllQuickCommandTags = async (): Promise<QuickCommandTag[]> => {
     );
     return rows;
   } catch (err: unknown) {
-    console.error('[仓库] 查询快捷指令标签列表时出错:', getErrorMessage(err));
+    logger.error('[仓库] 查询快捷指令标签列表时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('获取快捷指令标签列表失败', '获取快捷指令标签列表失败');
   }
 };
@@ -39,7 +40,7 @@ export const findQuickCommandTagById = async (id: number): Promise<QuickCommandT
     );
     return row || null;
   } catch (err: unknown) {
-    console.error(`[仓库] 查询快捷指令标签 ${id} 时出错:`, getErrorMessage(err));
+    logger.error(`[仓库] 查询快捷指令标签 ${id} 时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('获取快捷指令标签信息失败', '获取快捷指令标签信息失败');
   }
 };
@@ -62,7 +63,7 @@ export const createQuickCommandTag = async (name: string): Promise<number> => {
     return result.lastID;
   } catch (err: unknown) {
     const errMsg = getErrorMessage(err);
-    console.error('[仓库] 创建快捷指令标签时出错:', errMsg);
+    logger.error('[仓库] 创建快捷指令标签时出错:', errMsg);
     if (errMsg.includes('UNIQUE constraint failed')) {
       throw ErrorFactory.validationError(
         `快捷指令标签名称 "${name}" 已存在`,
@@ -85,7 +86,7 @@ export const updateQuickCommandTag = async (id: number, name: string): Promise<b
     return result.changes > 0;
   } catch (err: unknown) {
     const errMsg = getErrorMessage(err);
-    console.error(`[仓库] 更新快捷指令标签 ${id} 时出错:`, errMsg);
+    logger.error(`[仓库] 更新快捷指令标签 ${id} 时出错:`, errMsg);
     if (errMsg.includes('UNIQUE constraint failed')) {
       throw ErrorFactory.validationError(
         `快捷指令标签名称 "${name}" 已存在`,
@@ -108,7 +109,7 @@ export const deleteQuickCommandTag = async (id: number): Promise<boolean> => {
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
   } catch (err: unknown) {
-    console.error(`[仓库] 删除快捷指令标签 ${id} 时出错:`, getErrorMessage(err));
+    logger.error(`[仓库] 删除快捷指令标签 ${id} 时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('删除快捷指令标签失败', '删除快捷指令标签失败');
   }
 };
@@ -138,7 +139,7 @@ export const setCommandTagAssociations = async (
       for (const tagId of tagIds) {
         // 验证 tagId 是否为有效数字
         if (typeof tagId !== 'number' || Number.isNaN(tagId)) {
-          console.warn(
+          logger.warn(
             `[Repo] setCommandTagAssociations: 无效的 tagId (${tagId})，跳过关联到指令 ${commandId}。`
           );
           continue;
@@ -149,7 +150,7 @@ export const setCommandTagAssociations = async (
     }
     await runDb(db, 'COMMIT');
   } catch (err: unknown) {
-    console.error('设置快捷指令标签关联时出错:', getErrorMessage(err));
+    logger.error('设置快捷指令标签关联时出错:', getErrorMessage(err));
     await runDb(db, 'ROLLBACK'); // 出错时回滚
     throw ErrorFactory.databaseError('无法设置快捷指令标签关联', '无法设置快捷指令标签关联');
   }
@@ -180,7 +181,7 @@ export const addTagToCommands = async (commandIds: number[], tagId: number): Pro
         typeof tagId !== 'number' ||
         Number.isNaN(tagId)
       ) {
-        console.warn(
+        logger.warn(
           `[Repo] addTagToCommands: 无效的 commandId (${commandId}) 或 tagId (${tagId})，跳过关联。`
         );
         continue;
@@ -189,11 +190,11 @@ export const addTagToCommands = async (commandIds: number[], tagId: number): Pro
     }
     await stmt.finalize(); // 完成批量插入
     await runDb(db, 'COMMIT');
-    console.info(
+    logger.info(
       `[Repo] addTagToCommands: 成功将标签 ${tagId} 关联到 ${commandIds.length} 个指令。`
     );
   } catch (err: unknown) {
-    console.error(
+    logger.error(
       `[Repo] addTagToCommands: 批量关联标签 ${tagId} 到指令时出错:`,
       getErrorMessage(err)
     );
@@ -226,7 +227,7 @@ export const findTagsByCommandId = async (commandId: number): Promise<QuickComma
     const rows = await allDb<QuickCommandTag>(db, sql, [commandId]);
     return rows;
   } catch (err: unknown) {
-    console.error(`Repository: 查询快捷指令 ${commandId} 的标签时出错:`, getErrorMessage(err));
+    logger.error(`Repository: 查询快捷指令 ${commandId} 的标签时出错:`, getErrorMessage(err));
     throw ErrorFactory.databaseError('获取快捷指令标签失败', '获取快捷指令标签失败');
   }
 };

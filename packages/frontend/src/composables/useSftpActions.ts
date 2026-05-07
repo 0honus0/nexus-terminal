@@ -7,6 +7,7 @@ import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { findNodeByPath } from './useSftpTreeUtils';
 import { createMessageHandlers } from './useSftpMessageHandlers';
 import { createSftpOperations } from './useSftpOperations';
+import { log } from '@/utils/log';
 
 /**
  * @interface WebSocketDependencies
@@ -104,7 +105,7 @@ export function createSftpActionsManager(
   });
 
   const cleanup = () => {
-    console.info(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
+    log.info(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
     unregisterCallbacks.forEach((cb) => cb());
     unregisterCallbacks.length = 0;
   };
@@ -115,29 +116,29 @@ export function createSftpActionsManager(
     const targetNode = findNodeByPath(fileTree, path, instanceSessionId);
 
     if (targetNode && targetNode.childrenLoaded && !forceRefresh) {
-      console.info(`[SFTP ${instanceSessionId}] 使用文件树缓存加载目录: ${path}`);
+      log.info(`[SFTP ${instanceSessionId}] 使用文件树缓存加载目录: ${path}`);
       isLoading.value = false;
       currentPathRef.value = path;
       return;
     }
 
     if (forceRefresh && targetNode) {
-      console.info(`[SFTP ${instanceSessionId}] 强制刷新，重置节点 ${path} 的 childrenLoaded 状态`);
+      log.info(`[SFTP ${instanceSessionId}] 强制刷新，重置节点 ${path} 的 childrenLoaded 状态`);
       targetNode.childrenLoaded = false;
     }
 
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
       isLoading.value = false;
-      console.warn(`[SFTP ${instanceSessionId}] 尝试加载目录 ${path} 但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试加载目录 ${path} 但 SFTP 未就绪。`);
       return;
     }
     if (isLoading.value) {
-      console.warn(`[SFTP ${instanceSessionId}] 尝试加载目录 ${path} 但已在加载中。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试加载目录 ${path} 但已在加载中。`);
       return;
     }
 
-    console.info(`[SFTP ${instanceSessionId}] ${forceRefresh ? '强制' : ''}加载目录: ${path}`);
+    log.info(`[SFTP ${instanceSessionId}] ${forceRefresh ? '强制' : ''}加载目录: ${path}`);
     isLoading.value = true;
     const requestId = generateRequestId();
     loadingRequestId.value = requestId;

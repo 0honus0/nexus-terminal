@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 // 定义代理信息接口 (前端使用，不含密码)
 export interface ProxyInfo {
@@ -37,7 +38,7 @@ export const useProxiesStore = defineStore('proxies', {
         const response = await apiClient.get<ProxyInfo[]>('/proxies');
         this.proxies = response.data;
       } catch (err: unknown) {
-        console.error('获取代理列表失败:', err);
+        log.error('获取代理列表失败:', err);
         this.error = extractErrorMessage(err, '获取代理列表时发生未知错误。');
         // 401 未授权由 apiClient 拦截器统一处理
       } finally {
@@ -64,7 +65,7 @@ export const useProxiesStore = defineStore('proxies', {
         this.proxies.unshift(response.data.proxy);
         return true;
       } catch (err: unknown) {
-        console.error('添加代理失败:', err);
+        log.error('添加代理失败:', err);
         this.error = extractErrorMessage(err, '添加代理时发生未知错误。');
         // 401/409 错误：401 由拦截器处理，409 冲突已记录在 error
         return false;
@@ -93,7 +94,7 @@ export const useProxiesStore = defineStore('proxies', {
         }
         return true;
       } catch (err: unknown) {
-        console.error(`更新代理 ${proxyId} 失败:`, err);
+        log.error(`更新代理 ${proxyId} 失败:`, err);
         this.error = extractErrorMessage(err, '更新代理时发生未知错误。');
         // 401/409 错误：401 由拦截器处理，409 冲突已记录在 error
         return false;
@@ -111,7 +112,7 @@ export const useProxiesStore = defineStore('proxies', {
         this.proxies = this.proxies.filter((p) => p.id !== proxyId);
         return true;
       } catch (err: unknown) {
-        console.error(`删除代理 ${proxyId} 失败:`, err);
+        log.error(`删除代理 ${proxyId} 失败:`, err);
         this.error = extractErrorMessage(err, '删除代理时发生未知错误。');
         // 401 由拦截器统一处理
         return false;

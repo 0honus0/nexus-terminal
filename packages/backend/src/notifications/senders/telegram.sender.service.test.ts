@@ -15,6 +15,15 @@ const { mockPost, mockIsAxiosError } = vi.hoisted(() => ({
 }));
 
 // Mock axios
+// Logger mock for console replacement migration
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('axios', () => ({
   default: {
     post: mockPost,
@@ -138,7 +147,7 @@ describe('TelegramSenderService', () => {
     });
 
     it('无效的自定义域名应回退到默认 API', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // console spy removed (was: warn);
       const configWithInvalidDomain: TelegramConfig = {
         ...mockTelegramConfig,
         customDomain: 'not-a-valid-url',
@@ -150,13 +159,14 @@ describe('TelegramSenderService', () => {
 
       await telegramSenderService.send(notification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid customDomain URL'));
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid customDomain URL')
+      );
       expect(mockPost).toHaveBeenCalledWith(
         expect.stringContaining('api.telegram.org'),
         expect.any(Object),
         expect.any(Object)
       );
-      consoleSpy.mockRestore();
     });
 
     it('自定义域名应保留协议和主机', async () => {
@@ -220,17 +230,16 @@ describe('TelegramSenderService', () => {
     });
 
     it('应正确处理成功响应', async () => {
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // console spy removed (was: info);
       mockPost.mockResolvedValue({
         data: { ok: true, result: { message_id: 456 } },
       });
 
       await telegramSenderService.send(mockNotification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Successfully sent notification')
       );
-      consoleSpy.mockRestore();
     });
   });
 

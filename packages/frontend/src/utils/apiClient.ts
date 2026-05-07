@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { handleUnauthorizedLogout } from './authRuntimeBridge';
+import { log } from '@/utils/log';
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const AI_REQUEST_TIMEOUT_MS = 60_000;
@@ -22,9 +23,7 @@ const apiClient = axios.create({
 // 请求拦截器 (可选，例如添加认证 Token)
 apiClient.interceptors.request.use(
   (config) => {
-    if (import.meta.env.DEV) {
-      console.info(`[apiClient Debug] ${config.method?.toUpperCase()} ${config.url}`);
-    }
+    log.debug(`[apiClient Debug] ${config.method?.toUpperCase()} ${config.url}`);
     // 可以在这里添加逻辑，比如从 store 获取 token 并添加到请求头
     // const authStore = useAuthStore();
     // if (authStore.token) {
@@ -34,7 +33,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     // 处理请求错误
-    console.error('Request error:', error);
+    log.error('Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -84,9 +83,9 @@ apiClient.interceptors.response.use(
         data: bodySnippet,
       };
       if (isUpstreamUnavailableStatus) {
-        console.warn('[apiClient] Response warning:', responseErrorPayload);
+        log.warn('[apiClient] Response warning:', responseErrorPayload);
       } else {
-        console.error('[apiClient] Response error:', responseErrorPayload);
+        log.error('[apiClient] Response error:', responseErrorPayload);
       }
 
       // 处理常见的 HTTP 错误状态码
@@ -95,39 +94,39 @@ apiClient.interceptors.response.use(
           if (await handleUnauthorizedLogout()) {
             return Promise.reject(new Error('Unauthorized, logging out.'));
           }
-          console.info('Unauthorized access to protected route.');
+          log.info('Unauthorized access to protected route.');
           break;
         case 403: // 禁止访问
           // 可以显示一个权限不足的提示
-          console.error('Forbidden access.');
+          log.error('Forbidden access.');
           break;
         case 404: // 未找到
-          console.error('Resource not found.');
+          log.error('Resource not found.');
           break;
         case 500: // 服务器内部错误
-          console.error('Internal server error.');
+          log.error('Internal server error.');
           break;
         case 502: // 网关错误
         case 503: // 服务不可用
         case 504: // 网关超时
-          console.warn(
+          log.warn(
             `[apiClient] Upstream service unavailable (${status}) for ${requestMethod} ${requestUrl}`
           );
           break;
         // 可以根据需要添加更多错误状态码的处理
         default:
-          console.error(
+          log.error(
             `[apiClient] Unhandled error status: ${status} (${requestMethod} ${requestUrl})`
           );
       }
     } else if (error.request) {
       // 请求已发出，但没有收到响应 (例如网络问题)
-      console.error(
+      log.error(
         `[apiClient] Network error or no response received: ${requestMethod} ${requestUrl}`
       );
     } else {
       // 发送请求时出了点问题
-      console.error('[apiClient] Error setting up request:', error.message);
+      log.error('[apiClient] Error setting up request:', error.message);
     }
 
     // 将错误继续抛出，以便调用方可以捕获并处理

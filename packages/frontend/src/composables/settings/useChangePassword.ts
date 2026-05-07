@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../../stores/auth.store';
+import { log } from '@/utils/log';
 
 export function useChangePassword() {
   const authStore = useAuthStore();
@@ -36,7 +37,7 @@ export function useChangePassword() {
       newPassword.value = '';
       confirmPassword.value = '';
     } catch (error: unknown) {
-      console.error('修改密码失败:', error);
+      log.error('修改密码失败:', error);
       const errorMessage = error instanceof Error ? error.message : '';
       changePasswordMessage.value = errorMessage || t('settings.changePassword.error.generic');
       changePasswordSuccess.value = false;

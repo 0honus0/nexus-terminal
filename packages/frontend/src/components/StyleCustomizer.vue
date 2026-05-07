@@ -6,6 +6,7 @@ import StyleCustomizerUiTab from './style-customizer/StyleCustomizerUiTab.vue';
 import StyleCustomizerTerminalTab from './style-customizer/StyleCustomizerTerminalTab.vue';
 import StyleCustomizerBackgroundTab from './style-customizer/StyleCustomizerBackgroundTab.vue';
 import StyleCustomizerOtherTab from './style-customizer/StyleCustomizerOtherTab.vue';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const uiTabRef = ref<InstanceType<typeof StyleCustomizerUiTab> | null>(null);
@@ -55,7 +56,7 @@ onMounted(() => {
   const rootEl = modalRootRef.value;
 
   if (!headerElement || !dialogEl || !rootEl) {
-    // console.warn("Draggable elements not found for StyleCustomizer modal."); // 用于调试的可选日志
+    // log.warn("Draggable elements not found for StyleCustomizer modal."); // 用于调试的可选日志
     return;
   }
 

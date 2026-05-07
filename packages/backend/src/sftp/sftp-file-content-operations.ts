@@ -3,6 +3,7 @@ import * as iconv from 'iconv-lite';
 import type { ClientState } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
 import { detectAndDecodeSftpFileContent } from './sftp-encoding.utils';
+import { logger } from '../utils/logger';
 
 interface FileItemPayload {
   filename: string;
@@ -46,7 +47,7 @@ export const executeReadFileContentOperation = async (
   requestedEncoding?: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readFile (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readFile (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:readfile:error',
@@ -59,7 +60,7 @@ export const executeReadFileContentOperation = async (
   }
 
   const { sftp } = state;
-  console.debug(
+  logger.debug(
     `[SFTP ${sessionId}] Received readFile request for ${path} (ID: ${requestId}, Requested Encoding: ${requestedEncoding ?? 'auto'})`
   );
 
@@ -77,7 +78,7 @@ export const executeReadFileContentOperation = async (
         return;
       }
       errorOccurred = true;
-      console.error(`[SFTP ${sessionId}] readFile ${path} stream error (ID: ${requestId}):`, err);
+      logger.error(`[SFTP ${sessionId}] readFile ${path} stream error (ID: ${requestId}):`, err);
       state.ws.send(
         JSON.stringify({
           type: 'sftp:readfile:error',
@@ -93,7 +94,7 @@ export const executeReadFileContentOperation = async (
         return;
       }
 
-      console.debug(
+      logger.debug(
         `[SFTP ${sessionId}] readFile ${path} success, size: ${fileData.length} bytes (ID: ${requestId}). Processing content...`
       );
       let encodingUsed = 'utf-8';
@@ -106,11 +107,11 @@ export const executeReadFileContentOperation = async (
           requestId,
         });
         encodingUsed = decodeResult.encodingUsed;
-        console.debug(
+        logger.debug(
           `[SFTP ${sessionId}] Content decoding completed with encoding ${encodingUsed} (ID: ${requestId}).`
         );
       } catch (decodeError: unknown) {
-        console.error(
+        logger.error(
           `[SFTP ${sessionId}] Error detecting/decoding file content for ${path} (ID: ${requestId}):`,
           decodeError
         );
@@ -138,7 +139,7 @@ export const executeReadFileContentOperation = async (
       );
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] readFile ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );
@@ -162,7 +163,7 @@ export const executeWriteFileContentOperation = async (
   encoding?: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 writefile (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 writefile (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:writefile:error',
@@ -176,7 +177,7 @@ export const executeWriteFileContentOperation = async (
 
   const { sftp } = state;
   const targetEncoding = encoding || 'utf-8';
-  console.debug(
+  logger.debug(
     `[SFTP ${sessionId}] Received writefile request for ${path} (ID: ${requestId}, Encoding: ${targetEncoding})`
   );
 
@@ -184,11 +185,11 @@ export const executeWriteFileContentOperation = async (
     let buffer: Buffer;
     try {
       buffer = iconv.encode(data, targetEncoding);
-      console.debug(
+      logger.debug(
         `[SFTP ${sessionId}] Encoded content for ${path} using ${targetEncoding} (Buffer size: ${buffer.length})`
       );
     } catch (encodeError: unknown) {
-      console.error(
+      logger.error(
         `[SFTP ${sessionId}] Failed to encode content for ${path} with encoding ${targetEncoding} (ID: ${requestId}):`,
         encodeError
       );
@@ -215,11 +216,11 @@ export const executeWriteFileContentOperation = async (
         });
       });
       originalMode = fileStats.mode;
-      console.debug(
+      logger.debug(
         `[SFTP ${sessionId}] Retrieved original file mode for ${path}: ${originalMode.toString(8)} (ID: ${requestId})`
       );
     } catch (statError: unknown) {
-      console.warn(
+      logger.warn(
         `[SFTP ${sessionId}] Could not retrieve original file mode for ${path} (ID: ${requestId}):`,
         statError
       );
@@ -234,7 +235,7 @@ export const executeWriteFileContentOperation = async (
         return;
       }
       errorOccurred = true;
-      console.error(`[SFTP ${sessionId}] writefile ${path} stream error (ID: ${requestId}):`, err);
+      logger.error(`[SFTP ${sessionId}] writefile ${path} stream error (ID: ${requestId}):`, err);
       state.ws.send(
         JSON.stringify({
           type: 'sftp:writefile:error',
@@ -251,14 +252,14 @@ export const executeWriteFileContentOperation = async (
       }
 
       if (originalMode !== undefined) {
-        console.debug(
+        logger.debug(
           `[SFTP ${sessionId}] Set file mode for ${path} during creation: ${originalMode.toString(8)} (ID: ${requestId})`
         );
       }
 
       sftp.lstat(path, (statErr, stats) => {
         if (statErr) {
-          console.error(
+          logger.error(
             `[SFTP ${sessionId}] lstat after writefile ${path} failed (ID: ${requestId}):`,
             statErr
           );
@@ -284,13 +285,13 @@ export const executeWriteFileContentOperation = async (
       });
     });
 
-    console.debug(
+    logger.debug(
       `[SFTP ${sessionId}] Writing ${buffer.length} bytes to ${path} (ID: ${requestId})`
     );
     writeStream.end(buffer);
-    console.debug(`[SFTP ${sessionId}] writefile ${path} end() called (ID: ${requestId})`);
+    logger.debug(`[SFTP ${sessionId}] writefile ${path} end() called (ID: ${requestId})`);
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] writefile ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );

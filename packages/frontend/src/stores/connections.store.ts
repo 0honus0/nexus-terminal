@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient';
 import { cacheManager, CACHE_KEYS, CACHE_CONFIG } from '../utils/cacheManager';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 // 定义连接信息接口 (与后端对应，不含敏感信息)
 export interface ConnectionInfo {
@@ -78,10 +79,10 @@ export const useConnectionsStore = defineStore('connections', {
         }
         this.error = null;
       } catch (err: unknown) {
-        console.error('[ConnectionsStore] 获取连接列表失败:', err);
+        log.error('[ConnectionsStore] 获取连接列表失败:', err);
         this.error = extractErrorMessage(err, '获取连接列表时发生未知错误。');
         if (isUnauthorizedError(err)) {
-          console.warn('[ConnectionsStore] 未授权，需要登录才能获取连接列表。');
+          log.warn('[ConnectionsStore] 未授权，需要登录才能获取连接列表。');
         }
       } finally {
         this.isLoading = false;
@@ -120,10 +121,10 @@ export const useConnectionsStore = defineStore('connections', {
         await this.fetchConnections(); // 推荐重新获取以保证数据一致性
         return true; // 表示成功
       } catch (err: unknown) {
-        console.error('添加连接失败:', err);
+        log.error('添加连接失败:', err);
         this.error = extractErrorMessage(err, '添加连接时发生未知错误。');
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能添加连接。');
+          log.warn('未授权，需要登录才能添加连接。');
         }
         return false; // 表示失败
       } finally {
@@ -179,10 +180,10 @@ export const useConnectionsStore = defineStore('connections', {
         }
         return true; // 表示成功
       } catch (err: unknown) {
-        console.error(`更新连接 ${connectionId} 失败:`, err);
+        log.error(`更新连接 ${connectionId} 失败:`, err);
         this.error = extractErrorMessage(err, '更新连接时发生未知错误。');
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能更新连接。');
+          log.warn('未授权，需要登录才能更新连接。');
         }
         return false; // 表示失败
       } finally {
@@ -206,10 +207,10 @@ export const useConnectionsStore = defineStore('connections', {
         // await this.fetchConnections();
         return true; // 表示成功
       } catch (err: unknown) {
-        console.error(`删除连接 ${connectionId} 失败:`, err);
+        log.error(`删除连接 ${connectionId} 失败:`, err);
         this.error = extractErrorMessage(err, '删除连接时发生未知错误。');
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能删除连接。');
+          log.warn('未授权，需要登录才能删除连接。');
         }
         // 即使删除失败，也可能需要通知用户
         return false; // 表示失败
@@ -221,7 +222,7 @@ export const useConnectionsStore = defineStore('connections', {
     // 批量删除连接
     async deleteBatchConnections(connectionIds: number[]): Promise<boolean> {
       if (!connectionIds || connectionIds.length === 0) {
-        console.warn('[ConnectionsStore] deleteBatchConnections called with no IDs.');
+        log.warn('[ConnectionsStore] deleteBatchConnections called with no IDs.');
         return true; // 没有要删除的，视为成功
       }
       this.isLoading = true; // 标记整个批量删除操作正在进行
@@ -247,7 +248,7 @@ export const useConnectionsStore = defineStore('connections', {
           allSucceeded = false;
           const errorMessage = extractErrorMessage(error, '未知错误');
           individualErrors.push(`调用删除连接 ID ${id} 时发生意外错误: ${errorMessage}`);
-          console.error(
+          log.error(
             `[ConnectionsStore] Unexpected error calling deleteConnection for ID ${id}`,
             error
           );
@@ -256,9 +257,7 @@ export const useConnectionsStore = defineStore('connections', {
 
       if (!allSucceeded) {
         this.error = `批量删除操作中部分连接未能成功删除。详情: ${individualErrors.join('; ')}`;
-        console.error(
-          '[ConnectionsStore] Batch delete operation completed with one or more failures.'
-        );
+        log.error('[ConnectionsStore] Batch delete operation completed with one or more failures.');
       } else {
         // 如果所有操作都成功，确保 this.error 为 null
         this.error = null;
@@ -288,9 +287,9 @@ export const useConnectionsStore = defineStore('connections', {
           latency: response.data.latency,
         };
       } catch (err: unknown) {
-        console.error(`测试连接 ${connectionId} 失败:`, err);
+        log.error(`测试连接 ${connectionId} 失败:`, err);
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能测试连接。');
+          log.warn('未授权，需要登录才能测试连接。');
         }
         return { success: false, message: extractErrorMessage(err, '测试连接时发生未知错误。') };
       } finally {
@@ -313,10 +312,10 @@ export const useConnectionsStore = defineStore('connections', {
         await this.fetchConnections(); // 重新获取以保证数据一致性
         return true; // 表示成功
       } catch (err: unknown) {
-        console.error(`克隆连接 ${originalId} 失败:`, err);
+        log.error(`克隆连接 ${originalId} 失败:`, err);
         this.error = extractErrorMessage(err, '克隆连接时发生未知错误。');
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能克隆连接。');
+          log.warn('未授权，需要登录才能克隆连接。');
         }
         return false; // 表示失败
       } finally {
@@ -342,10 +341,10 @@ export const useConnectionsStore = defineStore('connections', {
         await this.fetchConnections();
         return true; // 表示成功
       } catch (err: unknown) {
-        console.error(`为连接 ${connectionIds.join(', ')} 添加标签 ${tagId} 失败:`, err);
+        log.error(`为连接 ${connectionIds.join(', ')} 添加标签 ${tagId} 失败:`, err);
         this.error = extractErrorMessage(err, '为连接添加标签时发生未知错误。');
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能为连接添加标签。');
+          log.warn('未授权，需要登录才能为连接添加标签。');
         }
         return false; // 表示失败
       } finally {
@@ -364,7 +363,7 @@ export const useConnectionsStore = defineStore('connections', {
         await this.fetchConnections();
         return true;
       } catch (err: unknown) {
-        console.error(`更新连接 ${connectionId} 的标签失败:`, err);
+        log.error(`更新连接 ${connectionId} 的标签失败:`, err);
         this.error = extractErrorMessage(err, '更新连接标签时发生未知错误。');
         return false;
       } finally {
@@ -397,10 +396,10 @@ export const useConnectionsStore = defineStore('connections', {
         const response = await apiClient.post<{ token: string }>(apiUrl);
         return response.data.token;
       } catch (err: unknown) {
-        console.error(`获取 VNC 会话令牌失败 (连接 ID: ${connectionId}):`, err);
+        log.error(`获取 VNC 会话令牌失败 (连接 ID: ${connectionId}):`, err);
         // this.error = err.response?.data?.message || err.message || '获取 VNC 会话令牌时发生未知错误。';
         if (isUnauthorizedError(err)) {
-          console.warn('未授权，需要登录才能获取 VNC 会话令牌。');
+          log.warn('未授权，需要登录才能获取 VNC 会话令牌。');
         }
         // 对于这种一次性获取数据的操作，错误通常由调用方处理并显示给用户
         throw err; // 重新抛出错误，让调用方处理

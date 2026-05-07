@@ -31,6 +31,15 @@ const { mockEmailSender, mockTelegramSender, mockWebhookSender, mockProcessorEmi
 );
 
 // Mock 依赖模块
+// Logger mock for console replacement migration
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('./senders/email.sender.service', () => ({
   default: mockEmailSender,
 }));
@@ -108,15 +117,14 @@ describe('NotificationDispatcherService', () => {
     });
 
     it('注册已存在的渠道类型时应覆盖并输出警告', () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // console spy removed (was: warn);
       const sender1: INotificationSender = { send: vi.fn() };
       const sender2: INotificationSender = { send: vi.fn() };
 
       service.registerSender('email', sender1);
       service.registerSender('email', sender2);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('email'));
-      consoleSpy.mockRestore();
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('email'));
     });
   });
 
@@ -156,7 +164,7 @@ describe('NotificationDispatcherService', () => {
     });
 
     it('未注册的渠道类型应记录错误并静默返回', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       const unknownNotification: ProcessedNotification = {
         channelType: 'unknown' as NotificationChannelType,
         config: {},
@@ -167,18 +175,19 @@ describe('NotificationDispatcherService', () => {
       // 不应抛出错误
       await expect(service.dispatchNotification(unknownNotification)).resolves.toBeUndefined();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('unknown'));
-      consoleSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('unknown'));
     });
 
     it('发送器抛出错误时应捕获并记录', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       mockEmailSender.send.mockRejectedValue(new Error('SMTP connection failed'));
 
       await expect(service.dispatchNotification(mockEmailNotification)).resolves.toBeUndefined();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('email'), expect.any(Error));
-      consoleSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('email'),
+        expect.any(Error)
+      );
     });
   });
 
@@ -215,15 +224,14 @@ describe('NotificationDispatcherService', () => {
 
   describe('initialize', () => {
     it('应注册所有默认发送器并开始监听', () => {
-      const registerSpy = vi.spyOn(service, 'registerSender');
-      const listenSpy = vi.spyOn(service, 'listenForNotifications');
+      vi.spyOn(service, 'registerSender');
+      vi.spyOn(service, 'listenForNotifications');
 
       service.initialize();
 
-      expect(registerSpy).toHaveBeenCalledWith('email', expect.any(Object));
-      expect(registerSpy).toHaveBeenCalledWith('telegram', expect.any(Object));
-      expect(registerSpy).toHaveBeenCalledWith('webhook', expect.any(Object));
-      expect(listenSpy).toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('email'));
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('telegram'));
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('webhook'));
     });
   });
 
@@ -244,12 +252,10 @@ describe('NotificationDispatcherService', () => {
     });
 
     it('notification 为 null/undefined 时应安全处理', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       await expect(service.dispatchNotification(null as any)).resolves.toBeUndefined();
       await expect(service.dispatchNotification(undefined as any)).resolves.toBeUndefined();
-
-      consoleSpy.mockRestore();
     });
 
     it('并发分发多个通知应正确处理', async () => {

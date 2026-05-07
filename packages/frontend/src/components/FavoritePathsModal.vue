@@ -6,6 +6,7 @@ import { useSessionStore } from '../stores/session.store';
 import AddEditFavoritePathForm from './AddEditFavoritePathForm.vue';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { log } from '@/utils/log';
 
 const PADDING = 8; // px
 
@@ -63,7 +64,7 @@ const handleItemClick = async (pathItem: FavoritePathItem) => {
     // Mark path as used before navigating
     await favoritePathsStore.markPathAsUsed(pathItem.id, t);
   } catch (error: unknown) {
-    console.error('Failed to mark path as used:', error);
+    log.error('Failed to mark path as used:', error);
     // Optionally, inform the user about the failure, though navigation will still proceed.
   }
   emit('navigateToPath', pathItem.path);
@@ -88,7 +89,7 @@ const handleDelete = async (pathItem: FavoritePathItem) => {
     try {
       await favoritePathsStore.deleteFavoritePath(pathItem.id, t);
     } catch (error: unknown) {
-      console.error('Failed to delete favorite path from modal:', error);
+      log.error('Failed to delete favorite path from modal:', error);
     }
   }
 };
@@ -101,10 +102,10 @@ const handleSendToTerminal = (pathItem: FavoritePathItem) => {
     try {
       activeSession.terminalManager.sendData(command);
     } catch (error: unknown) {
-      console.error('[FavoritePathsModal] Failed to send command to active terminal:', error);
+      log.error('[FavoritePathsModal] Failed to send command to active terminal:', error);
     }
   } else {
-    console.warn(
+    log.warn(
       '[FavoritePathsModal] No active session with a terminal manager found to send path to.'
     );
   }

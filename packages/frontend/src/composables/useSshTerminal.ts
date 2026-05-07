@@ -5,6 +5,7 @@ import type { Terminal } from '@xterm/xterm';
 import type { SearchAddon, ISearchOptions } from '@xterm/addon-search'; // *** 移除 ISearchResult 导入 ***
 import { sessions as globalSessionsRef } from '../stores/session/state'; // +++ 导入全局 sessions state +++
 import type { WebSocketMessage } from '../types/websocket.types';
+import { log } from '@/utils/log';
 
 // 定义与 WebSocket 相关的依赖接口
 export interface SshTerminalDependencies {
@@ -251,7 +252,7 @@ export function createSshTerminalManager(
     searchAddon: SearchAddon | null;
   }) => {
     const { terminal: term, searchAddon: addon } = payload;
-    console.info(
+    log.info(
       `[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。SearchAddon 实例:`,
       addon ? '存在' : '不存在'
     );
@@ -265,17 +266,17 @@ export function createSshTerminalManager(
       currentSessionState.pendingOutput &&
       currentSessionState.pendingOutput.length > 0
     ) {
-      // console.info(`[会话 ${sessionId}][SSH终端模块] 发现 SessionState.pendingOutput，长度: ${currentSessionState.pendingOutput.length}。正在写入...`);
+      // log.info(`[会话 ${sessionId}][SSH终端模块] 发现 SessionState.pendingOutput，长度: ${currentSessionState.pendingOutput.length}。正在写入...`);
       currentSessionState.pendingOutput.forEach((data) => {
         term.write(data);
       });
       currentSessionState.pendingOutput = []; // 清空
-      // console.info(`[会话 ${sessionId}][SSH终端模块] SessionState.pendingOutput 处理完毕。`);
+      // log.info(`[会话 ${sessionId}][SSH终端模块] SessionState.pendingOutput 处理完毕。`);
       // 如果之前因为 pendingOutput 而将 isResuming 保持为 true，现在可以考虑更新
       if (currentSessionState.isResuming) {
         // 检查 isLastChunk 是否已收到 (这部分逻辑在 handleSshOutputCachedChunk 中，这里仅作标记清除)
         // 假设所有缓存块都已处理完毕
-        // console.info(`[会话 ${sessionId}][SSH终端模块] 所有 pendingOutput 已写入，清除 isResuming 标记。`);
+        // log.info(`[会话 ${sessionId}][SSH终端模块] 所有 pendingOutput 已写入，清除 isResuming 标记。`);
         currentSessionState.isResuming = false;
       }
     }
@@ -294,18 +295,18 @@ export function createSshTerminalManager(
   };
 
   const handleTerminalData = (data: string) => {
-    // console.debug(`[会话 ${sessionId}][SSH终端模块] 接收到终端输入:`, data);
+    // log.debug(`[会话 ${sessionId}][SSH终端模块] 接收到终端输入:`, data);
     // 注意：后端期望 payload 直接是字符串
     sendMessage({ type: 'ssh:input', payload: data });
   };
 
   const handleTerminalResize = (dimensions: { cols: number; rows: number }) => {
-    console.info(`[SSH ${sessionId}] handleTerminalResize called with:`, dimensions);
+    log.info(`[SSH ${sessionId}] handleTerminalResize called with:`, dimensions);
     // 只有在连接状态下才发送 resize 命令给后端
     if (isConnected.value) {
       sendMessage({ type: 'ssh:resize', sessionId, payload: dimensions });
     } else {
-      console.info(`[SSH ${sessionId}] WebSocket not connected, skipping ssh:resize.`);
+      log.info(`[SSH ${sessionId}] WebSocket not connected, skipping ssh:resize.`);
     }
   };
 
@@ -333,7 +334,7 @@ export function createSshTerminalManager(
         // 直接使用原始二进制数据作为 Uint8Array 写入终端，避免编码转换问题
         outputData = bytes;
       } catch (error: unknown) {
-        console.error(
+        log.error(
           `[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`,
           error,
           '原始数据:',
@@ -344,7 +345,7 @@ export function createSshTerminalManager(
     }
     // 如果不是 base64 或解码失败，确保它是字符串
     else if (typeof outputData !== 'string') {
-      console.warn(`[会话 ${sessionId}][SSH终端模块] 收到非字符串 ssh:output payload:`, outputData);
+      log.warn(`[会话 ${sessionId}][SSH终端模块] 收到非字符串 ssh:output payload:`, outputData);
       try {
         outputData = JSON.stringify(outputData); // 尝试序列化
       } catch {
@@ -356,8 +357,8 @@ export function createSshTerminalManager(
     // 相关代码已移除
 
     // --- 添加前端日志 ---
-    // console.info(`[会话 ${sessionId}][SSH前端] 收到 ssh:output 原始 payload (解码前):`, payload);
-    // console.info(`[会话 ${sessionId}][SSH前端] 解码后的数据 (尝试写入):`, outputData);
+    // log.info(`[会话 ${sessionId}][SSH前端] 收到 ssh:output 原始 payload (解码前):`, payload);
+    // log.info(`[会话 ${sessionId}][SSH前端] 解码后的数据 (尝试写入):`, outputData);
     // --------------------
 
     // +++ 优化：区分小数据包（用户输入回显）和大数据包（服务器输出） +++
@@ -397,7 +398,7 @@ export function createSshTerminalManager(
       return; // 忽略不属于此会话的消息
     }
 
-    console.info(
+    log.info(
       `[会话 ${sessionId}][SSH终端模块] SSH 会话已连接。 Payload:`,
       payload,
       'Full message:',
@@ -414,26 +415,26 @@ export function createSshTerminalManager(
       };
       // 检查尺寸是否有效
       if (currentDimensions.cols > 0 && currentDimensions.rows > 0) {
-        console.info(
+        log.info(
           `[会话 ${sessionId}][SSH终端模块] SSH 连接成功，主动发送初始尺寸:`,
           currentDimensions
         );
         sendMessage({ type: 'ssh:resize', sessionId, payload: currentDimensions });
       } else {
-        console.warn(
+        log.warn(
           `[会话 ${sessionId}][SSH终端模块] SSH 连接成功，但获取到的初始尺寸无效，跳过发送 resize:`,
           currentDimensions
         );
       }
     } else {
-      console.warn(
+      log.warn(
         `[会话 ${sessionId}][SSH终端模块] SSH 连接成功，但 terminalInstance 不可用，无法发送初始 resize。`
       );
     }
 
     // 清空可能存在的旧缓冲（虽然理论上此时应该已经 ready 了）
     if (terminalOutputBuffer.value.length > 0) {
-      console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接时仍有缓冲数据，正在写入...`);
+      log.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接时仍有缓冲数据，正在写入...`);
       terminalOutputBuffer.value.forEach((data) => terminalInstance.value?.write(data));
       terminalOutputBuffer.value = [];
       currentBufferSizeBytes = 0;
@@ -448,7 +449,7 @@ export function createSshTerminalManager(
 
     const reason =
       (typeof payload === 'string' ? payload : null) || t('workspace.terminal.unknownReason'); // 使用 i18n 获取未知原因文本
-    console.info(`[会话 ${sessionId}][SSH终端模块] SSH 会话已断开:`, reason);
+    log.info(`[会话 ${sessionId}][SSH终端模块] SSH 会话已断开:`, reason);
     isSshConnected.value = false; // 更新状态
     terminalInstance.value?.writeln(
       `\r\n\x1b[31m${getTerminalText('disconnectMsg', { reason })}\x1b[0m`
@@ -464,7 +465,7 @@ export function createSshTerminalManager(
 
     const errorMsg =
       (typeof payload === 'string' ? payload : null) || t('workspace.terminal.unknownSshError'); // 使用 i18n
-    console.error(`[会话 ${sessionId}][SSH终端模块] SSH 错误:`, errorMsg);
+    log.error(`[会话 ${sessionId}][SSH终端模块] SSH 错误:`, errorMsg);
     isSshConnected.value = false; // 更新状态
     terminalInstance.value?.writeln(
       `\r\n\x1b[31m${getTerminalText('genericErrorMsg', { message: errorMsg })}\x1b[0m`
@@ -476,14 +477,14 @@ export function createSshTerminalManager(
 
     // 兼容后端两种 payload 格式：纯字符串 或 { key, params } 结构化对象
     if (typeof payload === 'string') {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, payload);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, payload);
     } else if (typeof payload === 'object' && payload !== null) {
       const payloadObj = payload as Record<string, unknown>;
       const statusKey = payloadObj.key || 'unknown';
       const statusParams = payloadObj.params || {};
-      console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, statusKey, statusParams);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, statusKey, statusParams);
     } else {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, 'unknown');
+      log.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, 'unknown');
     }
   };
 
@@ -494,7 +495,7 @@ export function createSshTerminalManager(
     }
 
     const infoText = typeof payload === 'string' ? payload : String(payload ?? '');
-    console.info(`[会话 ${sessionId}][SSH终端模块] 收到后端信息:`, payload);
+    log.info(`[会话 ${sessionId}][SSH终端模块] 收到后端信息:`, payload);
     terminalInstance.value?.writeln(
       `\r\n\x1b[34m${getTerminalText('infoPrefix')} ${infoText}\x1b[0m`
     );
@@ -509,7 +510,7 @@ export function createSshTerminalManager(
     // 通用错误也可能需要显示在终端
     const errorMsg =
       (typeof payload === 'string' ? payload : null) || t('workspace.terminal.unknownGenericError'); // 使用 i18n
-    console.error(`[会话 ${sessionId}][SSH终端模块] 收到后端通用错误:`, errorMsg);
+    log.error(`[会话 ${sessionId}][SSH终端模块] 收到后端通用错误:`, errorMsg);
     terminalInstance.value?.writeln(
       `\r\n\x1b[31m${getTerminalText('errorPrefix')} ${errorMsg}\x1b[0m`
     );
@@ -526,11 +527,11 @@ export function createSshTerminalManager(
     unregisterHandlers.push(onMessage('ssh:status', handleSshStatus));
     unregisterHandlers.push(onMessage('info', handleInfoMessage));
     unregisterHandlers.push(onMessage('error', handleErrorMessage)); // 也处理通用错误
-    console.info(`[会话 ${sessionId}][SSH终端模块] 已注册 SSH 相关消息处理器。`);
+    log.info(`[会话 ${sessionId}][SSH终端模块] 已注册 SSH 相关消息处理器。`);
   };
 
   const unregisterAllSshHandlers = () => {
-    console.info(`[会话 ${sessionId}][SSH终端模块] 注销 SSH 相关消息处理器...`);
+    log.info(`[会话 ${sessionId}][SSH终端模块] 注销 SSH 相关消息处理器...`);
     unregisterHandlers.forEach((unregister) => unregister?.());
     unregisterHandlers.length = 0; // 清空数组
   };
@@ -543,7 +544,7 @@ export function createSshTerminalManager(
     unregisterAllSshHandlers();
     // terminalInstance.value?.dispose(); // 终端实例的销毁由 TerminalComponent 负责
     terminalInstance.value = null;
-    console.info(`[会话 ${sessionId}][SSH终端模块] 已清理。`);
+    log.info(`[会话 ${sessionId}][SSH终端模块] 已清理。`);
   };
 
   /**
@@ -551,7 +552,7 @@ export function createSshTerminalManager(
    * @param data 要发送的字符串数据
    */
   const sendData = (data: string) => {
-    // console.debug(`[会话 ${sessionId}][SSH终端模块] 直接发送数据:`, data);
+    // log.debug(`[会话 ${sessionId}][SSH终端模块] 直接发送数据:`, data);
     // 注意：后端期望 payload 直接是字符串
     sendMessage({ type: 'ssh:input', payload: data });
   };
@@ -562,35 +563,35 @@ export function createSshTerminalManager(
 
   const searchNext = (term: string, options?: ISearchOptions): boolean => {
     if (searchAddon.value) {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 执行 searchNext: "${term}"`);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 执行 searchNext: "${term}"`);
       const found = searchAddon.value.findNext(term, options);
       // Removed manual count and state update
       return found;
     }
-    console.warn(`[会话 ${sessionId}][SSH终端模块] searchNext 调用失败，searchAddon 不可用。`);
+    log.warn(`[会话 ${sessionId}][SSH终端模块] searchNext 调用失败，searchAddon 不可用。`);
     // Removed state reset on failure
     return false;
   };
 
   const searchPrevious = (term: string, options?: ISearchOptions): boolean => {
     if (searchAddon.value) {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 执行 searchPrevious: "${term}"`);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 执行 searchPrevious: "${term}"`);
       const found = searchAddon.value.findPrevious(term, options);
       // Removed manual count and state update
       return found;
     }
-    console.warn(`[会话 ${sessionId}][SSH终端模块] searchPrevious 调用失败，searchAddon 不可用。`);
+    log.warn(`[会话 ${sessionId}][SSH终端模块] searchPrevious 调用失败，searchAddon 不可用。`);
     // Removed state reset on failure
     return false;
   };
 
   const clearTerminalSearch = () => {
     if (searchAddon.value) {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 清除搜索高亮。`);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 清除搜索高亮。`);
       searchAddon.value.clearDecorations();
     }
     // Removed state reset
-    console.info(`[会话 ${sessionId}][SSH终端模块] 搜索高亮已清除 (状态不再管理)。`);
+    log.info(`[会话 ${sessionId}][SSH终端模块] 搜索高亮已清除 (状态不再管理)。`);
   };
 
   // 返回工厂实例
@@ -613,23 +614,23 @@ export function createSshTerminalManager(
 
 // 保留兼容旧代码的函数（将在完全迁移后移除）
 export function useSshTerminal(_t: (key: string) => string) {
-  console.warn(
+  log.warn(
     '⚠️ 使用已弃用的 useSshTerminal() 全局单例。请迁移到 createSshTerminalManager() 工厂函数。'
   );
 
   const terminalInstance = ref<Terminal | null>(null);
 
   const handleTerminalReady = (term: Terminal) => {
-    console.info('[SSH终端模块][旧] 终端实例已就绪，但使用了已弃用的单例模式。');
+    log.info('[SSH终端模块][旧] 终端实例已就绪，但使用了已弃用的单例模式。');
     terminalInstance.value = term;
   };
 
   const handleTerminalData = (_data: string) => {
-    console.warn('[SSH终端模块][旧] 收到终端数据，但使用了已弃用的单例模式，无法发送。');
+    log.warn('[SSH终端模块][旧] 收到终端数据，但使用了已弃用的单例模式，无法发送。');
   };
 
   const handleTerminalResize = (_dimensions: { cols: number; rows: number }) => {
-    console.warn('[SSH终端模块][旧] 收到终端大小调整，但使用了已弃用的单例模式，无法发送。');
+    log.warn('[SSH终端模块][旧] 收到终端大小调整，但使用了已弃用的单例模式，无法发送。');
   };
 
   // 返回与旧接口兼容的空函数，以避免错误
@@ -638,8 +639,8 @@ export function useSshTerminal(_t: (key: string) => string) {
     handleTerminalReady,
     handleTerminalData,
     handleTerminalResize,
-    registerSshHandlers: () => console.warn('[SSH终端模块][旧] 调用了已弃用的 registerSshHandlers'),
+    registerSshHandlers: () => log.warn('[SSH终端模块][旧] 调用了已弃用的 registerSshHandlers'),
     unregisterAllSshHandlers: () =>
-      console.warn('[SSH终端模块][旧] 调用了已弃用的 unregisterAllSshHandlers'),
+      log.warn('[SSH终端模块][旧] 调用了已弃用的 unregisterAllSshHandlers'),
   };
 }

@@ -12,6 +12,7 @@ import type {
 import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/websocket.types';
 import type { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import type { TranslateFn } from '../types/i18n.types';
+import { log } from '@/utils/log';
 
 /** 文件操作模块的依赖注入接口 */
 export interface SftpOperationsDeps {
@@ -58,7 +59,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const createDirectory = (newDirName: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试创建目录 ${newDirName} 但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试创建目录 ${newDirName} 但 SFTP 未就绪。`);
       return;
     }
     const newFolderPath = joinPath(currentPathRef.value, newDirName);
@@ -70,7 +71,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const createFile = (newFileName: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试创建文件 ${newFileName} 但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试创建文件 ${newFileName} 但 SFTP 未就绪。`);
       return;
     }
     const newFilePath = joinPath(currentPathRef.value, newFileName);
@@ -86,7 +87,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const deleteItems = (items: FileListItem[]) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试删除项目但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试删除项目但 SFTP 未就绪。`);
       return;
     }
     if (items.length === 0) return;
@@ -102,7 +103,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const renameItem = (item: FileListItem, newName: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试重命名项目 ${item.filename} 但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试重命名项目 ${item.filename} 但 SFTP 未就绪。`);
       return;
     }
     if (!newName || item.filename === newName) return;
@@ -116,7 +117,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const changePermissions = (item: FileListItem, mode: number) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试修改 ${item.filename} 的权限但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试修改 ${item.filename} 的权限但 SFTP 未就绪。`);
       return;
     }
     const targetPath = joinPath(currentPathRef.value, item.filename);
@@ -135,7 +136,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
     return new Promise((resolve, reject) => {
       if (!isSftpReady.value) {
         const errMsg = t('fileManager.errors.sftpNotReady');
-        console.warn(`[SFTP ${instanceSessionId}] 尝试读取文件 ${path} 但 SFTP 未就绪。`);
+        log.warn(`[SFTP ${instanceSessionId}] 尝试读取文件 ${path} 但 SFTP 未就绪。`);
         uiNotificationsStore.showError(errMsg);
         return reject(new Error(errMsg));
       }
@@ -195,7 +196,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
     return new Promise((resolve, reject) => {
       if (!isSftpReady.value) {
         const errMsg = t('fileManager.errors.sftpNotReady');
-        console.warn(`[SFTP ${instanceSessionId}] 尝试写入文件 ${path} 但 SFTP 未就绪。`);
+        log.warn(`[SFTP ${instanceSessionId}] 尝试写入文件 ${path} 但 SFTP 未就绪。`);
         uiNotificationsStore.showError(errMsg);
         return reject(new Error(errMsg));
       }
@@ -253,7 +254,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const copyItems = (sourcePaths: string[], destinationDir: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试复制项目但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试复制项目但 SFTP 未就绪。`);
       return;
     }
     if (sourcePaths.length === 0) return;
@@ -263,7 +264,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
       requestId,
       payload: { sources: sourcePaths, destination: destinationDir },
     });
-    console.info(
+    log.info(
       `[SFTP ${instanceSessionId}] 发送 sftp:copy 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
     );
   };
@@ -272,7 +273,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
   const moveItems = (sourcePaths: string[], destinationDir: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
-      console.warn(`[SFTP ${instanceSessionId}] 尝试移动项目但 SFTP 未就绪。`);
+      log.warn(`[SFTP ${instanceSessionId}] 尝试移动项目但 SFTP 未就绪。`);
       return;
     }
     if (sourcePaths.length === 0) return;
@@ -282,7 +283,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
       requestId,
       payload: { sources: sourcePaths, destination: destinationDir },
     });
-    console.info(
+    log.info(
       `[SFTP ${instanceSessionId}] 发送 sftp:move 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`
     );
   };
@@ -296,7 +297,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
       if (!isSftpReady.value) {
         const errMsg = t('fileManager.errors.sftpNotReady');
         uiNotificationsStore.showError(errMsg);
-        console.warn(`[SFTP ${instanceSessionId}] 尝试压缩项目但 SFTP 未就绪。`);
+        log.warn(`[SFTP ${instanceSessionId}] 尝试压缩项目但 SFTP 未就绪。`);
         return reject(new Error(errMsg));
       }
       const sourcePaths = items.map((item) => joinPath(currentPathRef.value, item.filename));
@@ -365,7 +366,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
         }
       );
 
-      console.info(
+      log.info(
         `[SFTP ${instanceSessionId}] 发送 sftp:compress 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationPath}, Format: ${format}`
       );
       sendMessage({
@@ -382,7 +383,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
       if (!isSftpReady.value) {
         const errMsg = t('fileManager.errors.sftpNotReady');
         uiNotificationsStore.showError(errMsg);
-        console.warn(`[SFTP ${instanceSessionId}] 尝试解压项目 ${item.filename} 但 SFTP 未就绪。`);
+        log.warn(`[SFTP ${instanceSessionId}] 尝试解压项目 ${item.filename} 但 SFTP 未就绪。`);
         return reject(new Error(errMsg));
       }
       const sourcePath = joinPath(currentPathRef.value, item.filename);
@@ -436,7 +437,7 @@ export function createSftpOperations(deps: SftpOperationsDeps) {
         }
       );
 
-      console.info(
+      log.info(
         `[SFTP ${instanceSessionId}] 发送 sftp:decompress 请求 (ID: ${requestId}) Source: ${sourcePath}, Dest: ${destinationDir}`
       );
       sendMessage({

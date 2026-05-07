@@ -21,6 +21,7 @@ import {
   type DockerManagerDependencies,
 } from '../../../composables/useDockerManager';
 import { workspaceEmitter } from '../../../composables/workspaceEvents';
+import { log } from '@/utils/log';
 
 // --- 辅助函数 (特定于此模块的 actions) ---
 const findConnectionInfo = (
@@ -52,11 +53,11 @@ export const openNewSession = (
     connInfo = findConnectionInfo(connIdForLog, connectionsStore);
   }
 
-  console.info(
+  log.info(
     `[SessionActions] 请求打开新会话: ${connIdForLog}${existingSessionId ? `, 使用预定义 ID: ${existingSessionId}` : ''}`
   );
   if (!connInfo) {
-    console.error(`[SessionActions] 无法打开新会话：找不到 ID 为 ${connIdForLog} 的连接信息。`);
+    log.error(`[SessionActions] 无法打开新会话：找不到 ID 为 ${connIdForLog} 的连接信息。`);
     showError?.(t('session.errors.connectionNotFound'));
     return;
   }
@@ -130,7 +131,7 @@ export const openNewSession = (
   newSessionsMap.set(newSessionId, newSession);
   sessions.value = newSessionsMap;
   activeSessionId.value = newSessionId;
-  console.info(`[SessionActions] 已创建新会话实例: ${newSessionId} for connection ${dbConnId}`);
+  log.info(`[SessionActions] 已创建新会话实例: ${newSessionId} for connection ${dbConnId}`);
 
   // +++ 在连接前设置 ssh:connected 处理器以更新 sessionId +++
   const originalFrontendSessionIdForHandler = newSessionId; // 仅用于日志与首次兜底查找
@@ -147,7 +148,7 @@ export const openNewSession = (
       const backendSID = connectedPayload.sessionId as string;
       const backendCID = String(connectedPayload.connectionId);
 
-      console.info(
+      log.info(
         `[SessionActions/ssh:connected] 收到消息。前端初始SID: ${originalFrontendSessionIdForHandler}, 后端SID: ${backendSID}, 后端CID: ${backendCID}`
       );
 
@@ -173,21 +174,21 @@ export const openNewSession = (
 
       if (sessionToUpdate && currentFrontendSessionId) {
         if (sessionToUpdate.connectionId !== backendCID) {
-          console.warn(
+          log.warn(
             `[SessionActions/ssh:connected] 后端CID ${backendCID} 与会话 ${currentFrontendSessionId} 的期望CID ${sessionToUpdate.connectionId} 不匹配。终止SID更新。`
           );
           return;
         }
 
         if (backendSID && backendSID !== currentFrontendSessionId) {
-          console.info(
+          log.info(
             `[SessionActions/ssh:connected] 会话ID需要更新：从 ${currentFrontendSessionId} 到 ${backendSID}。`
           );
           const currentSessions = new Map(sessions.value);
           const existingSession = currentSessions.get(backendSID);
           if (existingSession && existingSession !== sessionToUpdate) {
             // 防止异常时序下把另一个会话覆盖到同一 SID。
-            console.warn(
+            log.warn(
               `[SessionActions/ssh:connected] 检测到 SID 冲突：目标 SID ${backendSID} 已绑定其他会话，跳过本次重映射。`
             );
             return;
@@ -201,9 +202,9 @@ export const openNewSession = (
 
           if (activeSessionId.value === currentFrontendSessionId) {
             activeSessionId.value = backendSID;
-            console.info(`[SessionActions/ssh:connected] 活动会话ID已更新为 ${backendSID}。`);
+            log.info(`[SessionActions/ssh:connected] 活动会话ID已更新为 ${backendSID}。`);
           }
-          console.info(`[SessionActions/ssh:connected] 会话存储已更新，新键为 ${backendSID}。`);
+          log.info(`[SessionActions/ssh:connected] 会话存储已更新，新键为 ${backendSID}。`);
 
           // 通知 FileManager 等组件 session ID 已变更，触发 SFTP 管理器重新初始化
           workspaceEmitter.emit('session:remapped', {
@@ -211,17 +212,17 @@ export const openNewSession = (
             newSessionId: backendSID,
           });
         } else if (backendSID === currentFrontendSessionId) {
-          console.info(
+          log.info(
             `[SessionActions/ssh:connected] 后端SID ${backendSID} 与前端当前SID匹配。无需重新键控。`
           );
         } else {
-          console.error(
+          log.error(
             `[SessionActions/ssh:connected] 从后端收到的 ssh:connected 消息中缺少有效的sessionId。Payload:`,
             connectedPayload
           );
         }
       } else {
-        console.warn(
+        log.warn(
           `[SessionActions/ssh:connected] 当处理后端SID ${backendSID} 时，未找到与当前 wsManager 绑定的会话（初始SID: ${originalFrontendSessionIdForHandler}）。`
         );
       }
@@ -240,9 +241,9 @@ export const openNewSession = (
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsHostAndPort = window.location.host;
   const wsUrl = `${protocol}//${wsHostAndPort}/ws/`;
-  console.info(`[SessionActions] Generated WebSocket URL: ${wsUrl}`);
+  log.info(`[SessionActions] Generated WebSocket URL: ${wsUrl}`);
   wsManager.connect(wsUrl);
-  console.info(`[SessionActions] 已为会话 ${newSessionId} 启动 WebSocket 连接。`);
+  log.info(`[SessionActions] 已为会话 ${newSessionId} 启动 WebSocket 连接。`);
 
   // 注册 SSH 挂起相关的 WebSocket 消息处理器
   // 确保只对 SSH 类型的连接注册 (虽然 wsManager 本身不包含类型信息，但 openNewSession 通常只为 SSH 调用)
@@ -251,16 +252,13 @@ export const openNewSession = (
     void import('./sshSuspendActions')
       .then(({ registerSshSuspendHandlers }) => {
         registerSshSuspendHandlers(wsManager);
-        console.info(`[SessionActions] 已为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器。`);
+        log.info(`[SessionActions] 已为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器。`);
       })
       .catch((error: unknown) => {
-        console.error(
-          `[SessionActions] 为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器失败:`,
-          error
-        );
+        log.error(`[SessionActions] 为 SSH 会话 ${newSessionId} 注册 SSH 挂起处理器失败:`, error);
       });
   } else if (connInfo) {
-    console.info(
+    log.info(
       `[SessionActions] 会话 ${newSessionId} 类型为 ${connInfo.type}，不注册 SSH 挂起处理器。`
     );
   }
@@ -270,29 +268,29 @@ export const activateSession = (sessionId: string) => {
   if (sessions.value.has(sessionId)) {
     if (activeSessionId.value !== sessionId) {
       activeSessionId.value = sessionId;
-      console.info(`[SessionActions] 已激活会话: ${sessionId}`);
+      log.info(`[SessionActions] 已激活会话: ${sessionId}`);
     } else {
-      console.info(`[SessionActions] 会话 ${sessionId} 已经是活动状态。`);
+      log.info(`[SessionActions] 会话 ${sessionId} 已经是活动状态。`);
     }
   } else {
-    console.warn(`[SessionActions] 尝试激活不存在的会话 ID: ${sessionId}`);
+    log.warn(`[SessionActions] 尝试激活不存在的会话 ID: ${sessionId}`);
   }
 };
 
 export const closeSession = (sessionId: string) => {
-  console.info(`[SessionActions] 请求关闭会话 ID: ${sessionId}`);
+  log.info(`[SessionActions] 请求关闭会话 ID: ${sessionId}`);
   const sessionToClose = sessions.value.get(sessionId);
   if (!sessionToClose) {
-    console.warn(`[SessionActions] 尝试关闭不存在的会话 ID: ${sessionId}`);
+    log.warn(`[SessionActions] 尝试关闭不存在的会话 ID: ${sessionId}`);
     return;
   }
 
   // 1. 调用实例上的清理和断开方法
   sessionToClose.wsManager.disconnect();
-  console.info(`[SessionActions] 已为会话 ${sessionId} 调用 wsManager.disconnect()`);
+  log.info(`[SessionActions] 已为会话 ${sessionId} 调用 wsManager.disconnect()`);
   sessionToClose.sftpManagers.forEach((manager, instanceId) => {
     manager.cleanup();
-    console.info(
+    log.info(
       `[SessionActions] 已为会话 ${sessionId} 的 sftpManager (实例 ${instanceId}) 调用 cleanup()`
     );
   });
@@ -304,23 +302,23 @@ export const closeSession = (sessionId: string) => {
       try {
         dispose();
       } catch (error: unknown) {
-        console.error(`[SessionActions] 清理disposable时出错:`, error);
+        log.error(`[SessionActions] 清理disposable时出错:`, error);
       }
     });
     sessionToClose.disposables = []; // 清空数组
-    console.info(`[SessionActions] 已为会话 ${sessionId} 调用所有disposables。`);
+    log.info(`[SessionActions] 已为会话 ${sessionId} 调用所有disposables。`);
   }
-  console.info(`[SessionActions] 已为会话 ${sessionId} 调用 terminalManager.cleanup()`);
+  log.info(`[SessionActions] 已为会话 ${sessionId} 调用 terminalManager.cleanup()`);
   sessionToClose.statusMonitorManager.cleanup();
-  console.info(`[SessionActions] 已为会话 ${sessionId} 调用 statusMonitorManager.cleanup()`);
+  log.info(`[SessionActions] 已为会话 ${sessionId} 调用 statusMonitorManager.cleanup()`);
   sessionToClose.dockerManager.cleanup();
-  console.info(`[SessionActions] 已为会话 ${sessionId} 调用 dockerManager.cleanup()`);
+  log.info(`[SessionActions] 已为会话 ${sessionId} 调用 dockerManager.cleanup()`);
 
   // 2. 从 Map 中移除会话
   const newSessionsMap = new Map(sessions.value);
   newSessionsMap.delete(sessionId);
   sessions.value = newSessionsMap;
-  console.info(`[SessionActions] 已从 Map 中移除会话: ${sessionId}`);
+  log.info(`[SessionActions] 已从 Map 中移除会话: ${sessionId}`);
 
   // 3. 切换活动标签页
   if (activeSessionId.value === sessionId) {
@@ -328,7 +326,7 @@ export const closeSession = (sessionId: string) => {
     const nextActiveId =
       remainingSessions.length > 0 ? remainingSessions[remainingSessions.length - 1] : null;
     activeSessionId.value = nextActiveId;
-    console.info(`[SessionActions] 关闭活动会话后，切换到: ${nextActiveId}`);
+    log.info(`[SessionActions] 关闭活动会话后，切换到: ${nextActiveId}`);
   }
 };
 
@@ -356,18 +354,16 @@ export const handleConnectRequest = (
       const currentActiveSession = sessions.value.get(activeSessionId.value);
       if (currentActiveSession && currentActiveSession.connectionId === connIdStr) {
         const currentStatus = currentActiveSession.wsManager.connectionStatus.value;
-        console.info(
+        log.info(
           `[SessionActions] 点击的是当前活动会话 ${activeSessionId.value}，状态: ${currentStatus}`
         );
         if (currentStatus === 'disconnected' || currentStatus === 'error') {
           activeAndDisconnected = true;
-          console.info(
-            `[SessionActions] 活动会话 ${activeSessionId.value} 已断开或出错，尝试重连...`
-          );
+          log.info(`[SessionActions] 活动会话 ${activeSessionId.value} 已断开或出错，尝试重连...`);
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           const wsHostAndPort = window.location.host;
           const wsUrl = `${protocol}//${wsHostAndPort}/ws/`;
-          console.info(
+          log.info(
             `[SessionActions handleConnectRequest] Generated WebSocket URL for reconnect: ${wsUrl}`
           );
           currentActiveSession.wsManager.connect(wsUrl);
@@ -378,7 +374,7 @@ export const handleConnectRequest = (
     }
 
     if (!activeAndDisconnected) {
-      console.info(
+      log.info(
         `[SessionActions] 不满足重连条件或点击了其他连接，将打开新会话 for ID: ${connIdStr}`
       );
       openNewSession(connIdStr, { connectionsStore, t });
@@ -394,12 +390,12 @@ export const handleOpenNewSession = (
     t: ReturnType<typeof useI18n>['t'];
   }
 ) => {
-  console.info(`[SessionActions] handleOpenNewSession called for ID: ${connectionId}`);
+  log.info(`[SessionActions] handleOpenNewSession called for ID: ${connectionId}`);
   openNewSession(connectionId, dependencies); // existingSessionId 将为 undefined，因此会生成新的
 };
 
 export const cleanupAllSessions = () => {
-  console.info('[SessionActions] 清理所有会话...');
+  log.info('[SessionActions] 清理所有会话...');
   sessions.value.forEach((_session, sessionId) => {
     closeSession(sessionId);
   });

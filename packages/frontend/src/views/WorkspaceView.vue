@@ -24,6 +24,7 @@ import { useEditorEvents } from '../composables/useEditorEvents';
 import { useWorkspaceSearch } from '../composables/useWorkspaceSearch';
 import { useSessionTabActions } from '../composables/useSessionTabActions';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { log } from '@/utils/log';
 
 // --- Setup ---
 const { t } = useI18n();
@@ -166,9 +167,7 @@ const handleGlobalKeyDown = (event: KeyboardEvent) => {
 
     const nextSessionId = tabs[nextIndex].sessionId;
     if (nextSessionId !== currentId) {
-      console.info(
-        `[WorkspaceView] Alt+${event.key} detected. Switching to session: ${nextSessionId}`
-      );
+      log.info(`[WorkspaceView] Alt+${event.key} detected. Switching to session: ${nextSessionId}`);
       sessionStore.activateSession(nextSessionId);
     }
   }
@@ -208,7 +207,7 @@ const _onFileManagerOpenModal = (payload: { sessionId: string }) =>
 
 // --- 生命周期钩子 ---
 onMounted(() => {
-  console.info('[工作区视图] 组件已挂载。');
+  log.info('[工作区视图] 组件已挂载。');
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleGlobalKeyDown);
   // 确保布局已初始化 (layoutStore 内部会处理)
@@ -254,7 +253,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  console.info('[工作区视图] 组件即将卸载，清理所有会话...');
+  log.info('[工作区视图] 组件即将卸载，清理所有会话...');
   // 移除键盘事件监听器
   window.removeEventListener('keydown', handleGlobalKeyDown);
   sessionStore.cleanupAllSessions();
@@ -306,7 +305,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
 // --- 本地方法 (仅处理 UI 状态) ---
 const handleRequestAddConnection = () => {
-  console.info('[WorkspaceView] handleRequestAddConnection 被调用！');
+  log.info('[WorkspaceView] handleRequestAddConnection 被调用！');
   connectionToEdit.value = null;
   showAddEditForm.value = true;
 };
@@ -322,12 +321,12 @@ const handleFormClose = () => {
 };
 
 const handleConnectionAdded = () => {
-  console.info('[工作区视图] 连接已添加');
+  log.info('[工作区视图] 连接已添加');
   handleFormClose();
 };
 
 const handleConnectionUpdated = () => {
-  console.info('[工作区视图] 连接已更新');
+  log.info('[工作区视图] 连接已更新');
   handleFormClose();
 };
 
@@ -342,15 +341,15 @@ const handleCloseLayoutConfigurator = () => {
 // --- 连接列表操作处理 (保留于主组件) ---
 const handleConnectRequest = (id: number) => {
   const connectionInfo = connectionsStore.connections.find((c) => c.id === id);
-  // console.info(`[WorkspaceView] Received 'connect-request' event for ID: ${id}`); // 保留原始日志或移除
+  // log.info(`[WorkspaceView] Received 'connect-request' event for ID: ${id}`); // 保留原始日志或移除
   if (connectionInfo) {
     sessionStore.handleConnectRequest(connectionInfo);
   } else {
-    console.error(`[WorkspaceView] handleConnectRequest: Connection info not found for ID ${id}.`); // 保留错误日志
+    log.error(`[WorkspaceView] handleConnectRequest: Connection info not found for ID ${id}.`); // 保留错误日志
   }
 };
 const handleOpenNewSession = (id: number) => {
-  console.info(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
+  log.info(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
   sessionStore.handleOpenNewSession(id);
 };
 

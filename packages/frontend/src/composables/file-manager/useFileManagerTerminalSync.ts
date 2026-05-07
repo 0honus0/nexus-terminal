@@ -11,6 +11,7 @@ import type { useSessionStore } from '../../stores/session.store';
 import type { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { SILENT_PWD_PREFIX, parsePathFromSilentOutput } from './fileManagerTerminalPathUtils';
 import { getWsDepsFromSession } from './fileManagerWsUtils';
+import { log } from '@/utils/log';
 
 type SessionStore = ReturnType<typeof useSessionStore>;
 type UiNotificationsStore = ReturnType<typeof useUiNotificationsStore>;
@@ -75,38 +76,38 @@ export function useFileManagerTerminalSync(options: UseFileManagerTerminalSyncOp
     const manager = currentSftpManager.value;
     const wsDeps = getWsDepsFromSession(sessionStore, sessionId.value);
     if (!manager || !wsDeps?.isConnected.value) {
-      console.warn(
+      log.warn(
         `${logPrefix.value} Cannot send CD command: SFTP manager not ready or not connected.`
       );
       return;
     }
     const currentPath = manager.currentPath.value;
     if (!currentPath) {
-      console.warn(`${logPrefix.value} Cannot send CD command: Current path is empty.`);
+      log.warn(`${logPrefix.value} Cannot send CD command: Current path is empty.`);
       return;
     }
 
     const escapedPath = `"${currentPath}"`;
     const command = `cd ${escapedPath}\n`;
 
-    console.info(`${logPrefix.value} Sending command to terminal: ${command.trim()}`);
+    log.info(`${logPrefix.value} Sending command to terminal: ${command.trim()}`);
     try {
       const targetSession = sessionStore.sessions.get(sessionId.value);
       if (!targetSession) {
-        console.error(
+        log.error(
           `${logPrefix.value} Failed to send command: Session ${sessionId.value} not found.`
         );
         return;
       }
       if (!targetSession.terminalManager) {
-        console.error(
+        log.error(
           `${logPrefix.value} Failed to send command: Terminal manager not found for session ${sessionId.value}.`
         );
         return;
       }
       targetSession.terminalManager.sendData(command);
     } catch (error: unknown) {
-      console.error(`${logPrefix.value} Failed to send command to terminal:`, error);
+      log.error(`${logPrefix.value} Failed to send command to terminal:`, error);
     }
   };
 

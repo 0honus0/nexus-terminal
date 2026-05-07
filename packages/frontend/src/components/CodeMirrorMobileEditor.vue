@@ -31,6 +31,7 @@ import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
 import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { highlightSelectionMatches, searchKeymap, openSearchPanel } from '@codemirror/search'; // + Import search functionalities
+import { log } from '@/utils/log';
 
 const props = defineProps({
   modelValue: {
@@ -247,7 +248,7 @@ onMounted(async () => {
 
   if (editorRef.value) {
     const langExt = await getLanguageExtension(props.language);
-    console.info(
+    log.info(
       '[CodeMirrorMobileEditor DEBUG] onMounted - Initial language:',
       props.language,
       'Fetched langExt:',

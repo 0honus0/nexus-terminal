@@ -8,6 +8,7 @@ import type { ConnectionInfo } from '../stores/connections.store';
 import type { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import type { TranslateFn } from '../types/i18n.types';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 /** 测试连接响应结构 */
 interface TestConnectionResponse {
@@ -106,7 +107,7 @@ export function createTestConnection(deps: TestDeps) {
         uiNotificationsStore.showError(errorMessage);
       }
     } catch (error: unknown) {
-      console.error('测试连接失败:', error);
+      log.error('测试连接失败:', error);
       testStatus.value = 'error';
       const errorMessageToShow = extractErrorMessage(error, t('connections.test.errorNetwork'));
       testResult.value = errorMessageToShow;

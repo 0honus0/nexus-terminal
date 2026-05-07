@@ -52,6 +52,7 @@ import {
   buildUserTwoFactorSecretByIdQueryAction,
 } from './auth-controller-sql.utils';
 import { resolveRequestClientIp } from './auth-main-flow.utils';
+import { logger } from '../utils/logger';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
@@ -126,7 +127,7 @@ export const setup2FA = async (req: Request, res: Response, next: NextFunction):
 
     res.status(setupAction.response.statusCode).json(setupAction.response.body);
   } catch (error: unknown) {
-    console.error(`用户 ${userId} 设置 2FA 时出错:`, error);
+    logger.error(`用户 ${userId} 设置 2FA 时出错:`, error);
     next(error);
   }
 };
@@ -228,7 +229,7 @@ export const verifyAndActivate2FA = async (
       return;
     }
   } catch (error: unknown) {
-    console.error(`用户 ${validatedUserId} 验证并激活 2FA 时出错:`, error);
+    logger.error(`用户 ${validatedUserId} 验证并激活 2FA 时出错:`, error);
     next(error);
   }
 };
@@ -284,7 +285,7 @@ export const disable2FA = async (
 
     const changeValidation = resolveTwoFactorMutationChangesValidation({ changes: result.changes });
     if (!changeValidation.ok) {
-      console.error(`禁用 2FA 错误: 更新影响行数为 0 - 用户 ID ${userId}`);
+      logger.error(`禁用 2FA 错误: 更新影响行数为 0 - 用户 ID ${userId}`);
       throw changeValidation.error;
     }
 
@@ -297,7 +298,7 @@ export const disable2FA = async (
 
     res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {
-    console.error(`用户 ${userId} 禁用 2FA 时出错:`, error);
+    logger.error(`用户 ${userId} 禁用 2FA 时出错:`, error);
     next(error);
   }
 };
@@ -337,7 +338,7 @@ export const changePassword = async (
 
     const userValidation = resolvePasswordActionUserValidation({ user });
     if (!userValidation.ok) {
-      console.error(`修改密码错误: 未找到 ID 为 ${userId} 的用户。`);
+      logger.error(`修改密码错误: 未找到 ID 为 ${userId} 的用户。`);
       res.status(userValidation.failure.statusCode).json(userValidation.failure.body);
       return;
     }
@@ -345,7 +346,7 @@ export const changePassword = async (
     const isMatch = await comparePassword(currentPassword, userValidation.user.hashed_password);
     const matchValidation = resolveCurrentPasswordMatchValidation({ isMatch });
     if (!matchValidation.ok) {
-      console.debug(`修改密码尝试失败: 当前密码错误 - 用户 ID ${userId}`);
+      logger.debug(`修改密码尝试失败: 当前密码错误 - 用户 ID ${userId}`);
       res.status(matchValidation.failure.statusCode).json(matchValidation.failure.body);
       return;
     }
@@ -359,7 +360,7 @@ export const changePassword = async (
 
     const changeValidation = resolveMutationChangesValidation({ changes: result.changes });
     if (!changeValidation.ok) {
-      console.error(`修改密码错误: 更新影响行数为 0 - 用户 ID ${userId}`);
+      logger.error(`修改密码错误: 更新影响行数为 0 - 用户 ID ${userId}`);
       throw changeValidation.error;
     }
 
@@ -369,7 +370,7 @@ export const changePassword = async (
     applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
     res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {
-    console.error(`修改用户 ${userId} 密码时发生内部错误:`, error);
+    logger.error(`修改用户 ${userId} 密码时发生内部错误:`, error);
     next(error);
   }
 };

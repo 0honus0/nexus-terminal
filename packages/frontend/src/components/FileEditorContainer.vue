@@ -20,6 +20,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; // +++ 导入外观 Store +++
 import { storeToRefs } from 'pinia';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
@@ -94,7 +95,7 @@ const updateSelectWidth = () => {
     // Set the select width (add extra space for dropdown arrow, adjust as needed)
     const arrowPadding = 25; // Increased padding for arrow and visual spacing
     selectElement.style.width = `${textWidth + arrowPadding}px`;
-    // console.info(`[EditorContainer] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
+    // log.info(`[EditorContainer] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
   });
 };
 
@@ -102,7 +103,7 @@ const updateSelectWidth = () => {
 watch(
   activeTab,
   (newTab) => {
-    // console.info('[EditorContainer] Active tab changed, updating local content.');
+    // log.info('[EditorContainer] Active tab changed, updating local content.');
     localEditorContent.value = newTab?.content ?? '';
     updateSelectWidth(); // Update select width when tab changes
   },
@@ -112,9 +113,9 @@ watch(
 // 移除用于调试的 watch 函数
 // 当本地编辑器内容变化时，通知父组件 (WorkspaceView)
 watch(localEditorContent, (newContent) => {
-  // console.info('[EditorContainer] Local content changed, checking if emit needed.');
+  // log.info('[EditorContainer] Local content changed, checking if emit needed.');
   if (activeTab.value && newContent !== activeTab.value.content) {
-    // console.info(`[EditorContainer] Emitting update:content for tab ${activeTab.value.id}`);
+    // log.info(`[EditorContainer] Emitting update:content for tab ${activeTab.value.id}`);
     // 只有当内容实际改变时才发出事件
     emitWorkspaceEvent('editor:updateContent', { tabId: activeTab.value.id, content: newContent });
     // 注意：isModified 状态应该由 Store 根据 content 和 originalContent 计算
@@ -208,9 +209,7 @@ const handleEncodingChange = (event: Event) => {
   const target = event.target as HTMLSelectElement;
   const newEncoding = target.value;
   if (activeTab.value && newEncoding && newEncoding !== currentSelectedEncoding.value) {
-    console.info(
-      `[EditorContainer] Encoding changed to ${newEncoding} for tab ${activeTab.value.id}`
-    );
+    log.info(`[EditorContainer] Encoding changed to ${newEncoding} for tab ${activeTab.value.id}`);
     emitWorkspaceEvent('editor:changeEncoding', {
       tabId: activeTab.value.id,
       encoding: newEncoding,

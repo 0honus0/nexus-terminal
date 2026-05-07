@@ -44,6 +44,7 @@ const onWorkspaceEvent = useWorkspaceEventSubscriber(); // 获取事件订阅器
 
 // Clean up listener on unmount (though v-if usually handles this)
 import { onUnmounted } from 'vue';
+import { log } from '@/utils/log';
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown);
 });
@@ -51,7 +52,7 @@ onUnmounted(() => {
 onMounted(() => {
   // 监听 terminal:sendCommand 事件以关闭模态框
   onWorkspaceEvent('terminal:sendCommand', () => {
-    console.info('[QuickCommandsModal] Received terminal:sendCommand event, closing modal.');
+    log.info('[QuickCommandsModal] Received terminal:sendCommand event, closing modal.');
     closeModal();
   });
 });

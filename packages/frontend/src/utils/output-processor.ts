@@ -5,6 +5,7 @@
  * - 链接检测
  * - 长输出折叠元数据
  */
+import { log } from '@/utils/log';
 
 export enum OutputType {
   JSON = 'json',
@@ -85,7 +86,7 @@ export class OutputProcessor {
     if (lineCount > 5000) {
       const now = Date.now();
       if (now - this.lastLargeFileWarning > this.warningThrottleMs) {
-        console.warn(`[OutputProcessor] 跳过高亮处理：输出行数 ${lineCount} 超过阈值 5000`);
+        log.warn(`[OutputProcessor] 跳过高亮处理：输出行数 ${lineCount} 超过阈值 5000`);
         this.lastLargeFileWarning = now;
       }
       return {
@@ -132,7 +133,7 @@ export class OutputProcessor {
     if (duration > 100) {
       const now = Date.now();
       if (now - this.lastSlowProcessWarning > this.warningThrottleMs) {
-        console.warn(
+        log.warn(
           `[OutputProcessor] 处理耗时过长：${duration.toFixed(2)}ms（${lineCount} 行，类型：${detectedType}）`
         );
         this.lastSlowProcessWarning = now;
@@ -161,7 +162,7 @@ export class OutputProcessor {
         return OutputType.JSON;
       } catch (error: unknown) {
         // 非合法 JSON，继续后续格式检测
-        console.debug('[输出处理] JSON 格式检测解析失败:', error);
+        log.debug('[输出处理] JSON 格式检测解析失败:', error);
       }
     }
 

@@ -17,6 +17,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { zhCN, enUS, ja } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t, locale } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -120,13 +121,13 @@ onMounted(async () => {
     try {
       await connectionsStore.fetchConnections();
     } catch (error: unknown) {
-      console.error('加载连接列表失败:', error);
+      log.error('加载连接列表失败:', error);
     }
   }
   try {
     await tagsStore.fetchTags();
   } catch (error: unknown) {
-    console.error('加载标签列表失败:', error);
+    log.error('加载标签列表失败:', error);
   }
 });
 
@@ -166,7 +167,7 @@ const formatRelativeTime = (timestampInSeconds: number | null | undefined): stri
   try {
     const timestampInMs = timestampInSeconds * 1000;
     if (isNaN(timestampInMs)) {
-      console.warn(`[ConnectionsView] Invalid timestamp received: ${timestampInSeconds}`);
+      log.warn(`[ConnectionsView] Invalid timestamp received: ${timestampInSeconds}`);
       return String(timestampInSeconds);
     }
     const date = new Date(timestampInMs);
@@ -175,7 +176,7 @@ const formatRelativeTime = (timestampInSeconds: number | null | undefined): stri
     let targetDateFnsLocale = dateFnsLocales[currentI18nLocale] || dateFnsLocales[langPart] || enUS;
     return formatDistanceToNow(date, { addSuffix: true, locale: targetDateFnsLocale });
   } catch (error: unknown) {
-    console.error('格式化日期失败:', error);
+    log.error('格式化日期失败:', error);
     return String(timestampInSeconds);
   }
 };
@@ -310,7 +311,7 @@ const handleBatchDeleteConnections = async () => {
       await connectionsStore.fetchConnections();
     } catch (error: unknown) {
       const errorMessage = extractErrorMessage(error, '未知错误');
-      console.error('Batch delete connections error:', error);
+      log.error('Batch delete connections error:', error);
       showAlertDialog({
         title: t('common.error'),
         message: t('connections.batchEdit.errorMessage', `批量删除连接失败: ${errorMessage}`),
@@ -407,7 +408,7 @@ const handleTestAllFilteredConnections = async () => {
     // We also add a .catch here to handle any unexpected errors from handleTestSingleConnection itself
     // or if conn.id was somehow null/undefined (though filtered out).
     return handleTestSingleConnection(conn).catch((error) => {
-      console.error(`Error testing connection ${conn.id}:`, error);
+      log.error(`Error testing connection ${conn.id}:`, error);
       // Ensure state is updated for this specific connection to show an error
       // The 'id' here is from the 'conn' object in the map function's scope.
       connectionTestStates.value.set(conn.id!, {
@@ -423,7 +424,7 @@ const handleTestAllFilteredConnections = async () => {
   } catch (error: unknown) {
     // This catch block handles errors if Promise.all itself fails,
     // though individual promise rejections are handled above.
-    console.error('Error during batch testing of connections (Promise.all):', error);
+    log.error('Error during batch testing of connections (Promise.all):', error);
     // Optionally, set a general error state or notification for the entire batch operation if needed.
   } finally {
     isTestingAll.value = false;
@@ -499,9 +500,7 @@ const handleConnectAllFilteredConnections = async () => {
     (conn) => conn.type === 'SSH'
   );
   if (sshConnectionsToConnect.length === 0) {
-    console.warn(
-      t('connections.messages.noSshConnectionsToConnectAll', '没有可连接的 SSH 筛选结果。')
-    );
+    log.warn(t('connections.messages.noSshConnectionsToConnectAll', '没有可连接的 SSH 筛选结果。'));
     // Optionally, use a UI notification if available in your project
     // e.g., uiNotificationsStore.addNotification({ message: t('connections.messages.noSshConnectionsToConnectAll'), type: 'info' });
     return;
@@ -516,7 +515,7 @@ const handleConnectAllFilteredConnections = async () => {
       // await new Promise(resolve => setTimeout(resolve, 200)); // Example delay
     }
   } catch (error: unknown) {
-    console.error('Error connecting to all filtered SSH connections:', error);
+    log.error('Error connecting to all filtered SSH connections:', error);
     // uiNotificationsStore.addNotification({ message: t('connections.errors.connectAllSshFailed', '连接全部 SSH 操作失败。'), type: 'error' });
   } finally {
     isConnectingAll.value = false;

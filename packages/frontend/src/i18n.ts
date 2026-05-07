@@ -1,4 +1,5 @@
 import { createI18n, Composer } from 'vue-i18n';
+import { log } from '@/utils/log';
 
 // 这允许嵌套的翻译键，例如 'parent.child.grandchild'
 interface RecursiveStringRecord {
@@ -29,7 +30,7 @@ for (const path of Object.keys(localeModules)) {
 
 // 检查是否成功加载了任何语言文件
 if (availableLocales.length === 0) {
-  console.error(
+  log.error(
     "[i18n] No language files found in './locales/'. Please ensure language files exist and the path is correct."
   );
 }
@@ -49,14 +50,14 @@ const getInitialLocale = (): string => {
   const storedLocale = localStorage.getItem(localStorageKey);
   // 1. 检查 localStorage 中存储的完整 locale 是否可用
   if (storedLocale && availableLocales.includes(storedLocale)) {
-    console.info(`[i18n] Using locale from localStorage: ${storedLocale}`);
+    log.info(`[i18n] Using locale from localStorage: ${storedLocale}`);
     return storedLocale;
   }
 
   // 2. 回退逻辑：检查浏览器提供的完整区域代码 (e.g., 'zh-CN') 是否可用
   const navigatorLocale = navigator.language; // 获取完整代码，如 'zh-CN'
   if (navigatorLocale && availableLocales.includes(navigatorLocale)) {
-    console.info(`[i18n] Using locale from navigator.language: ${navigatorLocale}`);
+    log.info(`[i18n] Using locale from navigator.language: ${navigatorLocale}`);
     return navigatorLocale;
   }
 
@@ -65,12 +66,12 @@ const getInitialLocale = (): string => {
   //    或者如果我们未来添加了通用的 'zh' 文件
   const navigatorLangPart = navigatorLocale?.split('-')[0];
   if (navigatorLangPart && availableLocales.includes(navigatorLangPart)) {
-    console.info(`[i18n] Using locale based on navigator language part: ${navigatorLangPart}`);
+    log.info(`[i18n] Using locale based on navigator language part: ${navigatorLangPart}`);
     return navigatorLangPart;
   }
 
   // 4. 最后回退到默认语言
-  console.info(`[i18n] Falling back to default locale: ${defaultLng}`);
+  log.info(`[i18n] Falling back to default locale: ${defaultLng}`);
   return defaultLng;
 };
 
@@ -90,27 +91,25 @@ const i18n = createI18n<[MessageSchema], string>({
  * @param lang 要设置的语言代码
  */
 export const setLocale = (lang: string) => {
-  console.info(`[i18n] Attempting to set locale to: ${lang}`);
+  log.info(`[i18n] Attempting to set locale to: ${lang}`);
   const globalComposer = i18n.global as unknown as Composer;
   // 使用动态获取的可用语言列表进行检查
   if (availableLocales.includes(lang)) {
     const currentLocale = globalComposer.locale.value;
     if (currentLocale !== lang) {
       globalComposer.locale.value = lang; // 更新 locale
-      console.info(
-        `[i18n] Successfully updated global locale from "${currentLocale}" to "${lang}".`
-      );
+      log.info(`[i18n] Successfully updated global locale from "${currentLocale}" to "${lang}".`);
       try {
         localStorage.setItem(localStorageKey, lang); // 持久化到 localStorage
-        console.info(`[i18n] Locale "${lang}" saved to localStorage.`);
+        log.info(`[i18n] Locale "${lang}" saved to localStorage.`);
       } catch (error: unknown) {
-        console.error('[i18n] Failed to save locale to localStorage:', error);
+        log.error('[i18n] Failed to save locale to localStorage:', error);
       }
     } else {
-      console.info(`[i18n] Locale is already "${lang}". No update needed.`);
+      log.info(`[i18n] Locale is already "${lang}". No update needed.`);
     }
   } else {
-    console.warn(
+    log.warn(
       `[i18n] Locale "${lang}" is not available. Available locales: ${availableLocales.join(', ')}`
     );
   }

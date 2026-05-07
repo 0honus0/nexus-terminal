@@ -12,6 +12,7 @@ import { useSessionStore } from '../stores/session.store';
 
 import SessionDurationChart from '../components/dashboard/SessionDurationChart.vue';
 import SystemResourcesHistoryChart from '../components/dashboard/SystemResourcesHistoryChart.vue';
+import { log } from '@/utils/log';
 
 defineOptions({
   name: 'EnhancedDashboard',
@@ -157,7 +158,7 @@ const handleRefresh = async () => {
   try {
     await dashboardStore.fetchAllData(timeRange.value);
   } catch (error: unknown) {
-    console.error('[Dashboard] 刷新失败:', error);
+    log.error('[Dashboard] 刷新失败:', error);
     uiNotifications.showError(t('dashboard.errors.refreshFailed') || '刷新数据失败，请稍后重试');
   }
 };
@@ -168,7 +169,7 @@ const handleTimeRangeChange = async () => {
     dashboardStore.setTimeRange(range);
     await dashboardStore.fetchAllData(range);
   } catch (error: unknown) {
-    console.error('[Dashboard] 时间范围变更失败:', error);
+    log.error('[Dashboard] 时间范围变更失败:', error);
     uiNotifications.showError(
       t('dashboard.errors.timeRangeFailed') || '时间范围变更失败，请稍后重试'
     );
@@ -231,10 +232,10 @@ onMounted(async () => {
   try {
     await initializeDashboardDataIfReady();
     if (!hasInitializedDashboardData.value) {
-      console.info('[Dashboard] 等待认证初始化完成后再加载数据。');
+      log.info('[Dashboard] 等待认证初始化完成后再加载数据。');
     }
   } catch (error: unknown) {
-    console.error('[Dashboard] 初始化失败:', error);
+    log.error('[Dashboard] 初始化失败:', error);
     uiNotifications.showError(
       t('dashboard.errors.initFailed') || '仪表盘初始化失败，请刷新页面重试'
     );
@@ -251,7 +252,7 @@ watch(
     try {
       await initializeDashboardDataIfReady();
     } catch (error: unknown) {
-      console.error('[Dashboard] 认证完成后初始化失败:', error);
+      log.error('[Dashboard] 认证完成后初始化失败:', error);
     }
   },
   { immediate: true }
@@ -271,7 +272,7 @@ const handleConnectRecent = async (conn: ConnectionInfo) => {
   try {
     await sessionStore.handleConnectRequest(conn);
   } catch (error: unknown) {
-    console.error('[Dashboard] 连接失败:', error);
+    log.error('[Dashboard] 连接失败:', error);
     uiNotifications.showError(t('dashboard.errors.connectFailed') || '连接失败，请稍后重试');
   }
 };
@@ -282,7 +283,7 @@ const handleConnectionModified = async () => {
     connectionToEdit.value = null;
     await connectionsStore.fetchConnections();
   } catch (error: unknown) {
-    console.error('[Dashboard] 连接列表更新失败:', error);
+    log.error('[Dashboard] 连接列表更新失败:', error);
     uiNotifications.showError(
       t('dashboard.errors.connectionsFailed') || '连接列表更新失败，请稍后重试'
     );

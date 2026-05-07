@@ -11,8 +11,7 @@ import {
   getAppearanceSettings,
   updateAppearanceSettings as updateAppearanceSettingsInRepo,
 } from '../appearance/appearance.repository';
-import { setLogLevel as setRuntimeLogLevel, type LogLevel } from '../logging/logger';
-import { setLogLevel as setPinoLogLevel } from '../utils/logger';
+import { logger, setLogLevel as setPinoLogLevel } from '../utils/logger';
 
 const auditLogService = new AuditLogService();
 const notificationService = new NotificationService();
@@ -167,7 +166,7 @@ export const settingsController = {
     try {
       // +++ 修改：获取请求体并验证其是否符合 FocusSwitcherFullConfig 结构 +++
       const fullConfig = req.body;
-      console.debug('[SettingsController] 请求体 fullConfig:', JSON.stringify(fullConfig));
+      logger.debug('[SettingsController] 请求体 fullConfig:', JSON.stringify(fullConfig));
 
       // +++ 验证 FocusSwitcherFullConfig 结构 +++
       if (
@@ -181,7 +180,7 @@ export const settingsController = {
           isShortcutRecord(fullConfig.shortcuts)
         )
       ) {
-        console.warn('[SettingsController] 收到无效的完整焦点配置格式:', fullConfig);
+        logger.warn('[SettingsController] 收到无效的完整焦点配置格式:', fullConfig);
         throw ErrorFactory.badRequest(
           '无效的请求体，必须是包含 sequence (string[]) 和 shortcuts (Record<string, {shortcut?: string}>) 的对象',
           'INVALID_REQUEST_BODY'
@@ -214,10 +213,10 @@ export const settingsController = {
    */
   setNavBarVisibility: asyncHandler(async (req, res) => {
     const { visible } = req.body;
-    console.debug('[SettingsController] 请求体 visible:', visible);
+    logger.debug('[SettingsController] 请求体 visible:', visible);
 
     if (typeof visible !== 'boolean') {
-      console.warn('[SettingsController] 收到无效的 visible 格式:', visible);
+      logger.warn('[SettingsController] 收到无效的 visible 格式:', visible);
       res.status(400).json({
         success: false,
         error: '无效的请求体，"visible" 必须是一个布尔值',
@@ -256,7 +255,7 @@ export const settingsController = {
       const layoutTree = req.body;
 
       if (typeof layoutTree !== 'object' || layoutTree === null) {
-        console.warn('[SettingsController] 收到无效的布局树格式 (非对象):', layoutTree);
+        logger.warn('[SettingsController] 收到无效的布局树格式 (非对象):', layoutTree);
         throw ErrorFactory.badRequest(
           '无效的请求体，应为 JSON 对象格式的布局树',
           'INVALID_REQUEST_BODY'
@@ -317,10 +316,10 @@ export const settingsController = {
    */
   setAutoCopyOnSelect: asyncHandler(async (req, res) => {
     const { enabled } = req.body;
-    console.debug('[SettingsController] 请求体 enabled:', enabled);
+    logger.debug('[SettingsController] 请求体 enabled:', enabled);
 
     if (typeof enabled !== 'boolean') {
-      console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
+      logger.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
       res.status(400).json({
         success: false,
         error: '无效的请求体，"enabled" 必须是一个布尔值',
@@ -339,7 +338,7 @@ export const settingsController = {
    */
   getSidebarConfig: asyncHandler(async (req, res) => {
     const config = await settingsService.getSidebarConfig();
-    console.debug('[SettingsController] 向客户端发送侧边栏配置:', config);
+    logger.debug('[SettingsController] 向客户端发送侧边栏配置:', config);
     res.json(config);
   }),
 
@@ -349,7 +348,7 @@ export const settingsController = {
   setSidebarConfig: asyncHandler(async (req, res) => {
     try {
       const configDto: UpdateSidebarConfigDto = req.body;
-      console.debug('[SettingsController] 请求体:', configDto);
+      logger.debug('[SettingsController] 请求体:', configDto);
 
       // --- DTO Validation (Basic) ---
       // More specific validation happens in the service layer
@@ -359,7 +358,7 @@ export const settingsController = {
         !Array.isArray(configDto.left) ||
         !Array.isArray(configDto.right)
       ) {
-        console.warn('[SettingsController] 收到无效的侧边栏配置格式:', configDto);
+        logger.warn('[SettingsController] 收到无效的侧边栏配置格式:', configDto);
         throw ErrorFactory.badRequest(
           '无效的请求体，应为包含 left 和 right 数组的 JSON 对象',
           'INVALID_REQUEST_BODY'
@@ -392,7 +391,7 @@ export const settingsController = {
       recaptchaSiteKey: fullConfig.recaptchaSiteKey,
     };
 
-    console.debug('[SettingsController] 向客户端发送公共 CAPTCHA 配置:', publicConfig);
+    logger.debug('[SettingsController] 向客户端发送公共 CAPTCHA 配置:', publicConfig);
     res.json(publicConfig);
   }),
 
@@ -402,14 +401,14 @@ export const settingsController = {
   setCaptchaConfig: asyncHandler(async (req, res) => {
     try {
       const configDto: UpdateCaptchaSettingsDto = req.body;
-      console.debug('[SettingsController] 请求体 (DTO, 密钥已屏蔽):', {
+      logger.debug('[SettingsController] 请求体 (DTO, 密钥已屏蔽):', {
         ...configDto,
         hcaptchaSecretKey: '***',
         recaptchaSecretKey: '***',
       });
 
       if (!configDto || typeof configDto !== 'object') {
-        console.warn('[SettingsController] 收到无效的 CAPTCHA 配置格式 (非对象):', configDto);
+        logger.warn('[SettingsController] 收到无效的 CAPTCHA 配置格式 (非对象):', configDto);
         throw ErrorFactory.badRequest('无效的请求体，应为 JSON 对象', 'INVALID_REQUEST_BODY');
       }
 
@@ -434,10 +433,10 @@ export const settingsController = {
 
   setShowConnectionTags: asyncHandler(async (req, res) => {
     const { enabled } = req.body;
-    console.debug('[SettingsController] 请求体 enabled:', enabled);
+    logger.debug('[SettingsController] 请求体 enabled:', enabled);
 
     if (typeof enabled !== 'boolean') {
-      console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
+      logger.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
       res.status(400).json({
         success: false,
         error: '无效的请求体，"enabled" 必须是一个布尔值',
@@ -464,10 +463,10 @@ export const settingsController = {
 
   setShowQuickCommandTags: asyncHandler(async (req, res) => {
     const { enabled } = req.body;
-    console.debug('[SettingsController] 请求体 enabled:', enabled);
+    logger.debug('[SettingsController] 请求体 enabled:', enabled);
 
     if (typeof enabled !== 'boolean') {
-      console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
+      logger.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
       res.status(400).json({
         success: false,
         error: '无效的请求体，"enabled" 必须是一个布尔值',
@@ -494,10 +493,10 @@ export const settingsController = {
 
   setShowStatusMonitorIpAddress: asyncHandler(async (req, res) => {
     const { enabled } = req.body;
-    console.debug('[SettingsController] 请求体 enabled:', enabled);
+    logger.debug('[SettingsController] 请求体 enabled:', enabled);
 
     if (typeof enabled !== 'boolean') {
-      console.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
+      logger.warn('[SettingsController] 收到无效的 enabled 格式:', enabled);
       res.status(400).json({
         success: false,
         error: '无效的请求体，"enabled" 必须是一个布尔值',
@@ -556,8 +555,7 @@ export const settingsController = {
 
     // 保存到数据库
     await settingsService.setLogLevel(level);
-    // 立即更新运行时日志等级（console 覆写 + pino 结构化日志同步）
-    setRuntimeLogLevel(level as LogLevel);
+    // 立即更新运行时日志等级（单一 pino 引擎）
     setPinoLogLevel(level);
 
     auditLogService.logAction('SETTINGS_UPDATED', { updatedKeys: ['logLevel'], newValue: level });

@@ -2,6 +2,7 @@ import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
 import path from 'path';
 import fs from 'fs';
+import { logger } from './utils/logger';
 
 // --- 动态确定支持的语言 ---
 const localesDir = path.join(__dirname, 'locales');
@@ -12,6 +13,7 @@ try {
   dynamicSupportedLngs = entries
     .filter((dirent) => dirent.isFile() && dirent.name.endsWith('.json'))
     .map((dirent) => dirent.name.replace('.json', '')); // Extract lang code from filename
+  // 使用 console 直接输出：此处在模块导入时执行，dotenv 尚未加载，logger 的 pino 实例会读到错误的环境变量默认值
   console.info('[i18next] 动态检测到的语言:', dynamicSupportedLngs);
 } catch (err: unknown) {
   console.error('[i18next] 读取 locales 目录时出错:', err);
@@ -46,11 +48,11 @@ const i18nInitializationPromise = new Promise<void>((resolve, reject) => {
     (err, _t) => {
       // Init callback
       if (err) {
-        console.error('[i18next] 初始化过程中出错:', err);
+        logger.error('[i18next] 初始化过程中出错:', err);
         i18nInitialized = false; // Mark as not initialized on error
         return reject(err); // Reject the promise on error
       }
-      console.info('[i18next] 初始化完成。已加载语言:', Object.keys(i18next.store.data || {})); // Safe access to store.data
+      logger.info('[i18next] 初始化完成。已加载语言:', Object.keys(i18next.store.data || {})); // Safe access to store.data
       i18nInitialized = true; // Mark as initialized
       resolve(); // Resolve the promise on success
     }

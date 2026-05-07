@@ -8,6 +8,7 @@ import {
 } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { lookupGeoInfo } from '../auth/ip-geo.service';
+import { logger } from '../utils/logger';
 
 // H-19: 会话级清理回调注册表，避免模块间循环依赖
 type SessionCleanupCallback = (sessionId: string) => void;
@@ -36,7 +37,7 @@ const getSshSuspendKeepAliveSecondsFromSettings = async (): Promise<number> => {
     const rawSetting = await settingsService.getSetting(SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY);
     return parseSshSuspendKeepAliveSeconds(rawSetting);
   } catch (error: unknown) {
-    console.warn(
+    logger.warn(
       `[WebSocket] 读取 ${SSH_SUSPEND_KEEP_ALIVE_SECONDS_KEY} 失败，将使用默认值 ${DEFAULT_SSH_SUSPEND_KEEP_ALIVE_SECONDS}:`,
       error
     );
@@ -63,13 +64,13 @@ export function parsePortsString(portsString: string | undefined | null): PortIn
     } else if (parts.length === 1) {
       privatePart = parts[0];
     } else {
-      console.warn(`[WebSocket] Skipping unparsable port entry: ${entry}`);
+      logger.warn(`[WebSocket] Skipping unparsable port entry: ${entry}`);
       continue;
     }
 
     const privateMatch = privatePart.match(/^(\d+)\/(tcp|udp|\w+)$/);
     if (!privateMatch) {
-      //  console.warn(`[WebSocket] Skipping unparsable private port part: ${privatePart}`);
+      //  logger.warn(`[WebSocket] Skipping unparsable private port part: ${privatePart}`);
       continue;
     }
     const privatePort = parseInt(privateMatch[1], 10);
@@ -84,7 +85,7 @@ export function parsePortsString(portsString: string | undefined | null): PortIn
         ip = publicMatch[1] || undefined;
         publicPort = parseInt(publicMatch[2], 10);
       } else {
-        //   console.warn(`[WebSocket] Skipping unparsable public port part: ${publicPart}`);
+        //   logger.warn(`[WebSocket] Skipping unparsable public port part: ${publicPart}`);
       }
     }
 
@@ -110,7 +111,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
 
   const state = clientStates.get(sessionId);
   if (state) {
-    console.debug(
+    logger.debug(
       `WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`
     );
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -133,7 +134,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       state.suspendLogPath &&
       state.ws.userId !== undefined
     ) {
-      console.debug(
+      logger.debug(
         `WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`
       );
       try {
@@ -165,7 +166,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         });
 
         if (newSuspendId) {
-          console.info(
+          logger.info(
             `WebSocket: 会话 ${sessionId} 已成功移交给 SshSuspendService，新的挂起ID: ${newSuspendId}。SSH 连接将由服务管理。`
           );
           const suspendPayload: Record<string, unknown> = {
@@ -185,7 +186,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
             });
           // SSH 资源已移交，不需要在这里关闭它们
         } else {
-          console.warn(
+          logger.warn(
             `WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 失败 (takeOverMarkedSession 返回 null)。可能 SSH 连接在标记后已断开。将执行常规清理。`
           );
           // 移交失败，执行常规关闭
@@ -194,7 +195,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
           state.isSuspendedByService = false; // 重置标记，因为接管失败
         }
       } catch (error: unknown) {
-        console.error(`WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 时发生错误:`, error);
+        logger.error(`WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 时发生错误:`, error);
         // 发生错误，也执行常规关闭以防资源泄露
         if (state.sshClient) state.sshClient.end(); // 如果引用还在，尝试关闭
         if (state.sshShellStream) state.sshShellStream.end(); // 如果引用还在，尝试关闭
@@ -204,7 +205,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       // 未标记挂起，也未被服务接管，执行常规关闭
       state.sshShellStream?.end();
       state.sshClient?.end();
-      console.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已关闭 (未标记挂起，未被服务接管)。`);
+      logger.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已关闭 (未标记挂起，未被服务接管)。`);
       const disconnectPayload: Record<string, unknown> = {
         userId: state.ws.userId,
         username: state.ws.username,
@@ -223,13 +224,13 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         });
     } else if (state.isSuspendedByService) {
       // 已被服务接管（例如通过旧的 startSuspend 流程，或成功移交后），不在此处关闭
-      console.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已由挂起服务管理，跳过关闭。`);
+      logger.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已由挂起服务管理，跳过关闭。`);
     }
 
     // 4. 清理 Docker 状态轮询定时器
     if (state.dockerStatusIntervalId) {
       clearInterval(state.dockerStatusIntervalId);
-      console.debug(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
+      logger.debug(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
     }
 
     // H-19: 执行已注册的会话级清理回调（如 silent exec 定时器）
@@ -237,7 +238,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       try {
         cb(sessionId);
       } catch (callbackError: unknown) {
-        console.warn(`[WebSocket] 会话 ${sessionId} 清理回调执行失败:`, callbackError);
+        logger.warn(`[WebSocket] 会话 ${sessionId} 清理回调执行失败:`, callbackError);
       }
     });
 
@@ -249,8 +250,8 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
       delete state.ws.sessionId;
     }
 
-    console.debug(`WebSocket: 会话 ${sessionId} 已清理。`);
+    logger.debug(`WebSocket: 会话 ${sessionId} 已清理。`);
   } else {
-    // console.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
+    // logger.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
   }
 };

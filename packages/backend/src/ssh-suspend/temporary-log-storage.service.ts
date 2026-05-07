@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { logger } from '../utils/logger';
 
 // 类型守卫：检查是否为带有 code 属性的 Node.js 系统错误
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -51,9 +52,9 @@ export class TemporaryLogStorageService {
   async ensureLogDirectoryExists(): Promise<void> {
     try {
       await fs.mkdir(LOG_DIRECTORY, { recursive: true });
-      // console.info(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
+      // logger.info(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
     } catch (error: unknown) {
-      console.error(`创建日志目录 '${LOG_DIRECTORY}' 失败:`, error);
+      logger.error(`创建日志目录 '${LOG_DIRECTORY}' 失败:`, error);
       // 在实际应用中，这里可能需要更健壮的错误处理
     }
   }
@@ -90,7 +91,7 @@ export class TemporaryLogStorageService {
 
       if (stat && stat.size >= MAX_LOG_SIZE_BYTES) {
         // 文件过大，执行环形缓冲轮替：保留尾部数据，丢弃头部旧数据
-        console.info(
+        logger.info(
           `日志文件 '${filePath}' 大小达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行环形缓冲轮替（保留尾部 ${RING_BUFFER_RETAIN_BYTES / (1024 * 1024)}MB）。`
         );
         const fileContent = (await fs.readFile(filePath, 'utf8')) ?? '';
@@ -100,7 +101,7 @@ export class TemporaryLogStorageService {
         await fs.appendFile(filePath, data, 'utf8');
       }
     } catch (error: unknown) {
-      console.error(`写入日志文件 '${filePath}' 失败:`, error);
+      logger.error(`写入日志文件 '${filePath}' 失败:`, error);
       throw error; // 重新抛出错误，让调用者处理
     }
   }
@@ -117,10 +118,10 @@ export class TemporaryLogStorageService {
       return data;
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        // console.info(`日志文件 '${filePath}' 不存在，返回空内容。`);
+        // logger.info(`日志文件 '${filePath}' 不存在，返回空内容。`);
         return ''; // 文件不存在，通常意味着没有日志
       }
-      console.error(`读取日志文件 '${filePath}' 失败:`, error);
+      logger.error(`读取日志文件 '${filePath}' 失败:`, error);
       throw error;
     }
   }
@@ -133,13 +134,13 @@ export class TemporaryLogStorageService {
     const filePath = this.getLogFilePath(suspendSessionId);
     try {
       await fs.unlink(filePath);
-      // console.info(`日志文件 '${filePath}' 已成功删除。`);
+      // logger.info(`日志文件 '${filePath}' 已成功删除。`);
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        // console.warn(`尝试删除日志文件 '${filePath}' 时发现文件已不存在，操作忽略。`);
+        // logger.warn(`尝试删除日志文件 '${filePath}' 时发现文件已不存在，操作忽略。`);
         return; // 文件不存在，无需操作
       }
-      console.error(`删除日志文件 '${filePath}' 失败:`, error);
+      logger.error(`删除日志文件 '${filePath}' 失败:`, error);
       throw error;
     }
   }
@@ -155,7 +156,7 @@ export class TemporaryLogStorageService {
       await this.ensureLogDirectoryExists();
       await fs.writeFile(filePath, JSON.stringify(metadata, null, 2), 'utf8');
     } catch (error: unknown) {
-      console.error(`写入元数据文件 '${filePath}' 失败:`, error);
+      logger.error(`写入元数据文件 '${filePath}' 失败:`, error);
       throw error;
     }
   }
@@ -177,7 +178,7 @@ export class TemporaryLogStorageService {
         typeof metadata.connectionId !== 'string' ||
         typeof metadata.originalSessionId !== 'string'
       ) {
-        console.warn(`元数据文件 '${filePath}' 格式无效，跳过。`);
+        logger.warn(`元数据文件 '${filePath}' 格式无效，跳过。`);
         return null;
       }
       return metadata;
@@ -185,7 +186,7 @@ export class TemporaryLogStorageService {
       if (isNodeError(error) && error.code === 'ENOENT') {
         return null; // 文件不存在
       }
-      console.error(`读取元数据文件 '${filePath}' 失败:`, error);
+      logger.error(`读取元数据文件 '${filePath}' 失败:`, error);
       return null; // 解析失败也返回 null
     }
   }
@@ -202,7 +203,7 @@ export class TemporaryLogStorageService {
       if (isNodeError(error) && error.code === 'ENOENT') {
         return; // 文件不存在，无需操作
       }
-      console.error(`删除元数据文件 '${filePath}' 失败:`, error);
+      logger.error(`删除元数据文件 '${filePath}' 失败:`, error);
       throw error;
     }
   }
@@ -219,7 +220,7 @@ export class TemporaryLogStorageService {
         .filter((file) => file.endsWith('.meta.json'))
         .map((file) => file.replace(/\.meta\.json$/, ''));
     } catch (error: unknown) {
-      console.error(`列出元数据文件失败:`, error);
+      logger.error(`列出元数据文件失败:`, error);
       return [];
     }
   }
@@ -237,7 +238,7 @@ export class TemporaryLogStorageService {
         .filter((file) => file.endsWith('.log'))
         .map((file) => file.replace(/\.log$/, ''));
     } catch (error: unknown) {
-      console.error(`列出日志目录 '${LOG_DIRECTORY}' 中的文件失败:`, error);
+      logger.error(`列出日志目录 '${LOG_DIRECTORY}' 中的文件失败:`, error);
       return []; // 发生错误时返回空数组
     }
   }

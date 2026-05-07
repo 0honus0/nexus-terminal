@@ -15,6 +15,15 @@ const { mockAxios, mockIsAxiosError } = vi.hoisted(() => ({
 }));
 
 // Mock axios
+// Logger mock for console replacement migration
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('axios', () => ({
   default: Object.assign(mockAxios, {
     isAxiosError: mockIsAxiosError,
@@ -268,7 +277,7 @@ describe('WebhookSenderService', () => {
     });
 
     it('无效 JSON 应作为原始字符串发送', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // console spy removed (was: warn);
       const notification: ProcessedNotification = {
         ...mockNotification,
         body: 'invalid json {',
@@ -276,7 +285,7 @@ describe('WebhookSenderService', () => {
 
       await webhookSenderService.send(notification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse request body as JSON')
       );
       expect(mockAxios).toHaveBeenCalledWith(
@@ -284,11 +293,10 @@ describe('WebhookSenderService', () => {
           data: 'invalid json {',
         })
       );
-      consoleSpy.mockRestore();
     });
 
     it('GET 请求应记录警告', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // console spy removed (was: warn);
       const config: WebhookConfig = {
         ...mockWebhookConfig,
         method: 'GET',
@@ -300,10 +308,9 @@ describe('WebhookSenderService', () => {
 
       await webhookSenderService.send(notification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Sending data in body for GET request')
       );
-      consoleSpy.mockRestore();
     });
 
     it.each(['POST', 'PUT', 'PATCH'] as const)('%s 请求应在请求体中发送数据', async (method) => {
@@ -329,30 +336,28 @@ describe('WebhookSenderService', () => {
 
   describe('响应状态处理', () => {
     it('2xx 状态码应视为成功', async () => {
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // console spy removed (was: info);
 
       for (const status of [200, 201, 202, 204, 299]) {
         mockAxios.mockResolvedValueOnce({ status, data: {} });
         await webhookSenderService.send(mockNotification);
       }
 
-      // 每次发送会调用 2 次 console.info：发送前 + 成功后
-      expect(consoleSpy).toHaveBeenCalledTimes(10);
-      consoleSpy.mockRestore();
+      // 每次发送会调用 2 次 logger.info：发送前 + 成功后
+      expect(mockLogger.info).toHaveBeenCalledTimes(10);
     });
 
     it('非 2xx 状态码应记录警告但不抛出错误', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // console spy removed (was: warn);
       mockAxios.mockResolvedValue({ status: 302, data: { redirected: true } });
 
       // 不应抛出错误
       await webhookSenderService.send(mockNotification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('responded with status: 302'),
         expect.any(Object)
       );
-      consoleSpy.mockRestore();
     });
   });
 
@@ -530,28 +535,26 @@ describe('WebhookSenderService', () => {
 
   describe('日志记录', () => {
     it('发送前应记录请求信息', async () => {
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // console spy removed (was: info);
 
       await webhookSenderService.send(mockNotification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('Sending POST notification to webhook URL')
       );
-      consoleSpy.mockRestore();
     });
 
     it('成功后应记录状态码', async () => {
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // console spy removed (was: info);
       mockAxios.mockResolvedValue({ status: 201, data: { created: true } });
 
       await webhookSenderService.send(mockNotification);
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Status: 201'));
-      consoleSpy.mockRestore();
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Status: 201'));
     });
 
     it('失败时应记录错误信息', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       const axiosError = new Error('Network Error') as any;
       axiosError.response = { status: 503, data: { error: 'Service Unavailable' } };
       mockAxios.mockRejectedValue(axiosError);
@@ -559,12 +562,11 @@ describe('WebhookSenderService', () => {
 
       await expect(webhookSenderService.send(mockNotification)).rejects.toThrow();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Axios error sending notification'),
         expect.any(Number),
         expect.any(Object)
       );
-      consoleSpy.mockRestore();
     });
   });
 });

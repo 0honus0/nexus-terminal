@@ -14,6 +14,7 @@ import { type ConnectionType, type AuthMethod, parseIpRange } from './useAddConn
 import { createSubmitHandler, createDeleteHandler } from './useAddConnectionFormSubmit';
 import { createTagHandlers } from './useAddConnectionFormTags';
 import { createTestConnection } from './useAddConnectionFormTest';
+import { log } from '@/utils/log';
 
 // Define Props interface based on the component's props
 interface AddConnectionFormProps {
@@ -126,8 +127,8 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         formData.jump_chain = newVal.jump_chain
           ? JSON.parse(JSON.stringify(newVal.jump_chain))
           : null;
-        console.info('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
-        console.info(
+        log.info('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
+        log.info(
           '[Debug] watch connectionToEdit - formData.jump_chain initialized:',
           formData.jump_chain
         );
@@ -177,7 +178,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         formData.jump_chain = null;
         formData.proxy_type = null;
         formData.force_keyboard_interactive = false;
-        console.info('[Debug] watch connectionToEdit - formData.jump_chain reset');
+        log.info('[Debug] watch connectionToEdit - formData.jump_chain reset');
         advancedConnectionMode.value = 'proxy';
       }
     },
@@ -225,7 +226,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       } else {
         formData.proxy_type = null;
       }
-      console.info(
+      log.info(
         `[Debug] useAddConnectionForm: proxy_type set to ${formData.proxy_type} (type: ${newType}, mode: ${newAdvMode})`
       );
     },

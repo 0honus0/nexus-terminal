@@ -1,4 +1,5 @@
 import { ref, onUnmounted, type Ref, watch } from 'vue'; // +++ Import watch +++
+import { log } from '@/utils/log';
 
 interface UseSidebarResizeOptions {
   sidebarRef: Ref<HTMLElement | null>;
@@ -22,12 +23,12 @@ export function useSidebarResize({
   const startWidth = ref(0);
 
   const handleMouseDown = (event: MouseEvent) => {
-    console.info(`[useSidebarResize] handleMouseDown triggered for side: ${side}`, {
+    log.info(`[useSidebarResize] handleMouseDown triggered for side: ${side}`, {
       sidebar: sidebarRef.value,
       handle: handleRef.value,
     }); // +++ Add Log +++
     if (!sidebarRef.value || !handleRef.value) {
-      console.info('[useSidebarResize] MouseDown ignored: sidebarRef or handleRef is null.');
+      log.info('[useSidebarResize] MouseDown ignored: sidebarRef or handleRef is null.');
       return;
     }
 

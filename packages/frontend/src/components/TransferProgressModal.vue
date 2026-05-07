@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store'; // 请确认此路径是否正确
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 interface Props {
   visible: boolean;
@@ -142,7 +143,7 @@ const fetchTransferTasks = async () => {
       return task;
     });
   } catch (error: unknown) {
-    console.error('Failed to fetch transfer tasks:', error);
+    log.error('Failed to fetch transfer tasks:', error);
     errorLoading.value = extractErrorMessage(
       error,
       t('transferProgressModal.error.unknown', '未知错误')
@@ -276,7 +277,7 @@ const handleCancelTask = async (taskId: string) => {
     // 立即刷新一次列表，或者等待下一次轮询
     fetchTransferTasks();
   } catch (error: unknown) {
-    console.error(`Failed to cancel task ${taskId}:`, error);
+    log.error(`Failed to cancel task ${taskId}:`, error);
   }
 };
 </script>

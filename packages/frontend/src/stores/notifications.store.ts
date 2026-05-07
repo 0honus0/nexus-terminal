@@ -8,6 +8,7 @@ import {
   NotificationChannelType,
   NotificationChannelConfig,
 } from '../types/server.types'; // Import NotificationChannelType
+import { log } from '@/utils/log';
 
 export const useNotificationsStore = defineStore('notifications', () => {
   const settings = ref<NotificationSetting[]>([]);
@@ -21,7 +22,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       const response = await apiClient.get<NotificationSetting[]>('/notifications'); // 使用 apiClient
       settings.value = response.data;
     } catch (err: unknown) {
-      console.error('Error fetching notification settings:', err);
+      log.error('Error fetching notification settings:', err);
       error.value = extractErrorMessage(err, '获取通知设置失败');
       settings.value = []; // Clear settings on error
     } finally {
@@ -39,7 +40,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       settings.value.push(response.data);
       return response.data;
     } catch (err: unknown) {
-      console.error('Error adding notification setting:', err);
+      log.error('Error adding notification setting:', err);
       error.value = extractErrorMessage(err, '添加通知设置失败');
       return null;
     } finally {
@@ -67,7 +68,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       }
       return response.data;
     } catch (err: unknown) {
-      console.error(`Error updating notification setting ${id}:`, err);
+      log.error(`Error updating notification setting ${id}:`, err);
       error.value = extractErrorMessage(err, '更新通知设置失败');
       return null;
     } finally {
@@ -83,7 +84,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       settings.value = settings.value.filter((s) => s.id !== id);
       return true;
     } catch (err: unknown) {
-      console.error(`Error deleting notification setting ${id}:`, err);
+      log.error(`Error deleting notification setting ${id}:`, err);
       error.value = extractErrorMessage(err, '删除通知设置失败');
       return false;
     } finally {
@@ -103,7 +104,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       const response = await apiClient.post<{ message: string }>(`/notifications/${id}/test`); // 使用 apiClient, removed config from body
       return { success: true, message: response.data.message || '测试成功' };
     } catch (err: unknown) {
-      console.error(`Error testing notification setting ${id}:`, err);
+      log.error(`Error testing notification setting ${id}:`, err);
       // Don't set the main 'error' ref here, let the component handle test-specific errors/results.
       // Throw the error so the component's catch block can handle it.
       throw err; // Re-throw the error to be caught in the component
@@ -125,7 +126,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       }); // 使用 apiClient
       return { success: true, message: response.data.message || '测试成功' };
     } catch (err: unknown) {
-      console.error(`Error testing unsaved notification setting:`, err);
+      log.error(`Error testing unsaved notification setting:`, err);
       throw err; // Re-throw the error to be caught in the component
     }
   };

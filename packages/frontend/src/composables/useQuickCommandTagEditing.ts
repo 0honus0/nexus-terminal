@@ -4,6 +4,7 @@ import type { GroupedQuickCommands } from '../stores/quickCommands.store';
 import { useQuickCommandsStore } from '../stores/quickCommands.store';
 import { useQuickCommandTagsStore } from '../stores/quickCommandTags.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { log } from '@/utils/log';
 
 /**
  * 快捷指令标签行内编辑 composable
@@ -76,7 +77,7 @@ export function useQuickCommandTagEditing() {
     try {
       if (currentEditingId === 'untagged') {
         // --- 创建新标签并分配命令 ---
-        console.info(`[useQuickCommandTagEditing] Creating new tag: ${newName}`);
+        log.info(`[useQuickCommandTagEditing] Creating new tag: ${newName}`);
         const newTag = await quickCommandTagsStore.addTag(newName);
         if (newTag) {
           uiNotificationsStore.showSuccess(t('quickCommands.tags.createSuccess'));
@@ -84,7 +85,7 @@ export function useQuickCommandTagEditing() {
           const commandIdsToAssign = untaggedGroup ? untaggedGroup.commands.map((c) => c.id) : [];
 
           if (commandIdsToAssign.length > 0) {
-            console.info(
+            log.info(
               `[useQuickCommandTagEditing] Assigning ${commandIdsToAssign.length} commands to new tag ID: ${newTag.id}`
             );
             const assignSuccess = await quickCommandsStore.assignCommandsToTagAction(
@@ -92,13 +93,9 @@ export function useQuickCommandTagEditing() {
               newTag.id
             );
             if (assignSuccess) {
-              console.info(
-                `[useQuickCommandTagEditing] assignCommandsToTagAction reported success.`
-              );
+              log.info(`[useQuickCommandTagEditing] assignCommandsToTagAction reported success.`);
             } else {
-              console.error(
-                `[useQuickCommandTagEditing] assignCommandsToTagAction reported failure.`
-              );
+              log.error(`[useQuickCommandTagEditing] assignCommandsToTagAction reported failure.`);
             }
           } else {
             uiNotificationsStore.showInfo(t('quickCommands.tags.noCommandsToAssign'));
@@ -116,7 +113,7 @@ export function useQuickCommandTagEditing() {
         // --- 更新已有标签 ---
         const originalTagName = originalGroup?.groupName;
         if (!originalTagName) {
-          console.error(
+          log.error(
             `[useQuickCommandTagEditing] Cannot find original group name for tag ID ${currentEditingId}`
           );
           cancelEditingTag();
@@ -125,7 +122,7 @@ export function useQuickCommandTagEditing() {
         if (originalTagName === newName) {
           // 名称未变化
         } else {
-          console.info(
+          log.info(
             `[useQuickCommandTagEditing] Updating tag ID ${currentEditingId} from "${originalTagName}" to "${newName}"`
           );
           const updateResult = await quickCommandTagsStore.updateTag(currentEditingId, newName);
@@ -141,7 +138,7 @@ export function useQuickCommandTagEditing() {
         }
       }
     } catch (error: unknown) {
-      console.error('[useQuickCommandTagEditing] Error during finishEditingTag:', error);
+      log.error('[useQuickCommandTagEditing] Error during finishEditingTag:', error);
       uiNotificationsStore.showError(t('common.unexpectedError'));
     } finally {
       editingTagId.value = null;
@@ -164,7 +161,7 @@ export function useQuickCommandTagEditing() {
         inputRef.focus();
         inputRef.select();
       } else {
-        console.error(`[useQuickCommandTagEditing] Watcher: Input ref for ID ${newId} not found.`);
+        log.error(`[useQuickCommandTagEditing] Watcher: Input ref for ID ${newId} not found.`);
       }
     }
   });

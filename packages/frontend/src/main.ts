@@ -14,6 +14,7 @@ import {
 import './style.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
+import { log } from '@/utils/log';
 // Element Plus styles are now auto-imported via unplugin-vue-components
 
 const pinia = createPinia(); // 创建 Pinia 实例
@@ -41,7 +42,7 @@ const setupWebManifestLink = async () => {
     document.head.appendChild(manifestLink);
   } catch (error: unknown) {
     // 在受保护网关场景中，manifest 可能被重定向到登录页
-    console.debug('[main.ts] manifest 链接添加失败（可能被网关拦截）:', error);
+    log.debug('[main.ts] manifest 链接添加失败（可能被网关拦截）:', error);
   }
 };
 
@@ -56,22 +57,22 @@ const setupWebManifestLink = async () => {
     if (!authStore.isAuthenticated) {
       return false;
     }
-    console.warn('Unauthorized access detected. Logging out.');
+    log.warn('Unauthorized access detected. Logging out.');
     await authStore.logout();
     return true;
   });
 
   try {
-    console.info('[main.ts] 开始初始化应用...');
+    log.info('[main.ts] 开始初始化应用...');
 
     // 1. 立即挂载应用,不等待数据加载
     await router.isReady(); // 等待路由初始化完成
     app.mount('#app');
-    console.info('[main.ts] 应用已挂载,开始后台加载数据...');
+    log.info('[main.ts] 应用已挂载,开始后台加载数据...');
 
     // 2. 后台异步加载初始化数据 (使用新的统一API)
     await authStore.loadInitData();
-    console.info(
+    log.info(
       `[main.ts] 初始化数据加载完成: needsSetup=${authStore.needsSetup}, isAuthenticated=${authStore.isAuthenticated}`
     );
 
@@ -80,17 +81,17 @@ const setupWebManifestLink = async () => {
 
     // 优先级1: 需要初始设置
     if (authStore.needsSetup && currentRoute.name !== 'Setup') {
-      console.info('[main.ts] 需要初始设置,重定向到 /setup');
+      log.info('[main.ts] 需要初始设置,重定向到 /setup');
       router.push({ name: 'Setup' });
     }
     // 优先级2: 已登录用户在登录页，重定向到仪表盘
     else if (!authStore.needsSetup && currentRoute.name === 'Login' && authStore.isAuthenticated) {
-      console.info('[main.ts] 已登录用户在登录页,重定向到仪表盘');
+      log.info('[main.ts] 已登录用户在登录页,重定向到仪表盘');
       router.push({ name: 'Dashboard' });
     }
     // 优先级3: 不需要设置但在设置页
     else if (!authStore.needsSetup && currentRoute.name === 'Setup') {
-      console.info('[main.ts] 不需要设置,从 /setup 重定向');
+      log.info('[main.ts] 不需要设置,从 /setup 重定向');
       router.push(authStore.isAuthenticated ? { name: 'Dashboard' } : { name: 'Login' });
     }
     // 优先级4: 未认证用户访问受保护页面
@@ -99,28 +100,28 @@ const setupWebManifestLink = async () => {
       currentRoute.name !== 'Login' &&
       currentRoute.name !== 'Setup'
     ) {
-      console.info('[main.ts] 用户未认证,重定向到 /login');
+      log.info('[main.ts] 用户未认证,重定向到 /login');
       router.push({ name: 'Login' });
     }
 
     // 4. 如果用户已认证,加载用户特定数据
     if (!authStore.needsSetup && authStore.isAuthenticated) {
-      console.info('[main.ts] 用户已认证,加载设置和外观数据...');
+      log.info('[main.ts] 用户已认证,加载设置和外观数据...');
       const settingsStore = useSettingsStore(pinia);
       try {
         await Promise.all([
           settingsStore.loadInitialSettings(),
           appearanceStore.loadInitialAppearanceData(),
         ]);
-        console.info('[main.ts] 用户设置和外观数据加载完成。');
+        log.info('[main.ts] 用户设置和外观数据加载完成。');
       } catch (error: unknown) {
-        console.error('[main.ts] 加载用户设置或外观数据失败:', error);
+        log.error('[main.ts] 加载用户设置或外观数据失败:', error);
         // 加载失败也继续,可能使用默认值或显示错误
       }
     }
   } catch (error: unknown) {
     // 捕获初始化过程中的意外错误
-    console.error('[main.ts] 应用初始化过程中发生严重错误:', error);
+    log.error('[main.ts] 应用初始化过程中发生严重错误:', error);
     // 即使发生严重错误,应用也已经挂载,可能显示错误页面或回退状态
   }
 
@@ -131,7 +132,7 @@ const setupWebManifestLink = async () => {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
-          console.info('SW registered: ', registration);
+          log.info('SW registered: ', registration);
 
           // 检测 SW 更新：当有新的 Service Worker 进入 waiting 状态时通知用户刷新
           registration.addEventListener('updatefound', () => {
@@ -141,7 +142,7 @@ const setupWebManifestLink = async () => {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 // 新 SW 已安装但尚未激活，提示用户刷新
-                console.info('[SW] 新版本已就绪，等待用户确认刷新');
+                log.info('[SW] 新版本已就绪，等待用户确认刷新');
                 if (window.confirm('应用有新版本可用，是否立即刷新以获取最新内容？')) {
                   newWorker.postMessage({ type: 'SKIP_WAITING' });
                   window.location.reload();
@@ -151,7 +152,7 @@ const setupWebManifestLink = async () => {
           });
         })
         .catch((registrationError: unknown) => {
-          console.info('SW registration failed: ', registrationError);
+          log.info('SW registration failed: ', registrationError);
         });
     });
   }

@@ -126,6 +126,7 @@ import { useSessionStore } from '../stores/session.store';
 import type { SessionState } from '../stores/session/types';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { log } from '@/utils/log';
 
 const commandHistoryStore = useCommandHistoryStore();
 const { showConfirmDialog } = useConfirmDialog();
@@ -282,7 +283,7 @@ const copyCommand = async (command: string) => {
     await navigator.clipboard.writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
   } catch (err: unknown) {
-    console.error('复制命令失败:', err);
+    log.error('复制命令失败:', err);
     uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败'));
   }
 };
@@ -346,7 +347,7 @@ const showCommandHistoryContextMenu = (event: MouseEvent, entry: CommandHistoryE
         finalX !== commandHistoryContextMenuPosition.value.x ||
         finalY !== commandHistoryContextMenuPosition.value.y
       ) {
-        console.info(
+        log.info(
           `[CommandHistoryView] Adjusting command history context menu position: (${commandHistoryContextMenuPosition.value.x}, ${commandHistoryContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
         );
         commandHistoryContextMenuPosition.value = { x: finalX, y: finalY };

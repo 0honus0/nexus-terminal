@@ -6,6 +6,21 @@
 
 ## 变更记录 (Changelog)
 
+### 2026-05-06 (日志统一改造)
+
+- **新增前端日志工具**：`src/utils/log.ts`，统一替代所有 `console.*` 调用
+  - `log.info()` / `log.warn()` / `log.error()`：dev 模式输出，prod 模式静默
+  - `log.debug()`：需 `?log=debug` URL 参数或 `localStorage` 开关激活
+  - `isVerbose()` / `setVerbose()`：运行时 verbose 控制
+  - 生产构建通过 `import.meta.env.DEV` 守卫自动剥离，零运行时开销
+- **console 调用全量迁移**：138 个源文件、1,335 处 `console.info/warn/error/debug` → `log.info/warn/error/debug`
+- **移除 `import.meta.env.DEV` 冗余守卫**：`useNL2CMD.ts`、`apiClient.ts` 中的 DEV 守卫已移除（log.ts 内部处理）
+- **测试文件 logger mock 更新**：8 个测试文件中的 `vi.spyOn(console, ...)` 改为 `vi.mock('@/utils/log')`
+- **验证结果**：
+  - 前端类型检查通过（vue-tsc --noEmit）
+  - 62 个测试文件 / 1,616 测试全部通过
+  - 生产构建中 console 调用为 0
+
 ### 2026-05-03 (仪表盘增强)
 
 - **仪表盘组件新增**：

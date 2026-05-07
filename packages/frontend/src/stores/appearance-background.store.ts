@@ -7,6 +7,7 @@ import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { defaultUiTheme } from '../features/appearance/config/default-themes';
 import type { AppearanceSettings } from '../types/appearance.types';
+import { log } from '@/utils/log';
 
 /** 背景与 UI 主题子 Store 的依赖参数 */
 export interface BackgroundDeps {
@@ -82,11 +83,11 @@ export function createBackgroundStore(deps: BackgroundDeps) {
   // --- 终端背景操作方法 ---
 
   async function setTerminalBackgroundEnabled(enabled: boolean) {
-    console.info(
+    log.info(
       `[AppearanceStore LOG] setTerminalBackgroundEnabled 调用，准备发送给后端的值: ${enabled}`
     );
     await updateAppearanceSettings({ terminalBackgroundEnabled: enabled });
-    console.info(`[AppearanceStore LOG] setTerminalBackgroundEnabled 更新后端调用完成。`);
+    log.info(`[AppearanceStore LOG] setTerminalBackgroundEnabled 更新后端调用完成。`);
   }
 
   async function setTerminalBackgroundOverlayOpacity(opacity: number) {
@@ -97,7 +98,7 @@ export function createBackgroundStore(deps: BackgroundDeps) {
     try {
       await updateAppearanceSettings({ terminal_custom_html: html });
     } catch (err: unknown) {
-      console.error('设置终端自定义 HTML 失败:', err);
+      log.error('设置终端自定义 HTML 失败:', err);
       throw new Error(extractErrorMessage(err, '设置终端自定义 HTML 失败'));
     }
   }
@@ -117,7 +118,7 @@ export function createBackgroundStore(deps: BackgroundDeps) {
       applyPageBackground();
       return response.data.filePath;
     } catch (err: unknown) {
-      console.error('上传页面背景失败:', err);
+      log.error('上传页面背景失败:', err);
       throw new Error(extractErrorMessage(err, '上传页面背景失败'));
     }
   }
@@ -134,7 +135,7 @@ export function createBackgroundStore(deps: BackgroundDeps) {
       getSettings().terminalBackgroundImage = response.data.filePath;
       return response.data.filePath;
     } catch (err: unknown) {
-      console.error('上传终端背景失败:', err);
+      log.error('上传终端背景失败:', err);
       throw new Error(extractErrorMessage(err, '上传终端背景失败'));
     }
   }
@@ -144,7 +145,7 @@ export function createBackgroundStore(deps: BackgroundDeps) {
       await apiClient.delete('/appearance/background/page');
       await updateAppearanceSettings({ pageBackgroundImage: '' });
     } catch (err: unknown) {
-      console.error('移除页面背景失败:', err);
+      log.error('移除页面背景失败:', err);
       throw new Error(extractErrorMessage(err, '移除页面背景失败'));
     }
   }
@@ -154,7 +155,7 @@ export function createBackgroundStore(deps: BackgroundDeps) {
       await apiClient.delete('/appearance/background/terminal');
       await updateAppearanceSettings({ terminalBackgroundImage: '' });
     } catch (err: unknown) {
-      console.error('移除终端背景失败:', err);
+      log.error('移除终端背景失败:', err);
       throw new Error(extractErrorMessage(err, '移除终端背景失败'));
     }
   }
@@ -175,7 +176,7 @@ export function createBackgroundStore(deps: BackgroundDeps) {
     if (pageBackgroundImage.value) {
       const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
       const imagePath = pageBackgroundImage.value;
-      console.info(
+      log.info(
         `[AppearanceStore applyPageBackground] Base URL: "${backendUrl}", Image Path: "${imagePath}"`
       );
 
@@ -184,11 +185,11 @@ export function createBackgroundStore(deps: BackgroundDeps) {
         const baseUrl = new URL(backendUrl);
         const correctedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
         fullImageUrl = new URL(correctedPath, baseUrl).href;
-        console.info(
+        log.info(
           `[AppearanceStore applyPageBackground] Constructed Full Image URL: "${fullImageUrl}"`
         );
       } catch (error: unknown) {
-        console.error(`[AppearanceStore applyPageBackground] Error constructing image URL:`, error);
+        log.error(`[AppearanceStore applyPageBackground] Error constructing image URL:`, error);
         body.style.backgroundImage = 'none';
         return;
       }
@@ -201,11 +202,11 @@ export function createBackgroundStore(deps: BackgroundDeps) {
           body.style.backgroundPosition = 'center';
           body.style.backgroundRepeat = 'no-repeat';
           body.style.backgroundAttachment = 'fixed';
-          console.info(
+          log.info(
             `[AppearanceStore applyPageBackground] Applied background image: ${fullImageUrl}`
           );
         } else {
-          console.warn(
+          log.warn(
             `[AppearanceStore applyPageBackground] Skipping background application due to invalid URL.`
           );
           body.style.backgroundImage = 'none';
@@ -213,9 +214,9 @@ export function createBackgroundStore(deps: BackgroundDeps) {
       });
     } else {
       body.style.backgroundImage = 'none';
-      console.info(`[AppearanceStore applyPageBackground] Cleared background image.`);
+      log.info(`[AppearanceStore applyPageBackground] Cleared background image.`);
     }
-    console.info('[AppearanceStore] 页面背景已应用:', pageBackgroundImage.value);
+    log.info('[AppearanceStore] 页面背景已应用:', pageBackgroundImage.value);
   }
 
   // --- Watchers ---
@@ -281,7 +282,7 @@ export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultV
   try {
     return JSON.parse(jsonString);
   } catch (error: unknown) {
-    console.error('JSON 解析失败:', error);
+    log.error('JSON 解析失败:', error);
     return defaultValue;
   }
 };

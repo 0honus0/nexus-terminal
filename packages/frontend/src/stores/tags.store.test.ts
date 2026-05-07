@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 // Mock apiClient
 const mockGet = vi.fn();
 const mockPost = vi.fn();
@@ -142,8 +151,6 @@ describe('tags.store', () => {
       const freshTags = [createMockTag({ id: 1, name: '新标签' })];
       mockGet.mockResolvedValue({ data: freshTags });
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
 
@@ -154,14 +161,11 @@ describe('tags.store', () => {
       expect(store.error).toBeNull();
       // 解析失败后缓存应被清除
       expect(localStorage.removeItem).toHaveBeenCalledWith('tagsCache');
-      consoleSpy.mockRestore();
     });
 
     it('API 请求失败时应设置错误状态并返回 false', async () => {
       const error = new Error('网络错误');
       mockGet.mockRejectedValue(error);
-
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
@@ -171,14 +175,11 @@ describe('tags.store', () => {
       expect(result).toBe(false);
       expect(store.error).toBe('网络错误');
       expect(store.isLoading).toBe(false);
-      consoleSpy.mockRestore();
     });
 
     it('API 返回带 response.data.error 的错误时应提取错误消息', async () => {
       const error = { response: { data: { error: '服务器内部错误' } } };
       mockGet.mockRejectedValue(error);
-
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
@@ -187,7 +188,6 @@ describe('tags.store', () => {
 
       expect(result).toBe(false);
       expect(store.error).toBe('服务器内部错误');
-      consoleSpy.mockRestore();
     });
   });
 
@@ -216,8 +216,6 @@ describe('tags.store', () => {
       const error = new Error('添加失败');
       mockPost.mockRejectedValue(error);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
 
@@ -226,7 +224,6 @@ describe('tags.store', () => {
       expect(result).toBeNull();
       expect(store.error).toBe('添加失败');
       expect(store.isLoading).toBe(false);
-      consoleSpy.mockRestore();
     });
   });
 
@@ -253,8 +250,6 @@ describe('tags.store', () => {
       const error = { response: { data: { error: '标签不存在' } } };
       mockPut.mockRejectedValue(error);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
 
@@ -263,7 +258,6 @@ describe('tags.store', () => {
       expect(result).toBe(false);
       expect(store.error).toBe('标签不存在');
       expect(store.isLoading).toBe(false);
-      consoleSpy.mockRestore();
     });
   });
 
@@ -290,8 +284,6 @@ describe('tags.store', () => {
       const error = new Error('删除失败');
       mockDelete.mockRejectedValue(error);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
 
@@ -300,7 +292,6 @@ describe('tags.store', () => {
       expect(result).toBe(false);
       expect(store.error).toBe('删除失败');
       expect(store.isLoading).toBe(false);
-      consoleSpy.mockRestore();
     });
   });
 
@@ -343,8 +334,6 @@ describe('tags.store', () => {
       const error = { response: { data: { error: '连接更新失败' } } };
       mockPut.mockRejectedValue(error);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       const { useTagsStore } = await import('./tags.store');
       const store = useTagsStore();
 
@@ -353,7 +342,6 @@ describe('tags.store', () => {
       expect(result).toBe(false);
       expect(store.error).toBe('连接更新失败');
       expect(store.isLoading).toBe(false);
-      consoleSpy.mockRestore();
     });
   });
 
@@ -402,13 +390,10 @@ describe('tags.store', () => {
 
       // 后续 fetchTags 失败
       mockGet.mockRejectedValueOnce(new Error('后续获取失败'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const fetchResult = await store.fetchTags();
       expect(fetchResult).toBe(false);
       expect(store.error).toBe('后续获取失败');
-
-      consoleSpy.mockRestore();
     });
 
     it('isLoading 在操作完成后应始终为 false', async () => {
@@ -422,7 +407,6 @@ describe('tags.store', () => {
 
       // fetchTags 失败
       mockGet.mockRejectedValue(new Error('fail'));
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
       await store.fetchTags();
       expect(store.isLoading).toBe(false);
 
@@ -445,8 +429,6 @@ describe('tags.store', () => {
       mockPut.mockRejectedValue(new Error('fail'));
       await store.updateTagConnections(1, []);
       expect(store.isLoading).toBe(false);
-
-      spy.mockRestore();
     });
   });
 });

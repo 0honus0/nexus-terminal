@@ -175,7 +175,7 @@ const confirmAction = () => {
   ) {
     // This case should ideally be handled by disabling the button, but as a fallback:
     // Consider showing an inline error message instead of alert
-    console.warn('Invalid chmod format submitted');
+    log.warn('Invalid chmod format submitted');
     return;
   }
   emit('confirm', inputValue.value.trim());
@@ -198,6 +198,7 @@ const handleGlobalKeydown = (event: KeyboardEvent) => {
 };
 
 import { onUnmounted } from 'vue';
+import { log } from '@/utils/log';
 onUnmounted(() => {
   document.removeEventListener('keydown', handleGlobalKeydown);
 });

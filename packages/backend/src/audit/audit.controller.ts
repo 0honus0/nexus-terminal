@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuditLogService } from './audit.service';
 import { AuditLogActionType } from '../types/audit.types';
+import { logger } from '../utils/logger';
 
 const auditLogService = new AuditLogService();
 
@@ -66,7 +67,7 @@ export class AuditController {
           try {
             parsedDetails = JSON.parse(log.details);
           } catch (error: unknown) {
-            console.warn(`[Audit Log] Failed to parse details for log ID ${log.id}:`, error);
+            logger.warn(`[Audit Log] Failed to parse details for log ID ${log.id}:`, error);
             parsedDetails = { raw: log.details, parseError: true };
           }
         }
@@ -80,7 +81,7 @@ export class AuditController {
         offset,
       });
     } catch (error: unknown) {
-      console.error('获取审计日志时出错:', error);
+      logger.error('获取审计日志时出错:', error);
       next(error); // 传递给全局错误处理中间件
     }
   }
@@ -96,7 +97,7 @@ export class AuditController {
         deletedCount,
       });
     } catch (error: unknown) {
-      console.error('删除审计日志时出错:', error);
+      logger.error('删除审计日志时出错:', error);
       next(error); // 传递给全局错误处理中间件
     }
   }
@@ -109,7 +110,7 @@ export class AuditController {
       const count = await auditLogService.getLogCount();
       res.status(200).json({ count });
     } catch (error: unknown) {
-      console.error('获取审计日志数量时出错:', error);
+      logger.error('获取审计日志数量时出错:', error);
       next(error); // 传递给全局错误处理中间件
     }
   }

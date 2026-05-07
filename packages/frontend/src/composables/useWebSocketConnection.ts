@@ -17,6 +17,7 @@ import type {
 } from '../types/websocket.types';
 import { parseWebSocketMessage } from './useWebSocketConnection/messageParser';
 import { createReconnectManager } from './useWebSocketConnection/reconnect';
+import { log } from '@/utils/log';
 
 // 导出类型别名，以便其他模块可以使用
 export type WsConnectionStatus = WsConnectionStatusType;
@@ -59,7 +60,7 @@ export function createWebSocketConnectionManager(
       const translated = t(`workspace.status.${statusKey}`, params || {});
       return translated === `workspace.status.${statusKey}` ? statusKey : translated;
     } catch (error: unknown) {
-      console.warn(
+      log.warn(
         `[WebSocket ${instanceSessionId}] i18n 错误 (键: workspace.status.${statusKey}):`,
         error
       );
@@ -80,10 +81,7 @@ export function createWebSocketConnectionManager(
         try {
           handler(payload, fullMessage);
         } catch (error: unknown) {
-          console.error(
-            `[WebSocket ${instanceSessionId}] 消息处理器错误 (类型: "${type}"):`,
-            error
-          );
+          log.error(`[WebSocket ${instanceSessionId}] 消息处理器错误 (类型: "${type}"):`, error);
         }
       });
     }
@@ -120,7 +118,7 @@ export function createWebSocketConnectionManager(
       (ws.value.readyState === WebSocket.OPEN || ws.value.readyState === WebSocket.CONNECTING) &&
       (connectionStatus.value === 'connected' || connectionStatus.value === 'connecting')
     ) {
-      console.warn(
+      log.warn(
         `[WebSocket ${instanceSessionId}] 连接已打开或正在连接中 (readyState: ${ws.value.readyState}, status: ${connectionStatus.value})。 阻止重复连接。`
       );
       return;
@@ -131,7 +129,7 @@ export function createWebSocketConnectionManager(
       ws.value &&
       (ws.value.readyState === WebSocket.OPEN || ws.value.readyState === WebSocket.CONNECTING)
     ) {
-      console.warn(
+      log.warn(
         `[WebSocket ${instanceSessionId}] 检测到状态不一致 (readyState: ${ws.value.readyState}, status: ${connectionStatus.value})。尝试关闭旧连接并继续...`
       );
       const oldWs = ws.value;
@@ -287,10 +285,10 @@ export function createWebSocketConnectionManager(
         const messageString = JSON.stringify(message);
         ws.value.send(messageString);
       } catch (error: unknown) {
-        console.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, error, message);
+        log.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, error, message);
       }
     } else {
-      console.warn(
+      log.warn(
         `[WebSocket ${instanceSessionId}] 无法发送消息，连接未打开。状态: ${connectionStatus.value}, ReadyState: ${ws.value?.readyState}`
       );
     }

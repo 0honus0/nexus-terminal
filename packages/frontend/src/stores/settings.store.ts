@@ -22,6 +22,7 @@ import {
 } from './settings-system.store';
 import { createSecuritySettingsGetters } from './settings-security.store';
 import { createLayoutSettingsGetters } from './settings-layout.store';
+import { log } from '@/utils/log';
 
 // 重新导出类型供外部使用
 export type { SortField, SortOrder };
@@ -135,7 +136,7 @@ export const useSettingsStore = defineStore('settings', () => {
     let determinedLang: string | undefined;
 
     try {
-      console.info('[SettingsStore] 加载通用设置...');
+      log.info('[SettingsStore] 加载通用设置...');
       const [generalSettingsResponse, showConnectionTagsResponse, showQuickCommandTagsResponse] =
         await Promise.all([
           apiClient.get<Record<string, string>>('/settings'),
@@ -147,10 +148,7 @@ export const useSettingsStore = defineStore('settings', () => {
       settings.value.showConnectionTags = String(showConnectionTagsResponse.data.enabled);
       settings.value.showQuickCommandTags = String(showQuickCommandTagsResponse.data.enabled);
 
-      console.info(
-        '[SettingsStore] Fetched settings from backend:',
-        JSON.stringify(settings.value)
-      );
+      log.info('[SettingsStore] Fetched settings from backend:', JSON.stringify(settings.value));
 
       // --- 设置默认值 (如果后端未返回) ---
       applyDefaultValues();
@@ -167,18 +165,14 @@ export const useSettingsStore = defineStore('settings', () => {
       // --- 语言设置 ---
       determinedLang = resolveLanguage(settings.value.language);
       if (determinedLang) {
-        console.info(
-          `[SettingsStore] Determined language: ${determinedLang}. Calling setLocale...`
-        );
+        log.info(`[SettingsStore] Determined language: ${determinedLang}. Calling setLocale...`);
         setLocale(determinedLang);
       } else {
-        console.error(
-          '[SettingsStore] Could not determine a valid language. This should not happen.'
-        );
+        log.error('[SettingsStore] Could not determine a valid language. This should not happen.');
         setLocale(defaultLng);
       }
     } catch (err: unknown) {
-      console.error('Error loading general settings:', err);
+      log.error('Error loading general settings:', err);
       error.value = getApiErrorMessage(err, 'Failed to load settings');
       const navigatorLocale = navigator.language;
       const navigatorLangPart = navigatorLocale?.split('-')[0];
@@ -188,7 +182,7 @@ export const useSettingsStore = defineStore('settings', () => {
       } else if (navigatorLangPart && availableLocales.includes(navigatorLangPart)) {
         fallbackLang = navigatorLangPart;
       }
-      console.info(
+      log.info(
         `[SettingsStore] Error loading settings. Falling back to language: ${fallbackLang}. Calling setLocale...`
       );
       setLocale(fallbackLang);
@@ -237,7 +231,7 @@ export const useSettingsStore = defineStore('settings', () => {
     for (const [key, defaultValue] of Object.entries(defaults)) {
       if (settings.value[key] === undefined) {
         settings.value[key] = defaultValue;
-        console.info(`[SettingsStore] ${key} not found, set to default: ${defaultValue}`);
+        log.info(`[SettingsStore] ${key} not found, set to default: ${defaultValue}`);
       }
     }
   }
@@ -259,12 +253,12 @@ export const useSettingsStore = defineStore('settings', () => {
       if (settings.value.sidebarPaneWidths) {
         loadedWidths = JSON.parse(settings.value.sidebarPaneWidths);
         if (typeof loadedWidths !== 'object' || loadedWidths === null) {
-          console.warn('[SettingsStore] Invalid sidebarPaneWidths format loaded, resetting.');
+          log.warn('[SettingsStore] Invalid sidebarPaneWidths format loaded, resetting.');
           loadedWidths = {};
         }
       }
     } catch (parseError: unknown) {
-      console.error('[SettingsStore] Failed to parse sidebarPaneWidths, resetting.', parseError);
+      log.error('[SettingsStore] Failed to parse sidebarPaneWidths, resetting.', parseError);
       loadedWidths = {};
     }
     const finalWidths: Record<string, string> = {};
@@ -308,7 +302,7 @@ export const useSettingsStore = defineStore('settings', () => {
         }
       }
     } catch (parseError: unknown) {
-      console.error('[SettingsStore] Failed to parse fileManagerColWidths, resetting.', parseError);
+      log.error('[SettingsStore] Failed to parse fileManagerColWidths, resetting.', parseError);
       loadedFmWidths = {};
     }
     const finalFmWidths: Record<string, number> = { ...defaultFileManagerColWidths };
@@ -394,7 +388,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'terminalOutputEnhancerEnabled',
     ];
     if (!allowedKeys.includes(key)) {
-      console.error(`[SettingsStore] 尝试更新不允许的设置键: ${key}`);
+      log.error(`[SettingsStore] 尝试更新不允许的设置键: ${key}`);
       throw new Error(`不允许更新设置项 '${key}'`);
     }
 
@@ -429,7 +423,7 @@ export const useSettingsStore = defineStore('settings', () => {
         try {
           localStorage.setItem('nexus_quickCommandsCompactMode', String(value));
         } catch (storageError: unknown) {
-          console.error(
+          log.error(
             '[SettingsStore] Failed to save quickCommandsCompactMode to localStorage:',
             storageError
           );
@@ -439,12 +433,12 @@ export const useSettingsStore = defineStore('settings', () => {
       if (key === 'language' && typeof value === 'string' && availableLocales.includes(value)) {
         setLocale(value);
       } else if (key === 'language') {
-        console.warn(
+        log.warn(
           `[SettingsStore] updateSetting: Attempted to set invalid language '${value}'. Ignoring i18n update.`
         );
       }
     } catch (err: unknown) {
-      console.error(`[SettingsStore] Failed to update setting '${key}' via API. Error:`, err);
+      log.error(`[SettingsStore] Failed to update setting '${key}' via API. Error:`, err);
       throw new Error(getApiErrorMessage(err, `更新设置项 '${key}' 失败`));
     }
   }
@@ -517,7 +511,7 @@ export const useSettingsStore = defineStore('settings', () => {
         setLocale(languageUpdate);
       }
     } catch (err: unknown) {
-      console.error('批量更新设置失败:', err);
+      log.error('批量更新设置失败:', err);
       throw new Error(getApiErrorMessage(err, '批量更新设置失败'));
     }
   }
@@ -530,7 +524,7 @@ export const useSettingsStore = defineStore('settings', () => {
     try {
       await updateMultipleSettings({ sidebarPaneWidths: JSON.stringify(newWidths) });
     } catch (err: unknown) {
-      console.error(
+      log.error(
         `[SettingsStore] Failed to save sidebarPaneWidths after updating ${paneName}:`,
         err
       );
@@ -552,7 +546,7 @@ export const useSettingsStore = defineStore('settings', () => {
         fileManagerColWidths: widthsString,
       });
     } catch (err: unknown) {
-      console.error('[SettingsStore] Failed to save file manager layout settings:', err);
+      log.error('[SettingsStore] Failed to save file manager layout settings:', err);
     }
   }
 
@@ -563,13 +557,13 @@ export const useSettingsStore = defineStore('settings', () => {
       try {
         localStorage.setItem('nexus_quickCommandRowSizeMultiplier', multiplierString);
       } catch (storageError: unknown) {
-        console.error(
+        log.error(
           '[SettingsStore] Failed to save quickCommandRowSizeMultiplier to localStorage:',
           storageError
         );
       }
     } catch (err: unknown) {
-      console.error('[SettingsStore] Failed to save Quick Command row size multiplier:', err);
+      log.error('[SettingsStore] Failed to save Quick Command row size multiplier:', err);
     }
   }
 
@@ -580,7 +574,7 @@ export const useSettingsStore = defineStore('settings', () => {
         dashboardSortOrder: sortOrder,
       });
     } catch (err: unknown) {
-      console.error('[SettingsStore] Failed to save dashboard sort preference:', err);
+      log.error('[SettingsStore] Failed to save dashboard sort preference:', err);
     }
   }
 

@@ -5,6 +5,7 @@ import { Request, RequestHandler } from 'express';
 import { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket } from './types';
 import { SECURITY_CONFIG } from '../config/security.config';
+import { logger } from '../utils/logger';
 
 type UpgradeRequestMeta = {
   clientIpAddress?: string;
@@ -28,7 +29,7 @@ export function initializeUpgradeHandler(
 ): void {
   server.on('upgrade', (request: Request, socket, head) => {
     // --- 添加详细日志：检查传入的请求头和 request.ip ---
-    console.debug('[WebSocket Upgrade] Received upgrade request.');
+    logger.debug('[WebSocket Upgrade] Received upgrade request.');
     // 安全日志：仅记录非敏感头部（避免泄露 cookie/authorization）
     const safeHeaders = {
       origin: request.headers.origin,
@@ -38,10 +39,10 @@ export function initializeUpgradeHandler(
       connection: request.headers.connection,
       host: request.headers.host,
     };
-    console.debug('[WebSocket Upgrade] Safe Headers:', safeHeaders);
-    console.debug(`[WebSocket Upgrade] Initial request.ip value: ${request.ip}`); // Express 尝试解析的 IP
-    console.debug(`[WebSocket Upgrade] X-Real-IP Header: ${request.headers['x-real-ip']}`);
-    console.debug(
+    logger.debug('[WebSocket Upgrade] Safe Headers:', safeHeaders);
+    logger.debug(`[WebSocket Upgrade] Initial request.ip value: ${request.ip}`); // Express 尝试解析的 IP
+    logger.debug(`[WebSocket Upgrade] X-Real-IP Header: ${request.headers['x-real-ip']}`);
+    logger.debug(
       `[WebSocket Upgrade] X-Forwarded-For Header: ${request.headers['x-forwarded-for']}`
     );
     // --- 结束添加日志 ---
@@ -64,10 +65,10 @@ export function initializeUpgradeHandler(
       const trimmedIp = rawIp.trim();
       // 使用 net.isIP() 验证：返回 4 (IPv4) 或 6 (IPv6)，0 表示无效
       if (net.isIP(trimmedIp)) {
-        console.debug(`[WebSocket Upgrade] Valid IP from ${source}: ${trimmedIp}`);
+        logger.debug(`[WebSocket Upgrade] Valid IP from ${source}: ${trimmedIp}`);
         return trimmedIp;
       } else {
-        console.warn(
+        logger.warn(
           `[WebSocket Upgrade] Invalid IP format from ${source}: ${trimmedIp}, rejecting.`
         );
         return undefined;
@@ -89,43 +90,43 @@ export function initializeUpgradeHandler(
       if (!ipAddress) {
         // 最后回退到 socket.remoteAddress（通常已是合法 IP）
         ipAddress = request.socket.remoteAddress;
-        console.debug(`[WebSocket Upgrade] Using socket.remoteAddress: ${ipAddress}`);
+        logger.debug(`[WebSocket Upgrade] Using socket.remoteAddress: ${ipAddress}`);
       }
     } else {
       // 开发环境直接使用 socket.remoteAddress，避免被欺骗
       ipAddress = request.socket.remoteAddress || request.ip;
-      console.debug(`[WebSocket Upgrade] Development mode - using direct socket IP: ${ipAddress}`);
+      logger.debug(`[WebSocket Upgrade] Development mode - using direct socket IP: ${ipAddress}`);
     }
 
     // 确保 ipAddress 不是 undefined 或空字符串，否则设为 'unknown'
     ipAddress = ipAddress || 'unknown';
-    console.debug(`[WebSocket Upgrade] Determined IP Address: ${ipAddress}`);
+    logger.debug(`[WebSocket Upgrade] Determined IP Address: ${ipAddress}`);
 
-    console.debug(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
+    logger.debug(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
 
     const noopResponse = {} as unknown as Parameters<RequestHandler>[1];
     sessionParser(request, noopResponse, () => {
       // --- Origin 校验 (CSWSH 防护) ---
       const { origin } = request.headers;
-      console.debug(`[WebSocket Upgrade] Origin Header: ${origin}`);
+      logger.debug(`[WebSocket Upgrade] Origin Header: ${origin}`);
 
       if (!origin || !SECURITY_CONFIG.ALLOWED_WS_ORIGINS.includes(origin)) {
-        console.info(`[WebSocket Upgrade] REJECTED - Origin not in allowlist: ${origin}`);
-        console.debug(`[WebSocket Upgrade] Allowed origins:`, SECURITY_CONFIG.ALLOWED_WS_ORIGINS);
+        logger.info(`[WebSocket Upgrade] REJECTED - Origin not in allowlist: ${origin}`);
+        logger.debug(`[WebSocket Upgrade] Allowed origins:`, SECURITY_CONFIG.ALLOWED_WS_ORIGINS);
         socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
         socket.destroy();
         return;
       }
-      console.debug(`[WebSocket Upgrade] Origin validation passed: ${origin}`);
+      logger.debug(`[WebSocket Upgrade] Origin validation passed: ${origin}`);
 
       // --- 认证检查 ---
       if (!request.session || !request.session.userId) {
-        console.info(`WebSocket 认证失败 (Path: ${pathname})：未找到会话或用户未登录。`);
+        logger.info(`WebSocket 认证失败 (Path: ${pathname})：未找到会话或用户未登录。`);
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
       }
-      console.debug(
+      logger.debug(
         `WebSocket 认证成功 (Path: ${pathname})：用户 ${request.session.username} (ID: ${request.session.userId})`
       );
       const typedRequest = getUpgradeRequest(request);
@@ -134,7 +135,7 @@ export function initializeUpgradeHandler(
       // 本地调试用/rdp-proxy，nginx反代用/ws/rdp-proxy
       if (pathname === '/rdp-proxy' || pathname === '/ws/rdp-proxy') {
         // RDP 代理路径 - 直接处理升级，连接逻辑在 'connection' 事件中处理
-        console.debug(`WebSocket: Handling RDP proxy upgrade for user ${request.session.username}`);
+        logger.debug(`WebSocket: Handling RDP proxy upgrade for user ${request.session.username}`);
         wss.handleUpgrade(request, socket, head, (ws) => {
           const extWs = ws as AuthenticatedWebSocket;
           extWs.userId = request.session.userId;
@@ -151,7 +152,7 @@ export function initializeUpgradeHandler(
         });
       } else {
         // 默认路径 (SSH, SFTP, Docker etc.) - 按原逻辑处理
-        console.debug(`WebSocket: Handling standard upgrade for user ${request.session.username}`);
+        logger.debug(`WebSocket: Handling standard upgrade for user ${request.session.username}`);
         wss.handleUpgrade(request, socket, head, (ws) => {
           const extWs = ws as AuthenticatedWebSocket;
           extWs.userId = request.session.userId;
@@ -163,5 +164,5 @@ export function initializeUpgradeHandler(
       }
     });
   });
-  console.info('WebSocket upgrade handler initialized.');
+  logger.info('WebSocket upgrade handler initialized.');
 }

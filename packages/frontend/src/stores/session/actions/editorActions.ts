@@ -6,6 +6,7 @@ import { getLanguageFromFilename, decodeRawContent } from '../utils';
 import type { FileTab, SftpManagerInstance } from '../types';
 import type { FileInfo } from '../../fileEditor.store'; // 路径: packages/frontend/src/stores/fileEditor.store.ts
 import type { SftpReadFileSuccessPayload } from '../../../types/sftp.types'; // 路径: packages/frontend/src/types/sftp.types.ts
+import { log } from '@/utils/log';
 
 // --- Editor Actions ---
 const loadTabContentInSession = async (
@@ -19,14 +20,14 @@ const loadTabContentInSession = async (
 ) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中加载标签页 ${tabId}`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中加载标签页 ${tabId}`);
     return;
   }
 
   const { getOrCreateSftpManager, t } = dependencies;
   const tabRef = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
   if (!tabRef) {
-    console.warn(`[EditorActions] 会话 ${sessionId} 中不存在标签页 ${tabId}，无法加载文件内容。`);
+    log.warn(`[EditorActions] 会话 ${sessionId} 中不存在标签页 ${tabId}，无法加载文件内容。`);
     return;
   }
 
@@ -38,12 +39,10 @@ const loadTabContentInSession = async (
     if (!sftpManager) {
       throw new Error(t('fileManager.errors.sftpManagerNotFound'));
     }
-    console.info(
-      `[EditorActions ${sessionId}] 使用 primary-editor sftpManager 读取文件 ${filePath}`
-    );
+    log.info(`[EditorActions ${sessionId}] 使用 primary-editor sftpManager 读取文件 ${filePath}`);
 
     const fileData: SftpReadFileSuccessPayload = await sftpManager.readFile(filePath);
-    console.info(
+    log.info(
       `[EditorActions ${sessionId}] 文件 ${filePath} 读取成功。后端使用编码: ${fileData.encodingUsed}`
     );
 
@@ -58,11 +57,9 @@ const loadTabContentInSession = async (
     currentTabState.isLoading = false;
     currentTabState.isModified = false;
     currentTabState.loadingError = null;
-    console.info(
-      `[EditorActions ${sessionId}] 文件 ${filePath} 内容已加载并设置到标签页 ${tabId}。`
-    );
+    log.info(`[EditorActions ${sessionId}] 文件 ${filePath} 内容已加载并设置到标签页 ${tabId}。`);
   } catch (err: unknown) {
-    console.error(`[EditorActions ${sessionId}] 读取文件 ${filePath} 失败:`, err);
+    log.error(`[EditorActions ${sessionId}] 读取文件 ${filePath} 失败:`, err);
     const errorTabRef = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
     if (errorTabRef) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -82,7 +79,7 @@ export const openFileInSession = (
 ) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中打开文件`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中打开文件`);
     return;
   }
   const { getOrCreateSftpManager, t } = dependencies;
@@ -90,7 +87,7 @@ export const openFileInSession = (
   const existingTab = session.editorTabs.value.find((tab) => tab.filePath === fileInfo.fullPath);
   if (existingTab) {
     session.activeEditorTabId.value = existingTab.id;
-    console.info(
+    log.info(
       `[EditorActions] 会话 ${sessionId} 中已存在文件 ${fileInfo.fullPath} 的标签页，已激活: ${existingTab.id}`
     );
   } else {
@@ -114,7 +111,7 @@ export const openFileInSession = (
     };
     session.editorTabs.value.push(newTab);
     session.activeEditorTabId.value = newTab.id;
-    console.info(
+    log.info(
       `[EditorActions] 已在会话 ${sessionId} 中为文件 ${fileInfo.fullPath} 创建新标签页: ${newTab.id}`
     );
     loadTabContentInSession(sessionId, newTab.id, fileInfo.fullPath, { getOrCreateSftpManager, t });
@@ -131,18 +128,18 @@ export const reloadTabInSession = async (
 ) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中刷新标签页 ${tabId}`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中刷新标签页 ${tabId}`);
     return;
   }
 
   const tab = session.editorTabs.value.find((tabItem) => tabItem.id === tabId);
   if (!tab) {
-    console.warn(`[EditorActions] 尝试刷新会话 ${sessionId} 中不存在的标签页 ${tabId}`);
+    log.warn(`[EditorActions] 尝试刷新会话 ${sessionId} 中不存在的标签页 ${tabId}`);
     return;
   }
 
   if (tab.isSaving) {
-    console.warn(`[EditorActions] 标签页 ${tabId} 正在保存，跳过刷新。`);
+    log.warn(`[EditorActions] 标签页 ${tabId} 正在保存，跳过刷新。`);
     return;
   }
 
@@ -164,13 +161,13 @@ export const closeEditorTabInSession = async (
 ): Promise<boolean> => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中关闭标签页 ${tabId}`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中关闭标签页 ${tabId}`);
     return false;
   }
 
   const tabIndex = session.editorTabs.value.findIndex((tab) => tab.id === tabId);
   if (tabIndex === -1) {
-    console.warn(`[EditorActions] 尝试关闭会话 ${sessionId} 中不存在的标签页 ID: ${tabId}`);
+    log.warn(`[EditorActions] 尝试关闭会话 ${sessionId} 中不存在的标签页 ID: ${tabId}`);
     return false;
   }
 
@@ -189,13 +186,13 @@ export const closeEditorTabInSession = async (
     });
 
     if (!shouldDiscard) {
-      console.info(`[EditorActions] 用户取消关闭有未保存更改的标签页: ${tabId}`);
+      log.info(`[EditorActions] 用户取消关闭有未保存更改的标签页: ${tabId}`);
       return false;
     }
   }
 
   session.editorTabs.value.splice(tabIndex, 1);
-  console.info(`[EditorActions] 已从会话 ${sessionId} 中移除标签页: ${tabId}`);
+  log.info(`[EditorActions] 已从会话 ${sessionId} 中移除标签页: ${tabId}`);
 
   if (session.activeEditorTabId.value === tabId) {
     const remainingTabs = session.editorTabs.value;
@@ -204,7 +201,7 @@ export const closeEditorTabInSession = async (
         ? remainingTabs[Math.max(0, tabIndex > 0 ? tabIndex - 1 : 0)].id
         : null;
     session.activeEditorTabId.value = nextActiveTabId;
-    console.info(`[EditorActions] 会话 ${sessionId} 关闭活动标签页后，切换到: ${nextActiveTabId}`);
+    log.info(`[EditorActions] 会话 ${sessionId} 关闭活动标签页后，切换到: ${nextActiveTabId}`);
   }
   return true;
 };
@@ -212,17 +209,17 @@ export const closeEditorTabInSession = async (
 export const setActiveEditorTabInSession = (sessionId: string, tabId: string) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中激活标签页 ${tabId}`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中激活标签页 ${tabId}`);
     return;
   }
 
   if (session.editorTabs.value.some((tab) => tab.id === tabId)) {
     if (session.activeEditorTabId.value !== tabId) {
       session.activeEditorTabId.value = tabId;
-      console.info(`[EditorActions] 已在会话 ${sessionId} 中激活标签页: ${tabId}`);
+      log.info(`[EditorActions] 已在会话 ${sessionId} 中激活标签页: ${tabId}`);
     }
   } else {
-    console.warn(`[EditorActions] 尝试激活会话 ${sessionId} 中不存在的标签页 ID: ${tabId}`);
+    log.warn(`[EditorActions] 尝试激活会话 ${sessionId} 中不存在的标签页 ID: ${tabId}`);
   }
 };
 
@@ -233,7 +230,7 @@ export const updateFileContentInSession = (
 ) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中更新标签页 ${tabId} 内容`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中更新标签页 ${tabId} 内容`);
     return;
   }
   const tab = session.editorTabs.value.find((t) => t.id === tabId);
@@ -245,9 +242,9 @@ export const updateFileContentInSession = (
       tab.saveError = null;
     }
   } else if (tab) {
-    console.warn(`[EditorActions] 尝试更新正在加载的标签页 ${tabId} 的内容`);
+    log.warn(`[EditorActions] 尝试更新正在加载的标签页 ${tabId} 的内容`);
   } else {
-    console.warn(`[EditorActions] 尝试更新会话 ${sessionId} 中不存在的标签页 ${tabId} 的内容`);
+    log.warn(`[EditorActions] 尝试更新会话 ${sessionId} 中不存在的标签页 ${tabId} 的内容`);
   }
 };
 
@@ -261,26 +258,25 @@ export const saveFileInSession = async (
 ) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中保存标签页 ${tabId}`);
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中保存标签页 ${tabId}`);
     return;
   }
   const tab = session.editorTabs.value.find((t) => t.id === tabId);
   if (!tab) {
-    console.warn(`[EditorActions] 尝试保存在会话 ${sessionId} 中不存在的标签页 ${tabId}`);
+    log.warn(`[EditorActions] 尝试保存在会话 ${sessionId} 中不存在的标签页 ${tabId}`);
     return;
   }
   const { getOrCreateSftpManager, t } = dependencies;
 
   if (tab.isSaving || tab.isLoading || tab.loadingError || !tab.isModified) {
-    console.warn(
-      `[EditorActions] 保存条件不满足 for ${tab.filePath} (会话 ${sessionId})，无法保存。`,
-      { tab }
-    );
+    log.warn(`[EditorActions] 保存条件不满足 for ${tab.filePath} (会话 ${sessionId})，无法保存。`, {
+      tab,
+    });
     return;
   }
 
   if (!session.wsManager.isConnected.value || !session.wsManager.isSftpReady.value) {
-    console.error(`[EditorActions] 保存失败：会话 ${sessionId} 无效或未连接/SFTP 未就绪。`);
+    log.error(`[EditorActions] 保存失败：会话 ${sessionId} 无效或未连接/SFTP 未就绪。`);
     tab.saveStatus = 'error';
     tab.saveError = t('fileManager.errors.sessionInvalidOrNotReady');
     setTimeout(() => {
@@ -294,7 +290,7 @@ export const saveFileInSession = async (
 
   const sftpManager = getOrCreateSftpManager(sessionId, 'primary-editor');
   if (!sftpManager) {
-    console.error(
+    log.error(
       `[EditorActions] 保存失败：无法获取会话 ${sessionId} 的 primary-editor sftpManager。`
     );
     tab.saveStatus = 'error';
@@ -308,7 +304,7 @@ export const saveFileInSession = async (
     return;
   }
 
-  console.info(
+  log.info(
     `[EditorActions] 开始保存文件: ${tab.filePath} (会话 ${sessionId}, Tab ID: ${tab.id}) using primary-editor sftpManager`
   );
   tab.isSaving = true;
@@ -320,7 +316,7 @@ export const saveFileInSession = async (
 
   try {
     await sftpManager.writeFile(tab.filePath, contentToSave, encodingToUse);
-    console.info(
+    log.info(
       `[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用编码 ${encodingToUse} 保存成功。`
     );
     tab.isSaving = false;
@@ -334,7 +330,7 @@ export const saveFileInSession = async (
       }
     }, 2000);
   } catch (err: unknown) {
-    console.error(`[EditorActions] 保存文件 ${tab.filePath} (会话 ${sessionId}) 失败:`, err);
+    log.error(`[EditorActions] 保存文件 ${tab.filePath} (会话 ${sessionId}) 失败:`, err);
     tab.isSaving = false;
     tab.saveStatus = 'error';
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -351,31 +347,29 @@ export const saveFileInSession = async (
 export const changeEncodingInSession = (sessionId: string, tabId: string, newEncoding: string) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.warn(`[EditorActions] 尝试更改不存在的会话 ${sessionId} 中标签页 ${tabId} 的编码。`);
+    log.warn(`[EditorActions] 尝试更改不存在的会话 ${sessionId} 中标签页 ${tabId} 的编码。`);
     return;
   }
   const tab = session.editorTabs.value.find((t) => t.id === tabId);
   if (!tab) {
-    console.warn(`[EditorActions] 尝试更改会话 ${sessionId} 中不存在的标签页 ${tabId} 的编码。`);
+    log.warn(`[EditorActions] 尝试更改会话 ${sessionId} 中不存在的标签页 ${tabId} 的编码。`);
     return;
   }
 
   if (!tab.rawContentBase64) {
-    console.error(
-      `[EditorActions] 无法更改编码：会话 ${sessionId} 标签页 ${tabId} 没有原始文件数据。`
-    );
+    log.error(`[EditorActions] 无法更改编码：会话 ${sessionId} 标签页 ${tabId} 没有原始文件数据。`);
     tab.isLoading = false; // 应该已经是 false，但确保
     tab.loadingError = '缺少原始文件数据，无法更改编码';
     return;
   }
   if (tab.selectedEncoding === newEncoding) {
-    console.info(
+    log.info(
       `[EditorActions] 会话 ${sessionId} 标签页 ${tabId} 编码已经是 ${newEncoding}，无需更改。`
     );
     return;
   }
 
-  console.info(
+  log.info(
     `[EditorActions] 使用新编码 "${newEncoding}" 在前端重新解码文件: ${tab.filePath} (会话 ${sessionId}, Tab ID: ${tabId})`
   );
 
@@ -383,17 +377,17 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
     const newContent = decodeRawContent(tab.rawContentBase64, newEncoding);
     tab.content = newContent;
     tab.selectedEncoding = newEncoding;
-    // tab.isModified 状态取决于新内容是否与 originalContent 不同，或者用户可能希望将更改编码视为“修改”
+    // tab.isModified 状态取决于新内容是否与 originalContent 不同，或者用户可能希望将更改编码视为'修改'
     // 这里我们假设仅更改编码预览不直接标记为 isModified，除非内容实际变化
     // 如果 newContent === tab.originalContent，isModified 可以保持不变或设为 false
     // 如果 newContent !== tab.originalContent，isModified 应该为 true
     // 为了简单起见，这里不改变 isModified，由后续的 content 比较来决定
     tab.loadingError = null; // 清除可能存在的旧错误
-    console.info(
+    log.info(
       `[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用新编码 "${newEncoding}" 解码完成。`
     );
   } catch (err: unknown) {
-    console.error(
+    log.error(
       `[EditorActions] 使用编码 "${newEncoding}" 在前端解码文件 ${tab.filePath} (会话 ${sessionId}) 失败:`,
       err
     );
@@ -420,7 +414,7 @@ export const closeOtherTabsInSession = async (
   const targetTab = session.editorTabs.value.find((tab) => tab.id === targetTabId);
   if (!targetTab) return;
 
-  console.info(`[EditorActions ${sessionId}] 关闭除 ${targetTabId} 之外的所有标签页...`);
+  log.info(`[EditorActions ${sessionId}] 关闭除 ${targetTabId} 之外的所有标签页...`);
   const tabsToClose = session.editorTabs.value.filter((tab) => tab.id !== targetTabId);
   const idsToClose = tabsToClose.map((t) => t.id);
   for (const id of idsToClose) {
@@ -446,7 +440,7 @@ export const closeTabsToTheRightInSession = async (
   const targetIndex = session.editorTabs.value.findIndex((tab) => tab.id === targetTabId);
   if (targetIndex === -1) return;
 
-  console.info(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 右侧的所有标签页...`);
+  log.info(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 右侧的所有标签页...`);
   const tabsToClose = session.editorTabs.value.slice(targetIndex + 1);
   const idsToClose = tabsToClose.map((t) => t.id);
   for (const id of idsToClose) {
@@ -462,9 +456,7 @@ export const updateTabScrollPositionInSession = (
 ) => {
   const session = sessions.value.get(sessionId);
   if (!session) {
-    console.error(
-      `[EditorActions] 尝试在不存在的会话 ${sessionId} 中更新标签页 ${tabId} 的滚动位置`
-    );
+    log.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中更新标签页 ${tabId} 的滚动位置`);
     return;
   }
   const tab = session.editorTabs.value.find((t) => t.id === tabId);
@@ -472,7 +464,7 @@ export const updateTabScrollPositionInSession = (
     tab.scrollTop = scrollTop;
     tab.scrollLeft = scrollLeft;
   } else {
-    console.warn(`[EditorActions] 尝试更新会话 ${sessionId} 中不存在的标签页 ${tabId} 的滚动位置`);
+    log.warn(`[EditorActions] 尝试更新会话 ${sessionId} 中不存在的标签页 ${tabId} 的滚动位置`);
   }
 };
 
@@ -494,7 +486,7 @@ export const closeTabsToTheLeftInSession = async (
   const targetIndex = session.editorTabs.value.findIndex((tab) => tab.id === targetTabId);
   if (targetIndex === -1) return;
 
-  console.info(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 左侧的所有标签页...`);
+  log.info(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 左侧的所有标签页...`);
   const tabsToClose = session.editorTabs.value.slice(0, targetIndex);
   const idsToClose = tabsToClose.map((t) => t.id);
   for (const id of idsToClose) {

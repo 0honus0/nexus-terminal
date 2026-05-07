@@ -10,6 +10,7 @@ import {
   type OutputType,
   type ProcessedOutput,
 } from '../../../utils/output-processor';
+import { log } from '@/utils/log';
 
 const ANSI_DIM = '\x1b[2m';
 const ANSI_RESET = '\x1b[0m';
@@ -210,7 +211,7 @@ export class OutputEnhancerAddon implements ITerminalAddon {
       remaining = `${
         truncated
       }\n${ANSI_DIM}[... 内容过长已截断，已隐藏 ${hiddenLines - truncatedLines} 行]${ANSI_RESET}`;
-      console.warn(
+      log.warn(
         `[OutputEnhancerAddon] 折叠块内容过大（${(remainingBytes / 1024 / 1024).toFixed(2)}MB），已截断到 ${(actualBytes / 1024 / 1024).toFixed(2)}MB`
       );
     }

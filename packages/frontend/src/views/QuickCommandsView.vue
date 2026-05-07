@@ -254,6 +254,7 @@ import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useSessionStore } from '../stores/session.store';
 import type { SessionState } from '../stores/session/types';
 import { useConnectionsStore } from '../stores/connections.store';
+import { log } from '@/utils/log';
 
 const quickCommandsStore = useQuickCommandsStore();
 const quickCommandTagsStore = useQuickCommandTagsStore();
@@ -319,10 +320,10 @@ watchEffect(() => {
   if (storeVal && typeof storeVal === 'number' && storeVal > 0) {
     if (quickCommandRowSizeMultiplier.value !== storeVal) {
       quickCommandRowSizeMultiplier.value = storeVal;
-      // console.info(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
+      // log.info(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
     }
   } else {
-    // console.info(`[QuickCmdView] No valid row size multiplier in store for QuickCommands, using default: ${quickCommandRowSizeMultiplier.value}`);
+    // log.info(`[QuickCmdView] No valid row size multiplier in store for QuickCommands, using default: ${quickCommandRowSizeMultiplier.value}`);
   }
 });
 
@@ -334,12 +335,12 @@ const handleWheel = (event: WheelEvent) => {
   quickCommandRowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2));
 
   if (quickCommandRowSizeMultiplier.value !== oldMultiplier) {
-    // console.info(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
+    // log.info(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
     // 假设 settingsStore 有一个名为 updateQuickCommandRowSizeMultiplier 的 action
     if (settingsStore.updateQuickCommandRowSizeMultiplier) {
       settingsStore.updateQuickCommandRowSizeMultiplier(quickCommandRowSizeMultiplier.value);
     } else {
-      console.warn(
+      log.warn(
         '[QuickCmdView] settingsStore.updateQuickCommandRowSizeMultiplier action not found.'
       );
     }
@@ -422,7 +423,7 @@ const scrollToSelected = async (index: number) => {
       block: 'nearest',
     });
   } else {
-    console.warn(
+    log.warn(
       `[QuickCmdView] scrollToSelected: Could not find element for command ID ${selectedCommandId}`
     );
   }
@@ -548,7 +549,7 @@ const copyCommand = async (command: string) => {
     await navigator.clipboard.writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
   } catch (err: unknown) {
-    console.error('使用Clipboard API复制命令失败:', err);
+    log.error('使用Clipboard API复制命令失败:', err);
     // 备用方案：使用临时文本区域和execCommand
     try {
       const textarea = document.createElement('textarea');
@@ -566,7 +567,7 @@ const copyCommand = async (command: string) => {
         uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败'));
       }
     } catch (fallbackErr: unknown) {
-      console.error('备用复制方法也失败:', fallbackErr);
+      log.error('备用复制方法也失败:', fallbackErr);
       uiNotificationsStore.showError(t('commandHistory.copyFailed', '复制失败'));
     }
   }

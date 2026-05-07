@@ -2,6 +2,7 @@
 
 import * as iconv from '@vscode/iconv-lite-umd';
 import { Buffer } from 'buffer/';
+import { log } from '@/utils/log';
 
 /**
  * 生成唯一的会话 ID。
@@ -95,13 +96,13 @@ export const decodeRawContent = (rawContentBase64: string, encoding: string): st
     }
     // 如果 iconv-lite 也不支持，回退到 UTF-8 并警告
 
-    console.warn(
+    log.warn(
       `[SessionUtils decodeRawContent] Unsupported encoding "${encoding}" requested. Falling back to UTF-8.`
     );
     const decoder = new TextDecoder('utf-8');
     return decoder.decode(buffer);
   } catch (error: unknown) {
-    console.error(
+    log.error(
       `[SessionUtils decodeRawContent] Error decoding content with encoding "${encoding}":`,
       error
     );

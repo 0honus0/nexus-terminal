@@ -119,6 +119,7 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth.store'; // *** 导入 Auth Store ***
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -167,7 +168,7 @@ const handleSetup = async () => {
     // The success message will be briefly visible before navigation.
     router.push('/login');
   } catch (err: unknown) {
-    console.error('Setup failed:', err);
+    log.error('Setup failed:', err);
     error.value = extractErrorMessage(err, t('setup.error.generic'));
     isLoading.value = false; // Re-enable button on error
   }

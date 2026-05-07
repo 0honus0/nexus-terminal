@@ -1,6 +1,7 @@
 import { Database } from 'sqlite3';
 import * as schemaSql from './schema';
 import { presetTerminalThemes } from '../config/preset-themes-definition';
+import { logger } from '../utils/logger';
 
 interface RunResult {
   lastID: number;
@@ -11,7 +12,7 @@ const runDb = (db: Database, sql: string, params: unknown[] = []): Promise<RunRe
   return new Promise((resolve, reject) => {
     db.run(sql, params, function runDbCallback(this: RunResult, err: Error | null) {
       if (err) {
-        console.error(
+        logger.error(
           `[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`
         );
         reject(err);
@@ -37,7 +38,7 @@ export interface TableDefinition {
  */
 const initAuditLogsTable = async (_db: Database): Promise<void> => {
   // 索引创建已移至 migrations.ts（迁移 #12），避免在旧数据库上因 user_id 列尚未添加而失败
-  console.debug('[DB Init] 审计日志表初始化检查完成（索引由迁移管理）。');
+  logger.debug('[DB Init] 审计日志表初始化检查完成（索引由迁移管理）。');
 };
 
 /**
@@ -47,7 +48,7 @@ const initBatchTasksTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createBatchTasksIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.debug('[DB Init] 批量任务索引创建完成。');
+  logger.debug('[DB Init] 批量任务索引创建完成。');
 };
 
 /**
@@ -57,7 +58,7 @@ const initBatchSubTasksTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createBatchSubTasksIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.debug('[DB Init] 批量子任务索引创建完成。');
+  logger.debug('[DB Init] 批量子任务索引创建完成。');
 };
 
 /**
@@ -67,7 +68,7 @@ const initAISessionsTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createAISessionsIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.debug('[DB Init] AI会话索引创建完成。');
+  logger.debug('[DB Init] AI会话索引创建完成。');
 };
 
 /**
@@ -77,7 +78,7 @@ const initAIMessagesTable = async (db: Database): Promise<void> => {
   for (const indexSql of schemaSql.createAIMessagesIndexesSQL) {
     await runDb(db, indexSql);
   }
-  console.debug('[DB Init] AI消息索引创建完成。');
+  logger.debug('[DB Init] AI消息索引创建完成。');
 };
 
 /**
@@ -88,7 +89,7 @@ const initTerminalThemesTable = async (db: Database): Promise<void> => {
   const { initializePresetThemes } =
     await import('../terminal-themes/terminal-theme.repository.js');
   await initializePresetThemes(db, presetTerminalThemes);
-  console.debug('[DB Init] 预设主题初始化检查完成。');
+  logger.debug('[DB Init] 预设主题初始化检查完成。');
 };
 
 /**
@@ -98,7 +99,7 @@ const initTerminalThemesTable = async (db: Database): Promise<void> => {
 const initAppearanceSettingsTable = async (db: Database): Promise<void> => {
   const { ensureDefaultSettingsExist } = await import('../appearance/appearance.repository.js');
   await ensureDefaultSettingsExist(db);
-  console.debug('[DB Init] 外观设置初始化检查完成。');
+  logger.debug('[DB Init] 外观设置初始化检查完成。');
 };
 
 // --- Table Definitions Registry ---
@@ -191,7 +192,7 @@ export const tableDefinitions: TableDefinition[] = [
       for (const indexSql of schemaSql.createIpGeoCacheIndexesSQL) {
         await runDb(db, indexSql);
       }
-      console.debug('[DB Init] IP 地理定位缓存索引创建完成。');
+      logger.debug('[DB Init] IP 地理定位缓存索引创建完成。');
     },
   },
 ];

@@ -1,5 +1,6 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { ErrorFactory, getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 定义路径历史记录的接口
 export interface PathHistoryEntry {
@@ -48,7 +49,7 @@ export const upsertPath = async (path: string): Promise<number> => {
       return insertResult.lastID;
     }
   } catch (err: unknown) {
-    console.error('Upsert 路径历史记录时出错:', getErrorMessage(err));
+    logger.error('Upsert 路径历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法更新或插入路径历史记录', '无法更新或插入路径历史记录');
   }
 };
@@ -64,7 +65,7 @@ export const getAllPaths = async (): Promise<PathHistoryEntry[]> => {
     const rows = await allDb<DbPathHistoryRow>(db, sql);
     return rows;
   } catch (err: unknown) {
-    console.error('获取路径历史记录时出错:', getErrorMessage(err));
+    logger.error('获取路径历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法获取路径历史记录', '无法获取路径历史记录');
   }
 };
@@ -81,7 +82,7 @@ export const deletePathById = async (id: number): Promise<boolean> => {
     const result = await runDb(db, sql, [id]);
     return result.changes > 0;
   } catch (err: unknown) {
-    console.error('删除路径历史记录时出错:', getErrorMessage(err));
+    logger.error('删除路径历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法删除路径历史记录', '无法删除路径历史记录');
   }
 };
@@ -97,7 +98,7 @@ export const clearAllPaths = async (): Promise<number> => {
     const result = await runDb(db, sql);
     return result.changes;
   } catch (err: unknown) {
-    console.error('清空路径历史记录时出错:', getErrorMessage(err));
+    logger.error('清空路径历史记录时出错:', getErrorMessage(err));
     throw ErrorFactory.databaseError('无法清空路径历史记录', '无法清空路径历史记录');
   }
 };

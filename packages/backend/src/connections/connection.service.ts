@@ -10,6 +10,7 @@ import {
   UpdateConnectionInput,
   FullConnectionData,
 } from '../types/connection.types';
+import { logger } from '../utils/logger';
 
 export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateConnectionInput };
 
@@ -125,7 +126,7 @@ export const createConnection = async (
     'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'
   > & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
 
-  console.debug('[Service:createConnection] Received input:', JSON.stringify(input, null, 2)); // Log input
+  logger.debug('[Service:createConnection] Received input:', input);
 
   // 0. 处理和验证 jump_chain
   const processedJumpChain = await _validateAndProcessJumpChain(input.jump_chain, input.proxy_id);
@@ -290,7 +291,7 @@ export const createConnection = async (
   if (finalConnectionData.ssh_key_id === null) {
     delete finalConnectionData.ssh_key_id; // Adjust based on repository function signature if needed
   }
-  console.debug(
+  logger.debug(
     '[Service:createConnection] Data being passed to ConnectionRepository.createConnection:',
     JSON.stringify(finalConnectionData, null, 2)
   ); // Log data before saving
@@ -314,7 +315,7 @@ export const createConnection = async (
   const newConnection = await getConnectionById(newConnectionId);
   if (!newConnection) {
     // 如果创建成功，这理论上不应该发生
-    console.error(
+    logger.error(
       `[Audit Log Error] Failed to retrieve connection ${newConnectionId} after creation.`
     );
     throw new Error('创建连接后无法检索到该连接。');
@@ -371,7 +372,7 @@ export const updateConnection = async (
       try {
         jumpChainFromDb = JSON.parse(currentFullConnection.jump_chain) as number[];
       } catch (error: unknown) {
-        console.error(
+        logger.error(
           `[Service:updateConnection] Failed to parse jump_chain from DB for connection ${id}: ${currentFullConnection.jump_chain}`,
           error
         );
@@ -576,7 +577,7 @@ export const updateConnection = async (
   let updatedFieldsForAudit: string[] = []; // 跟踪审计日志的字段
   if (hasNonTagChanges) {
     updatedFieldsForAudit = Object.keys(dataToUpdate); // 在更新调用之前获取字段
-    console.debug(
+    logger.debug(
       `[Service:updateConnection] Data being passed to ConnectionRepository.updateConnection for ID ${id}:`,
       JSON.stringify(dataToUpdate, null, 2)
     ); // ADD THIS LOG
@@ -642,7 +643,7 @@ export const getConnectionWithDecryptedCredentials = async (
   // 1. 获取完整的连接数据（包含加密字段和可能的 ssh_key_id）
   const fullConnectionDbRow = await ConnectionRepository.findFullConnectionById(id);
   if (!fullConnectionDbRow) {
-    console.debug(`[Service:getConnWithDecrypt] Connection not found for ID: ${id}`);
+    logger.debug(`[Service:getConnWithDecrypt] Connection not found for ID: ${id}`);
     return null;
   }
   // Convert DbRow to the stricter FullConnectionData type expected by the service/types file
@@ -662,7 +663,7 @@ export const getConnectionWithDecryptedCredentials = async (
     await ConnectionRepository.findConnectionByIdWithTags(id);
   if (!connectionWithTags) {
     // This shouldn't happen if findFullConnectionById succeeded, but good practice to check
-    console.error(
+    logger.error(
       `[Service:getConnWithDecrypt] Mismatch: Full connection found but tagged connection not found for ID: ${id}`
     );
     // Consider throwing an error or returning a specific error state
@@ -683,7 +684,7 @@ export const getConnectionWithDecryptedCredentials = async (
     else if (fullConnection.auth_method === 'key') {
       if (fullConnection.ssh_key_id) {
         // +++ If using ssh_key_id, fetch and decrypt the stored key +++
-        console.debug(
+        logger.debug(
           `[Service:getConnWithDecrypt] Connection ${id} uses stored SSH key ID: ${fullConnection.ssh_key_id}. Fetching key...`
         );
         const storedKeyDetails = await SshKeyService.getDecryptedSshKeyById(
@@ -691,14 +692,14 @@ export const getConnectionWithDecryptedCredentials = async (
         );
         if (!storedKeyDetails) {
           // This indicates an inconsistency, as the ssh_key_id should be valid
-          console.error(
+          logger.error(
             `[Service:getConnWithDecrypt] Error: Connection ${id} references non-existent SSH key ID ${fullConnection.ssh_key_id}`
           );
           throw new Error(`关联的 SSH 密钥 (ID: ${fullConnection.ssh_key_id}) 未找到。`);
         }
         decryptedPrivateKey = storedKeyDetails.privateKey;
         decryptedPassphrase = storedKeyDetails.passphrase;
-        console.debug(
+        logger.debug(
           `[Service:getConnWithDecrypt] Successfully fetched and decrypted stored SSH key ${fullConnection.ssh_key_id} for connection ${id}.`
         );
       } else if (fullConnection.encrypted_private_key) {
@@ -710,7 +711,7 @@ export const getConnectionWithDecryptedCredentials = async (
         decryptedPrivateKey = decrypted.private_key;
         decryptedPassphrase = decrypted.passphrase;
       } else {
-        console.warn(
+        logger.warn(
           `[Service:getConnWithDecrypt] Connection ${id} uses key auth but has neither ssh_key_id nor encrypted_private_key.`
         );
         // No key available to decrypt
@@ -718,7 +719,7 @@ export const getConnectionWithDecryptedCredentials = async (
     }
   } catch (error: unknown) {
     // Catch decryption or key fetching errors
-    console.error(
+    logger.error(
       `[Service:getConnWithDecrypt] Failed to decrypt credentials for connection ID ${id}:`,
       error
     );
@@ -730,7 +731,7 @@ export const getConnectionWithDecryptedCredentials = async (
     // 其他解密错误（如加密密钥变更）记录日志并继续，返回 undefined 凭证
   }
 
-  console.debug(
+  logger.debug(
     `[Service:getConnWithDecrypt] Returning data for ID: ${id}, Auth Method: ${fullConnection.auth_method}`
   );
   return {
@@ -805,7 +806,7 @@ export const cloneConnection = async (
   // 6. 记录审计操作
   const clonedConnection = await getConnectionById(newConnectionId);
   if (!clonedConnection) {
-    console.error(
+    logger.error(
       `[Audit Log Error] Failed to retrieve connection ${newConnectionId} after cloning from ${originalId}.`
     );
     throw new Error('克隆连接后无法检索到该连接。');
@@ -848,7 +849,7 @@ export const addTagToConnections = async (
     // 记录审计日志
     auditLogService.logAction('CONNECTIONS_TAG_ADDED', { connectionIds, tagId });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `Service: 为连接 ${connectionIds.join(', ')} 添加标签 ${tagId} 时发生错误:`,
       error
     );
@@ -870,7 +871,7 @@ export const updateConnectionTags = async (
     const updated = await ConnectionRepository.updateConnectionTags(connectionId, tagIds);
     return updated;
   } catch (error: unknown) {
-    console.error(`Service: 更新连接 ${connectionId} 的标签时发生错误:`, error);
+    logger.error(`Service: 更新连接 ${connectionId} 的标签时发生错误:`, error);
     throw error;
   }
 };

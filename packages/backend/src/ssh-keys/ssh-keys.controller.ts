@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as SshKeyService from './ssh-keys.service';
 import { CreateSshKeyInput, UpdateSshKeyInput } from './ssh-keys.service';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 /**
  * 获取所有 SSH 密钥的名称列表 (GET /api/v1/ssh-keys)
@@ -15,7 +16,7 @@ export const getSshKeyNames = async (
     const keys = await SshKeyService.getAllSshKeyNames();
     res.status(200).json(keys);
   } catch (error: unknown) {
-    console.error('Controller: 获取 SSH 密钥列表失败:', error);
+    logger.error('Controller: 获取 SSH 密钥列表失败:', error);
     next(error);
   }
 };
@@ -38,7 +39,7 @@ export const createSshKey = async (
     const newKey = await SshKeyService.createSshKey(input);
     res.status(201).json({ message: 'SSH 密钥创建成功。', key: newKey });
   } catch (error: unknown) {
-    console.error('Controller: 创建 SSH 密钥失败:', error);
+    logger.error('Controller: 创建 SSH 密钥失败:', error);
     const errMsg = getErrorMessage(error);
     // 检查是否是 Service 层抛出的特定错误 (如名称重复)
     if (errMsg.includes('已存在') || errMsg.includes('必须提供')) {
@@ -72,7 +73,7 @@ export const getDecryptedSshKey = async (
       res.status(200).json(keyDetails);
     }
   } catch (error: unknown) {
-    console.error(`Controller: 获取解密后的 SSH 密钥 ${req.params.id} 失败:`, error);
+    logger.error(`Controller: 获取解密后的 SSH 密钥 ${req.params.id} 失败:`, error);
     next(error);
   }
 };
@@ -105,7 +106,7 @@ export const updateSshKey = async (
       res.status(200).json({ message: 'SSH 密钥更新成功。', key: updatedKey });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 更新 SSH 密钥 ${req.params.id} 失败:`, error);
+    logger.error(`Controller: 更新 SSH 密钥 ${req.params.id} 失败:`, error);
     const errMsg = getErrorMessage(error);
     // 检查是否是 Service 层抛出的特定错误 (如名称重复或验证失败)
     if (errMsg.includes('已存在') || errMsg.includes('不能为空')) {
@@ -137,7 +138,7 @@ export const deleteSshKey = async (
       res.status(200).json({ message: 'SSH 密钥删除成功。' });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 删除 SSH 密钥 ${req.params.id} 失败:`, error);
+    logger.error(`Controller: 删除 SSH 密钥 ${req.params.id} 失败:`, error);
     next(error);
   }
 };

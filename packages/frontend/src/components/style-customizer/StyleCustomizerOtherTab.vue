@@ -5,6 +5,7 @@ import { useAppearanceStore } from '../../stores/appearance.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -60,7 +61,7 @@ const handleSaveEditorFontSize = async () => {
       message: t('styleCustomizer.editorFontSizeSaved'),
     });
   } catch (error: unknown) {
-    console.error('保存编辑器字体大小失败:', error);
+    log.error('保存编辑器字体大小失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.editorFontSizeSaveFailed', {
@@ -79,7 +80,7 @@ const handleSaveEditorFontFamily = async () => {
       message: t('styleCustomizer.editorFontFamilySaved'),
     });
   } catch (error: unknown) {
-    console.error('保存编辑器字体失败:', error);
+    log.error('保存编辑器字体失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.editorFontFamilySaveFailed', {

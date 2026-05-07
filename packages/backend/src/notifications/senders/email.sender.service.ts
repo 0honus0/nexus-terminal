@@ -6,6 +6,7 @@ import type { ProcessedNotification } from '../notification.processor.service';
 import { EmailConfig } from '../../types/notification.types';
 import { settingsService } from '../../settings/settings.service';
 import { getErrorMessage } from '../../utils/AppError';
+import { logger } from '../../utils/logger';
 
 class EmailSenderService implements INotificationSender {
   async send(notification: ProcessedNotification): Promise<void> {
@@ -15,7 +16,7 @@ class EmailSenderService implements INotificationSender {
     const { body } = notification;
 
     if (!to) {
-      console.error('[EmailSender] Missing recipient address (to) in configuration.');
+      logger.error('[EmailSender] Missing recipient address (to) in configuration.');
       throw new Error('Email configuration is incomplete (missing recipient address).');
     }
 
@@ -35,14 +36,14 @@ class EmailSenderService implements INotificationSender {
       const finalFrom = from || globalSmtpFrom || 'noreply@nexus-terminal.local';
 
       if (!finalSmtpHost) {
-        console.error(
+        logger.error(
           '[EmailSender] SMTP host is not configured (neither channel-specific nor global).'
         );
         throw new Error('SMTP host configuration is missing.');
       }
 
       if (Number.isNaN(finalSmtpPort) || finalSmtpPort <= 0) {
-        console.error(
+        logger.error(
           `[EmailSender] Invalid SMTP port configured: ${finalSmtpPort}. Using default 587.`
         );
 
@@ -77,11 +78,11 @@ class EmailSenderService implements INotificationSender {
         html: body,
       };
 
-      console.info(`[EmailSender] Sending email notification to: ${to} with subject: "${subject}"`);
+      logger.info({ to, subject }, '[EmailSender] Sending email notification');
       const info = await transporter.sendMail(mailOptions);
-      console.info(`[EmailSender] Email sent successfully. Message ID: ${info.messageId}`);
+      logger.info({ messageId: info.messageId }, '[EmailSender] Email sent successfully');
     } catch (error: unknown) {
-      console.error(`[EmailSender] Error sending email notification to ${to}:`, error);
+      logger.error({ to, err: error }, '[EmailSender] Error sending email notification');
 
       throw new Error(`Failed to send email notification: ${getErrorMessage(error)}`);
     }

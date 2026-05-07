@@ -13,6 +13,7 @@ import {
   UpdateCaptchaSettingsDto,
   CaptchaProvider,
 } from '../types/settings.types';
+import { logger } from '../utils/logger';
 
 // +++ 定义焦点切换完整配置接口 (与前端 store 保持一致) +++
 interface FocusItemConfig {
@@ -61,9 +62,9 @@ export const settingsService = {
    * @returns 返回包含所有设置项的键值对记录
    */
   async getAllSettings(): Promise<Record<string, string>> {
-    // console.info('[Service] Calling repository.getAllSettings...');
+    // logger.info('[Service] Calling repository.getAllSettings...');
     const settingsArray = await settingsRepository.getAllSettings();
-    // console.info('[Service] Got settings array from repository:', JSON.stringify(settingsArray));
+    // logger.info('[Service] Got settings array from repository:', JSON.stringify(settingsArray));
     const settingsRecord: Record<string, string> = {};
     settingsArray.forEach((setting) => {
       settingsRecord[setting.key] = setting.value;
@@ -94,12 +95,12 @@ export const settingsService = {
    * @param settings 包含多个设置项键值对的对象
    */
   async setMultipleSettings(settings: Record<string, string>): Promise<void> {
-    console.debug(
+    logger.debug(
       '[Service] Calling repository.setMultipleSettings with:',
       JSON.stringify(settings)
     );
     await settingsRepository.setMultipleSettings(settings);
-    console.debug('[Service] Finished repository.setMultipleSettings.');
+    logger.debug('[Service] Finished repository.setMultipleSettings.');
   },
 
   /**
@@ -140,17 +141,17 @@ export const settingsService = {
    * @returns 返回是否启用 (boolean)，如果未设置则默认为 true
    */
   async isIpBlacklistEnabled(): Promise<boolean> {
-    console.debug(`[Service] Attempting to get setting for key: ${IP_BLACKLIST_ENABLED_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${IP_BLACKLIST_ENABLED_KEY}`);
     try {
       const enabledStr = await settingsRepository.getSetting(IP_BLACKLIST_ENABLED_KEY);
-      console.debug(
+      logger.debug(
         `[Service] Raw value from repository for ${IP_BLACKLIST_ENABLED_KEY}:`,
         enabledStr
       );
       // 如果设置存在且值为 'false'，则返回 false，否则都返回 true (包括未设置的情况)
       return enabledStr !== 'false';
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting IP blacklist enabled setting (key: ${IP_BLACKLIST_ENABLED_KEY}):`,
         error
       );
@@ -165,11 +166,11 @@ export const settingsService = {
    */
   async getFocusSwitcherSequence(): Promise<FocusSwitcherFullConfig> {
     // +++ 更新返回类型 +++
-    console.debug(`[Service] Attempting to get setting for key: ${FOCUS_SEQUENCE_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${FOCUS_SEQUENCE_KEY}`);
     const defaultConfig: FocusSwitcherFullConfig = { sequence: [], shortcuts: {} }; // 默认值
     try {
       const configJson = await settingsRepository.getSetting(FOCUS_SEQUENCE_KEY);
-      console.debug(`[Service] Raw value from repository for ${FOCUS_SEQUENCE_KEY}:`, configJson);
+      logger.debug(`[Service] Raw value from repository for ${FOCUS_SEQUENCE_KEY}:`, configJson);
       if (configJson) {
         const config = JSON.parse(configJson);
         // +++ 验证 FocusSwitcherFullConfig 结构 +++
@@ -187,25 +188,25 @@ export const settingsService = {
               (!('shortcut' in sc) || typeof (sc as { shortcut?: unknown }).shortcut === 'string')
           )
         ) {
-          console.debug(
+          logger.debug(
             '[Service] Fetched and validated full focus switcher config:',
             JSON.stringify(config)
           );
           return config as FocusSwitcherFullConfig;
         }
-        console.warn(
+        logger.warn(
           '[Service] Invalid full focus switcher config format found in settings. Returning default.'
         );
       } else {
-        console.debug('[Service] No focus switcher config found in settings. Returning default.');
+        logger.debug('[Service] No focus switcher config found in settings. Returning default.');
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error parsing full focus switcher config from settings (key: ${FOCUS_SEQUENCE_KEY}):`,
         error
       );
     }
-    console.debug('[Service] Returning default focus config:', JSON.stringify(defaultConfig));
+    logger.debug('[Service] Returning default focus config:', JSON.stringify(defaultConfig));
     return defaultConfig;
   },
 
@@ -215,7 +216,7 @@ export const settingsService = {
    */
   async setFocusSwitcherSequence(fullConfig: FocusSwitcherFullConfig): Promise<void> {
     // +++ 更新参数类型 +++
-    console.debug(
+    logger.debug(
       '[Service] setFocusSwitcherSequence called with full config:',
       JSON.stringify(fullConfig)
     );
@@ -236,7 +237,7 @@ export const settingsService = {
         )
       )
     ) {
-      console.error(
+      logger.error(
         '[Service] Attempted to save invalid full focus switcher config format:',
         fullConfig
       );
@@ -248,7 +249,7 @@ export const settingsService = {
       (id) => !(VALID_FOCUS_INPUT_IDS as readonly string[]).includes(id)
     );
     if (invalidSequenceIds.length > 0) {
-      console.error(
+      logger.error(
         `[Service] Invalid focus input IDs in sequence: ${invalidSequenceIds.join(', ')}`
       );
       throw new Error(`Invalid focus input ID(s) in sequence: ${invalidSequenceIds.join(', ')}`);
@@ -259,7 +260,7 @@ export const settingsService = {
       (key) => !(VALID_FOCUS_INPUT_IDS as readonly string[]).includes(key)
     );
     if (invalidShortcutKeys.length > 0) {
-      console.error(
+      logger.error(
         `[Service] Invalid focus input IDs in shortcuts: ${invalidShortcutKeys.join(', ')}`
       );
       throw new Error(`Invalid focus input ID(s) in shortcuts: ${invalidShortcutKeys.join(', ')}`);
@@ -273,7 +274,7 @@ export const settingsService = {
       }
     }
     if (invalidShortcuts.length > 0) {
-      console.warn(
+      logger.warn(
         `[Service] Invalid shortcut format(s): ${invalidShortcuts.join(', ')}. Shortcuts should follow pattern like "Ctrl+K", "Alt+Shift+F", etc.`
       );
       // 对于快捷键格式，仅警告而不阻止保存（允许用户自定义格式）
@@ -281,13 +282,13 @@ export const settingsService = {
 
     try {
       const configJson = JSON.stringify(fullConfig); // +++ 序列化完整结构 +++
-      console.debug(
+      logger.debug(
         `[Service] Attempting to save setting. Key: ${FOCUS_SEQUENCE_KEY}, Value: ${configJson}`
       );
       await settingsRepository.setSetting(FOCUS_SEQUENCE_KEY, configJson);
-      console.debug(`[Service] Successfully saved setting for key: ${FOCUS_SEQUENCE_KEY}`);
+      logger.debug(`[Service] Successfully saved setting for key: ${FOCUS_SEQUENCE_KEY}`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${FOCUS_SEQUENCE_KEY}:`,
         error
       );
@@ -300,14 +301,14 @@ export const settingsService = {
    * @returns 返回导航栏是否可见 (boolean)，如果未设置则默认为 true
    */
   async getNavBarVisibility(): Promise<boolean> {
-    console.debug(`[Service] Attempting to get setting for key: ${NAV_BAR_VISIBLE_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${NAV_BAR_VISIBLE_KEY}`);
     try {
       const visibleStr = await settingsRepository.getSetting(NAV_BAR_VISIBLE_KEY);
-      console.debug(`[Service] Raw value from repository for ${NAV_BAR_VISIBLE_KEY}:`, visibleStr);
+      logger.debug(`[Service] Raw value from repository for ${NAV_BAR_VISIBLE_KEY}:`, visibleStr);
       // 如果设置存在且值为 'false'，则返回 false，否则都返回 true (包括未设置的情况)
       return visibleStr !== 'false';
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting nav bar visibility setting (key: ${NAV_BAR_VISIBLE_KEY}):`,
         error
       );
@@ -321,16 +322,16 @@ export const settingsService = {
    * @param visible 是否可见 (boolean)
    */
   async setNavBarVisibility(visible: boolean): Promise<void> {
-    console.debug(`[Service] setNavBarVisibility called with: ${visible}`);
+    logger.debug(`[Service] setNavBarVisibility called with: ${visible}`);
     try {
       const visibleStr = String(visible); // 将布尔值转换为 'true' 或 'false'
-      console.debug(
+      logger.debug(
         `[Service] Attempting to save setting. Key: ${NAV_BAR_VISIBLE_KEY}, Value: ${visibleStr}`
       );
       await settingsRepository.setSetting(NAV_BAR_VISIBLE_KEY, visibleStr);
-      console.debug(`[Service] Successfully saved setting for key: ${NAV_BAR_VISIBLE_KEY}`);
+      logger.debug(`[Service] Successfully saved setting for key: ${NAV_BAR_VISIBLE_KEY}`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${NAV_BAR_VISIBLE_KEY}:`,
         error
       );
@@ -343,19 +344,16 @@ export const settingsService = {
    * @returns 返回存储的布局树 JSON 字符串，如果未设置则返回 null
    */
   async getLayoutTree(): Promise<string | null> {
-    console.debug(`[Service] Attempting to get setting for key: ${LAYOUT_TREE_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${LAYOUT_TREE_KEY}`);
     try {
       const layoutJson = await settingsRepository.getSetting(LAYOUT_TREE_KEY);
-      console.debug(
+      logger.debug(
         `[Service] Raw value from repository for ${LAYOUT_TREE_KEY}:`,
         layoutJson ? `${layoutJson.substring(0, 100)}...` : null
       ); // 只打印部分内容
       return layoutJson; // 直接返回 JSON 字符串或 null
     } catch (error: unknown) {
-      console.error(
-        `[Service] Error getting layout tree setting (key: ${LAYOUT_TREE_KEY}):`,
-        error
-      );
+      logger.error(`[Service] Error getting layout tree setting (key: ${LAYOUT_TREE_KEY}):`, error);
       return null; // 出错时返回 null
     }
   },
@@ -365,23 +363,23 @@ export const settingsService = {
    * @param layoutJson 布局树的 JSON 字符串
    */
   async setLayoutTree(layoutJson: string): Promise<void> {
-    console.debug(
+    logger.debug(
       `[Service] setLayoutTree called with JSON (first 100 chars): ${layoutJson.substring(0, 100)}...`
     );
     // 可选：在这里添加 JSON 格式验证
     try {
       JSON.parse(layoutJson); // 尝试解析以验证格式
     } catch (error: unknown) {
-      console.error('[Service] Invalid JSON format provided for layout tree:', error);
+      logger.error('[Service] Invalid JSON format provided for layout tree:', error);
       throw new Error('Invalid layout tree JSON format.');
     }
 
     try {
-      console.debug(`[Service] Attempting to save setting. Key: ${LAYOUT_TREE_KEY}`);
+      logger.debug(`[Service] Attempting to save setting. Key: ${LAYOUT_TREE_KEY}`);
       await settingsRepository.setSetting(LAYOUT_TREE_KEY, layoutJson);
-      console.debug(`[Service] Successfully saved setting for key: ${LAYOUT_TREE_KEY}`);
+      logger.debug(`[Service] Successfully saved setting for key: ${LAYOUT_TREE_KEY}`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${LAYOUT_TREE_KEY}:`,
         error
       );
@@ -394,17 +392,17 @@ export const settingsService = {
    * @returns 返回是否启用该功能 (boolean)，如果未设置则默认为 false
    */
   async getAutoCopyOnSelect(): Promise<boolean> {
-    console.debug(`[Service] Attempting to get setting for key: ${AUTO_COPY_ON_SELECT_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${AUTO_COPY_ON_SELECT_KEY}`);
     try {
       const enabledStr = await settingsRepository.getSetting(AUTO_COPY_ON_SELECT_KEY);
-      console.debug(
+      logger.debug(
         `[Service] Raw value from repository for ${AUTO_COPY_ON_SELECT_KEY}:`,
         enabledStr
       );
       // 如果设置存在且值为 'true'，则返回 true，否则都返回 false (包括未设置或值为 'false' 的情况)
       return enabledStr === 'true';
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting auto copy on select setting (key: ${AUTO_COPY_ON_SELECT_KEY}):`,
         error
       );
@@ -418,16 +416,16 @@ export const settingsService = {
    * @param enabled 是否启用 (boolean)
    */
   async setAutoCopyOnSelect(enabled: boolean): Promise<void> {
-    console.debug(`[Service] setAutoCopyOnSelect called with: ${enabled}`);
+    logger.debug(`[Service] setAutoCopyOnSelect called with: ${enabled}`);
     try {
       const enabledStr = String(enabled); // 将布尔值转换为 'true' 或 'false'
-      console.debug(
+      logger.debug(
         `[Service] Attempting to save setting. Key: ${AUTO_COPY_ON_SELECT_KEY}, Value: ${enabledStr}`
       );
       await settingsRepository.setSetting(AUTO_COPY_ON_SELECT_KEY, enabledStr);
-      console.debug(`[Service] Successfully saved setting for key: ${AUTO_COPY_ON_SELECT_KEY}`);
+      logger.debug(`[Service] Successfully saved setting for key: ${AUTO_COPY_ON_SELECT_KEY}`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${AUTO_COPY_ON_SELECT_KEY}:`,
         error
       );
@@ -440,12 +438,12 @@ export const settingsService = {
    * @returns 返回间隔秒数 (number)，如果未设置或无效则返回默认值
    */
   async getStatusMonitorIntervalSeconds(): Promise<number> {
-    console.debug(
+    logger.debug(
       `[Service] Attempting to get setting for key: ${STATUS_MONITOR_INTERVAL_SECONDS_KEY}`
     );
     try {
       const intervalStr = await settingsRepository.getSetting(STATUS_MONITOR_INTERVAL_SECONDS_KEY);
-      console.debug(
+      logger.debug(
         `[Service] Raw value from repository for ${STATUS_MONITOR_INTERVAL_SECONDS_KEY}:`,
         intervalStr
       );
@@ -455,14 +453,14 @@ export const settingsService = {
         if (!Number.isNaN(intervalNum) && intervalNum > 0) {
           return intervalNum;
         }
-        console.warn(
+        logger.warn(
           `[Service] Invalid status monitor interval value found ('${intervalStr}'). Returning default.`
         );
       } else {
-        console.debug(`[Service] No status monitor interval found in settings. Returning default.`);
+        logger.debug(`[Service] No status monitor interval found in settings. Returning default.`);
       }
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting status monitor interval setting (key: ${STATUS_MONITOR_INTERVAL_SECONDS_KEY}):`,
         error
       );
@@ -476,23 +474,23 @@ export const settingsService = {
    * @param interval 间隔秒数 (number)
    */
   async setStatusMonitorIntervalSeconds(interval: number): Promise<void> {
-    console.debug(`[Service] setStatusMonitorIntervalSeconds called with: ${interval}`);
+    logger.debug(`[Service] setStatusMonitorIntervalSeconds called with: ${interval}`);
     // 验证输入是否为正整数
     if (!Number.isInteger(interval) || interval <= 0) {
-      console.error(`[Service] Attempted to save invalid status monitor interval: ${interval}`);
+      logger.error(`[Service] Attempted to save invalid status monitor interval: ${interval}`);
       throw new Error('Invalid interval value provided. Must be a positive integer.');
     }
     try {
       const intervalStr = String(interval);
-      console.debug(
+      logger.debug(
         `[Service] Attempting to save setting. Key: ${STATUS_MONITOR_INTERVAL_SECONDS_KEY}, Value: ${intervalStr}`
       );
       await settingsRepository.setSetting(STATUS_MONITOR_INTERVAL_SECONDS_KEY, intervalStr);
-      console.debug(
+      logger.debug(
         `[Service] Successfully saved setting for key: ${STATUS_MONITOR_INTERVAL_SECONDS_KEY}`
       );
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${STATUS_MONITOR_INTERVAL_SECONDS_KEY}:`,
         error
       );
@@ -507,10 +505,10 @@ export const settingsService = {
    * @returns Promise<SidebarConfig>
    */
   async getSidebarConfig(): Promise<SidebarConfig> {
-    console.debug('[SettingsService] Getting sidebar config...');
+    logger.debug('[SettingsService] Getting sidebar config...');
     // Directly call the specific repository function
     const config = await getSidebarConfigFromRepo();
-    console.debug('[SettingsService] Returning sidebar config:', config);
+    logger.debug('[SettingsService] Returning sidebar config:', config);
     return config;
   },
 
@@ -520,7 +518,7 @@ export const settingsService = {
    * @returns Promise<void>
    */
   async setSidebarConfig(configDto: UpdateSidebarConfigDto): Promise<void> {
-    console.debug('[SettingsService] Setting sidebar config:', configDto);
+    logger.debug('[SettingsService] Setting sidebar config:', configDto);
 
     // --- Validation ---
     if (
@@ -575,7 +573,7 @@ export const settingsService = {
 
     // Directly call the specific repository function
     await setSidebarConfigInRepo(configToSave);
-    console.info('[SettingsService] Sidebar config successfully set.');
+    logger.info('[SettingsService] Sidebar config successfully set.');
   }, // <-- Add comma here
 
   // --- CAPTCHA Settings Specific Functions ---
@@ -585,12 +583,12 @@ export const settingsService = {
    * @returns Promise<CaptchaSettings>
    */
   async getCaptchaConfig(): Promise<CaptchaSettings> {
-    console.debug('[SettingsService] Getting CAPTCHA config...');
+    logger.debug('[SettingsService] Getting CAPTCHA config...');
     // Directly call the specific repository function
     const config = await getCaptchaConfigFromRepo();
     // Mask secret keys before logging
     const maskedConfig = { ...config, hcaptchaSecretKey: '***', recaptchaSecretKey: '***' };
-    console.debug('[SettingsService] Returning CAPTCHA config:', maskedConfig);
+    logger.debug('[SettingsService] Returning CAPTCHA config:', maskedConfig);
     return config;
   },
 
@@ -600,7 +598,7 @@ export const settingsService = {
    * @returns Promise<void>
    */
   async setCaptchaConfig(configDto: UpdateCaptchaSettingsDto): Promise<void> {
-    console.debug('[SettingsService] Setting CAPTCHA config (DTO):', {
+    logger.debug('[SettingsService] Setting CAPTCHA config (DTO):', {
       ...configDto,
       hcaptchaSecretKey: '***',
       recaptchaSecretKey: '***',
@@ -654,22 +652,22 @@ export const settingsService = {
 
     // Directly call the specific repository function with the full, validated config
     await setCaptchaConfigInRepo(configToSave);
-    console.info('[SettingsService] CAPTCHA config successfully set.');
+    logger.info('[SettingsService] CAPTCHA config successfully set.');
   }, // <-- Add comma here
 
   // --- Show Connection Tags ---
   async getShowConnectionTags(): Promise<boolean> {
-    console.debug(`[Service] Attempting to get setting for key: ${SHOW_CONNECTION_TAGS_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${SHOW_CONNECTION_TAGS_KEY}`);
     try {
       const valueStr = await settingsRepository.getSetting(SHOW_CONNECTION_TAGS_KEY);
-      console.debug(
+      logger.debug(
         `[Service] Raw value from repository for ${SHOW_CONNECTION_TAGS_KEY}:`,
         valueStr
       );
       // 默认显示，所以只有当值为 'false' 时才返回 false
       return valueStr !== 'false';
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting show connection tags setting (key: ${SHOW_CONNECTION_TAGS_KEY}):`,
         error
       );
@@ -678,16 +676,16 @@ export const settingsService = {
   },
 
   async setShowConnectionTags(enabled: boolean): Promise<void> {
-    console.debug(`[Service] setShowConnectionTags called with: ${enabled}`);
+    logger.debug(`[Service] setShowConnectionTags called with: ${enabled}`);
     try {
       const valueStr = String(enabled);
-      console.debug(
+      logger.debug(
         `[Service] Attempting to save setting. Key: ${SHOW_CONNECTION_TAGS_KEY}, Value: ${valueStr}`
       );
       await settingsRepository.setSetting(SHOW_CONNECTION_TAGS_KEY, valueStr);
-      console.debug(`[Service] Successfully saved setting for key: ${SHOW_CONNECTION_TAGS_KEY}`);
+      logger.debug(`[Service] Successfully saved setting for key: ${SHOW_CONNECTION_TAGS_KEY}`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${SHOW_CONNECTION_TAGS_KEY}:`,
         error
       );
@@ -697,17 +695,17 @@ export const settingsService = {
 
   // --- Show Quick Command Tags ---
   async getShowQuickCommandTags(): Promise<boolean> {
-    console.debug(`[Service] Attempting to get setting for key: ${SHOW_QUICK_COMMAND_TAGS_KEY}`);
+    logger.debug(`[Service] Attempting to get setting for key: ${SHOW_QUICK_COMMAND_TAGS_KEY}`);
     try {
       const valueStr = await settingsRepository.getSetting(SHOW_QUICK_COMMAND_TAGS_KEY);
-      console.debug(
+      logger.debug(
         `[Service] Raw value from repository for ${SHOW_QUICK_COMMAND_TAGS_KEY}:`,
         valueStr
       );
       // 默认显示，所以只有当值为 'false' 时才返回 false
       return valueStr !== 'false';
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting show quick command tags setting (key: ${SHOW_QUICK_COMMAND_TAGS_KEY}):`,
         error
       );
@@ -716,16 +714,16 @@ export const settingsService = {
   },
 
   async setShowQuickCommandTags(enabled: boolean): Promise<void> {
-    console.debug(`[Service] setShowQuickCommandTags called with: ${enabled}`);
+    logger.debug(`[Service] setShowQuickCommandTags called with: ${enabled}`);
     try {
       const valueStr = String(enabled);
-      console.debug(
+      logger.debug(
         `[Service] Attempting to save setting. Key: ${SHOW_QUICK_COMMAND_TAGS_KEY}, Value: ${valueStr}`
       );
       await settingsRepository.setSetting(SHOW_QUICK_COMMAND_TAGS_KEY, valueStr);
-      console.debug(`[Service] Successfully saved setting for key: ${SHOW_QUICK_COMMAND_TAGS_KEY}`);
+      logger.debug(`[Service] Successfully saved setting for key: ${SHOW_QUICK_COMMAND_TAGS_KEY}`);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${SHOW_QUICK_COMMAND_TAGS_KEY}:`,
         error
       );
@@ -735,7 +733,7 @@ export const settingsService = {
 
   // --- Show Status Monitor IP Address ---
   async getShowStatusMonitorIpAddress(): Promise<boolean> {
-    console.debug(
+    logger.debug(
       `[Service] Attempting to get setting for key: ${SHOW_STATUS_MONITOR_IP_ADDRESS_KEY}`
     );
     try {
@@ -743,7 +741,7 @@ export const settingsService = {
       // 默认显示 (true)，所以只有当值为 'false' 时才返回 false
       return valueStr !== 'false';
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error getting show status monitor IP address setting (key: ${SHOW_STATUS_MONITOR_IP_ADDRESS_KEY}):`,
         error
       );
@@ -756,7 +754,7 @@ export const settingsService = {
       const valueStr = String(enabled);
       await settingsRepository.setSetting(SHOW_STATUS_MONITOR_IP_ADDRESS_KEY, valueStr);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[Service] Error calling settingsRepository.setSetting for key ${SHOW_STATUS_MONITOR_IP_ADDRESS_KEY}:`,
         error
       );
@@ -778,7 +776,7 @@ export const settingsService = {
       }
       return 'info';
     } catch (error: unknown) {
-      console.error(`[Service] Error getting log level setting:`, error);
+      logger.error(`[Service] Error getting log level setting:`, error);
       return 'info';
     }
   },
@@ -795,7 +793,7 @@ export const settingsService = {
     try {
       await settingsRepository.setSetting(LOG_LEVEL_KEY, level);
     } catch (error: unknown) {
-      console.error(`[Service] Error setting log level:`, error);
+      logger.error(`[Service] Error setting log level:`, error);
       throw new Error('Failed to save log level setting.');
     }
   },
@@ -816,7 +814,7 @@ export const settingsService = {
       }
       return DEFAULT_AUDIT_LOG_MAX_ENTRIES;
     } catch (error: unknown) {
-      console.error(`[Service] Error getting audit log max entries:`, error);
+      logger.error(`[Service] Error getting audit log max entries:`, error);
       return DEFAULT_AUDIT_LOG_MAX_ENTRIES;
     }
   },
@@ -832,7 +830,7 @@ export const settingsService = {
     try {
       await settingsRepository.setSetting(AUDIT_LOG_MAX_ENTRIES_KEY, String(maxEntries));
     } catch (error: unknown) {
-      console.error(`[Service] Error setting audit log max entries:`, error);
+      logger.error(`[Service] Error setting audit log max entries:`, error);
       throw new Error('Failed to save audit log max entries setting.');
     }
   },

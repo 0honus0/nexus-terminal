@@ -22,6 +22,7 @@ import { createTerminalThemeStore } from './appearance-terminal-theme.store';
 import { createFontStore } from './appearance-font.store';
 import { createBackgroundStore, safeJsonParse } from './appearance-background.store';
 import { createHtmlPresetsStore } from './appearance-html-presets.store';
+import { log } from '@/utils/log';
 
 // 重新导出 safeJsonParse 供外部使用（如 StyleCustomizerUiTab.vue）
 export { safeJsonParse };
@@ -45,7 +46,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
     };
     const response = await apiClient.put<AppearanceSettings>('/appearance', payloadToSend);
     appearanceSettings.value = response.data;
-    console.info('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
+    log.info('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
     // 如果 UI 主题或背景更新，重新应用
     if (updates.customUiTheme !== undefined)
       backgroundStore.applyUiTheme(backgroundStore.currentUiTheme.value);
@@ -108,7 +109,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
       // 应用背景
       backgroundStore.applyPageBackground();
     } catch (err: unknown) {
-      console.error('加载外观数据失败:', err);
+      log.error('加载外观数据失败:', err);
       error.value = extractErrorMessage(err, '加载外观数据失败');
       appearanceSettings.value = {};
       allTerminalThemes.value = [];
@@ -125,7 +126,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
     try {
       await _updateAppearanceSettings(updates);
     } catch (err: unknown) {
-      console.error('更新外观设置失败:', err);
+      log.error('更新外观设置失败:', err);
       throw new Error(extractErrorMessage(err, '更新外观设置失败'));
     }
   }
@@ -134,7 +135,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
   function toggleStyleCustomizer(visible?: boolean) {
     isStyleCustomizerVisible.value =
       visible === undefined ? !isStyleCustomizerVisible.value : visible;
-    console.info(
+    log.info(
       '[AppearanceStore] Style Customizer visibility toggled:',
       isStyleCustomizerVisible.value
     );

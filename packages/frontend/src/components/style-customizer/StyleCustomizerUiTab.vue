@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import { defaultUiTheme } from '../../features/appearance/config/default-themes';
 import { safeJsonParse } from '../../stores/appearance.store';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -63,7 +64,7 @@ const initializeEditableState = () => {
       editableUiThemeString.value = '';
     }
   } catch (error: unknown) {
-    console.error('初始化 UI 主题字符串失败:', error);
+    log.error('初始化 UI 主题字符串失败:', error);
     editableUiThemeString.value = '';
   }
 };
@@ -73,7 +74,7 @@ onMounted(initializeEditableState);
 watch(
   () => appearanceSettings.value.customUiTheme,
   () => {
-    console.info('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
+    log.info('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
     initializeEditableState();
   },
   { deep: true }
@@ -87,7 +88,7 @@ const handleSaveUiTheme = async () => {
       message: t('styleCustomizer.uiThemeSaved'),
     });
   } catch (error: unknown) {
-    console.error('保存 UI 主题失败:', error);
+    log.error('保存 UI 主题失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.uiThemeSaveFailed', {
@@ -105,7 +106,7 @@ const handleResetUiTheme = async () => {
       message: t('styleCustomizer.uiThemeReset'),
     });
   } catch (error: unknown) {
-    console.error('重置 UI 主题失败:', error);
+    log.error('重置 UI 主题失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.uiThemeResetFailed', {
@@ -124,7 +125,7 @@ const applyDarkMode = async () => {
       message: t('styleCustomizer.darkModeApplied'),
     });
   } catch (error: unknown) {
-    console.error('应用黑暗模式失败:', error);
+    log.error('应用黑暗模式失败:', error);
     notificationsStore.addNotification({
       type: 'error',
       message: t('styleCustomizer.darkModeApplyFailed', {
@@ -145,7 +146,7 @@ const formattedEditableUiThemeJson = computed(() => {
     });
     return lines.join('\n');
   } catch (error: unknown) {
-    console.error('序列化可编辑 UI 主题键值对失败:', error);
+    log.error('序列化可编辑 UI 主题键值对失败:', error);
     return '';
   }
 });
@@ -212,7 +213,7 @@ const handleUiThemeStringChange = () => {
     }
     editableUiTheme.value = parsedTheme;
   } catch (error: unknown) {
-    console.error('解析 UI 主题配置失败:', error);
+    log.error('解析 UI 主题配置失败:', error);
     const fallbackError = t('styleCustomizer.errorInvalidJsonConfig');
     let errorMessage = extractErrorMessage(error, fallbackError);
     if (error instanceof SyntaxError) {

@@ -16,6 +16,7 @@ import {
 } from './ai.types';
 import * as AIRepository from './ai.repository';
 import { clientStates, userSockets } from '../websocket/state';
+import { logger } from '../utils/logger';
 
 // 24小时的秒数
 const SECONDS_24H = 24 * 60 * 60;
@@ -368,7 +369,7 @@ async function analyzeSecurityEvents(_userId?: number | string): Promise<AIInsig
         ipCounts.set(ip, (ipCounts.get(ip) || 0) + 1);
       } catch (error: unknown) {
         // JSON 解析失败，跳过该条审计日志
-        console.debug('[AI服务] 审计日志详情解析失败:', error);
+        logger.debug('[AI服务] 审计日志详情解析失败:', error);
       }
     });
 

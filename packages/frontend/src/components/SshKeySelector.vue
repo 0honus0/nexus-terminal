@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSshKeysStore } from '../stores/sshKeys.store';
 import SshKeyManagementModal from './SshKeyManagementModal.vue';
+import { log } from '@/utils/log';
 
 const props = defineProps<{
   modelValue: number | null;
@@ -48,7 +49,7 @@ watch(
       const keyExists = newKeys.some((key) => key.id === selectedKeyId.value);
       if (!keyExists) {
         // If the selected key ID is no longer valid (e.g., deleted), reset the selection
-        console.warn(
+        log.warn(
           `[SshKeySelector] Selected key ID ${selectedKeyId.value} not found in updated list. Resetting.`
         );
         selectedKeyId.value = null; // This will trigger the watcher above to emit update:modelValue

@@ -7,6 +7,7 @@ import Guacamole from 'guacamole-common-js';
 import apiClient from '../utils/apiClient';
 import { ConnectionInfo } from '../stores/connections.store';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -218,16 +219,16 @@ const trySyncClipboardOnDisplayFocus = async () => {
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
-      console.info(
+      log.info(
         '[RemoteDesktopModal] Sent clipboard to RDP on display focus:',
         currentClipboardText.substring(0, 50) + (currentClipboardText.length > 50 ? '...' : '')
       );
     }
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
-      // console.info('[RemoteDesktopModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
+      // log.info('[RemoteDesktopModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
     } else {
-      console.warn(
+      log.warn(
         '[RemoteDesktopModal] Could not read clipboard on display focus, or other error:',
         err
       );
@@ -250,7 +251,7 @@ const setupInputListeners = () => {
         (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')
       ) {
         activeElement.blur();
-        console.info('[RDP Modal] Blurred input field on RDP display click.');
+        log.info('[RDP Modal] Blurred input field on RDP display click.');
       }
       // Ensure the RDP display element gets focus when clicked
       if (displayEl && typeof displayEl.focus === 'function') {
@@ -282,12 +283,12 @@ const setupInputListeners = () => {
       const cursorElement = cursorLayer.getElement(); // 获取光标图层的 DOM 元素
       if (cursorElement) {
         cursorElement.style.zIndex = '1000'; // 设置 DOM 元素的 z-index
-        console.info('[RDP Modal] Set cursor layer element z-index to 1000.');
+        log.info('[RDP Modal] Set cursor layer element z-index to 1000.');
       } else {
-        console.warn('[RDP Modal] Could not get cursor layer element to set z-index.');
+        log.warn('[RDP Modal] Could not get cursor layer element to set z-index.');
       }
     } else {
-      console.warn('[RDP Modal] Could not get cursor layer to set z-index.');
+      log.warn('[RDP Modal] Could not get cursor layer to set z-index.');
     }
 
     mouse.value.onmousedown =
@@ -328,18 +329,18 @@ const setupInputListeners = () => {
         reader.onend = async () => {
           try {
             await navigator.clipboard.writeText(text);
-            console.info(
+            log.info(
               '[RemoteDesktopModal] Received clipboard from RDP and wrote to host:',
               text.substring(0, 50) + (text.length > 50 ? '...' : '')
             );
           } catch (err: unknown) {
-            console.warn('[RemoteDesktopModal] Could not write to host clipboard:', err);
+            log.warn('[RemoteDesktopModal] Could not write to host clipboard:', err);
           }
         };
       }
     };
   } catch (inputError: unknown) {
-    console.error('Error setting up input listeners:', inputError); // 添加错误日志
+    log.error('Error setting up input listeners:', inputError); // 添加错误日志
     statusMessage.value = t('remoteDesktopModal.errors.inputError');
   }
 };
@@ -355,7 +356,7 @@ const removeInputListeners = () => {
         displayEl.removeEventListener('focus', trySyncClipboardOnDisplayFocus);
       }
     } catch (error: unknown) {
-      console.warn(
+      log.warn(
         'Could not reset cursor or remove listeners on display element during listener removal:',
         error
       );
@@ -382,12 +383,12 @@ const removeInputListeners = () => {
 
 const disableRdpKeyboard = () => {
   isKeyboardDisabledForInput.value = true;
-  console.info('[RDP Modal] Keyboard disabled for input focus.');
+  log.info('[RDP Modal] Keyboard disabled for input focus.');
 };
 
 const enableRdpKeyboard = () => {
   isKeyboardDisabledForInput.value = false;
-  console.info('[RDP Modal] Keyboard enabled after input blur.');
+  log.info('[RDP Modal] Keyboard enabled after input blur.');
   // 尝试将焦点移回 RDP 显示区域
   nextTick(() => {
     const displayEl = guacClient.value?.getDisplay()?.getElement();
@@ -480,9 +481,9 @@ const handleWidthInputBlur = () => {
   saveWidthTimeout = setTimeout(() => {
     if (String(validatedValue) !== settingsStore.settings.rdpModalWidth) {
       settingsStore.updateSetting('rdpModalWidth', String(validatedValue));
-      console.info(`[RDP Modal] Saved width to store: ${validatedValue}`);
+      log.info(`[RDP Modal] Saved width to store: ${validatedValue}`);
     } else {
-      console.info(
+      log.info(
         `[RDP Modal] Debounced save - width ${validatedValue} matches store value. Skipped redundant save.`
       );
     }
@@ -501,9 +502,9 @@ const handleHeightInputBlur = () => {
   saveHeightTimeout = setTimeout(() => {
     if (String(validatedValue) !== settingsStore.settings.rdpModalHeight) {
       settingsStore.updateSetting('rdpModalHeight', String(validatedValue));
-      console.info(`[RDP Modal] Saved height to store: ${validatedValue}`);
+      log.info(`[RDP Modal] Saved height to store: ${validatedValue}`);
     } else {
-      console.info(
+      log.info(
         `[RDP Modal] Debounced save - height ${validatedValue} matches store value. Skipped redundant save.`
       );
     }
@@ -527,7 +528,7 @@ watch(desiredModalHeight, (newVal) => {
 watchEffect(() => {
   const storeWidth = settingsStore.settings.rdpModalWidth;
   const storeHeight = settingsStore.settings.rdpModalHeight;
-  console.info(`[RDP 模态框] 从存储加载尺寸 - 宽度: ${storeWidth}, 高度: ${storeHeight}`);
+  log.info(`[RDP 模态框] 从存储加载尺寸 - 宽度: ${storeWidth}, 高度: ${storeHeight}`);
 
   // 如果存储中有默认值则使用，否则使用组件默认值
   const initialWidth = storeWidth ? parseInt(storeWidth, 10) : desiredModalWidth.value; // 使用当前 ref 值作为备用默认值
@@ -542,7 +543,7 @@ watchEffect(() => {
     Math.max(MIN_MODAL_HEIGHT, isNaN(initialHeight) ? MIN_MODAL_HEIGHT : initialHeight),
     maxAllowedHeight.value
   );
-  console.info(`[RDP 模态框] 应用验证后的尺寸 - 宽度: ${finalWidth}, 高度: ${finalHeight}`);
+  log.info(`[RDP 模态框] 应用验证后的尺寸 - 宽度: ${finalWidth}, 高度: ${finalHeight}`);
   desiredModalWidth.value = finalWidth;
   desiredModalHeight.value = finalHeight;
   tempInputWidth.value = finalWidth;
@@ -621,7 +622,7 @@ watchEffect(() => {
         const displayWidth = rdpContainerRef.value.offsetWidth;
         const displayHeight = rdpContainerRef.value.offsetHeight;
         if (displayWidth > 0 && displayHeight > 0) {
-          // console.info(`[RDP Modal] Resizing Guacamole display to: ${displayWidth}x${displayHeight} due to style change.`);
+          // log.info(`[RDP Modal] Resizing Guacamole display to: ${displayWidth}x${displayHeight} due to style change.`);
           guacClient.value.sendSize(displayWidth, displayHeight);
         }
       }

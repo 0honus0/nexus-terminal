@@ -7,6 +7,7 @@ import type { UploadItem } from '../types/upload.types';
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 import type { TranslateFn } from '../types/i18n.types';
 import type { WebSocketDependencies } from './useSftpActions';
+import { log } from '@/utils/log';
 
 /** 分块大小：256KB（优化：减少消息数量，降低内存压力） */
 const CHUNK_SIZE = 1024 * 256;
@@ -50,7 +51,7 @@ export function sendFileChunks(
   const upload = uploads[uploadId];
   // 在继续之前检查连接和上传状态
   if (!wsDeps.value.isConnected.value || !upload || upload.status !== 'uploading') {
-    console.warn(
+    log.warn(
       `[FileUploader ${sessionIdForLog.value}] Cannot send chunk for ${uploadId}. Connection: ${wsDeps.value.isConnected.value}, Upload status: ${upload?.status}`
     );
     return;
@@ -79,7 +80,7 @@ export function sendFileChunks(
         !currentUpload ||
         currentUpload.status !== 'uploading'
       ) {
-        console.warn(
+        log.warn(
           `[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} status changed or disconnected before sending chunk at offset ${currentOffset}.`
         );
         inFlight = Math.max(0, inFlight - 1);
@@ -97,7 +98,7 @@ export function sendFileChunks(
           payload: { uploadId, chunkIndex, data: chunkBase64, isLast },
         });
       } else {
-        console.error(
+        log.error(
           `[FileUploader ${sessionIdForLog.value}] FileReader returned unexpected result for ${uploadId}:`,
           chunkResult
         );
@@ -108,7 +109,7 @@ export function sendFileChunks(
     };
 
     reader.onerror = () => {
-      console.error(
+      log.error(
         `[FileUploader ${sessionIdForLog.value}] FileReader error for upload ID: ${uploadId}`
       );
       const failedUpload = uploads[uploadId];
@@ -127,7 +128,7 @@ export function sendFileChunks(
     if (ackFallbackTimer) clearTimeout(ackFallbackTimer);
     ackFallbackTimer = setTimeout(() => {
       if (!ackReceived && uploads[uploadId]?.status === 'uploading') {
-        console.warn(
+        log.warn(
           `[FileUploader ${sessionIdForLog.value}] ACK timeout for ${uploadId}, using fallback (treating as implicit ack).`
         );
         // 旧后端不支持 ack，回退为每确认一个就补一个
@@ -183,7 +184,7 @@ export function sendFileChunks(
     resetAckFallbackTimer();
   } else {
     // 零字节文件直接发送
-    console.info(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
+    log.info(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
     wsDeps.value.sendMessage({
       type: 'sftp:upload:chunk',
       payload: { uploadId, chunkIndex: 0, data: '', isLast: true },

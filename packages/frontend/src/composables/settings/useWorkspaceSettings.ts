@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../../stores/settings.store';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 export function useWorkspaceSettings() {
   const settingsStore = useSettingsStore();
@@ -43,7 +44,7 @@ export function useWorkspaceSettings() {
       popupEditorMessage.value = t('settings.popupEditor.success.saved');
       popupEditorSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新弹窗编辑器设置失败:', error);
+      log.error('更新弹窗编辑器设置失败:', error);
       popupEditorMessage.value = extractErrorMessage(
         error,
         t('settings.popupEditor.error.saveFailed')
@@ -70,7 +71,7 @@ export function useWorkspaceSettings() {
       shareTabsMessage.value = t('settings.shareEditorTabs.success.saved');
       shareTabsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新共享编辑器标签页设置失败:', error);
+      log.error('更新共享编辑器标签页设置失败:', error);
       shareTabsMessage.value = extractErrorMessage(
         error,
         t('settings.shareEditorTabs.error.saveFailed')
@@ -97,7 +98,7 @@ export function useWorkspaceSettings() {
       autoCopyMessage.value = t('settings.autoCopyOnSelect.success.saved');
       autoCopySuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新自动复制设置失败:', error);
+      log.error('更新自动复制设置失败:', error);
       autoCopyMessage.value = extractErrorMessage(
         error,
         t('settings.autoCopyOnSelect.error.saveFailed')
@@ -126,7 +127,7 @@ export function useWorkspaceSettings() {
       );
       workspaceSidebarPersistentSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新侧边栏固定设置失败:', error);
+      log.error('更新侧边栏固定设置失败:', error);
       workspaceSidebarPersistentMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.error.sidebarPersistentSaveFailed')
@@ -158,7 +159,7 @@ export function useWorkspaceSettings() {
       );
       commandInputSyncSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新命令输入同步目标失败:', error);
+      log.error('更新命令输入同步目标失败:', error);
       commandInputSyncMessage.value = extractErrorMessage(
         error,
         t('settings.commandInputSync.error.saveFailed', '保存同步目标失败')
@@ -187,7 +188,7 @@ export function useWorkspaceSettings() {
       );
       showConnectionTagsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新显示连接标签设置失败:', error);
+      log.error('更新显示连接标签设置失败:', error);
       showConnectionTagsMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.error.showConnectionTagsSaveFailed', '保存连接标签显示设置失败')
@@ -216,7 +217,7 @@ export function useWorkspaceSettings() {
       );
       showQuickCommandTagsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新显示快捷指令标签设置失败:', error);
+      log.error('更新显示快捷指令标签设置失败:', error);
       showQuickCommandTagsMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.error.showQuickCommandTagsSaveFailed', '保存快捷指令标签显示设置失败')
@@ -257,7 +258,7 @@ export function useWorkspaceSettings() {
       );
       terminalScrollbackLimitSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新终端回滚行数设置失败:', error);
+      log.error('更新终端回滚行数设置失败:', error);
       terminalScrollbackLimitMessage.value = extractErrorMessage(
         error,
         t('settings.terminalScrollback.error.saveFailed', '保存终端回滚行数设置失败。')
@@ -287,7 +288,7 @@ export function useWorkspaceSettings() {
       );
       terminalAutoWrapSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新终端自动换行设置失败:', error);
+      log.error('更新终端自动换行设置失败:', error);
       terminalAutoWrapMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.terminalAutoWrapError', '保存终端自动换行设置失败。')
@@ -331,7 +332,7 @@ export function useWorkspaceSettings() {
       );
       sshSuspendKeepAliveSecondsSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新挂起会话保活时长设置失败:', error);
+      log.error('更新挂起会话保活时长设置失败:', error);
       sshSuspendKeepAliveSecondsMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.sshSuspendKeepAliveError', '保存挂起会话保活时长设置失败。')
@@ -361,7 +362,7 @@ export function useWorkspaceSettings() {
       );
       fileManagerShowDeleteConfirmationSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新文件管理器删除确认设置失败:', error);
+      log.error('更新文件管理器删除确认设置失败:', error);
       fileManagerShowDeleteConfirmationMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.fileManagerDeleteConfirmError', '保存文件管理器删除确认设置失败。')
@@ -391,7 +392,7 @@ export function useWorkspaceSettings() {
       );
       fileManagerSingleClickOpenFileSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新文件管理器文件打开方式设置失败:', error);
+      log.error('更新文件管理器文件打开方式设置失败:', error);
       fileManagerSingleClickOpenFileMessage.value = extractErrorMessage(
         error,
         t(
@@ -424,7 +425,7 @@ export function useWorkspaceSettings() {
       );
       terminalEnableRightClickPasteSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新终端右键粘贴设置失败:', error);
+      log.error('更新终端右键粘贴设置失败:', error);
       terminalEnableRightClickPasteMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.terminalRightClickPasteError', '保存终端右键粘贴设置失败。')
@@ -451,7 +452,7 @@ export function useWorkspaceSettings() {
       showPopupFileManagerMessage.value = t('settings.popupFileManager.success.saved');
       showPopupFileManagerSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新弹窗文件管理器设置失败:', error);
+      log.error('更新弹窗文件管理器设置失败:', error);
       showPopupFileManagerMessage.value = extractErrorMessage(
         error,
         t('settings.popupFileManager.error.saveFailed')
@@ -478,7 +479,7 @@ export function useWorkspaceSettings() {
       statusMonitorShowIpMessage.value = t('common.saved');
       statusMonitorShowIpSuccess.value = true;
     } catch (error: unknown) {
-      console.error('Failed to update status monitor IP display setting:', error);
+      log.error('Failed to update status monitor IP display setting:', error);
       statusMonitorShowIpMessage.value = extractErrorMessage(
         error,
         t(
@@ -508,7 +509,7 @@ export function useWorkspaceSettings() {
       terminalOutputEnhancerMessage.value = t('settings.terminalOutputEnhancer.success.saved');
       terminalOutputEnhancerSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新终端输出增强器设置失败:', error);
+      log.error('更新终端输出增强器设置失败:', error);
       terminalOutputEnhancerMessage.value = extractErrorMessage(
         error,
         t('settings.terminalOutputEnhancer.error.saveFailed')

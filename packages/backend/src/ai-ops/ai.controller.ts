@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import * as AIService from './ai.service';
 import { AIQueryRequest } from './ai.types';
+import { logger } from '../utils/logger';
 
 type SessionWithUserId = Request['session'] & { userId?: number };
 
@@ -80,7 +81,7 @@ export const processQuery = async (req: Request, res: Response): Promise<void> =
 
     res.status(200).json(response);
   } catch (error: unknown) {
-    console.error('[AIController] 处理查询失败:', error);
+    logger.error('[AIController] 处理查询失败:', error);
     res.status(500).json({ success: false, error: '处理查询失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -112,7 +113,7 @@ export const getSessions = async (req: Request, res: Response): Promise<void> =>
       offset: safeOffset,
     });
   } catch (error: unknown) {
-    console.error('[AIController] 获取会话列表失败:', error);
+    logger.error('[AIController] 获取会话列表失败:', error);
     res.status(500).json({ success: false, error: '获取会话列表失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -145,7 +146,7 @@ export const getSessionDetails = async (req: Request, res: Response): Promise<vo
 
     res.status(200).json({ success: true, session });
   } catch (error: unknown) {
-    console.error('[AIController] 获取会话详情失败:', error);
+    logger.error('[AIController] 获取会话详情失败:', error);
     res.status(500).json({ success: false, error: '获取会话详情失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -177,7 +178,7 @@ export const deleteSession = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, error: '会话不存在或无权删除', code: 'NOT_FOUND' });
     }
   } catch (error: unknown) {
-    console.error('[AIController] 删除会话失败:', error);
+    logger.error('[AIController] 删除会话失败:', error);
     res.status(500).json({ success: false, error: '删除会话失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -198,7 +199,7 @@ export const getHealthSummary = async (req: Request, res: Response): Promise<voi
     const summary = await AIService.getSystemHealthSummary(userId);
     res.status(200).json({ success: true, summary });
   } catch (error: unknown) {
-    console.error('[AIController] 获取系统健康摘要失败:', error);
+    logger.error('[AIController] 获取系统健康摘要失败:', error);
     res.status(500).json({ success: false, error: '获取系统健康摘要失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -219,7 +220,7 @@ export const getCommandPatterns = async (req: Request, res: Response): Promise<v
     const analysis = await AIService.analyzeCommandPatterns(userId);
     res.status(200).json({ success: true, analysis });
   } catch (error: unknown) {
-    console.error('[AIController] 获取命令模式分析失败:', error);
+    logger.error('[AIController] 获取命令模式分析失败:', error);
     res.status(500).json({ success: false, error: '获取命令模式分析失败', code: 'INTERNAL_ERROR' });
   }
 };
@@ -247,7 +248,7 @@ export const cleanupSessions = async (req: Request, res: Response): Promise<void
       keepCount: safeKeepCount,
     });
   } catch (error: unknown) {
-    console.error('[AIController] 清理会话失败:', error);
+    logger.error('[AIController] 清理会话失败:', error);
     res.status(500).json({ success: false, error: '清理会话失败', code: 'INTERNAL_ERROR' });
   }
 };

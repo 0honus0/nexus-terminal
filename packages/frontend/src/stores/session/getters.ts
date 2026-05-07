@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import { sessions, activeSessionId } from './state';
 import type { SessionState, SessionTabInfoWithStatus } from './types';
+import { log } from '@/utils/log';
 
 export const sessionTabs = computed(() => {
   return Array.from(sessions.value.values()).map((session) => ({
@@ -18,9 +19,9 @@ export const sessionTabsWithStatus = computed((): SessionTabInfoWithStatus[] => 
   if (sessionOrderStr) {
     try {
       sessionOrder = JSON.parse(sessionOrderStr);
-      console.info('[SessionGetters] 使用本地存储的用户自定义标签顺序');
+      log.info('[SessionGetters] 使用本地存储的用户自定义标签顺序');
     } catch (error: unknown) {
-      console.error('[SessionGetters] 解析本地存储的标签顺序失败:', error);
+      log.error('[SessionGetters] 解析本地存储的标签顺序失败:', error);
       sessionOrder = [];
     }
   }

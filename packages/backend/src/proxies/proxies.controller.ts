@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as ProxyService from './proxy.service';
 import { AuditLogService } from '../audit/audit.service';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const auditLogService = new AuditLogService();
 
@@ -24,7 +25,7 @@ export const getAllProxies = async (req: Request, res: Response, next: NextFunct
     const proxies = await ProxyService.getAllProxies();
     res.status(200).json(proxies.map(sanitizeProxy));
   } catch (error: unknown) {
-    console.error('Controller: 获取代理列表失败:', error);
+    logger.error('Controller: 获取代理列表失败:', error);
     next(error);
   }
 };
@@ -45,7 +46,7 @@ export const getProxyById = async (req: Request, res: Response, next: NextFuncti
       res.status(404).json({ message: `未找到 ID 为 ${id} 的代理` });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 获取代理 ${id} 失败:`, error);
+    logger.error(`Controller: 获取代理 ${id} 失败:`, error);
     next(error);
   }
 };
@@ -73,7 +74,7 @@ export const createProxy = async (req: Request, res: Response, next: NextFunctio
       proxy: sanitizeProxy(newProxy),
     });
   } catch (error: unknown) {
-    console.error('Controller: 创建代理失败:', error);
+    logger.error('Controller: 创建代理失败:', error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('UNIQUE constraint failed') || errMsg.includes('同名字段冲突')) {
       return res.status(409).json({ message: '创建代理失败：可能存在同名字段冲突', error: errMsg });
@@ -122,7 +123,7 @@ export const updateProxy = async (req: Request, res: Response, next: NextFunctio
       res.status(404).json({ message: `未找到 ID 为 ${id} 的代理进行更新` });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 更新代理 ${id} 失败:`, error);
+    logger.error(`Controller: 更新代理 ${id} 失败:`, error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('UNIQUE constraint failed') || errMsg.includes('同名字段冲突')) {
       return res.status(409).json({ message: '更新代理失败：可能存在同名字段冲突', error: errMsg });
@@ -153,7 +154,7 @@ export const deleteProxy = async (req: Request, res: Response, next: NextFunctio
       res.status(404).json({ message: `未找到 ID 为 ${id} 的代理进行删除` });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 删除代理 ${id} 失败:`, error);
+    logger.error(`Controller: 删除代理 ${id} 失败:`, error);
     next(error);
   }
 };

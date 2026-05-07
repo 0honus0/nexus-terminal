@@ -95,6 +95,7 @@ import { useSessionStore } from '../../stores/session.store';
 import { useAppearanceStore } from '../../stores/appearance.store';
 import { useConnectionsStore } from '../../stores/connections.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -228,7 +229,7 @@ const execute = (item: CommandItem) => {
   Promise.resolve()
     .then(() => item.action())
     .catch((error) => {
-      console.error('[CommandPalette] 执行命令失败:', error);
+      log.error('[CommandPalette] 执行命令失败:', error);
       uiNotificationsStore.showError(t('commandPalette.actionFailed', '执行失败，请稍后重试'));
     })
     .finally(() => {

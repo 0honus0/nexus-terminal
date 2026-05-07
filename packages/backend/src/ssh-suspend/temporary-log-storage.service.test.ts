@@ -18,6 +18,15 @@ const mockFs = vi.hoisted(() => ({
 }));
 
 // Mock 依赖模块
+// Logger mock for console replacement migration
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('fs/promises', () => ({
   mkdir: mockFs.mkdir,
   stat: mockFs.stat,
@@ -65,16 +74,15 @@ describe('TemporaryLogStorageService', () => {
     });
 
     it('创建目录失败时应记录错误但不抛出', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       mockFs.mkdir.mockRejectedValue(new Error('Permission denied'));
 
       await service.ensureLogDirectoryExists();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('创建日志目录'),
         expect.any(Error)
       );
-      consoleSpy.mockRestore();
     });
   });
 
@@ -102,8 +110,7 @@ describe('TemporaryLogStorageService', () => {
       // 模拟读取现有文件内容
       mockFs.readFile.mockResolvedValue('A'.repeat(100 * 1024 * 1024));
       mockFs.writeFile.mockResolvedValue(undefined);
-
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // console spy removed (was: info);
       await service.writeToLog('session-456', 'new data after rotation');
 
       // 环形缓冲：保留尾部80MB + 新数据
@@ -116,8 +123,7 @@ describe('TemporaryLogStorageService', () => {
         expect.stringContaining('new data after rotation'),
         'utf8'
       );
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('环形缓冲轮替'));
-      consoleSpy.mockRestore();
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('环形缓冲轮替'));
     });
 
     it('文件未达最大大小时应追加写入', async () => {
@@ -141,20 +147,16 @@ describe('TemporaryLogStorageService', () => {
       });
       mockFs.stat.mockRejectedValue(enoentError);
       mockFs.appendFile.mockRejectedValue(new Error('Disk full'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       await expect(service.writeToLog('session-err', 'data')).rejects.toThrow('Disk full');
-
-      consoleSpy.mockRestore();
     });
 
     it('stat 返回非 ENOENT 错误时应抛出', async () => {
       mockFs.stat.mockRejectedValue(new Error('Unknown error'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       await expect(service.writeToLog('session-unknown', 'data')).rejects.toThrow('Unknown error');
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -185,11 +187,9 @@ describe('TemporaryLogStorageService', () => {
 
     it('读取失败（非 ENOENT）时应抛出错误', async () => {
       mockFs.readFile.mockRejectedValue(new Error('Read permission denied'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       await expect(service.readLog('session-noperm')).rejects.toThrow('Read permission denied');
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -215,11 +215,9 @@ describe('TemporaryLogStorageService', () => {
 
     it('删除失败（非 ENOENT）时应抛出错误', async () => {
       mockFs.unlink.mockRejectedValue(new Error('Delete permission denied'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       await expect(service.deleteLog('session-locked')).rejects.toThrow('Delete permission denied');
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -242,12 +240,11 @@ describe('TemporaryLogStorageService', () => {
 
     it('读取目录失败时应返回空数组', async () => {
       mockFs.readdir.mockRejectedValue(new Error('Directory not found'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       const result = await service.listLogFiles();
 
       expect(result).toEqual([]);
-      consoleSpy.mockRestore();
     });
 
     it('应过滤非 .log 文件', async () => {

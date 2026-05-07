@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as FavoritePathsService from './favorite-paths.service';
 import { FavoritePathSortBy } from './favorite-paths.service';
 import { ErrorFactory } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 /**
  * 处理添加新收藏路径的请求
@@ -28,11 +29,11 @@ export const createFavoritePath = async (
     if (newFavoritePath) {
       res.status(201).json({ message: '收藏路径已添加', favoritePath: newFavoritePath });
     } else {
-      console.error(`[Controller] 添加收藏路径后未能找到 ID: ${newId}`);
+      logger.error(`[Controller] 添加收藏路径后未能找到 ID: ${newId}`);
       res.status(201).json({ message: '收藏路径已添加，但无法检索新记录', id: newId });
     }
   } catch (error: unknown) {
-    console.error('[Controller] 添加收藏路径失败:', error);
+    logger.error('[Controller] 添加收藏路径失败:', error);
     next(error);
   }
 };
@@ -54,7 +55,7 @@ export const getAllFavoritePaths = async (
     const favoritePaths = await FavoritePathsService.getAllFavoritePaths(validSortBy);
     res.status(200).json(favoritePaths);
   } catch (error: unknown) {
-    console.error('获取收藏路径控制器出错:', error);
+    logger.error('获取收藏路径控制器出错:', error);
     next(error);
   }
 };
@@ -82,7 +83,7 @@ export const getFavoritePathById = async (
       res.status(404).json({ message: '未找到指定的收藏路径' });
     }
   } catch (error: unknown) {
-    console.error('获取单个收藏路径控制器出错:', error);
+    logger.error('获取单个收藏路径控制器出错:', error);
     next(error);
   }
 };
@@ -118,7 +119,7 @@ export const updateFavoritePath = async (
       if (updatedFavoritePath) {
         res.status(200).json({ message: '收藏路径已更新', favoritePath: updatedFavoritePath });
       } else {
-        console.error(`[Controller] 更新收藏路径后未能找到 ID: ${id}`);
+        logger.error(`[Controller] 更新收藏路径后未能找到 ID: ${id}`);
         res.status(200).json({ message: '收藏路径已更新，但无法检索更新后的记录' });
       }
     } else {
@@ -126,13 +127,13 @@ export const updateFavoritePath = async (
       if (!pathExists) {
         res.status(404).json({ message: '未找到要更新的收藏路径' });
       } else {
-        console.error(`[Controller] 更新收藏路径 ${id} 失败，但路径存在。`);
+        logger.error(`[Controller] 更新收藏路径 ${id} 失败，但路径存在。`);
         next(ErrorFactory.internalError('更新收藏路径时发生未知错误'));
         return;
       }
     }
   } catch (error: unknown) {
-    console.error('更新收藏路径控制器出错:', error);
+    logger.error('更新收藏路径控制器出错:', error);
     next(error);
   }
 };
@@ -160,7 +161,7 @@ export const deleteFavoritePath = async (
       res.status(404).json({ message: '未找到要删除的收藏路径' });
     }
   } catch (error: unknown) {
-    console.error('删除收藏路径控制器出错:', error);
+    logger.error('删除收藏路径控制器出错:', error);
     next(error);
   }
 };
@@ -191,7 +192,7 @@ export const incrementUsage = async (
       } else {
         // 这种情况理论上不应该发生，因为 updateFavoritePathLastUsed 内部应该处理了路径不存在的情况
         // 收藏路径 (ID: ${id}) 上次使用时间已更新，但无法检索该路径。
-        console.error(`[Controller] 收藏路径 (ID: ${id}) 上次使用时间已更新，但无法检索该路径。`);
+        logger.error(`[Controller] 收藏路径 (ID: ${id}) 上次使用时间已更新，但无法检索该路径。`);
         res.status(404).json({ message: '上次使用时间已更新，但无法检索更新后的收藏路径' });
       }
     } else {
@@ -201,13 +202,13 @@ export const incrementUsage = async (
         res.status(404).json({ message: '未找到要更新上次使用时间的收藏路径' });
       } else {
         // 路径存在，但更新操作失败
-        console.warn(`[Controller] 尝试更新收藏路径 (ID: ${id}) 的上次使用时间失败，但路径存在。`);
+        logger.warn(`[Controller] 尝试更新收藏路径 (ID: ${id}) 的上次使用时间失败，但路径存在。`);
         next(ErrorFactory.internalError('更新上次使用时间失败'));
         return;
       }
     }
   } catch (error: unknown) {
-    console.error('更新收藏路径上次使用时间控制器出错:', error);
+    logger.error('更新收藏路径上次使用时间控制器出错:', error);
     next(error);
   }
 };
@@ -237,7 +238,7 @@ export const updateLastUsedTimestamp = async (
         res.status(200).json({ message: '上次使用时间戳已更新', favoritePath: updatedPath });
       } else {
         // 这种情况理论上不应该发生，因为 updateFavoritePathLastUsed 内部应该处理了路径不存在的情况
-        console.error(`[Controller] 收藏路径 (ID: ${id}) 上次使用时间戳已更新，但无法检索该路径。`);
+        logger.error(`[Controller] 收藏路径 (ID: ${id}) 上次使用时间戳已更新，但无法检索该路径。`);
         res.status(404).json({ message: '上次使用时间戳已更新，但无法检索更新后的收藏路径' });
       }
     } else {
@@ -247,15 +248,13 @@ export const updateLastUsedTimestamp = async (
         res.status(404).json({ message: '未找到要更新上次使用时间戳的收藏路径' });
       } else {
         // 路径存在，但更新操作失败
-        console.warn(
-          `[Controller] 尝试更新收藏路径 (ID: ${id}) 的上次使用时间戳失败，但路径存在。`
-        );
+        logger.warn(`[Controller] 尝试更新收藏路径 (ID: ${id}) 的上次使用时间戳失败，但路径存在。`);
         next(ErrorFactory.internalError('更新上次使用时间戳失败'));
         return;
       }
     }
   } catch (error: unknown) {
-    console.error('更新收藏路径上次使用时间戳控制器出错:', error);
+    logger.error('更新收藏路径上次使用时间戳控制器出错:', error);
     next(error);
   }
 };

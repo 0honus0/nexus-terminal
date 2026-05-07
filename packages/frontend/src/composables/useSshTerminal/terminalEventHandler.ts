@@ -15,6 +15,7 @@ import type { SearchAddon } from '@xterm/addon-search';
 import type { WebSocketMessage } from '../../types/websocket.types';
 import type { createBufferManager } from './bufferManager';
 import { sessions as globalSessionsRef } from '../../stores/session/state';
+import { log } from '@/utils/log';
 
 /** 事件处理器所需的外部依赖 */
 export interface EventHandlerDeps {
@@ -56,7 +57,7 @@ export function createEventHandlers(deps: EventHandlerDeps) {
     searchAddon: SearchAddon | null;
   }) => {
     const { terminal: term, searchAddon: addon } = payload;
-    console.info(
+    log.info(
       `[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。SearchAddon 实例:`,
       addon ? '存在' : '不存在'
     );
@@ -121,7 +122,7 @@ export function createEventHandlers(deps: EventHandlerDeps) {
         }
         outputData = bytes;
       } catch (error: unknown) {
-        console.error(`[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`, error);
+        log.error(`[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`, error);
         outputData = `\r\n[解码错误: ${error}]\r\n`;
       }
     } else if (typeof outputData !== 'string') {
@@ -197,14 +198,14 @@ export function createEventHandlers(deps: EventHandlerDeps) {
 
     // 兼容后端两种 payload 格式：纯字符串 或 { key, params } 结构化对象
     if (typeof payload === 'string') {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, payload);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, payload);
     } else if (typeof payload === 'object' && payload !== null) {
       const payloadObj = payload as Record<string, unknown>;
       const statusKey = payloadObj.key || 'unknown';
       const statusParams = payloadObj.params || {};
-      console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, statusKey, statusParams);
+      log.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, statusKey, statusParams);
     } else {
-      console.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, 'unknown');
+      log.info(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, 'unknown');
     }
   };
 

@@ -5,6 +5,7 @@
 import { reactive } from 'vue';
 import type { FileAttributes } from '../types/sftp.types';
 import type { FileTreeNode } from './useSftpActions';
+import { log } from '@/utils/log';
 
 // 文件排序比较函数
 type SortableSftpEntry = Pick<{ filename: string; attrs: FileAttributes }, 'filename' | 'attrs'>;
@@ -36,13 +37,13 @@ export const findNodeByPath = (
       nextNode = currentNode.children.find((child) => child.filename === part);
       if (!nextNode) {
         if (!currentNode.childrenLoaded && !createIfMissing) {
-          console.info(
+          log.info(
             `[SFTP ${instanceSessionId}] findNodeByPath: Node ${part} not found in partially loaded children of ${currentNode.filename}.`
           );
           return null;
         }
         if (currentNode.childrenLoaded && !createIfMissing) {
-          console.info(
+          log.info(
             `[SFTP ${instanceSessionId}] findNodeByPath: Node ${part} not found in fully loaded children of ${currentNode.filename}.`
           );
           return null;
@@ -50,17 +51,17 @@ export const findNodeByPath = (
       }
     } else if (currentNode.children === null) {
       if (!createIfMissing) {
-        console.info(
+        log.info(
           `[SFTP ${instanceSessionId}] findNodeByPath: Children of ${currentNode.filename} are null, cannot find ${part}.`
         );
         return null;
       }
-      console.info(
+      log.info(
         `[SFTP ${instanceSessionId}] findNodeByPath: Children of ${currentNode.filename} are null, will create placeholder for ${part}.`
       );
       currentNode.children = [];
     } else if (!currentNode.attrs.isDirectory) {
-      console.warn(
+      log.warn(
         `[SFTP ${instanceSessionId}] findNodeByPath: Attempted to find child '${part}' under a file node '${currentNode.filename}'.`
       );
       return null;
@@ -91,18 +92,18 @@ export const findNodeByPath = (
         }
         currentNode.children.push(nextNode);
         currentNode.children.sort(sortFiles);
-        console.info(
+        log.info(
           `[SFTP ${instanceSessionId}] findNodeByPath: Created placeholder node for ${part} under ${currentNode.filename}`
         );
       } else {
-        console.info(
+        log.info(
           `[SFTP ${instanceSessionId}] findNodeByPath: Node ${part} not found under ${currentNode.filename} and createIfMissing is false.`
         );
         return null;
       }
     }
     if (!nextNode) {
-      console.error(
+      log.error(
         `[SFTP ${instanceSessionId}] findNodeByPath: Logic error - nextNode is still undefined for part '${part}'.`
       );
       return null;
@@ -127,11 +128,11 @@ export const removeNodeFromTree = (
     const index = parentNode.children.findIndex((node) => node.filename === filename);
     if (index !== -1) {
       parentNode.children.splice(index, 1);
-      console.info(`[SFTP ${instanceSessionId}] 从文件树 ${parentPath} 中移除节点: ${filename}`);
+      log.info(`[SFTP ${instanceSessionId}] 从文件树 ${parentPath} 中移除节点: ${filename}`);
       return true;
     }
   }
-  console.warn(`[SFTP ${instanceSessionId}] 尝试从文件树 ${parentPath} 移除节点 ${filename} 失败`);
+  log.warn(`[SFTP ${instanceSessionId}] 尝试从文件树 ${parentPath} 移除节点 ${filename} 失败`);
   return false;
 };
 
@@ -152,7 +153,7 @@ export const addOrUpdateNodeInTree = (
     }
 
     if (!Array.isArray(parentNode.children)) {
-      console.error(
+      log.error(
         `[SFTP ${instanceSessionId}] Logic error: parentNode.children is not an array after findNodeByPath in addOrUpdateNodeInTree for path ${parentPath}`
       );
       return false;
@@ -169,7 +170,7 @@ export const addOrUpdateNodeInTree = (
     const existingIndex = parentNode.children.findIndex((node) => node.filename === item.filename);
     if (existingIndex !== -1) {
       parentNode.children.splice(existingIndex, 1, newNode);
-      console.info(`[SFTP ${instanceSessionId}] 更新文件树节点: ${parentPath}/${item.filename}`);
+      log.info(`[SFTP ${instanceSessionId}] 更新文件树节点: ${parentPath}/${item.filename}`);
     } else {
       let insertIndex = 0;
       while (
@@ -179,11 +180,11 @@ export const addOrUpdateNodeInTree = (
         insertIndex++;
       }
       parentNode.children.splice(insertIndex, 0, newNode);
-      console.info(`[SFTP ${instanceSessionId}] 添加文件树节点: ${parentPath}/${item.filename}`);
+      log.info(`[SFTP ${instanceSessionId}] 添加文件树节点: ${parentPath}/${item.filename}`);
     }
     return true;
   }
-  console.error(
+  log.error(
     `[SFTP ${instanceSessionId}] Failed to find or create parent node ${parentPath} in addOrUpdateNodeInTree for item ${item.filename}.`
   );
   return false;

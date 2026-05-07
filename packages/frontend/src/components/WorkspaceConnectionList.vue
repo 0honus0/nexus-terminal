@@ -19,6 +19,7 @@ import { useTagEditing } from '../composables/useTagEditing';
 import ConnectionContextMenu from './ConnectionContextMenu.vue';
 import TagGroupContextMenu from './TagGroupContextMenu.vue';
 import ConnectionItem from './ConnectionItem.vue';
+import { log } from '@/utils/log';
 
 // 定义事件
 
@@ -71,7 +72,7 @@ const loadInitialExpandedGroups = (): Record<string, boolean> => {
       }
     }
   } catch (error: unknown) {
-    console.error('Failed to load or parse expanded groups state from localStorage:', error);
+    log.error('Failed to load or parse expanded groups state from localStorage:', error);
     localStorage.removeItem(EXPANDED_GROUPS_STORAGE_KEY); // 清除无效状态
   }
   // 默认返回空对象，让 computed 属性处理默认展开
@@ -297,7 +298,7 @@ watch(
       try {
         localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, JSON.stringify(newState));
       } catch (error: unknown) {
-        console.error('Failed to save expanded groups state to localStorage:', error);
+        log.error('Failed to save expanded groups state to localStorage:', error);
       }
     }
   },
@@ -332,7 +333,7 @@ const toggleGroup = (groupName: string) => {
 // 处理单击连接 (左键/Enter) - 使用 session store 处理连接请求
 const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent) => {
   if (event instanceof MouseEvent && event.button !== 0) {
-    console.info(
+    log.info(
       `[WkspConnList] DEBUG: handleConnect called with non-left click (button: ${event.button}). Ignoring.`
     );
     return;
@@ -340,7 +341,7 @@ const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent)
 
   const connection = connections.value.find((c) => c.id === connectionId);
   if (!connection) {
-    console.error(`[WkspConnList] Connection with ID ${connectionId} not found.`);
+    log.error(`[WkspConnList] Connection with ID ${connectionId} not found.`);
     return;
   }
 
@@ -380,7 +381,7 @@ const handleMenuAction = async (action: 'add' | 'edit' | 'delete' | 'clone') => 
   closeContextMenu(); // 先关闭菜单
 
   if (action === 'add') {
-    console.info(
+    log.info(
       '[WorkspaceConnectionList] handleMenuAction called with action: add. Emitting request-add-connection...'
     );
     // router.push('/connections/add'); // 改为触发事件
@@ -417,7 +418,7 @@ const handleMenuAction = async (action: 'add' | 'edit' | 'delete' | 'clone') => 
 
       connectionsStore.cloneConnection(conn.id, newName).catch((error) => {
         // 可以在这里处理克隆失败的特定 UI 反馈，如果需要的话
-        console.error('Cloning failed in component:', error);
+        log.error('Cloning failed in component:', error);
       });
     }
   }
@@ -520,7 +521,7 @@ const handleTagMenuAction = async (
 
       const deletePromises = connectionIdsToDelete.map((connId) =>
         connectionsStore.deleteConnection(connId).catch((err) => {
-          console.error(
+          log.error(
             `[WkspConnList] Failed to delete connection ${connId} in group ${group.groupName}:`,
             err
           );
@@ -594,7 +595,7 @@ onBeforeUnmount(() => {
   // 调用存储的注销函数
   if (unregisterFocusAction) {
     unregisterFocusAction();
-    console.info(`[WkspConnList] Unregistered focus action on unmount.`);
+    log.info(`[WkspConnList] Unregistered focus action on unmount.`);
   }
   unregisterFocusAction = null;
 });

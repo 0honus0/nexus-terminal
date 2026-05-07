@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store'; // 用于显示通知
+import { log } from '@/utils/log';
 
 // 后端返回的原始历史记录条目接口
 interface CommandHistoryEntryBE {
@@ -72,7 +73,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
         isLoading.value = true; // 无缓存，初始加载
       }
     } catch (loadError: unknown) {
-      console.error('[CmdHistoryStore] Failed to load or parse history cache:', loadError);
+      log.error('[CmdHistoryStore] Failed to load or parse history cache:', loadError);
       localStorage.removeItem(cacheKey); // 解析失败则移除缓存
       isLoading.value = true; // 缓存无效，需要加载
     }
@@ -80,7 +81,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
     // 2. 后台获取最新数据
     isLoading.value = true; // 标记正在后台获取
     try {
-      console.info('[CmdHistoryStore] Fetching latest history from server...');
+      log.info('[CmdHistoryStore] Fetching latest history from server...');
       const response = await apiClient.get<CommandHistoryEntryBE[]>('/command-history');
       // 后端返回升序，前端需要降序
       const freshData = response.data.reverse();
@@ -89,15 +90,15 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       // 3. 对比并更新
       const currentDataString = JSON.stringify(historyList.value);
       if (currentDataString !== freshDataString) {
-        console.info('[CmdHistoryStore] History data changed, updating state and cache.');
+        log.info('[CmdHistoryStore] History data changed, updating state and cache.');
         historyList.value = freshData;
         localStorage.setItem(cacheKey, freshDataString); // 更新缓存 (存降序)
       } else {
-        console.info('[CmdHistoryStore] History data is up-to-date.');
+        log.info('[CmdHistoryStore] History data is up-to-date.');
       }
       error.value = null; // 清除错误
     } catch (err: unknown) {
-      console.error('[CmdHistoryStore] 获取命令历史记录失败:', err);
+      log.error('[CmdHistoryStore] 获取命令历史记录失败:', err);
       error.value = extractErrorMessage(err, '获取历史记录时发生错误');
       // 保留缓存数据，仅设置错误状态
       uiNotificationsStore.showError(error.value ?? '未知错误');
@@ -110,7 +111,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
   const addCommand = async (command: string) => {
     //  Filter out Ctrl+C signal (\x03) from being added to history
     if (command === '\x03') {
-      console.info('[CmdHistoryStore] Ignoring Ctrl+C signal for history.');
+      log.info('[CmdHistoryStore] Ignoring Ctrl+C signal for history.');
       return;
     }
     if (!command || command.trim().length === 0) {
@@ -125,7 +126,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       localStorage.removeItem('commandHistoryCache');
       await fetchHistory(); // fetchHistory 会处理获取和缓存更新
     } catch (err: unknown) {
-      console.error('添加命令历史记录失败:', err);
+      log.error('添加命令历史记录失败:', err);
       const message = extractErrorMessage(err, '添加历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
@@ -143,7 +144,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       }
       uiNotificationsStore.showSuccess('历史记录已删除');
     } catch (err: unknown) {
-      console.error('删除命令历史记录失败:', err);
+      log.error('删除命令历史记录失败:', err);
       const message = extractErrorMessage(err, '删除历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }
@@ -159,7 +160,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
       historyList.value = [];
       uiNotificationsStore.showSuccess('所有历史记录已清空');
     } catch (err: unknown) {
-      console.error('清空命令历史记录失败:', err);
+      log.error('清空命令历史记录失败:', err);
       const message = extractErrorMessage(err, '清空历史记录时发生错误');
       uiNotificationsStore.showError(message);
     }

@@ -2,6 +2,7 @@ import { ref, nextTick, type Ref } from 'vue';
 import { type useI18n } from 'vue-i18n';
 import type { FileListItem } from '../../types/sftp.types';
 import type FileManagerContextMenu from '../../components/FileManagerContextMenu.vue';
+import { log } from '@/utils/log';
 
 // 定义菜单项类型 (可以根据需要扩展)
 export interface ContextMenuItem {
@@ -435,7 +436,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
         // Update the position state if adjustments were made
         if (finalX !== contextMenuPosition.value.x || finalY !== contextMenuPosition.value.y) {
-          console.info(
+          log.info(
             `[useFileManagerContextMenu] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`
           );
           contextMenuPosition.value = { x: finalX, y: finalY };

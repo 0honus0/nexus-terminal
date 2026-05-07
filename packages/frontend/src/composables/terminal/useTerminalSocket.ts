@@ -1,6 +1,7 @@
 import { watch, type Ref } from 'vue';
 import type { Terminal } from '@xterm/xterm';
 import { useWorkspaceEventEmitter } from '../workspaceEvents';
+import { log } from '@/utils/log';
 
 export function useTerminalSocket(
   terminal: Ref<Terminal | null>,
@@ -33,7 +34,7 @@ export function useTerminalSocket(
             }
           }
         } catch (error: unknown) {
-          console.error('Error reading terminal stream:', error);
+          log.error('Error reading terminal stream:', error);
         } finally {
           reader.releaseLock();
         }

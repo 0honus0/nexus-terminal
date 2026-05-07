@@ -6,6 +6,7 @@
  */
 
 import { getDbInstance, runDb, getDb as getDbRow } from '../database/connection';
+import { logger } from '../utils/logger';
 
 // ==================== 类型定义 ====================
 
@@ -123,12 +124,12 @@ class IpGeoService {
     const providerName = (process.env.GEO_PROVIDER || 'ip-api').trim();
     this.adapter = PROVIDER_ADAPTERS[providerName] || ipApiAdapter;
     if (providerName !== 'ip-api' && !PROVIDER_ADAPTERS[providerName]) {
-      console.warn(
+      logger.warn(
         `[IpGeo] 未知提供商 "${providerName}"，可用: ${Object.keys(PROVIDER_ADAPTERS).join(', ')}。回退到 ip-api。`
       );
       this.adapter = ipApiAdapter;
     }
-    console.info(`[IpGeo] 使用地理定位提供商: ${this.adapter.name}`);
+    logger.info(`[IpGeo] 使用地理定位提供商: ${this.adapter.name}`);
   }
 
   /**
@@ -212,7 +213,7 @@ class IpGeoService {
         [ip, geo.country, geo.regionName, geo.city, geo.isp, geo.asn, this.adapter.name, now]
       );
     } catch (err: unknown) {
-      console.debug('[IpGeo] 写入 SQLite 缓存失败:', err instanceof Error ? err.message : err);
+      logger.debug('[IpGeo] 写入 SQLite 缓存失败:', err instanceof Error ? err.message : err);
     }
   }
 
@@ -231,7 +232,7 @@ class IpGeoService {
       const data = await response.json();
       return this.adapter.parseResponse(data, ip);
     } catch (error: unknown) {
-      console.debug('[IpGeo] API 查询失败:', error instanceof Error ? error.message : error);
+      logger.debug('[IpGeo] API 查询失败:', error instanceof Error ? error.message : error);
       return null;
     }
   }

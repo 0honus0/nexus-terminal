@@ -2,6 +2,7 @@ import { Stats } from 'ssh2';
 import type { ClientState } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
 import { shellEscape } from '../utils/shell-escape';
+import { logger } from '../utils/logger';
 
 interface PathItemPayload {
   filename: string;
@@ -48,7 +49,7 @@ export const executeMkdirPathOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 mkdir (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 mkdir (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:mkdir:error',
@@ -61,11 +62,11 @@ export const executeMkdirPathOperation = async (
   }
 
   const { sftp } = state;
-  console.debug(`[SFTP ${sessionId}] Received mkdir request for ${path} (ID: ${requestId})`);
+  logger.debug(`[SFTP ${sessionId}] Received mkdir request for ${path} (ID: ${requestId})`);
   try {
     sftp.mkdir(path, (err) => {
       if (err) {
-        console.error(`[SFTP ${sessionId}] mkdir ${path} failed (ID: ${requestId}):`, err);
+        logger.error(`[SFTP ${sessionId}] mkdir ${path} failed (ID: ${requestId}):`, err);
         state.ws.send(
           JSON.stringify({
             type: 'sftp:mkdir:error',
@@ -77,12 +78,12 @@ export const executeMkdirPathOperation = async (
         return;
       }
 
-      console.debug(
+      logger.debug(
         `[SFTP ${sessionId}] mkdir ${path} success (ID: ${requestId}). Fetching stats...`
       );
       sftp.lstat(path, (statErr, stats) => {
         if (statErr) {
-          console.error(
+          logger.error(
             `[SFTP ${sessionId}] lstat after mkdir ${path} failed (ID: ${requestId}):`,
             statErr
           );
@@ -108,7 +109,7 @@ export const executeMkdirPathOperation = async (
       });
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] mkdir ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );
@@ -130,7 +131,7 @@ export const executeRmdirPathOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sshClient) {
-    console.warn(
+    logger.warn(
       `[SSH Exec] SSH 客户端未准备好，无法在 ${sessionId} 上执行 rmdir (ID: ${requestId})`
     );
     state?.ws.send(
@@ -144,16 +145,16 @@ export const executeRmdirPathOperation = async (
     return;
   }
 
-  console.debug(`[SSH Exec ${sessionId}] Received rmdir request for ${path} (ID: ${requestId})`);
+  logger.debug(`[SSH Exec ${sessionId}] Received rmdir request for ${path} (ID: ${requestId})`);
   const command = `rm -rf ${shellEscape(path)}`;
 
-  console.debug(`[SSH Exec ${sessionId}] 尝试使用 rm -rf 命令删除 ${path} (ID: ${requestId})`);
-  console.debug(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+  logger.debug(`[SSH Exec ${sessionId}] 尝试使用 rm -rf 命令删除 ${path} (ID: ${requestId})`);
+  logger.debug(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
 
   try {
     state.sshClient.exec(command, (err, stream) => {
       if (err) {
-        console.error(
+        logger.error(
           `[SSH Exec ${sessionId}] Failed to start exec for rm -rf ${path} (ID: ${requestId}):`,
           err
         );
@@ -175,7 +176,7 @@ export const executeRmdirPathOperation = async (
 
       stream.on('close', (code: number | null, signal: string | null) => {
         if (code === 0) {
-          console.debug(
+          logger.debug(
             `[SSH Exec ${sessionId}] rm -rf ${path} command executed successfully (ID: ${requestId})`
           );
           state.ws.send(JSON.stringify({ type: 'sftp:rmdir:success', path, requestId }));
@@ -185,7 +186,7 @@ export const executeRmdirPathOperation = async (
         const errorMessage =
           stderrOutput.trim() ||
           `命令退出，代码: ${code ?? 'N/A'}${signal ? `, 信号: ${signal}` : ''}`;
-        console.error(
+        logger.error(
           `[SSH Exec ${sessionId}] rm -rf ${path} command failed (ID: ${requestId}). Code: ${code}, Signal: ${signal}, Stderr: ${errorMessage}`
         );
         state.ws.send(
@@ -199,13 +200,13 @@ export const executeRmdirPathOperation = async (
       });
 
       stream.on('data', (data: Buffer) => {
-        console.debug(
+        logger.debug(
           `[SSH Exec ${sessionId}] rm -rf stdout (ID: ${requestId}): ${data.toString()}`
         );
       });
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SSH Exec ${sessionId}] rm -rf ${path} caught unexpected error during exec setup (ID: ${requestId}):`,
       error
     );
@@ -227,7 +228,7 @@ export const executeUnlinkPathOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 unlink (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 unlink (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:unlink:error',
@@ -239,11 +240,11 @@ export const executeUnlinkPathOperation = async (
     return;
   }
 
-  console.debug(`[SFTP ${sessionId}] Received unlink request for ${path} (ID: ${requestId})`);
+  logger.debug(`[SFTP ${sessionId}] Received unlink request for ${path} (ID: ${requestId})`);
   try {
     state.sftp.unlink(path, (err) => {
       if (err) {
-        console.error(`[SFTP ${sessionId}] unlink ${path} failed (ID: ${requestId}):`, err);
+        logger.error(`[SFTP ${sessionId}] unlink ${path} failed (ID: ${requestId}):`, err);
         state.ws.send(
           JSON.stringify({
             type: 'sftp:unlink:error',
@@ -255,11 +256,11 @@ export const executeUnlinkPathOperation = async (
         return;
       }
 
-      console.debug(`[SFTP ${sessionId}] unlink ${path} success (ID: ${requestId})`);
+      logger.debug(`[SFTP ${sessionId}] unlink ${path} success (ID: ${requestId})`);
       state.ws.send(JSON.stringify({ type: 'sftp:unlink:success', path, requestId }));
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] unlink ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );
@@ -282,7 +283,7 @@ export const executeRenamePathOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 rename (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 rename (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:rename:error',
@@ -296,13 +297,13 @@ export const executeRenamePathOperation = async (
   }
 
   const { sftp } = state;
-  console.debug(
+  logger.debug(
     `[SFTP ${sessionId}] Received rename request ${oldPath} -> ${newPath} (ID: ${requestId})`
   );
   try {
     sftp.rename(oldPath, newPath, (err) => {
       if (err) {
-        console.error(
+        logger.error(
           `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} failed (ID: ${requestId}):`,
           err
         );
@@ -318,12 +319,12 @@ export const executeRenamePathOperation = async (
         return;
       }
 
-      console.debug(
+      logger.debug(
         `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} success (ID: ${requestId}). Fetching stats for new path...`
       );
       sftp.lstat(newPath, (statErr, stats) => {
         if (statErr) {
-          console.error(
+          logger.error(
             `[SFTP ${sessionId}] lstat after rename ${newPath} failed (ID: ${requestId}):`,
             statErr
           );
@@ -347,7 +348,7 @@ export const executeRenamePathOperation = async (
       });
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} caught unexpected error (ID: ${requestId}):`,
       error
     );

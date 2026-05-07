@@ -48,6 +48,7 @@ import {
   handleSftpUploadChunk,
   handleSftpUploadCancel,
 } from './handlers/sftp.handler';
+import { logger } from '../utils/logger';
 
 type ConnectionRequestMeta = {
   clientType?: unknown;
@@ -91,7 +92,7 @@ export function initializeConnectionHandler(
 
     // 记录被拒绝的客户端类型值（用于审计与灰度）
     if (clientTypeParam && !isValidClientType) {
-      console.warn(
+      logger.warn(
         `[WebSocket] 拒绝无效的客户端类型参数: "${clientTypeParam}"（规范化后: "${normalizedClientType}"），已回退到 UA 检测。`
       );
     }
@@ -102,7 +103,7 @@ export function initializeConnectionHandler(
 
     const clientIp = typeof clientIpAddress === 'string' ? clientIpAddress : 'unknown'; // Preserved from upgrade handler
 
-    console.debug(
+    logger.debug(
       `WebSocket：客户端 ${ws.username} (ID: ${ws.userId}, IP: ${clientIp}, 类型: ${ws.clientType}, RDP Proxy: ${isRdpProxy}) 已连接。`
     );
 
@@ -125,7 +126,7 @@ export function initializeConnectionHandler(
         try {
           parsedMessage = JSON.parse(message.toString());
         } catch {
-          console.error(`WebSocket：来自 ${ws.username} 的无效 JSON 消息:`, message.toString());
+          logger.error(`WebSocket：来自 ${ws.username} 的无效 JSON 消息:`, message.toString());
           if (ws.readyState === WebSocket.OPEN)
             ws.send(JSON.stringify({ type: 'error', payload: '无效的消息格式 (非 JSON)' }));
           return;
@@ -134,7 +135,7 @@ export function initializeConnectionHandler(
         // --- 统一 Schema 校验（P1-3 安全改进）---
         const validationResult = validateWebSocketMessage(parsedMessage);
         if (!validationResult.success) {
-          console.warn(
+          logger.warn(
             `[WebSocket 校验] 来自 ${ws.username} 的消息校验失败: ${validationResult.error}`
           );
           if (ws.readyState === WebSocket.OPEN) {
@@ -225,7 +226,7 @@ export function initializeConnectionHandler(
 
             case 'SSH_SUSPEND_LIST_REQUEST': {
               if (!ws.userId) {
-                console.error(`[SSH_SUSPEND_LIST_REQUEST] 用户 ID 未定义。`);
+                logger.error(`[SSH_SUSPEND_LIST_REQUEST] 用户 ID 未定义。`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -243,7 +244,7 @@ export function initializeConnectionHandler(
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
               } catch (error: unknown) {
-                console.error(`[SSH_SUSPEND_LIST_REQUEST] 获取挂起列表失败:`, error);
+                logger.error(`[SSH_SUSPEND_LIST_REQUEST] 获取挂起列表失败:`, error);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -257,10 +258,10 @@ export function initializeConnectionHandler(
             case 'SSH_SUSPEND_RESUME_REQUEST': {
               const resumePayload = payload as SshSuspendResumeRequest['payload'];
               const { suspendSessionId, newFrontendSessionId } = resumePayload;
-              // console.info(`[WebSocket Handler][${type}] 接到请求。UserID: ${ws.userId}, WsSessionID: ${ws.sessionId}, Payload: ${JSON.stringify(resumePayload)}`);
+              // logger.info(`[WebSocket Handler][${type}] 接到请求。UserID: ${ws.userId}, WsSessionID: ${ws.sessionId}, Payload: ${JSON.stringify(resumePayload)}`);
 
               if (!ws.userId) {
-                console.error(`[WebSocket Handler][${type}] 用户 ID 未定义。`);
+                logger.error(`[WebSocket Handler][${type}] 用户 ID 未定义。`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -276,12 +277,12 @@ export function initializeConnectionHandler(
                 break;
               }
               try {
-                // console.info(`[WebSocket Handler][${type}] 调用 sshSuspendService.resumeSession (userId: ${ws.userId}, suspendSessionId: ${suspendSessionId})`);
+                // logger.info(`[WebSocket Handler][${type}] 调用 sshSuspendService.resumeSession (userId: ${ws.userId}, suspendSessionId: ${suspendSessionId})`);
                 const result = await sshSuspendService.resumeSession(ws.userId, suspendSessionId);
-                // console.info(`[WebSocket Handler][${type}] sshSuspendService.resumeSession 返回: ${result ? `包含 sshClient: ${!!result.sshClient}, channel: ${!!result.channel}, logData长度: ${result.logData?.length}` : 'null'}`);
+                // logger.info(`[WebSocket Handler][${type}] sshSuspendService.resumeSession 返回: ${result ? `包含 sshClient: ${!!result.sshClient}, channel: ${!!result.channel}, logData长度: ${result.logData?.length}` : 'null'}`);
 
                 if (result) {
-                  // console.info(`[WebSocket Handler][${type}] 成功恢复会话。准备设置新的 ClientState (ID: ${newFrontendSessionId})。`);
+                  // logger.info(`[WebSocket Handler][${type}] 成功恢复会话。准备设置新的 ClientState (ID: ${newFrontendSessionId})。`);
                   const newSessionState: ClientState = {
                     ws, // 当前的 WebSocket 连接
                     sshClient: result.sshClient,
@@ -293,18 +294,18 @@ export function initializeConnectionHandler(
                   };
                   clientStates.set(newFrontendSessionId, newSessionState);
                   ws.sessionId = newFrontendSessionId; // 将当前 ws 与新会话关联
-                  // console.info(`[WebSocket Handler][${type}] 新 ClientState (ID: ${newFrontendSessionId}) 已设置并关联到当前 WebSocket。`);
+                  // logger.info(`[WebSocket Handler][${type}] 新 ClientState (ID: ${newFrontendSessionId}) 已设置并关联到当前 WebSocket。`);
 
                   // +++ 为恢复的会话初始化 SFTP +++
-                  // console.info(`[WebSocket Handler][${type}] 尝试为恢复的会话 ${newFrontendSessionId} 初始化 SFTP。`);
+                  // logger.info(`[WebSocket Handler][${type}] 尝试为恢复的会话 ${newFrontendSessionId} 初始化 SFTP。`);
                   sftpService
                     .initializeSftpSession(newFrontendSessionId)
                     .then(() => {
-                      // console.info(`[WebSocket Handler][${type}] SFTP 初始化调用完成 (可能异步) for ${newFrontendSessionId}。`);
+                      // logger.info(`[WebSocket Handler][${type}] SFTP 初始化调用完成 (可能异步) for ${newFrontendSessionId}。`);
                       // sftp_ready 消息会由 sftpService 内部发送
                     })
                     .catch((sftpInitErr: unknown) => {
-                      console.error(
+                      logger.error(
                         `[WebSocket Handler][${type}] 为恢复的会话 ${newFrontendSessionId} 初始化 SFTP 失败:`,
                         sftpInitErr
                       );
@@ -316,7 +317,7 @@ export function initializeConnectionHandler(
                   result.channel.removeAllListeners('data'); // 清除 SshSuspendService 可能设置的监听器
                   result.channel.on('data', (data: Buffer) => {
                     if (ws.readyState === WebSocket.OPEN) {
-                      // console.debug(`[WebSocket Handler][${type}] 发送 ssh:output for ${newFrontendSessionId}`);
+                      // logger.debug(`[WebSocket Handler][${type}] 发送 ssh:output for ${newFrontendSessionId}`);
                       // 保持与 ssh.handler.ts 中 ssh:output 格式一致
                       ws.send(
                         JSON.stringify({
@@ -328,7 +329,7 @@ export function initializeConnectionHandler(
                     }
                   });
                   result.channel.on('close', () => {
-                    console.debug(
+                    logger.debug(
                       `[WebSocket Handler][${type}] 恢复的会话 ${newFrontendSessionId} 的 channel 已关闭。`
                     );
                     if (ws.readyState === WebSocket.OPEN) {
@@ -340,14 +341,14 @@ export function initializeConnectionHandler(
                       );
                     }
                     cleanupClientConnection(newFrontendSessionId).catch((error: unknown) => {
-                      console.debug(
+                      logger.debug(
                         '[WebSocket] 恢复会话 channel 关闭后清理失败:',
                         error instanceof Error ? error.message : error
                       );
                     });
                   });
                   result.sshClient.on('error', (err: Error) => {
-                    console.error(
+                    logger.error(
                       `[WebSocket Handler][${type}] 恢复后的 SSH 客户端错误 (会话: ${newFrontendSessionId}):`,
                       err
                     );
@@ -359,18 +360,17 @@ export function initializeConnectionHandler(
                         })
                       );
                     cleanupClientConnection(newFrontendSessionId).catch((error: unknown) => {
-                      console.debug(
+                      logger.debug(
                         '[WebSocket] 恢复会话 SSH 客户端错误后清理失败:',
                         error instanceof Error ? error.message : error
                       );
                     });
                   });
-                  // console.info(`[WebSocket Handler][${type}] 已为恢复的会话 ${newFrontendSessionId} 设置事件监听器。`);
+                  // logger.info(`[WebSocket Handler][${type}] 已为恢复的会话 ${newFrontendSessionId} 设置事件监听器。`);
 
                   // 发送缓存日志块
-                  console.debug(
-                    '[SSH Suspend Backend] Log data to send to frontend:',
-                    result.logData
+                  logger.debug(
+                    `[SSH Suspend Backend] 发送缓存日志块，数据长度: ${result.logData?.length ?? 0}`
                   );
                   const logChunkResponse: SshOutputCachedChunk = {
                     type: 'SSH_OUTPUT_CACHED_CHUNK',
@@ -382,9 +382,9 @@ export function initializeConnectionHandler(
                   };
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify(logChunkResponse));
-                    // console.info(`[WebSocket Handler][${type}] 已发送 SSH_OUTPUT_CACHED_CHUNK 给 ${newFrontendSessionId} (数据长度: ${result.logData.length})。`);
+                    // logger.info(`[WebSocket Handler][${type}] 已发送 SSH_OUTPUT_CACHED_CHUNK 给 ${newFrontendSessionId} (数据长度: ${result.logData.length})。`);
                   } else {
-                    // console.warn(`[WebSocket Handler][${type}] WebSocket 在发送 SSH_OUTPUT_CACHED_CHUNK 前已关闭 (会话 ${newFrontendSessionId})。`);
+                    // logger.warn(`[WebSocket Handler][${type}] WebSocket 在发送 SSH_OUTPUT_CACHED_CHUNK 前已关闭 (会话 ${newFrontendSessionId})。`);
                   }
 
                   // +++ 发送 ssh:connected 消息 +++
@@ -398,7 +398,7 @@ export function initializeConnectionHandler(
                         },
                       })
                     );
-                    console.debug(
+                    logger.debug(
                       `[WebSocket Handler][SSH_SUSPEND_RESUME_REQUEST] 已发送 ssh:connected 给 ${newFrontendSessionId}。`
                     );
                   }
@@ -410,19 +410,19 @@ export function initializeConnectionHandler(
                   };
                   if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify(responseNotification));
-                    // console.info(`[WebSocket Handler][${type}] 已发送 SSH_SUSPEND_RESUMED 给 ${newFrontendSessionId}。`);
+                    // logger.info(`[WebSocket Handler][${type}] 已发送 SSH_SUSPEND_RESUMED 给 ${newFrontendSessionId}。`);
                   } else {
-                    // console.warn(`[WebSocket Handler][${type}] WebSocket 在发送 SSH_SUSPEND_RESUMED 前已关闭 (会话 ${newFrontendSessionId})。`);
+                    // logger.warn(`[WebSocket Handler][${type}] WebSocket 在发送 SSH_SUSPEND_RESUMED 前已关闭 (会话 ${newFrontendSessionId})。`);
                   }
 
                   // 在成功恢复并通知前端后，调用 handleSshResumeSuccess 启动状态监控
                   handleSshResumeSuccess(newFrontendSessionId);
                 } else {
-                  // console.warn(`[WebSocket Handler][${type}] sshSuspendService.resumeSession 返回 null，无法恢复会话 ${suspendSessionId}。`);
+                  // logger.warn(`[WebSocket Handler][${type}] sshSuspendService.resumeSession 返回 null，无法恢复会话 ${suspendSessionId}。`);
                   throw new Error('服务未能恢复会话，或会话不存在/状态不正确。');
                 }
               } catch (error: unknown) {
-                // console.error(`[WebSocket Handler][${type}] 处理恢复会话 ${suspendSessionId} 时发生错误:`, error);
+                // logger.error(`[WebSocket Handler][${type}] 处理恢复会话 ${suspendSessionId} 时发生错误:`, error);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -440,11 +440,11 @@ export function initializeConnectionHandler(
             }
             case 'SSH_SUSPEND_TERMINATE_REQUEST': {
               const { suspendSessionId } = payload as SshSuspendTerminateRequest['payload'];
-              console.debug(
+              logger.debug(
                 `[WebSocket Handler] Received SSH_SUSPEND_TERMINATE_REQUEST. UserID: ${ws.userId}, WsSessionID: ${ws.sessionId}, SuspendSessionID: ${suspendSessionId}`
               );
               if (!ws.userId) {
-                console.error(
+                logger.error(
                   `[SSH_SUSPEND_TERMINATE_REQUEST] 用户 ID 未定义。Payload: ${JSON.stringify(payload)}`
                 );
                 if (ws.readyState === WebSocket.OPEN)
@@ -467,7 +467,7 @@ export function initializeConnectionHandler(
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
               } catch (error: unknown) {
-                console.error(
+                logger.error(
                   `[SSH_SUSPEND_TERMINATE_REQUEST] 终止会话 ${suspendSessionId} 失败:`,
                   error
                 );
@@ -487,11 +487,11 @@ export function initializeConnectionHandler(
             }
             case 'SSH_SUSPEND_REMOVE_ENTRY': {
               const { suspendSessionId } = payload as SshSuspendRemoveEntryRequest['payload'];
-              console.debug(
+              logger.debug(
                 `[WebSocket Handler] Received SSH_SUSPEND_REMOVE_ENTRY. UserID: ${ws.userId}, WsSessionID: ${ws.sessionId}, SuspendSessionID: ${suspendSessionId}`
               );
               if (!ws.userId) {
-                console.error(
+                logger.error(
                   `[SSH_SUSPEND_REMOVE_ENTRY] 用户 ID 未定义。Payload: ${JSON.stringify(payload)}`
                 );
                 if (ws.readyState === WebSocket.OPEN)
@@ -514,7 +514,7 @@ export function initializeConnectionHandler(
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
               } catch (error: unknown) {
-                console.error(
+                logger.error(
                   `[SSH_SUSPEND_REMOVE_ENTRY] 移除条目 ${suspendSessionId} 失败:`,
                   error
                 );
@@ -540,7 +540,7 @@ export function initializeConnectionHandler(
               // 以后端当前连接绑定的 SID 为准，兼容前端 reconnect 后仍携带旧 SID 的请求。
               const sessionToMarkId = wsBoundSessionId || requestedSessionToMarkId;
               const { initialBuffer } = markPayload; // +++ 获取 initialBuffer +++
-              console.debug(
+              logger.debug(
                 `[WebSocket Handler] Received SSH_MARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToMarkId}, RequestedSessionID: ${requestedSessionToMarkId}, InitialBuffer provided: ${!!initialBuffer}`
               );
 
@@ -549,13 +549,13 @@ export function initializeConnectionHandler(
                 wsBoundSessionId &&
                 requestedSessionToMarkId !== wsBoundSessionId
               ) {
-                console.warn(
+                logger.warn(
                   `[SSH_MARK_FOR_SUSPEND] 请求会话ID(${requestedSessionToMarkId})与当前WebSocket绑定会话ID(${wsBoundSessionId})不一致，已按当前连接会话处理。`
                 );
               }
 
               if (!ws.userId) {
-                console.error(`[SSH_MARK_FOR_SUSPEND] 用户 ID 未定义。`);
+                logger.error(`[SSH_MARK_FOR_SUSPEND] 用户 ID 未定义。`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -571,7 +571,7 @@ export function initializeConnectionHandler(
               }
 
               if (!sessionToMarkId) {
-                console.error('[SSH_MARK_FOR_SUSPEND] 缺少有效会话 ID。');
+                logger.error('[SSH_MARK_FOR_SUSPEND] 缺少有效会话 ID。');
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -592,7 +592,7 @@ export function initializeConnectionHandler(
                 !activeSessionState.sshClient ||
                 !activeSessionState.sshShellStream
               ) {
-                console.error(
+                logger.error(
                   `[SSH_MARK_FOR_SUSPEND] 找不到活动的SSH会话或其组件: ${sessionToMarkId}`
                 );
                 if (ws.readyState === WebSocket.OPEN)
@@ -610,7 +610,7 @@ export function initializeConnectionHandler(
               }
 
               if (activeSessionState.isMarkedForSuspend) {
-                console.warn(`[SSH_MARK_FOR_SUSPEND] 会话 ${sessionToMarkId} 已被标记。`);
+                logger.warn(`[SSH_MARK_FOR_SUSPEND] 会话 ${sessionToMarkId} 已被标记。`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -644,14 +644,14 @@ export function initializeConnectionHandler(
                     logPathSuffix,
                     formattedInitialBuffer
                   );
-                  console.debug(
+                  logger.debug(
                     `[SSH_MARK_FOR_SUSPEND] 已将初始缓冲区写入日志 (会话: ${sessionToMarkId})。`
                   );
                 }
                 // --- 移除自动添加的日志标记行 ---
                 // await temporaryLogStorageService.writeToLog(logPathSuffix, `--- Log recording continued for session ${sessionToMarkId} at ${new Date().toISOString()} ---\n`);
 
-                console.info(
+                logger.info(
                   `[SSH_MARK_FOR_SUSPEND] 会话 ${sessionToMarkId} 已成功标记待挂起。日志将记录到与 ${logPathSuffix} 关联的文件。`
                 );
                 const response: SshMarkedForSuspendAck = {
@@ -660,7 +660,7 @@ export function initializeConnectionHandler(
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
               } catch (error: unknown) {
-                console.error(`[SSH_MARK_FOR_SUSPEND] 标记会话 ${sessionToMarkId} 失败:`, error);
+                logger.error(`[SSH_MARK_FOR_SUSPEND] 标记会话 ${sessionToMarkId} 失败:`, error);
                 if (activeSessionState) {
                   // 如果状态存在，尝试回滚标记
                   activeSessionState.isMarkedForSuspend = false;
@@ -686,7 +686,7 @@ export function initializeConnectionHandler(
               const wsBoundSessionId = typeof ws.sessionId === 'string' ? ws.sessionId : '';
               // 与标记逻辑一致：优先使用当前连接 SID，避免旧 SID 导致"会话不存在"。
               const sessionToUnmarkId = wsBoundSessionId || requestedSessionToUnmarkId;
-              console.debug(
+              logger.debug(
                 `[WebSocket Handler] Received SSH_UNMARK_FOR_SUSPEND. UserID: ${ws.userId}, TargetSessionID: ${sessionToUnmarkId}, RequestedSessionID: ${requestedSessionToUnmarkId}`
               );
               const ackPayloadBase = { sessionId: sessionToUnmarkId };
@@ -696,13 +696,13 @@ export function initializeConnectionHandler(
                 wsBoundSessionId &&
                 requestedSessionToUnmarkId !== wsBoundSessionId
               ) {
-                console.warn(
+                logger.warn(
                   `[SSH_UNMARK_FOR_SUSPEND] 请求会话ID(${requestedSessionToUnmarkId})与当前WebSocket绑定会话ID(${wsBoundSessionId})不一致，已按当前连接会话处理。`
                 );
               }
 
               if (!ws.userId) {
-                console.error(`[SSH_UNMARK_FOR_SUSPEND] 用户 ID 未定义。`);
+                logger.error(`[SSH_UNMARK_FOR_SUSPEND] 用户 ID 未定义。`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -718,7 +718,7 @@ export function initializeConnectionHandler(
               }
 
               if (!sessionToUnmarkId) {
-                console.error('[SSH_UNMARK_FOR_SUSPEND] 缺少有效会话 ID。');
+                logger.error('[SSH_UNMARK_FOR_SUSPEND] 缺少有效会话 ID。');
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -735,7 +735,7 @@ export function initializeConnectionHandler(
 
               const activeSessionState = clientStates.get(sessionToUnmarkId);
               if (!activeSessionState) {
-                console.warn(`[SSH_UNMARK_FOR_SUSPEND] 未找到会话: ${sessionToUnmarkId}`);
+                logger.warn(`[SSH_UNMARK_FOR_SUSPEND] 未找到会话: ${sessionToUnmarkId}`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(
                     JSON.stringify({
@@ -751,7 +751,7 @@ export function initializeConnectionHandler(
               }
 
               if (!activeSessionState.isMarkedForSuspend) {
-                console.warn(
+                logger.warn(
                   `[SSH_UNMARK_FOR_SUSPEND] 会话 ${sessionToUnmarkId} 并未被标记为待挂起。`
                 );
                 // 即使未标记，也回复成功，因为最终状态是"未标记"
@@ -776,19 +776,19 @@ export function initializeConnectionHandler(
 
                 if (logPathToDelete) {
                   await temporaryLogStorageService.deleteLog(logPathToDelete);
-                  console.debug(
+                  logger.debug(
                     `[SSH_UNMARK_FOR_SUSPEND] 已删除会话 ${sessionToUnmarkId} 的临时挂起日志: ${logPathToDelete}`
                   );
                 }
 
-                console.info(`[SSH_UNMARK_FOR_SUSPEND] 会话 ${sessionToUnmarkId} 已成功取消标记。`);
+                logger.info(`[SSH_UNMARK_FOR_SUSPEND] 会话 ${sessionToUnmarkId} 已成功取消标记。`);
                 const response: SshUnmarkedForSuspendAck = {
                   type: 'SSH_UNMARKED_FOR_SUSPEND_ACK',
                   payload: { ...ackPayloadBase, success: true },
                 };
                 if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
               } catch (error: unknown) {
-                console.error(
+                logger.error(
                   `[SSH_UNMARK_FOR_SUSPEND] 取消标记会话 ${sessionToUnmarkId} 失败:`,
                   error
                 );
@@ -812,14 +812,14 @@ export function initializeConnectionHandler(
               break;
             }
             default:
-              console.warn(
+              logger.warn(
                 `WebSocket：收到来自 ${ws.username} (会话: ${sessionId}) 的未知消息类型: ${type}`
               );
               if (ws.readyState === WebSocket.OPEN)
                 ws.send(JSON.stringify({ type: 'error', payload: `不支持的消息类型: ${type}` }));
           }
         } catch (error: unknown) {
-          console.error(
+          logger.error(
             `WebSocket: 处理来自 ${ws.username} (会话: ${sessionId}) 的消息 (${type}) 时发生顶层错误:`,
             error
           );
@@ -834,7 +834,7 @@ export function initializeConnectionHandler(
       });
 
       ws.on('close', (code, reason) => {
-        console.debug(
+        logger.debug(
           `WebSocket：客户端 ${ws.username} (会话: ${ws.sessionId}) 已断开连接。代码: ${code}, 原因: ${reason.toString()}`
         );
 
@@ -847,7 +847,7 @@ export function initializeConnectionHandler(
         cleanupHeartbeat(ws);
 
         cleanupClientConnection(ws.sessionId).catch((error: unknown) => {
-          console.debug(
+          logger.debug(
             '[WebSocket] 连接关闭后清理失败:',
             error instanceof Error ? error.message : error
           );
@@ -855,7 +855,7 @@ export function initializeConnectionHandler(
       });
 
       ws.on('error', (error) => {
-        console.error(`WebSocket：客户端 ${ws.username} (会话: ${ws.sessionId}) 发生错误:`, error);
+        logger.error(`WebSocket：客户端 ${ws.username} (会话: ${ws.sessionId}) 发生错误:`, error);
 
         // 注销 userId 到 WebSocket 的映射
         if (ws.userId) {
@@ -866,7 +866,7 @@ export function initializeConnectionHandler(
         cleanupHeartbeat(ws);
 
         cleanupClientConnection(ws.sessionId).catch((cleanupError: unknown) => {
-          console.debug(
+          logger.debug(
             '[WebSocket] 连接错误后清理失败:',
             cleanupError instanceof Error ? cleanupError.message : cleanupError
           );
@@ -880,7 +880,7 @@ export function initializeConnectionHandler(
     'sessionAutoTerminated',
     (eventPayload: { userId: number; suspendSessionId: string; reason: string }) => {
       const { userId, suspendSessionId, reason } = eventPayload;
-      console.debug(
+      logger.debug(
         `[WebSocket 通知] 准备发送 SSH_SUSPEND_AUTO_TERMINATED 给用户 ${userId} 的会话 ${suspendSessionId}`
       );
 
@@ -895,7 +895,7 @@ export function initializeConnectionHandler(
             },
           };
           wsClient.send(JSON.stringify(notification));
-          console.debug(
+          logger.debug(
             `[WebSocket 通知] 已发送 SSH_SUSPEND_AUTO_TERMINATED 给用户 ${userId} 的一个 WebSocket 连接 (会话 ${suspendSessionId})。`
           );
         }
@@ -903,7 +903,7 @@ export function initializeConnectionHandler(
     }
   );
 
-  console.info(
+  logger.info(
     'WebSocket connection handler initialized, including SshSuspendService event listener.'
   );
 }

@@ -423,21 +423,24 @@ npm start
 
 ## 环境变量
 
-| 变量名              | 默认值      | 描述                                                               |
-| ------------------- | ----------- | ------------------------------------------------------------------ |
-| `PORT`              | 3001        | API 服务端口                                                       |
-| `NODE_ENV`          | development | 运行环境                                                           |
-| `ENCRYPTION_KEY`    | (自动生成)  | 数据库敏感信息加密密钥（32字节 hex，支持轮换）                     |
-| `SESSION_SECRET`    | (自动生成)  | 会话密钥                                                           |
-| `GUACD_HOST`        | localhost   | Guacamole daemon 地址                                              |
-| `GUACD_PORT`        | 4822        | Guacamole daemon 端口                                              |
-| `RP_ID`             | -           | Passkey RP ID。可单值（跨域共享 Passkey 推荐）或多值（按顺序映射） |
-| `RP_ORIGIN`         | -           | Passkey Origin，支持逗号分隔多值（完整 URL）                       |
-| `ENABLE_METRICS`    | false       | 启用 Prometheus 指标端点（/api/v1/metrics）                        |
-| `ENABLE_GEO_LOOKUP` | true        | 启用登录事件 IP 地理位置查询（设为 false 禁用）                    |
-| `GEO_PROVIDER`      | ip-api      | IP 地理定位提供商：`ip-api`（默认）或 `ipinfo`                     |
-| `IPINFO_TOKEN`      | -           | ipinfo.io API Token（可选，提升请求配额）                          |
-| `LOG_LEVEL`         | info        | 运行时日志等级（debug/info/warn/error/silent）                     |
+| 变量名              | 默认值      | 描述                                                                  |
+| ------------------- | ----------- | --------------------------------------------------------------------- |
+| `PORT`              | 3001        | API 服务端口                                                          |
+| `NODE_ENV`          | development | 运行环境                                                              |
+| `ENCRYPTION_KEY`    | (自动生成)  | 数据库敏感信息加密密钥（32字节 hex，支持轮换）                        |
+| `SESSION_SECRET`    | (自动生成)  | 会话密钥                                                              |
+| `GUACD_HOST`        | localhost   | Guacamole daemon 地址                                                 |
+| `GUACD_PORT`        | 4822        | Guacamole daemon 端口                                                 |
+| `RP_ID`             | -           | Passkey RP ID。可单值（跨域共享 Passkey 推荐）或多值（按顺序映射）    |
+| `RP_ORIGIN`         | -           | Passkey Origin，支持逗号分隔多值（完整 URL）                          |
+| `ENABLE_METRICS`    | false       | 启用 Prometheus 指标端点（/api/v1/metrics）                           |
+| `ENABLE_GEO_LOOKUP` | true        | 启用登录事件 IP 地理位置查询（设为 false 禁用）                       |
+| `GEO_PROVIDER`      | ip-api      | IP 地理定位提供商：`ip-api`（默认）或 `ipinfo`                        |
+| `IPINFO_TOKEN`      | -           | ipinfo.io API Token（可选，提升请求配额）                             |
+| `LOG_LEVEL`         | info        | 运行时日志等级（debug/info/warn/error/silent）                        |
+| `LOG_PRETTY`        | -           | 日志格式化开关（true=pino-pretty 彩色，false=JSON），dev 模式默认开启 |
+| `LOG_REDACT`        | true        | 日志脱敏开关（false 可关闭敏感信息脱敏）                              |
+| `LOG_TZ`            | -           | 日志时间戳时区（优先级高于 TZ）                                       |
 
 ### 安全配置常量（`src/config/security.config.ts`）
 

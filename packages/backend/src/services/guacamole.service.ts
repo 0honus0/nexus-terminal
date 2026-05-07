@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { ConnectionWithTags } from '../types/connection.types';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 统一远程桌面网关服务的 Base URL
 const REMOTE_GATEWAY_API_BASE =
@@ -8,14 +9,14 @@ const REMOTE_GATEWAY_API_BASE =
     ? process.env.REMOTE_GATEWAY_API_BASE_LOCAL || 'http://localhost:9090'
     : process.env.REMOTE_GATEWAY_API_BASE_DOCKER || 'http://remote-gateway:9090';
 
-console.debug(`[GuacamoleService] DEPLOYMENT_MODE: ${process.env.DEPLOYMENT_MODE}`);
-console.debug(
+logger.debug(`[GuacamoleService] DEPLOYMENT_MODE: ${process.env.DEPLOYMENT_MODE}`);
+logger.debug(
   `[GuacamoleService] Using Remote Gateway API Base (Local): ${process.env.REMOTE_GATEWAY_API_BASE_LOCAL}`
 );
-console.debug(
+logger.debug(
   `[GuacamoleService] Using Remote Gateway API Base (Docker): ${process.env.REMOTE_GATEWAY_API_BASE_DOCKER}`
 );
-console.debug(`[GuacamoleService] Effective Remote Gateway API Base: ${REMOTE_GATEWAY_API_BASE}`);
+logger.debug(`[GuacamoleService] Effective Remote Gateway API Base: ${REMOTE_GATEWAY_API_BASE}`);
 
 interface TokenResponse {
   token: string;
@@ -51,7 +52,7 @@ export const getRemoteDesktopToken = async (
     connection.auth_method === 'password' &&
     !decryptedPassword
   ) {
-    console.warn(
+    logger.warn(
       `[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} connection ${connection.id} uses password auth but password decryption failed or password not provided.`
     );
     throw new Error(`${protocol.toUpperCase()} 连接使用密码认证，但密码解密失败或未提供密码。`);
@@ -67,7 +68,7 @@ export const getRemoteDesktopToken = async (
   if (protocol === 'rdp') {
     const rdpConnection = connection as RdpConnectionWithExtras;
     if (!connection.username) {
-      console.warn(
+      logger.warn(
         `[GuacamoleService:getRemoteDesktopToken] RDP connection ${connection.id} is missing username.`
       );
       // 对于RDP，用户名通常是必需的，但让网关决定是否可以为空
@@ -93,7 +94,7 @@ export const getRemoteDesktopToken = async (
   };
 
   const tokenUrl = `${REMOTE_GATEWAY_API_BASE}/api/remote-desktop/token`;
-  console.debug(
+  logger.debug(
     `[GuacamoleService:getRemoteDesktopToken] Calling Remote Gateway API: ${tokenUrl} for protocol ${protocol}, connection ${connection.id}`
   );
 
@@ -108,19 +109,22 @@ export const getRemoteDesktopToken = async (
     });
 
     if (response.status !== 200 || !response.data?.token) {
-      console.error(
-        `[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} backend API call failed or returned invalid data. Status: ${response.status}`,
-        response.data
+      logger.error(
+        {
+          status: response.status,
+          errorMessage: (response.data as unknown as Record<string, unknown>)?.message ?? '',
+        },
+        `[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} backend API call failed or returned invalid data.`
       );
       throw new Error(`从 ${protocol.toUpperCase()} 后端获取令牌失败。`);
     }
-    console.info(
+    logger.info(
       `[GuacamoleService:getRemoteDesktopToken] Received Guacamole token from ${protocol.toUpperCase()} backend for connection ${connection.id}`
     );
     return response.data.token;
   } catch (error: unknown) {
     const errorMsg = getErrorMessage(error);
-    console.error(
+    logger.error(
       `[GuacamoleService:getRemoteDesktopToken] Error calling ${protocol.toUpperCase()} backend for connection ${connection.id}:`,
       errorMsg
     );

@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import zhCN from '../zh-CN.json';
 import enUS from '../en-US.json';
 import jaJP from '../ja-JP.json';
+
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
 
 /**
  * 递归提取嵌套对象中所有叶节点的 key 路径
@@ -38,13 +47,13 @@ describe('翻译完整性校验', () => {
         const extraInCurrent = currentKeys.filter((k) => !referenceKeys.includes(k));
 
         if (missingInCurrent.length > 0) {
-          console.warn(
+          mockLog.warn(
             `[${localeName}] 缺少 ${missingInCurrent.length} 个 key:`,
             missingInCurrent.slice(0, 10)
           );
         }
         if (extraInCurrent.length > 0) {
-          console.warn(
+          mockLog.warn(
             `[${localeName}] 多出 ${extraInCurrent.length} 个 key:`,
             extraInCurrent.slice(0, 10)
           );

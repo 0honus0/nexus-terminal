@@ -6,6 +6,7 @@ import { ref } from 'vue';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import type { AppearanceSettings } from '../types/appearance.types';
+import { log } from '@/utils/log';
 
 /** HTML 预设子 Store 的依赖参数 */
 export interface HtmlPresetsDeps {
@@ -40,7 +41,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       );
       localHtmlPresets.value = response.data;
     } catch (err: unknown) {
-      console.error('获取本地 HTML 主题列表失败:', err);
+      log.error('获取本地 HTML 主题列表失败:', err);
       htmlPresetError.value = extractErrorMessage(err, '获取本地 HTML 主题列表失败');
       localHtmlPresets.value = [];
     } finally {
@@ -55,7 +56,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       });
       return response.data;
     } catch (err: unknown) {
-      console.error(`获取本地 HTML 主题 '${name}' 内容失败:`, err);
+      log.error(`获取本地 HTML 主题 '${name}' 内容失败:`, err);
       throw new Error(extractErrorMessage(err, `获取主题 '${name}' 内容失败`));
     }
   }
@@ -65,7 +66,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       await apiClient.post('/appearance/html-presets/local', { name, content });
       await fetchLocalHtmlPresets();
     } catch (err: unknown) {
-      console.error('创建本地 HTML 主题失败:', err);
+      log.error('创建本地 HTML 主题失败:', err);
       throw new Error(extractErrorMessage(err, '创建本地 HTML 主题失败'));
     }
   }
@@ -74,7 +75,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
     try {
       await apiClient.put(`/appearance/html-presets/local/${name}`, { content });
     } catch (err: unknown) {
-      console.error(`更新本地 HTML 主题 '${name}' 失败:`, err);
+      log.error(`更新本地 HTML 主题 '${name}' 失败:`, err);
       throw new Error(extractErrorMessage(err, `更新主题 '${name}' 失败`));
     }
   }
@@ -84,7 +85,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       await apiClient.delete(`/appearance/html-presets/local/${name}`);
       await fetchLocalHtmlPresets();
     } catch (err: unknown) {
-      console.error(`删除本地 HTML 主题 '${name}' 失败:`, err);
+      log.error(`删除本地 HTML 主题 '${name}' 失败:`, err);
       throw new Error(extractErrorMessage(err, `删除主题 '${name}' 失败`));
     }
   }
@@ -100,7 +101,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       );
       remoteHtmlPresetsRepositoryUrl.value = response.data.url;
     } catch (err: unknown) {
-      console.error('获取远程 HTML 主题仓库链接失败:', err);
+      log.error('获取远程 HTML 主题仓库链接失败:', err);
       htmlPresetError.value = extractErrorMessage(err, '获取远程仓库链接失败');
     } finally {
       isLoadingHtmlPresets.value = false;
@@ -113,7 +114,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       remoteHtmlPresetsRepositoryUrl.value = url;
       await updateAppearanceSettings({ remoteHtmlPresetsUrl: url });
     } catch (err: unknown) {
-      console.error('更新远程 HTML 主题仓库链接失败:', err);
+      log.error('更新远程 HTML 主题仓库链接失败:', err);
       throw new Error(extractErrorMessage(err, '更新远程仓库链接失败'));
     }
   }
@@ -139,7 +140,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       );
       remoteHtmlPresets.value = response.data;
     } catch (err: unknown) {
-      console.error('获取远程 HTML 主题列表失败:', err);
+      log.error('获取远程 HTML 主题列表失败:', err);
       htmlPresetError.value = extractErrorMessage(err, '获取远程主题列表失败');
       remoteHtmlPresets.value = [];
     } finally {
@@ -155,7 +156,7 @@ export function createHtmlPresetsStore(deps: HtmlPresetsDeps) {
       });
       return response.data;
     } catch (err: unknown) {
-      console.error(`获取远程 HTML 主题内容 (URL: ${fileUrl}) 失败:`, err);
+      log.error(`获取远程 HTML 主题内容 (URL: ${fileUrl}) 失败:`, err);
       throw new Error(extractErrorMessage(err, '获取远程主题内容失败'));
     }
   }

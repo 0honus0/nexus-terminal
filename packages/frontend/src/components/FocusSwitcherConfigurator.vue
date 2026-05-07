@@ -10,6 +10,7 @@ import {
 } from '../stores/focusSwitcher.store';
 import { storeToRefs } from 'pinia';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { log } from '@/utils/log';
 
 // 本地接口，仅用于右侧列表显示
 interface SequenceDisplayItem extends FocusableInput {}
@@ -62,12 +63,12 @@ watch(
       const allAvailableInputs = focusSwitcherStore.availableInputs; // 获取所有可用输入的基础信息
       const inputsMap = new Map(allAvailableInputs.map((input) => [input.id, input]));
 
-      console.info('[FocusSwitcherConfigurator] Loading full config from store...');
-      console.info(
+      log.info('[FocusSwitcherConfigurator] Loading full config from store...');
+      log.info(
         '[FocusSwitcherConfigurator] Store sequenceOrder:',
         JSON.stringify(currentSequenceOrder)
       );
-      console.info(
+      log.info(
         '[FocusSwitcherConfigurator] Store itemConfigs:',
         JSON.stringify(currentItemConfigs)
       );
@@ -94,15 +95,15 @@ watch(
       );
 
       hasChanges.value = false;
-      console.info(
+      log.info(
         '[FocusSwitcherConfigurator] Dialog opened. Loaded localSequence:',
         JSON.stringify(localSequence.value)
       );
-      console.info(
+      log.info(
         '[FocusSwitcherConfigurator] Loaded localItemConfigs:',
         JSON.stringify(localItemConfigs.value)
       );
-      console.info(
+      log.info(
         '[FocusSwitcherConfigurator] Original full config stored:',
         JSON.stringify(originalConfig.value)
       );
@@ -172,10 +173,10 @@ watch(
     const changed = JSON.stringify(currentFullConfig) !== JSON.stringify(comparableOriginalConfig);
 
     hasChanges.value = changed;
-    // console.info(`[FocusSwitcherConfigurator] Comparing:`);
-    // console.info("Current:", JSON.stringify(currentFullConfig));
-    // console.info("Original:", JSON.stringify(comparableOriginalConfig));
-    // console.info(`[FocusSwitcherConfigurator] Changes detected: ${changed}`);
+    // log.info(`[FocusSwitcherConfigurator] Comparing:`);
+    // log.info("Current:", JSON.stringify(currentFullConfig));
+    // log.info("Original:", JSON.stringify(comparableOriginalConfig));
+    // log.info(`[FocusSwitcherConfigurator] Changes detected: ${changed}`);
   },
   { deep: true }
 );
@@ -212,12 +213,12 @@ const saveConfiguration = () => {
     shortcuts: newShortcuts,
   };
 
-  console.info(
+  log.info(
     '[FocusSwitcherConfigurator] Saving full configuration:',
     JSON.stringify(fullConfigToSave)
   );
   focusSwitcherStore.updateConfiguration(fullConfigToSave); // 调用 Store 更新函数
-  console.info('[FocusSwitcherConfigurator] Configuration save process triggered.');
+  log.info('[FocusSwitcherConfigurator] Configuration save process triggered.');
   hasChanges.value = false;
   emit('close'); // 保存后关闭
 };
@@ -463,14 +464,14 @@ const captureShortcut = (event: KeyboardEvent, itemConfig: FocusItemConfig) => {
       itemConfig.shortcut = undefined; // 使用 undefined 清空
     } else {
       // 可选：提示不支持的键
-      console.warn(`[FocusSwitcherConfigurator] Unsupported key for shortcut: ${key}`);
+      log.warn(`[FocusSwitcherConfigurator] Unsupported key for shortcut: ${key}`);
     }
   } else if (event.key === 'Backspace' || event.key === 'Delete') {
     // 允许单独按 Backspace 或 Delete 清空 (即使没有 Alt)
     itemConfig.shortcut = undefined; // 使用 undefined 清空
   } else {
     // 可选：如果按下非 Alt 组合键，可以清空或提示
-    // console.info('[FocusSwitcherConfigurator] Invalid shortcut combination.');
+    // log.info('[FocusSwitcherConfigurator] Invalid shortcut combination.');
   }
 };
 </script>

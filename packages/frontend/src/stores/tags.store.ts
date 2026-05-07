@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 // 定义标签信息接口
 export interface TagInfo {
@@ -31,7 +32,7 @@ export const useTagsStore = defineStore('tags', () => {
         isLoading.value = true; // 无缓存，初始加载
       }
     } catch (loadError: unknown) {
-      console.error('[TagsStore] Failed to load or parse tags cache:', loadError);
+      log.error('[TagsStore] Failed to load or parse tags cache:', loadError);
       localStorage.removeItem(cacheKey); // 解析失败则移除缓存
       isLoading.value = true; // 缓存无效，需要加载
     }
@@ -49,12 +50,12 @@ export const useTagsStore = defineStore('tags', () => {
         tags.value = freshData;
         localStorage.setItem(cacheKey, freshDataString); // 更新缓存
       } else {
-        console.info('[TagsStore] Tags data is up-to-date.');
+        log.info('[TagsStore] Tags data is up-to-date.');
       }
       error.value = null; // 清除错误
       return true; // 表示获取成功（即使数据未变）
     } catch (err: unknown) {
-      console.error('[TagsStore] Failed to fetch tags:', err);
+      log.error('[TagsStore] Failed to fetch tags:', err);
       error.value = extractErrorMessage(err, '获取标签列表失败');
       // 保留缓存数据，仅设置错误状态
       return false; // 表示获取失败
@@ -76,7 +77,7 @@ export const useTagsStore = defineStore('tags', () => {
       await fetchTags(); // fetchTags 会处理获取和缓存更新
       return newTag; // 返回新标签信息
     } catch (err: unknown) {
-      console.error('Failed to add tag:', err);
+      log.error('Failed to add tag:', err);
       error.value = extractErrorMessage(err, '添加标签失败');
       return null; // 返回 null 表示失败
     } finally {
@@ -95,7 +96,7 @@ export const useTagsStore = defineStore('tags', () => {
       await fetchTags();
       return true;
     } catch (err: unknown) {
-      console.error('Failed to update tag:', err);
+      log.error('Failed to update tag:', err);
       error.value = extractErrorMessage(err, '更新标签失败');
       return false;
     } finally {
@@ -114,7 +115,7 @@ export const useTagsStore = defineStore('tags', () => {
       await fetchTags();
       return true;
     } catch (err: unknown) {
-      console.error('Failed to delete tag:', err);
+      log.error('Failed to delete tag:', err);
       error.value = extractErrorMessage(err, '删除标签失败');
       return false;
     } finally {
@@ -144,7 +145,7 @@ export const useTagsStore = defineStore('tags', () => {
 
       return true;
     } catch (err: unknown) {
-      console.error(`Failed to update connections for tag ${tagId}:`, err);
+      log.error(`Failed to update connections for tag ${tagId}:`, err);
       error.value = extractErrorMessage(err, '更新标签连接失败');
       return false;
     } finally {

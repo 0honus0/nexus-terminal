@@ -6,6 +6,7 @@ import { useConnectionsStore } from '../stores/connections.store';
 import Guacamole from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
 import { extractErrorMessage } from '../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -49,17 +50,17 @@ const normalizeGuacamoleStatus = (status: unknown): GuacamoleStatusPayload => {
 
 const sendInputTextToVnc = async () => {
   if (!guacClient.value || connectionStatus.value !== 'connected') {
-    console.warn('[VncModal] Guacamole client not available or not connected to send text.');
+    log.warn('[VncModal] Guacamole client not available or not connected to send text.');
     // Можно добавить сообщение для пользователя здесь, если нужно
     return;
   }
   const textToSend = vncPasteInputText.value;
   if (!textToSend) {
-    console.info('[VncModal] Paste input is empty, nothing to send.');
+    log.info('[VncModal] Paste input is empty, nothing to send.');
     return;
   }
 
-  console.info(`[VncModal] Simulating keyboard input for: ${textToSend.substring(0, 50)}...`);
+  log.info(`[VncModal] Simulating keyboard input for: ${textToSend.substring(0, 50)}...`);
   try {
     for (const char of textToSend) {
       const keysym = char.charCodeAt(0); //直接使用字符的 Unicode 码点作为 keysym
@@ -71,14 +72,14 @@ const sendInputTextToVnc = async () => {
         guacClient.value.sendKeyEvent(0, keysym); // Key release
         await new Promise((resolve) => setTimeout(resolve, 30)); // 短暂延迟
       } else {
-        console.warn(`[VncModal] Invalid keysym for character "${char}". Skipping.`);
+        log.warn(`[VncModal] Invalid keysym for character "${char}". Skipping.`);
       }
     }
-    console.info('[VncModal] Finished simulating keyboard input.');
+    log.info('[VncModal] Finished simulating keyboard input.');
     // vncPasteInputText.value = ''; // 如果希望发送后清空输入框，取消此行注释
   } catch (err: unknown) {
     const errorMessage = extractErrorMessage(err, t('term.unknownError'));
-    console.error('[VncModal] Error simulating keyboard input:', err);
+    log.error('[VncModal] Error simulating keyboard input:', err);
     statusMessage.value = t('vncModal.errors.simulateInputError', { error: errorMessage });
   }
 };
@@ -213,9 +214,7 @@ const handleConnection = async () => {
               const displayWidth = vncDisplayRef.value.offsetWidth;
               const displayHeight = vncDisplayRef.value.offsetHeight;
               if (displayWidth > 0 && displayHeight > 0) {
-                console.info(
-                  `[VncModal] Initial resize on connect: ${displayWidth}x${displayHeight}`
-                );
+                log.info(`[VncModal] Initial resize on connect: ${displayWidth}x${displayHeight}`);
                 guacClient.value.sendSize(displayWidth, displayHeight);
               }
             }
@@ -277,7 +276,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
-      console.info(
+      log.info(
         '[VncModal] Sent clipboard to VNC on display focus:',
         currentClipboardText.substring(0, 50) + (currentClipboardText.length > 50 ? '...' : '')
       );
@@ -286,9 +285,9 @@ const trySyncClipboardOnDisplayFocus = async () => {
     // This error is expected if the document/tab is not focused when the VNC display element gets focus.
     // Or if clipboard permissions are not granted.
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
-      // console.info('[VncModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
+      // log.info('[VncModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
     } else {
-      console.warn('[VncModal] Could not read clipboard on display focus, or other error:', err);
+      log.warn('[VncModal] Could not read clipboard on display focus, or other error:', err);
     }
   }
 };
@@ -362,7 +361,7 @@ const setupInputListeners = () => {
     // displayEl.addEventListener('mouseenter', trySyncClipboardOnMouseEnter); // Changed to focus event
     displayEl.addEventListener('focus', trySyncClipboardOnDisplayFocus);
   } catch (inputError: unknown) {
-    console.error('Error setting up VNC input listeners:', inputError);
+    log.error('Error setting up VNC input listeners:', inputError);
     statusMessage.value = t('remoteDesktopModal.errors.inputError');
   }
 };
@@ -380,7 +379,7 @@ const removeInputListeners = () => {
           displayEl.style.cursor = 'default';
         }
       } catch (error: unknown) {
-        console.warn('Could not reset cursor on VNC display element:', error);
+        log.warn('Could not reset cursor on VNC display element:', error);
       }
     }
   }
@@ -598,7 +597,7 @@ watchEffect(() => {
         const displayHeight = vncDisplayRef.value.offsetHeight;
 
         if (displayWidth > 0 && displayHeight > 0) {
-          console.info(
+          log.info(
             `[VncModal] Resizing VNC display to: ${displayWidth}x${displayHeight} due to style change.`
           );
           guacClient.value.sendSize(displayWidth, displayHeight);

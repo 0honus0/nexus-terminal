@@ -3,6 +3,7 @@ import type { Terminal as XtermTerminal } from '@xterm/xterm';
 import type { SearchAddon } from '@xterm/addon-search';
 import type { SshTerminalInstance, SessionState } from '../stores/session/types';
 import type { ConnectionInfo } from '../stores/connections.store';
+import { log } from '@/utils/log';
 
 /**
  * @interface TerminalEventsDependencies
@@ -50,9 +51,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
 
     if (!sessionToCommand) {
       const idForLog = targetSessionId || 'active (none found)';
-      console.warn(
-        `[useTerminalEvents] Cannot send command, no session found for ID: ${idForLog}.`
-      );
+      log.warn(`[useTerminalEvents] Cannot send command, no session found for ID: ${idForLog}.`);
       return;
     }
     const terminalManager = sessionToCommand.terminalManager as SshTerminalInstance | undefined;
@@ -62,7 +61,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
       !terminalManager.isSshConnected.value &&
       command.trim() === ''
     ) {
-      console.info(
+      log.info(
         `[useTerminalEvents] Command bar Enter detected in disconnected session ${sessionToCommand.sessionId}, attempting reconnect...`
       );
       if (terminalManager.terminalInstance?.value) {
@@ -76,7 +75,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
       if (connectionInfo) {
         sessionStore.handleConnectRequest(connectionInfo);
       } else {
-        console.error(
+        log.error(
           `[useTerminalEvents] handleSendCommand: 未找到 ID 为 ${sessionToCommand.connectionId} 的连接信息。`
         );
       }
@@ -85,7 +84,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
 
     if (terminalManager && typeof terminalManager.sendData === 'function') {
       const commandToSend = command.trim();
-      console.info(
+      log.info(
         `[useTerminalEvents] Sending command/data to session ${sessionToCommand.sessionId}: ${JSON.stringify(command)}`
       );
       const dataToSend = command === '\x03' ? command : command + '\r';
@@ -99,7 +98,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
         commandHistoryStore.addCommand(commandToSend);
       }
     } else {
-      console.warn(
+      log.warn(
         `[useTerminalEvents] Cannot send command for session ${sessionToCommand.sessionId}, terminal manager or sendData method not available.`
       );
     }
@@ -113,19 +112,19 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
     const session = sessionStore.sessions.get(sessionId);
     const manager = session?.terminalManager as SshTerminalInstance | undefined;
     if (!session || !manager) {
-      console.warn(
+      log.warn(
         `[useTerminalEvents] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`
       );
       return;
     }
     if (data === '\r' && manager.isSshConnected && !manager.isSshConnected.value) {
-      console.info(`[useTerminalEvents] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
+      log.info(`[useTerminalEvents] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
       if (manager.terminalInstance?.value) {
         manager.terminalInstance.value.writeln(
           `\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`
         );
       } else {
-        console.warn(`[useTerminalEvents] 无法写入重连提示，terminalInstance 不可用。`);
+        log.warn(`[useTerminalEvents] 无法写入重连提示，terminalInstance 不可用。`);
       }
       const connectionInfo = connectionsStore.connections.find(
         (c) => c.id === Number(session.connectionId)
@@ -133,7 +132,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
       if (connectionInfo) {
         sessionStore.handleConnectRequest(connectionInfo);
       } else {
-        console.error(
+        log.error(
           `[useTerminalEvents] handleTerminalInput: 未找到 ID 为 ${session.connectionId} 的连接信息。`
         );
       }
@@ -162,14 +161,14 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
     terminal: XtermTerminal;
     searchAddon: SearchAddon | null;
   }) => {
-    console.info(
+    log.info(
       `[useTerminalEvents ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`,
       payload
     );
     if (payload && payload.searchAddon) {
-      console.info(`[useTerminalEvents ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
+      log.info(`[useTerminalEvents ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
     } else {
-      console.warn(
+      log.warn(
         `[useTerminalEvents ${payload.sessionId}] Payload 未包含 searchAddon 实例！ Payload:`,
         payload
       );
@@ -183,7 +182,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
   const handleClearTerminal = () => {
     const currentSession = activeSession.value;
     if (!currentSession) {
-      console.warn('[useTerminalEvents] Cannot clear terminal, no active session.');
+      log.warn('[useTerminalEvents] Cannot clear terminal, no active session.');
       return;
     }
     const terminalManager = currentSession.terminalManager as SshTerminalInstance | undefined;
@@ -194,12 +193,12 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
       terminalManager.terminalInstance?.value &&
       typeof terminalManager.terminalInstance.value.clear === 'function'
     ) {
-      console.info(
+      log.info(
         `[useTerminalEvents ${mode}] Clearing terminal for active session ${currentSession.sessionId}`
       );
       terminalManager.terminalInstance.value.clear();
     } else {
-      console.warn(
+      log.warn(
         `[useTerminalEvents ${mode}] Cannot clear terminal for session ${currentSession.sessionId}, terminal manager, instance, or clear method not available.`
       );
     }
@@ -212,10 +211,10 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
     const session = sessionStore.sessions.get(payload.sessionId);
     const terminalManager = session?.terminalManager as SshTerminalInstance | undefined;
     if (terminalManager?.terminalInstance?.value) {
-      console.info(`[useTerminalEvents] Scrolling to bottom for session ${payload.sessionId}`);
+      log.info(`[useTerminalEvents] Scrolling to bottom for session ${payload.sessionId}`);
       terminalManager.terminalInstance.value.scrollToBottom();
     } else {
-      console.warn(
+      log.warn(
         `[useTerminalEvents] Cannot scroll to bottom for session ${payload.sessionId}, terminal instance not found.`
       );
     }
@@ -227,17 +226,17 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
   const handleVirtualKeyPress = (keySequence: string) => {
     const currentSession = activeSession.value;
     if (!currentSession) {
-      console.warn('[useTerminalEvents] Cannot send virtual key, no active session.');
+      log.warn('[useTerminalEvents] Cannot send virtual key, no active session.');
       return;
     }
     const terminalManager = currentSession.terminalManager as SshTerminalInstance | undefined;
     if (terminalManager && typeof terminalManager.sendData === 'function') {
-      console.info(
+      log.info(
         `[useTerminalEvents Mobile] Sending virtual key sequence: ${JSON.stringify(keySequence)}`
       );
       terminalManager.sendData(keySequence);
     } else {
-      console.warn(
+      log.warn(
         `[useTerminalEvents Mobile] Cannot send virtual key for session ${currentSession.sessionId}, terminal manager or sendData method not available.`
       );
     }
@@ -248,7 +247,7 @@ export function useTerminalEvents(deps: TerminalEventsDependencies) {
    */
   const handleQuickCommandExecuteProcessed = (payload: { command: string; sessionId?: string }) => {
     const { command, sessionId: targetSessionId } = payload;
-    console.info(
+    log.info(
       `[useTerminalEvents] Received quickCommand:executeProcessed event. Command: "${command}", TargetSessionID: ${targetSessionId}`
     );
     handleSendCommand(command, targetSessionId);

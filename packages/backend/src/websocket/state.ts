@@ -7,6 +7,7 @@ import { NotificationService } from '../notifications/notification.service';
 import { DockerService } from '../docker/docker.service';
 import { settingsService } from '../settings/settings.service'; // 添加导入
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // 存储所有活动客户端的状态 (key: sessionId)
 export const clientStates = new Map<string, ClientState>();
@@ -67,7 +68,7 @@ export function registerUserSocket(userId: number, ws: AuthenticatedWebSocket): 
     return;
   }
   sockets.add(ws);
-  console.info(`[WebSocket 状态] 用户 ${userId} 的连接已注册，当前连接数: ${sockets.size}`);
+  logger.info(`[WebSocket 状态] 用户 ${userId} 的连接已注册，当前连接数: ${sockets.size}`);
 }
 
 /**
@@ -82,9 +83,9 @@ export function unregisterUserSocket(userId: number, ws: AuthenticatedWebSocket)
     sockets.delete(ws);
     if (sockets.size === 0) {
       userSockets.delete(userId);
-      console.info(`[WebSocket 状态] 用户 ${userId} 的所有连接已断开，已清理映射。`);
+      logger.info(`[WebSocket 状态] 用户 ${userId} 的所有连接已断开，已清理映射。`);
     } else {
-      console.info(`[WebSocket 状态] 用户 ${userId} 的一个连接已断开，剩余连接数: ${sockets.size}`);
+      logger.info(`[WebSocket 状态] 用户 ${userId} 的一个连接已断开，剩余连接数: ${sockets.size}`);
     }
   }
 }
@@ -98,7 +99,7 @@ export function unregisterUserSocket(userId: number, ws: AuthenticatedWebSocket)
 export function broadcastToUser(userId: number, message: unknown): number {
   const sockets = userSockets.get(userId);
   if (!sockets || sockets.size === 0) {
-    console.warn(`[WebSocket 广播] 用户 ${userId} 没有活动连接，消息未发送。`);
+    logger.warn(`[WebSocket 广播] 用户 ${userId} 没有活动连接，消息未发送。`);
     return 0;
   }
 
@@ -112,7 +113,7 @@ export function broadcastToUser(userId: number, message: unknown): number {
         ws.send(messageStr);
         successCount++;
       } catch (error: unknown) {
-        console.error(
+        logger.error(
           `[WebSocket 广播] 向用户 ${userId} 的一个连接发送消息失败:`,
           getErrorMessage(error)
         );
@@ -127,7 +128,7 @@ export function broadcastToUser(userId: number, message: unknown): number {
   // 清理死连接
   if (deadSockets.length > 0) {
     deadSockets.forEach((ws) => sockets.delete(ws));
-    console.info(`[WebSocket 广播] 已清理用户 ${userId} 的 ${deadSockets.length} 个死连接。`);
+    logger.info(`[WebSocket 广播] 已清理用户 ${userId} 的 ${deadSockets.length} 个死连接。`);
 
     // 如果所有连接都已死亡，清理整个映射
     if (sockets.size === 0) {
@@ -135,7 +136,7 @@ export function broadcastToUser(userId: number, message: unknown): number {
     }
   }
 
-  console.info(
+  logger.info(
     `[WebSocket 广播] 已向用户 ${userId} 的 ${successCount}/${sockets.size + deadSockets.length} 个连接发送消息。`
   );
   return successCount;

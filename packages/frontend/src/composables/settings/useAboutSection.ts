@@ -2,6 +2,7 @@ import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
 import { GITHUB_REPO_URL } from '@/utils/constants';
+import { log } from '@/utils/log';
 
 export function useAboutSection() {
   const { t } = useI18n();
@@ -36,7 +37,7 @@ export function useAboutSection() {
       const response = await axios.get('/VERSION');
       appVersion.value = response.data.trim();
     } catch (error: unknown) {
-      console.error('加载应用版本失败:', error);
+      log.error('加载应用版本失败:', error);
       appVersion.value = '未知版本';
     }
   };
@@ -61,23 +62,23 @@ export function useAboutSection() {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
           // 404 是正常情况（仓库还没有 release），使用 warn 级别
-          console.warn('暂无可用的发布版本');
+          log.warn('暂无可用的发布版本');
           versionCheckError.value = t('settings.about.error.noReleases', '没有找到发布版本。');
         } else if (error.response?.status === 403) {
-          console.error('GitHub API 访问频率受限:', error);
+          log.error('GitHub API 访问频率受限:', error);
           versionCheckError.value = t(
             'settings.about.error.rateLimit',
             'API 访问频率受限，请稍后再试。'
           );
         } else {
-          console.error('检查最新版本失败:', error);
+          log.error('检查最新版本失败:', error);
           versionCheckError.value = t(
             'settings.about.error.checkFailed',
             '检查更新失败，请检查网络连接或稍后再试。'
           );
         }
       } else {
-        console.error('检查最新版本失败:', error);
+        log.error('检查最新版本失败:', error);
         versionCheckError.value = t(
           'settings.about.error.checkFailed',
           '检查更新失败，请检查网络连接或稍后再试。'

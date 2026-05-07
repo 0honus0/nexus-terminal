@@ -5,6 +5,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createWebSocketConnectionManager } from './useWebSocketConnection';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 // Mock vue-i18n
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n');
@@ -540,12 +549,10 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       const ws = createdWebSockets[0];
       // 不调用 simulateOpen()
 
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       manager.sendMessage({ type: 'test:message', payload: {} });
 
       expect(ws.send).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLog.warn).toHaveBeenCalled();
     });
   });
 
@@ -733,10 +740,8 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       handler.mockClear();
 
       // 无效的 payload（应该是字符串）
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       ws.simulateMessage({ type: 'terminal:data', payload: { invalid: true } });
       expect(handler).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('应验证 terminal:resize 的 payload', () => {
@@ -755,10 +760,8 @@ describe('useWebSocketConnection (createWebSocketConnectionManager)', () => {
       handler.mockClear();
 
       // 无效的 payload
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       ws.simulateMessage({ type: 'terminal:resize', payload: { cols: '80' } });
       expect(handler).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
   });
 

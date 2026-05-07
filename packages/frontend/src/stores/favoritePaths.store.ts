@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
+import { log } from '@/utils/log';
 
 export type FavoritePathSortType = 'name' | 'last_used_at';
 
@@ -91,7 +92,7 @@ export const useFavoritePathsStore = defineStore('favoritePaths', {
         this._sortFavoritePaths(); // Sort locally after fetching
       } catch (err: unknown) {
         this.error = extractErrorMessage(err, 'Failed to fetch favorite paths');
-        console.error('Error fetching favorite paths:', err);
+        log.error('Error fetching favorite paths:', err);
         this.isInitialized = false; // +++ 如果获取失败，允许重试初始化 +++
       } finally {
         this.isLoading = false;
@@ -120,11 +121,11 @@ export const useFavoritePathsStore = defineStore('favoritePaths', {
           this._sortFavoritePaths(); // Re-sort after updating
         } else {
           // Fallback to re-fetch if updated item isn't returned as expected
-          console.warn('markPathAsUsed did not receive updated path, re-fetching list.');
+          log.warn('markPathAsUsed did not receive updated path, re-fetching list.');
           await this.fetchFavoritePaths(t);
         }
       } catch (err: unknown) {
-        console.error(`Error marking path ${pathId} as used:`, err);
+        log.error(`Error marking path ${pathId} as used:`, err);
         notificationsStore.addNotification({
           message: t('favoritePaths.notifications.markAsUsedError', 'Failed to mark path as used.'),
           type: 'error',
@@ -151,7 +152,7 @@ export const useFavoritePathsStore = defineStore('favoritePaths', {
         });
       } catch (err: unknown) {
         this.error = extractErrorMessage(err, 'Failed to add favorite path');
-        console.error('Error adding favorite path:', err);
+        log.error('Error adding favorite path:', err);
         notificationsStore.addNotification({
           message: t('favoritePaths.notifications.addError', 'Failed to add favorite path.'),
           type: 'error',
@@ -188,7 +189,7 @@ export const useFavoritePathsStore = defineStore('favoritePaths', {
         });
       } catch (err: unknown) {
         this.error = extractErrorMessage(err, 'Failed to update favorite path');
-        console.error('Error updating favorite path:', err);
+        log.error('Error updating favorite path:', err);
         notificationsStore.addNotification({
           message: t('favoritePaths.notifications.updateError', 'Failed to update favorite path.'),
           type: 'error',
@@ -214,7 +215,7 @@ export const useFavoritePathsStore = defineStore('favoritePaths', {
         });
       } catch (err: unknown) {
         this.error = extractErrorMessage(err, 'Failed to delete favorite path');
-        console.error('Error deleting favorite path:', err);
+        log.error('Error deleting favorite path:', err);
         notificationsStore.addNotification({
           message: t('favoritePaths.notifications.deleteError', 'Failed to delete favorite path.'),
           type: 'error',

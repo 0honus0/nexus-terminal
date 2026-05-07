@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import FileManager from './FileManager.vue';
 import type { WebSocketDependencies } from '../composables/useSftpActions';
 import type { SessionState } from '../stores/session/types';
+import { log } from '@/utils/log';
 
 /**
  * @interface FileManagerModalProps
@@ -46,7 +47,7 @@ const currentFileManagerSessionId = ref<string | null>(null);
 const open = (sessionId: string) => {
   const session = props.getSession(sessionId);
   if (!session) {
-    console.error(`[FileManagerModal] Cannot open file manager: Session ${sessionId} not found.`);
+    log.error(`[FileManagerModal] Cannot open file manager: Session ${sessionId} not found.`);
     props.showError(props.t('workspace.errors.sessionNotFound'));
     return;
   }
@@ -54,7 +55,7 @@ const open = (sessionId: string) => {
   // 1. 获取 dbConnectionId
   const dbConnectionId = session.connectionId;
   if (!dbConnectionId) {
-    console.error(
+    log.error(
       `[FileManagerModal] Cannot open file manager: Missing dbConnectionId for session ${sessionId}.`
     );
     props.showError(props.t('workspace.errors.missingConnectionId'));
@@ -63,7 +64,7 @@ const open = (sessionId: string) => {
 
   // 2. 获取 wsDeps
   if (!session.wsManager) {
-    console.error(
+    log.error(
       `[FileManagerModal] Cannot open file manager: wsManager not found for session ${sessionId}.`
     );
     props.showError(props.t('workspace.errors.wsManagerNotFound'));
@@ -90,7 +91,7 @@ const open = (sessionId: string) => {
   fileManagerPropsMap.value.set(sessionId, newProps);
   currentFileManagerSessionId.value = sessionId;
   showFileManagerModal.value = true;
-  console.info(
+  log.info(
     `[FileManagerModal] Opening FileManager modal with props for session ${sessionId}:`,
     newProps
   );
@@ -108,14 +109,14 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
  */
 const closeFileManagerModal = () => {
   showFileManagerModal.value = false;
-  console.info('[FileManagerModal] FileManager modal hidden (kept alive).');
+  log.info('[FileManagerModal] FileManager modal hidden (kept alive).');
 };
 
 /** 清理指定会话的文件管理器实例（会话关闭时调用，避免内存泄漏） */
 const removeSession = (sessionId: string) => {
   fileManagerPropsMap.value.delete(sessionId);
   fileManagerPropsMap.value = new Map(fileManagerPropsMap.value);
-  console.info(`[FileManagerModal] Cleaned up FileManager for session ${sessionId}.`);
+  log.info(`[FileManagerModal] Cleaned up FileManager for session ${sessionId}.`);
 };
 
 defineExpose({

@@ -5,6 +5,7 @@ import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
 import { useQuickCommandTagsStore } from './quickCommandTags.store';
+import { log } from '@/utils/log';
 
 // 定义前端使用的快捷指令接口 (包含 tagIds)
 export interface QuickCommandFE {
@@ -182,12 +183,12 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         const parsedState = JSON.parse(storedState);
         if (typeof parsedState === 'object' && parsedState !== null) {
           expandedGroups.value = parsedState;
-          console.info('[QuickCmdStore] Loaded expanded groups state from localStorage.');
+          log.info('[QuickCmdStore] Loaded expanded groups state from localStorage.');
           return;
         }
       }
     } catch (loadError: unknown) {
-      console.error('[QuickCmdStore] Failed to load or parse expanded groups state:', loadError);
+      log.error('[QuickCmdStore] Failed to load or parse expanded groups state:', loadError);
       localStorage.removeItem(EXPANDED_GROUPS_STORAGE_KEY);
     }
     // Default to empty object if no valid state found
@@ -199,7 +200,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
     try {
       localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, JSON.stringify(expandedGroups.value));
     } catch (saveError: unknown) {
-      console.error('[QuickCmdStore] Failed to save expanded groups state:', saveError);
+      log.error('[QuickCmdStore] Failed to save expanded groups state:', saveError);
     }
   };
 
@@ -264,7 +265,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
           quickCommandsList.value = parsedData;
           isLoading.value = false;
         } else {
-          console.warn('[QuickCmdStore] Cached data format invalid, ignoring cache.');
+          log.warn('[QuickCmdStore] Cached data format invalid, ignoring cache.');
           localStorage.removeItem(cacheKey);
           isLoading.value = true;
         }
@@ -272,7 +273,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         isLoading.value = true;
       }
     } catch (loadError: unknown) {
-      console.error('[QuickCmdStore] Failed to load or parse commands cache:', loadError);
+      log.error('[QuickCmdStore] Failed to load or parse commands cache:', loadError);
       localStorage.removeItem(cacheKey);
       isLoading.value = true;
     }
@@ -280,7 +281,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
     // 2. 后台获取最新数据
     isLoading.value = true;
     try {
-      console.info(`[QuickCmdStore] Fetching latest commands from server...`);
+      log.info(`[QuickCmdStore] Fetching latest commands from server...`);
       // 不再发送 sortBy 参数
       const response = await apiClient.get<QuickCommandFE[]>('/quick-commands');
       // 确保返回的数据包含 tagIds 数组和 variables 对象
@@ -294,14 +295,14 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       // 3. 对比并更新
       const currentDataString = JSON.stringify(quickCommandsList.value);
       if (currentDataString !== freshDataString) {
-        console.info('[QuickCmdStore] Commands data changed, updating state and cache.');
+        log.info('[QuickCmdStore] Commands data changed, updating state and cache.');
         quickCommandsList.value = freshData;
         localStorage.setItem(cacheKey, freshDataString); // 更新缓存
       } else {
       }
       error.value = null;
     } catch (err: unknown) {
-      console.error('[QuickCmdStore] 获取快捷指令失败:', err);
+      log.error('[QuickCmdStore] 获取快捷指令失败:', err);
       error.value = extractErrorMessage(err, '获取快捷指令时发生错误');
       if (error.value) {
         uiNotificationsStore.showError(error.value);
@@ -314,7 +315,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
   // 清除快捷指令列表缓存
   const clearQuickCommandsCache = () => {
     localStorage.removeItem('quickCommandsListCache');
-    console.info('[QuickCmdStore] Cleared quick commands list cache.');
+    log.info('[QuickCmdStore] Cleared quick commands list cache.');
   };
 
   // 添加快捷指令 (发送 tagIds 和 variables)
@@ -338,7 +339,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       uiNotificationsStore.showSuccess('快捷指令已添加');
       return true;
     } catch (err: unknown) {
-      console.error('添加快捷指令失败:', err);
+      log.error('添加快捷指令失败:', err);
       const message = extractErrorMessage(err, '添加快捷指令时发生错误');
       uiNotificationsStore.showError(message);
       return false;
@@ -367,7 +368,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       uiNotificationsStore.showSuccess('快捷指令已更新');
       return true;
     } catch (err: unknown) {
-      console.error('更新快捷指令失败:', err);
+      log.error('更新快捷指令失败:', err);
       const message = extractErrorMessage(err, '更新快捷指令时发生错误');
       uiNotificationsStore.showError(message);
       return false;
@@ -386,7 +387,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
       }
       uiNotificationsStore.showSuccess('快捷指令已删除');
     } catch (err: unknown) {
-      console.error('删除快捷指令失败:', err);
+      log.error('删除快捷指令失败:', err);
       const message = extractErrorMessage(err, '删除快捷指令时发生错误');
       uiNotificationsStore.showError(message);
     }
@@ -408,7 +409,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         }
       }
     } catch (err: unknown) {
-      console.error('增加使用次数失败:', err);
+      log.error('增加使用次数失败:', err);
       // 这里可以选择不提示用户错误，因为这是一个后台操作
     }
   };
@@ -461,7 +462,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
     // +++ Action to assign a tag to multiple commands +++
     async assignCommandsToTagAction(commandIds: number[], tagId: number): Promise<boolean> {
       if (!commandIds || commandIds.length === 0) {
-        console.warn('[Store] assignCommandsToTagAction: No command IDs provided.');
+        log.warn('[Store] assignCommandsToTagAction: No command IDs provided.');
         return false;
       }
       isLoading.value = true; // Use the store's isLoading state
@@ -472,7 +473,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
           tagId,
         });
         if (response.data.success) {
-          console.info(
+          log.info(
             `[Store] Successfully assigned tag ${tagId} to ${commandIds.length} commands via API.`
           );
 
@@ -491,14 +492,12 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
                 updatedCount++;
               }
             } else {
-              console.warn(
+              log.warn(
                 `[Store] assignCommandsToTagAction: Command ID ${cmdId} not found in local list for manual update.`
               );
             }
           });
-          console.info(
-            `[Store] Manually updated tagIds for ${updatedCount} commands in local state.`
-          );
+          log.info(`[Store] Manually updated tagIds for ${updatedCount} commands in local state.`);
 
           // Optionally, still fetch for full consistency, but UI should update based on manual change first.
           // clearQuickCommandsCache();
@@ -510,7 +509,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         if (error.value) uiNotificationsStore.showError(error.value); // Check if error.value is not null
         return false;
       } catch (err: unknown) {
-        console.error('[Store] Error assigning tag to commands:', err);
+        log.error('[Store] Error assigning tag to commands:', err);
         error.value = extractErrorMessage(err, '批量分配标签时发生网络或服务器错误');
         if (error.value) uiNotificationsStore.showError(error.value); // Check if error.value is not null
         return false;

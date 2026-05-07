@@ -2,6 +2,7 @@ import type { Stats } from 'ssh2';
 import type { ClientState } from '../websocket/types';
 import { getErrorMessage } from '../utils/AppError';
 import WebSocket from 'ws';
+import { logger } from '../utils/logger';
 
 interface ReaddirEntry {
   filename: string;
@@ -19,7 +20,7 @@ export const executeReaddirSftpOperation = async (
   requestId: string
 ): Promise<void> => {
   if (!state || !state.sftp) {
-    console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readdir (ID: ${requestId})`);
+    logger.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readdir (ID: ${requestId})`);
     state?.ws.send(
       JSON.stringify({
         type: 'sftp:readdir:error',
@@ -31,11 +32,11 @@ export const executeReaddirSftpOperation = async (
     return;
   }
 
-  console.debug(`[SFTP ${sessionId}] Received readdir request for ${path} (ID: ${requestId})`);
+  logger.debug(`[SFTP ${sessionId}] Received readdir request for ${path} (ID: ${requestId})`);
   try {
     state.sftp.readdir(path, (err, list: ReaddirEntry[]) => {
       if (err) {
-        console.error(`[SFTP ${sessionId}] readdir ${path} failed (ID: ${requestId}):`, err);
+        logger.error(`[SFTP ${sessionId}] readdir ${path} failed (ID: ${requestId}):`, err);
         if (state.ws.readyState !== WebSocket.OPEN) return;
         state.ws.send(
           JSON.stringify({
@@ -80,7 +81,7 @@ export const executeReaddirSftpOperation = async (
       }
 
       // 大目录列表：按大小分批发送，每批控制在上限以内
-      console.warn(
+      logger.warn(
         `[SFTP ${sessionId}] readdir ${path} 结果过大 (${Math.round(Buffer.byteLength(fullMessage, 'utf8') / 1024)}KB, ${files.length} 项)，分批发送。`
       );
       let byteOffset = 0;
@@ -109,7 +110,7 @@ export const executeReaddirSftpOperation = async (
       }
     });
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `[SFTP ${sessionId}] readdir ${path} caught unexpected error (ID: ${requestId}):`,
       error
     );

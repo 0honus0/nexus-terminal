@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { isAxiosError } from 'axios';
 import apiClient from '../../utils/apiClient';
+import { log } from '@/utils/log';
 
 /** 导入连接的 composable，提供文件选择、上传与结果反馈 */
 export function useImportConnections() {
@@ -58,7 +59,7 @@ export function useImportConnections() {
         importSuccess.value = true;
       }
     } catch (error: unknown) {
-      console.error('导入连接失败:', error);
+      log.error('导入连接失败:', error);
       let message = t('settings.importConnections.error', '导入连接时发生错误。');
       if (isAxiosError(error) && error.response?.data) {
         const data = error.response.data;

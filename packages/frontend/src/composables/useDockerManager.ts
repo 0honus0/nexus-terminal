@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../stores/settings.store';
 import type { WebSocketMessage } from '../types/websocket.types';
 import { useLayoutStore } from '../stores/layout.store';
+import { log } from '@/utils/log';
 
 // --- Interfaces (Copied from DockerManager.vue) ---
 interface PortInfo {
@@ -155,7 +156,7 @@ export function createDockerManager(
   const setupWsListeners = () => {
     clearWsListeners(); // Clear previous listeners first
     if (!isConnected.value) {
-      console.warn(`[DockerManager ${sessionId}] Cannot setup listeners, WebSocket not connected.`);
+      log.warn(`[DockerManager ${sessionId}] Cannot setup listeners, WebSocket not connected.`);
       return;
     }
 
@@ -208,7 +209,7 @@ export function createDockerManager(
 
     const unsubStatusError = onMessage('docker:status:error', (payload, message) => {
       if (message?.sessionId && message.sessionId !== sessionId) return;
-      console.error(`[DockerManager ${sessionId}] Received docker:status:error`, payload);
+      log.error(`[DockerManager ${sessionId}] Received docker:status:error`, payload);
       isLoading.value = false;
       const statusErrorPayload = parseDockerStatusErrorPayload(payload);
       error.value = statusErrorPayload.message || t('dockerManager.error.fetchFailed');
@@ -221,7 +222,7 @@ export function createDockerManager(
 
     const unsubCommandError = onMessage('docker:command:error', (payload, message) => {
       if (message?.sessionId && message.sessionId !== sessionId) return;
-      console.error(`[DockerManager ${sessionId}] Received docker:command:error`, payload);
+      log.error(`[DockerManager ${sessionId}] Received docker:command:error`, payload);
       // How to notify UI? Maybe set an error ref? Or rely on status update?
       // For now, just log. UI component could show a generic error or use a notification system.
       // Consider adding a transient commandError ref if needed.
@@ -229,7 +230,7 @@ export function createDockerManager(
 
     const unsubStatsError = onMessage('docker:stats:error', (payload, message) => {
       if (message?.sessionId && message.sessionId !== sessionId) return;
-      console.error(`[DockerManager ${sessionId}] Received docker:stats:error`, payload);
+      log.error(`[DockerManager ${sessionId}] Received docker:stats:error`, payload);
       const statsErrorPayload = parseDockerStatusErrorPayload(payload);
       error.value = statsErrorPayload.message || t('dockerManager.error.fetchFailed');
     });
@@ -254,13 +255,11 @@ export function createDockerManager(
     command: 'start' | 'stop' | 'restart' | 'remove'
   ) => {
     if (!isConnected.value) {
-      console.warn(`[DockerManager ${sessionId}] Cannot send command, WebSocket not connected.`);
+      log.warn(`[DockerManager ${sessionId}] Cannot send command, WebSocket not connected.`);
       return;
     }
     if (!isDockerAvailable.value) {
-      console.warn(
-        `[DockerManager ${sessionId}] Cannot send command, remote Docker is not available.`
-      );
+      log.warn(`[DockerManager ${sessionId}] Cannot send command, remote Docker is not available.`);
       return;
     }
 

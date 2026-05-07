@@ -27,6 +27,7 @@ import { NL2CMD_CONFIG, safeBaseUrlForLog, shouldLogTiming } from './nl2cmd.cons
 import { settingsRepository } from '../settings/settings.repository';
 import { encrypt, decrypt } from '../utils/crypto';
 import { ErrorFactory } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const AI_SETTINGS_KEY = 'aiProviderConfig';
 
@@ -88,12 +89,12 @@ export async function getAISettings(): Promise<AISettings | null> {
       try {
         config.apiKey = decrypt(config.apiKey);
       } catch {
-        console.warn('[NL2CMD] API Key 解密失败，可能是旧格式明文存储');
+        logger.warn('[NL2CMD] API Key 解密失败，可能是旧格式明文存储');
       }
     }
     return config;
   } catch (error: unknown) {
-    console.error('[NL2CMD] 获取 AI 配置失败:', error);
+    logger.error('[NL2CMD] 获取 AI 配置失败:', error);
     throw ErrorFactory.serviceUnavailable('获取 AI 配置失败，请稍后重试');
   }
 }
@@ -109,7 +110,7 @@ export async function saveAISettings(settings: AISettings): Promise<void> {
     };
     await settingsRepository.setSetting(AI_SETTINGS_KEY, JSON.stringify(settingsToStore));
   } catch (error: unknown) {
-    console.error('[NL2CMD] 保存 AI 配置失败:', error);
+    logger.error('[NL2CMD] 保存 AI 配置失败:', error);
     throw new Error('保存 AI 配置失败');
   }
 }
@@ -312,7 +313,7 @@ async function parseStreamResponse(data: unknown): Promise<string> {
           }
         } catch (error: unknown) {
           // SSE 数据块解析失败，跳过继续处理后续数据
-          console.debug('[NL2CMD] SSE 数据块解析失败:', error);
+          logger.debug('[NL2CMD] SSE 数据块解析失败:', error);
         }
       }
     }
@@ -332,7 +333,7 @@ async function parseStreamResponse(data: unknown): Promise<string> {
           }
         } catch (error: unknown) {
           // SSE 数据块解析失败，跳过继续处理后续数据
-          console.debug('[NL2CMD] Buffer 数据块解析失败:', error);
+          logger.debug('[NL2CMD] Buffer 数据块解析失败:', error);
         }
       }
     }
@@ -535,7 +536,7 @@ function buildErrorMessage(error: AxiosError): string {
       errorMessage = '请求的 API 端点或模型不存在，请检查 Base URL 和模型名称';
       break;
     case 429:
-      console.warn('[NL2CMD] Upstream 429 Error Details:', {
+      logger.warn('[NL2CMD] Upstream 429 Error Details:', {
         url: error.config?.url,
         baseURL: error.config?.baseURL,
         status,
@@ -586,7 +587,7 @@ export async function generateCommand(
     if (!settings || !settings.enabled) {
       const totalMs = Date.now() - startTime;
       if (shouldLogTiming(totalMs)) {
-        console.info('[NL2CMD Timing] Disabled', { traceId, totalMs });
+        logger.info('[NL2CMD Timing] Disabled', { traceId, totalMs });
       }
       return { success: false, error: 'AI 功能未启用或未配置' };
     }
@@ -602,11 +603,11 @@ export async function generateCommand(
     const prompt = buildNL2CMDPrompt(request);
 
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[NL2CMD Debug] Request:', {
+      logger.debug('[NL2CMD Debug] Request:', {
         ...request,
         query: request.query.substring(0, 50) + (request.query.length > 50 ? '...' : ''),
       });
-      console.debug('[NL2CMD Debug] Generated Prompt:', prompt);
+      logger.debug('[NL2CMD Debug] Generated Prompt:', prompt);
     }
 
     // 调用 AI Provider
@@ -636,17 +637,17 @@ export async function generateCommand(
     const providerMs = Date.now() - providerStart;
 
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[NL2CMD Debug] Raw AI Output:', rawCommand);
+      logger.debug('[NL2CMD Debug] Raw AI Output:', rawCommand);
     }
 
     const command = cleanCommandOutput(rawCommand);
     const cleanMs = Date.now() - providerStart;
 
     if (!command) {
-      console.warn('[NL2CMD] Warning: AI returned empty command. Raw output:', rawCommand);
+      logger.warn('[NL2CMD] Warning: AI returned empty command. Raw output:', rawCommand);
       const totalMs = Date.now() - startTime;
       if (shouldLogTiming(totalMs)) {
-        console.info('[NL2CMD Timing] Empty command', {
+        logger.info('[NL2CMD Timing] Empty command', {
           traceId,
           totalMs,
           providerMs,
@@ -661,14 +662,14 @@ export async function generateCommand(
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.debug('[NL2CMD Debug] Cleaned Command:', command);
+      logger.debug('[NL2CMD Debug] Cleaned Command:', command);
     }
 
     const warning = detectDangerousCommand(command);
 
     const totalMs = Date.now() - startTime;
     if (shouldLogTiming(totalMs)) {
-      console.info('[NL2CMD Timing] Success', {
+      logger.info('[NL2CMD Timing] Success', {
         traceId,
         totalMs,
         providerMs,
@@ -692,7 +693,7 @@ export async function generateCommand(
   } catch (error: unknown) {
     const totalMs = Date.now() - startTime;
     if (shouldLogTiming(totalMs)) {
-      console.warn('[NL2CMD Timing] Failed', {
+      logger.warn('[NL2CMD Timing] Failed', {
         traceId,
         totalMs,
         queryLen: request.query.length,
@@ -701,7 +702,7 @@ export async function generateCommand(
       });
     }
 
-    console.error('[NL2CMD] 生成命令失败:', error);
+    logger.error('[NL2CMD] 生成命令失败:', error);
 
     let errorMessage: string;
     if (axios.isAxiosError(error)) {
@@ -755,7 +756,7 @@ export async function testAIConnection(
 
     const totalMs = Date.now() - startTime;
     if (shouldLogTiming(totalMs)) {
-      console.info('[NL2CMD Timing] Test success', {
+      logger.info('[NL2CMD Timing] Test success', {
         traceId,
         totalMs,
         providerMs: Date.now() - providerStart,
@@ -769,7 +770,7 @@ export async function testAIConnection(
   } catch (error: unknown) {
     const totalMs = Date.now() - startTime;
     if (shouldLogTiming(totalMs)) {
-      console.warn('[NL2CMD Timing] Test failed', {
+      logger.warn('[NL2CMD Timing] Test failed', {
         traceId,
         totalMs,
         provider: config.provider,
@@ -779,7 +780,7 @@ export async function testAIConnection(
         errorCode: (error as AxiosError | undefined)?.code,
       });
     }
-    console.error('[NL2CMD] 测试连接失败:', error);
+    logger.error('[NL2CMD] 测试连接失败:', error);
     return false;
   }
 }

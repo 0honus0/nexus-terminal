@@ -15,6 +15,7 @@ import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-stor
 import { startDockerStatusPolling } from './docker.handler';
 import { getErrorMessage } from '../../utils/AppError';
 import { lookupGeoInfo } from '../../auth/ip-geo.service';
+import { logger } from '../../utils/logger';
 
 type SilentExecShellFlavor = 'posix' | 'powershell' | 'cmd' | 'fish';
 type SilentExecSuccessCriteria = 'any' | 'non_empty' | 'absolute_path';
@@ -273,7 +274,7 @@ const startSilentExecAttempt = (sessionId: string): void => {
         currentState.sshShellStream.write('\x03');
       }
     } catch (ctrlcError: unknown) {
-      console.debug(
+      logger.debug(
         `[SSH Handler] 发送 Ctrl+C 失败 (会话: ${sessionId}):`,
         ctrlcError instanceof Error ? ctrlcError.message : ctrlcError
       );
@@ -560,7 +561,7 @@ export async function handleSshConnect(
   const existingState = sessionId ? clientStates.get(sessionId) : undefined;
 
   if (sessionId && existingState) {
-    console.warn(
+    logger.warn(
       `WebSocket: 用户 ${ws.username} (会话: ${sessionId}) 已有活动连接，忽略新的连接请求。`
     );
     if (ws.readyState === WebSocket.OPEN)
@@ -575,13 +576,13 @@ export async function handleSshConnect(
     return;
   }
 
-  console.debug(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
+  logger.debug(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
   if (ws.readyState === WebSocket.OPEN)
     ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' }));
 
   const dbConnectionIdAsNumber = parseInt(String(dbConnectionId), 10);
   if (Number.isNaN(dbConnectionIdAsNumber)) {
-    console.error(`WebSocket: 无效的 dbConnectionId '${dbConnectionId}' (非数字)，无法建立连接。`);
+    logger.error(`WebSocket: 无效的 dbConnectionId '${dbConnectionId}' (非数字)，无法建立连接。`);
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' }));
     ws.close(1008, 'Invalid Connection ID');
@@ -619,7 +620,7 @@ export async function handleSshConnect(
       isShellReady: false,
     };
     clientStates.set(newSessionId, newState);
-    console.debug(
+    logger.debug(
       `WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`
     );
 
@@ -640,14 +641,12 @@ export async function handleSshConnect(
       const shellReadyTimeout = setTimeout(() => {
         if (!shellCallbackCalled) {
           shellCallbackCalled = true;
-          console.error(
-            `SSH: 会话 ${newSessionId} Shell 就绪超时（${SHELL_READY_TIMEOUT_MS}ms）。`
-          );
+          logger.error(`SSH: 会话 ${newSessionId} Shell 就绪超时（${SHELL_READY_TIMEOUT_MS}ms）。`);
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ssh:error', payload: 'Shell 就绪超时，请重试。' }));
           }
           cleanupClientConnection(newSessionId).catch((error: unknown) => {
-            console.debug(
+            logger.debug(
               '[WebSocket] Shell 就绪超时清理连接失败:',
               error instanceof Error ? error.message : error
             );
@@ -666,7 +665,7 @@ export async function handleSshConnect(
           if (shellCallbackCalled) return; // 超时已处理，忽略后续回调
           shellCallbackCalled = true;
           if (err) {
-            console.error(`SSH: 会话 ${newSessionId} 打开 Shell 失败:`, err);
+            logger.error(`SSH: 会话 ${newSessionId} 打开 Shell 失败:`, err);
             const shellFailPayload: Record<string, unknown> = {
               connectionName: newState.connectionName,
               userId: ws.userId,
@@ -690,7 +689,7 @@ export async function handleSshConnect(
               );
             }
             cleanupClientConnection(newSessionId).catch((error: unknown) => {
-              console.debug(
+              logger.debug(
                 '[WebSocket] Shell 打开失败后清理连接失败:',
                 error instanceof Error ? error.message : error
               );
@@ -698,7 +697,7 @@ export async function handleSshConnect(
             return;
           }
 
-          console.debug(
+          logger.debug(
             `WebSocket: 会话 ${newSessionId} Shell 打开成功 (尺寸 ${defaultCols}x${defaultRows})。`
           );
           newState.sshShellStream = stream;
@@ -728,7 +727,7 @@ export async function handleSshConnect(
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, processedOutput)
                 .catch((writeLogError: unknown) => {
-                  console.error(
+                  logger.error(
                     `[SSH Handler] 写入标记会话 ${newSessionId} 的日志失败 (路径: ${currentState.suspendLogPath}):`,
                     writeLogError
                   );
@@ -738,8 +737,8 @@ export async function handleSshConnect(
           stream.stderr.on('data', (data: Buffer) => {
             const processedOutput = processSshStreamOutput(newSessionId, data.toString('utf8'));
             if (processedOutput) {
-              console.error(
-                `SSH Stderr (会话: ${newSessionId}): ${processedOutput.substring(0, 100)}...`
+              logger.error(
+                `SSH Stderr (会话: ${newSessionId})，数据长度: ${processedOutput.length}`
               );
             }
             if (ws.readyState === WebSocket.OPEN) {
@@ -764,7 +763,7 @@ export async function handleSshConnect(
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, `[STDERR] ${processedOutput}`)
                 .catch((writeStderrLogError: unknown) => {
-                  console.error(
+                  logger.error(
                     `[SSH Handler] 写入标记会话 ${newSessionId} 的 STDERR 日志失败 (路径: ${currentState.suspendLogPath}):`,
                     writeStderrLogError
                   );
@@ -776,12 +775,12 @@ export async function handleSshConnect(
               newSessionId,
               'Shell channel closed before silent command completed.'
             );
-            console.debug(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
+            logger.debug(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
             }
             cleanupClientConnection(newSessionId).catch((error: unknown) => {
-              console.debug(
+              logger.debug(
                 '[WebSocket] Shell 通道关闭后清理连接失败:',
                 error instanceof Error ? error.message : error
               );
@@ -798,7 +797,7 @@ export async function handleSshConnect(
                 },
               })
             );
-          console.info(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
+          logger.info(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
           const connectSuccessPayload: Record<string, unknown> = {
             userId: ws.userId,
             username: ws.username,
@@ -816,12 +815,12 @@ export async function handleSshConnect(
               notificationService.sendNotification('SSH_CONNECT_SUCCESS', connectSuccessPayload);
             });
 
-          console.debug(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
+          logger.debug(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
           sftpService
             .initializeSftpSession(newSessionId)
-            .then(() => console.debug(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
+            .then(() => logger.debug(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
             .catch((sftpInitError: unknown) =>
-              console.error(`WebSocket: 会话 ${newSessionId} 异步初始化 SFTP 失败:`, sftpInitError)
+              logger.error(`WebSocket: 会话 ${newSessionId} 异步初始化 SFTP 失败:`, sftpInitError)
             );
 
           statusMonitorService.startStatusPolling(newSessionId);
@@ -830,7 +829,7 @@ export async function handleSshConnect(
       );
     } catch (shellError: unknown) {
       const shellErrMsg = getErrorMessage(shellError);
-      console.error(`SSH: 会话 ${newSessionId} 打开 Shell 时发生意外错误: ${shellErrMsg}`);
+      logger.error(`SSH: 会话 ${newSessionId} 打开 Shell 时发生意外错误: ${shellErrMsg}`);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
           JSON.stringify({
@@ -840,7 +839,7 @@ export async function handleSshConnect(
         );
       }
       cleanupClientConnection(newSessionId).catch((error: unknown) => {
-        console.debug(
+        logger.debug(
           '[WebSocket] Shell 打开异常后清理连接失败:',
           error instanceof Error ? error.message : error
         );
@@ -852,9 +851,9 @@ export async function handleSshConnect(
         newSessionId,
         'SSH connection closed before silent command completed.'
       );
-      console.debug(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
+      logger.debug(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
       cleanupClientConnection(newSessionId).catch((error: unknown) => {
-        console.debug(
+        logger.debug(
           '[WebSocket] SSH 客户端关闭后清理连接失败:',
           error instanceof Error ? error.message : error
         );
@@ -865,12 +864,12 @@ export async function handleSshConnect(
         newSessionId,
         `SSH client error before silent command completed: ${err.message}`
       );
-      console.error(`SSH: 会话 ${newSessionId} 的客户端连接错误:`, err);
+      logger.error(`SSH: 会话 ${newSessionId} 的客户端连接错误:`, err);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));
       }
       cleanupClientConnection(newSessionId).catch((error: unknown) => {
-        console.debug(
+        logger.debug(
           '[WebSocket] SSH 客户端错误后清理连接失败:',
           error instanceof Error ? error.message : error
         );
@@ -878,7 +877,7 @@ export async function handleSshConnect(
     });
   } catch (connectError: unknown) {
     const connectErrMsg = getErrorMessage(connectError);
-    console.error(
+    logger.error(
       `WebSocket: 用户 ${ws.username} (IP: ${clientIp}) 连接到数据库 ID ${dbConnectionId} 失败:`,
       connectError
     );
@@ -909,7 +908,7 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: SshInputPayl
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 
   if (!state || !state.sshShellStream) {
-    console.warn(
+    logger.warn(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 SSH 输入，但无活动 Shell。`
     );
     return;
@@ -920,7 +919,7 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: SshInputPayl
     // Check isShellReady
     state.sshShellStream.write(data);
   } else if (!state.isShellReady) {
-    console.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
+    logger.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
   }
 }
 
@@ -930,7 +929,7 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: SshResizePa
 
   if (!state || !state.sshClient) {
     // sshClient is enough, stream might not be ready for resize yet
-    console.warn(`WebSocket: 收到来自 ${ws.username} 的调整大小请求，但无有效会话或 SSH 客户端。`);
+    logger.warn(`WebSocket: 收到来自 ${ws.username} 的调整大小请求，但无有效会话或 SSH 客户端。`);
     return;
   }
 
@@ -943,7 +942,7 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: SshResizePa
     cols > 1000 ||
     rows > 500
   ) {
-    console.warn(
+    logger.warn(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的无效调整大小请求:`,
       payload
     );
@@ -951,13 +950,13 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: SshResizePa
   }
 
   if (state.isShellReady && state.sshShellStream) {
-    console.debug(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
+    logger.debug(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
     state.sshShellStream.setWindow(rows, cols, 0, 0);
   } else {
     // Store intended size if shell not ready, apply when shell is ready.
     // This part is a bit more complex as it requires modifying the shell opening logic.
     // For now, we just log if shell is not ready.
-    console.warn(
+    logger.warn(
       `WebSocket: 会话 ${sessionId} 收到调整大小请求，但 Shell 尚未就绪或流不存在 (isShellReady: ${state.isShellReady})。尺寸将不会立即应用。`
     );
     // A more robust solution would queue the resize or store it in ClientState to be applied later.
@@ -972,7 +971,7 @@ export function handleSshResumeSuccess(sessionId: string): void {
     // 如果 Docker 状态也需要恢复，可以在这里添加
     // startDockerStatusPolling(sessionId);
   } else {
-    console.error(
+    logger.error(
       `[SSH Handler ${sessionId}] 无法为恢复的会话启动状态轮询：未找到会话状态或 SSH 客户端。`
     );
   }

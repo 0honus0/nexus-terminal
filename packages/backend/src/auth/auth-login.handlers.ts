@@ -65,6 +65,7 @@ import {
 } from './auth-login-log-actions.utils';
 import { verifyTwoFactorTokenWithSkew } from './auth-two-factor-flow.utils';
 import { lookupGeoInfo } from './ip-geo.service';
+import { logger } from '../utils/logger';
 
 // 开发环境标志
 const isDev = process.env.NODE_ENV !== 'production';
@@ -279,7 +280,7 @@ export const getAuthStatus = async (
     const response = buildAuthStatusHttpResponse(authState);
     res.status(response.statusCode).json(response.body);
   } catch (error: unknown) {
-    console.error(`获取用户 ${authenticatedUserId} 状态时发生内部错误:`, error);
+    logger.error(`获取用户 ${authenticatedUserId} 状态时发生内部错误:`, error);
     next(error);
   }
 };
@@ -396,7 +397,7 @@ export const verifyLogin2FA = async (
     clearPendingLoginTwoFactorAuthState(req);
     completeAuthenticatedSession(req, res, verificationOutcomeAction.completionAction);
   } catch (error: unknown) {
-    console.error(
+    logger.error(
       `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,
       error
     );
@@ -420,7 +421,7 @@ export const needsSetup = async (
 
     res.status(200).json({ needsSetup: userCount === 0 });
   } catch (error: unknown) {
-    console.error('检查设置状态时发生内部错误:', error);
+    logger.error('检查设置状态时发生内部错误:', error);
     next(error);
   }
 };
@@ -504,7 +505,7 @@ export const setupAdmin = async (
     const userCount = row ? row.count : 0;
 
     if (userCount > 0) {
-      console.warn('尝试在已有用户的情况下执行初始设置。');
+      logger.warn('尝试在已有用户的情况下执行初始设置。');
       res.status(403).json({
         success: false,
         error: '设置已完成，无法重复执行。',
@@ -521,14 +522,12 @@ export const setupAdmin = async (
     const result = await runDb(db, insertAction.sql, insertAction.params);
 
     if (typeof result.lastID !== 'number' || result.lastID <= 0) {
-      console.error(
-        '创建初始账号后未能获取有效的 lastID。可能原因：用户名已存在或其他数据库错误。'
-      );
+      logger.error('创建初始账号后未能获取有效的 lastID。可能原因：用户名已存在或其他数据库错误。');
       throw new Error('创建初始账号失败，可能用户名已存在。');
     }
     const newUser = { id: result.lastID };
 
-    console.info(`初始账号 '${username}' (ID: ${newUser.id}) 已成功创建。`);
+    logger.info(`初始账号 '${username}' (ID: ${newUser.id}) 已成功创建。`);
     const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
     const setupPayload: Record<string, unknown> = {
       userId: newUser.id,
@@ -546,7 +545,7 @@ export const setupAdmin = async (
 
     res.status(201).json({ message: '初始账号创建成功！' });
   } catch (error: unknown) {
-    console.error('初始设置过程中发生内部错误:', error);
+    logger.error('初始设置过程中发生内部错误:', error);
     next(error);
   }
 };
@@ -583,14 +582,14 @@ export const getPublicCaptchaConfig = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    console.debug('[AuthController] Received request for public CAPTCHA config.');
+    logger.debug('[AuthController] Received request for public CAPTCHA config.');
     const fullConfig = await settingsService.getCaptchaConfig();
     const publicConfig = toPublicCaptchaConfig(fullConfig);
 
-    console.debug('[AuthController] Sending public CAPTCHA config to client:', publicConfig);
+    logger.debug('[AuthController] Sending public CAPTCHA config to client:', publicConfig);
     res.status(200).json(publicConfig);
   } catch (error: unknown) {
-    console.error('[AuthController] 获取公共 CAPTCHA 配置时出错:', error);
+    logger.error('[AuthController] 获取公共 CAPTCHA 配置时出错:', error);
     next(error);
   }
 };
@@ -619,11 +618,11 @@ export const getInitData = async (
       })
     );
 
-    console.debug(
+    logger.debug(
       `[AuthController] 初始化数据已发送: needsSetup=${requiresSetup}, isAuthenticated=${authState.isAuthenticated}`
     );
   } catch (error: unknown) {
-    console.error('[AuthController] 获取初始化数据时出错:', error);
+    logger.error('[AuthController] 获取初始化数据时出错:', error);
     next(error);
   }
 };

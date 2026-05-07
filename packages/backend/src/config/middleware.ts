@@ -10,6 +10,7 @@ import cors from 'cors';
 import { normalizeOrigin } from '../utils/url';
 import { ipWhitelistMiddleware } from '../auth/ipWhitelist.middleware';
 import { metricsMiddleware } from '../metrics/metrics.middleware';
+import { logger } from '../utils/logger';
 
 /**
  * 解析正整数环境变量
@@ -104,7 +105,7 @@ export const registerSecurityMiddleware = (app: express.Application) => {
     : ['http://localhost:5173', 'http://localhost:18111'];
 
   if (!process.env.ALLOWED_ORIGINS && process.env.NODE_ENV === 'production') {
-    console.warn(
+    logger.warn(
       '[CORS] 生产环境未设置 ALLOWED_ORIGINS，正在使用默认值（localhost）。请配置 ALLOWED_ORIGINS 环境变量以限制允许的跨域来源。'
     );
   }

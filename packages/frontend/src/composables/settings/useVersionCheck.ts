@@ -2,6 +2,7 @@ import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
 import { GITHUB_REPO_URL } from '@/utils/constants';
+import { log } from '@/utils/log';
 
 export function useVersionCheck() {
   const { t } = useI18n();
@@ -29,7 +30,7 @@ export function useVersionCheck() {
       const response = await axios.get('/VERSION');
       appVersion.value = response.data.trim();
     } catch (error: unknown) {
-      console.error('加载应用版本失败:', error);
+      log.error('加载应用版本失败:', error);
       appVersion.value = '未知版本';
     }
   };
@@ -50,14 +51,14 @@ export function useVersionCheck() {
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 404) {
-          console.warn('暂无可用的发布版本');
+          log.warn('暂无可用的发布版本');
           versionCheckError.value = t('settings.about.error.noReleases');
         } else {
-          console.error('检查最新版本失败:', error);
+          log.error('检查最新版本失败:', error);
           versionCheckError.value = t('settings.about.error.checkFailed');
         }
       } else {
-        console.error('检查最新版本失败:', error);
+        log.error('检查最新版本失败:', error);
         versionCheckError.value = t('settings.about.error.checkFailed');
       }
     } finally {

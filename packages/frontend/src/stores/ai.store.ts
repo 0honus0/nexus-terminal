@@ -18,6 +18,7 @@ import type {
   AICleanupResponse,
   AIQueryContext,
 } from '../types/ai.types';
+import { log } from '@/utils/log';
 
 export const useAIStore = defineStore('ai', () => {
   // === State ===
@@ -92,7 +93,7 @@ export const useAIStore = defineStore('ai', () => {
         throw new Error('查询失败');
       }
     } catch (err: unknown) {
-      console.error('[AIStore] 发送查询失败:', err);
+      log.error('[AIStore] 发送查询失败:', err);
       error.value = extractErrorMessage(err, '发送查询失败');
       // 移除乐观更新的消息
       messages.value = messages.value.filter((m) => m.id !== userMsg.id);
@@ -126,7 +127,7 @@ export const useAIStore = defineStore('ai', () => {
         }));
       }
     } catch (err: unknown) {
-      console.error('[AIStore] 获取会话列表失败:', err);
+      log.error('[AIStore] 获取会话列表失败:', err);
       error.value = extractErrorMessage(err, '获取会话列表失败');
     } finally {
       isLoading.value = false;
@@ -151,7 +152,7 @@ export const useAIStore = defineStore('ai', () => {
         }));
       }
     } catch (err: unknown) {
-      console.error('[AIStore] 加载会话详情失败:', err);
+      log.error('[AIStore] 加载会话详情失败:', err);
       error.value = extractErrorMessage(err, '加载会话详情失败');
     } finally {
       isLoading.value = false;
@@ -176,7 +177,7 @@ export const useAIStore = defineStore('ai', () => {
 
       return true;
     } catch (err: unknown) {
-      console.error('[AIStore] 删除会话失败:', err);
+      log.error('[AIStore] 删除会话失败:', err);
       error.value = extractErrorMessage(err, '删除会话失败');
       return false;
     }
@@ -214,7 +215,7 @@ export const useAIStore = defineStore('ai', () => {
         }
       }
     } catch (err: unknown) {
-      console.error('[AIStore] 获取健康摘要失败:', err);
+      log.error('[AIStore] 获取健康摘要失败:', err);
       error.value = extractErrorMessage(err, '获取健康摘要失败');
     } finally {
       isLoading.value = false;
@@ -235,7 +236,7 @@ export const useAIStore = defineStore('ai', () => {
         commandPatterns.value = response.data.analysis;
       }
     } catch (err: unknown) {
-      console.error('[AIStore] 获取命令模式分析失败:', err);
+      log.error('[AIStore] 获取命令模式分析失败:', err);
       error.value = extractErrorMessage(err, '获取命令模式分析失败');
     } finally {
       isLoading.value = false;
@@ -258,7 +259,7 @@ export const useAIStore = defineStore('ai', () => {
       }
       return 0;
     } catch (err: unknown) {
-      console.error('[AIStore] 清理会话失败:', err);
+      log.error('[AIStore] 清理会话失败:', err);
       error.value = extractErrorMessage(err, '清理会话失败');
       return 0;
     }

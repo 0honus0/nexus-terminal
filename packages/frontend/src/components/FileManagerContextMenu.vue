@@ -6,6 +6,7 @@ import type { ContextMenuItem } from '../composables/file-manager/useFileManager
 import type { FileListItem } from '../types/sftp.types';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useSessionStore } from '../stores/session.store';
+import { log } from '@/utils/log';
 
 const props = defineProps({
   isVisible: {
@@ -77,7 +78,7 @@ watch(
 
             // 如果菜单没有实际尺寸 (例如，内容为空或未渲染)，则不进行调整
             if (menuRect.width === 0 && menuRect.height === 0) {
-              // console.debug("[FileManagerContextMenu] Menu dimensions are zero, sticking to initial position.");
+              // log.debug("[FileManagerContextMenu] Menu dimensions are zero, sticking to initial position.");
               return;
             }
 
@@ -87,7 +88,7 @@ watch(
             const menuHeight = menuRect.height;
             const margin = 10; // 距离窗口边缘的最小间距
 
-            // console.debug(`[FileManagerContextMenu] Initial pos: (${finalX}, ${finalY}), Menu size: (${menuWidth}x${menuHeight}), Window: (${window.innerWidth}x${window.innerHeight})`);
+            // log.debug(`[FileManagerContextMenu] Initial pos: (${finalX}, ${finalY}), Menu size: (${menuWidth}x${menuHeight}), Window: (${window.innerWidth}x${window.innerHeight})`);
 
             // 调整水平位置，防止溢出右侧
             if (finalX + menuWidth > window.innerWidth) {
@@ -103,7 +104,7 @@ watch(
             finalX = Math.max(margin, finalX);
             finalY = Math.max(margin, finalY);
 
-            // console.debug(`[FileManagerContextMenu] Adjusted pos: (${finalX}, ${finalY})`);
+            // log.debug(`[FileManagerContextMenu] Adjusted pos: (${finalX}, ${finalY})`);
             computedRenderPosition.value = { x: finalX, y: finalY };
           }
         });
@@ -197,7 +198,7 @@ const handleSendToClick = () => {
 };
 
 const handleFilesSent = (payload: unknown) => {
-  console.info('Files to send (from FileManagerContextMenu):', payload);
+  log.info('Files to send (from FileManagerContextMenu):', payload);
   // 实际发送逻辑可以后续添加或委派
 };
 

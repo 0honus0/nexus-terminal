@@ -4,6 +4,7 @@ import { AuditLogActionType } from '../types/audit.types';
 import { NotificationEvent } from '../types/notification.types';
 import { resolveRequestClientIp } from './auth-main-flow.utils';
 import { lookupGeoInfo } from './ip-geo.service';
+import { logger } from '../utils/logger';
 
 interface AuthEventServices {
   auditLogService: {
@@ -91,7 +92,7 @@ export const completePasskeyAuthenticatedSession = (
 
   req.session.regenerate((err) => {
     if (err) {
-      console.error('Passkey 认证后会话重新生成失败:', err);
+      logger.error('Passkey 认证后会话重新生成失败:', err);
       res.status(500).json({ message: 'Passkey 认证成功但会话创建失败，请重试。' });
       return;
     }
@@ -106,7 +107,7 @@ export const completePasskeyAuthenticatedSession = (
 
     req.session.save((saveErr) => {
       if (saveErr) {
-        console.error('Passkey 认证后会话保存失败:', saveErr);
+        logger.error('Passkey 认证后会话保存失败:', saveErr);
         res.status(500).json({ message: 'Passkey 认证成功但会话创建失败，请重试。' });
         return;
       }

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useAuthStore } from './auth.store';
+import { log } from '@/utils/log';
 
 /** CAPTCHA 服务商类型 */
 type CaptchaProvider = 'hcaptcha' | 'recaptcha' | 'none';
@@ -70,16 +71,16 @@ export const useCaptchaSettingsStore = defineStore('captchaSettings', () => {
     isLoading.value = true;
     captchaError.value = null;
     try {
-      console.info('[CaptchaSettingsStore] 加载 CAPTCHA 设置...');
+      log.info('[CaptchaSettingsStore] 加载 CAPTCHA 设置...');
       const response = await apiClient.get<CaptchaSettings>('/settings/captcha');
       captchaSettings.value = response.data;
-      console.info('[CaptchaSettingsStore] CAPTCHA 设置加载完成:', {
+      log.info('[CaptchaSettingsStore] CAPTCHA 设置加载完成:', {
         ...response.data,
         hcaptchaSecretKey: '***',
         recaptchaSecretKey: '***',
       });
     } catch (err: unknown) {
-      console.error('加载 CAPTCHA 设置失败:', err);
+      log.error('加载 CAPTCHA 设置失败:', err);
       captchaError.value = getApiErrorMessage(err, '加载 CAPTCHA 设置失败');
       captchaSettings.value = null;
     } finally {
@@ -92,7 +93,7 @@ export const useCaptchaSettingsStore = defineStore('captchaSettings', () => {
     isLoading.value = true;
     captchaError.value = null;
     try {
-      console.info('[CaptchaSettingsStore] 更新 CAPTCHA 设置:', {
+      log.info('[CaptchaSettingsStore] 更新 CAPTCHA 设置:', {
         ...updates,
         hcaptchaSecretKey: '***',
         recaptchaSecretKey: '***',
@@ -104,14 +105,14 @@ export const useCaptchaSettingsStore = defineStore('captchaSettings', () => {
       } else {
         await loadCaptchaSettings();
       }
-      console.info('[CaptchaSettingsStore] CAPTCHA 设置更新成功。');
+      log.info('[CaptchaSettingsStore] CAPTCHA 设置更新成功。');
 
       // 强制 authStore 重新获取 CAPTCHA 配置
       const authStore = useAuthStore();
       authStore.publicCaptchaConfig = null;
       await authStore.fetchCaptchaConfig();
     } catch (err: unknown) {
-      console.error('更新 CAPTCHA 设置失败:', err);
+      log.error('更新 CAPTCHA 设置失败:', err);
       captchaError.value = getApiErrorMessage(err, '更新 CAPTCHA 设置失败');
       throw new Error(captchaError.value);
     } finally {

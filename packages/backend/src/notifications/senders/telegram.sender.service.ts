@@ -3,6 +3,7 @@ import type { INotificationSender } from '../notification-sender.interface';
 import type { ProcessedNotification } from '../notification.processor.service';
 import { TelegramConfig } from '../../types/notification.types';
 import { getErrorMessage } from '../../utils/AppError';
+import { logger } from '../../utils/logger';
 
 class TelegramSenderService implements INotificationSender {
   async send(notification: ProcessedNotification): Promise<void> {
@@ -11,7 +12,7 @@ class TelegramSenderService implements INotificationSender {
     const messageBody = notification.body;
 
     if (!botToken || !chatId) {
-      console.error('[TelegramSender] Missing botToken or chatId in configuration.');
+      logger.error('[TelegramSender] Missing botToken or chatId in configuration.');
       throw new Error('Telegram configuration is incomplete (missing botToken or chatId).');
     }
 
@@ -20,9 +21,9 @@ class TelegramSenderService implements INotificationSender {
       try {
         const url = new URL(customDomain); // Validate and parse the custom domain
         baseApiUrl = `${url.protocol}//${url.host}`; // Use protocol and host from customDomain
-        console.info(`[TelegramSender] Using custom domain: ${baseApiUrl}`);
+        logger.info(`[TelegramSender] Using custom domain: ${baseApiUrl}`);
       } catch (error: unknown) {
-        console.warn(
+        logger.warn(
           `[TelegramSender] Invalid customDomain URL: ${customDomain}. Falling back to default Telegram API. (${getErrorMessage(error)})`
         );
         // Optionally, you could throw an error here or decide to proceed with the default
@@ -32,7 +33,7 @@ class TelegramSenderService implements INotificationSender {
     const apiUrl = `${baseApiUrl}/bot${botToken}/sendMessage`;
 
     try {
-      console.info(`[TelegramSender] Sending notification to chat ID: ${chatId}`);
+      logger.info(`[TelegramSender] Sending notification to chat ID: ${chatId}`);
       const response = await axios.post(
         apiUrl,
         {
@@ -47,10 +48,10 @@ class TelegramSenderService implements INotificationSender {
       );
 
       if (response.data && response.data.ok) {
-        console.info(`[TelegramSender] Successfully sent notification to chat ID: ${chatId}`);
+        logger.info(`[TelegramSender] Successfully sent notification to chat ID: ${chatId}`);
       } else {
         const errorDescription = response.data?.description || 'Unknown error from Telegram API';
-        console.error(
+        logger.error(
           `[TelegramSender] Failed to send notification. Telegram API response: ${errorDescription}`,
           response.data
         );
@@ -58,7 +59,7 @@ class TelegramSenderService implements INotificationSender {
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error(
+        logger.error(
           `[TelegramSender] Axios error sending notification: ${getErrorMessage(error)}`,
           error.response?.data
         );
@@ -66,7 +67,7 @@ class TelegramSenderService implements INotificationSender {
           `Failed to send Telegram notification (Axios Error): ${getErrorMessage(error)}`
         );
       } else {
-        console.error(`[TelegramSender] Unexpected error sending notification:`, error);
+        logger.error(`[TelegramSender] Unexpected error sending notification:`, error);
         throw new Error(
           `Failed to send Telegram notification (Unexpected Error): ${getErrorMessage(error)}`
         );

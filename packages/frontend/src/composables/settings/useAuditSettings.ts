@@ -2,6 +2,7 @@ import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import apiClient from '../../utils/apiClient';
 import { extractErrorMessage } from '../../utils/errorExtractor';
+import { log } from '@/utils/log';
 
 export function useAuditSettings() {
   const { t } = useI18n();
@@ -20,7 +21,7 @@ export function useAuditSettings() {
         auditLogMaxEntries.value = maxEntries;
       }
     } catch (error: unknown) {
-      console.error('获取审计日志最大保留条数失败:', error);
+      log.error('获取审计日志最大保留条数失败:', error);
     }
   };
 
@@ -45,7 +46,7 @@ export function useAuditSettings() {
       );
       auditLogMaxEntriesSuccess.value = true;
     } catch (error: unknown) {
-      console.error('更新审计日志最大保留条数失败:', error);
+      log.error('更新审计日志最大保留条数失败:', error);
       auditLogMaxEntriesMessage.value = extractErrorMessage(
         error,
         t('settings.auditLog.error.maxEntriesSaveFailed', '保存失败')
@@ -68,7 +69,7 @@ export function useAuditSettings() {
       const response = await apiClient.get('/audit-logs/count');
       auditLogCount.value = response.data.count || 0;
     } catch (error: unknown) {
-      console.error('获取审计日志数量失败:', error);
+      log.error('获取审计日志数量失败:', error);
     }
   };
 
@@ -86,7 +87,7 @@ export function useAuditSettings() {
       showDeleteConfirm.value = false;
       await fetchAuditLogCount();
     } catch (error: unknown) {
-      console.error('删除审计日志失败:', error);
+      log.error('删除审计日志失败:', error);
       deleteAuditLogsMessage.value = extractErrorMessage(
         error,
         t('settings.auditLog.error.deleteFailed', '删除失败')

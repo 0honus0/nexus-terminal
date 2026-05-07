@@ -4,6 +4,15 @@ import { ErrorFactory, AppError } from '../utils/AppError';
 import { ErrorCode } from '../types/error.types';
 
 // Mock database connection
+// Logger mock for console replacement migration
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../utils/logger', () => ({ logger: mockLogger }));
+
 vi.mock('./connection', () => ({
   getDbInstance: vi.fn(),
   runDb: vi.fn(),
@@ -82,7 +91,7 @@ describe('RepositoryUtils', () => {
     });
 
     it('应该在操作抛出普通错误时包装为 AppError', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       await expect(
         RepositoryUtils.executeWithErrorHandling(
@@ -94,8 +103,7 @@ describe('RepositoryUtils', () => {
         )
       ).rejects.toThrow(AppError);
 
-      expect(consoleSpy).toHaveBeenCalledWith('[仓库] 测试上下文:', '原始错误');
-      consoleSpy.mockRestore();
+      expect(mockLogger.error).toHaveBeenCalledWith('[仓库] 测试上下文:', '原始错误');
     });
 
     it('应该直接重新抛出 AppError', async () => {
@@ -113,7 +121,7 @@ describe('RepositoryUtils', () => {
     });
 
     it('应该使用自定义错误处理器', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       const customHandler = vi.fn().mockReturnValue(ErrorFactory.validationError('自定义验证错误'));
 
@@ -129,11 +137,10 @@ describe('RepositoryUtils', () => {
       ).rejects.toThrow('自定义验证错误');
 
       expect(customHandler).toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('应该在自定义处理器返回 null 时使用默认处理', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
 
       const customHandler = vi.fn().mockReturnValue(null);
 
@@ -151,8 +158,6 @@ describe('RepositoryUtils', () => {
         expect(err).toBeInstanceOf(AppError);
         expect((err as AppError).code).toBe(ErrorCode.DATABASE_ERROR);
       }
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -175,7 +180,7 @@ describe('RepositoryUtils', () => {
     });
 
     it('应该在失败时回滚事务', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // console spy removed (was: error);
       const { runDb, getDbInstance } = await import('./connection');
       const mockDb = {} as any;
       vi.mocked(getDbInstance).mockResolvedValue(mockDb);
@@ -193,8 +198,6 @@ describe('RepositoryUtils', () => {
 
       expect(runDb).toHaveBeenCalledWith(mockDb, 'BEGIN TRANSACTION');
       expect(runDb).toHaveBeenCalledWith(mockDb, 'ROLLBACK');
-
-      consoleSpy.mockRestore();
     });
 
     it('应该在操作抛出 AppError 时保留原始错误', async () => {

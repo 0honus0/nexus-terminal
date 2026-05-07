@@ -1,4 +1,5 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { log } from '@/utils/log';
 
 /**
  * 追踪 visualViewport 变化，用于检测移动端软键盘弹出状态
@@ -35,7 +36,7 @@ export function useVisualViewport() {
   onMounted(() => {
     const vp = window.visualViewport;
     if (!vp) {
-      console.debug(
+      log.debug(
         '[useVisualViewport] window.visualViewport not available, keyboard tracking disabled'
       );
       return;

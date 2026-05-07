@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 // import { useSftpActions } from './useSftpActions';
 // 从类型文件导入所需类型
 import type { EditorFileContent, SaveStatus } from '../types/sftp.types';
+import { log } from '@/utils/log';
 
 // --- 类型定义 (已移至 sftp.types.ts) ---
 // export type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -89,12 +90,12 @@ export function useFileEditor(
   // --- 方法 ---
 
   const openFile = async (filePath: string) => {
-    console.info(`[文件编辑器模块] 尝试打开文件: ${filePath}`);
+    log.info(`[文件编辑器模块] 尝试打开文件: ${filePath}`);
     if (!filePath) return;
 
     // 如果已经是同一个文件，则不重新加载（除非需要强制刷新）
     // if (editingFilePath.value === filePath && isEditorVisible.value) {
-    //     console.info(`[文件编辑器模块] 文件 ${filePath} 已在编辑器中打开。`);
+    //     log.info(`[文件编辑器模块] 文件 ${filePath} 已在编辑器中打开。`);
     //     return;
     // }
 
@@ -109,7 +110,7 @@ export function useFileEditor(
 
     try {
       const fileData = await sftpReadFile(filePath); // 调用注入的 readFile 方法
-      console.info(`[文件编辑器模块] 文件 ${filePath} 读取成功。编码: ${fileData.encoding}`);
+      log.info(`[文件编辑器模块] 文件 ${filePath} 读取成功。编码: ${fileData.encoding}`);
 
       // 处理可能的 Base64 编码
       if (fileData.encoding === 'base64') {
@@ -117,7 +118,7 @@ export function useFileEditor(
           editingFileContent.value = atob(fileData.content); // 解码
           editingFileEncoding.value = 'base64'; // 记录原始编码
         } catch (decodeError: unknown) {
-          console.error(`[文件编辑器模块] Base64 解码错误 for ${filePath}:`, decodeError);
+          log.error(`[文件编辑器模块] Base64 解码错误 for ${filePath}:`, decodeError);
           editorError.value = t('fileManager.errors.fileDecodeError');
           editingFileContent.value = `// ${t('fileManager.errors.fileDecodeError')}\n${fileData.content}`; // 显示原始 Base64 作为后备
         }
@@ -127,7 +128,7 @@ export function useFileEditor(
       }
       isEditorLoading.value = false;
     } catch (err: unknown) {
-      console.error(`[文件编辑器模块] 读取文件 ${filePath} 失败:`, err);
+      log.error(`[文件编辑器模块] 读取文件 ${filePath} 失败:`, err);
       const errMsg = err instanceof Error ? err.message : String(err);
       editorError.value = `${t('fileManager.errors.readFileFailed')}: ${errMsg}`;
       editingFileContent.value = `// ${editorError.value}`; // 在编辑器中显示错误
@@ -137,7 +138,7 @@ export function useFileEditor(
 
   const saveFile = async () => {
     if (!editingFilePath.value || isSaving.value || isEditorLoading.value || editorError.value) {
-      console.warn('[文件编辑器模块] 保存条件不满足，无法保存。', {
+      log.warn('[文件编辑器模块] 保存条件不满足，无法保存。', {
         path: editingFilePath.value,
         isSaving: isSaving.value,
         isLoading: isEditorLoading.value,
@@ -146,7 +147,7 @@ export function useFileEditor(
       return;
     }
 
-    console.info(`[文件编辑器模块] 开始保存文件: ${editingFilePath.value}`);
+    log.info(`[文件编辑器模块] 开始保存文件: ${editingFilePath.value}`);
     isSaving.value = true;
     saveStatus.value = 'saving';
     saveError.value = null;
@@ -155,7 +156,7 @@ export function useFileEditor(
 
     try {
       await sftpWriteFile(editingFilePath.value, contentToSave); // 调用注入的 writeFile 方法
-      console.info(`[文件编辑器模块] 文件 ${editingFilePath.value} 保存成功。`);
+      log.info(`[文件编辑器模块] 文件 ${editingFilePath.value} 保存成功。`);
       isSaving.value = false;
       saveStatus.value = 'success';
       saveError.value = null;
@@ -167,7 +168,7 @@ export function useFileEditor(
         }
       }, 2000);
     } catch (err: unknown) {
-      console.error(`[文件编辑器模块] 保存文件 ${editingFilePath.value} 失败:`, err);
+      log.error(`[文件编辑器模块] 保存文件 ${editingFilePath.value} 失败:`, err);
       isSaving.value = false;
       saveStatus.value = 'error';
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -184,7 +185,7 @@ export function useFileEditor(
   };
 
   const closeEditor = () => {
-    console.info('[文件编辑器模块] 关闭编辑器。');
+    log.info('[文件编辑器模块] 关闭编辑器。');
     isEditorVisible.value = false;
     editingFilePath.value = null;
     editingFileContent.value = '';

@@ -3,6 +3,7 @@ import { SECURITY_CONFIG } from '../config/security.config';
 import { AuditLogActionType } from '../types/audit.types';
 import { NotificationEvent } from '../types/notification.types';
 import { lookupGeoInfo } from './ip-geo.service';
+import { logger } from '../utils/logger';
 
 interface AuthEventServices {
   auditLogService: {
@@ -121,7 +122,7 @@ export const startPendingTwoFactorSession = (
   const { pendingAuth, rememberMe, isDev } = payload;
   req.session.regenerate((err) => {
     if (err) {
-      console.error('会话重新生成失败:', err);
+      logger.error('会话重新生成失败:', err);
       res.status(500).json({ message: '登录过程中发生错误，请重试。' });
       return;
     }
@@ -131,13 +132,13 @@ export const startPendingTwoFactorSession = (
 
     req.session.save((saveErr) => {
       if (saveErr) {
-        console.error('[AuthController] 2FA 认证状态保存失败:', saveErr);
+        logger.error('[AuthController] 2FA 认证状态保存失败:', saveErr);
         res.status(500).json({ message: '登录过程中发生错误，请重试。' });
         return;
       }
 
       if (isDev) {
-        console.debug('[AuthController] 2FA pendingAuth 已保存到 session');
+        logger.debug('[AuthController] 2FA pendingAuth 已保存到 session');
       }
       res.status(200).json({
         message: '需要进行两步验证。',
@@ -160,7 +161,7 @@ export const completeAuthenticatedSession = (
   const { user, rememberMe, saveErrorMessage } = payload;
   req.session.regenerate((err) => {
     if (err) {
-      console.error('会话重新生成失败:', err);
+      logger.error('会话重新生成失败:', err);
       res.status(500).json({ message: saveErrorMessage });
       return;
     }
@@ -172,7 +173,7 @@ export const completeAuthenticatedSession = (
 
     req.session.save((saveErr) => {
       if (saveErr) {
-        console.error('[AuthController] 登录后会话保存失败:', saveErr);
+        logger.error('[AuthController] 登录后会话保存失败:', saveErr);
         res.status(500).json({ message: saveErrorMessage });
         return;
       }
@@ -197,12 +198,12 @@ export const destroySessionAndRespondLogout = (
   const { userId, username, onLogoutSuccess } = payload;
   req.session.destroy((err) => {
     if (err) {
-      console.error(`销毁用户 ${userId} (${username}) 的会话时出错:`, err);
+      logger.error(`销毁用户 ${userId} (${username}) 的会话时出错:`, err);
       res.status(500).json({ message: '登出时发生服务器内部错误。' });
       return;
     }
 
-    console.info(`用户 ${userId} (${username}) 已成功登出。`);
+    logger.info(`用户 ${userId} (${username}) 已成功登出。`);
     res.clearCookie('connect.sid');
     if (userId) {
       onLogoutSuccess?.(resolveRequestClientIp(req));

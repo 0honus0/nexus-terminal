@@ -7,6 +7,7 @@
  * - 自动聚焦输入框
  */
 import { ref, watch, nextTick, type ComponentPublicInstance } from 'vue';
+import { log } from '@/utils/log';
 
 export interface TagEditingDependencies {
   /** 获取标签列表（响应式） */
@@ -131,7 +132,7 @@ export function useTagEditing(deps: TagEditingDependencies) {
       } else if (typeof currentEditingId === 'number') {
         // --- 更新现有标签 ---
         if (!originalTag) {
-          console.error(`Tag with ID ${currentEditingId} not found for update.`);
+          log.error(`Tag with ID ${currentEditingId} not found for update.`);
         } else if (originalTag.name === newName) {
           // 名称未变，视为成功
         } else {
@@ -149,7 +150,7 @@ export function useTagEditing(deps: TagEditingDependencies) {
         }
       }
     } catch (error: unknown) {
-      console.error('Error during finishEditingTag:', error);
+      log.error('Error during finishEditingTag:', error);
       deps.notify({ message: deps.t('common.unexpectedError'), type: 'error' });
     } finally {
       // 无论核心操作成功与否，最终都退出编辑模式
@@ -171,7 +172,7 @@ export function useTagEditing(deps: TagEditingDependencies) {
         inputRef.focus();
         inputRef.select();
       } else {
-        console.error(
+        log.error(
           `[useTagEditing] Watcher: Input ref for ID ${newId} not found in map after nextTick.`
         );
       }

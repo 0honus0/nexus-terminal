@@ -3,6 +3,7 @@ import type { INotificationSender } from '../notification-sender.interface';
 import type { ProcessedNotification } from '../notification.processor.service';
 import { WebhookConfig } from '../../types/notification.types';
 import { getErrorMessage } from '../../utils/AppError';
+import { logger } from '../../utils/logger';
 
 class WebhookSenderService implements INotificationSender {
   async send(notification: ProcessedNotification): Promise<void> {
@@ -11,14 +12,14 @@ class WebhookSenderService implements INotificationSender {
     const requestBody = notification.body;
 
     if (!url) {
-      console.error('[WebhookSender] Missing webhook URL in configuration.');
+      logger.error('[WebhookSender] Missing webhook URL in configuration.');
       throw new Error('Webhook configuration is incomplete (missing URL).');
     }
 
     try {
       new URL(url);
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[WebhookSender] Invalid webhook URL format: ${url} (${getErrorMessage(error)})`
       );
       throw new Error(`Invalid webhook URL format: ${url}`);
@@ -32,15 +33,13 @@ class WebhookSenderService implements INotificationSender {
     const requestMethod: Method = method.toUpperCase() as Method;
     const validMethods: Method[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
     if (!validMethods.includes(requestMethod)) {
-      console.error(
-        `[WebhookSender] Invalid HTTP method specified: ${method}. Defaulting to POST.`
-      );
+      logger.error(`[WebhookSender] Invalid HTTP method specified: ${method}. Defaulting to POST.`);
 
       throw new Error(`Invalid HTTP method specified: ${method}`);
     }
 
     try {
-      console.info(`[WebhookSender] Sending ${requestMethod} notification to webhook URL: ${url}`);
+      logger.info(`[WebhookSender] Sending ${requestMethod} notification to webhook URL: ${url}`);
 
       let requestData: unknown;
       const requestParams: Record<string, string> | undefined = undefined;
@@ -50,7 +49,7 @@ class WebhookSenderService implements INotificationSender {
           try {
             requestData = JSON.parse(requestBody);
           } catch (parseError: unknown) {
-            console.warn(
+            logger.warn(
               `[WebhookSender] Failed to parse request body as JSON for Content-Type application/json. Sending as raw string. Parse error: ${getErrorMessage(parseError)}. Body: ${requestBody.substring(
                 0,
                 100
@@ -62,7 +61,7 @@ class WebhookSenderService implements INotificationSender {
           requestData = requestBody;
         }
       } else if (requestMethod === 'GET') {
-        console.warn(
+        logger.warn(
           `[WebhookSender] Sending data in body for GET request might not be standard. URL: ${url}`
         );
       }
@@ -77,18 +76,18 @@ class WebhookSenderService implements INotificationSender {
       });
 
       if (response.status >= 200 && response.status < 300) {
-        console.info(
+        logger.info(
           `[WebhookSender] Successfully sent notification to webhook. Status: ${response.status}`
         );
       } else {
-        console.warn(
+        logger.warn(
           `[WebhookSender] Webhook endpoint responded with status: ${response.status}`,
           response.data
         );
       }
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        console.error(
+        logger.error(
           `[WebhookSender] Axios error sending notification to ${url}: ${getErrorMessage(error)}`,
           error.response?.status,
           error.response?.data
@@ -97,7 +96,7 @@ class WebhookSenderService implements INotificationSender {
           `Failed to send webhook notification (Axios Error): ${getErrorMessage(error)}`
         );
       } else {
-        console.error(`[WebhookSender] Unexpected error sending notification to ${url}:`, error);
+        logger.error(`[WebhookSender] Unexpected error sending notification to ${url}:`, error);
         throw new Error(
           `Failed to send webhook notification (Unexpected Error): ${getErrorMessage(error)}`
         );

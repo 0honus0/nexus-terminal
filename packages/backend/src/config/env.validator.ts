@@ -2,6 +2,7 @@
  * 环境变量验证模块
  * 在应用启动前验证所有必需的环境变量，并提供类型安全的访问接口
  */
+import { logger } from '../utils/logger';
 
 export interface EnvironmentConfig {
   // 核心配置
@@ -40,7 +41,9 @@ export interface EnvironmentConfig {
   MAX_MISSED_PONGS_MOBILE?: number;
 
   // 日志配置
-  LOG_LEVEL?: 'error' | 'warn' | 'info' | 'debug';
+  LOG_LEVEL?: 'error' | 'warn' | 'info' | 'debug' | 'silent';
+  LOG_PRETTY?: 'true' | 'false';
+  LOG_REDACT?: 'true' | 'false';
   LOG_TZ?: string;
   TZ?: string;
 
@@ -264,8 +267,20 @@ const ENV_SCHEMA: Record<keyof EnvironmentConfig, EnvVarSchema> = {
   LOG_LEVEL: {
     required: false,
     type: 'enum',
-    enum: ['error', 'warn', 'info', 'debug'],
-    default: 'info',
+    enum: ['error', 'warn', 'info', 'debug', 'silent'],
+    default: (process.env.NODE_ENV ?? 'development') === 'development' ? 'debug' : 'info',
+  },
+  LOG_PRETTY: {
+    required: false,
+    type: 'enum',
+    enum: ['true', 'false'],
+    default: (process.env.NODE_ENV ?? 'development') === 'development' ? 'true' : 'false',
+  },
+  LOG_REDACT: {
+    required: false,
+    type: 'enum',
+    enum: ['true', 'false'],
+    default: 'true',
   },
   LOG_TZ: {
     required: false,
@@ -388,11 +403,11 @@ export function validateEnvironment(): EnvironmentConfig {
 export function printEnvironmentConfig(config: EnvironmentConfig): void {
   const sensitiveKeys: Set<keyof EnvironmentConfig> = new Set(['ENCRYPTION_KEY', 'SESSION_SECRET']);
 
-  console.info('[Env Validator] 环境变量配置:');
+  logger.info('[Env Validator] 环境变量配置:');
   for (const [key, value] of Object.entries(config)) {
     const displayValue = sensitiveKeys.has(key as keyof EnvironmentConfig)
       ? '***REDACTED***'
       : value;
-    console.info(`  ${key}: ${displayValue}`);
+    logger.info(`  ${key}: ${displayValue}`);
   }
 }

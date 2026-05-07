@@ -6,6 +6,7 @@ import * as GuacamoleService from '../services/guacamole.service';
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 /**
  * 创建新连接 (POST /api/v1/connections)
@@ -19,7 +20,7 @@ export const createConnection = async (
     const newConnection = await ConnectionService.createConnection(req.body);
     res.status(201).json({ message: '连接创建成功。', connection: newConnection });
   } catch (error: unknown) {
-    console.error('Controller: 创建连接时发生错误:', error);
+    logger.error('Controller: 创建连接时发生错误:', error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('缺少') || errMsg.includes('需要提供')) {
       res.status(400).json({ success: false, error: errMsg, code: 'VALIDATION_ERROR' });
@@ -41,7 +42,7 @@ export const getConnections = async (
     const connections = await ConnectionService.getAllConnections();
     res.status(200).json(connections);
   } catch (error: unknown) {
-    console.error('Controller: 获取连接列表时发生错误:', error);
+    logger.error('Controller: 获取连接列表时发生错误:', error);
     next(error);
   }
 };
@@ -69,7 +70,7 @@ export const getConnectionById = async (
       res.status(200).json(connection);
     }
   } catch (error: unknown) {
-    console.error(`Controller: 获取连接 ${req.params.id} 时发生错误:`, error);
+    logger.error(`Controller: 获取连接 ${req.params.id} 时发生错误:`, error);
     next(error);
   }
 };
@@ -97,7 +98,7 @@ export const updateConnection = async (
       res.status(200).json({ message: '连接更新成功。', connection: updatedConnection });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 更新连接 ${req.params.id} 时发生错误:`, error);
+    logger.error(`Controller: 更新连接 ${req.params.id} 时发生错误:`, error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('需要提供')) {
       res.status(400).json({ success: false, error: errMsg, code: 'VALIDATION_ERROR' });
@@ -130,7 +131,7 @@ export const deleteConnection = async (
       res.status(200).json({ message: '连接删除成功。' });
     }
   } catch (error: unknown) {
-    console.error(`Controller: 删除连接 ${req.params.id} 时发生错误:`, error);
+    logger.error(`Controller: 删除连接 ${req.params.id} 时发生错误:`, error);
     next(error);
   }
 };
@@ -155,7 +156,7 @@ export const testConnection = async (
 
     res.status(200).json({ success: true, message: '连接测试成功。', latency }); // 返回延迟
   } catch (error: unknown) {
-    console.error(`Controller: 测试连接 ${req.params.id} 时发生错误:`, error);
+    logger.error(`Controller: 测试连接 ${req.params.id} 时发生错误:`, error);
     next(error);
   }
 };
@@ -211,7 +212,7 @@ export const testUnsavedConnection = async (
     }
     // 如果同时提供了 ssh_key_id 和 private_key，优先使用 ssh_key_id (或者可以报错，这里选择优先)
     if (auth_method === 'key' && ssh_key_id && private_key) {
-      console.warn(
+      logger.warn(
         '[testUnsavedConnection] 同时提供了 ssh_key_id 和 private_key，将优先使用 ssh_key_id。'
       );
       // 不需要额外操作，后续逻辑会处理
@@ -269,7 +270,7 @@ export const testUnsavedConnection = async (
     // 如果 SshService.testUnsavedConnection 没有抛出错误，则表示成功
     res.status(200).json({ success: true, message: '连接测试成功。', latency });
   } catch (error: unknown) {
-    console.error(`Controller: 测试未保存连接时发生错误:`, error);
+    logger.error(`Controller: 测试未保存连接时发生错误:`, error);
     next(error);
   }
 };
@@ -292,7 +293,7 @@ export const exportConnections = async (
     res.setHeader('Content-Type', 'application/zip');
     res.status(200).send(exportedData);
   } catch (error: unknown) {
-    console.error('Controller: 导出连接时发生错误:', error);
+    logger.error('Controller: 导出连接时发生错误:', error);
     next(error);
   }
 };
@@ -332,7 +333,7 @@ export const importConnections = async (
       });
     }
   } catch (error: unknown) {
-    console.error('Controller: 导入连接时发生错误:', error);
+    logger.error('Controller: 导入连接时发生错误:', error);
     const errMsg = getErrorMessage(error);
     if (errMsg.includes('解析 JSON 文件失败')) {
       res.status(400).json({ success: false, error: errMsg, code: 'PARSE_ERROR' });
@@ -383,12 +384,12 @@ export const getRdpSessionToken = async (
     try {
       const currentTimeSeconds = Math.floor(Date.now() / 1000);
       await ConnectionRepository.updateLastConnected(connectionId, currentTimeSeconds);
-      console.info(
+      logger.info(
         `[Controller:getRdpSessionToken] 已更新 RDP 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`
       );
     } catch (updateError: unknown) {
       // 记录更新时间戳的错误，但不阻止获取令牌的流程
-      console.error(
+      logger.error(
         `[Controller:getRdpSessionToken] 更新 RDP 连接 ${connectionId} 的 last_connected_at 时出错:`,
         updateError
       );
@@ -397,7 +398,7 @@ export const getRdpSessionToken = async (
 
     // 3. 验证 RDP 连接是否使用密码认证
     if (connection.auth_method !== 'password' || !decryptedPassword) {
-      console.warn(
+      logger.warn(
         `[Controller:getRdpSessionToken] RDP connection ${connectionId} does not use password auth or password decryption failed.`
       );
       res.status(400).json({
@@ -424,7 +425,7 @@ export const getRdpSessionToken = async (
       rdpDpi
     );
 
-    console.info(
+    logger.info(
       `[Controller:getRdpSessionToken] Received Guacamole token via GuacamoleService for RDP connection ${connectionId}`
     );
 
@@ -432,7 +433,7 @@ export const getRdpSessionToken = async (
     res.status(200).json({ token: guacamoleToken });
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
-    console.error(`Controller: 获取 RDP 会话令牌时发生错误 (ID: ${req.params.id}):`, errMsg);
+    logger.error(`Controller: 获取 RDP 会话令牌时发生错误 (ID: ${req.params.id}):`, errMsg);
 
     let statusCode = 500;
     let responseMessage = '获取 RDP 会话令牌时发生内部服务器错误。';
@@ -459,14 +460,14 @@ export const getRdpSessionToken = async (
     } else if (axios.isAxiosError(error)) {
       responseMessage = '调用远程桌面网关服务时发生网络或请求错误。';
       if (error.response) {
-        console.error(
+        logger.error(
           '[Controller:getRdpSessionToken] Remote Gateway error response:',
           error.response.data
         );
         responseMessage += ` (状态: ${error.response.status})`;
         statusCode = error.response.status >= 500 ? 502 : 400;
       } else if (error.request) {
-        console.error('[Controller:getRdpSessionToken] No response from Remote Gateway.');
+        logger.error('[Controller:getRdpSessionToken] No response from Remote Gateway.');
         responseMessage += ' (无法连接或超时)';
         statusCode = 504;
       }
@@ -519,18 +520,18 @@ export const getVncSessionToken = async (
     try {
       const currentTimeSeconds = Math.floor(Date.now() / 1000);
       await ConnectionRepository.updateLastConnected(connectionId, currentTimeSeconds);
-      console.info(
+      logger.info(
         `[Controller:getVncSessionToken] 已更新 VNC 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`
       );
     } catch (updateError: unknown) {
-      console.error(
+      logger.error(
         `[Controller:getVncSessionToken] 更新 VNC 连接 ${connectionId} 的 last_connected_at 时出错:`,
         updateError
       );
     }
 
     if (connection.auth_method !== 'password' || !decryptedPassword) {
-      console.warn(
+      logger.warn(
         `[Controller:getVncSessionToken] VNC connection ${connectionId} does not use password auth or password decryption failed.`
       );
       res.status(400).json({
@@ -553,14 +554,14 @@ export const getVncSessionToken = async (
       initialHeight
     );
 
-    console.info(
+    logger.info(
       `[Controller:getVncSessionToken] Received Guacamole token via GuacamoleService for VNC connection ${connectionId} with size ${initialWidth}x${initialHeight}`
     );
 
     res.status(200).json({ token: guacamoleToken });
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
-    console.error(`Controller: 获取 VNC 会话令牌时发生错误 (ID: ${req.params.id}):`, errMsg);
+    logger.error(`Controller: 获取 VNC 会话令牌时发生错误 (ID: ${req.params.id}):`, errMsg);
 
     let statusCode = 500;
     let responseMessage = '获取 VNC 会话令牌时发生内部服务器错误。';
@@ -587,14 +588,14 @@ export const getVncSessionToken = async (
     } else if (axios.isAxiosError(error)) {
       responseMessage = '调用远程桌面网关服务时发生网络或请求错误。';
       if (error.response) {
-        console.error(
+        logger.error(
           '[Controller:getVncSessionToken] Remote Gateway error response:',
           error.response.data
         );
         responseMessage += ` (状态: ${error.response.status})`;
         statusCode = error.response.status >= 500 ? 502 : 400;
       } else if (error.request) {
-        console.error('[Controller:getVncSessionToken] No response from Remote Gateway.');
+        logger.error('[Controller:getVncSessionToken] No response from Remote Gateway.');
         responseMessage += ' (无法连接或超时)';
         statusCode = 504;
       }
@@ -642,7 +643,7 @@ export const cloneConnection = async (
     res.status(201).json({ message: '连接克隆成功。', connection: clonedConnection });
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
-    console.error(`Controller: 克隆连接 ${req.params.id} 时发生错误:`, error);
+    logger.error(`Controller: 克隆连接 ${req.params.id} 时发生错误:`, error);
     if (errMsg.includes('未找到')) {
       res.status(404).json({ success: false, error: errMsg, code: 'NOT_FOUND' });
     } else if (errMsg.includes('名称已存在')) {
@@ -694,7 +695,7 @@ export const addTagToConnections = async (
     res.status(200).json({ message: '标签已成功添加到指定连接。' });
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
-    console.error(`Controller: 为多个连接添加标签 ${req.body?.tag_id} 时发生错误:`, error);
+    logger.error(`Controller: 为多个连接添加标签 ${req.body?.tag_id} 时发生错误:`, error);
     if (errMsg.includes('标签 ID') && errMsg.includes('不存在')) {
       res.status(400).json({ success: false, error: errMsg, code: 'NOT_FOUND' }); // Bad request if tag doesn't exist
     } else {
@@ -738,7 +739,7 @@ export const updateConnectionTags = async (
     }
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
-    console.error(`Controller: 更新连接 ${req.params.id} 的标签时发生错误:`, error);
+    logger.error(`Controller: 更新连接 ${req.params.id} 的标签时发生错误:`, error);
     if (errMsg.includes('未找到')) {
       res.status(404).json({ success: false, error: errMsg, code: 'NOT_FOUND' });
     } else {

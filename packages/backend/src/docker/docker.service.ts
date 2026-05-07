@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getErrorMessage } from '../utils/AppError';
 import { sanitizeDockerContainerId, isValidDockerCommand } from '../utils/docker-security';
+import { logger } from '../utils/logger';
 
 const execAsync = promisify(exec);
 
@@ -110,7 +111,7 @@ export class DockerService {
             data.stats = null;
             return data as DockerContainer;
           } catch (parseError: unknown) {
-            console.error(`[DockerService] Failed to parse container JSON line: ${line}`, {
+            logger.error(`[DockerService] Failed to parse container JSON line: ${line}`, {
               error: parseError,
             });
             return null;
@@ -119,7 +120,7 @@ export class DockerService {
         .filter((container): container is DockerContainer => container !== null);
     } catch (error: unknown) {
       const stderr = getExecErrorStderr(error);
-      console.error('[DockerService] Failed to execute "docker ps"', {
+      logger.error('[DockerService] Failed to execute "docker ps"', {
         error: getErrorMessage(error),
         stderr,
       });
@@ -152,7 +153,7 @@ export class DockerService {
             // if (statsData.Name) statsMap.set(statsData.Name, statsData);
           }
         } catch (parseError: unknown) {
-          console.error(`[DockerService] Failed to parse stats JSON line: ${line}`, {
+          logger.error(`[DockerService] Failed to parse stats JSON line: ${line}`, {
             error: parseError,
           });
         }
@@ -160,7 +161,7 @@ export class DockerService {
     } catch (error: unknown) {
       // 获取 stats 失败不应阻止返回容器列表，只是 stats 会是 null
       const stderr = getExecErrorStderr(error);
-      console.warn('[DockerService] Failed to execute "docker stats"', {
+      logger.warn('[DockerService] Failed to execute "docker stats"', {
         error: getErrorMessage(error),
         stderr,
       });
@@ -198,7 +199,7 @@ export class DockerService {
     }
 
     if (!isValidDockerCommand(command)) {
-      console.error(`[DockerService] Received unknown command type: ${command}`);
+      logger.error(`[DockerService] Received unknown command type: ${command}`);
       throw new Error(`Unsupported Docker command: ${command}`);
     }
 
@@ -218,7 +219,7 @@ export class DockerService {
         break;
     }
 
-    console.info(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log
+    logger.info(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log
     try {
       const { stdout, stderr } = await execAsync(dockerCliCommand, {
         timeout: this.commandTimeout,
@@ -226,19 +227,19 @@ export class DockerService {
       if (stderr) {
         // Docker 命令有时会将正常信息输出到 stderr (例如 rm 返回容器 ID)
         // 但也可能包含错误信息
-        console.warn(`[DockerService] Command "${dockerCliCommand}" produced stderr:`, { stderr }); // Use console.warn
+        logger.warn(`[DockerService] Command "${dockerCliCommand}" produced stderr:`, { stderr }); // Use console.warn
         // 可以根据 stderr 内容判断是否真的是错误
         if (stderr.toLowerCase().includes('error') || stderr.toLowerCase().includes('failed')) {
           throw new Error(`Docker command failed: ${stderr}`);
         }
       }
-      console.info(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, {
+      logger.info(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, {
         stdout,
       }); // Use console.log
     } catch (error: unknown) {
       const errorMsg = getErrorMessage(error);
       const stderr = getExecErrorStderr(error);
-      console.error(`[DockerService] Failed to execute command "${dockerCliCommand}"`, {
+      logger.error(`[DockerService] Failed to execute command "${dockerCliCommand}"`, {
         error: errorMsg,
         stderr,
       }); // Use console.error

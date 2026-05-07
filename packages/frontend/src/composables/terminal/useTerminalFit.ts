@@ -2,6 +2,7 @@ import { onBeforeUnmount, nextTick, watch, type Ref } from 'vue';
 import type { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { useWorkspaceEventEmitter } from '../workspaceEvents';
+import { log } from '@/utils/log';
 
 export function useTerminalFit(
   terminal: Ref<Terminal | null>,
@@ -32,12 +33,12 @@ export function useTerminalFit(
   const debouncedEmitResize = debounce((term: Terminal) => {
     if (term && isActive.value) {
       const dimensions = { cols: term.cols, rows: term.rows };
-      console.info(`[Terminal ${sessionId}] Debounced resize emit:`, dimensions);
+      log.info(`[Terminal ${sessionId}] Debounced resize emit:`, dimensions);
       emitWorkspaceEvent('terminal:resize', { sessionId, dims: dimensions });
       try {
         term.refresh(0, term.rows - 1);
       } catch (error: unknown) {
-        console.warn(`[Terminal ${sessionId}] Refresh failed:`, error);
+        log.warn(`[Terminal ${sessionId}] Refresh failed:`, error);
       }
     }
   }, 150);
@@ -70,7 +71,7 @@ export function useTerminalFit(
         });
       }
     } catch (error: unknown) {
-      console.warn('Immediate fit/resize failed:', error);
+      log.warn('Immediate fit/resize failed:', error);
     }
   };
 

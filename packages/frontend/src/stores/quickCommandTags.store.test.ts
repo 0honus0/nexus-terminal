@@ -6,6 +6,15 @@ import apiClient from '../utils/apiClient';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { useUiNotificationsStore } from './uiNotifications.store';
 
+// Mock logger
+const mockLog = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('@/utils/log', () => ({ log: mockLog }));
+
 // 模拟 apiClient
 vi.mock('../utils/apiClient', () => ({
   default: {
@@ -46,9 +55,6 @@ const localStorageMock = (() => {
   };
 })();
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
-
-// 模拟 console.error 避免测试输出噪音
-vi.spyOn(console, 'error').mockImplementation(() => {});
 
 /** 生成模拟标签数据 */
 function createMockTag(overrides: Partial<QuickCommandTag> = {}): QuickCommandTag {

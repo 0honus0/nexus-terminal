@@ -9,6 +9,7 @@ import {
 import { AppEventType, default as eventService } from '../services/event.service'; // Import event service
 import i18next from '../i18n'; // Import the i18next instance
 import { getErrorMessage } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 // Remove sender imports as they are no longer called directly for testing
 // import telegramSenderService from '../services/senders/telegram.sender.service';
@@ -221,7 +222,7 @@ export class NotificationController {
       // Use i18next.t for i18n
       res.status(200).json({ message: i18next.t('notificationController.testEventTriggered') });
     } catch (error: unknown) {
-      console.error(`[NotificationController] Error triggering test for setting ${id}:`, error);
+      logger.error(`[NotificationController] Error triggering test for setting ${id}:`, error);
       // Use i18next.t for i18n
       res.status(500).json({
         message: i18next.t('notificationController.errorTriggerTest'),
@@ -270,7 +271,7 @@ export class NotificationController {
       // Use i18next.t for i18n
       res.status(200).json({ message: i18next.t('notificationController.testEventTriggered') });
     } catch (error: unknown) {
-      console.error(
+      logger.error(
         `[NotificationController] Error triggering test for unsaved ${channel_type}:`,
         error
       );
