@@ -537,7 +537,6 @@ describe('DockerManager.vue', () => {
       const wrapper = mount(DockerManager);
 
       expect(wrapper.text()).toContain('dockerManager.header.name');
-      expect(wrapper.text()).toContain('dockerManager.header.image');
       expect(wrapper.text()).toContain('dockerManager.header.status');
       expect(wrapper.text()).toContain('dockerManager.header.ports');
       expect(wrapper.text()).toContain('dockerManager.header.actions');

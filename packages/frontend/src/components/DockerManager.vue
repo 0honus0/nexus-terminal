@@ -165,11 +165,6 @@ const viewContainerLogs = (containerId: string) => {
             <th
               class="px-3 py-2 border-b border-border text-left font-medium text-text-secondary uppercase tracking-wider"
             >
-              {{ t('dockerManager.header.image') }}
-            </th>
-            <th
-              class="px-3 py-2 border-b border-border text-left font-medium text-text-secondary uppercase tracking-wider"
-            >
               {{ t('dockerManager.header.status') }}
             </th>
             <th
@@ -230,14 +225,18 @@ const viewContainerLogs = (containerId: string) => {
                 class="responsive-td px-3 py-2 border-b border-border align-middle text-right"
                 :data-label="t('dockerManager.header.name')"
               >
-                <span class="font-medium">{{ container.Names?.join(', ') || 'N/A' }}</span>
-              </td>
-              <!-- Image Cell -->
-              <td
-                class="responsive-td px-3 py-2 border-b border-border align-middle text-right break-all"
-                :data-label="t('dockerManager.header.image')"
-              >
-                {{ container.Image }}
+                <div class="flex flex-col items-end gap-0.5">
+                  <span
+                    class="font-medium text-sm truncate max-w-[180px]"
+                    :title="container.Names?.join(', ')"
+                    >{{ container.Names?.join(', ') || 'N/A' }}</span
+                  >
+                  <span
+                    class="text-xs text-text-secondary truncate max-w-[180px]"
+                    :title="container.Image"
+                    >{{ container.Image }}</span
+                  >
+                </div>
               </td>
               <!-- Status Cell -->
               <td
@@ -266,67 +265,77 @@ const viewContainerLogs = (containerId: string) => {
                 class="responsive-td px-3 py-2 border-b border-border align-middle text-right break-all"
                 :data-label="t('dockerManager.header.ports')"
               >
-                {{
-                  container.Ports?.map(
-                    (p) =>
-                      `${p.IP ? p.IP + ':' : ''}${p.PublicPort ? p.PublicPort + '->' : ''}${p.PrivatePort}/${p.Type}`
-                  ).join(', ') || 'N/A'
-                }}
+                <span
+                  class="text-xs text-text-secondary"
+                  :title="
+                    container.Ports?.map(
+                      (p) =>
+                        `${p.IP ? p.IP + ':' : ''}${p.PublicPort ? p.PublicPort + '->' : ''}${p.PrivatePort}/${p.Type}`
+                    ).join(', ')
+                  "
+                >
+                  {{
+                    container.Ports?.map(
+                      (p) =>
+                        `${p.IP ? p.IP + ':' : ''}${p.PublicPort ? p.PublicPort + '->' : ''}${p.PrivatePort}/${p.Type}`
+                    ).join(', ') || 'N/A'
+                  }}
+                </span>
               </td>
               <!-- Actions Cell -->
               <td
                 class="responsive-td px-3 py-2 border-b border-border align-middle text-right"
                 :data-label="t('dockerManager.header.actions')"
               >
-                <div class="responsive-actions-container flex justify-end gap-2 flex-wrap pt-2">
+                <div class="responsive-actions-container flex justify-end gap-1 flex-wrap pt-2">
                   <button
                     @click="sendDockerCommand(container.id, 'start')"
-                    :title="t('dockerManager.action.start')"
                     :aria-label="t('dockerManager.action.start')"
-                    class="text-text-secondary hover:text-success disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    class="docker-action-btn text-text-secondary hover:text-success disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    :data-tooltip="t('dockerManager.action.start')"
                     :disabled="container.State === 'running'"
                   >
                     <i class="fas fa-play"></i>
                   </button>
                   <button
                     @click="sendDockerCommand(container.id, 'stop')"
-                    :title="t('dockerManager.action.stop')"
                     :aria-label="t('dockerManager.action.stop')"
-                    class="text-text-secondary hover:text-warning disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    class="docker-action-btn text-text-secondary hover:text-warning disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    :data-tooltip="t('dockerManager.action.stop')"
                     :disabled="container.State !== 'running'"
                   >
                     <i class="fas fa-stop"></i>
                   </button>
                   <button
                     @click="sendDockerCommand(container.id, 'restart')"
-                    :title="t('dockerManager.action.restart')"
                     :aria-label="t('dockerManager.action.restart')"
-                    class="text-text-secondary hover:text-primary disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    class="docker-action-btn text-text-secondary hover:text-primary disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    :data-tooltip="t('dockerManager.action.restart')"
                     :disabled="container.State !== 'running'"
                   >
                     <i class="fas fa-sync-alt"></i>
                   </button>
                   <button
                     @click="sendDockerCommand(container.id, 'remove')"
-                    :title="t('dockerManager.action.remove')"
                     :aria-label="t('dockerManager.action.remove')"
-                    class="text-text-secondary hover:text-error disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    class="docker-action-btn text-text-secondary hover:text-error disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    :data-tooltip="t('dockerManager.action.remove')"
                   >
                     <i class="fas fa-trash-alt"></i>
                   </button>
                   <button
                     @click="enterContainer(container.id)"
-                    :title="t('dockerManager.action.enter')"
                     :aria-label="t('dockerManager.action.enter')"
-                    class="text-text-secondary hover:text-primary transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    class="docker-action-btn text-text-secondary hover:text-primary transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    :data-tooltip="t('dockerManager.action.enter')"
                   >
                     <i class="fas fa-terminal"></i>
                   </button>
                   <button
                     @click="viewContainerLogs(container.id)"
-                    :title="t('dockerManager.action.logs')"
                     :aria-label="t('dockerManager.action.logs')"
-                    class="text-text-secondary hover:text-text-secondary transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    class="docker-action-btn text-text-secondary hover:text-text-secondary transition-colors duration-150 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-base"
+                    :data-tooltip="t('dockerManager.action.logs')"
                   >
                     <i class="fas fa-file-alt"></i>
                   </button>
@@ -581,4 +590,30 @@ const viewContainerLogs = (containerId: string) => {
 /* --- End Responsive Table Styles --- */
 
 /* Minimal styles needed - Tailwind handles most */
+
+/* Docker 操作按钮 CSS Tooltip */
+.docker-action-btn {
+  position: relative;
+}
+.docker-action-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--header-bg-color, #1e293b);
+  color: var(--text-color, #e2e8f0);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 50;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.docker-action-btn:hover::after {
+  opacity: 1;
+}
 </style>
