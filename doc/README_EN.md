@@ -94,6 +94,9 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **Dependabot Automation**: Configured automatic dependency updates for continuous security monitoring
 - **Dependency Overrides**: Enforced secure versions via npm overrides
 - **XSS Protection**: AI panel migrated to DOMPurify, SFTP compress/decompress added path whitelist validation
+- **SSRF Protection (2026-05-08)**: URL fetching validates resolved IPs against private ranges before making requests
+- **Command Injection Prevention (2026-05-08)**: Docker container IDs and batch commands validated with whitelist/reject patterns
+- **Path Traversal Prevention (2026-05-08)**: File upload/download paths verified with `path.resolve()` + `startsWith()` checks
 
 ---
 

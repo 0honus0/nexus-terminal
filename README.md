@@ -73,6 +73,9 @@
 - **CSP 安全头**：添加 Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
 - **统一错误响应格式**：全局 ErrorResponse 类型统一，消除 `{ message }` vs `{ success, error }` 混用
 - **安全配置环境变量化**：`security.config.ts` 支持环境变量覆盖，不再硬编码
+- **SSRF 防护**：URL 抓取前验证解析 IP 是否指向私网（2026-05-08）
+- **命令注入防护**：Docker 容器 ID 白名单验证 + 批量命令 shell 元字符拒绝（2026-05-08）
+- **路径穿越防护**：文件上传/下载路径 `path.resolve()` + `startsWith()` 校验（2026-05-08）
 - **Docker Compose 生产就绪**：添加 healthcheck、资源限制、restart policy、日志轮转
 - **Docker 部署精简**：guacd 内嵌于 remote-gateway 容器，部署从 4 容器精简为 3 容器
 - **IP 地理定位增强**：SQLite 持久化缓存 + ASN 支持 + 多提供商适配器（ip-api/ipinfo）
