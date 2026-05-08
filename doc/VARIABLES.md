@@ -156,7 +156,7 @@
 | `GUACD_HOST`              | `string`  | 否   | `localhost`             | Guacd 服务地址                    |
 | `GUACD_PORT`              | `number`  | 否   | `4822`                  | Guacd 服务端口                    |
 | `FRONTEND_URL`            | `string`  | 否   | `http://localhost:5173` | 前端 URL (CORS 白名单)            |
-| `MAIN_BACKEND_URL`        | `string`  | 否   | `http://localhost:3000` | 后端 URL (CORS 白名单)            |
+| `MAIN_BACKEND_URL`        | `string`  | 否   | `http://localhost:3001` | 后端 URL (CORS 白名单)            |
 | `NODE_ENV`                | `string`  | 否   | -                       | 运行环境                          |
 | `CORS_ALLOWED_ORIGINS`    | `string`  | 否   | -                       | CORS 允许的来源 (逗号分隔)        |
 | `CORS_ALLOW_ALL`          | `boolean` | 否   | `false`                 | 是否允许所有来源 (生产环境不推荐) |
@@ -195,12 +195,9 @@
 | `FRONTEND_URL`            | `http://frontend`                                        | 前端地址                           |
 | `MAIN_BACKEND_URL`        | `http://backend:3001`                                    | 后端地址                           |
 
-### Guacd 服务
+### Guacd（内嵌于 remote-gateway）
 
-| 变量/配置 | 值                       | 描述                  |
-| --------- | ------------------------ | --------------------- |
-| 镜像      | `guacamole/guacd:latest` | Guacamole daemon 镜像 |
-| 重启策略  | `unless-stopped`         | 异常退出自动重启      |
+> Guacd 已内嵌于 remote-gateway 容器中，无需单独部署。由 remote-gateway entrypoint 自动启动。
 
 ---
 
@@ -208,14 +205,14 @@
 
 > 定义位置：`packages/backend/src/config/security.config.ts`
 
-| 常量名                   | 值                                | 描述                           |
-| ------------------------ | --------------------------------- | ------------------------------ |
-| `CHALLENGE_TIMEOUT`      | `5 * 60 * 1000` (5分钟)           | WebAuthn Challenge 超时时间    |
-| `PENDING_AUTH_TIMEOUT`   | `5 * 60 * 1000` (5分钟)           | 2FA 临时认证超时时间           |
-| `TEMP_TOKEN_LENGTH`      | `32`                              | 临时令牌长度 (字节)            |
-| `SESSION_COOKIE_MAX_AGE` | `30 * 24 * 60 * 60 * 1000` (30天) | Session Cookie 最大存活时间    |
-| `BCRYPT_SALT_ROUNDS`     | `12`                              | bcrypt 盐轮次 (2025年推荐值)   |
-| `ALLOWED_WS_ORIGINS`     | 动态计算                          | WebSocket 允许的 Origin 白名单 |
+| 常量名                   | 值                                | 环境变量覆盖              | 描述                           |
+| ------------------------ | --------------------------------- | ------------------------- | ------------------------------ |
+| `CHALLENGE_TIMEOUT`      | `5 * 60 * 1000` (5分钟)           | `CHALLENGE_TIMEOUT_MS`    | WebAuthn Challenge 超时时间    |
+| `PENDING_AUTH_TIMEOUT`   | `5 * 60 * 1000` (5分钟)           | `PENDING_AUTH_TIMEOUT_MS` | 2FA 临时认证超时时间           |
+| `TEMP_TOKEN_LENGTH`      | `32`                              | -                         | 临时令牌长度 (字节)            |
+| `SESSION_COOKIE_MAX_AGE` | `30 * 24 * 60 * 60 * 1000` (30天) | `SESSION_MAX_AGE_DAYS`    | Session Cookie 最大存活时间    |
+| `BCRYPT_SALT_ROUNDS`     | `12`                              | `BCRYPT_SALT_ROUNDS`      | bcrypt 盐轮次 (2025年推荐值)   |
+| `ALLOWED_WS_ORIGINS`     | 动态计算                          | `ALLOWED_WS_ORIGINS`      | WebSocket 允许的 Origin 白名单 |
 
 ---
 
@@ -502,4 +499,4 @@
 
 ---
 
-**文档生成时间**：2025-12-26（初始）| **最后更新**：2026-05-06（新增 LOG_PRETTY、LOG_REDACT 日志环境变量）
+**文档生成时间**：2025-12-26（初始）| **最后更新**：2026-05-08（修复 MAIN_BACKEND_URL 默认端口、安全配置环境变量覆盖、移除 Guacd 独立服务说明）
