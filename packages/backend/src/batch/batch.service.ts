@@ -29,22 +29,27 @@ const OUTPUT_THROTTLE_MS = 100; // 输出写入节流
 
 /**
  * 校验批量执行的命令字符串，拒绝包含 shell 注入风险的输入。
- * 采用严格拒绝策略：匹配到任何危险模式即返回空字符串，不做剥离处理，
- * 确保不会产生意外的安全缺口（与 sanitizeDockerContainerId 同一设计思路）。
+ * 采用精准拦截策略：仅阻断真正的注入向量，允许合法 shell 语法。
  *
- * 拦截目标：
- * - 反引号 `` ` ``   → 命令替换（`whoami`）
- * - $()              → 命令替换（$(whoami)）
- * - ${}              → 变量/命令展开（${IFS}）
- * - 分号、管道、逻辑运算符 → 命令链接（; | && ||）
- * - 换行符           → 注入换行执行多条命令
- * - 空字节           → 绕过字符串截断
- * - 重定向符         → 文件写入（> >>）或读取（<）
- * - 通配符           → 路径遍历（* ?）
- * - 小括号           → 子 shell（(cmd)）
- * - 方括号           → Glob 模式（[0-9]）
+ * 拦截目标（真正危险的注入模式）：
+ * - 反引号 `` ` ``       → 命令替换（`whoami`）
+ * - $()                  → 命令替换（$(whoami)）
+ * - ${}                  → 变量/命令展开（${IFS}、${PATH:-/bin}）
+ * - 换行符 \n \r         → 注入换行执行多条命令
+ * - 空字节 \x00          → 绕过字符串截断
+ * - 大括号 {}            → 花括号展开（{a,b}cp）可用于绕过过滤
+ *
+ * 允许的合法 shell 语法：
+ * - |  管道（cat file | grep x）
+ * - ;  命令分隔（cd /tmp; ls）
+ * - && ||  逻辑运算符
+ * - $VAR  环境变量引用（echo $USER）
+ * - * ?  通配符（ls *.log）
+ * - > <  重定向（echo x > file）
+ * - ()  子 shell / 命令分组
+ * - []  glob 模式（ls [0-9]*）
  */
-const DANGEROUS_CMD_PATTERN = /[`$;|&\n\r\x00><*?\[\]{}()]/;
+const DANGEROUS_CMD_PATTERN = /`|\$\(|\$\{|\$'|\n|\r|\x00|\{[a-zA-Z]/;
 
 function sanitizeBatchCommand(command: string): string {
   if (!command || typeof command !== 'string') {
@@ -96,15 +101,20 @@ export async function execCommandBatch(
   }
   const safePayload = { ...payload, command: sanitizedCommand };
 
-  // 获取连接名称用于显示
+  // 并行获取连接名称用于显示
   const connectionNames = new Map<number, string>();
-  for (const connId of safePayload.connectionIds) {
-    try {
+  const nameResults = await Promise.allSettled(
+    safePayload.connectionIds.map(async (connId) => {
       const conn = await ConnectionRepository.findConnectionByIdWithTags(connId);
-      if (conn) {
-        connectionNames.set(connId, conn.name || `连接 #${connId}`);
-      }
-    } catch {
+      return { connId, name: conn?.name || `连接 #${connId}` };
+    })
+  );
+  for (let i = 0; i < nameResults.length; i++) {
+    const result = nameResults[i];
+    const connId = safePayload.connectionIds[i];
+    if (result.status === 'fulfilled') {
+      connectionNames.set(connId, result.value.name);
+    } else {
       connectionNames.set(connId, `连接 #${connId}`);
     }
   }
@@ -180,9 +190,22 @@ async function processTask(
     return;
   }
 
-  // 检查是否已取消
+  // 检查是否已取消（任务启动前就收到 abort 信号）
   if (signal.aborted) {
-    await updateTaskStatus(taskId, 'cancelled', { message: '任务启动前已取消' });
+    await updateTaskStatus(taskId, 'cancelled', {
+      message: '任务启动前已取消',
+      endedAt: new Date(),
+      overallProgress: 0,
+      completedSubTasks: 0,
+      failedSubTasks: 0,
+      cancelledSubTasks: task.totalSubTasks,
+    });
+    // 发送终态事件，确保前端能收到 batch:cancelled
+    sendBatchEvent(userId, {
+      type: 'batch:cancelled',
+      payload: { taskId, reason: '任务启动前已取消' },
+    });
+    taskAbortControllers.delete(taskId);
     return;
   }
 
@@ -608,11 +631,7 @@ function executeCommand(
           if (dbAllowedSize > 0) {
             const dbChunk = chunk.substring(0, dbAllowedSize);
             dbOutputSize += dbAllowedSize;
-            BatchRepository.appendSubTaskOutput(subTaskId, dbChunk).catch((error: unknown) => {
-              logger.warn(
-                `[Batch] 追加子任务输出失败 (subTaskId=${subTaskId}): ${error instanceof Error ? error.message : String(error)}`
-              );
-            });
+            BatchRepository.appendSubTaskOutput(subTaskId, dbChunk);
           }
         }
       };
@@ -642,23 +661,9 @@ function executeCommand(
 }
 
 /**
- * 更新子任务状态
+ * 更新子任务状态（直接委托到 Repository）
  */
-async function updateSubTask(
-  taskId: string,
-  subTaskId: string,
-  status: BatchSubTaskStatus,
-  progress: number,
-  updates: Partial<{
-    exitCode: number;
-    output: string;
-    message: string;
-    startedAt: Date;
-    endedAt: Date;
-  }> = {}
-): Promise<void> {
-  await BatchRepository.updateSubTaskStatus(taskId, subTaskId, status, progress, updates);
-}
+const updateSubTask = BatchRepository.updateSubTaskStatus;
 
 /**
  * 发送子任务更新事件
@@ -698,8 +703,7 @@ async function updateOverallProgress(
   cancelled: number,
   total: number
 ): Promise<void> {
-  const overallProgress =
-    total > 0 ? Math.round(((completed + failed + cancelled) / total) * 100) : 0;
+  const overallProgress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   await BatchRepository.updateTaskStatus(taskId, 'in-progress', {
     overallProgress,
@@ -722,23 +726,9 @@ async function updateOverallProgress(
 }
 
 /**
- * 更新任务状态
+ * 更新任务状态（直接委托到 Repository）
  */
-async function updateTaskStatus(
-  taskId: string,
-  status: BatchTaskStatus,
-  updates: Partial<{
-    overallProgress: number;
-    completedSubTasks: number;
-    failedSubTasks: number;
-    cancelledSubTasks: number;
-    message: string;
-    startedAt: Date;
-    endedAt: Date;
-  }> = {}
-): Promise<void> {
-  await BatchRepository.updateTaskStatus(taskId, status, updates);
-}
+const updateTaskStatus = BatchRepository.updateTaskStatus;
 
 /**
  * 完成任务处理
@@ -854,17 +844,9 @@ export async function cancelTask(taskId: string, reason: string = '用户取消'
   const cancelledCount = await BatchRepository.cancelSubTasks(taskId, reason);
   logger.info(`[BatchService] 已取消任务 ${taskId} 的 ${cancelledCount} 个排队子任务。`);
 
-  // 注意：不在这里更新任务状态，让 processTask 的 finalizeTask 来处理
-  // 这样可以确保状态计数准确
-
-  // 发送取消事件
-  sendBatchEvent(task.userId, {
-    type: 'batch:cancelled',
-    payload: {
-      taskId,
-      reason,
-    },
-  });
+  // 不在这里发送 WS 事件或更新任务状态
+  // 由 processTask 的 finalizeTask 在 DB 写入后统一发送终态事件
+  // 避免竞态：前端收到 WS 事件后 fetch 可能读到旧的 DB 状态
 
   return true;
 }
@@ -904,4 +886,38 @@ export async function cleanupOldTasks(daysOld: number = 7): Promise<number> {
     logger.info(`[BatchService] 已清理 ${count} 个过期任务。`);
   }
   return count;
+}
+
+// ========== 启动初始化 ==========
+
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 每小时清理一次
+
+let cleanupTimer: NodeJS.Timeout | null = null;
+
+// 记录进程启动时间戳（秒），用于孤儿恢复时排除本次启动期间的新任务
+const PROCESS_STARTED_AT = Math.floor(Date.now() / 1000);
+
+/**
+ * 模块启动初始化：
+ * 1. 恢复服务器重启后孤儿化的 in-progress 任务（基于进程启动边界）
+ * 2. 启动定时清理过期任务
+ *
+ * 在应用启动时由 routes 注册处调用一次。
+ */
+export async function initialize(): Promise<void> {
+  // 恢复孤儿任务：仅恢复 updated_at < 进程启动时间的任务（上次进程遗留）
+  const recovered = await BatchRepository.recoverOrphanedTasks(PROCESS_STARTED_AT);
+  if (recovered > 0) {
+    logger.info(`[BatchService] 启动恢复：${recovered} 个孤儿任务已标记为 failed。`);
+  }
+
+  // 启动定时清理
+  if (!cleanupTimer) {
+    cleanupTimer = setInterval(() => {
+      cleanupOldTasks(7).catch((err: unknown) => {
+        logger.error(`[BatchService] 定时清理失败:`, err);
+      });
+    }, CLEANUP_INTERVAL_MS);
+    logger.debug('[BatchService] 定时清理已启动（每小时执行一次）。');
+  }
 }

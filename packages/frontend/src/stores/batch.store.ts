@@ -15,8 +15,43 @@ import type {
   BatchTaskListResponse,
   BatchCancelResponse,
   BatchSubTaskStatus,
+  BatchWsEventType,
 } from '../types/batch.types';
 import { log } from '@/utils/log';
+
+// 输出缓冲上限（前端内存限制，防止 OOM）
+const MAX_OUTPUT_SIZE = 512 * 1024; // 512KB
+const TRUNCATION_NOTICE = '\n\n[输出已截断，超过 512KB 限制]';
+// WS 事件超时兜底（毫秒）：若 WS 断连，超时后自动降级为轮询
+const WS_TIMEOUT_MS = 10_000;
+
+/**
+ * 将 API 响应中的日期字段统一转换为 Date 对象
+ */
+function parseTaskDates(
+  task: Omit<BatchTask, 'createdAt' | 'updatedAt' | 'subTasks'> & {
+    createdAt: string | Date;
+    updatedAt: string | Date;
+    subTasks?: Array<
+      Omit<BatchSubTask, 'startedAt' | 'endedAt'> & {
+        startedAt?: string | Date;
+        endedAt?: string | Date;
+      }
+    >;
+  }
+): BatchTask {
+  return {
+    ...task,
+    createdAt: new Date(task.createdAt),
+    updatedAt: new Date(task.updatedAt),
+    subTasks:
+      task.subTasks?.map((st) => ({
+        ...st,
+        startedAt: st.startedAt ? new Date(st.startedAt) : undefined,
+        endedAt: st.endedAt ? new Date(st.endedAt) : undefined,
+      })) || [],
+  } as BatchTask;
+}
 
 export const useBatchStore = defineStore('batch', () => {
   // === State ===
@@ -26,8 +61,12 @@ export const useBatchStore = defineStore('batch', () => {
   const isLoading = ref(false);
   const error = ref<string | null>(null);
 
-  // 子任务状态映射（用于快速查询）
-  const subTaskStatusMap = ref<Record<number, BatchSubTaskStatus>>({});
+  // H5: 以 taskId → connectionId 为键的状态映射，支持多任务并行
+  const subTaskStatusMap = ref<Record<string, Record<number, BatchSubTaskStatus>>>({});
+
+  // H4: WS 连接状态跟踪 — 用于轮询降级策略（ref 使其可被组件 watch）
+  const wsEventReceived = ref(false);
+  let wsTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   // === Getters ===
   const hasActiveTask = computed(
@@ -45,34 +84,37 @@ export const useBatchStore = defineStore('batch', () => {
 
     error.value = null;
     isExecuting.value = true;
+    wsEventReceived.value = false;
 
     // 清理上一次任务的状态映射
     subTaskStatusMap.value = {};
 
-    // 初始化子任务状态
+    // 初始化子任务状态映射（H5: 以 taskId 为外层键）
+    // taskId 在后端返回后才会设置，先用 'pending' 占位
+    subTaskStatusMap.value['pending'] = {};
     payload.connectionIds.forEach((id) => {
-      subTaskStatusMap.value[id] = 'queued';
+      subTaskStatusMap.value['pending'][id] = 'queued';
     });
 
     try {
       const response = await apiClient.post<BatchExecResponse>('/batch', payload);
 
       if (response.data.success && response.data.task) {
-        currentTask.value = {
-          ...response.data.task,
-          createdAt: new Date(response.data.task.createdAt),
-          updatedAt: new Date(response.data.task.updatedAt),
-          subTasks: response.data.task.subTasks.map((st) => ({
-            ...st,
-            startedAt: st.startedAt ? new Date(st.startedAt) : undefined,
-            endedAt: st.endedAt ? new Date(st.endedAt) : undefined,
-          })),
-        };
+        const task = parseTaskDates(response.data.task);
+        currentTask.value = task;
+
+        // 将 'pending' 键迁移到实际 taskId
+        const pendingMap = subTaskStatusMap.value['pending'] || {};
+        delete subTaskStatusMap.value['pending'];
+        subTaskStatusMap.value[task.taskId] = pendingMap;
 
         // 更新子任务状态映射
-        currentTask.value.subTasks.forEach((st) => {
-          subTaskStatusMap.value[st.connectionId] = st.status;
+        task.subTasks.forEach((st) => {
+          subTaskStatusMap.value[task.taskId][st.connectionId] = st.status;
         });
+
+        // H4: 启动 WS 超时兜底
+        startWsTimeoutGuard();
 
         return response.data.taskId;
       }
@@ -93,27 +135,20 @@ export const useBatchStore = defineStore('batch', () => {
       const response = await apiClient.get<BatchStatusResponse>(`/batch/${taskId}`);
 
       if (response.data.success && response.data.task) {
-        const task: BatchTask = {
-          ...response.data.task,
-          createdAt: new Date(response.data.task.createdAt),
-          updatedAt: new Date(response.data.task.updatedAt),
-          subTasks: response.data.task.subTasks.map((st) => ({
-            ...st,
-            startedAt: st.startedAt ? new Date(st.startedAt) : undefined,
-            endedAt: st.endedAt ? new Date(st.endedAt) : undefined,
-          })),
-        };
+        const task = parseTaskDates(response.data.task);
 
         // 更新当前任务
         if (currentTask.value?.taskId === taskId) {
           currentTask.value = task;
+          subTaskStatusMap.value[task.taskId] = subTaskStatusMap.value[task.taskId] || {};
           task.subTasks.forEach((st) => {
-            subTaskStatusMap.value[st.connectionId] = st.status;
+            subTaskStatusMap.value[task.taskId][st.connectionId] = st.status;
           });
 
           // 检查是否完成
           if (['completed', 'failed', 'cancelled', 'partially-completed'].includes(task.status)) {
             isExecuting.value = false;
+            clearWsTimeoutGuard();
           }
         }
 
@@ -122,7 +157,6 @@ export const useBatchStore = defineStore('batch', () => {
       return null;
     } catch (err: unknown) {
       log.error('[BatchStore] 获取任务状态失败:', err);
-      // 设置错误状态，但不直接释放 isExecuting（任务可能仍在执行，只是查询失败）
       error.value = extractErrorMessage(err, '获取任务状态失败，请稍后重试');
       return null;
     }
@@ -141,17 +175,9 @@ export const useBatchStore = defineStore('batch', () => {
       });
 
       if (response.data.success) {
-        tasks.value = response.data.tasks.map((t) => ({
-          ...t,
-          createdAt: new Date(t.createdAt),
-          updatedAt: new Date(t.updatedAt),
-          subTasks:
-            t.subTasks?.map((st) => ({
-              ...st,
-              startedAt: st.startedAt ? new Date(st.startedAt) : undefined,
-              endedAt: st.endedAt ? new Date(st.endedAt) : undefined,
-            })) || [],
-        }));
+        tasks.value = response.data.tasks.map((t) =>
+          parseTaskDates(t as Parameters<typeof parseTaskDates>[0])
+        );
       }
     } catch (err: unknown) {
       log.error('[BatchStore] 获取任务列表失败:', err);
@@ -195,7 +221,11 @@ export const useBatchStore = defineStore('batch', () => {
       if (currentTask.value?.taskId === taskId) {
         currentTask.value = null;
         isExecuting.value = false;
+        clearWsTimeoutGuard();
       }
+
+      // 清理状态映射
+      delete subTaskStatusMap.value[taskId];
 
       return true;
     } catch (err: unknown) {
@@ -206,9 +236,37 @@ export const useBatchStore = defineStore('batch', () => {
   };
 
   /**
+   * H4: WS 超时兜底 — 收到首个 WS 事件后停止轮询计时器
+   */
+  const onWsEventReceived = (): void => {
+    wsEventReceived.value = true;
+    clearWsTimeoutGuard();
+  };
+
+  /**
+   * H4: 启动 WS 超时守卫 — 超时后由轮询兜底
+   */
+  const startWsTimeoutGuard = (): void => {
+    clearWsTimeoutGuard();
+    wsEventReceived.value = false;
+    wsTimeoutTimer = setTimeout(() => {
+      if (!wsEventReceived.value && isExecuting.value) {
+        log.warn('[BatchStore] WS 事件超时，轮询将作为降级方案继续工作。');
+      }
+    }, WS_TIMEOUT_MS);
+  };
+
+  const clearWsTimeoutGuard = (): void => {
+    if (wsTimeoutTimer) {
+      clearTimeout(wsTimeoutTimer);
+      wsTimeoutTimer = null;
+    }
+  };
+
+  /**
    * 处理 WebSocket 批量事件
    */
-  const handleBatchWsEvent = (type: string, payload: unknown): void => {
+  const handleBatchWsEvent = (type: BatchWsEventType | string, payload: unknown): void => {
     const eventPayload = payload as {
       taskId?: string;
       subTaskId?: string;
@@ -225,8 +283,13 @@ export const useBatchStore = defineStore('batch', () => {
 
     if (!currentTask.value || currentTask.value.taskId !== eventPayload.taskId) return;
 
+    // H4: 标记收到 WS 事件，停止超时守卫
+    onWsEventReceived();
+
+    const taskId = currentTask.value.taskId;
+
     switch (type) {
-      case 'batch:subtask:update':
+      case 'batch:subtask:update': {
         // 更新子任务状态
         if (eventPayload.subTaskId) {
           const subTask = currentTask.value.subTasks.find(
@@ -239,11 +302,13 @@ export const useBatchStore = defineStore('batch', () => {
             if (eventPayload.exitCode !== undefined) subTask.exitCode = eventPayload.exitCode;
             if (eventPayload.message) subTask.message = eventPayload.message;
 
-            // 更新状态映射
-            subTaskStatusMap.value[subTask.connectionId] = subTask.status;
+            // H5: 更新状态映射（taskId 嵌套键）
+            if (!subTaskStatusMap.value[taskId]) subTaskStatusMap.value[taskId] = {};
+            subTaskStatusMap.value[taskId][subTask.connectionId] = subTask.status;
           }
         }
         break;
+      }
 
       case 'batch:overall':
         // 更新整体进度
@@ -259,34 +324,59 @@ export const useBatchStore = defineStore('batch', () => {
 
       case 'batch:completed':
       case 'batch:failed':
-      case 'batch:cancelled':
+      case 'batch:cancelled': {
         // 任务结束
         isExecuting.value = false;
+        clearWsTimeoutGuard();
         // 刷新最终状态
         if (eventPayload.taskId) {
           fetchTaskStatus(eventPayload.taskId);
         }
         break;
+      }
 
-      case 'batch:log':
-        // 流式输出
+      case 'batch:log': {
+        // H3: 流式输出，带上限截断（预留截断提示空间）
         if (eventPayload.subTaskId && eventPayload.chunk) {
           const subTask = currentTask.value.subTasks.find(
             (st) => st.subTaskId === eventPayload.subTaskId
           );
-          if (subTask) {
-            subTask.output = (subTask.output || '') + eventPayload.chunk;
+          if (subTask && !subTask.output?.endsWith(TRUNCATION_NOTICE)) {
+            const currentOutput = subTask.output || '';
+            if (currentOutput.length < MAX_OUTPUT_SIZE) {
+              const budget = Math.max(
+                0,
+                MAX_OUTPUT_SIZE - currentOutput.length - TRUNCATION_NOTICE.length
+              );
+              if (budget > 0) {
+                const chunk = eventPayload.chunk.substring(0, budget);
+                subTask.output = currentOutput + chunk;
+              }
+              // budget=0 空间耗尽，或原始 chunk 超出预算时，均追加截断提示
+              if (
+                budget === 0 ||
+                currentOutput.length + eventPayload.chunk.length >= MAX_OUTPUT_SIZE
+              ) {
+                subTask.output = (subTask.output || currentOutput) + TRUNCATION_NOTICE;
+              }
+            }
           }
         }
         break;
+      }
     }
   };
 
   /**
-   * 获取连接的执行状态
+   * 获取连接的执行状态（H5: 需要 taskId）
    */
-  const getConnectionStatus = (connectionId: number): BatchSubTaskStatus | null => {
-    return subTaskStatusMap.value[connectionId] || null;
+  const getConnectionStatus = (
+    connectionId: number,
+    taskId?: string
+  ): BatchSubTaskStatus | null => {
+    const effectiveTaskId = taskId || currentTask.value?.taskId;
+    if (!effectiveTaskId) return null;
+    return subTaskStatusMap.value[effectiveTaskId]?.[connectionId] || null;
   };
 
   /**
@@ -305,6 +395,7 @@ export const useBatchStore = defineStore('batch', () => {
     isExecuting.value = false;
     error.value = null;
     subTaskStatusMap.value = {};
+    clearWsTimeoutGuard();
   };
 
   /**
@@ -322,6 +413,7 @@ export const useBatchStore = defineStore('batch', () => {
     isLoading,
     error,
     subTaskStatusMap,
+    wsEventReceived,
 
     // Getters
     hasActiveTask,

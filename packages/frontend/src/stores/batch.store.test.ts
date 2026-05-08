@@ -127,8 +127,8 @@ describe('batch.store', () => {
       expect(taskId).toBe('task-123');
       expect(store.currentTask?.taskId).toBe('task-123');
       expect(store.isExecuting).toBe(true);
-      expect(store.subTaskStatusMap[1]).toBe('queued');
-      expect(store.subTaskStatusMap[2]).toBe('queued');
+      expect(store.subTaskStatusMap['task-123']?.[1]).toBe('queued');
+      expect(store.subTaskStatusMap['task-123']?.[2]).toBe('queued');
     });
 
     it('正在执行时再次调用应返回 null', async () => {
@@ -327,7 +327,7 @@ describe('batch.store', () => {
       expect(subTask?.status).toBe('running');
       expect(subTask?.progress).toBe(50);
       expect(subTask?.output).toBe('output line');
-      expect(store.subTaskStatusMap[1]).toBe('running');
+      expect(store.subTaskStatusMap['task-123']?.[1]).toBe('running');
     });
 
     it('batch:overall 应更新整体进度', () => {
@@ -390,11 +390,11 @@ describe('batch.store', () => {
   describe('getConnectionStatus', () => {
     it('应返回连接的执行状态', () => {
       const store = useBatchStore();
-      store.subTaskStatusMap = { 1: 'running', 2: 'completed' };
+      store.subTaskStatusMap = { 'test-task': { 1: 'running', 2: 'completed' } };
 
-      expect(store.getConnectionStatus(1)).toBe('running');
-      expect(store.getConnectionStatus(2)).toBe('completed');
-      expect(store.getConnectionStatus(3)).toBeNull();
+      expect(store.getConnectionStatus(1, 'test-task')).toBe('running');
+      expect(store.getConnectionStatus(2, 'test-task')).toBe('completed');
+      expect(store.getConnectionStatus(3, 'test-task')).toBeNull();
     });
   });
 
@@ -422,7 +422,7 @@ describe('batch.store', () => {
       store.currentTask = mockTask;
       store.isExecuting = true;
       store.error = '错误';
-      store.subTaskStatusMap = { 1: 'running' };
+      store.subTaskStatusMap = { 'test-task': { 1: 'running' } };
 
       store.reset();
 

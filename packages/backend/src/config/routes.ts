@@ -24,6 +24,8 @@ import { transfersRoutes } from '../transfers/transfers.routes';
 import pathHistoryRoutes from '../path-history/path-history.routes';
 import favoritePathsRouter from '../favorite-paths/favorite-paths.routes';
 import batchRoutes from '../batch/batch.routes';
+import * as BatchService from '../batch/batch.service';
+import { logger } from '../utils/logger';
 import aiRoutes from '../ai-ops/ai.routes';
 import passkeyRoutes from '../passkey/passkey.routes';
 import dashboardRoutes from '../services/dashboard.routes';
@@ -119,4 +121,9 @@ export const registerRoutes = (
   // 全局错误处理中间件（必须在所有路由之后）
   app.use(notFoundHandler);
   app.use(errorHandler);
+
+  // 初始化批量模块（孤儿任务恢复 + 定时清理）
+  BatchService.initialize().catch((err: unknown) => {
+    logger.error({ err }, '[Routes] 批量模块初始化失败');
+  });
 };

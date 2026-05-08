@@ -98,7 +98,7 @@
             type="number"
             v-model.number="concurrencyLimit"
             min="1"
-            max="20"
+            max="50"
             class="w-12 px-1 py-0.5 bg-input border border-border rounded text-foreground text-center"
           />
         </label>
@@ -171,11 +171,14 @@
       </div>
     </div>
 
-    <!-- Output Modal -->
+    <!-- Output Modal (L4: Escape 键关闭 + L7: 复制按钮) -->
     <div
       v-if="selectedOutput"
+      ref="outputModalRef"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      tabindex="-1"
       @click.self="selectedOutput = null"
+      @keydown.escape="selectedOutput = null"
     >
       <div
         class="bg-background border border-border rounded-lg shadow-xl w-[80%] max-w-2xl max-h-[80vh] flex flex-col"
@@ -184,9 +187,21 @@
           <span class="font-medium"
             >{{ selectedOutput.connectionName }} - {{ t('batchOps.output', 'Output') }}</span
           >
-          <button @click="selectedOutput = null" class="text-text-secondary hover:text-foreground">
-            <i class="fas fa-times"></i>
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              @click="copyOutput"
+              class="text-xs text-text-secondary hover:text-foreground px-2 py-1 rounded hover:bg-header"
+              :title="t('batchOps.copyOutput', 'Copy to clipboard')"
+            >
+              <i class="fas fa-copy mr-1"></i>{{ t('common.copy', 'Copy') }}
+            </button>
+            <button
+              @click="selectedOutput = null"
+              class="text-text-secondary hover:text-foreground"
+            >
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
         </div>
         <div class="flex-grow overflow-auto p-4">
           <pre class="font-mono text-xs text-text-secondary whitespace-pre-wrap">{{
@@ -199,11 +214,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useConnectionsStore } from '../../stores/connections.store';
 import { useBatchStore } from '../../stores/batch.store';
 import type { BatchSubTask, BatchSubTaskStatus } from '../../types/batch.types';
+import { log } from '@/utils/log';
 
 const { t } = useI18n();
 const connectionsStore = useConnectionsStore();
@@ -216,9 +232,11 @@ const command = ref('');
 const useSudo = ref(false);
 const concurrencyLimit = ref(5);
 const selectedOutput = ref<BatchSubTask | null>(null);
+const outputModalRef = ref<HTMLDivElement | null>(null);
 
-// 轮询定时器
+// H4: 轮询仅作为 WS 降级方案
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+let pollingActive = false;
 
 const toggleSelection = (id: number) => {
   if (selectedIds.value.includes(id)) {
@@ -236,6 +254,7 @@ const deselectAll = () => {
   selectedIds.value = [];
 };
 
+// H5: getConnectionStatus 使用 taskId 嵌套键
 const getConnectionStatus = (connectionId: number): BatchSubTaskStatus | null => {
   return batchStore.getConnectionStatus(connectionId);
 };
@@ -272,9 +291,17 @@ const statusClass = computed(() => {
   return classMap[task.status] || '';
 });
 
-// 执行批量命令
+// L6: sudo 执行确认
 const executeBatch = async () => {
   if (selectedIds.value.length === 0 || !command.value.trim() || batchStore.isExecuting) return;
+
+  // L6: sudo 确认对话框
+  if (useSudo.value) {
+    const confirmed = window.confirm(
+      t('batchOps.sudoConfirm', 'Warning: Running with sudo privileges. Continue?')
+    );
+    if (!confirmed) return;
+  }
 
   const taskId = await batchStore.executeBatch({
     command: command.value.trim(),
@@ -284,7 +311,18 @@ const executeBatch = async () => {
   });
 
   if (taskId) {
-    // 开始轮询任务状态
+    // L5: 记录命令历史
+    try {
+      const { useCommandHistoryStore } = await import('../../stores/commandHistory.store');
+      const historyStore = useCommandHistoryStore();
+      if (historyStore.addCommand) {
+        historyStore.addCommand(command.value.trim());
+      }
+    } catch {
+      // 命令历史模块不可用时静默忽略
+    }
+
+    // H4: 启动降级轮询
     startPolling(taskId);
   }
 };
@@ -296,29 +334,67 @@ const cancelExecution = async () => {
   }
 };
 
-// 查看输出
+// 查看输出（L5: 快照输出内容，避免 WS 更新导致内容变化）
 const showOutput = (subTask: BatchSubTask) => {
-  selectedOutput.value = subTask;
+  selectedOutput.value = { ...subTask };
+  nextTick(() => {
+    outputModalRef.value?.focus();
+  });
 };
 
-// 开始轮询
+// L7: 复制输出到剪贴板
+const copyOutput = async () => {
+  if (!selectedOutput.value?.output) return;
+  try {
+    await navigator.clipboard.writeText(selectedOutput.value.output);
+  } catch {
+    // 降级方案：选中文本
+    log.warn('[BatchStore] 剪贴板 API 不可用');
+  }
+};
+
+// H4: 轮询作为 WS 降级方案
 const startPolling = (taskId: string) => {
   stopPolling();
+  pollingActive = true;
   pollInterval = setInterval(async () => {
+    // 若已收到 WS 事件，停止轮询（WS 是更及时的数据源）
+    if (!pollingActive) {
+      stopPolling();
+      return;
+    }
     const task = await batchStore.fetchTaskStatus(taskId);
     if (task && ['completed', 'failed', 'cancelled', 'partially-completed'].includes(task.status)) {
       stopPolling();
     }
-  }, 1000);
+  }, 2000); // 降级轮询间隔放宽到 2s
 };
 
-// 停止轮询
 const stopPolling = () => {
+  pollingActive = false;
   if (pollInterval) {
     clearInterval(pollInterval);
     pollInterval = null;
   }
 };
+
+// H4: 监听 WS 活动 — 收到首个 WS 事件后立即停止轮询，轮询仅作为 WS 降级方案
+watch(
+  () => batchStore.wsEventReceived,
+  (received) => {
+    if (received) stopPolling();
+  }
+);
+
+// 任务终态时也停止轮询（兜底）
+watch(
+  () => batchStore.currentTask?.status,
+  (status) => {
+    if (status && status !== 'in-progress' && status !== 'queued') {
+      stopPolling();
+    }
+  }
+);
 
 // 组件挂载时获取连接列表
 onMounted(() => {
@@ -333,9 +409,19 @@ onUnmounted(() => {
 });
 </script>
 
-<!-- 子组件：状态徽章 -->
+<!-- L2: 共享配置 map，消除 StatusBadge/StatusIcon 重复定义 -->
 <script lang="ts">
 import { defineComponent, h } from 'vue';
+
+// 统一状态配置（图标 + 颜色 + 可选文本）
+const STATUS_CONFIG: Record<string, { icon: string; class: string; text?: string }> = {
+  queued: { icon: 'fa-clock', class: 'text-text-secondary', text: 'Queued' },
+  connecting: { icon: 'fa-spinner fa-spin', class: 'text-warning', text: 'Connecting' },
+  running: { icon: 'fa-spinner fa-spin', class: 'text-primary', text: 'Running' },
+  completed: { icon: 'fa-check-circle', class: 'text-success', text: 'Done' },
+  failed: { icon: 'fa-times-circle', class: 'text-error', text: 'Failed' },
+  cancelled: { icon: 'fa-ban', class: 'text-text-secondary', text: 'Cancelled' },
+};
 
 const StatusBadge = defineComponent({
   name: 'StatusBadge',
@@ -345,22 +431,11 @@ const StatusBadge = defineComponent({
   setup(props) {
     return () => {
       if (!props.status) return null;
-
-      const config: Record<string, { icon: string; class: string; text: string }> = {
-        queued: { icon: 'fa-clock', class: 'text-text-secondary', text: 'Queued' },
-        connecting: { icon: 'fa-spinner fa-spin', class: 'text-warning', text: 'Connecting' },
-        running: { icon: 'fa-spinner fa-spin', class: 'text-primary', text: 'Running' },
-        completed: { icon: 'fa-check', class: 'text-success', text: 'Done' },
-        failed: { icon: 'fa-times', class: 'text-error', text: 'Failed' },
-        cancelled: { icon: 'fa-ban', class: 'text-text-secondary', text: 'Cancelled' },
-      };
-
-      const c = config[props.status];
+      const c = STATUS_CONFIG[props.status];
       if (!c) return null;
-
       return h('span', { class: `text-xs ${c.class}` }, [
         h('i', { class: `fas ${c.icon} mr-1` }),
-        c.text,
+        c.text || '',
       ]);
     };
   },
@@ -373,16 +448,10 @@ const StatusIcon = defineComponent({
   },
   setup(props) {
     return () => {
-      const config: Record<string, { icon: string; class: string }> = {
-        queued: { icon: 'fa-clock', class: 'text-text-secondary' },
-        connecting: { icon: 'fa-spinner fa-spin', class: 'text-warning' },
-        running: { icon: 'fa-spinner fa-spin', class: 'text-primary' },
-        completed: { icon: 'fa-check-circle', class: 'text-success' },
-        failed: { icon: 'fa-times-circle', class: 'text-error' },
-        cancelled: { icon: 'fa-ban', class: 'text-text-secondary' },
+      const c = STATUS_CONFIG[props.status] || {
+        icon: 'fa-question',
+        class: 'text-text-secondary',
       };
-
-      const c = config[props.status] || { icon: 'fa-question', class: 'text-text-secondary' };
       return h('i', { class: `fas ${c.icon} ${c.class}` });
     };
   },

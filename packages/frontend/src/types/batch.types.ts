@@ -95,9 +95,19 @@ export interface BatchCancelResponse {
   message: string;
 }
 
+// WebSocket 事件类型（与后端 batch.types.ts 保持一致）
+export type BatchWsEventType =
+  | 'batch:started'
+  | 'batch:subtask:update'
+  | 'batch:overall'
+  | 'batch:completed'
+  | 'batch:failed'
+  | 'batch:cancelled'
+  | 'batch:log';
+
 // WebSocket 批量事件消息
 export interface BatchWsMessage {
-  type: string;
+  type: BatchWsEventType;
   payload: {
     taskId: string;
     subTaskId?: string;

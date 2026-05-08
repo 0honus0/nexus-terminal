@@ -14,26 +14,112 @@ import {
   BatchSubTaskRow,
   BatchExecPayload,
 } from './batch.types';
+import { logger } from '../utils/logger';
+
+// ========== 输出写入缓冲 ==========
+// 每个子任务的输出先缓冲到内存，定期批量写入数据库，
+// 避免高频并发 COALESCE 写入导致数据丢失。
+
+const FLUSH_INTERVAL_MS = 500;
+const outputBuffers = new Map<string, string>(); // subTaskId → 待写入的累积文本
+
+let flushTimer: NodeJS.Timeout | null = null;
+
+/**
+ * 启动输出缓冲的定时刷盘（首次调用时激活）
+ */
+function ensureFlushTimer(): void {
+  if (flushTimer) return;
+  flushTimer = setInterval(() => {
+    flushOutputBuffers().catch((err: unknown) => {
+      logger.warn(
+        `[BatchRepo] 输出缓冲刷盘失败: ${err instanceof Error ? err.message : String(err)}`
+      );
+    });
+  }, FLUSH_INTERVAL_MS);
+}
+
+/**
+ * 将所有缓冲区的数据批量写入数据库
+ *
+ * 逐 subtask 处理：写入成功后才从缓冲区删除，失败时保留以便下次重试。
+ * 避免 clear() 后写入失败导致数据永久丢失。
+ */
+async function flushOutputBuffers(): Promise<void> {
+  if (outputBuffers.size === 0) return;
+
+  // 快照当前所有 key，避免迭代时修改 Map
+  const pendingIds = Array.from(outputBuffers.keys());
+  const db = await getDbInstance();
+
+  for (const subTaskId of pendingIds) {
+    const chunk = outputBuffers.get(subTaskId);
+    if (!chunk) continue;
+
+    try {
+      await runDb(db, `UPDATE batch_subtasks SET output = COALESCE(output, '') || ? WHERE id = ?`, [
+        chunk,
+        subTaskId,
+      ]);
+      // 写入成功才删除缓冲
+      outputBuffers.delete(subTaskId);
+    } catch (err: unknown) {
+      logger.warn(
+        `[BatchRepo] 刷盘子任务 ${subTaskId} 输出失败，将在下次刷盘重试: ${err instanceof Error ? err.message : String(err)}`
+      );
+      // 写入失败，保留缓冲区数据不删除，下次重试
+    }
+  }
+}
+
+/**
+ * 停止输出缓冲定时器（模块卸载或测试清理时调用）
+ */
+export function stopOutputFlushTimer(): void {
+  if (flushTimer) {
+    clearInterval(flushTimer);
+    flushTimer = null;
+  }
+}
 
 // 行数据转换为 BatchTask 对象
-const rowToTask = (row: BatchTaskRow, subTasks: BatchSubTask[] = []): BatchTask => ({
-  taskId: row.id,
-  userId: row.user_id,
-  status: row.status,
-  concurrencyLimit: row.concurrency_limit,
-  overallProgress: row.overall_progress,
-  totalSubTasks: row.total_subtasks,
-  completedSubTasks: row.completed_subtasks,
-  failedSubTasks: row.failed_subtasks,
-  cancelledSubTasks: row.cancelled_subtasks,
-  message: row.message || undefined,
-  payload: JSON.parse(row.payload_json) as BatchExecPayload,
-  subTasks,
-  createdAt: new Date(row.created_at * 1000),
-  updatedAt: new Date(row.updated_at * 1000),
-  startedAt: row.started_at ? new Date(row.started_at * 1000) : undefined,
-  endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
-});
+const rowToTask = (row: BatchTaskRow, subTasks: BatchSubTask[] = []): BatchTask => {
+  let payload: BatchExecPayload;
+  try {
+    payload = (JSON.parse(row.payload_json) as BatchExecPayload) || {
+      command: '',
+      connectionIds: [],
+    };
+  } catch (error: unknown) {
+    // payload_json 损坏或为 null 时返回降级 payload，记录日志便于排查
+    const rawPayload = row.payload_json ?? '';
+    const preview = rawPayload.length > 200 ? `${rawPayload.slice(0, 200)}…` : rawPayload;
+    logger.warn(
+      { taskId: row.id, preview, error: error instanceof Error ? error.message : String(error) },
+      '[BatchRepo] payload_json 解析失败，使用降级 payload'
+    );
+    payload = { command: '', connectionIds: [] };
+  }
+
+  return {
+    taskId: row.id,
+    userId: row.user_id,
+    status: row.status,
+    concurrencyLimit: row.concurrency_limit,
+    overallProgress: row.overall_progress,
+    totalSubTasks: row.total_subtasks,
+    completedSubTasks: row.completed_subtasks,
+    failedSubTasks: row.failed_subtasks,
+    cancelledSubTasks: row.cancelled_subtasks,
+    message: row.message || undefined,
+    payload,
+    subTasks,
+    createdAt: new Date(row.created_at * 1000),
+    updatedAt: new Date(row.updated_at * 1000),
+    startedAt: row.started_at ? new Date(row.started_at * 1000) : undefined,
+    endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
+  };
+};
 
 // 行数据转换为 BatchSubTask 对象
 const rowToSubTask = (row: BatchSubTaskRow): BatchSubTask => ({
@@ -348,17 +434,15 @@ export const updateSubTaskStatus = async (
 };
 
 /**
- * 追加子任务输出（用于流式日志）
+ * 追加子任务输出（缓冲写入，定期批量刷盘）
+ *
+ * 高频写入场景下直接并发 COALESCE 写入同一行存在数据丢失风险，
+ * 改为 per-subtask 内存缓冲 + 定时批量写入，兼顾性能与可靠性。
  */
-export const appendSubTaskOutput = async (subTaskId: string, chunk: string): Promise<void> => {
-  const db = await getDbInstance();
-  await runDb(
-    db,
-    `
-        UPDATE batch_subtasks SET output = COALESCE(output, '') || ? WHERE id = ?
-    `,
-    [chunk, subTaskId]
-  );
+export const appendSubTaskOutput = (subTaskId: string, chunk: string): void => {
+  ensureFlushTimer();
+  const existing = outputBuffers.get(subTaskId) || '';
+  outputBuffers.set(subTaskId, existing + chunk);
 };
 
 /**
@@ -425,4 +509,52 @@ export const cleanupOldTasks = async (daysOld: number = 7): Promise<number> => {
   );
 
   return typeof result.changes === 'number' ? result.changes : 0;
+};
+
+/**
+ * 恢复孤儿任务：将所有非终态的 in-progress/queued 任务标记为 failed
+ *
+ * 服务器重启后内存中的 AbortController 丢失，这些任务永远无法完成。
+ * 在启动时扫描并标记为 failed，确保不会永久卡在中间状态。
+ *
+ * @param processStartedAt 进程启动时间戳（秒），用于排除本次启动期间新创建的合法任务。
+ *   传入后仅恢复 updated_at < processStartedAt 的任务（即上次进程遗留的）。
+ *   不传入则恢复全部非终态任务（保守策略）。
+ */
+export const recoverOrphanedTasks = async (processStartedAt?: number): Promise<number> => {
+  const db = await getDbInstance();
+  const result = await runDb(
+    db,
+    `
+        UPDATE batch_tasks
+        SET status = 'failed',
+            message = '服务器重启，任务中断',
+            ended_at = CAST(strftime('%s', 'now') AS INTEGER),
+            updated_at = CAST(strftime('%s', 'now') AS INTEGER)
+        WHERE status IN ('queued', 'in-progress')
+          ${processStartedAt ? 'AND updated_at < ?' : ''}
+    `,
+    processStartedAt ? [processStartedAt] : []
+  );
+
+  const count = typeof result.changes === 'number' ? result.changes : 0;
+  if (count > 0) {
+    // 同步更新子任务状态
+    await runDb(
+      db,
+      `
+          UPDATE batch_subtasks
+          SET status = 'failed',
+              message = '服务器重启，任务中断'
+          WHERE task_id IN (
+              SELECT id FROM batch_tasks
+              WHERE status = 'failed' AND message = '服务器重启，任务中断'
+          )
+            AND status IN ('queued', 'connecting', 'running')
+      `,
+      []
+    );
+  }
+
+  return count;
 };

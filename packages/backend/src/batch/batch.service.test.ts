@@ -247,10 +247,9 @@ describe('Batch Service', () => {
 
       expect(result).toBe(true);
       expect(BatchRepository.cancelSubTasks).toHaveBeenCalledWith('task-1', '用户主动取消');
-      expect(broadcastToUser).toHaveBeenCalledWith(1, {
-        type: 'batch:cancelled',
-        payload: { taskId: 'task-1', reason: '用户主动取消' },
-      });
+      // H2 修复：WS 终态事件统一由 finalizeTask 在 DB 写入后发送，
+      // cancelTask 不再提前广播 batch:cancelled 事件，避免竞态条件
+      expect(broadcastToUser).not.toHaveBeenCalled();
     });
 
     it('应使用默认取消原因', async () => {
