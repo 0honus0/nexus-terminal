@@ -4,7 +4,7 @@
  */
 
 // AI Provider 类型
-export type AIProvider = 'openai' | 'gemini' | 'claude';
+export type AIProvider = 'openai' | 'claude';
 
 // OpenAI API 端点类型
 export type OpenAIEndpoint = 'chat/completions' | 'responses';
@@ -48,13 +48,15 @@ export interface NL2CMDStreamEvent {
 export interface OpenAIChatRequest {
   model: string;
   messages: Array<{
-    role: 'system' | 'user' | 'assistant';
+    role: 'developer' | 'system' | 'user' | 'assistant';
     content: string;
   }>;
   temperature?: number;
   max_tokens?: number;
   max_completion_tokens?: number;
   stream?: boolean; // 流式响应开关
+  stream_options?: { include_usage: boolean }; // 流式响应时返回 token 用量
+  response_format?: { type: 'json_object' }; // 结构化输出
 }
 
 // OpenAI Chat Completions API 响应
@@ -93,44 +95,18 @@ export interface OpenAIResponsesResponse {
   object: string;
   created: number;
   model: string;
-  response: string;
+  response?: string;
+  output?: Array<{
+    type: string;
+    content?: Array<{
+      type: string;
+      text: string;
+    }>;
+  }>;
   usage?: {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
-  };
-}
-
-// Gemini API 请求
-export interface GeminiRequest {
-  contents: Array<{
-    role?: string;
-    parts: Array<{
-      text: string;
-    }>;
-  }>;
-  generationConfig?: {
-    temperature?: number;
-    maxOutputTokens?: number;
-  };
-}
-
-// Gemini API 响应
-export interface GeminiResponse {
-  candidates: Array<{
-    content: {
-      parts: Array<{
-        text: string;
-      }>;
-      role: string;
-    };
-    finishReason: string;
-    index: number;
-  }>;
-  usageMetadata?: {
-    promptTokenCount: number;
-    candidatesTokenCount: number;
-    totalTokenCount: number;
   };
 }
 
@@ -144,6 +120,7 @@ export interface ClaudeRequest {
   max_tokens: number;
   temperature?: number;
   system?: string;
+  metadata?: { user_id: string }; // 用于滥用监控
 }
 
 // Claude API 响应

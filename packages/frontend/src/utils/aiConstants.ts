@@ -4,27 +4,20 @@
  */
 
 /** OpenAI API 默认 Base URL */
-export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
-
-/** Gemini API 默认 Base URL */
-export const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
+export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 /** Claude API 默认 Base URL */
-export const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com';
+export const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
 
 /** AI Provider 默认配置 */
 export const AI_PROVIDER_DEFAULTS = {
   openai: {
     baseUrl: DEFAULT_OPENAI_BASE_URL,
-    model: 'gpt-4o-mini',
-    endpoint: 'chat/completions' as const,
-  },
-  gemini: {
-    baseUrl: DEFAULT_GEMINI_BASE_URL,
-    model: 'gemini-2.0-flash',
+    model: 'gpt-5-nano',
+    endpoint: '/chat/completions' as const,
   },
   claude: {
     baseUrl: DEFAULT_CLAUDE_BASE_URL,
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-sonnet-4-6',
   },
 } as const;

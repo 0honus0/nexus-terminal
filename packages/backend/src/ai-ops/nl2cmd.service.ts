@@ -5,7 +5,7 @@
  * 优化特性：
  * - Axios 客户端单例复用
  * - 流式响应支持
- * - 快速失败（不重试）
+ * - 429 限流指数退避重试
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
@@ -17,20 +17,33 @@ import {
   OpenAIChatResponse,
   OpenAIResponsesRequest,
   OpenAIResponsesResponse,
-  GeminiRequest,
-  GeminiResponse,
   ClaudeRequest,
   ClaudeResponse,
   AISettings,
 } from './nl2cmd.types';
 import { NL2CMD_CONFIG, safeBaseUrlForLog, shouldLogTiming } from './nl2cmd.constants';
 import { settingsRepository } from '../settings/settings.repository';
+import crypto from 'crypto';
 import { encrypt, decrypt } from '../utils/crypto';
 import { ErrorFactory } from '../utils/AppError';
 import { logger } from '../utils/logger';
 import { validateUrlNotPrivate } from '../utils/url';
 
 const AI_SETTINGS_KEY = 'aiProviderConfig';
+
+/**
+ * Provider 调用结果（含 token 用量）
+ */
+interface ProviderResult {
+  command: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+}
 
 /**
  * Axios 客户端缓存（按 baseUrl + apiKey 缓存，带 LRU 淘汰）
@@ -42,8 +55,14 @@ const AXIOS_CACHE_MAX_SIZE = 16;
 /**
  * 获取或创建 Axios 客户端（单例复用）
  */
+function getCacheKey(baseUrl: string, apiKey: string, prefix?: string): string {
+  // 使用完整 apiKey 的 hex digest 避免前缀碰撞
+  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
+  return prefix ? `${prefix}:${baseUrl}::${keyHash}` : `${baseUrl}::${keyHash}`;
+}
+
 function getAxiosClient(baseUrl: string, apiKey: string): AxiosInstance {
-  const cacheKey = `${baseUrl}::${apiKey.substring(0, 8)}`;
+  const cacheKey = getCacheKey(baseUrl, apiKey);
 
   let client = axiosClientCache.get(cacheKey);
   if (!client) {
@@ -150,15 +169,21 @@ function detectSystemInfo(osType?: string, shellType?: string): { os: string; sh
 }
 
 /**
- * 清理用户输入，防止 Prompt 注入
+ * 清理用户输入，防止 Prompt 注入和 Unicode 同形字攻击
  */
 function sanitizeUserInput(input: string): string {
-  return input
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/```/g, '')
-    .replace(/\${/g, '')
-    .trim()
-    .slice(0, NL2CMD_CONFIG.MAX_QUERY_LENGTH);
+  return (
+    input
+      // NFKC 标准化：将全角字符、组合字符等统一为等效 ASCII 形式
+      .normalize('NFKC')
+      // 剥离零宽字符和不可见格式字符（U+200B-U+200F, U+2028-U+202F, U+FEFF）
+      .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/```/g, '')
+      .replace(/\${/g, '')
+      .trim()
+      .slice(0, NL2CMD_CONFIG.MAX_QUERY_LENGTH)
+  );
 }
 
 /**
@@ -169,9 +194,7 @@ function buildNL2CMDPrompt(request: NL2CMDRequest): string {
   const currentPath = request.currentPath || '~';
   const sanitizedQuery = sanitizeUserInput(request.query);
 
-  return `你是一个专业的命令行助手。请将用户的自然语言描述转换为对应的命令行指令。
-
-系统信息：
+  return `系统信息：
 - 操作系统：${os}
 - Shell 类型：${shell}
 - 当前路径：${currentPath}
@@ -182,10 +205,11 @@ function buildNL2CMDPrompt(request: NL2CMDRequest): string {
 3. 如果需要多条命令，使用 && 或 ; 连接
 4. 确保命令语法适配指定的操作系统和 Shell 类型
 5. 对于危险操作（如 rm -rf），添加 --interactive 或 -i 等安全选项
+6. 以 JSON 格式返回：{"command": "命令内容"}
 
 用户描述：${sanitizedQuery}
 
-请直接返回命令：`;
+请以 JSON 格式返回：{"command": "命令内容"}`;
 }
 
 /**
@@ -217,15 +241,16 @@ function detectDangerousCommand(command: string): string | undefined {
 async function callOpenAIChatCompletions(
   config: AIProviderConfig,
   prompt: string,
-  stream: boolean = false
-): Promise<string> {
+  stream: boolean = false,
+  endpointPath: string = '/chat/completions'
+): Promise<ProviderResult> {
   const client = getAxiosClient(config.baseUrl, config.apiKey);
 
   const requestBody: OpenAIChatRequest = {
     model: config.model,
     messages: [
       {
-        role: 'system',
+        role: 'developer',
         content: '你是一个专业的命令行助手，专门帮助用户将自然语言转换为精确的命令行指令。',
       },
       {
@@ -240,45 +265,32 @@ async function callOpenAIChatCompletions(
 
   if (stream) {
     requestBody.stream = true;
+    requestBody.stream_options = { include_usage: true };
   }
 
-  const postChatCompletions = async (body: OpenAIChatRequest): Promise<string> => {
+  const postChatCompletions = async (body: OpenAIChatRequest): Promise<ProviderResult> => {
     // 流式响应需要设置 responseType
     if (stream) {
-      const streamResponse = await client.post('/v1/chat/completions', body, {
+      const streamResponse = await client.post(endpointPath, body, {
         responseType: 'stream',
       });
-      return await parseStreamResponse(streamResponse.data);
+      return { command: await parseStreamResponse(streamResponse.data) };
     }
 
-    const response = await client.post<OpenAIChatResponse>('/v1/chat/completions', body);
+    const response = await client.post<OpenAIChatResponse>(endpointPath, body);
     const choices = response.data?.choices;
     if (!choices || choices.length === 0) {
       throw new Error('OpenAI API 返回空响应');
     }
 
     const content = choices[0]?.message?.content || '';
-    return content.trim();
+    return {
+      command: content.trim(),
+      usage: response.data?.usage,
+    };
   };
 
-  try {
-    return await postChatCompletions(requestBody);
-  } catch (error: unknown) {
-    // 兼容：部分 OpenAI-compatible 端点仍只接受 max_tokens
-    if (
-      axios.isAxiosError(error) &&
-      isUnrecognizedRequestArgument(error, 'max_completion_tokens') &&
-      requestBody.max_completion_tokens !== undefined
-    ) {
-      const fallbackBody: OpenAIChatRequest = {
-        ...requestBody,
-        max_tokens: requestBody.max_completion_tokens,
-      };
-      delete (fallbackBody as { max_completion_tokens?: number }).max_completion_tokens;
-      return await postChatCompletions(fallbackBody);
-    }
-    throw error;
-  }
+  return retryWithBackoff(() => postChatCompletions(requestBody));
 }
 
 /**
@@ -344,9 +356,175 @@ async function parseStreamResponse(data: unknown): Promise<string> {
 }
 
 /**
+ * 流式解析 SSE 响应，通过回调逐块返回
+ * 用于真 streaming 场景
+ */
+async function parseStreamResponseWithCallback(
+  data: unknown,
+  onChunk: (chunk: string) => void
+): Promise<string> {
+  const chunks: string[] = [];
+
+  const processLine = (line: string) => {
+    if (line.startsWith('data: ')) {
+      const jsonStr = line.slice(6);
+      if (jsonStr === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) {
+          chunks.push(content);
+          onChunk(content);
+        }
+      } catch {
+        logger.debug('[NL2CMD] SSE streaming 数据块解析失败');
+      }
+    }
+  };
+
+  if (data && typeof data === 'object' && 'on' in data) {
+    const stream = data as NodeJS.ReadableStream;
+    const decoder = new (require('string_decoder').StringDecoder)('utf-8');
+    let partial = '';
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (chunk: Buffer) => {
+        partial += decoder.write(chunk);
+        const lines = partial.split('\n');
+        partial = lines.pop() || '';
+        for (const line of lines) processLine(line.trim());
+      });
+      stream.on('end', () => {
+        if (partial) processLine(partial.trim());
+        resolve();
+      });
+      stream.on('error', reject);
+    });
+  } else if (Buffer.isBuffer(data)) {
+    for (const line of data.toString('utf-8').split('\n')) processLine(line.trim());
+  }
+
+  return chunks.join('');
+}
+
+/**
+ * 生成命令（流式版本）
+ * 通过回调逐块返回 AI 生成的内容
+ */
+export async function generateCommandStream(
+  request: NL2CMDRequest,
+  onChunk: (chunk: string) => void,
+  traceId?: string,
+  signal?: AbortSignal
+): Promise<NL2CMDResponse> {
+  const startTime = Date.now();
+  try {
+    const settings = await getAISettings();
+    if (!settings || !settings.enabled) {
+      return { success: false, error: 'AI 功能未启用或未配置' };
+    }
+    const config: AIProviderConfig = {
+      provider: settings.provider,
+      baseUrl: settings.baseUrl,
+      apiKey: settings.apiKey,
+      model: settings.model,
+      openaiEndpoint: settings.openaiEndpoint,
+    };
+    const prompt = buildNL2CMDPrompt(request);
+    await validateUrlNotPrivate(config.baseUrl, 'NL2CMD generateCommandStream');
+
+    let providerResult: ProviderResult;
+    const providerStart = Date.now();
+
+    if (config.provider === 'openai' && !(config.openaiEndpoint || '').includes('responses')) {
+      // 真 streaming：OpenAI Chat Completions
+      const client = getAxiosClient(config.baseUrl, config.apiKey);
+      const requestBody: OpenAIChatRequest = {
+        model: config.model,
+        messages: [
+          {
+            role: 'developer',
+            content: '你是一个专业的命令行助手，专门帮助用户将自然语言转换为精确的命令行指令。',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: NL2CMD_CONFIG.TEMPERATURE,
+        max_completion_tokens: NL2CMD_CONFIG.MAX_OUTPUT_TOKENS,
+        stream: true,
+        stream_options: { include_usage: true },
+      };
+      const endpointPath = (() => {
+        const ep = config.openaiEndpoint || '/chat/completions';
+        const normalizedEp = ep.startsWith('/') ? ep : `/${ep}`;
+        return `${config.baseUrl.replace(/\/$/, '')}${normalizedEp}`;
+      })();
+      const streamResponse = await retryWithBackoff(() =>
+        client.post(endpointPath, requestBody, {
+          responseType: 'stream',
+          signal,
+        })
+      );
+      const command = await parseStreamResponseWithCallback(streamResponse.data, onChunk);
+      providerResult = { command };
+    } else {
+      // 非 streaming provider：缓冲完整响应
+      switch (config.provider) {
+        case 'openai':
+          providerResult = await callOpenAIResponses(config, prompt);
+          break;
+        case 'claude':
+          providerResult = await callClaude(config, prompt);
+          break;
+        default:
+          return { success: false, error: '不支持的 AI Provider' };
+      }
+      onChunk(providerResult.command);
+    }
+
+    const rawCommand = providerResult.command;
+    const providerMs = Date.now() - providerStart;
+    const command = cleanCommandOutput(rawCommand);
+    if (!command) return { success: false, error: 'AI 未能生成有效命令，请尝试更详细的描述' };
+    const warning = detectDangerousCommand(command);
+    const totalMs = Date.now() - startTime;
+    if (shouldLogTiming(totalMs)) {
+      logger.info('[NL2CMD Timing] Stream Success', {
+        traceId,
+        totalMs,
+        providerMs,
+        provider: config.provider,
+        model: config.model,
+        baseUrl: safeBaseUrlForLog(config.baseUrl),
+        queryLen: request.query.length,
+        commandLen: command.length,
+        streaming: true,
+        ...(providerResult.usage ? { usage: providerResult.usage } : {}),
+      });
+    }
+    return { success: true, command, warning, streaming: true };
+  } catch (error: unknown) {
+    const totalMs = Date.now() - startTime;
+    if (axios.isAxiosError(error)) {
+      const errorMessage = buildErrorMessage(error);
+      if (shouldLogTiming(totalMs)) {
+        logger.warn('[NL2CMD Timing] Stream Failed', { traceId, totalMs, error: errorMessage });
+      }
+      return { success: false, error: errorMessage };
+    }
+    if (shouldLogTiming(totalMs)) {
+      logger.warn('[NL2CMD Timing] Stream Failed', { traceId, totalMs, error: String(error) });
+    }
+    return { success: false, error: '生成命令失败' };
+  }
+}
+
+/**
  * 调用 OpenAI API (Responses)
  */
-async function callOpenAIResponses(config: AIProviderConfig, prompt: string): Promise<string> {
+async function callOpenAIResponses(
+  config: AIProviderConfig,
+  prompt: string,
+  endpointPath: string = '/responses'
+): Promise<ProviderResult> {
   const client = getAxiosClient(config.baseUrl, config.apiKey);
 
   const requestBody: OpenAIResponsesRequest = {
@@ -356,114 +534,112 @@ async function callOpenAIResponses(config: AIProviderConfig, prompt: string): Pr
     max_output_tokens: NL2CMD_CONFIG.MAX_OUTPUT_TOKENS,
   };
 
-  const postResponses = async (body: OpenAIResponsesRequest): Promise<OpenAIResponsesResponse> => {
-    const response = await client.post<OpenAIResponsesResponse>('/v1/responses', body);
-    return response.data;
-  };
+  return retryWithBackoff(async () => {
+    const response = await client.post<OpenAIResponsesResponse>(endpointPath, requestBody);
+    const data = response.data;
 
-  let data: OpenAIResponsesResponse;
-  try {
-    data = await postResponses(requestBody);
-  } catch (error: unknown) {
-    // 兼容：部分 OpenAI-compatible 端点仍沿用 max_tokens
-    if (
-      axios.isAxiosError(error) &&
-      isUnrecognizedRequestArgument(error, 'max_output_tokens') &&
-      requestBody.max_output_tokens !== undefined
-    ) {
-      const fallbackBody: OpenAIResponsesRequest = {
-        ...requestBody,
-        max_tokens: requestBody.max_output_tokens,
-      };
-      delete (fallbackBody as { max_output_tokens?: number }).max_output_tokens;
-      data = await postResponses(fallbackBody);
-    } else {
+    if (!data) {
+      throw new Error('OpenAI Responses API 返回空响应');
+    }
+
+    // 从 output 数组提取文本（兼容 response 字段回退）
+    let content = '';
+    if (data.output && Array.isArray(data.output)) {
+      for (const item of data.output) {
+        if (item.type === 'message' && item.content) {
+          for (const part of item.content) {
+            if (part.type === 'output_text' && part.text) {
+              content = part.text;
+              break;
+            }
+          }
+        }
+        if (content) break;
+      }
+    }
+    // 兼容旧版：尝试 response 字段
+    if (!content) {
+      content = data.response || '';
+    }
+    if (!content) {
+      throw new Error('OpenAI Responses API 返回空响应');
+    }
+
+    return {
+      command: content.trim(),
+      usage: data.usage,
+    };
+  });
+}
+
+const MAX_RETRY_ATTEMPTS = 2;
+const RETRY_BASE_DELAY_MS = 1000;
+
+/**
+ * 429 限流重试包装器，指数退避
+ * 仅对 429 状态码重试，其他错误立即抛出
+ */
+async function retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      lastError = error;
+      if (
+        attempt < MAX_RETRY_ATTEMPTS &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 429
+      ) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        logger.warn(`[NL2CMD] 429 限流，${delay}ms 后重试 (${attempt + 1}/${MAX_RETRY_ATTEMPTS})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
       throw error;
     }
   }
-
-  if (!data || !data.response) {
-    throw new Error('OpenAI Responses API 返回空响应');
-  }
-
-  const content = data.response || '';
-  return content.trim();
-}
-
-function isUnrecognizedRequestArgument(error: AxiosError, argumentName: string): boolean {
-  if (error.response?.status !== 400) return false;
-  const data = error.response?.data as unknown;
-  const dataObject =
-    typeof data === 'object' && data !== null
-      ? (data as { error?: { message?: unknown }; message?: unknown })
-      : undefined;
-
-  const message =
-    (typeof dataObject?.error?.message === 'string' ? dataObject.error.message : undefined) ??
-    (typeof dataObject?.message === 'string' ? dataObject.message : undefined) ??
-    (typeof data === 'string' ? data : undefined);
-
-  if (typeof message !== 'string') return false;
-
-  return (
-    message.includes(`Unrecognized request argument supplied: ${argumentName}`) ||
-    message.includes(`Unrecognized request argument: ${argumentName}`) ||
-    message.includes(`Unrecognized request argument supplied: '${argumentName}'`) ||
-    (/unknown (parameter|field)/i.test(message) && message.includes(argumentName)) ||
-    (/unexpected (parameter|field)/i.test(message) && message.includes(argumentName))
-  );
-}
-
-/**
- * 调用 Gemini API
- */
-async function callGemini(config: AIProviderConfig, prompt: string): Promise<string> {
-  const requestBody: GeminiRequest = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: prompt }],
-      },
-    ],
-    generationConfig: {
-      temperature: NL2CMD_CONFIG.TEMPERATURE,
-      maxOutputTokens: NL2CMD_CONFIG.MAX_OUTPUT_TOKENS,
-    },
-  };
-
-  const baseUrl = config.baseUrl.replace(/\/$/, '');
-  const url = `${baseUrl}/v1beta/models/${config.model}:generateContent`;
-
-  const response = await axios.post<GeminiResponse>(url, requestBody, {
-    params: { key: config.apiKey },
-    headers: { 'Content-Type': 'application/json' },
-    timeout: NL2CMD_CONFIG.REQUEST_TIMEOUT_MS,
-  });
-
-  const candidates = response.data?.candidates;
-  if (!candidates || candidates.length === 0) {
-    throw new Error('Gemini API 返回空响应');
-  }
-
-  const content = candidates[0]?.content?.parts?.[0]?.text || '';
-  return content.trim();
+  throw lastError;
 }
 
 /**
  * 调用 Claude API
  * 注意：Claude API 需要特定的 headers，不能使用共享的 getAxiosClient
  */
-async function callClaude(config: AIProviderConfig, prompt: string): Promise<string> {
-  const client = axios.create({
-    baseURL: config.baseUrl,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    timeout: NL2CMD_CONFIG.REQUEST_TIMEOUT_MS,
-  });
+function getClaudeClient(config: AIProviderConfig): AxiosInstance {
+  // 兼容旧版 baseUrl（不含 /v1）：自动补全
+  const normalizedBaseUrl =
+    config.baseUrl.replace(/\/$/, '') + (config.baseUrl.includes('/v1') ? '' : '/v1');
+  const cacheKey = getCacheKey(normalizedBaseUrl, config.apiKey, 'claude');
+  let client = axiosClientCache.get(cacheKey);
+  if (client) {
+    // LRU：命中时刷新访问顺序
+    axiosClientCache.delete(cacheKey);
+    axiosClientCache.set(cacheKey, client);
+    return client;
+  }
+  {
+    client = axios.create({
+      baseURL: normalizedBaseUrl,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      timeout: NL2CMD_CONFIG.REQUEST_TIMEOUT_MS,
+    });
+    if (axiosClientCache.size >= AXIOS_CACHE_MAX_SIZE) {
+      const firstKey = axiosClientCache.keys().next().value;
+      if (firstKey) axiosClientCache.delete(firstKey);
+    }
+    axiosClientCache.set(cacheKey, client);
+  }
+  return client;
+}
+
+async function callClaude(config: AIProviderConfig, prompt: string): Promise<ProviderResult> {
+  const client = getClaudeClient(config);
 
   const requestBody: ClaudeRequest = {
     model: config.model,
@@ -473,22 +649,41 @@ async function callClaude(config: AIProviderConfig, prompt: string): Promise<str
     messages: [{ role: 'user', content: prompt }],
   };
 
-  const response = await client.post<ClaudeResponse>('/v1/messages', requestBody);
+  return retryWithBackoff(async () => {
+    const response = await client.post<ClaudeResponse>('/messages', requestBody);
 
-  const contentArray = response.data?.content;
-  if (!contentArray || contentArray.length === 0) {
-    throw new Error('Claude API 返回空响应');
-  }
+    const contentArray = response.data?.content;
+    if (!contentArray || contentArray.length === 0) {
+      throw new Error('Claude API 返回空响应');
+    }
 
-  const content = contentArray[0]?.text || '';
-  return content.trim();
+    const content = contentArray[0]?.text || '';
+    return {
+      command: content.trim(),
+      usage: response.data?.usage,
+    };
+  });
 }
 
 /**
- * 清理 AI 返回的命令（移除 Markdown 代码块等）
+ * 清理 AI 返回的命令（优先解析 JSON，回退到正则清理）
  */
 function cleanCommandOutput(output: string): string {
-  let cleaned = output.replace(/```[\w]*\n?/g, '').replace(/```/g, '');
+  // 先剥离 Markdown 代码块围栏，再尝试 JSON 解析
+  let cleaned = output
+    .replace(/```[\w]*\n?/g, '')
+    .replace(/```/g, '')
+    .trim();
+
+  // 优先尝试解析 JSON 格式响应
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed && typeof parsed.command === 'string' && parsed.command.trim()) {
+      return parsed.command.trim();
+    }
+  } catch {
+    // 非 JSON 响应，继续使用正则清理
+  }
 
   // 移除反引号包裹的单行代码
   cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
@@ -500,9 +695,9 @@ function cleanCommandOutput(output: string): string {
   const lines = cleaned.split('\n');
   if (lines.length > 1) {
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('//')) {
-        return trimmed;
+      const lineTrimmed = line.trim();
+      if (lineTrimmed && !lineTrimmed.startsWith('#') && !lineTrimmed.startsWith('//')) {
+        return lineTrimmed;
       }
     }
   }
@@ -574,7 +769,7 @@ function buildErrorMessage(error: AxiosError): string {
 
 /**
  * 生成命令（主函数）
- * 特性：快速失败，不重试
+ * 特性：429 限流自动重试（指数退避）
  */
 export async function generateCommand(
   request: NL2CMDRequest,
@@ -613,30 +808,39 @@ export async function generateCommand(
 
     // 调用 AI Provider
     const providerStart = Date.now();
-    let rawCommand: string;
+    let providerResult: ProviderResult;
 
     const streamingEnabled = settings.streamingEnabled ?? false;
 
     // SSRF 防护：验证 AI Provider baseUrl 不指向私有/内部网络
     await validateUrlNotPrivate(config.baseUrl, 'NL2CMD generateCommand');
 
+    const endpointPath = (() => {
+      const ep = config.openaiEndpoint || '/chat/completions';
+      const normalizedEp = ep.startsWith('/') ? ep : `/${ep}`;
+      return `${config.baseUrl.replace(/\/$/, '')}${normalizedEp}`;
+    })();
     switch (config.provider) {
       case 'openai':
-        if (config.openaiEndpoint === 'responses') {
-          rawCommand = await callOpenAIResponses(config, prompt);
+        if (endpointPath.includes('responses')) {
+          providerResult = await callOpenAIResponses(config, prompt, endpointPath);
         } else {
-          rawCommand = await callOpenAIChatCompletions(config, prompt, streamingEnabled);
+          providerResult = await callOpenAIChatCompletions(
+            config,
+            prompt,
+            streamingEnabled,
+            endpointPath
+          );
         }
         break;
-      case 'gemini':
-        rawCommand = await callGemini(config, prompt);
-        break;
       case 'claude':
-        rawCommand = await callClaude(config, prompt);
+        providerResult = await callClaude(config, prompt);
         break;
       default:
         return { success: false, error: '不支持的 AI Provider' };
     }
+
+    const rawCommand = providerResult.command;
 
     const providerMs = Date.now() - providerStart;
 
@@ -685,6 +889,7 @@ export async function generateCommand(
         hasWarning: Boolean(warning),
         commandLen: command.length,
         streaming: streamingEnabled,
+        ...(providerResult.usage ? { usage: providerResult.usage } : {}),
       });
     }
 
@@ -743,16 +948,18 @@ export async function testAIConnection(
     await validateUrlNotPrivate(config.baseUrl, 'NL2CMD testAIConnection');
 
     const providerStart = Date.now();
+    const endpointPath = (() => {
+      const ep = config.openaiEndpoint || '/chat/completions';
+      const normalizedEp = ep.startsWith('/') ? ep : `/${ep}`;
+      return `${config.baseUrl.replace(/\/$/, '')}${normalizedEp}`;
+    })();
     switch (config.provider) {
       case 'openai':
-        if (config.openaiEndpoint === 'responses') {
-          await callOpenAIResponses(config, prompt);
+        if (endpointPath.includes('responses')) {
+          await callOpenAIResponses(config, prompt, endpointPath);
         } else {
-          await callOpenAIChatCompletions(config, prompt);
+          await callOpenAIChatCompletions(config, prompt, false, endpointPath);
         }
-        break;
-      case 'gemini':
-        await callGemini(config, prompt);
         break;
       case 'claude':
         await callClaude(config, prompt);

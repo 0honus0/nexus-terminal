@@ -103,8 +103,8 @@ export const getAISettings = async (req: Request, res: Response): Promise<void> 
           provider: 'openai',
           baseUrl: 'https://api.openai.com',
           apiKey: '',
-          model: 'gpt-4o-mini',
-          openaiEndpoint: 'chat/completions',
+          model: 'gpt-5-nano',
+          openaiEndpoint: '/chat/completions',
           rateLimitEnabled: true,
           streamingEnabled: false,
         },
@@ -155,10 +155,10 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
     return;
   }
 
-  if (!['openai', 'gemini', 'claude'].includes(provider)) {
+  if (!['openai', 'claude'].includes(provider)) {
     res.status(400).json({
       success: false,
-      error: 'provider 必须是 openai, gemini 或 claude',
+      error: 'provider 必须是 openai 或 claude',
       code: 'VALIDATION_ERROR',
     });
     return;
@@ -190,7 +190,7 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
       baseUrl,
       apiKey: finalApiKey || '',
       model,
-      openaiEndpoint: provider === 'openai' ? openaiEndpoint || 'chat/completions' : undefined,
+      openaiEndpoint: provider === 'openai' ? openaiEndpoint || '/chat/completions' : undefined,
       rateLimitEnabled: rateLimitEnabled !== false,
       streamingEnabled: streamingEnabled === true, // 显式处理流式开关
     };
@@ -204,6 +204,85 @@ export const saveAISettings = async (req: Request, res: Response): Promise<void>
   } catch (error: unknown) {
     logger.error('[NL2CMD Controller] 保存 AI 配置失败:', error);
     res.status(500).json({ success: false, error: '保存 AI 配置失败', code: 'INTERNAL_ERROR' });
+  }
+};
+
+/**
+ * 生成命令（流式 SSE）
+ * POST /api/v1/ai/nl2cmd/stream
+ */
+export const generateCommandStream = async (req: Request, res: Response): Promise<void> => {
+  const userId = getUserId(req);
+  if (!userId) {
+    res.status(401).json({ success: false, error: '未授权', code: 'UNAUTHORIZED' });
+    return;
+  }
+
+  const { query, osType, shellType, currentPath } = req.body;
+  const traceId = createTraceId();
+  res.setHeader('x-request-id', traceId);
+
+  if (!query || typeof query !== 'string' || query.trim().length === 0) {
+    res.status(400).json({ success: false, error: '查询内容不能为空' });
+    return;
+  }
+
+  if (query.length > NL2CMD_CONFIG.MAX_QUERY_LENGTH) {
+    res.status(400).json({ success: false, error: '查询内容不能超过 500 字符' });
+    return;
+  }
+
+  // 设置 SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const request: NL2CMDRequest = { query: query.trim(), osType, shellType, currentPath };
+  let clientDisconnected = false;
+
+  // 客户端断开时中止上游请求
+  const abortController = new AbortController();
+  req.on('close', () => {
+    clientDisconnected = true;
+    abortController.abort();
+    logger.debug('[NL2CMD] SSE 客户端断开，中止上游请求', { traceId });
+  });
+
+  const start = Date.now();
+  try {
+    const response = await NL2CMDService.generateCommandStream(
+      request,
+      (chunk) => {
+        if (!clientDisconnected && !res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+        }
+      },
+      traceId,
+      abortController.signal
+    );
+
+    if (!clientDisconnected && !res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'done', ...response })}\n\n`);
+      res.end();
+    }
+
+    const durationMs = Date.now() - start;
+    if (shouldLogTiming(durationMs)) {
+      logger.info('[NL2CMD HTTP] /nl2cmd/stream', {
+        traceId,
+        ok: response.success,
+        durationMs,
+        queryLen: request.query.length,
+      });
+    }
+  } catch (error: unknown) {
+    logger.error('[NL2CMD Controller] 流式生成命令失败:', error);
+    if (!clientDisconnected && !res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: '生成命令失败' })}\n\n`);
+      res.end();
+    }
   }
 };
 
@@ -224,10 +303,10 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
   res.setHeader('x-request-id', traceId);
 
   // 参数验证
-  if (!['openai', 'gemini', 'claude'].includes(provider)) {
+  if (!['openai', 'claude'].includes(provider)) {
     res.status(400).json({
       success: false,
-      error: 'provider 必须是 openai, gemini 或 claude',
+      error: 'provider 必须是 openai 或 claude',
       code: 'VALIDATION_ERROR',
     });
     return;
@@ -263,7 +342,7 @@ export const testAIConnection = async (req: Request, res: Response): Promise<voi
       baseUrl,
       apiKey: finalApiKey,
       model,
-      openaiEndpoint: provider === 'openai' ? openaiEndpoint || 'chat/completions' : undefined,
+      openaiEndpoint: provider === 'openai' ? openaiEndpoint || '/chat/completions' : undefined,
     };
 
     const success = await NL2CMDService.testAIConnection(config, traceId);

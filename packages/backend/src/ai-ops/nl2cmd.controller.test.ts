@@ -125,8 +125,8 @@ describe('NL2CMD Controller', () => {
           provider: 'openai',
           baseUrl: 'https://api.openai.com',
           apiKey: '',
-          model: 'gpt-4o-mini',
-          openaiEndpoint: 'chat/completions',
+          model: 'gpt-5-nano',
+          openaiEndpoint: '/chat/completions',
           rateLimitEnabled: true,
           streamingEnabled: false,
         },
@@ -182,7 +182,7 @@ describe('NL2CMD Controller', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
-        error: 'provider 必须是 openai, gemini 或 claude',
+        error: 'provider 必须是 openai 或 claude',
         code: 'VALIDATION_ERROR',
       });
     });
@@ -197,7 +197,7 @@ describe('NL2CMD Controller', () => {
           baseUrl: 'https://api.openai.com',
           apiKey: 'sk-test',
           model: 'gpt-4',
-          openaiEndpoint: 'chat/completions',
+          openaiEndpoint: '/chat/completions',
         },
       });
       const res = createMockResponse();

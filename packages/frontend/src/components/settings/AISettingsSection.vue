@@ -45,30 +45,23 @@
             "
           >
             <option value="openai">OpenAI</option>
-            <option value="gemini">Google Gemini</option>
             <option value="claude">Anthropic Claude</option>
           </select>
         </div>
       </div>
 
-      <!-- OpenAI Endpoint 选择（仅 OpenAI 可见） -->
+      <!-- OpenAI Endpoint 路径（仅 OpenAI 可见） -->
       <div v-if="localSettings.provider === 'openai'">
-        <label class="text-sm font-medium text-foreground">OpenAI API Endpoint</label>
-        <div class="relative mt-2">
-          <select
-            v-model="localSettings.openaiEndpoint"
-            class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary appearance-none bg-no-repeat bg-right pr-8"
-            style="
-              background-image: url(&quot;data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e&quot;);
-              background-position: right 0.75rem center;
-              background-size: 16px 12px;
-            "
-          >
-            <option value="chat/completions">Chat Completions (/v1/chat/completions)</option>
-            <option value="responses">Responses (/v1/responses)</option>
-          </select>
-        </div>
-        <p class="text-xs text-muted-foreground mt-1">选择使用的 OpenAI API 端点类型</p>
+        <label class="text-sm font-medium text-foreground">API Endpoint 路径</label>
+        <input
+          v-model="localSettings.openaiEndpoint"
+          type="text"
+          class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary mt-2"
+          :placeholder="getEndpointPlaceholder()"
+        />
+        <p class="text-xs text-muted-foreground mt-1">
+          完整路径（如 <code>/chat/completions</code>），将拼接到 Base URL 后。确保路径准确。
+        </p>
       </div>
 
       <!-- Base URL -->
@@ -288,11 +281,6 @@ function handleProviderChange() {
       localSettings.value.model = AI_PROVIDER_DEFAULTS.openai.model;
       localSettings.value.openaiEndpoint = AI_PROVIDER_DEFAULTS.openai.endpoint;
       break;
-    case 'gemini':
-      localSettings.value.baseUrl = AI_PROVIDER_DEFAULTS.gemini.baseUrl;
-      localSettings.value.model = AI_PROVIDER_DEFAULTS.gemini.model;
-      delete localSettings.value.openaiEndpoint;
-      break;
     case 'claude':
       localSettings.value.baseUrl = AI_PROVIDER_DEFAULTS.claude.baseUrl;
       localSettings.value.model = AI_PROVIDER_DEFAULTS.claude.model;
@@ -306,8 +294,6 @@ function getBaseUrlPlaceholder(): string {
   switch (localSettings.value.provider) {
     case 'openai':
       return `OpenAI API 地址，默认为 ${AI_PROVIDER_DEFAULTS.openai.baseUrl}`;
-    case 'gemini':
-      return `Gemini API 地址，默认为 ${AI_PROVIDER_DEFAULTS.gemini.baseUrl}`;
     case 'claude':
       return `Claude API 地址，默认为 ${AI_PROVIDER_DEFAULTS.claude.baseUrl}`;
     default:
@@ -315,13 +301,16 @@ function getBaseUrlPlaceholder(): string {
   }
 }
 
+// 获取 Endpoint 占位符
+function getEndpointPlaceholder(): string {
+  return '/v1/chat/completions';
+}
+
 // 获取模型占位符
 function getModelPlaceholder(): string {
   switch (localSettings.value.provider) {
     case 'openai':
-      return 'gpt-4o-mini, gpt-4o, gpt-4-turbo 等';
-    case 'gemini':
-      return 'gemini-2.0-flash, gemini-1.5-pro 等';
+      return 'gpt-4o, gpt-4o-mini, gpt-4-turbo 等';
     case 'claude':
       return 'claude-sonnet-4, claude-3-5-haiku-20241022 等';
     default:
@@ -334,10 +323,8 @@ function getModelHint(): string {
   switch (localSettings.value.provider) {
     case 'openai':
       return '推荐使用 gpt-4o-mini（经济高效）或 gpt-4o';
-    case 'gemini':
-      return '推荐使用 gemini-2.0-flash';
     case 'claude':
-      return '推荐使用 claude-3-5-haiku-20241022（速度快且经济）';
+      return '推荐使用 claude-sonnet-4-6（平衡性能与成本）';
     default:
       return '';
   }

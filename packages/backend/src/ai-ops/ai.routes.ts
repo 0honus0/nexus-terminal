@@ -60,5 +60,6 @@ router.post('/settings', aiLimiter, NL2CMDController.saveAISettings);
 // NL2CMD 相关路由（应用动态速率限制）
 router.post('/test', conditionalAiLimiter, NL2CMDController.testAIConnection);
 router.post('/nl2cmd', conditionalAiLimiter, NL2CMDController.generateCommand);
+router.post('/nl2cmd/stream', conditionalAiLimiter, NL2CMDController.generateCommandStream);
 
 export default router;
