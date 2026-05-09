@@ -78,6 +78,7 @@ import {
 import { log } from '@/utils/log';
 import { workspaceEmitter } from '../../../composables/workspaceEvents';
 import { createWebSocketConnectionManager } from '../../../composables/useWebSocketConnection';
+import type { ConnectionInfo } from '../../connections.store';
 
 /** 创建模拟会话（完整 SessionState 结构） */
 const createMockSession = (
@@ -105,7 +106,7 @@ const createMockSession = (
   commandInputContent: ref(''),
   isMarkedForSuspend: overrides.isMarkedForSuspend ?? false,
   createdAt: Date.now(),
-  disposables: [],
+  disposables: [] as Array<() => void>,
 });
 
 describe('session/actions/sessionActions', () => {
@@ -318,21 +319,27 @@ describe('session/actions/sessionActions', () => {
 
     const createMockDependencies = () => ({
       connectionsStore: {
-        connections: [],
+        connections: [] as ConnectionInfo[],
       },
       router: {
         push: vi.fn(),
       },
       openRdpModalAction: vi.fn(),
       openVncModalAction: vi.fn(),
-      t: (key: string, fallback?: string) => fallback ?? key,
+      t: ((key: string, ...args: unknown[]) => {
+        const last = args[args.length - 1];
+        return typeof last === 'string' ? last : key;
+      }) as unknown as (key: string) => string,
     });
 
     it('RDP 连接应打开 RDP Modal', () => {
       const conn = createMockConnection({ type: 'RDP' });
       const deps = createMockDependencies();
 
-      handleConnectRequest(conn as any, deps as any);
+      handleConnectRequest(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       expect(deps.openRdpModalAction).toHaveBeenCalledWith(conn);
       expect(deps.openVncModalAction).not.toHaveBeenCalled();
@@ -342,7 +349,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ type: 'VNC' });
       const deps = createMockDependencies();
 
-      handleConnectRequest(conn as any, deps as any);
+      handleConnectRequest(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       expect(deps.openVncModalAction).toHaveBeenCalledWith(conn);
       expect(deps.openRdpModalAction).not.toHaveBeenCalled();
@@ -352,7 +362,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ type: 'SSH', id: 42 });
       const deps = createMockDependencies();
 
-      handleConnectRequest(conn as any, deps as any);
+      handleConnectRequest(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       expect(deps.router.push).toHaveBeenCalledWith({ name: 'Workspace' });
     });
@@ -366,7 +379,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ type: 'SSH', id: 1 });
       const deps = createMockDependencies();
 
-      handleConnectRequest(conn as any, deps as any);
+      handleConnectRequest(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       expect(session.wsManager.connect).toHaveBeenCalled();
       expect(deps.router.push).toHaveBeenCalledWith({ name: 'Workspace' });
@@ -391,16 +407,19 @@ describe('session/actions/sessionActions', () => {
 
     const createMockDependencies = () => ({
       connectionsStore: {
-        connections: [],
+        connections: [] as ConnectionInfo[],
       },
-      t: (key: string, fallback?: string) => fallback ?? key,
+      t: ((key: string, ...args: unknown[]) => {
+        const last = args[args.length - 1];
+        return typeof last === 'string' ? last : key;
+      }) as unknown as (key: string) => string,
       showError: vi.fn(),
     });
 
     it('连接不存在时应调用 showError', () => {
       const deps = createMockDependencies();
 
-      openNewSession(999, deps as any);
+      openNewSession(999, deps as unknown as Parameters<typeof handleConnectRequest>[1]);
 
       expect(deps.showError).toHaveBeenCalled();
       expect(log.error).toHaveBeenCalledWith(expect.stringContaining('找不到'));
@@ -410,7 +429,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ id: 1 });
       const deps = createMockDependencies();
 
-      openNewSession(conn as any, deps as any);
+      openNewSession(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       expect(mockSessions.value.size).toBe(1);
       expect(mockActiveSessionId.value).toBeTruthy();
@@ -420,9 +442,9 @@ describe('session/actions/sessionActions', () => {
     it('传入连接 ID 时应从 connectionsStore 查找', () => {
       const conn = createMockConnection({ id: 1 });
       const deps = createMockDependencies();
-      deps.connectionsStore.connections = [conn as any];
+      deps.connectionsStore.connections = [conn as unknown as ConnectionInfo];
 
-      openNewSession(1, deps as any);
+      openNewSession(1, deps as unknown as Parameters<typeof handleConnectRequest>[1]);
 
       expect(mockSessions.value.size).toBe(1);
     });
@@ -431,7 +453,11 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ id: 1 });
       const deps = createMockDependencies();
 
-      openNewSession(conn as any, deps as any, 'custom-id');
+      openNewSession(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1],
+        'custom-id'
+      );
 
       expect(mockSessions.value.has('custom-id')).toBe(true);
       expect(mockActiveSessionId.value).toBe('custom-id');
@@ -441,7 +467,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ id: 1 });
       const deps = createMockDependencies();
 
-      openNewSession(conn as any, deps as any);
+      openNewSession(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       const wsManager = vi.mocked(createWebSocketConnectionManager).mock.results[0].value;
       expect(wsManager.onMessage).toHaveBeenCalledWith('ssh:connected', expect.any(Function));
@@ -451,7 +480,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ id: 1 });
       const deps = createMockDependencies();
 
-      openNewSession(conn as any, deps as any);
+      openNewSession(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       const wsManager = vi.mocked(createWebSocketConnectionManager).mock.results[0].value;
       expect(wsManager.connect).toHaveBeenCalled();
@@ -461,7 +493,10 @@ describe('session/actions/sessionActions', () => {
       const conn = createMockConnection({ id: 1 });
       const deps = createMockDependencies();
 
-      openNewSession(conn as any, deps as any);
+      openNewSession(
+        conn as unknown as ConnectionInfo,
+        deps as unknown as Parameters<typeof handleConnectRequest>[1]
+      );
 
       const session = Array.from(mockSessions.value.values())[0];
       expect(session.terminalManager).toBeDefined();
