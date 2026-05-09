@@ -7,11 +7,38 @@
       {{ t('settings.category.dataManagement', '数据管理') }}
     </h2>
     <div class="p-6 space-y-6">
-      <!-- Export Connections Section -->
+      <!-- Docker Migration Hint -->
+      <div class="settings-section-content">
+        <div class="p-4 rounded-md border border-info/30 bg-info/5">
+          <p class="text-sm text-info font-medium mb-1">
+            {{ t('settings.dataManagement.dockerMigrationHint.title', '服务器间迁移推荐方式') }}
+          </p>
+          <p class="text-xs text-text-secondary">
+            {{
+              t(
+                'settings.dataManagement.dockerMigrationHint.description',
+                '如需在服务器间完整迁移，最简单的方式是直接复制宿主机的 ./data 目录及 data/.env 文件到新服务器，然后启动 Docker 容器即可。'
+              )
+            }}
+          </p>
+        </div>
+      </div>
+
+      <hr class="border-border/50" />
+
+      <!-- Export Connections Section (CLI Migration) -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">
           {{ t('settings.exportConnections.title', '导出连接数据') }}
         </h3>
+        <p class="text-sm text-text-secondary mb-2">
+          {{
+            t(
+              'settings.exportConnections.cliHint',
+              '导出为 CLI 脚本格式（ZIP），用于在其他 Nexus Terminal 实例中通过命令行导入。'
+            )
+          }}
+        </p>
         <p class="text-sm text-text-secondary mb-4">
           <span class="font-semibold text-warning">{{
             t(
@@ -66,6 +93,65 @@
 
       <hr class="border-border/50" />
 
+      <!-- Full Backup Export Section -->
+      <div class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">
+          {{ t('settings.fullBackupExport.title', '完整数据备份') }}
+        </h3>
+        <p class="text-sm text-text-secondary mb-4">
+          {{
+            t(
+              'settings.fullBackupExport.description',
+              '导出全部核心业务数据为 JSON 文件，包含连接、标签、快捷指令、终端主题等。可用于跨实例完整恢复。'
+            )
+          }}
+        </p>
+        <form @submit.prevent="handleFullBackupExport" class="space-y-4">
+          <div class="flex items-center justify-between">
+            <button
+              type="submit"
+              :disabled="fullBackupLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium inline-flex items-center"
+            >
+              <svg
+                v-if="fullBackupLoading"
+                class="animate-spin -ml-1 mr-2 h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              {{
+                fullBackupLoading
+                  ? t('common.loading')
+                  : t('settings.fullBackupExport.buttonText', '导出备份文件')
+              }}
+            </button>
+            <p
+              v-if="fullBackupMessage"
+              :class="['text-sm', fullBackupSuccess ? 'text-success' : 'text-error']"
+            >
+              {{ fullBackupMessage }}
+            </p>
+          </div>
+        </form>
+      </div>
+
+      <hr class="border-border/50" />
+
       <!-- Import Connections Section -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">
@@ -75,7 +161,7 @@
           {{
             t(
               'settings.importConnections.description',
-              '选择 JSON 格式的连接配置文件进行导入。文件大小限制 5MB。'
+              '选择 JSON 格式的连接配置文件进行导入（仅支持连接数据，不含标签、主题等）。文件大小限制 5MB。'
             )
           }}
         </p>
@@ -349,6 +435,8 @@ import { storeToRefs } from 'pinia';
 import { useExportConnections } from '../../composables/settings/useExportConnections';
 import { useImportConnections } from '../../composables/settings/useImportConnections';
 import { useAuditSettings } from '../../composables/settings/useAuditSettings';
+import apiClient from '../../utils/apiClient';
+import { log } from '@/utils/log';
 
 const settingsStore = useSettingsStore();
 const { settings } = storeToRefs(settingsStore);
@@ -360,6 +448,61 @@ const {
   exportConnectionsSuccess,
   handleExportConnections,
 } = useExportConnections();
+
+// 全量备份导出
+const fullBackupLoading = ref(false);
+const fullBackupMessage = ref('');
+const fullBackupSuccess = ref(false);
+
+const handleFullBackupExport = async () => {
+  fullBackupLoading.value = true;
+  fullBackupMessage.value = '';
+  fullBackupSuccess.value = false;
+  try {
+    const response = await apiClient.post(
+      '/backup/export',
+      {},
+      {
+        responseType: 'blob',
+      }
+    );
+
+    let filename = `nexus-terminal-backup-${Date.now()}.json`;
+    const disposition = response.headers['content-disposition'];
+    if (disposition && disposition.includes('attachment')) {
+      const filenameRegex = /filename[^;=\n]*=(?:(['"])(.*?)\1|([^;\n]*))/;
+      const matches = filenameRegex.exec(disposition);
+      if (matches != null && (matches[2] || matches[3])) {
+        filename = matches[2] || matches[3];
+      }
+    }
+
+    const blob = new Blob([response.data], {
+      type: (response.headers['content-type'] as string) || 'application/json',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    fullBackupMessage.value = t('settings.fullBackupExport.success', '备份文件已开始下载。');
+    fullBackupSuccess.value = true;
+  } catch (error: unknown) {
+    log.error('导出备份失败:', error);
+    let message = t('settings.fullBackupExport.error', '导出备份时发生错误。');
+    if (error instanceof Error && error.message) {
+      message = error.message;
+    }
+    fullBackupMessage.value = message;
+    fullBackupSuccess.value = false;
+  } finally {
+    fullBackupLoading.value = false;
+  }
+};
 
 // 导入功能
 const {

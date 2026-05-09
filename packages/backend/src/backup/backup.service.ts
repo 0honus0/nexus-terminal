@@ -48,6 +48,9 @@ const IMPORT_TABLES: Record<
       'encrypted_passphrase',
       'proxy_id',
       'ssh_key_id',
+      'notes',
+      'jump_chain',
+      'proxy_type',
       'force_keyboard_interactive',
     ],
   },
@@ -73,7 +76,7 @@ const IMPORT_TABLES: Record<
   connectionTags: { table: 'connection_tags', columns: ['connection_id', 'tag_id'] },
   quickCommands: {
     table: 'quick_commands',
-    columns: ['name', 'content', 'description', 'is_active'],
+    columns: ['name', 'command', 'usage_count', 'variables'],
   },
   quickCommandTags: { table: 'quick_command_tags', columns: ['name'] },
   quickCommandTagAssociations: {
@@ -82,15 +85,52 @@ const IMPORT_TABLES: Record<
   },
   terminalThemes: {
     table: 'terminal_themes',
-    columns: ['name', 'theme_data', 'is_default', 'created_at', 'updated_at'],
+    columns: [
+      'name',
+      'theme_type',
+      'foreground',
+      'background',
+      'cursor',
+      'cursor_accent',
+      'selection_background',
+      'black',
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
+      'white',
+      'bright_black',
+      'bright_red',
+      'bright_green',
+      'bright_yellow',
+      'bright_blue',
+      'bright_magenta',
+      'bright_cyan',
+      'bright_white',
+      'created_at',
+      'updated_at',
+    ],
   },
   notificationSettings: {
     table: 'notification_settings',
-    columns: ['channel_type', 'name', 'enabled', 'config', 'enabled_events'],
+    columns: [
+      'channel_type',
+      'name',
+      'enabled',
+      'config',
+      'enabled_events',
+      'created_at',
+      'updated_at',
+    ],
   },
   settings: { table: 'settings', columns: ['key', 'value'] },
   appearanceSettings: { table: 'appearance_settings', columns: ['key', 'value'] },
-  favoritePaths: { table: 'favorite_paths', columns: ['path', 'name', 'sort_order'] },
+  favoritePaths: {
+    table: 'favorite_paths',
+    columns: ['name', 'path', 'last_used_at', 'created_at', 'updated_at'],
+  },
 };
 
 /** 导出所有核心业务数据 */
@@ -189,12 +229,9 @@ export async function importData(
     // 有错误时回滚，否则提交
     if (result.errors.length > 0) {
       await runDb(db, 'ROLLBACK');
-      const totalImported = Object.values(result.imported).reduce((a, b) => a + b, 0);
-      if (totalImported === 0) {
-        // 全部失败，清空结果标记
-        result.imported = {};
-        result.skipped = {};
-      }
+      // 回滚后数据未实际落库，清空统计避免误导调用方
+      result.imported = {};
+      result.skipped = {};
     } else {
       await runDb(db, 'COMMIT');
     }
