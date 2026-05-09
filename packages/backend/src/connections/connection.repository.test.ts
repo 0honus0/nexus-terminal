@@ -15,6 +15,8 @@ import {
   updateLastConnected,
   updateConnectionTags,
   findConnectionTags,
+  bulkInsertConnections,
+  addTagToMultipleConnections,
 } from './connection.repository';
 
 // Mock 数据库连接
@@ -410,6 +412,220 @@ describe('Connection Repository', () => {
       const result = await findConnectionTags(1);
 
       expect(result).toHaveLength(0);
+    });
+
+    it('数据库查询失败时应抛出错误', async () => {
+      (allDb as any).mockRejectedValueOnce(new Error('Database error'));
+
+      await expect(findConnectionTags(1)).rejects.toThrow('获取连接标签失败');
+    });
+  });
+
+  describe('bulkInsertConnections', () => {
+    it('应批量插入连接并返回结果', async () => {
+      (runDb as any)
+        .mockResolvedValueOnce({ lastID: 1, changes: 1 })
+        .mockResolvedValueOnce({ lastID: 2, changes: 1 });
+
+      const connections = [
+        {
+          name: 'Server 1',
+          type: 'SSH',
+          host: '10.0.0.1',
+          port: 22,
+          username: 'root',
+          auth_method: 'password',
+        },
+        {
+          name: 'Server 2',
+          type: 'RDP',
+          host: '10.0.0.2',
+          port: 3389,
+          username: 'admin',
+          auth_method: 'password',
+        },
+      ];
+
+      const result = await bulkInsertConnections({} as any, connections);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].connectionId).toBe(1);
+      expect(result[1].connectionId).toBe(2);
+    });
+
+    it('空数组应返回空结果', async () => {
+      const result = await bulkInsertConnections({} as any, []);
+
+      expect(result).toEqual([]);
+    });
+
+    it('插入失败时应抛出错误', async () => {
+      (runDb as any).mockRejectedValueOnce(new Error('Insert failed'));
+
+      const connections = [
+        {
+          name: 'Failed',
+          type: 'SSH',
+          host: '10.0.0.1',
+          port: 22,
+          username: 'root',
+          auth_method: 'password',
+        },
+      ];
+
+      await expect(bulkInsertConnections({} as any, connections)).rejects.toThrow();
+    });
+
+    it('lastID 无效时应抛出错误', async () => {
+      (runDb as any).mockResolvedValueOnce({ lastID: 0, changes: 1 });
+
+      const connections = [
+        {
+          name: 'Invalid',
+          type: 'SSH',
+          host: '10.0.0.1',
+          port: 22,
+          username: 'root',
+          auth_method: 'password',
+        },
+      ];
+
+      await expect(bulkInsertConnections({} as any, connections)).rejects.toThrow();
+    });
+  });
+
+  describe('addTagToMultipleConnections', () => {
+    it('应为多个连接添加同一标签', async () => {
+      (runDb as any)
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockResolvedValueOnce({}) // INSERT 1
+        .mockResolvedValueOnce({}) // INSERT 2
+        .mockResolvedValueOnce({}); // COMMIT
+
+      await addTagToMultipleConnections([1, 2], 5);
+
+      expect(runDb).toHaveBeenCalled();
+    });
+
+    it('空连接 ID 数组应直接返回', async () => {
+      await addTagToMultipleConnections([], 5);
+
+      expect(runDb).not.toHaveBeenCalled();
+    });
+
+    it('无效标签 ID 应直接返回', async () => {
+      await addTagToMultipleConnections([1, 2], 0);
+
+      expect(runDb).not.toHaveBeenCalled();
+    });
+
+    it('负数标签 ID 应直接返回', async () => {
+      await addTagToMultipleConnections([1, 2], -1);
+
+      expect(runDb).not.toHaveBeenCalled();
+    });
+
+    it('事务失败时应回滚并抛出错误', async () => {
+      (runDb as any)
+        .mockResolvedValueOnce({}) // BEGIN
+        .mockRejectedValueOnce(new Error('Insert failed')); // INSERT
+
+      await expect(addTagToMultipleConnections([1, 2], 5)).rejects.toThrow();
+    });
+  });
+
+  describe('updateConnection 边界条件', () => {
+    it('应正确处理 force_keyboard_interactive 布尔值', async () => {
+      (runDb as any).mockResolvedValue({ changes: 1 });
+
+      await updateConnection(1, { force_keyboard_interactive: true });
+
+      const call = (runDb as any).mock.calls[0];
+      expect(call[1]).toContain('force_keyboard_interactive');
+    });
+
+    it('应正确处理 jump_chain 为空数组', async () => {
+      (runDb as any).mockResolvedValue({ changes: 1 });
+
+      await updateConnection(1, { jump_chain: [] });
+
+      const call = (runDb as any).mock.calls[0];
+      expect(call[1]).toContain('jump_chain');
+    });
+
+    it('应正确处理 jump_chain 为非空数组', async () => {
+      (runDb as any).mockResolvedValue({ changes: 1 });
+
+      await updateConnection(1, { jump_chain: [1, 2] });
+
+      const call = (runDb as any).mock.calls[0];
+      expect(call[2]).toContain('[1,2]');
+    });
+
+    it('数据库更新失败时应抛出错误', async () => {
+      (runDb as any).mockRejectedValue(new Error('Database error'));
+
+      await expect(updateConnection(1, { name: 'test' })).rejects.toThrow('更新连接记录失败');
+    });
+  });
+
+  describe('findAllConnectionsWithTags 边界条件', () => {
+    it('应正确处理 force_keyboard_interactive 为 1 的情况', async () => {
+      const mockRows = [
+        {
+          id: 1,
+          name: 'Server',
+          type: 'SSH',
+          host: '10.0.0.1',
+          port: 22,
+          username: 'root',
+          auth_method: 'password',
+          proxy_id: null,
+          proxy_type: null,
+          ssh_key_id: null,
+          notes: null,
+          jump_chain: null,
+          force_keyboard_interactive: 1,
+          created_at: 1000,
+          updated_at: 1000,
+          last_connected_at: null,
+          tag_ids_str: null,
+        },
+      ];
+      (allDb as any).mockResolvedValueOnce(mockRows);
+
+      const result = await findAllConnectionsWithTags();
+
+      expect(result[0].force_keyboard_interactive).toBe(true);
+    });
+
+    it('应正确处理包含无效 tag_id 的情况', async () => {
+      const mockRows = [
+        {
+          id: 1,
+          name: 'Server',
+          type: 'SSH',
+          host: '10.0.0.1',
+          port: 22,
+          username: 'root',
+          auth_method: 'password',
+          proxy_id: null,
+          proxy_type: null,
+          ssh_key_id: null,
+          notes: null,
+          jump_chain: null,
+          force_keyboard_interactive: 0,
+          created_at: 1000,
+          updated_at: 1000,
+          last_connected_at: null,
+          tag_ids_str: '1,abc,3',
+        },
+      ];
+      (allDb as any).mockResolvedValueOnce(mockRows);
+
+      const result = await findAllConnectionsWithTags();
+
+      expect(result[0].tag_ids).toEqual([1, 3]);
     });
   });
 });

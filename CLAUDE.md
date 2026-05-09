@@ -72,19 +72,19 @@ sequenceDiagram
 
 ## 模块索引
 
-| 模块 | 路径 | TS 文件 | 职责 | 文档 |
-|------|------|---------|------|------|
-| **backend** | `packages/backend` | 207 | SSH/SFTP 连接、认证、审计、通知、Docker 管理 | [backend/CLAUDE.md](./packages/backend/CLAUDE.md) |
-| **frontend** | `packages/frontend` | 240 | 终端界面、文件管理器、连接管理、主题定制 | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md) |
-| **remote-gateway** | `packages/remote-gateway` | 2 | RDP/VNC 连接代理 | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
+| 模块               | 路径                      | TS 文件 | 职责                                         | 文档                                                            |
+| ------------------ | ------------------------- | ------- | -------------------------------------------- | --------------------------------------------------------------- |
+| **backend**        | `packages/backend`        | 207     | SSH/SFTP 连接、认证、审计、通知、Docker 管理 | [backend/CLAUDE.md](./packages/backend/CLAUDE.md)               |
+| **frontend**       | `packages/frontend`       | 240     | 终端界面、文件管理器、连接管理、主题定制     | [frontend/CLAUDE.md](./packages/frontend/CLAUDE.md)             |
+| **remote-gateway** | `packages/remote-gateway` | 2       | RDP/VNC 连接代理                             | [remote-gateway/CLAUDE.md](./packages/remote-gateway/CLAUDE.md) |
 
 ### 规划文档
 
-| 文档 | 描述 |
-|------|------|
-| [PERSONAL_ROADMAP.md](./doc/PERSONAL_ROADMAP.md) | Phase 6-11 功能规划 |
-| [TECHNICAL_DEBT_REPORT.md](./doc/TECHNICAL_DEBT_REPORT.md) | 技术债务报告（84 项已清零） |
-| [CHANGELOG.md](./CHANGELOG.md) | 变更记录 |
+| 文档                                                       | 描述         |
+| ---------------------------------------------------------- | ------------ |
+| [DESIGN.md](./DESIGN.md)                                   | 项目设计文档 |
+| [TECHNICAL_DEBT_REPORT.md](./doc/TECHNICAL_DEBT_REPORT.md) | 技术债务报告 |
+| [CHANGELOG.md](./CHANGELOG.md)                             | 变更记录     |
 
 ---
 
@@ -118,15 +118,15 @@ cd packages/frontend && npm run build
 
 ### 环境变量
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `PORT` | 3001 | API 端口 |
-| `ENCRYPTION_KEY` | 自动生成 | 数据库加密密钥（32B hex） |
-| `SESSION_SECRET` | 自动生成 | 会话密钥 |
-| `GUACD_HOST`/`GUACD_PORT` | localhost:4822 | Guacamole daemon |
-| `ENABLE_METRICS` | false | Prometheus 端点 |
-| `ENABLE_GEO_LOOKUP` | true | IP 地理位置查询 |
-| `LOG_LEVEL` | info | 日志等级 |
+| 变量                      | 默认值         | 说明                      |
+| ------------------------- | -------------- | ------------------------- |
+| `PORT`                    | 3001           | API 端口                  |
+| `ENCRYPTION_KEY`          | 自动生成       | 数据库加密密钥（32B hex） |
+| `SESSION_SECRET`          | 自动生成       | 会话密钥                  |
+| `GUACD_HOST`/`GUACD_PORT` | localhost:4822 | Guacamole daemon          |
+| `ENABLE_METRICS`          | false          | Prometheus 端点           |
+| `ENABLE_GEO_LOOKUP`       | true           | IP 地理位置查询           |
+| `LOG_LEVEL`               | info           | 日志等级                  |
 
 ---
 
@@ -162,14 +162,14 @@ npx playwright install          # 首次运行 E2E 需安装浏览器
 
 ### 覆盖率要求
 
-| 模块类型 | 行覆盖率 | 分支覆盖率 |
-|----------|----------|------------|
-| Service | >=80% | >=70% |
-| Controller | >=70% | >=60% |
-| Repository | >=60% | >=50% |
-| Utils | >=90% | >=80% |
-| Store | >=80% | >=70% |
-| Component | >=60% | >=50% |
+| 模块类型   | 行覆盖率 | 分支覆盖率 |
+| ---------- | -------- | ---------- |
+| Service    | >=80%    | >=70%      |
+| Controller | >=70%    | >=60%      |
+| Repository | >=60%    | >=50%      |
+| Utils      | >=90%    | >=80%      |
+| Store      | >=80%    | >=70%      |
+| Component  | >=60%    | >=50%      |
 
 ---
 
@@ -216,16 +216,16 @@ npx playwright install          # 首次运行 E2E 需安装浏览器
 
 ### 关键文件路径
 
-| 类别 | 路径 |
-|------|------|
-| 数据库 Schema | `packages/backend/src/database/schema.ts`（24 表） |
-| 后端入口 | `packages/backend/src/index.ts` |
-| 前端入口 | `packages/frontend/src/main.ts` |
-| 后端路由 | `packages/backend/src/*/routes.ts`（24 模块） |
-| 前端路由 | `packages/frontend/src/router/index.ts`（9 视图） |
-| 状态管理 | `packages/frontend/src/stores/*.store.ts`（24 stores） |
-| WebSocket | `packages/backend/src/websocket.ts` + `handlers/` |
-| 加密模块 | `packages/backend/src/utils/crypto.ts` |
+| 类别          | 路径                                                   |
+| ------------- | ------------------------------------------------------ |
+| 数据库 Schema | `packages/backend/src/database/schema.ts`（24 表）     |
+| 后端入口      | `packages/backend/src/index.ts`                        |
+| 前端入口      | `packages/frontend/src/main.ts`                        |
+| 后端路由      | `packages/backend/src/*/routes.ts`（24 模块）          |
+| 前端路由      | `packages/frontend/src/router/index.ts`（9 视图）      |
+| 状态管理      | `packages/frontend/src/stores/*.store.ts`（24 stores） |
+| WebSocket     | `packages/backend/src/websocket.ts` + `handlers/`      |
+| 加密模块      | `packages/backend/src/utils/crypto.ts`                 |
 
 ### 部署架构
 
