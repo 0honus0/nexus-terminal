@@ -1,370 +1,115 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project will be documented in this file.
+本文件记录星枢终端（Nexus Terminal）的所有重要变更。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
+本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
-## [Unreleased]
+## [未发布]
 
-### Added
+### 新增
 
-- **终端输入增强**：ESC 键转义序列与 Bracketed Paste Mode 支持
-  - **ESC 键支持**：在 CommandInputBar 中按 ESC 键发送 `\x1b` 转义序列到终端，支持退出 vi/nano 等编辑器模式
-  - **Bracketed Paste Mode**：优化右键菜单粘贴功能，使用 `\x1b[200~` 和 `\x1b[201~` 包裹粘贴内容，确保编辑器正确识别粘贴内容
-  - **统一粘贴逻辑**：Ctrl+Shift+V 与右键粘贴均采用 Bracketed Paste Mode 实现
-  - **代码位置**：
-    - `packages/frontend/src/components/CommandInputBar.vue`：ESC 键处理（第 285-288 行）
-    - `packages/frontend/src/features/terminal/Terminal.vue`：Bracketed Paste Mode 实现（第 233-237 行、第 516-521 行）
+- **AI 调用优化**：移除 Gemini provider，仅保留 OpenAI/Claude，支持 429 指数退避重试、结构化 JSON 输出、SSE streaming
+- **AI 安全增强**：OpenAI/Claude API 端点路径用户可配置，含 SSRF 校验与旧版 baseUrl 自动兼容
+- **日志等级文字化**：pino 日志输出等级从数字（20/30/40/50）改为文字（debug/info/warn/error）
+- **标签栏滚动条隐藏**：终端标签栏在内容未溢出时不再显示滚动条轨道
 
-### Changed
+### 改进
 
-- **技术债务治理（2026-04-15 最新）**：（续下）
-  - ESLint 全仓告警已清零：`TOTAL_WARNINGS = 0`（`npm run -s lint -- --format json`）
-  - 本轮采用“子代理并行 + 主线程复核 + 分批提交”的持续收敛模式，已完成长尾文件治理
-  - `doc/TECHNICAL_DEBT_REPORT.md` 已同步为最新口径，仅保留最终汇总，不记录批次流水
-  - 新增 `debt:check` 回归门禁并接入提交前与 CI 扫描，阻止 TODO/`test.skip`/`console.log`/`any` 回流
-  - 新增 `quality:check` 与 `quality.yml`，将“债务门禁 + 零告警 lint + 格式校验”统一为 PR 自动化检查
-  - 修复前端类型基线：`vue-tsc --noEmit` 当前通过（修复 i18n、SSH 挂起动作与 2 处测试类型错误），并已纳入 `quality:check`
+- **Docker 管理器布局重构**：容器卡片名称与镜像合并为一列，操作按钮添加 CSS tooltip 悬停提示
+- **仪表盘工具栏修复**：自动刷新文字不再竖排显示，日期选择器恢复可见边框
+- **批量执行侧边栏**：补充 batchExec 的 i18n 翻译（中文/英文/日文），修复图标与传输进度按钮重复
 
-- **下一类债务收敛完成（ESLint 全量治理）**：
-  - 已完成纯 Flat Config 迁移并移除旧链路（`ESLINT_USE_FLAT_CONFIG=false`、`.eslintignore`、`.eslintrc.js`、`eslint.legacy-config.cjs`）
-  - 已扩展 lint 覆盖到 `.vue` 与 `*.config.ts`（`88` 个 Vue SFC、`9` 个配置文件）
-  - 已接入并全量回收 `eslint-plugin-vue` 关键规则（含 `no-mutating-props` 严格模式）
-  - 已完成 `AddConnectionForm*` 子组件 `emit patch` 数据流改造，清零 `no-mutating-props` 临时豁免
-  - 已清理无引用 ESLint 旧依赖：`eslint-config-airbnb-base`、`eslint-config-airbnb-typescript`、`eslint-config-prettier`
-  - 校验结果：`npm run -s lint -- --format json` 持续为 `errors=0 / warnings=0`
+### 修复
 
-### Security
+- **旧版 AI 配置兼容**：`openaiEndpoint` 缺少前导 `/` 时自动补全，避免 URL 拼接错误
+- **Claude 旧版 baseUrl 兼容**：不含 `/v1` 的 Claude baseUrl 自动补全
+- **批量命令注入防护**：新增 `sanitizeBatchCommand()` 阻止 shell 元字符
+- **AI 响应解析优化**：`cleanCommandOutput` 先剥离 Markdown 围栏再 JSON 解析，支持含花括号的命令
 
-- **依赖安全债务（最新口径）**：
-  - 全量与运行时审计均已清零（`critical/high/moderate/low = 0`）
-  - 维持月度审计与版本漂移监控策略
+## [1.4.3] - 2026-05-05
 
-- **应用启动性能优化**：统一初始化 API 并优化前端加载流程
-  - 后端新增统一初始化端点 `GET /api/v1/auth/init`，合并 needsSetup、isAuthenticated、captchaConfig 检查
-  - 修改 `packages/backend/src/auth/auth.controller.ts` (+63 行)
-  - 修改 `packages/backend/src/auth/auth.routes.ts` (+1 路由)
-  - 前端初始化流程重构：先挂载应用，后台异步加载数据
-  - 修改 `packages/frontend/src/main.ts` (重构 67 行)
-  - 新增 `packages/frontend/src/stores/auth.store.ts::loadInitData` action (+49 行)
-  - **性能提升**：减少 3-4 次网络请求合并为 1 次
-  - **用户体验**：应用立即显示，数据后台加载，消除"INITIALIZING NEXUS..."白屏等待
+### 新增
 
-- **错误处理类型安全强化**：消除 `catch (error: any)` 反模式
-  - 修改 29 个文件，使用 `unknown` 类型配合 `getErrorMessage()` 工具函数
-  - 涉及模块：ai-ops, appearance, auth, connections, notifications, proxies, quick-commands, settings, sftp, ssh-keys, tags, transfers, websocket
-  - 提升代码健壮性，防止 `undefined` 属性访问导致的运行时错误
+- ♿ 文本和标签现在更好地支持屏幕阅读器
 
-- **SftpService God Class 清理**：移除冗余代码
-  - 删除已委托到 `SftpUploadManager` 的 `activeUploads` 属性及其初始化代码
-  - 删除无用的 `cancelUploadInternal()` 私有方法
-  - 代码行数减少约 745 行，模块职责更加清晰
+### 改进
 
-- **SQLite WAL 模式启用**：优化数据库并发性能
-  - 修改 `packages/backend/src/database/connection.ts`
-  - 数据库初始化时自动启用 WAL 模式
-  - 提升读写并发能力，减少锁竞争
+- 🎨 应用视觉效果更流畅，颜色与主题正确匹配
+- 💾 文件保存现在可靠，不会丢失数据
+- 🌍 系统状态详情支持多语言显示
 
-- **类型化错误体系**：消除 `any` 类型，增强类型安全
-  - 扩展 `packages/backend/src/utils/AppError.ts`
-  - 新增 `DatabaseError`、`ValidationError`、`ExternalServiceError` 等子类
-  - 所有错误现在都是类型安全的
+### 修复
 
-- **前端虚拟滚动优化**：为 `CommandHistoryView` 添加虚拟滚动
-  - 修改 `packages/frontend/src/views/CommandHistoryView.vue`
-  - 使用 `@vueuse/core` 的 `useVirtualList`
-  - 支持数千条历史记录的流畅渲染
+- ⚡ 电脑功率使用百分比现在正确计算
+- 🔌 SSH 连接状态不再显示为"未知"
+- 📁 修复保存文件时的数据丢失问题
 
-- **前端懒加载优化**：减少初始加载体积
-  - 修改 `packages/frontend/src/App.vue`
-  - `RemoteDesktopModal` 和 `VncModal` 改为 `defineAsyncComponent` 动态导入
-  - guacamole 依赖 (~200KB) 现在按需加载
+## [1.4.2] - 2026-05-04
 
-- **Repository 层重构**：所有 Repository 继承 `BaseRepository`
-  - 统一错误处理模式
-  - 涉及 15+ 个 Repository 文件
+### 改进
 
-### Fixed
+- 📁 跨设备文件保存更可靠
+- ⚡ 文件切换速度大幅提升
+- 🤖 AI 助手响应更智能
 
-- **SSH 终端光标位置错乱修复**：修复 bbf8bca 提交引入的终端输出顺序错乱问题
-  - **问题描述**：命令执行后光标位置异常，新提示符在命令输出之前显示
-  - **根本原因**：小数据包立即写入策略导致输出顺序错乱
-    - 换行符（小数据包）→ 立即写入 ✓
-    - 命令输出（大数据包）→ 进入缓冲队列等待 16ms ✗
-    - 新提示符（小数据包）→ 立即写入 ✓
-    - 结果：新提示符在命令输出之前显示
-  - **修复方案**：增加缓冲队列状态检查
-    - 小数据包仅在缓冲队列为空时立即写入
-    - 缓冲队列非空时，小数据包也进入队列保持顺序
-    - 确保所有输出按正确顺序显示
-  - **涉及文件**：
-    - `packages/frontend/src/composables/useSshTerminal.ts` (修改 1 行)
+### 修复
 
-- **SSH 终端输入延迟优化**：解决 SSH 终端输入命令时的键入和显示迟缓问题
-  - **前端优化**：区分小数据包（用户输入≤100字节）和大数据包（服务器输出）
-    - 小数据包立即写入终端，不经过缓冲队列，延迟从 16ms 降低到 <1ms
-    - 大数据包继续使用批量缓冲策略，保持性能优化
-  - **输出增强器优化**：跳过小数据包的语法高亮、表格格式化等处理
-    - 避免用户输入被节流机制延迟
-    - 保持长输出的折叠、高亮等增强功能
-  - **性能提升**：总体输入延迟从 72-232ms 降低到 <3ms（98%↓）
-  - **涉及文件**：
-    - `packages/frontend/src/composables/useSshTerminal.ts` (+17 行)
-    - `packages/frontend/src/features/terminal/addons/output-enhancer.ts` (+7 行)
-    - `packages/backend/src/websocket/handlers/ssh.handler.ts` (已移除错误的 TCP_NODELAY 实现)
+- 💾 文件保存后不再消失或变为空
 
-### Added
+## [1.4.1] - 2026-05-04
 
-- **终端外观实时预览功能**：在外观自定义设置中新增实时预览窗口
-  - 新增组件：`TerminalPreview.vue` - 独立的 Xterm.js 预览实例，支持实时配置同步
-  - 三种预览模式：命令输出、代码高亮、文本样式（可切换）
-  - 性能优化：150ms 防抖 + requestAnimationFrame 渲染优化
-  - 响应式布局：桌面端左右分栏（配置 + 预览），移动端上下布局
-  - 实时同步：字体、字体大小、主题颜色、文字描边、文字阴影
-  - 测试覆盖：`TerminalPreview.test.ts` 16 个测试用例全部通过
-  - 国际化支持：zh-CN、en-US 预览模式翻译
-  - 涉及文件：
-    - `packages/frontend/src/components/style-customizer/TerminalPreview.vue` (新增)
-    - `packages/frontend/src/components/style-customizer/TerminalPreview.test.ts` (新增)
-    - `packages/frontend/src/components/style-customizer/StyleCustomizerTerminalTab.vue` (修改)
-    - `packages/frontend/src/locales/zh-CN.json` (修改)
-    - `packages/frontend/src/locales/en-US.json` (修改)
+### 新增
 
-### Fixed
+- 📦 新增数据备份与恢复工具
 
-- **测试套件修复**：修复 Backend 和 Frontend 测试失败问题（30 个测试用例）
-  - **Backend 修复**（5 个测试）：
-    - `validate.test.ts`：修正错误消息断言，从 `toContain()` 改为精确的 `toBe()` 匹配
-    - `sftp.controller.test.ts`：添加完整的 Express Session mock 对象（包含所有必需方法）
-    - `websocket/utils.test.ts`：补充缺失的状态字段并调整断言逻辑
-    - `concurrent-connections.test.ts`：修正 WebSocket.Server 导入，使用 WebSocketServer 构造函数
-  - **Frontend 修复**（25 个测试）：
-    - `connections.store.test.ts`：使用 `Object.defineProperty` 修复 localStorage mock 的 readonly 问题
-    - `batch.store.test.ts`：修正错误消息断言、添加 subTasks 深拷贝避免引用共享
-  - **测试结果**：111 个测试文件，1569 个测试用例，100% 通过率 ✅
-  - **修复文件**：
-    - `packages/backend/src/websocket/validate.test.ts`
-    - `packages/backend/src/sftp/sftp.controller.test.ts`
-    - `packages/backend/src/websocket/utils.test.ts`
-    - `packages/backend/tests/performance/concurrent-connections.test.ts`
-    - `packages/frontend/src/stores/connections.store.test.ts`
-    - `packages/frontend/src/stores/batch.store.test.ts`
+### 改进
 
-- **测试覆盖率优化**（基于 Codex 代码审查建议）：增强 validate.test.ts 测试精度
-  - **恢复详细错误断言**（3 处）：
-    - 行 93：`应拒绝无效的ssh:input消息` - 从 `toBeDefined()` 改为 `toContain('Missing data')`
-    - 行 120：`应处理Schema解析错误` - 恢复精确错误消息验证
-    - 行 184：`应处理嵌套的payload验证错误` - 恢复详细断言
-  - **新增异常类型覆盖**（1 处）：
-    - 行 156：`应处理非 Error 类型的异常` - 新增测试覆盖非标准异常处理分支
-    - 验证 `validateWebSocketMessage` 对字符串异常的处理：`'消息校验失败: 未知错误'`
-    - 覆盖 validate.ts:72 的 `instanceof Error` 判断逻辑
-  - **测试质量提升**：
-    - 防止错误消息格式回归
-    - 覆盖之前被遗漏的代码路径
-    - 提升测试断言精度，从泛化检查改为精确验证
-  - **修复文件**：`packages/backend/src/websocket/validate.test.ts`（新增 import schemas）
+- 🐳 移动端/平板设备上的设置更简便
+- 🌍 改进的地理位置服务帮助更快找到设备
 
-- **TerminalPreview 性能优化与 P0 死锁修复**：解决骨架屏与懒加载导致的初始化死锁问题
-  - **P0 问题修复**：将骨架屏从 `v-if/v-else` 替换式改为覆盖层（`position: absolute` + `z-index`）
-  - **根本原因**：原实现导致 `terminalRef` 在骨架屏显示时不存在，IntersectionObserver 无法观察元素
-  - **架构改进**：`terminalRef` 现在永远存在，确保 observer 可以正常工作，终端可正常初始化
-  - **性能优化**：使用 xterm `write()` 回调替代固定 `setTimeout(100ms)` 延迟，减少延迟叠加
-  - **深度监听优化**：`watch(..., { deep: false })` 避免不必要的对象深度遍历
-  - **动画增强**：添加骨架屏淡入动画（`skeleton-fade-in`）和半透明背景遮罩
-  - **测试更新**：适配覆盖层结构，15 个测试用例全部通过
-  - **修复文件**：
-    - `packages/frontend/src/components/style-customizer/TerminalPreview.vue` (重构)
-    - `packages/frontend/src/components/style-customizer/TerminalPreview.test.ts` (更新)
-  - **性能提升**：
-    - 首屏加载时间：∞（死锁）→ ~50-100ms（正常）
-    - 用户感知延迟：无限动画 → 平滑切换
-    - DOM 稳定性：terminalRef 时有时无 → 始终存在
+### 修复
 
-- **TerminalPreview CSS 样式累积 Bug**：修复 `applyTextStyles` 使用 `+=` 追加样式导致重复的问题
-  - 改为直接设置 `canvas.style.webkitTextStroke` 和 `canvas.style.textShadow` 属性
-  - 避免每次配置变更时累积样式字符串
-  - 修复位置：`packages/frontend/src/components/style-customizer/TerminalPreview.vue:125-137`
+- 💾 文件保存不再改变格式
 
-- **强制键盘交互式认证功能**：新增 SSH 连接选项，支持 TOTP/2FA 服务器认证
-  - 数据库层：`connections` 表添加 `force_keyboard_interactive` 字段
-  - 后端 Service：SSH `establishSshConnection` 支持 `keyboard-interactive` 认证方式
-  - 前端组件：`AddConnectionFormAdvanced.vue` 添加仅 SSH 显示的开关
-  - 国际化支持：zh-CN、en-US、ja-JP 三种语言
-  - 测试覆盖：后端 45 个测试、前端 36 个测试全部通过
+## [1.4.0] - 2026-05-04
 
-## 2026-05-03（文档与技术债务全面治理）
+### 新增
 
-### Changed
+- 🌍 通过地图可视化和 IP 追踪查看连接来源
+- 📂 支持一次性上传整个文件夹，提供更好的文件和目录控制
+- 🐳 更简单的部署，减少运行的应用容器数量
+- ⌨️ 快速退出文本编辑器或使用智能粘贴安全复制代码
 
-- **技术债务全面清零**：84 项债务全部修复（收敛率 100%），含 Codex 审查补漏 7 项
-  - Critical: 6/6 完成（SFTP shell 注入、PRAGMA SQL 拼接、Pinia Store 测试、并发竞态、缓冲区上限、路径遍历）
-  - High: 21/21 完成（SSRF 修复、Docker 注入、审计日志、大文件拆分、空 catch 块等）
-  - Medium: 30/30 完成（事件监听清理、utils 测试、输入验证、常量提取等）
-  - Low: 27/27 完成（Swagger 保护、uuid 升级、错误消息脱敏等）
-- **文档全面更新**：
-  - 更新根目录 CLAUDE.md：修正文件计数（Backend 207/127, Frontend 240/62）
-  - 更新 VARIABLES.md：补充 ENABLE_METRICS、TRUST_PROXY、REMOTE_GATEWAY_API_TOKEN 等缺失环境变量
-  - 更新 README.md：修正测试覆盖统计
-  - 更新 PERSONAL_ROADMAP.md：修正测试覆盖率数据
-  - 更新模块 CLAUDE.md：修正文件计数与变更记录
-- **测试覆盖提升**：
-  - Backend: 127 个测试文件（+9）
-  - Frontend: 62 个测试文件（+23）
-  - 总计: 190 个测试文件
-  - E2E: 8 个 Playwright 测试规范
+### 改进
 
----
+- 📱 手机虚拟键盘处理更好，智能调整屏幕尺寸和触控目标
+- 🎨 仪表盘外观更清爽，悬停效果现代，信息卡片组织有序
+- ⚡ 系统数据采集速度提升最高 85%
 
-## 2026-04-25 ~ 2026-05-02 (SFTP 深度重构与债务修复)
+### 修复
 
-### Changed
+- 🔐 文件上传现在保持正确的权限和会话
+- 🛡️ 修复备份导入和 IP 地址解析的安全问题
+- 🐳 Docker 容器现在在更多 Linux 系统变体上可靠启动
 
-- **SFTP 服务深度拆分**：`sftp.service.ts` 从 1884 行缩减至 243 行（-87%）
-  - 拆分为 readdir/move/copy/path-operations/session 等独立执行器模块
-- **认证控制器分层重构**：`auth.controller.ts` 拆分为 login/2fa/passkey handlers
-- **Composable 拆分**：
-  - `useAddConnectionForm.ts` 拆分为 Parsers/Submit/Tags/Test 子模块
-  - `useSftpActions.ts` 拆分为 Operations + MessageHandlers
-  - `StatusMonitorService` 拆分为 HealthCheck/Aggregator/Service
-- **循环依赖清零**：`import/no-cycle` 受控豁免从 16 处收敛至 0
-- **输入验证增强**：端口范围、主机名格式、密码复杂度、终端尺寸上限
-- **Codex 审查补漏**：修复 6 项问题（SFTP readdir 重复 chunk、readyState 检查、内存泄漏等）
+## [1.3.9] - 2026-05-01
 
-### Fixed
+### 新增
 
-- **移动端标签页裁切修复** + 工具栏图标居中对齐
-- **跟随终端路径命令**：修复发送到当前 FileManager 对应的 session 而非全局 activeSession
-- **移动端 SFTP 图标布局优化** + 仪表盘最近连接按 last_connected_at 排序
+- 🚀 改进的 AI 问题分析：更丰富的上下文和更可靠的功能
+- 🔄 新增通过评论重新触发 AI 分析的选项
+- 🔄 增强的文件上传功能，支持整个文件夹结构
 
----
+### 改进
 
-## 2025-12-27 (自然语言生成命令模块优化)
+- ⚡ 大文件上传稳定性更好
+- 🧹 AI 问题审查输出更清晰、更有条理
 
-- **nl2cmd 优化**：DRY 重构，提取共享常量模块
-- **nl2cmd 优化**：实现 Axios 客户端单例复用，避免重复创建
-- **nl2cmd 优化**：新增流式响应支持（设置页开关，仅 OpenAI 支持）
-- **nl2cmd 优化**：错误处理改为 fail-fast，移除重试逻辑，返回友好错误提示
-- **测试增强**：nl2cmd.service.test.ts 16 个测试用例全部通过
-- **新增 `packages/backend/src/ai-ops/nl2cmd.constants.ts`**：集中管理配置常量
-- **前端类型更新**：新增 `streamingEnabled` 字段支持流式开关
-- **新增 API**：`clearAxiosClientCache()` 用于缓存管理
-- **Bug 修复**：API 429 错误日志输出格式，透传上游详细错误信息
-- **Bug 修复**：测试用例中的 vitest mock 兼容性问题
-- **Bug 修复**：Claude API headers，添加必需的 `x-api-key` 和 `anthropic-version` headers
-- **Bug 修复**：流式响应，添加 `responseType: 'stream'` 配置，正确处理 NodeJS Stream
+### 修复
 
----
-
-## 2025-12-24 (E2E 与集成测试框架实现)
-
-- **Playwright E2E 测试框架**：
-  - 新增目录：`packages/frontend/e2e/`
-  - 配置文件：`playwright.config.ts`（支持 Chromium/Firefox/WebKit）
-  - Page Object Model 设计：
-    - `pages/login.page.ts`：登录页交互封装
-    - `pages/workspace.page.ts`：工作区交互封装
-    - `pages/settings.page.ts`：设置页交互封装
-  - 测试 Fixtures：`fixtures/auth.fixture.ts`（认证状态管理）
-  - 测试数据：`fixtures/test-data.ts`（SSH/RDP/VNC 连接配置）
-  - E2E 测试用例：
-    - `tests/auth.spec.ts`：认证流程（密码登录、2FA、Passkey）
-    - `tests/ssh-connection.spec.ts`：SSH 连接与终端交互
-    - `tests/sftp-operations.spec.ts`：SFTP 文件操作
-    - `tests/remote-desktop.spec.ts`：RDP/VNC 远程桌面
-- **SSH/SFTP 协议集成测试**：
-  - 新增目录：`packages/backend/tests/integration/ssh/`、`packages/backend/tests/integration/sftp/`
-  - Mock 服务器：`mock-ssh-server.ts`（MockSshServer、MockShellStream、MockSftpSession）
-  - 测试用例：SSH 连接建立、Shell 操作、重连机制、SFTP 文件/目录操作
-- **RDP/VNC 代理功能测试**：
-  - 新增目录：`packages/backend/tests/integration/guacamole/`
-  - 测试用例：
-    - `guacamole.service.test.ts`：Token 生成与加密（AES-256-CBC）
-    - `rdp-proxy.test.ts`：WebSocket 消息转发、Guacamole 协议解析
-  - Remote Gateway 测试：`packages/remote-gateway/tests/server.test.ts`
-- **测试脚本更新**：
-  - 新增命令：`npm run test:e2e`、`npm run test:e2e:ui`、`npm run test:e2e:headed`
-  - 新增依赖：`@playwright/test ^1.49.1`
-- **测试结果**：Backend 59 个测试文件，1,223 个测试用例全部通过
-
-## 2025-12-24 (安全增强与技术债务清零)
-
-- **安全增强**：
-  - bcrypt saltRounds 从 10 提升至 12（符合 2025 年安全标准）
-  - 实现加密密钥轮换机制（`crypto.ts` 重构）
-    - 支持多版本密钥共存
-    - 新增 `rotateEncryptionKey()` / `reEncrypt()` / `getKeyRotationStatus()` API
-    - 新加密格式：`[keyVersion(4B)][iv(16B)][encrypted][tag(16B)]`
-    - 保持向后兼容：自动识别并解密旧格式数据
-  - 代码审查报告 13 项问题全部修复（P0-P3）
-- **技术债务清零**：24/24 项技术债务已全部修复（100%）
-- **测试覆盖率大幅提升**：
-  - 新增 20+ 测试文件（Backend + Frontend）
-  - ESLint 配置优化，164 文件变更
-- **文档状态**：所有核心模块文档已更新至最新状态
-
-## 2025-12-24 00:09:22 (AI 上下文完整性验证)
-
-- **覆盖率验证**：完成全仓扫描，确认模块文档完整性与数据准确性
-- **文件统计更新**：
-  - Backend: 177 个 TypeScript 文件
-  - Frontend: 184 个 TypeScript/Vue 文件
-  - Remote Gateway: 1 个 TypeScript 文件
-  - **总计：362 个源代码文件**
-- **测试框架确认**：Backend 与 Frontend 均已配置 Vitest 测试框架
-- **索引更新**：更新 `.claude/index.json`，添加详细模块特性、测试配置、近期更新记录
-- **文档状态**：所有核心模块文档（CLAUDE.md）已完整且最新，覆盖率 100%
-
-## 2025-12-23 (技术债务整理)
-
-- **技术债务报告**：新增 `doc/TECHNICAL_DEBT_REPORT.md`，完整分析代码库中的 TODO/FIXME 标记
-- **发现数量**：24 个技术债务标记（Backend: 11 个，Frontend: 13 个）
-- **优先级分类**：高优先级 7 个，中优先级 12 个，低优先级 5 个
-- **问题分类**：错误处理缺失（10个）、安全/验证不完善（3个）、类型定义不精确（3个）等
-- **处理建议**：按优先级分三批处理，预估总工作量 15-20 人天
-
-## 2025-12-22 (Phase 6-11 规划)
-
-- **个人版路线图草案**：新增 `doc/PERSONAL_ROADMAP.md`，聚焦单用户工作流
-- **规划范围**：Phase 6-11 及长期愿景（AI Copilot、插件体系等）
-- **实施策略**：分阶段列出 DB 结构、后端/前端目录规划、估算工期
-- **定位重申**：强调无需多用户/权限体系，聚焦个人运维效率
-
-## 2025-12-21 (Phase 3-5 功能实现)
-
-- **Phase 3: WebSocket 基础设施升级**
-  - 心跳机制：桌面/移动端差异化心跳检测 (`websocket/heartbeat.ts`)
-  - 连接管理：客户端类型检测与验证 (`websocket/connection.ts`)
-  - 状态广播：用户 Socket 映射与死连接清理 (`websocket/state.ts`)
-  - 数据库索引：审计日志查询优化 (`schema.registry.ts`)
-
-- **Phase 4: 批量作业模块**
-  - 新增模块：`packages/backend/src/batch/`
-  - 多服务器命令广播：支持并发执行、取消、进度追踪
-  - 数据表：`batch_tasks`、`batch_subtasks`
-  - WebSocket 实时进度推送
-
-- **Phase 5: AI 智能运维模块**
-  - 后端模块：`packages/backend/src/ai-ops/`
-    - AI 会话管理（UUID 标识）
-    - 系统健康分析、命令模式分析、安全事件分析
-    - 连接统计分析、自然语言查询路由
-  - 前端模块：`packages/frontend/src/features/ai-ops/`
-    - AIAssistantPanel 聊天组件（XSS 防护、自动滚动）
-  - 前端模块：`packages/frontend/src/features/batch-ops/`
-    - MultiServerExec 多服务器执行组件
-  - 数据表：`ai_sessions`、`ai_messages`
-
-## 2025-12-20 22:27:42 (增量更新)
-
-- **模块文档完善**：为 3 个核心模块生成独立 CLAUDE.md 文档
-- **导航面包屑**：为各模块文档添加返回根文档的导航链接
-- **Mermaid 结构图**：更新模块结构图，添加模块间通信流程图
-- **覆盖率更新**：已扫描 283 个源代码文件，模块覆盖率 100%
-
-## 2025-12-20 22:27:42 (初始创建)
-
-- **初始化架构文档**：完成项目架构分析与模块索引建立
-- **模块识别**：识别 3 个核心模块（backend、frontend、remote-gateway）
-- **技术栈确认**：TypeScript + Vue 3 + Express.js + SQLite3 + Docker
+- 🐛 修复大文件上传时的文件损坏问题
+- 🐛 修复 SFTP 会话意外断开的场景
+- 🐛 修复拖拽文件时文件路径显示为 '[object Object]' 的问题
+- 🐛 修复文件无法正确加载的问题
+- 🐛 修复某些文件状态更新被阻止的问题

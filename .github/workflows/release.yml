@@ -2,8 +2,10 @@ name: 构建与发布
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'CHANGELOG.md'
   workflow_dispatch:
     inputs:
       version:
@@ -72,110 +74,70 @@ jobs:
             echo "TARGET=$TARGET"
           } >> "$GITHUB_OUTPUT"
 
-      - name: 生成更新日志
+      - name: 从 CHANGELOG.md 提取更新日志
         id: release_notes
         env:
           CURRENT_TAG: ${{ steps.release_meta.outputs.TAG }}
-          TARGET_SHA: ${{ steps.release_meta.outputs.TARGET }}
           VERSION: ${{ steps.release_meta.outputs.VERSION }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
-          git fetch --tags --force
+          # 提取 CHANGELOG.md 中当前版本的更新内容
+          # 匹配 ## [vX.Y.Z] 或 ## vX.Y.Z 格式的标题，提取到下一个 ## 标题之前
+          BODY=$(awk -v tag="$CURRENT_VERSION" '
+            BEGIN { found=0 }
+            /^## / {
+              if (found) { exit }
+              if (index($0, tag) > 0 || index($0, "v" tag) > 0) {
+                found=1
+                # 输出标题行
+                print $0
+                next
+              }
+            }
+            found && NF { print }
+          ' CHANGELOG.md)
 
-          # 查找上一个版本标签
-          PREV_TAG=$(git tag --sort=-version:refname | grep '^v' | grep -v "$CURRENT_TAG" | head -n 1 || true)
-          if [ -n "$PREV_TAG" ]; then
-            PREV_REF="$PREV_TAG"
-            echo "✅ 上一个版本：$PREV_TAG"
-          else
-            PREV_REF=$(git rev-list --max-parents=0 "$TARGET_SHA")
-            echo "ℹ️ 这是第一个版本"
+          if [ -z "$BODY" ]; then
+            # 回退：提取最新版本段落
+            BODY=$(awk '/^## \[/{if(p){exit};p=1} p&&NF{print}' CHANGELOG.md)
           fi
 
-          PREV_COMMIT=$(git rev-parse --verify "$PREV_REF^{commit}")
-          CUR_COMMIT=$(git rev-parse --verify "$TARGET_SHA^{commit}")
+          if [ -z "$BODY" ]; then
+            BODY="暂无更新日志内容"
+          fi
 
-          PREV_DATE_RAW=$(git show -s --format=%cI "$PREV_COMMIT")
-          CUR_DATE_RAW=$(git show -s --format=%cI "$CUR_COMMIT")
-          PREV_DATE=$(date -u -d "$PREV_DATE_RAW" +"%Y-%m-%dT%H:%M:%SZ")
-          CUR_DATE=$(date -u -d "$CUR_DATE_RAW" +"%Y-%m-%dT%H:%M:%SZ")
+          {
+            echo 'body<<EOF'
+            echo "$BODY"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
           OWNER="${GITHUB_REPOSITORY%/*}"
-          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           REPO="${GITHUB_REPOSITORY#*/}"
-          BASE_BRANCH="${DEFAULT_BRANCH:-main}"
 
-          # 查询已合并的 PR
-          RAW_QUERY="repo:${OWNER}/${REPO} is:pr is:merged base:${BASE_BRANCH} merged:>=${PREV_DATE} merged:<=${CUR_DATE}"
-          QUERY=$(printf '%s' "$RAW_QUERY" | jq -sRr @uri)
-          RESPONSE=$(gh api -X GET search/issues -f q="$QUERY" -f per_page=100)
-
-          PR_LINES=$(echo "$RESPONSE" | jq -r '.items[] | "* " + .title + " by @"+(.user.login // "unknown")+" in #"+(.number|tostring)' || true)
-
-          # 如果没有 PR，使用提交记录
-          COMMITS=$(git log --no-merges --pretty="* %s" "${PREV_REF}..${CUR_COMMIT}" | head -n 50 || true)
-          if [ -z "$PR_LINES" ]; then
-            if [ -n "$COMMITS" ]; then
-              PR_LINES="$COMMITS"
-            else
-              PR_LINES="* 暂无变更记录（无 PR 且无提交）"
-            fi
-          fi
-
-          # 识别新贡献者
-          NEW_LINES=$(echo "$RESPONSE" | jq -r '.items[] | select(.author_association == "FIRST_TIMER" or .author_association == "FIRST_TIME_CONTRIBUTOR") | "* @" + (.user.login // "unknown") + " made their first contribution in #" + (.number|tostring)' || true)
-          if [ -z "$NEW_LINES" ]; then
-            NEW_SECTION=$'## New Contributors\n* No new contributors'
-          else
-            NEW_SECTION=$'## New Contributors\n'"$NEW_LINES"
-          fi
-
-          # 生成完整更新日志 URL
+          # 完整更新日志链接
+          PREV_TAG=$(git tag --sort=-version:refname | grep '^v' | grep -v "$CURRENT_TAG" | head -n 1 || true)
           if [ -n "$PREV_TAG" ]; then
             CHANGELOG_URL="https://github.com/${OWNER}/${REPO}/compare/${PREV_TAG}...${CURRENT_TAG}"
           else
             CHANGELOG_URL="https://github.com/${OWNER}/${REPO}/commits/${CURRENT_TAG}"
           fi
+          echo "CHANGELOG_URL=$CHANGELOG_URL" >> "$GITHUB_OUTPUT"
 
-          # 输出 Release Notes
-          {
-            echo "BODY<<EOF"
-            echo "## What's Changed"
-            echo "$PR_LINES"
-            echo
-            echo "$NEW_SECTION"
-            echo
-            echo "## Docker Images"
-            echo "Docker 镜像已发布到 GitHub Container Registry："
-            echo
-            echo "\`\`\`bash"
-            echo "# Backend"
-            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-backend:${VERSION}"
-            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-backend:latest"
-            echo
-            echo "# Frontend"
-            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-frontend:${VERSION}"
-            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-frontend:latest"
-            echo
-            echo "# Remote Gateway"
-            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-remote-gateway:${VERSION}"
-            echo "docker pull ghcr.io/${OWNER_LC}/${REPO}-remote-gateway:latest"
-            echo "\`\`\`"
-            echo
-            echo "**Full Changelog**: ${CHANGELOG_URL}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: 创建 GitHub Release
+      - name: 创建 GitHub Release（中文）
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_meta.outputs.TAG }}
           target_commitish: ${{ steps.release_meta.outputs.TARGET }}
           name: ${{ steps.release_meta.outputs.TAG }}
-          body: ${{ steps.release_notes.outputs.BODY }}
+          body: |
+            ${{ steps.release_notes.outputs.BODY }}
+
+            ---
+
+            📖 完整更新日志：${{ steps.release_notes.outputs.CHANGELOG_URL }}
+            🐳 Docker 镜像：`docker pull ghcr.io/silentely/nexus-terminal-backend:${{ steps.release_meta.outputs.VERSION }}`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
