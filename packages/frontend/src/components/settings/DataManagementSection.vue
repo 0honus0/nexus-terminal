@@ -39,15 +39,29 @@
             )
           }}
         </p>
-        <p class="text-sm text-text-secondary mb-4">
-          <span class="font-semibold text-warning">{{
+        <p class="text-xs text-text-secondary mb-3">
+          {{
             t(
-              'settings.exportConnections.decryptKeyInfo',
-              '解压密码为您的 data/.env 文件中的 ENCRYPTION_KEY。请妥善保管此文件。'
+              'settings.exportConnections.proxyNote',
+              '注意：代理配置和按内容存储的 SSH 密钥不包含在导出中。'
             )
-          }}</span>
+          }}
         </p>
-        <form @submit.prevent="handleExportConnections" class="space-y-4">
+        <form @submit.prevent="handleExportWithPassword" class="space-y-4">
+          <div>
+            <label for="exportPassword" class="block text-sm font-medium text-text-secondary mb-1">
+              {{ t('settings.exportConnections.passwordLabel', '导出密码（可选）') }}
+            </label>
+            <input
+              id="exportPassword"
+              v-model="exportPassword"
+              type="password"
+              :placeholder="
+                t('settings.exportConnections.passwordPlaceholder', '留空则使用 ENCRYPTION_KEY')
+              "
+              class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm"
+            />
+          </div>
           <div class="flex items-center justify-between">
             <button
               type="submit"
@@ -448,6 +462,13 @@ const {
   exportConnectionsSuccess,
   handleExportConnections,
 } = useExportConnections();
+
+// 自定义导出密码
+const exportPassword = ref('');
+
+const handleExportWithPassword = () => {
+  handleExportConnections(exportPassword.value || undefined);
+};
 
 // 全量备份导出
 const fullBackupLoading = ref(false);

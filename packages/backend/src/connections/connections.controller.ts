@@ -284,7 +284,8 @@ export const exportConnections = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const exportedData = await ImportExportService.exportConnectionsAsEncryptedZip();
+    const password = typeof req.query.password === 'string' ? req.query.password : undefined;
+    const exportedData = await ImportExportService.exportConnectionsAsEncryptedZip(false, password);
 
     // 设置响应头，提示浏览器下载文件
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

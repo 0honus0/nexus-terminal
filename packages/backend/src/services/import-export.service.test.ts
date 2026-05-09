@@ -191,7 +191,7 @@ describe('ImportExportService', () => {
       mockDbConnection.allDb.mockResolvedValueOnce(mockConnections).mockResolvedValueOnce([]);
 
       await expect(exportConnectionsAsEncryptedZip(false)).rejects.toThrow(
-        'ENCRYPTION_KEY is not set or is empty'
+        'ENCRYPTION_KEY is not set or empty'
       );
     });
 

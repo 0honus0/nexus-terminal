@@ -1,6 +1,15 @@
 /**
  * 数据备份服务
  * 提供导出/导入核心业务数据的能力
+ *
+ * 以下表不纳入备份范围（原因如下）：
+ * - audit_logs：审计日志属于运营数据，体积大且无迁移价值
+ * - command_history / path_history：命令与路径历史为临时性数据
+ * - ip_blacklist / ip_geo_cache：IP 封禁与地理缓存为环境相关数据，不跨实例迁移
+ * - batch_tasks / batch_subtasks：批量任务为运行时状态，不可恢复
+ * - ai_sessions / ai_messages：AI 会话为临时对话数据
+ * - users：单用户模式下由初始设置流程创建，无需备份
+ * - passkeys：Passkey 凭证绑定设备，无法跨实例迁移
  */
 
 import { getDbInstance, allDb, runDb } from '../database/connection';

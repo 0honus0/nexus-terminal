@@ -11,13 +11,18 @@ export function useExportConnections() {
   const exportConnectionsMessage = ref('');
   const exportConnectionsSuccess = ref(false);
 
-  const handleExportConnections = async () => {
+  const handleExportConnections = async (password?: string) => {
     exportConnectionsLoading.value = true;
     exportConnectionsMessage.value = '';
     exportConnectionsSuccess.value = false;
     try {
+      const params: Record<string, string> = {};
+      if (password && password.trim()) {
+        params.password = password.trim();
+      }
       const response = await apiClient.get('/settings/export-connections', {
         responseType: 'blob',
+        params,
       });
 
       let filename = 'nexus_connections_export.zip';

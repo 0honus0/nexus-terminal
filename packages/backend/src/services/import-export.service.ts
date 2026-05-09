@@ -244,7 +244,8 @@ function escapeCliArgument(value: string | number | null | undefined): string {
 }
 
 export const exportConnectionsAsEncryptedZip = async (
-  includeSshKeys: boolean = false
+  includeSshKeys: boolean = false,
+  customPassword?: string
 ): Promise<Buffer> => {
   try {
     const connectionsData = await getPlaintextConnectionsData(); // This now returns PlaintextExportConnectionData[]
@@ -311,11 +312,11 @@ export const exportConnectionsAsEncryptedZip = async (
 
     const connectionsScriptContent = scriptLines.join('\n');
 
-    const zipPassword = process.env.ENCRYPTION_KEY;
+    const zipPassword = customPassword || process.env.ENCRYPTION_KEY;
     if (!zipPassword || zipPassword.trim() === '') {
-      logger.error('错误：ENCRYPTION_KEY 环境变量未设置或为空！无法为ZIP文件设置密码。');
+      logger.error('错误：未提供密码且 ENCRYPTION_KEY 环境变量未设置或为空！');
       throw new Error(
-        'ENCRYPTION_KEY is not set or is empty, cannot password-protect the ZIP file.'
+        'No password provided and ENCRYPTION_KEY is not set or empty, cannot password-protect the ZIP file.'
       );
     }
 
