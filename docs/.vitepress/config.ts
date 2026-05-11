@@ -48,6 +48,8 @@ export default defineConfig({
         author: { '@type': 'Person', name: 'Silentely' },
       }),
     ],
+    // WebMCP — 供 AI 代理在浏览器中发现和调用站点工具
+    ['script', { src: '/webmcp.js', defer: true }],
     // RFC 8288 Link headers — 供 AI 代理发现 API 目录和 MCP 服务
     [
       'link',
