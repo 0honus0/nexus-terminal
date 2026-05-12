@@ -2,10 +2,8 @@ name: 构建与发布
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'CHANGELOG.md'
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -28,78 +26,129 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: 读取版本号
-        id: version
-        run: |
-          VERSION=$(cat VERSION | tr -d '[:space:]')
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "✅ 当前版本：$VERSION"
-
-      - name: 解析发布标签
+      - name: 解析版本号
         id: release_meta
         run: |
           set -euo pipefail
-          VERSION_INPUT=$(jq -r '.inputs.version // ""' "$GITHUB_EVENT_PATH")
-          PAYLOAD_VERSION=$(jq -r '.client_payload.version // ""' "$GITHUB_EVENT_PATH")
           TAG=""
           VERSION=""
 
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
             VERSION="${TAG#v}"
-          elif [[ -n "$VERSION_INPUT" ]]; then
-            VERSION="$VERSION_INPUT"
-            TAG="v${VERSION}"
-          elif [[ -n "$PAYLOAD_VERSION" ]]; then
-            VERSION="$PAYLOAD_VERSION"
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
             TAG="v${VERSION}"
           else
-            VERSION="${{ steps.version.outputs.VERSION }}"
+            VERSION=$(cat VERSION | tr -d '[:space:]')
             TAG="v${VERSION}"
           fi
-
-          TARGET="$GITHUB_SHA"
 
           if [[ -z "$TAG" ]]; then
             echo "❌ 无法解析有效的标签，流程终止"
             exit 1
           fi
 
-          echo "✅ 将创建/更新 Release：$TAG (version: $VERSION)"
+          echo "✅ 将创建 Release：$TAG (version: $VERSION)"
           {
             echo "TAG=$TAG"
             echo "VERSION=$VERSION"
-            echo "TARGET=$TARGET"
           } >> "$GITHUB_OUTPUT"
 
-      - name: 从 CHANGELOG.md 提取更新日志
-        id: release_notes
+      - name: 等待 kittylog.app 更新（最多 15 分钟）
         env:
-          CURRENT_TAG: ${{ steps.release_meta.outputs.TAG }}
+          VERSION: ${{ steps.release_meta.outputs.VERSION }}
+        run: |
+          echo "⏳ 等待 kittylog.app 生成 v${VERSION} 更新日志..."
+          KITTYLOG_URL="https://kittylog.app/c/Silentely/nexus-terminal"
+          MAX_ATTEMPTS=15  # 每分钟轮询一次，最多 15 分钟
+          POLL_INTERVAL=60
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "  📡 轮询 [$i/$MAX_ATTEMPTS]..."
+
+            PAGE=$(curl -sL --max-time 15 "$KITTYLOG_URL" 2>/dev/null || true)
+
+            if echo "$PAGE" | grep -qi "v${VERSION}"; then
+              echo "✅ kittylog.app 已包含 v${VERSION} 更新日志"
+              echo "found=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              echo "  ⏳ 未找到，${POLL_INTERVAL}s 后重试..."
+              sleep $POLL_INTERVAL
+            fi
+          done
+
+          echo "⚠️ 等待超时（${MAX_ATTEMPTS} 分钟），将使用本地 docs/changelog.md 作为兜底"
+          echo "found=false" >> $GITHUB_OUTPUT
+
+      - name: 从 kittylog.app 提取更新日志
+        if: steps.wait_kittylog.outputs.found == 'true'
+        id: kittylog_notes
+        env:
+          VERSION: ${{ steps.release_meta.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          KITTYLOG_URL="https://kittylog.app/c/Silentely/nexus-terminal"
+
+          PAGE=$(curl -sL --max-time 30 "$KITTYLOG_URL" 2>/dev/null || true)
+
+          if [ -z "$PAGE" ]; then
+            echo "⚠️ 无法访问 kittylog.app"
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 提取指定版本的更新日志块
+          # kittylog.app 使用 Markdown 格式，版本标题为 ## vX.Y.Z
+          BODY=$(echo "$PAGE" | awk -v tag="$VERSION" '
+            BEGIN { found=0 }
+            /^## v/ {
+              if (found) { exit }
+              if (index($0, tag) > 0) {
+                found=1
+                print $0
+                next
+              }
+            }
+            found && NF { print }
+          ')
+
+          if [ -n "$BODY" ]; then
+            echo "✅ 从 kittylog.app 提取到 v${VERSION} 更新日志"
+            {
+              echo 'body<<EOF'
+              echo "$BODY"
+              echo EOF
+            } >> "$GITHUB_OUTPUT"
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ kittylog.app 未找到 v${VERSION} 内容"
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 从本地 docs/changelog.md 提取更新日志（兜底）
+        if: steps.wait_kittylog.outputs.found != 'true' || steps.kittylog_notes.outputs.found != 'true'
+        id: local_notes
+        env:
           VERSION: ${{ steps.release_meta.outputs.VERSION }}
         run: |
           set -euo pipefail
 
-          # 提取 CHANGELOG.md 中当前版本的更新内容
-          # 匹配 ## [vX.Y.Z] 或 ## vX.Y.Z 格式的标题，提取到下一个 ## 标题之前
           BODY=$(awk -v tag="$VERSION" '
             BEGIN { found=0 }
             /^## / {
               if (found) { exit }
               if (index($0, tag) > 0 || index($0, "v" tag) > 0) {
                 found=1
-                # 输出标题行
                 print $0
                 next
               }
             }
             found && NF { print }
-          ' CHANGELOG.md)
-
-          if [ -z "$BODY" ]; then
-            # 回退：提取最新版本段落
-            BODY=$(awk '/^## \[/{if(p){exit};p=1} p&&NF{print}' CHANGELOG.md)
-          fi
+          ' docs/changelog.md)
 
           if [ -z "$BODY" ]; then
             BODY="暂无更新日志内容"
@@ -109,28 +158,46 @@ jobs:
             echo 'body<<EOF'
             echo "$BODY"
             echo EOF
-          } >> "$GITHUB_OUTPUT"
+          } >> $GITHUB_OUTPUT
 
+      - name: 合并更新日志内容
+        id: release_notes
+        run: |
+          # 优先使用 kittylog.app 内容，否则使用本地兜底
+          if [[ "${{ steps.kittylog_notes.outputs.found }}" == "true" ]]; then
+            BODY="${{ steps.kittylog_notes.outputs.body }}"
+            SOURCE="kittylog.app"
+          else
+            BODY="${{ steps.local_notes.outputs.body }}"
+            SOURCE="本地 docs/changelog.md"
+          fi
+
+          echo "📝 使用更新日志来源：$SOURCE"
+          {
+            echo 'body<<EOF'
+            echo "$BODY"
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+          # 生成完整更新日志链接
           OWNER="${GITHUB_REPOSITORY%/*}"
           REPO="${GITHUB_REPOSITORY#*/}"
-
-          # 完整更新日志链接
+          CURRENT_TAG="${{ steps.release_meta.outputs.TAG }}"
           PREV_TAG=$(git tag --sort=-version:refname | grep '^v' | grep -v "$CURRENT_TAG" | head -n 1 || true)
           if [ -n "$PREV_TAG" ]; then
             CHANGELOG_URL="https://github.com/${OWNER}/${REPO}/compare/${PREV_TAG}...${CURRENT_TAG}"
           else
             CHANGELOG_URL="https://github.com/${OWNER}/${REPO}/commits/${CURRENT_TAG}"
           fi
-          echo "CHANGELOG_URL=$CHANGELOG_URL" >> "$GITHUB_OUTPUT"
+          echo "CHANGELOG_URL=$CHANGELOG_URL" >> $GITHUB_OUTPUT
 
-      - name: 创建 GitHub Release（中文）
+      - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_meta.outputs.TAG }}
-          target_commitish: ${{ steps.release_meta.outputs.TARGET }}
           name: ${{ steps.release_meta.outputs.TAG }}
           body: |
-            ${{ steps.release_notes.outputs.BODY }}
+            ${{ steps.release_notes.outputs.body }}
 
             ---
 

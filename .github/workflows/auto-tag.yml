@@ -79,5 +79,5 @@ jobs:
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
-      # Release 由 release.yml 在 CHANGELOG.md 变更时自动触发
-      # 流程：tag push → kittylog 生成 changelog → PR 合并 → release.yml 创建 Release
+      # Release 由 release.yml 监听 tag push 自动触发
+      # 流程：tag push → release.yml 等待 kittylog 更新 → 创建 Release
