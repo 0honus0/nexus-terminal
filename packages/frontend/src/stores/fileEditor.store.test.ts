@@ -645,9 +645,11 @@ describe('fileEditor.store', () => {
   });
 
   describe('reloadTab', () => {
-    it('标签页不存在时不应报错', async () => {
+    it('标签页不存在时不应报错且不改变状态', async () => {
       const store = useFileEditorStore();
+      const tabsBefore = store.tabs.size;
       await store.reloadTab('nonexistent');
+      expect(store.tabs.size).toBe(tabsBefore);
     });
 
     it('标签页正在保存时不应重载', async () => {
