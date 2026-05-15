@@ -807,4 +807,307 @@ describe('auth.store', () => {
       expect(store.loggedInUser).toBeUndefined();
     });
   });
+
+  describe('login 状态管理', () => {
+    it('登录成功后 isLoading 应为 false', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { message: '登录成功', user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.login({ username: 'testuser', password: 'pass' });
+
+      expect(store.isLoading).toBe(false);
+    });
+
+    it('登录失败后 isLoading 应为 false', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('网络错误'));
+
+      await store.login({ username: 'testuser', password: 'pass' });
+
+      expect(store.isLoading).toBe(false);
+    });
+
+    it('登录用户没有 language 字段时不应调用 setLocale', async () => {
+      const store = useAuthStore();
+      const mockUser = { id: 1, username: 'testuser' }; // no language field
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { message: '登录成功', user: mockUser },
+      });
+
+      await store.login({ username: 'testuser', password: 'pass' });
+
+      expect(setLocale).not.toHaveBeenCalled();
+    });
+
+    it('登录失败后应清除 loginRequires2FA 和 tempToken', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+      store.tempToken = 'old-token';
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('登录失败'));
+
+      await store.login({ username: 'testuser', password: 'pass' });
+
+      expect(store.loginRequires2FA).toBe(false);
+      expect(store.tempToken).toBeNull();
+    });
+
+    it('登录成功时应携带 rememberMe 参数', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { message: '登录成功', user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.login({ username: 'testuser', password: 'pass', rememberMe: true });
+
+      expect(apiClient.post).toHaveBeenCalledWith('/auth/login', {
+        username: 'testuser',
+        password: 'pass',
+        rememberMe: true,
+      });
+    });
+  });
+
+  describe('verifyLogin2FA 请求体验证', () => {
+    it('应在请求体中包含 tempToken', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+      store.tempToken = 'my-temp-token';
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { message: '验证成功', user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.verifyLogin2FA('123456');
+
+      expect(apiClient.post).toHaveBeenCalledWith('/auth/login/2fa', {
+        token: '123456',
+        tempToken: 'my-temp-token',
+      });
+    });
+
+    it('2FA 验证成功后用户无 language 时不应调用 setLocale', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+      store.tempToken = 'temp-token';
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { message: '验证成功', user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.verifyLogin2FA('123456');
+
+      expect(setLocale).not.toHaveBeenCalled();
+    });
+
+    it('2FA 验证成功后 isLoading 应为 false', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+      store.tempToken = 'temp-token';
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { message: '验证成功', user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.verifyLogin2FA('123456');
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('fetchIpBlacklist 参数验证', () => {
+    it('应使用默认参数 limit=50, offset=0', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { entries: [], total: 0 },
+      });
+
+      await store.fetchIpBlacklist();
+
+      expect(apiClient.get).toHaveBeenCalledWith('/settings/ip-blacklist', {
+        params: { limit: 50, offset: 0 },
+      });
+    });
+
+    it('应支持自定义 limit 和 offset', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { entries: [], total: 0 },
+      });
+
+      await store.fetchIpBlacklist(10, 20);
+
+      expect(apiClient.get).toHaveBeenCalledWith('/settings/ip-blacklist', {
+        params: { limit: 10, offset: 20 },
+      });
+    });
+
+    it('fetchIpBlacklist 成功后 isLoading 应为 false', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { entries: [], total: 0 },
+      });
+
+      await store.fetchIpBlacklist();
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('logout 状态管理', () => {
+    it('登出时即使 API 失败 isLoading 也应为 false', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('网络错误'));
+
+      await store.logout();
+
+      expect(store.isLoading).toBe(false);
+    });
+
+    it('登出前应将 loginRequires2FA 重置为 false', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({});
+
+      await store.logout();
+
+      expect(store.loginRequires2FA).toBe(false);
+    });
+  });
+
+  describe('checkAuthStatus 状态管理', () => {
+    it('认证成功时应重置 loginRequires2FA', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { isAuthenticated: true, user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.checkAuthStatus();
+
+      expect(store.loginRequires2FA).toBe(false);
+    });
+
+    it('未认证时应重置 loginRequires2FA', async () => {
+      const store = useAuthStore();
+      store.loginRequires2FA = true;
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { isAuthenticated: false },
+      });
+
+      await store.checkAuthStatus();
+
+      expect(store.loginRequires2FA).toBe(false);
+    });
+
+    it('checkAuthStatus 成功后 isLoading 应为 false', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { isAuthenticated: false },
+      });
+
+      await store.checkAuthStatus();
+
+      expect(store.isLoading).toBe(false);
+    });
+
+    it('已认证用户无 language 时不应调用 setLocale', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: { isAuthenticated: true, user: { id: 1, username: 'testuser' } },
+      });
+
+      await store.checkAuthStatus();
+
+      expect(setLocale).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteIpFromBlacklist 状态管理', () => {
+    it('deleteIpFromBlacklist 成功后 total 不应低于 0', async () => {
+      const store = useAuthStore();
+      store.ipBlacklist.entries = [];
+      store.ipBlacklist.total = 0;
+
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({});
+
+      const result = await store.deleteIpFromBlacklist('10.0.0.1');
+
+      expect(result).toBe(true);
+      expect(store.ipBlacklist.total).toBe(0); // Math.max(0, 0 - 1) = 0
+    });
+
+    it('deleteIpFromBlacklist 使用正确的 URL 编码', async () => {
+      const store = useAuthStore();
+      store.ipBlacklist.entries = [
+        { ip: '192.168.1.1', attempts: 1, last_attempt_at: Date.now(), blocked_until: null },
+      ];
+      store.ipBlacklist.total = 1;
+
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({});
+
+      await store.deleteIpFromBlacklist('192.168.1.1');
+
+      expect(apiClient.delete).toHaveBeenCalledWith(
+        `/settings/ip-blacklist/${encodeURIComponent('192.168.1.1')}`
+      );
+    });
+  });
+
+  describe('loadInitData 边界情况', () => {
+    it('成功加载时用户无 language 时不应调用 setLocale', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: {
+          needsSetup: false,
+          isAuthenticated: true,
+          user: { id: 1, username: 'testuser' }, // no language
+          captchaConfig: {
+            enabled: false,
+            provider: 'none',
+            hcaptchaSiteKey: null,
+            recaptchaSiteKey: null,
+          },
+        },
+      });
+
+      await store.loadInitData();
+
+      expect(setLocale).not.toHaveBeenCalled();
+      expect(store.isInitCompleted).toBe(true);
+    });
+
+    it('成功加载后 isLoading 应为 false', async () => {
+      const store = useAuthStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({
+        data: {
+          needsSetup: false,
+          isAuthenticated: false,
+          user: null,
+          captchaConfig: { enabled: false, provider: 'none', hcaptchaSiteKey: null, recaptchaSiteKey: null },
+        },
+      });
+
+      await store.loadInitData();
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
 });
