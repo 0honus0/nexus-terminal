@@ -7,7 +7,7 @@
  * 仅负责 UI 渲染与事件转发，所有业务逻辑由父组件 FileManager 管理。
  */
 import { ref, computed, watch, nextTick } from 'vue';
-import { useVirtualList } from '@vueuse/core';
+import { useVirtualListSetup } from '../composables/useVirtualListSetup';
 import { useI18n } from 'vue-i18n';
 import {
   formatSize,
@@ -148,8 +148,9 @@ const {
   containerProps,
   wrapperProps,
   scrollTo: virtualScrollTo,
-} = useVirtualList(virtualListSource, {
+} = useVirtualListSetup(virtualListSource, {
   itemHeight: () => itemHeight.value,
+  overscan: 15,
 });
 
 // --- Drop Overlay DOM 引用 ---

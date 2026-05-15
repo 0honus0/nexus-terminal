@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, defineExpose, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useVirtualList } from '@vueuse/core';
+import { useVirtualListSetup } from '../composables/useVirtualListSetup';
 
 import { useI18n } from 'vue-i18n';
 
@@ -284,9 +284,9 @@ const {
   list: virtualList,
   containerProps,
   wrapperProps,
-} = useVirtualList(flatFilteredConnections, {
+} = useVirtualListSetup(flatFilteredConnections, {
   itemHeight: CONNECTION_ITEM_HEIGHT,
-  overscan: 5, // 预渲染额外的5个项目以确保滚动流畅
+  overscan: 10,
 });
 
 // +++ 监听分组状态变化并保存到 localStorage +++

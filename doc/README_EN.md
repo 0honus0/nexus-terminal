@@ -24,15 +24,18 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 
 ### ⚡ Performance Optimizations
 
-| Optimization                          | Effect                                                                                                                      |
-| :------------------------------------ | :-------------------------------------------------------------------------------------------------------------------------- |
-| **SSH Terminal Input Latency**        | Reduced from 72-232ms to <3ms (**98% improvement**), separating small packet direct-write from large packet batch buffering |
-| **App Startup Performance**           | Unified initialization API, merging 3-4 network requests into 1, eliminating white-screen waiting                           |
-| **FileManager Virtual Scrolling**     | Auto-enabled when connections exceed 50, smooth rendering for massive file lists                                            |
-| **Command History Virtual Scrolling** | Smooth rendering of thousands of history records without lag                                                                |
-| **Frontend Lazy Loading**             | RDP/VNC components loaded on-demand, guacamole dependency (~200KB) no longer blocks initial render                          |
-| **SQLite WAL Mode**                   | Enabled WAL mode for optimized concurrent read/write, reduced lock contention                                               |
-| **Audit Log Probabilistic Cleanup**   | Triggered every 100 writes instead of every write, eliminating unnecessary cleanup overhead                                 |
+| Optimization                        | Effect                                                                                                                      |
+| :---------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
+| **SSH Terminal Input Latency**      | Reduced from 72-232ms to <3ms (**98% improvement**), separating small packet direct-write from large packet batch buffering |
+| **App Startup Performance**         | Unified initialization API, merging 3-4 network requests into 1, eliminating white-screen waiting                           |
+| **Unified Virtual Scrolling**       | Extracted `useVirtualListSetup` composable, used by 4 components with auto overscan scaling                                 |
+| **Audit Log Row Height Fix**        | Fixed `itemHeight` mismatch causing content clipping, adjusted from 100px to 180px                                          |
+| **WebWorker Output Processing**     | Terminal syntax highlighting offloaded to Worker thread, preventing main thread blocking with fallback support              |
+| **Route Resource Preloading**       | Auto-prefetch core route chunks after authentication (Dashboard > Workspace > Connections)                                  |
+| **Service Worker Enhancement**      | Structured caching strategy (static/API/icons/pages), enabling offline access                                               |
+| **Frontend Lazy Loading**           | RDP/VNC components loaded on-demand, guacamole dependency (~200KB) no longer blocks initial render                          |
+| **SQLite WAL Mode**                 | Enabled WAL mode for optimized concurrent read/write, reduced lock contention                                               |
+| **Audit Log Probabilistic Cleanup** | Triggered every 100 writes instead of every write, eliminating unnecessary cleanup overhead                                 |
 
 ### 🛠️ New Features
 

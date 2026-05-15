@@ -13,11 +13,20 @@
 - 领域命名空间：`EventDomain` 枚举按业务域分组事件，支持批量订阅
 - 生命周期管理：`onEventWithCleanup` 返回清理函数，简化订阅管理
 - 事件持久化：关键事件（认证、SSH、Docker 删除、备份、系统）自动写入 `event_logs` 表
+- **虚拟滚动统一架构**：抽取 `useVirtualListSetup` composable，4 个组件统一使用，支持自动 overscan 缩放
+- **WebWorker 输出处理**：终端语法高亮移至 Worker 线程，避免大量输出阻塞主线程
+- **通用 Worker 池管理器**：`createWorkerPool` 支持多 Worker 并行任务、Promise API、主线程降级兜底
+- **路由资源预加载**：认证后使用 `requestIdleCallback` 自动预加载核心路由 chunk
+- **Service Worker 增强**：结构化缓存策略（静态资源/API/图标/页面四个缓存桶），支持离线访问
+- **Service Worker 更新提示**：从 `window.confirm()` 弹窗改为通知 toast
 
 ### 改进
 
 - 简化 `NotificationProcessorService`，移除手动 `setImmediate` 包装
 - 事件服务向后兼容，现有 17+ 个发布点无需修改
+- **审计日志行高修复**：`itemHeight` 从 100px 调整为 180px，解决大 JSON 详情块内容裁剪
+- **overscan 标准化**：所有虚拟列表组件统一 overscan 值（文件列表 15，其他 10）
+- **PWA manifest 增强**：添加 `categories` 和 `description` 字段
 
 ### 数据库
 

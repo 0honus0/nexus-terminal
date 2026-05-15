@@ -1,7 +1,8 @@
 {
   "name": "Nexus Terminal",
   "short_name": "NexusTerm",
-  "description": "A modern, web-based terminal.",
+  "description": "现代化、功能丰富的 Web SSH / RDP / VNC 客户端",
+  "categories": ["developer", "utilities"],
   "icons": [
     {
       "src": "/icons/icon-144x144.png",

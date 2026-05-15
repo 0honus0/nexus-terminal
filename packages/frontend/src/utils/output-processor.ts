@@ -395,3 +395,71 @@ export class OutputProcessor {
 }
 
 export const outputProcessor = new OutputProcessor();
+
+// ==================== Worker 线程处理 ====================
+
+let workerPool: ReturnType<typeof import('../workers/createWorkerPool').createWorkerPool> | null =
+  null;
+
+/**
+ * 在 Worker 线程中处理终端输出
+ *
+ * 将计算密集型的语法高亮处理移至 Worker 线程，避免阻塞主线程。
+ * Worker 不可用时自动降级为同步处理。
+ *
+ * @param text - 待处理的终端输出文本
+ * @param options - 处理配置
+ * @returns Promise<ProcessedOutput> - 处理结果
+ */
+export async function processInWorker(
+  text: string,
+  options?: {
+    foldThreshold?: number;
+    enableHighlight?: boolean;
+    enableTableFormat?: boolean;
+    enableLinkDetection?: boolean;
+  }
+): Promise<ProcessedOutput> {
+  // 小数据包直接同步处理，避免 Worker 通信开销
+  if (text.length <= 100) {
+    return outputProcessor.process(text);
+  }
+
+  try {
+    // 懒加载 Worker 池
+    if (!workerPool) {
+      const { createWorkerPool } = await import('../workers/createWorkerPool');
+      workerPool = createWorkerPool(
+        new URL('../workers/output-processor.worker.ts', import.meta.url),
+        {
+          size: 2,
+          timeout: 5000,
+          // 降级处理：Worker 不可用时使用主线程同步处理
+          fallback: (_type: string, payload: unknown) => {
+            const { text: inputText, options: opts } = payload as {
+              text: string;
+              options?: typeof options;
+            };
+            const processor = opts ? new OutputProcessor(opts) : outputProcessor;
+            return processor.process(inputText);
+          },
+        }
+      );
+    }
+
+    return await workerPool.execute<ProcessedOutput>('process', { text, options });
+  } catch {
+    // Worker 执行失败时降级为同步处理
+    return outputProcessor.process(text);
+  }
+}
+
+/**
+ * 销毁 Worker 池（应用卸载时调用）
+ */
+export function destroyWorkerPool(): void {
+  if (workerPool) {
+    workerPool.destroy();
+    workerPool = null;
+  }
+}

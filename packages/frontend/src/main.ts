@@ -2,7 +2,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import App from './App.vue';
-import router from './router';
+import router, { schedulePrefetch } from './router';
 import i18n from './i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useSettingsStore } from './stores/settings.store';
@@ -14,6 +14,7 @@ import {
 import './style.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
+import { useUiNotificationsStore } from './stores/uiNotifications.store';
 import { log } from '@/utils/log';
 // Element Plus styles are now auto-imported via unplugin-vue-components
 
@@ -118,6 +119,9 @@ const setupWebManifestLink = async () => {
         log.error('[main.ts] 加载用户设置或外观数据失败:', error);
         // 加载失败也继续,可能使用默认值或显示错误
       }
+
+      // 认证完成后预加载核心路由 chunk，减少后续页面切换的加载时间
+      schedulePrefetch();
     }
   } catch (error: unknown) {
     // 捕获初始化过程中的意外错误
@@ -141,11 +145,21 @@ const setupWebManifestLink = async () => {
 
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // 新 SW 已安装但尚未激活，提示用户刷新
+                // 新 SW 已安装但尚未激活，通过通知系统提示用户刷新
                 log.info('[SW] 新版本已就绪，等待用户确认刷新');
-                if (window.confirm('应用有新版本可用，是否立即刷新以获取最新内容？')) {
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  window.location.reload();
+                try {
+                  const uiNotificationsStore = useUiNotificationsStore();
+                  uiNotificationsStore.addNotification({
+                    type: 'info',
+                    message: '应用有新版本可用，请刷新页面以获取最新内容。',
+                    timeout: 0,
+                  });
+                } catch {
+                  // 降级：如果通知 store 不可用，使用浏览器原生提示
+                  if (window.confirm('应用有新版本可用，是否立即刷新以获取最新内容？')) {
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    window.location.reload();
+                  }
                 }
               }
             });

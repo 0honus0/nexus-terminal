@@ -116,7 +116,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, defineExpose, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useVirtualList, useDebounceFn } from '@vueuse/core';
+import { useDebounceFn } from '@vueuse/core';
+import { useVirtualListSetup } from '../composables/useVirtualListSetup';
 import { useCommandHistoryStore, CommandHistoryEntryFE } from '../stores/commandHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
@@ -159,9 +160,9 @@ const {
   list: virtualList,
   containerProps,
   wrapperProps,
-} = useVirtualList(filteredHistory, {
+} = useVirtualListSetup(filteredHistory, {
   itemHeight: ITEM_HEIGHT,
-  overscan: 10, // 上下各预渲染 10 个项目
+  overscan: 10,
 });
 
 // --- 生命周期钩子 ---

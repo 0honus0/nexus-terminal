@@ -152,7 +152,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useAuditLogStore } from '../stores/audit.store';
 import { AuditLogEntry, AuditLogActionType } from '../types/server.types';
 import { useI18n } from 'vue-i18n';
-import { useVirtualList } from '@vueuse/core';
+import { useVirtualListSetup } from '../composables/useVirtualListSetup';
 
 const store = useAuditLogStore();
 const { t } = useI18n();
@@ -207,9 +207,9 @@ const logsPerPage = computed(() => store.logsPerPage);
 const totalPages = computed(() => Math.ceil(totalLogs.value / logsPerPage.value));
 
 // --- Virtual List ---
-// Use estimated item height since details can expand
-const { list, containerProps, wrapperProps } = useVirtualList(logs, {
-  itemHeight: 100, // Estimate 100px per row
+// 行高估算：minHeight 60px + max-h-40（160px）details 区域 + padding，取 180px 安全值
+const { list, containerProps, wrapperProps } = useVirtualListSetup(logs, {
+  itemHeight: 180,
   overscan: 10,
 });
 

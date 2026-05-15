@@ -96,15 +96,23 @@ packages/frontend/
 │   │   └── style-customizer/       # 样式定制相关
 │   │
 │   ├── composables/                # 组合式函数
-│   │   └── ...                     # 可复用逻辑
+│   │   ├── useVirtualListSetup.ts  # 虚拟列表通用配置
+│   │   └── ...                     # 其他可复用逻辑
 │   │
 │   ├── features/                   # 功能模块
 │   │   ├── appearance/             # 外观功能
 │   │   │   └── config/             # 预设主题配置
+│   │   ├── terminal/               # 终端增强插件
+│   │   │   └── addons/             # Xterm.js 插件
 │   │   ├── ai-ops/                 # AI 智能运维 (Phase 5)
 │   │   │   └── AIAssistantPanel.vue
 │   │   └── batch-ops/              # 批量操作 (Phase 4)
 │   │       └── MultiServerExec.vue
+│   │
+│   ├── workers/                    # WebWorker 线程
+│   │   ├── types.ts                # Worker 消息协议类型
+│   │   ├── createWorkerPool.ts     # 通用 Worker 池管理器
+│   │   └── output-processor.worker.ts  # 终端输出处理 Worker
 │   │
 │   ├── types/                      # TypeScript 类型定义
 │   │   ├── connection.ts
@@ -117,6 +125,7 @@ packages/frontend/
 │   ├── utils/                      # 工具函数
 │   │   ├── cacheManager.ts         # 统一缓存管理器
 │   │   ├── errorExtractor.ts       # 统一错误消息提取器
+│   │   ├── output-processor.ts     # 终端输出语法高亮处理
 │   │   ├── apiClient.ts            # API 客户端（axios 封装）
 │   │   └── ...
 │   │
@@ -315,6 +324,15 @@ packages/frontend/
 - `src/utils/cacheManager.ts` - 统一缓存管理器
 - `src/utils/errorExtractor.ts` - 统一错误消息提取器
 - `src/utils/apiClient.ts` - API 客户端（axios 封装）
+- `src/utils/output-processor.ts` - 终端输出语法高亮处理（支持 Worker 线程）
+
+### 性能优化基础设施
+
+- `src/composables/useVirtualListSetup.ts` - 虚拟列表通用配置（封装 `@vueuse/core` 的 `useVirtualList`）
+- `src/workers/types.ts` - Worker 消息协议类型定义
+- `src/workers/createWorkerPool.ts` - 通用 Worker 池管理器（Promise-based API，支持主线程降级）
+- `src/workers/output-processor.worker.ts` - 终端输出处理 Worker（语法高亮移至 Worker 线程）
+- `public/sw.js` - Service Worker（结构化缓存，支持离线访问）
 
 ### 样式
 
@@ -362,6 +380,13 @@ npm run preview
 - 优先使用 Tailwind CSS 类
 - 组件特定样式使用 `<style scoped>`
 - 全局样式放在 `src/style.css`
+
+### 性能优化约定
+
+- **虚拟滚动**：大数据列表（>50 项）必须使用 `useVirtualListSetup` composable，禁止直接 `v-for` 渲染
+- **WebWorker**：计算密集型任务（JSON 解析、语法高亮、Base64 解码）优先使用 Worker 线程，通过 `createWorkerPool` 管理
+- **路由预加载**：认证后自动预加载核心路由 chunk（Dashboard > Workspace > Connections）
+- **Service Worker**：使用结构化缓存策略（Cache-First 静态资源，Network-First API/导航），支持离线访问
 
 ### TypeScript 类型检查
 

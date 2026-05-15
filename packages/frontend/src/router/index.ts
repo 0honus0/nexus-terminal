@@ -113,4 +113,40 @@ router.beforeEach(async (to) => {
   return true;
 });
 
+/**
+ * 预加载指定路由的懒加载 chunk
+ * 通过解析路由配置触发 dynamic import，使浏览器提前下载 chunk
+ */
+function prefetchRoute(path: string) {
+  const route = router.resolve(path);
+  if (route.matched.length > 0) {
+    // 触发路由组件的 dynamic import，浏览器会自动下载对应 chunk
+    route.matched.forEach((record) => {
+      if (typeof record.components?.default === 'function') {
+        (record.components.default as () => Promise<unknown>)();
+      }
+    });
+  }
+}
+
+/**
+ * 在浏览器空闲时预加载核心路由的 chunk
+ * 优先级：Dashboard > Workspace > Connections
+ */
+function schedulePrefetch() {
+  const CORE_ROUTES = ['/', '/workspace', '/connections'];
+
+  const doPrefetch = () => {
+    CORE_ROUTES.forEach((path) => prefetchRoute(path));
+  };
+
+  if (typeof requestIdleCallback !== 'undefined') {
+    requestIdleCallback(doPrefetch, { timeout: 5000 });
+  } else {
+    // 降级：延迟 2 秒后执行
+    setTimeout(doPrefetch, 2000);
+  }
+}
+
+export { schedulePrefetch };
 export default router;
