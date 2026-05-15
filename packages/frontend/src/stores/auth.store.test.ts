@@ -1098,9 +1098,7 @@ describe('auth.store', () => {
 
       await store.deleteIpFromBlacklist('192.168.1.1');
 
-      expect(apiClient.delete).toHaveBeenCalledWith(
-        '/settings/ip-blacklist/192.168.1.1'
-      );
+      expect(apiClient.delete).toHaveBeenCalledWith('/settings/ip-blacklist/192.168.1.1');
     });
 
     it('total 减少时不应低于 0', async () => {

@@ -409,9 +409,7 @@ describe('connections.store', () => {
       store.connections = [...mockConnections];
 
       // 第一次成功，第二次无 message 的失败
-      vi.mocked(apiClient.delete)
-        .mockResolvedValueOnce({})
-        .mockRejectedValueOnce({});
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({}).mockRejectedValueOnce({});
 
       const result = await store.deleteBatchConnections([1, 2]);
 
