@@ -345,6 +345,79 @@ describe('connections.store', () => {
       expect(result).toBe(true);
       expect(apiClient.delete).not.toHaveBeenCalled();
     });
+
+    it('所有连接删除失败时应返回 false 并包含所有失败 ID', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.delete)
+        .mockRejectedValueOnce({ response: { data: { message: '失败1' } } })
+        .mockRejectedValueOnce({ response: { data: { message: '失败2' } } });
+
+      const result = await store.deleteBatchConnections([1, 2]);
+
+      expect(result).toBe(false);
+      expect(store.error).toContain('批量删除操作中部分连接未能成功删除');
+      expect(store.error).toContain('删除连接 ID 1');
+      expect(store.error).toContain('删除连接 ID 2');
+    });
+
+    it('批量删除完成后 isLoading 应始终为 false', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.delete)
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(new Error('删除失败'));
+
+      await store.deleteBatchConnections([1, 2]);
+
+      expect(store.isLoading).toBe(false);
+    });
+
+    it('全部成功时 error 应为 null', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+      store.error = '旧错误';
+
+      vi.mocked(apiClient.delete).mockResolvedValue({});
+
+      const result = await store.deleteBatchConnections([1, 2]);
+
+      expect(result).toBe(true);
+      expect(store.error).toBeNull();
+    });
+
+    it('批量删除中 401 错误应记录警告并将连接标记为失败', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.delete)
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce({ response: { status: 401, data: { message: 'Unauthorized' } } });
+
+      const result = await store.deleteBatchConnections([1, 2]);
+
+      expect(result).toBe(false);
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能删除连接')
+      );
+    });
+
+    it('失败消息中不包含 message 时应使用默认文本', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      // 第一次成功，第二次无 message 的失败
+      vi.mocked(apiClient.delete)
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce({});
+
+      const result = await store.deleteBatchConnections([1, 2]);
+
+      expect(result).toBe(false);
+      expect(store.error).toContain('删除连接 ID 2');
+    });
   });
 
   describe('testConnection', () => {
