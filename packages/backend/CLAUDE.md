@@ -265,7 +265,7 @@ packages/backend/
 
 ### 服务层
 
-- `src/services/event.service.ts` - 事件发布订阅
+- `src/services/event.service.ts` - 事件总线（50+ 事件类型，覆盖认证、连接、SSH、文件传输、批量任务、备份、Docker、SFTP 等全业务域）
 - `src/services/crypto.service.ts` - 数据加解密
 - `src/services/dashboard.service.ts` - 仪表盘统计（CPU/内存/存储/时间线）
 - `src/notifications/notification.processor.service.ts` - 通知处理
@@ -384,4 +384,3 @@ repository.ts → 数据访问与 SQL 操作
 - 敏感信息自动脱敏（`logging/logger.ts` 中的 redact 功能）
 
 ---
-
