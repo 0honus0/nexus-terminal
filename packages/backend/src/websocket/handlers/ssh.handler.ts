@@ -16,6 +16,7 @@ import { startDockerStatusPolling } from './docker.handler';
 import { getErrorMessage } from '../../utils/AppError';
 import { lookupGeoInfo } from '../../auth/ip-geo.service';
 import { logger } from '../../utils/logger';
+import eventService, { AppEventType } from '../../services/event.service';
 
 type SilentExecShellFlavor = 'posix' | 'powershell' | 'cmd' | 'fish';
 type SilentExecSuccessCriteria = 'any' | 'non_empty' | 'absolute_path';
@@ -683,6 +684,16 @@ export async function handleSshConnect(
                 auditLogService.logAction('SSH_SHELL_FAILURE', shellFailPayload);
                 notificationService.sendNotification('SSH_SHELL_FAILURE', shellFailPayload);
               });
+            eventService.emitEvent(AppEventType.SshShellFailure, {
+              userId: ws.userId,
+              details: {
+                connectionId: payload.connectionId,
+                connectionName: newState.connectionName || '',
+                sessionId: newSessionId,
+                ip: clientIp,
+                reason: getErrorMessage(err),
+              },
+            });
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(
                 JSON.stringify({ type: 'ssh:error', payload: `打开 Shell 失败: ${err.message}` })
@@ -814,6 +825,15 @@ export async function handleSshConnect(
               auditLogService.logAction('SSH_CONNECT_SUCCESS', connectSuccessPayload);
               notificationService.sendNotification('SSH_CONNECT_SUCCESS', connectSuccessPayload);
             });
+          eventService.emitEvent(AppEventType.SshConnectSuccess, {
+            userId: ws.userId,
+            details: {
+              connectionId: payload.connectionId,
+              connectionName: newState.connectionName || '',
+              sessionId: newSessionId,
+              ip: clientIp,
+            },
+          });
 
           logger.debug(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
           sftpService
@@ -897,6 +917,16 @@ export async function handleSshConnect(
         auditLogService.logAction('SSH_CONNECT_FAILURE', connectFailPayload);
         notificationService.sendNotification('SSH_CONNECT_FAILURE', connectFailPayload);
       });
+    eventService.emitEvent(AppEventType.SshConnectFailure, {
+      userId: ws.userId,
+      details: {
+        connectionId: payload.connectionId,
+        connectionName: connInfo?.name || '',
+        sessionId: ws.sessionId,
+        ip: clientIp,
+        reason: connectErrMsg,
+      },
+    });
     if (ws.readyState === WebSocket.OPEN)
       ws.send(JSON.stringify({ type: 'ssh:error', payload: `连接失败: ${connectErrMsg}` }));
     ws.close(1011, `SSH Connection Failed: ${connectErrMsg}`);

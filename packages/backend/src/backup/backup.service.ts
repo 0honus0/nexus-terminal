@@ -13,6 +13,7 @@
  */
 
 import { getDbInstance, allDb, runDb } from '../database/connection';
+import eventService, { AppEventType } from '../services/event.service';
 import {
   BACKUP_FORMAT_VERSION,
   type BackupMetadata,
@@ -172,6 +173,10 @@ export async function exportData(): Promise<BackupPayload> {
     result.metadata.recordCounts[key] = rows.length;
   }
 
+  eventService.emitEvent(AppEventType.BackupExportCompleted, {
+    details: { timestamp: new Date().toISOString() },
+  });
+
   return result;
 }
 
@@ -255,11 +260,21 @@ export async function importData(
       result.skipped = {};
     } else {
       await runDb(db, 'COMMIT');
+      eventService.emitEvent(AppEventType.BackupImportCompleted, {
+        details: {
+          imported: result.imported,
+          skipped: result.skipped,
+          errors: result.errors.length,
+        },
+      });
     }
   } catch (err: unknown) {
     await runDb(db, 'ROLLBACK').catch(() => {});
     const msg = err instanceof Error ? err.message : String(err);
     result.errors.push(`导入事务失败，已回滚: ${msg}`);
+    eventService.emitEvent(AppEventType.BackupImportFailed, {
+      details: { reason: msg },
+    });
   }
 
   return result;

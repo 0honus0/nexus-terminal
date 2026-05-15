@@ -28,9 +28,40 @@ export enum AppEventType {
   SshConnectSuccess = 'SSH_CONNECT_SUCCESS',
   SshConnectFailure = 'SSH_CONNECT_FAILURE',
   SshShellFailure = 'SSH_SHELL_FAILURE',
+  SshDisconnect = 'SSH_DISCONNECT',
+  SshSessionSuspended = 'SSH_SESSION_SUSPENDED',
+  // Passkey 事件
+  PasskeyRegistered = 'PASSKEY_REGISTERED',
+  PasskeyAuthSuccess = 'PASSKEY_AUTH_SUCCESS',
+  PasskeyAuthFailure = 'PASSKEY_AUTH_FAILURE',
+  PasskeyDeleted = 'PASSKEY_DELETED',
+  // 文件传输事件
+  FileUpload = 'FILE_UPLOAD',
+  FileDownload = 'FILE_DOWNLOAD',
+  // 命令安全事件
+  CommandBlocked = 'COMMAND_BLOCKED',
+  BatchCommandExecuted = 'BATCH_COMMAND_EXECUTED',
+  // 批量任务事件
+  BatchTaskCreated = 'BATCH_TASK_CREATED',
+  BatchTaskCompleted = 'BATCH_TASK_COMPLETED',
+  BatchTaskFailed = 'BATCH_TASK_FAILED',
+  BatchTaskCancelled = 'BATCH_TASK_CANCELLED',
+  // 备份事件
+  BackupExportCompleted = 'BACKUP_EXPORT_COMPLETED',
+  BackupExportFailed = 'BACKUP_EXPORT_FAILED',
+  BackupImportCompleted = 'BACKUP_IMPORT_COMPLETED',
+  BackupImportFailed = 'BACKUP_IMPORT_FAILED',
+  // Docker 事件
+  DockerContainerStarted = 'DOCKER_CONTAINER_STARTED',
+  DockerContainerStopped = 'DOCKER_CONTAINER_STOPPED',
+  DockerContainerRemoved = 'DOCKER_CONTAINER_REMOVED',
+  DockerContainerCommandFailed = 'DOCKER_CONTAINER_COMMAND_FAILED',
+  // SFTP 事件
+  SftpConnectSuccess = 'SFTP_CONNECT_SUCCESS',
+  SftpConnectFailure = 'SFTP_CONNECT_FAILURE',
+  // 系统事件
   DatabaseMigration = 'DATABASE_MIGRATION',
   AdminSetupComplete = 'ADMIN_SETUP_COMPLETE',
-  // 可以根据需要添加更多事件类型
 }
 
 // 定义事件负载的通用接口，可以根据具体事件扩展

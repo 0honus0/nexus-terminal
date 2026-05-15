@@ -1,6 +1,7 @@
 import type { SFTPWrapper } from 'ssh2';
 import type { ClientState } from '../websocket/types';
 import { logger } from '../utils/logger';
+import eventService, { AppEventType } from '../services/event.service';
 
 export const executeInitializeSftpSessionOperation = async (
   state: ClientState | undefined,
@@ -28,6 +29,9 @@ export const executeInitializeSftpSessionOperation = async (
             payload: { connectionId: state.dbConnectionId, message: 'SFTP 初始化失败' },
           })
         );
+        eventService.emitEvent(AppEventType.SftpConnectFailure, {
+          details: { sessionId, reason: 'SFTP 初始化失败' },
+        });
         reject(err);
         return;
       }
@@ -37,6 +41,9 @@ export const executeInitializeSftpSessionOperation = async (
       state.ws.send(
         JSON.stringify({ type: 'sftp_ready', payload: { connectionId: state.dbConnectionId } })
       );
+      eventService.emitEvent(AppEventType.SftpConnectSuccess, {
+        details: { sessionId },
+      });
       sftpInstance.on('end', () => {
         logger.info(`[SFTP] 会话 ${sessionId} 的 SFTP 会话已结束。`);
         state.sftp = undefined;

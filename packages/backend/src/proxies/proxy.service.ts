@@ -1,5 +1,6 @@
 import * as ProxyRepository from './proxy.repository';
 import { encrypt } from '../utils/crypto';
+import eventService, { AppEventType } from '../services/event.service';
 
 export interface ProxyData extends ProxyRepository.ProxyData {}
 
@@ -77,6 +78,11 @@ export const createProxy = async (input: CreateProxyInput): Promise<ProxyData> =
   // 4. 创建代理记录
   const newProxyId = await ProxyRepository.createProxy(proxyData);
 
+  // 发布代理创建事件
+  eventService.emitEvent(AppEventType.ProxyCreated, {
+    details: { proxyId: newProxyId, name: input.name, type: input.type },
+  });
+
   // 5. 获取并返回新创建的代理
   const newProxy = await getProxyById(newProxyId);
   if (!newProxy) {
@@ -152,6 +158,11 @@ export const updateProxy = async (
     if (!updated) {
       throw new Error('更新代理记录失败。');
     }
+
+    // 发布代理更新事件
+    eventService.emitEvent(AppEventType.ProxyUpdated, {
+      details: { proxyId: id, name: input.name },
+    });
   }
 
   // 4. 获取并返回更新后的代理
@@ -162,5 +173,11 @@ export const updateProxy = async (
  * 删除代理
  */
 export const deleteProxy = async (id: number): Promise<boolean> => {
-  return ProxyRepository.deleteProxy(id);
+  const result = await ProxyRepository.deleteProxy(id);
+  if (result) {
+    eventService.emitEvent(AppEventType.ProxyDeleted, {
+      details: { proxyId: id },
+    });
+  }
+  return result;
 };

@@ -19,6 +19,7 @@ import * as SshService from '../services/ssh.service';
 import { broadcastToUser } from '../websocket/state';
 import * as ConnectionRepository from '../connections/connection.repository';
 import { logger } from '../utils/logger';
+import eventService, { AppEventType } from '../services/event.service';
 
 // 默认配置
 const DEFAULT_CONCURRENCY = 5;
@@ -149,6 +150,14 @@ export async function execCommandBatch(
 
   // 持久化到数据库
   await BatchRepository.createTask(task);
+  eventService.emitEvent(AppEventType.BatchTaskCreated, {
+    userId: typeof userId === 'string' ? parseInt(userId, 10) : userId,
+    details: {
+      taskId: task.taskId,
+      command: payload.command,
+      targetCount: payload.connectionIds.length,
+    },
+  });
   logger.info(`[BatchService] 批量任务已创建: ${taskId}，包含 ${subTasks.length} 个子任务。`);
 
   // 创建 AbortController
@@ -794,6 +803,20 @@ async function finalizeTask(
       reason,
     },
   });
+
+  // 触发事件总线通知
+  const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+  if (failed === 0 && !taskCancelled) {
+    eventService.emitEvent(AppEventType.BatchTaskCompleted, {
+      userId: numericUserId,
+      details: { taskId, completed, failed, cancelled, total },
+    });
+  } else if (failed > 0) {
+    eventService.emitEvent(AppEventType.BatchTaskFailed, {
+      userId: numericUserId,
+      details: { taskId, completed, failed, cancelled, total },
+    });
+  }
 
   logger.info(
     `[BatchService] 任务 ${taskId} 已完成，最终状态: ${finalStatus}，成功: ${completed}，失败: ${failed}，取消: ${cancelled}`

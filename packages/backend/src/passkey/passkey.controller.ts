@@ -11,6 +11,7 @@ import { getErrorMessage } from '../utils/AppError';
 import { logger } from '../utils/logger';
 import { AuditLogService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service';
+import eventService, { AppEventType } from '../services/event.service';
 
 const auditLogService = new AuditLogService();
 const notificationService = new NotificationService();
@@ -82,6 +83,10 @@ export const deleteUserPasskey = async (
         userId: actor.userId,
         username: actor.username,
         credentialId: credentialID,
+      });
+      eventService.emitEvent(AppEventType.PasskeyDeleted, {
+        userId: actor.userId,
+        details: { username: actor.username, passkeyId: credentialID },
       });
       res.status(200).json({ message: 'Passkey 已成功删除。' });
     } else {
