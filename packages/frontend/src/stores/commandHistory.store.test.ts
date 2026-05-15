@@ -241,8 +241,8 @@ describe('commandHistory.store', () => {
       store.selectedIndex = -1;
 
       store.selectPreviousCommand();
-      // 公式：(selectedIndex - 1 + length) % length = (-1 - 1 + 3) % 3 = 1
-      expect(store.selectedIndex).toBe(1);
+      // 当 selectedIndex 为 -1 时，选中最后一个元素
+      expect(store.selectedIndex).toBe(2);
     });
 
     it('应该从 0 回退到最后一条（循环行为）', async () => {

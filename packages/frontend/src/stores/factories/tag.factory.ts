@@ -79,8 +79,8 @@ export function createTagStore(config: TagStoreConfig) {
         });
         const newTag = response.data.tag;
         localStorage.removeItem(cacheKey);
-        await fetchTags();
-        if (useNotifications) {
+        const fetchSuccess = await fetchTags();
+        if (fetchSuccess && useNotifications) {
           uiNotificationsStore.showSuccess('标签已添加');
         }
         return newTag;
@@ -102,8 +102,8 @@ export function createTagStore(config: TagStoreConfig) {
       try {
         await apiClient.put(`${apiEndpoint}/${id}`, { name });
         localStorage.removeItem(cacheKey);
-        await fetchTags();
-        if (useNotifications) {
+        const fetchSuccess = await fetchTags();
+        if (fetchSuccess && useNotifications) {
           uiNotificationsStore.showSuccess('标签已更新');
         }
         return true;
@@ -125,8 +125,8 @@ export function createTagStore(config: TagStoreConfig) {
       try {
         await apiClient.delete(`${apiEndpoint}/${id}`);
         localStorage.removeItem(cacheKey);
-        await fetchTags();
-        if (useNotifications) {
+        const fetchSuccess = await fetchTags();
+        if (fetchSuccess && useNotifications) {
           uiNotificationsStore.showSuccess('标签已删除');
         }
         return true;

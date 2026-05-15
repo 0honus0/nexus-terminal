@@ -49,8 +49,6 @@ export const useConnectionsStore = defineStore('connections', () => {
     } else {
       isLoading.value = true;
     }
-
-    isLoading.value = true;
     try {
       const response = await apiClient.get<ConnectionInfo[]>('/connections');
       const freshData = response.data;
@@ -130,19 +128,12 @@ export const useConnectionsStore = defineStore('connections', () => {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await apiClient.put<{ message: string; connection: ConnectionInfo }>(
+      await apiClient.put<{ message: string; connection: ConnectionInfo }>(
         `/connections/${connectionId}`,
         updatedData
       );
-
-      const index = connections.value.findIndex((conn) => conn.id === connectionId);
-      if (index !== -1) {
-        connections.value[index] = { ...connections.value[index], ...response.data.connection };
-      }
       cacheManager.remove(CACHE_KEYS.CONNECTIONS);
-      if (index !== -1) {
-        await fetchConnections();
-      }
+      await fetchConnections();
       return true;
     } catch (err: unknown) {
       log.error(`更新连接 ${connectionId} 失败:`, err);
@@ -176,6 +167,25 @@ export const useConnectionsStore = defineStore('connections', () => {
     }
   }
 
+  // 内部删除函数，不操作 isLoading/error，用于批量删除
+  async function _deleteConnection(
+    connectionId: number
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      await apiClient.delete(`/connections/${connectionId}`);
+      cacheManager.remove(CACHE_KEYS.CONNECTIONS);
+      connections.value = connections.value.filter((conn) => conn.id !== connectionId);
+      return { success: true };
+    } catch (err: unknown) {
+      log.error(`删除连接 ${connectionId} 失败:`, err);
+      const message = extractErrorMessage(err, '删除连接时发生未知错误。');
+      if (isUnauthorizedError(err)) {
+        log.warn('未授权，需要登录才能删除连接。');
+      }
+      return { success: false, message };
+    }
+  }
+
   async function deleteBatchConnections(connectionIds: number[]): Promise<boolean> {
     if (!connectionIds || connectionIds.length === 0) {
       log.warn('[ConnectionsStore] deleteBatchConnections called with no IDs.');
@@ -187,22 +197,14 @@ export const useConnectionsStore = defineStore('connections', () => {
     const individualErrors: string[] = [];
 
     for (const id of connectionIds) {
-      try {
-        const success = await deleteConnection(id);
-        if (!success) {
-          allSucceeded = false;
-          if (error.value) {
-            individualErrors.push(`删除连接 ID ${id} 失败: ${error.value}`);
-          } else {
-            individualErrors.push(`删除连接 ID ${id} 失败 (未知原因)`);
-          }
-          error.value = null;
-        }
-      } catch (err: unknown) {
+      const result = await _deleteConnection(id);
+      if (!result.success) {
         allSucceeded = false;
-        const errorMessage = extractErrorMessage(err, '未知错误');
-        individualErrors.push(`调用删除连接 ID ${id} 时发生意外错误: ${errorMessage}`);
-        log.error(`[ConnectionsStore] Unexpected error calling deleteConnection for ID ${id}`, err);
+        individualErrors.push(
+          result.message
+            ? `删除连接 ID ${id} 失败: ${result.message}`
+            : `删除连接 ID ${id} 失败 (未知原因)`
+        );
       }
     }
 

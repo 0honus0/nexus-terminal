@@ -1,5 +1,6 @@
 import { createTagStore, type TagInfo } from './factories/tag.factory';
 import apiClient from '../utils/apiClient';
+import { cacheManager, CACHE_KEYS } from '../utils/cacheManager';
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { log } from '@/utils/log';
 
@@ -28,9 +29,13 @@ export function useTagsStoreExtended(): TagsStoreExtended {
       await apiClient.put(`/tags/${tagId}/connections`, {
         connection_ids: connectionIds,
       });
-      localStorage.removeItem('tagsCache');
-      localStorage.removeItem('connectionsCache');
-      await store.fetchTags();
+      cacheManager.remove(CACHE_KEYS.TAGS);
+      cacheManager.remove(CACHE_KEYS.CONNECTIONS);
+      const fetchSuccess = await store.fetchTags();
+      if (!fetchSuccess) {
+        store.error = '标签数据刷新失败';
+        return false;
+      }
       return true;
     } catch (err: unknown) {
       log.error(`Failed to update connections for tag ${tagId}:`, err);

@@ -16,7 +16,11 @@ export interface FavoritePathItem {
 }
 
 export const useFavoritePathsStore = defineStore('favoritePaths', () => {
-  const savedSortBy = localStorage.getItem('favoritePathSortBy') as FavoritePathSortType | null;
+  const VALID_SORT_TYPES: FavoritePathSortType[] = ['name', 'last_used_at'];
+  const savedSortByRaw = localStorage.getItem('favoritePathSortBy');
+  const savedSortBy = VALID_SORT_TYPES.includes(savedSortByRaw as FavoritePathSortType)
+    ? (savedSortByRaw as FavoritePathSortType)
+    : null;
 
   // --- State ---
   const favoritePaths = ref<FavoritePathItem[]>([]);
@@ -39,9 +43,9 @@ export const useFavoritePathsStore = defineStore('favoritePaths', () => {
     );
   });
 
-  const getFavoritePathById = computed(() => {
-    return (id: number) => favoritePaths.value.find((fav) => fav.id === id);
-  });
+  function getFavoritePathById(id: number) {
+    return favoritePaths.value.find((fav) => fav.id === id);
+  }
 
   // --- Actions ---
   function _sortFavoritePaths() {

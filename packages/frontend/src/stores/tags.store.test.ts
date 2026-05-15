@@ -33,6 +33,19 @@ vi.mock('../utils/errorExtractor', () => ({
   }),
 }));
 
+// Mock cacheManager
+const mockCacheManagerRemove = vi.fn();
+vi.mock('../utils/cacheManager', () => ({
+  cacheManager: {
+    remove: mockCacheManagerRemove,
+  },
+  CACHE_KEYS: {
+    TAGS: 'nexus_tags',
+    CONNECTIONS: 'nexus_connections',
+  },
+  CACHE_CONFIG: {},
+}));
+
 // 辅助：创建模拟标签数据
 const createMockTag = (
   overrides: Partial<{ id: number; name: string; created_at: number; updated_at: number }> = {}
@@ -311,8 +324,8 @@ describe('tags.store', () => {
       expect(store.isLoading).toBe(false);
       expect(store.error).toBeNull();
       expect(mockPut).toHaveBeenCalledWith('/tags/1/connections', { connection_ids: [10, 20, 30] });
-      expect(localStorage.removeItem).toHaveBeenCalledWith('tagsCache');
-      expect(localStorage.removeItem).toHaveBeenCalledWith('connectionsCache');
+      expect(mockCacheManagerRemove).toHaveBeenCalledWith('nexus_tags');
+      expect(mockCacheManagerRemove).toHaveBeenCalledWith('nexus_connections');
     });
 
     it('空连接 ID 列表时应正确发送请求', async () => {

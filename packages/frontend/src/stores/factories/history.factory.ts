@@ -69,7 +69,12 @@ export function createHistoryStore<T extends HistoryEntryFE = HistoryEntryFE>(
         selectedIndex.value = -1;
         return;
       }
-      selectedIndex.value = (selectedIndex.value - 1 + history.length) % history.length;
+      // 当 selectedIndex 为 -1（未选中）时，选中最后一个元素
+      if (selectedIndex.value === -1) {
+        selectedIndex.value = history.length - 1;
+      } else {
+        selectedIndex.value = (selectedIndex.value - 1 + history.length) % history.length;
+      }
     };
 
     const resetSelection = () => {
@@ -123,6 +128,7 @@ export function createHistoryStore<T extends HistoryEntryFE = HistoryEntryFE>(
       // 过滤 Ctrl+C 信号
       if (itemValue === '\x03') return;
 
+      isLoading.value = true;
       try {
         await apiClient.post(apiEndpoint, { [itemLabel]: itemValue.trim() });
         localStorage.removeItem(cacheKey);
@@ -131,10 +137,13 @@ export function createHistoryStore<T extends HistoryEntryFE = HistoryEntryFE>(
         log.error(`[${storeId}] 添加${addLabel}失败:`, err);
         const message = extractErrorMessage(err, `添加${addLabel}时发生错误`);
         uiNotificationsStore.showError(message);
+      } finally {
+        isLoading.value = false;
       }
     };
 
     const deleteItem = async (id: number) => {
+      isLoading.value = true;
       try {
         await apiClient.delete(`${apiEndpoint}/${id}`);
         localStorage.removeItem(cacheKey);
@@ -147,10 +156,13 @@ export function createHistoryStore<T extends HistoryEntryFE = HistoryEntryFE>(
         log.error(`[${storeId}] 删除${deleteLabel}失败:`, err);
         const message = extractErrorMessage(err, `删除${deleteLabel}时发生错误`);
         uiNotificationsStore.showError(message);
+      } finally {
+        isLoading.value = false;
       }
     };
 
     const clearAll = async () => {
+      isLoading.value = true;
       try {
         await apiClient.delete(apiEndpoint);
         localStorage.removeItem(cacheKey);
@@ -160,6 +172,8 @@ export function createHistoryStore<T extends HistoryEntryFE = HistoryEntryFE>(
         log.error(`[${storeId}] 清空${clearLabel}失败:`, err);
         const message = extractErrorMessage(err, `清空${clearLabel}时发生错误`);
         uiNotificationsStore.showError(message);
+      } finally {
+        isLoading.value = false;
       }
     };
 
