@@ -517,6 +517,32 @@ describe('connections.store', () => {
       );
     });
 
+    it('只有 width 参数时应正确构建 URL', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { token: 'token-w' },
+      });
+
+      const token = await store.getVncSessionToken(2, 800);
+
+      expect(token).toBe('token-w');
+      expect(apiClient.post).toHaveBeenCalledWith('/connections/2/vnc-session?width=800');
+    });
+
+    it('无 width/height 时不应添加查询参数', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { token: 'token-plain' },
+      });
+
+      const token = await store.getVncSessionToken(3);
+
+      expect(token).toBe('token-plain');
+      expect(apiClient.post).toHaveBeenCalledWith('/connections/3/vnc-session');
+    });
+
     it('获取失败应抛出错误', async () => {
       const store = useConnectionsStore();
 
@@ -525,6 +551,315 @@ describe('connections.store', () => {
       });
 
       await expect(store.getVncSessionToken(1)).rejects.toThrow();
+    });
+
+    it('401 错误时应记录警告并重新抛出', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      await expect(store.getVncSessionToken(1)).rejects.toBeDefined();
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能获取 VNC 会话令牌')
+      );
+    });
+  });
+
+  describe('deleteConnection 追加边界条件', () => {
+    it('401 错误时应记录警告', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.delete).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      const result = await store.deleteConnection(1);
+
+      expect(result).toBe(false);
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能删除连接')
+      );
+    });
+
+    it('删除成功后连接数量应减少', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({});
+
+      await store.deleteConnection(1);
+
+      expect(store.connections).toHaveLength(1);
+    });
+
+    it('删除成功后 error 应为 null', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+      store.error = '旧错误';
+
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({});
+
+      await store.deleteConnection(1);
+
+      expect(store.error).toBeNull();
+    });
+  });
+
+  describe('addConnection 追加边界条件', () => {
+    it('401 错误时应记录警告', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      const result = await store.addConnection({
+        name: '新服务器',
+        type: 'SSH',
+        host: '10.0.0.1',
+        port: 22,
+        username: 'user',
+        auth_method: 'password',
+      });
+
+      expect(result).toBe(false);
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能添加连接')
+      );
+    });
+
+    it('添加失败后 isLoading 应为 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('fail'));
+
+      await store.addConnection({
+        name: '失败连接',
+        type: 'SSH',
+        host: '1.2.3.4',
+        port: 22,
+        username: 'root',
+        auth_method: 'password',
+      });
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('updateConnection 追加边界条件', () => {
+    it('401 错误时应记录警告', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.put).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      const result = await store.updateConnection(1, { name: '改名' });
+
+      expect(result).toBe(false);
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能更新连接')
+      );
+    });
+
+    it('更新成功后 isLoading 应为 false', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.put).mockResolvedValueOnce({
+        data: { message: '更新成功', connection: mockConnections[0] },
+      });
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockConnections });
+
+      await store.updateConnection(1, { name: '新名称' });
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('testConnection 追加边界条件', () => {
+    it('401 错误时应记录警告', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      const result = await store.testConnection(1);
+
+      expect(result.success).toBe(false);
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能测试连接')
+      );
+    });
+
+    it('测试成功无 latency 时 latency 应为 undefined', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        data: { success: true, message: '连接成功' }, // no latency
+      });
+
+      const result = await store.testConnection(1);
+
+      expect(result.success).toBe(true);
+      expect(result.latency).toBeUndefined();
+    });
+  });
+
+  describe('cloneConnection 追加边界条件', () => {
+    it('克隆失败时应设置错误并返回 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { data: { message: '克隆失败' } },
+      });
+
+      const result = await store.cloneConnection(1, '克隆连接');
+
+      expect(result).toBe(false);
+      expect(store.error).toBe('克隆失败');
+    });
+
+    it('401 错误时应记录警告', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      await store.cloneConnection(1, '克隆');
+
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能克隆连接')
+      );
+    });
+
+    it('克隆完成后 isLoading 应为 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce(new Error('fail'));
+
+      await store.cloneConnection(1, '克隆');
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('addTagToConnectionsAction 追加边界条件', () => {
+    it('添加标签失败时应设置错误并返回 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { data: { message: '添加标签失败' } },
+      });
+
+      const result = await store.addTagToConnectionsAction([1, 2], 5);
+
+      expect(result).toBe(false);
+      expect(store.error).toBe('添加标签失败');
+    });
+
+    it('401 错误时应记录警告', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.post).mockRejectedValueOnce({
+        response: { status: 401, data: { message: 'Unauthorized' } },
+      });
+
+      await store.addTagToConnectionsAction([1], 3);
+
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('未授权，需要登录才能为连接添加标签')
+      );
+    });
+  });
+
+  describe('updateConnectionTags 追加边界条件', () => {
+    it('更新失败时应设置错误并返回 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.put).mockRejectedValueOnce({
+        response: { data: { message: '更新标签失败' } },
+      });
+
+      const result = await store.updateConnectionTags(1, [2, 3]);
+
+      expect(result).toBe(false);
+      expect(store.error).toBe('更新标签失败');
+    });
+
+    it('更新标签完成后 isLoading 应为 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.put).mockRejectedValueOnce(new Error('fail'));
+
+      await store.updateConnectionTags(1, []);
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('fetchConnections 追加边界条件', () => {
+    it('成功获取后应清除 error', async () => {
+      const store = useConnectionsStore();
+      store.error = '旧错误';
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: [] });
+
+      await store.fetchConnections();
+
+      expect(store.error).toBeNull();
+    });
+
+    it('isLoading 完成后应为 false', async () => {
+      const store = useConnectionsStore();
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockConnections });
+
+      await store.fetchConnections();
+
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
+  describe('deleteBatchConnections 追加边界条件', () => {
+    it('单个 ID 列表成功删除应返回 true', async () => {
+      const store = useConnectionsStore();
+      store.connections = [mockConnections[0]];
+
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({});
+
+      const result = await store.deleteBatchConnections([1]);
+
+      expect(result).toBe(true);
+      expect(store.connections).toHaveLength(0);
+    });
+
+    it('null ID 列表应返回 true 并不调用 API', async () => {
+      const store = useConnectionsStore();
+
+      const result = await store.deleteBatchConnections(null as any);
+
+      expect(result).toBe(true);
+      expect(apiClient.delete).not.toHaveBeenCalled();
+    });
+
+    it('批量删除成功后不应修改有效的旧错误', async () => {
+      const store = useConnectionsStore();
+      store.connections = [...mockConnections];
+
+      vi.mocked(apiClient.delete).mockResolvedValue({});
+
+      // Previous error cleared before batch
+      store.error = '旧错误会在批量操作开始时被清除';
+      const result = await store.deleteBatchConnections([1, 2]);
+
+      expect(result).toBe(true);
+      expect(store.error).toBeNull();
     });
   });
 });
