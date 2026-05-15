@@ -58,9 +58,9 @@ export function createWorkerPool(
   const isWorkerAvailable = typeof Worker !== 'undefined';
 
   /**
-   * Initialize the worker pool by creating the configured number of Worker instances and wiring their handlers.
+   * Create and register up to `size` Web Worker instances for the pool.
    *
-   * If the environment does not support Worker, this function returns without creating workers. It attempts to create up to the configured `size` workers, attaches `onmessage` and `onerror` handlers for each successfully created worker, and records them as idle. Worker construction failures are ignored so initialization continues for remaining workers.
+   * If the environment does not support `Worker`, this does nothing. For each worker that is successfully constructed it attaches `onmessage` and `onerror` handlers and records the worker as idle; individual construction failures are ignored so initialization continues for remaining workers.
    */
   function init() {
     if (!isWorkerAvailable) return;
@@ -78,14 +78,14 @@ export function createWorkerPool(
   }
 
   /**
-   * Handle an inbound worker message and settle the matching pending request.
+   * Settle the pending promise that corresponds to an incoming worker message.
    *
-   * Finds a pending request by `event.data.id`; if a matching request exists, clears its timeout,
-   * removes it from the pending map, marks the originating worker as idle, resolves with the
-   * payload or rejects with an Error when `event.data.error` is present, and then triggers queue processing.
-   * If no matching pending request is found, the message is ignored.
+   * Looks up the pending request by `event.data.id`; if found, clears its timeout, removes it
+   * from the pending map, marks the originating worker as idle, resolves with `event.data.payload`
+   * or rejects with an `Error` when `event.data.error` is present, and then calls `processQueue`.
+   * If no matching pending request exists, the message is ignored.
    *
-   * @param event - The MessageEvent from a worker containing `{ id, error?, payload? }`
+   * @param event - MessageEvent from a worker with shape `{ id, error?, payload? }`
    */
   function handleMessage(event: MessageEvent<WorkerResponse>) {
     const { id, error } = event.data;

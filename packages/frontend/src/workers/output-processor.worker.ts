@@ -117,17 +117,10 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
 };
 
 /**
- * Process raw terminal output into a typed, possibly highlighted and formatted representation.
+ * Process terminal output into a structured, display-ready representation.
  *
- * Processes and sanitizes `output`, detects its type (JSON, YAML, LOG, TABLE, or TEXT), applies
- * highlighting/formatting according to current configuration, and detects links when enabled.
- * For very large inputs, highlighting/formatting is skipped and only sanitized text is returned.
- *
- * @param output - The raw text from the terminal to process
- * @returns A ProcessedOutput containing:
- *  - `type`: the detected `OutputType`
- *  - `content`: the processed (highlighted/formatted or sanitized) text
- *  - `metadata`: an object with `lineCount`, `isLong`, `shouldFold`, and `foldThreshold`
+ * @param output - Raw terminal text to process
+ * @returns A `ProcessedOutput` containing the detected `type`, the processed `content` (sanitized and optionally highlighted/formatted), and `metadata` with `lineCount`, `isLong`, `shouldFold`, and `foldThreshold`
  */
 
 function processOutput(output: string): ProcessedOutput {
