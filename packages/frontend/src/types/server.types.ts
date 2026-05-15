@@ -23,19 +23,20 @@ export interface ServerStatus {
 
 export type NotificationChannelType = 'webhook' | 'email' | 'telegram';
 
-// Align NotificationEvent with AuditLogActionType as requested
+// Align NotificationEvent with backend AppEventType
 export type NotificationEvent =
+  // 认证事件
   | 'LOGIN_SUCCESS'
   | 'LOGIN_FAILURE'
   | 'LOGOUT'
   | 'PASSWORD_CHANGED'
   | '2FA_ENABLED'
   | '2FA_DISABLED'
-  // Passkey Events
   | 'PASSKEY_REGISTERED'
   | 'PASSKEY_AUTH_SUCCESS'
   | 'PASSKEY_AUTH_FAILURE'
   | 'PASSKEY_DELETED'
+  // 连接与配置事件
   | 'CONNECTION_CREATED'
   | 'CONNECTION_UPDATED'
   | 'CONNECTION_DELETED'
@@ -51,9 +52,31 @@ export type NotificationEvent =
   | 'NOTIFICATION_SETTING_CREATED'
   | 'NOTIFICATION_SETTING_UPDATED'
   | 'NOTIFICATION_SETTING_DELETED'
+  // SSH 会话事件
   | 'SSH_CONNECT_SUCCESS'
   | 'SSH_CONNECT_FAILURE'
   | 'SSH_SHELL_FAILURE'
+  | 'SSH_DISCONNECT'
+  | 'SSH_SESSION_SUSPENDED'
+  // 批量任务事件
+  | 'BATCH_TASK_CREATED'
+  | 'BATCH_TASK_COMPLETED'
+  | 'BATCH_TASK_FAILED'
+  | 'BATCH_TASK_CANCELLED'
+  // 备份事件
+  | 'BACKUP_EXPORT_COMPLETED'
+  | 'BACKUP_EXPORT_FAILED'
+  | 'BACKUP_IMPORT_COMPLETED'
+  | 'BACKUP_IMPORT_FAILED'
+  // Docker 事件
+  | 'DOCKER_CONTAINER_STARTED'
+  | 'DOCKER_CONTAINER_STOPPED'
+  | 'DOCKER_CONTAINER_REMOVED'
+  | 'DOCKER_CONTAINER_COMMAND_FAILED'
+  // SFTP 事件
+  | 'SFTP_CONNECT_SUCCESS'
+  | 'SFTP_CONNECT_FAILURE'
+  // 系统事件
   | 'DATABASE_MIGRATION'
   | 'ADMIN_SETUP_COMPLETE';
 

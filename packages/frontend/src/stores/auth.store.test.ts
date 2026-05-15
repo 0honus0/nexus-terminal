@@ -1391,6 +1391,7 @@ describe('auth.store', () => {
       await store.fetchPasskeys();
 
       expect(store.passkeys).toHaveLength(1);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const pk = store.passkeys![0];
       expect(pk.credentialID).toBe('cred-abc');
       expect(pk.transports).toBeUndefined();

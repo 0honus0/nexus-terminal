@@ -9,6 +9,7 @@ import {
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { lookupGeoInfo } from '../auth/ip-geo.service';
 import { logger } from '../utils/logger';
+import eventService, { AppEventType } from '../services/event.service';
 
 // H-19: 会话级清理回调注册表，避免模块间循环依赖
 type SessionCleanupCallback = (sessionId: string) => void;
@@ -184,6 +185,15 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
             .finally(() => {
               void auditLogService.logAction('SSH_SESSION_SUSPENDED', suspendPayload);
             });
+          eventService.emitEvent(AppEventType.SshSessionSuspended, {
+            userId: state.ws.userId,
+            details: {
+              connectionId: state.dbConnectionId,
+              connectionName: state.connectionName || '',
+              sessionId,
+              ip: state.ipAddress,
+            },
+          });
           // SSH 资源已移交，不需要在这里关闭它们
         } else {
           logger.warn(
@@ -222,6 +232,16 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         .finally(() => {
           void auditLogService.logAction('SSH_DISCONNECT', disconnectPayload);
         });
+      eventService.emitEvent(AppEventType.SshDisconnect, {
+        userId: state.ws.userId,
+        details: {
+          connectionId: state.dbConnectionId,
+          connectionName: state.connectionName || '',
+          sessionId,
+          ip: state.ipAddress,
+          durationSeconds,
+        },
+      });
     } else if (state.isSuspendedByService) {
       // 已被服务接管（例如通过旧的 startSuspend 流程，或成功移交后），不在此处关闭
       logger.debug(`WebSocket: 会话 ${sessionId} 的 SSH 连接已由挂起服务管理，跳过关闭。`);

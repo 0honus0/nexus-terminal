@@ -14,6 +14,7 @@ import {
   CaptchaProvider,
 } from '../types/settings.types';
 import { logger } from '../utils/logger';
+import eventService, { AppEventType } from '../services/event.service';
 
 // +++ 定义焦点切换完整配置接口 (与前端 store 保持一致) +++
 interface FocusItemConfig {
@@ -100,6 +101,9 @@ export const settingsService = {
       JSON.stringify(settings)
     );
     await settingsRepository.setMultipleSettings(settings);
+    eventService.emitEvent(AppEventType.SettingsUpdated, {
+      details: { keys: Object.keys(settings) },
+    });
     logger.debug('[Service] Finished repository.setMultipleSettings.');
   },
 

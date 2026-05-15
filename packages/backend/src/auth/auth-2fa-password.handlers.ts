@@ -52,6 +52,7 @@ import {
   buildUserTwoFactorSecretByIdQueryAction,
 } from './auth-controller-sql.utils';
 import { resolveRequestClientIp } from './auth-main-flow.utils';
+import eventService, { AppEventType } from '../services/event.service';
 import { logger } from '../utils/logger';
 
 const notificationService = new NotificationService();
@@ -222,6 +223,10 @@ export const verifyAndActivate2FA = async (
       const successAction = successMutationAction.successAction;
       console[successAction.log.level](successAction.log.message);
       applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
+      eventService.emitEvent(AppEventType.TwoFactorEnabled, {
+        userId: validatedUserId,
+        details: { username: req.session.username },
+      });
 
       clearTwoFactorSessionSecret(req);
 
@@ -293,6 +298,10 @@ export const disable2FA = async (
     const successAction = buildDisableTwoFactorSuccessAction({ userId, clientIp });
     console[successAction.log.level](successAction.log.message);
     applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
+    eventService.emitEvent(AppEventType.TwoFactorDisabled, {
+      userId,
+      details: { username: req.session.username },
+    });
 
     clearTwoFactorSessionSecret(req);
 
@@ -368,6 +377,10 @@ export const changePassword = async (
     const successAction = buildChangePasswordSuccessAction({ userId, clientIp });
     console[successAction.log.level](successAction.log.message);
     applyAuthSideEffects(authSideEffectServices, successAction.sideEffects);
+    eventService.emitEvent(AppEventType.PasswordChanged, {
+      userId,
+      details: { username: req.session.username },
+    });
     res.status(successAction.response.statusCode).json(successAction.response.body);
   } catch (error: unknown) {
     logger.error(`修改用户 ${userId} 密码时发生内部错误:`, error);

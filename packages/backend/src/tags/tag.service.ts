@@ -1,6 +1,7 @@
 import * as TagRepository from './tag.repository';
 import { getErrorMessage } from '../utils/AppError';
 import { logger } from '../utils/logger';
+import eventService, { AppEventType } from '../services/event.service';
 
 // Re-export or define types
 export interface TagData extends TagRepository.TagData {}
@@ -34,6 +35,11 @@ export const createTag = async (name: string): Promise<TagData> => {
     if (!newTag) {
       throw new Error('创建标签后无法检索到该标签。');
     }
+
+    eventService.emitEvent(AppEventType.TagCreated, {
+      details: { tagId: newTag.id, name: newTag.name },
+    });
+
     return newTag;
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
@@ -59,6 +65,10 @@ export const updateTag = async (id: number, name: string): Promise<TagData | nul
       return null;
     }
 
+    eventService.emitEvent(AppEventType.TagUpdated, {
+      details: { tagId: id, name: trimmedName },
+    });
+
     return getTagById(id);
   } catch (error: unknown) {
     const errMsg = getErrorMessage(error);
@@ -73,7 +83,13 @@ export const updateTag = async (id: number, name: string): Promise<TagData | nul
  * 删除标签
  */
 export const deleteTag = async (id: number): Promise<boolean> => {
-  return TagRepository.deleteTag(id);
+  const result = await TagRepository.deleteTag(id);
+  if (result) {
+    eventService.emitEvent(AppEventType.TagDeleted, {
+      details: { tagId: id },
+    });
+  }
+  return result;
 };
 
 /**

@@ -56,6 +56,7 @@ import {
 } from './auth-passkey-2fa-flow.utils';
 import { resolveRequestClientIp as _resolveRequestClientIp } from './auth-main-flow.utils';
 import { applyAuthSideEffects } from './auth-side-effects-executor.utils';
+import eventService, { AppEventType } from '../services/event.service';
 import { NotificationService } from '../notifications/notification.service';
 import { AuditLogService } from '../audit/audit.service';
 
@@ -164,6 +165,13 @@ export const verifyPasskeyRegistrationHandler = async (
         username: req.session.username,
         credentialId: verificationResult.newPasskeyToSave.credential_id,
       });
+      eventService.emitEvent(AppEventType.PasskeyRegistered, {
+        userId: userIdNum,
+        details: {
+          username: req.session.username,
+          credentialId: verificationResult.newPasskeyToSave.credential_id,
+        },
+      });
 
       clearPasskeyRegistrationSession(req);
       res.status(201).json({ verified: true, message: 'Passkey 注册成功。' });
@@ -265,6 +273,9 @@ export const verifyPasskeyAuthenticationHandler = async (
             reason: 'User not found after verification',
           }
         );
+        eventService.emitEvent(AppEventType.PasskeyAuthFailure, {
+          details: { reason: 'Passkey authentication failed' },
+        });
         res.status(401).json({ verified: false, message: 'Passkey 认证失败：用户数据错误。' });
         return;
       }
@@ -284,6 +295,10 @@ export const verifyPasskeyAuthenticationHandler = async (
           credentialId: verificationResult.passkey.credential_id,
         }
       );
+      eventService.emitEvent(AppEventType.PasskeyAuthSuccess, {
+        userId: user.id,
+        details: { username: user.username },
+      });
       completePasskeyAuthenticatedSession(req, res, {
         user: { id: user.id, username: user.username },
         rememberMe,
@@ -302,6 +317,9 @@ export const verifyPasskeyAuthenticationHandler = async (
           reason: 'Verification failed',
         }
       );
+      eventService.emitEvent(AppEventType.PasskeyAuthFailure, {
+        details: { reason: 'Passkey authentication failed' },
+      });
       res.status(401).json(verificationResult.responseBody);
     }
   } catch (error: unknown) {
@@ -316,6 +334,9 @@ export const verifyPasskeyAuthenticationHandler = async (
         reason: getErrorMessage(error) || 'Unknown error',
       }
     );
+    eventService.emitEvent(AppEventType.PasskeyAuthFailure, {
+      details: { reason: 'Passkey authentication failed' },
+    });
     next(error);
   }
 };

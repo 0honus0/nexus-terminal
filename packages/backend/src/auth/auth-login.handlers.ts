@@ -65,6 +65,7 @@ import {
 } from './auth-login-log-actions.utils';
 import { verifyTwoFactorTokenWithSkew } from './auth-two-factor-flow.utils';
 import { lookupGeoInfo } from './ip-geo.service';
+import eventService, { AppEventType } from '../services/event.service';
 import { logger } from '../utils/logger';
 
 // 开发环境标志
@@ -144,6 +145,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
             { ipBlacklistService, auditLogService, notificationService },
             { username, reason: 'Invalid CAPTCHA token', clientIp }
           );
+          eventService.emitEvent(AppEventType.LoginFailure, {
+            details: { username, reason: 'Invalid CAPTCHA token', clientIp },
+          });
           res
             .status(401)
             .json({ success: false, error: 'CAPTCHA 验证失败。', code: ErrorCode.CAPTCHA_INVALID });
@@ -181,6 +185,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         { ipBlacklistService, auditLogService, notificationService },
         { username, reason: 'User not found', clientIp }
       );
+      eventService.emitEvent(AppEventType.LoginFailure, {
+        details: { username, reason: 'User not found', clientIp },
+      });
       res
         .status(401)
         .json({ success: false, error: '无效的凭据。', code: ErrorCode.INVALID_CREDENTIALS });
@@ -197,6 +204,9 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         { ipBlacklistService, auditLogService, notificationService },
         { username, reason: 'Invalid password', clientIp }
       );
+      eventService.emitEvent(AppEventType.LoginFailure, {
+        details: { username, reason: 'Invalid password', clientIp },
+      });
       res
         .status(401)
         .json({ success: false, error: '无效的凭据。', code: ErrorCode.INVALID_CREDENTIALS });
@@ -226,6 +236,10 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         user: { id: user.id, username: user.username },
         rememberMe,
         saveErrorMessage: '登录过程中发生错误，请重试。',
+      });
+      eventService.emitEvent(AppEventType.LoginSuccess, {
+        userId: user.id,
+        details: { username: user.username, clientIp },
       });
     }
   } catch (error: unknown) {
@@ -380,6 +394,13 @@ export const verifyLogin2FA = async (
         onFailure: (attempt) =>
           recordLoginFailureAttempt(loginTwoFactorSideEffectServices, attempt),
       });
+      eventService.emitEvent(AppEventType.LoginFailure, {
+        details: {
+          username: verifiedPendingAuth.username,
+          reason: 'Invalid 2FA code',
+          clientIp: resolveRequestClientIp(req),
+        },
+      });
       res
         .status(verificationOutcomeAction.response.statusCode)
         .json(verificationOutcomeAction.response.body);
@@ -396,6 +417,14 @@ export const verifyLogin2FA = async (
     });
     clearPendingLoginTwoFactorAuthState(req);
     completeAuthenticatedSession(req, res, verificationOutcomeAction.completionAction);
+    eventService.emitEvent(AppEventType.LoginSuccess, {
+      userId: verifiedPendingAuth.userId,
+      details: {
+        username: verifiedPendingAuth.username,
+        clientIp: resolveRequestClientIp(req),
+        method: '2fa',
+      },
+    });
   } catch (error: unknown) {
     logger.error(
       `2FA 验证时发生内部错误 (用户: ${verifiedPendingAuth?.userId || 'unknown'}):`,
@@ -569,6 +598,12 @@ export const logout = (req: Request, res: Response): void => {
           auditLogService.logAction('LOGOUT', logoutPayload);
           notificationService.sendNotification('LOGOUT', logoutPayload);
         });
+      if (userId != null) {
+        eventService.emitEvent(AppEventType.Logout, {
+          userId: userId as number,
+          details: { username: username as string },
+        });
+      }
     },
   });
 };

@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import { getErrorMessage } from '../utils/AppError';
 import { sanitizeDockerContainerId, isValidDockerCommand } from '../utils/docker-security';
 import { logger } from '../utils/logger';
+import eventService, { AppEventType } from '../services/event.service';
 
 const execAsync = promisify(exec);
 
@@ -236,6 +237,22 @@ export class DockerService {
       logger.info(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, {
         stdout,
       }); // Use console.log
+
+      // 触发事件总线通知
+      // restart 语义上是"先停止再启动"，此处复用 DockerContainerStarted 事件；
+      // details.command 字段保留原始命令值，可在通知模板中区分
+      const commandEventMap: Record<string, AppEventType> = {
+        start: AppEventType.DockerContainerStarted,
+        stop: AppEventType.DockerContainerStopped,
+        restart: AppEventType.DockerContainerStarted,
+        remove: AppEventType.DockerContainerRemoved,
+      };
+      const eventType = commandEventMap[command];
+      if (eventType) {
+        eventService.emitEvent(eventType, {
+          details: { containerId: cleanContainerId, command },
+        });
+      }
     } catch (error: unknown) {
       const errorMsg = getErrorMessage(error);
       const stderr = getExecErrorStderr(error);
@@ -243,6 +260,9 @@ export class DockerService {
         error: errorMsg,
         stderr,
       }); // Use console.error
+      eventService.emitEvent(AppEventType.DockerContainerCommandFailed, {
+        details: { containerId: cleanContainerId, command, reason: errorMsg },
+      });
       // 抛出错误，让 Controller 层处理并返回给前端
       throw new Error(`Failed to execute Docker command "${command}": ${stderr || errorMsg}`);
     }

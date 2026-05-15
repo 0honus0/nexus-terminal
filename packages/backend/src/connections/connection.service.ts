@@ -3,6 +3,7 @@ import { encrypt, decrypt } from '../utils/crypto';
 import { AuditLogService } from '../audit/audit.service';
 import { getErrorMessage } from '../utils/AppError';
 import * as SshKeyService from '../ssh-keys/ssh-keys.service';
+import eventService, { AppEventType } from '../services/event.service';
 import {
   ConnectionBase,
   ConnectionWithTags,
@@ -327,7 +328,12 @@ export const createConnection = async (
     host: newConnection.host,
   }); // Add type to audit log
 
-  // 7. 返回新创建的带标签的连接
+  // 7. 发布连接创建事件
+  eventService.emitEvent(AppEventType.ConnectionCreated, {
+    details: { connectionId: newConnection.id, name: newConnection.name, type: newConnection.type },
+  });
+
+  // 8. 返回新创建的带标签的连接
   return newConnection;
 };
 
@@ -609,6 +615,11 @@ export const updateConnection = async (
       auditDetails.newType = dataToUpdate.type;
     }
     auditLogService.logAction('CONNECTION_UPDATED', auditDetails);
+
+    // 发布连接更新事件
+    eventService.emitEvent(AppEventType.ConnectionUpdated, {
+      details: { connectionId: id, name: input.name ?? undefined },
+    });
   }
 
   // 6. 获取并返回更新后的连接
@@ -623,6 +634,11 @@ export const deleteConnection = async (id: number): Promise<boolean> => {
   if (deleted) {
     // 删除成功后记录审计操作
     auditLogService.logAction('CONNECTION_DELETED', { connectionId: id });
+
+    // 发布连接删除事件
+    eventService.emitEvent(AppEventType.ConnectionDeleted, {
+      details: { connectionId: id },
+    });
   }
   return deleted;
 };
