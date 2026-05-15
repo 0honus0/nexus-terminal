@@ -239,6 +239,8 @@ export class DockerService {
       }); // Use console.log
 
       // 触发事件总线通知
+      // restart 语义上是"先停止再启动"，此处复用 DockerContainerStarted 事件；
+      // details.command 字段保留原始命令值，可在通知模板中区分
       const commandEventMap: Record<string, AppEventType> = {
         start: AppEventType.DockerContainerStarted,
         stop: AppEventType.DockerContainerStopped,
@@ -248,7 +250,7 @@ export class DockerService {
       const eventType = commandEventMap[command];
       if (eventType) {
         eventService.emitEvent(eventType, {
-          details: { containerId, command },
+          details: { containerId: cleanContainerId, command },
         });
       }
     } catch (error: unknown) {
@@ -259,7 +261,7 @@ export class DockerService {
         stderr,
       }); // Use console.error
       eventService.emitEvent(AppEventType.DockerContainerCommandFailed, {
-        details: { containerId, command, reason: errorMsg },
+        details: { containerId: cleanContainerId, command, reason: errorMsg },
       });
       // 抛出错误，让 Controller 层处理并返回给前端
       throw new Error(`Failed to execute Docker command "${command}": ${stderr || errorMsg}`);

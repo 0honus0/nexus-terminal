@@ -806,8 +806,13 @@ async function finalizeTask(
 
   // 触发事件总线通知
   const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-  if (failed === 0 && !taskCancelled) {
+  if (failed === 0 && !taskCancelled && cancelled === 0) {
     eventService.emitEvent(AppEventType.BatchTaskCompleted, {
+      userId: numericUserId,
+      details: { taskId, completed, failed, cancelled, total },
+    });
+  } else if (taskCancelled || cancelled > 0) {
+    eventService.emitEvent(AppEventType.BatchTaskCancelled, {
       userId: numericUserId,
       details: { taskId, completed, failed, cancelled, total },
     });

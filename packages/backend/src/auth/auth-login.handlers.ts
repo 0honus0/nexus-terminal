@@ -146,7 +146,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
             { username, reason: 'Invalid CAPTCHA token', clientIp }
           );
           eventService.emitEvent(AppEventType.LoginFailure, {
-            details: { username, reason: 'Invalid CAPTCHA token', clientIp: req.ip },
+            details: { username, reason: 'Invalid CAPTCHA token', clientIp },
           });
           res
             .status(401)
@@ -186,7 +186,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         { username, reason: 'User not found', clientIp }
       );
       eventService.emitEvent(AppEventType.LoginFailure, {
-        details: { username, reason: 'User not found', clientIp: req.ip },
+        details: { username, reason: 'User not found', clientIp },
       });
       res
         .status(401)
@@ -205,7 +205,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         { username, reason: 'Invalid password', clientIp }
       );
       eventService.emitEvent(AppEventType.LoginFailure, {
-        details: { username, reason: 'Invalid password', clientIp: req.ip },
+        details: { username, reason: 'Invalid password', clientIp },
       });
       res
         .status(401)
@@ -239,7 +239,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       });
       eventService.emitEvent(AppEventType.LoginSuccess, {
         userId: user.id,
-        details: { username: user.username, clientIp: req.ip },
+        details: { username: user.username, clientIp },
       });
     }
   } catch (error: unknown) {
@@ -398,7 +398,7 @@ export const verifyLogin2FA = async (
         details: {
           username: verifiedPendingAuth.username,
           reason: 'Invalid 2FA code',
-          clientIp: req.ip,
+          clientIp: resolveRequestClientIp(req),
         },
       });
       res
@@ -419,7 +419,11 @@ export const verifyLogin2FA = async (
     completeAuthenticatedSession(req, res, verificationOutcomeAction.completionAction);
     eventService.emitEvent(AppEventType.LoginSuccess, {
       userId: verifiedPendingAuth.userId,
-      details: { username: verifiedPendingAuth.username, clientIp: req.ip, method: '2fa' },
+      details: {
+        username: verifiedPendingAuth.username,
+        clientIp: resolveRequestClientIp(req),
+        method: '2fa',
+      },
     });
   } catch (error: unknown) {
     logger.error(

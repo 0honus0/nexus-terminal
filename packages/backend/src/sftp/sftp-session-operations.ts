@@ -30,7 +30,13 @@ export const executeInitializeSftpSessionOperation = async (
           })
         );
         eventService.emitEvent(AppEventType.SftpConnectFailure, {
-          details: { sessionId, reason: 'SFTP 初始化失败' },
+          details: {
+            sessionId,
+            reason: 'SFTP 初始化失败',
+            connectionId: state.dbConnectionId,
+            userId: state.ws.userId,
+            ipAddress: state.ipAddress,
+          },
         });
         reject(err);
         return;
@@ -42,7 +48,12 @@ export const executeInitializeSftpSessionOperation = async (
         JSON.stringify({ type: 'sftp_ready', payload: { connectionId: state.dbConnectionId } })
       );
       eventService.emitEvent(AppEventType.SftpConnectSuccess, {
-        details: { sessionId },
+        details: {
+          sessionId,
+          connectionId: state.dbConnectionId,
+          userId: state.ws.userId,
+          ipAddress: state.ipAddress,
+        },
       });
       sftpInstance.on('end', () => {
         logger.info(`[SFTP] 会话 ${sessionId} 的 SFTP 会话已结束。`);
