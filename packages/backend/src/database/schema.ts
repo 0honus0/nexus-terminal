@@ -382,3 +382,21 @@ CREATE TABLE IF NOT EXISTS ip_geo_cache (
 export const createIpGeoCacheIndexesSQL = [
   `CREATE INDEX IF NOT EXISTS idx_ip_geo_cache_queried_at ON ip_geo_cache(queried_at);`,
 ];
+
+// ========== 事件日志表 ==========
+
+export const createEventLogsTableSQL = `
+CREATE TABLE IF NOT EXISTS event_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    user_id INTEGER NULL,
+    payload TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+`;
+
+export const createEventLogsIndexesSQL = [
+  `CREATE INDEX IF NOT EXISTS idx_event_logs_event_type ON event_logs(event_type);`,
+  `CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_event_logs_user_id ON event_logs(user_id);`,
+];

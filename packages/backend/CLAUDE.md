@@ -103,7 +103,8 @@ packages/backend/
 │   │   └── ai.routes.ts            # API 路由定义
 │   │
 │   ├── services/                   # 共享服务
-│   │   ├── event.service.ts        # 事件总线
+│   │   ├── event.service.ts        # 增强版事件总线（类型安全、错误隔离、中间件链、域名命名空间）
+│   │   ├── event.middlewares.ts    # 内置事件中间件（日志记录、事件持久化）
 │   │   ├── crypto.service.ts       # 加密服务
 │   │   ├── dashboard.service.ts    # 仪表盘统计服务
 │   │   ├── dashboard.controller.ts # 仪表盘控制器
@@ -265,7 +266,9 @@ packages/backend/
 
 ### 服务层
 
-- `src/services/event.service.ts` - 事件总线（50+ 事件类型，覆盖认证、连接、SSH、文件传输、批量任务、备份、Docker、SFTP 等全业务域）
+- `src/services/event.service.ts` - 增强版事件总线（50+ 事件类型，支持类型安全、错误隔离、中间件链、域名命名空间、生命周期管理）
+- `src/services/event.middlewares.ts` - 内置事件中间件（日志记录、关键事件持久化到 event_logs 表）
+- `src/types/event.types.ts` - 事件系统类型定义（EventPayloadMap、EventDomain、PERSISTENT_EVENTS）
 - `src/services/crypto.service.ts` - 数据加解密
 - `src/services/dashboard.service.ts` - 仪表盘统计（CPU/内存/存储/时间线）
 - `src/notifications/notification.processor.service.ts` - 通知处理

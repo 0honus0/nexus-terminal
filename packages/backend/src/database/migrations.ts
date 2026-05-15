@@ -428,6 +428,26 @@ const definedMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_connections_last_connected_at ON connections(last_connected_at DESC);
         `,
   },
+  {
+    id: 15,
+    name: 'Create event_logs table for event persistence',
+    check: async (db: Database): Promise<boolean> => {
+      const tableAlreadyExists = await tableExists(db, 'event_logs');
+      return !tableAlreadyExists;
+    },
+    sql: `
+            CREATE TABLE IF NOT EXISTS event_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                user_id INTEGER NULL,
+                payload TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_logs_event_type ON event_logs(event_type);
+            CREATE INDEX IF NOT EXISTS idx_event_logs_created_at ON event_logs(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_event_logs_user_id ON event_logs(user_id);
+        `,
+  },
 ];
 
 /**

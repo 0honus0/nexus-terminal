@@ -56,23 +56,19 @@ class NotificationProcessorService extends EventEmitter {
       return;
     }
     // 监听所有 AppEventType 事件
+    // 事件服务内置错误隔离，无需手动 try-catch 包装同步异常
     Object.values(AppEventType).forEach((eventType) => {
       if (eventType !== AppEventType.TestNotification) {
         eventService.onEvent(eventType, (payload) => {
-          // 使用 setImmediate 或 process.nextTick 避免阻塞事件循环
-          setImmediate(() => {
-            this.processStandardEvent(eventType, payload).catch((error: unknown) => {
-              logger.error(`[NotificationProcessor] 处理事件 ${eventType} 时出错:`, error);
-            });
+          this.processStandardEvent(eventType, payload).catch((error: unknown) => {
+            logger.error(`[NotificationProcessor] 处理事件 ${eventType} 时出错:`, error);
           });
         });
       }
     });
     eventService.onEvent(AppEventType.TestNotification, (payload) => {
-      setImmediate(() => {
-        this.processTestEvent(payload).catch((error: unknown) => {
-          logger.error(`[NotificationProcessor] 处理测试事件时出错:`, error);
-        });
+      this.processTestEvent(payload).catch((error: unknown) => {
+        logger.error(`[NotificationProcessor] 处理测试事件时出错:`, error);
       });
     });
     logger.info('[NotificationProcessor] 已注册监听器。');
