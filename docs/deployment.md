@@ -50,6 +50,120 @@ docker compose up -d
 默认端口为 `18111`，可在 `.env` 文件中修改。
 :::
 
+## 架构说明
+
+Docker 部署包含三个容器，职责如下：
+
+| 容器               | 内部端口                      | 职责                                                                |
+| ------------------ | ----------------------------- | ------------------------------------------------------------------- |
+| **frontend**       | 80                            | 静态资源托管 + 反向代理（转发 `/api/` → backend、`/ws/` → backend） |
+| **backend**        | 3001                          | API 服务、SSH/SFTP 连接管理、认证、审计                             |
+| **remote-gateway** | 8080 (WebSocket) / 9090 (API) | Guacamole 网关，处理 RDP/VNC 远程桌面连接                           |
+
+::: warning 注意
+前端容器的 nginx 默认只代理 `/api/` 和 `/ws/` 到 backend。**`/guacamole/` 不会自动转发到 remote-gateway**，需要在宿主机 Nginx 中单独处理（详见 [Nginx 反向代理配置](./deployment/nginx)）。
+:::
+
+## 手动 Docker Compose 部署
+
+如果需要自定义配置，可以手动编写 `docker-compose.yml`：
+
+### 第一步：创建项目目录
+
+```bash
+mkdir -p /opt/nexus-terminal && cd /opt/nexus-terminal
+```
+
+### 第二步：创建 docker-compose.yml
+
+```yaml
+services:
+  frontend:
+    container_name: nexus-terminal-frontend
+    ports:
+      - '127.0.0.1:18111:80'
+    depends_on:
+      - backend
+      - remote-gateway
+    networks:
+      - nexus-terminal-network
+    restart: unless-stopped
+    image: ghcr.io/silentely/nexus-terminal-frontend:latest
+
+  backend:
+    container_name: nexus-terminal-backend
+    env_file:
+      - .env
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      TZ: Asia/Shanghai
+    volumes:
+      - ./data:/app/data
+    networks:
+      - nexus-terminal-network
+    restart: unless-stopped
+    image: ghcr.io/silentely/nexus-terminal-backend:latest
+
+  remote-gateway:
+    container_name: nexus-terminal-remote-gateway
+    environment:
+      NODE_ENV: production
+      GUACD_HOST: localhost
+      GUACD_PORT: 4822
+      REMOTE_GATEWAY_API_PORT: 9090
+      REMOTE_GATEWAY_WS_PORT: 8080
+      FRONTEND_URL: http://frontend
+      MAIN_BACKEND_URL: http://backend:3001
+    networks:
+      - nexus-terminal-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    image: ghcr.io/silentely/nexus-terminal-remote-gateway:latest
+
+networks:
+  nexus-terminal-network:
+    driver: bridge
+```
+
+### 第三步：创建 .env 文件
+
+```bash
+cat > .env << 'EOF'
+DEPLOYMENT_MODE=docker
+NODE_ENV=production
+APP_NAME=Nexus Terminal
+PORT=3001
+EOF
+```
+
+::: tip 提示
+首次启动后，`ENCRYPTION_KEY` 和 `SESSION_SECRET` 会自动生成并写入 `./data/.env`，无需手动配置。
+:::
+
+### 第四步：启动服务
+
+```bash
+docker compose up -d
+```
+
+### 常用操作
+
+```bash
+# 查看容器状态
+docker compose ps
+
+# 查看日志
+docker compose logs -f backend
+
+# 重启单个服务
+docker compose restart backend
+
+# 更新镜像
+docker compose pull && docker compose up -d
+```
+
 ## 环境变量配置
 
 ### 核心变量

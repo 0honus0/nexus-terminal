@@ -7,6 +7,9 @@
 ## 目录
 
 - [基础配置](#基础配置)
+  - [最小化配置](#最小化配置)（本地开发）
+  - [Docker 宿主机 Nginx 配置](#docker-宿主机-nginx-配置)（推荐）
+  - [Docker Compose 内部 Nginx 配置](#docker-compose-内部-nginx-配置)
 - [HTTPS/SSL 配置](#httpsssl-配置)
 - [WebSocket 代理](#websocket-代理)
 - [负载均衡](#负载均衡)
@@ -75,7 +78,98 @@ server {
 }
 ```
 
-### Docker Compose 部署配置
+### Docker 宿主机 Nginx 配置
+
+适用于 Docker Compose 部署 + 宿主机 Nginx 反向代理的场景（最常见）。
+
+::: warning 架构说明
+此模式下前端容器监听 `127.0.0.1:18111:80`，宿主机 Nginx 统一入口代理到 `18111`。但前端容器内部的 nginx **仅代理 `/api/` 和 `/ws/` 到 backend**，不会转发 `/guacamole/`。因此 `/guacamole/` 必须在宿主机 Nginx 中单独代理到 `remote-gateway:8080`（宿主机上通常是 `127.0.0.1:8080`）。
+:::
+
+```nginx
+# WebSocket 连接映射（建议放在 http 块中）
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    # SSL 证书
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+
+    client_max_body_size 100m;
+
+    # 前端 + 后端 API + SSH 终端（通过前端容器代理）
+    location / {
+        proxy_pass http://127.0.0.1:18111;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:18111;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /ws/ {
+        proxy_pass http://127.0.0.1:18111;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_buffering off;
+    }
+
+    # Guacamole 远程桌面 WebSocket（直连 remote-gateway，不经过前端容器）
+    location /guacamole/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_buffering off;
+    }
+}
+```
+
+::: tip 端口对照
+| 路径 | 代理目标 | 说明 |
+| --- | --- | --- |
+| `/`、`/api/`、`/ws/` | `127.0.0.1:18111` | 通过前端容器，由其内部分流 |
+| `/guacamole/` | `127.0.0.1:8080` | 直连 remote-gateway，前端容器不代理此路径 |
+:::
+
+### Docker Compose 内部 Nginx 配置
 
 适用于 `docker-compose.yml` 默认部署：
 
@@ -197,7 +291,7 @@ server {
 
     client_max_body_size 100m;
 
-    # 前端
+    # 前端 + 后端 API + SSH 终端（通过前端容器代理）
     location / {
         proxy_pass http://127.0.0.1:18111;
         proxy_http_version 1.1;
@@ -207,9 +301,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # 后端 API
     location /api/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:18111;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -217,9 +310,8 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # WebSocket（SSH 终端）
     location /ws/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:18111;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -231,13 +323,16 @@ server {
         proxy_send_timeout 86400s;
     }
 
-    # 远程桌面 WebSocket
+    # Guacamole 远程桌面 WebSocket（直连 remote-gateway，不经过前端容器）
     location /guacamole/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 86400s;
         proxy_send_timeout 86400s;
     }
