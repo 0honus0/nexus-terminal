@@ -1,6 +1,6 @@
 /**
  * 增强版事件服务
- * 提供类型安全、错误隔离、中间件链、域名命名空间和生命周期管理
+ * 提供类型安全、错误隔离、中间件链、领域命名空间和生命周期管理
  */
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
@@ -60,6 +60,7 @@ class EventService extends EventEmitter {
 
   /**
    * 执行中间件链
+   * 使用 called 标志位防止 finalAction 被重复执行
    */
   private runMiddlewareChain(
     eventType: AppEventType,
@@ -68,21 +69,31 @@ class EventService extends EventEmitter {
   ): void {
     const middlewares = this.middlewares;
     let index = 0;
+    let finalActionCalled = false;
 
     const next = (): void => {
       if (index < middlewares.length) {
         const middleware = middlewares[index++];
+        let called = false;
         try {
-          middleware(eventType, payload, next);
+          middleware(eventType, payload, () => {
+            if (called) return; // 幂等保护：防止 next() 被重复调用
+            called = true;
+            next();
+          });
         } catch (error) {
           logger.error(`[EventService] 中间件执行异常: ${(error as Error).message}`, {
             eventType,
             middlewareIndex: index - 1,
           });
           // 中间件异常不阻止事件发送，继续执行后续中间件
-          next();
+          if (!called) {
+            called = true;
+            next();
+          }
         }
-      } else {
+      } else if (!finalActionCalled) {
+        finalActionCalled = true;
         finalAction();
       }
     };
@@ -95,6 +106,12 @@ class EventService extends EventEmitter {
   /**
    * 向所有监听器发射事件，每个监听器调用都包裹在 try-catch 中
    * 确保单个监听器的异常不会影响其他监听器和发布者
+   *
+   * 注意：此实现绕过了 EventEmitter.emit()，直接遍历 listeners 数组。
+   * 这是为了实现错误隔离而做的设计权衡。已知限制：
+   * - once() 注册的监听器不会自动取消订阅（项目中未使用 once()）
+   * - 监听器在执行过程中移除自身时，预计算的 listeners 数组仍会调用它
+   * - 不支持 'error' 事件的特殊处理
    */
   private emitToListeners(eventType: AppEventType, payload: AppEventPayload): void {
     const listeners = this.listeners(eventType);
@@ -116,7 +133,7 @@ class EventService extends EventEmitter {
   /**
    * 按域名批量订阅事件
    * 自动订阅该域名下的所有事件类型
-   * @returns 清理函数，调用后取消该域名下的所有订阅
+   * @returns 清理函数，调用后仅移除本次调用注册的监听器
    */
   onDomainEvent(
     domain: EventDomain,
@@ -153,9 +170,18 @@ class EventService extends EventEmitter {
       });
     }
 
-    // 返回清理函数
+    // 返回清理函数 - 仅移除本次调用注册的监听器
     return () => {
-      this.offDomainEvent(domain);
+      for (const reg of registrations) {
+        this.off(reg.eventType, reg.wrappedListener);
+        // 从 domainListeners 中移除记录
+        const records = this.domainListeners.get(domain);
+        if (records) {
+          const idx = records.findIndex((r) => r.listener === reg.wrappedListener);
+          if (idx !== -1) records.splice(idx, 1);
+          if (records.length === 0) this.domainListeners.delete(domain);
+        }
+      }
     };
   }
 

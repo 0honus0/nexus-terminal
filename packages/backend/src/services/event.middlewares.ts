@@ -54,14 +54,32 @@ export const persistenceMiddleware: EventMiddleware = (
 
 /**
  * 异步持久化事件到数据库
+ * 序列化完整 payload（排除 timestamp，已在数据库列中存储）
  */
 async function persistEvent(eventType: AppEventType, payload: AppEventPayload): Promise<void> {
   const db = await getDbInstance();
   const userId = payload.userId ?? null;
-  const payloadJson = JSON.stringify({
-    userId: payload.userId,
-    details: payload.details,
-  });
+
+  let payloadJson: string;
+  try {
+    // 序列化完整 payload，排除 timestamp（已在 created_at 列存储）
+    const { timestamp: _timestamp, ...rest } = payload;
+    payloadJson = JSON.stringify(rest);
+  } catch (error) {
+    // 防止 JSON.stringify 因循环引用等原因失败
+    logger.error('[EventPersistence] 事件 payload 序列化失败', {
+      eventType,
+      error: (error as Error)?.message,
+    });
+    // 回退：至少保存关键信息
+    payloadJson = JSON.stringify({
+      serializationError: (error as Error)?.message ?? 'UNKNOWN_ERROR',
+      fallbackPayload: {
+        userId: payload.userId ?? null,
+        details: payload.details,
+      },
+    });
+  }
 
   await new Promise<void>((resolve, reject) => {
     db.run(

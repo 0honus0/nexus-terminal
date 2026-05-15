@@ -29,9 +29,14 @@ import {
 } from './config/middleware';
 import { registerRoutes } from './config/routes';
 
-import './services/event.service';
+import eventService from './services/event.service';
+import { loggingMiddleware, persistenceMiddleware } from './services/event.middlewares';
 import './notifications/notification.processor.service';
 import './notifications/notification.dispatcher.service';
+
+// 注册内置事件中间件
+eventService.useEventMiddleware(loggingMiddleware);
+eventService.useEventMiddleware(persistenceMiddleware);
 
 type SwaggerConfigModule = typeof import('./config/swagger.config');
 

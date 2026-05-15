@@ -229,4 +229,16 @@ export const tableDefinitions: TableDefinition[] = [
       logger.debug('[DB Init] IP 地理定位缓存索引创建完成。');
     },
   },
+
+  // 事件日志表
+  {
+    name: 'event_logs',
+    sql: schemaSql.createEventLogsTableSQL,
+    init: async (db: Database) => {
+      for (const indexSql of schemaSql.createEventLogsIndexesSQL) {
+        await runDb(db, indexSql);
+      }
+      logger.debug('[DB Init] 事件日志表索引创建完成。');
+    },
+  },
 ];
