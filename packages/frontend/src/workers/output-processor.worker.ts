@@ -342,13 +342,13 @@ function formatTable(tableText: string): string {
 }
 
 /**
- * Highlights URLs and path-like segments in the provided text using ANSI escape sequences.
+ * Colorizes full HTTP(S) URLs and eligible path-like fragments in the given text using ANSI styles.
  *
- * The function colors full `http://` and `https://` URLs and also colors leading path-like fragments
- * (e.g., `/path/to/resource`) when they appear with a preceding whitespace or certain punctuation.
- * It avoids coloring when the prefix ends with `:` or when the path starts with `//`.
+ * The function first colors complete `http://` and `https://` URLs, then colors path-like segments
+ * that start with `/` when they are preceded by whitespace or certain punctuation. It does not
+ * color a path when the prefix ends with `:` or when the path begins with `//`.
  *
- * @param text - The input text to scan for links and path-like segments
+ * @param text - Input text to scan for URLs and path-like segments
  * @returns The input string with matched URLs and eligible paths wrapped in ANSI color codes
  */
 function highlightLinks(text: string): string {
@@ -368,10 +368,10 @@ function highlightLinks(text: string): string {
 /**
  * Parse a single table row into an array of cell strings.
  *
- * Handles two formats: pipe-separated cells (using `|`) and whitespace-separated cells (columns separated by two or more spaces).
+ * Supports pipe-separated rows (cells delimited with `|`) and whitespace-separated rows (columns separated by two or more spaces).
  *
  * @param line - The raw table row text to parse.
- * @returns An array of trimmed cell strings. For pipe-separated rows, leading/trailing empty columns produced by leading/trailing `|` are removed. For whitespace-separated rows, empty cells are omitted unless the original line contained two consecutive spaces, in which case empty segments are preserved.
+ * @returns An array of trimmed cell strings. For pipe-separated rows, leading and trailing empty cells produced by surrounding `|` are removed. For whitespace-separated rows, splits on runs of two or more spaces; empty cells are omitted unless the original line contains two consecutive spaces, in which case empty segments are preserved.
  */
 function parseTableCells(line: string): string[] {
   if (line.includes('|')) {
