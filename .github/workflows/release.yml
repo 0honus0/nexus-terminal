@@ -99,18 +99,20 @@ jobs:
 
       - name: 从 kittylog.app 提取更新日志
         if: steps.wait_kittylog.outputs.found == 'true'
-        id: kittylog_notes
+        id: kittylog_extract
         env:
           VERSION: ${{ steps.release_meta.outputs.VERSION }}
         run: |
           set -euo pipefail
           KITTYLOG_URL="https://kittylog.app/c/Silentely/nexus-terminal"
 
+          # 设置默认值，防止步骤失败时输出为空
+          echo "found=false" >> $GITHUB_OUTPUT
+
           PAGE=$(curl -sL --max-time 30 "$KITTYLOG_URL" 2>/dev/null || true)
 
           if [ -z "$PAGE" ]; then
             echo "⚠️ 无法访问 kittylog.app"
-            echo "found=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -139,11 +141,10 @@ jobs:
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "⚠️ kittylog.app 未找到 v${VERSION} 内容"
-            echo "found=false" >> $GITHUB_OUTPUT
           fi
 
       - name: 从本地 docs/changelog.md 提取更新日志（兜底）
-        if: steps.wait_kittylog.outputs.found != 'true' || steps.kittylog_notes.outputs.found != 'true'
+        if: steps.wait_kittylog.outputs.found != 'true' || steps.kittylog_extract.outputs.found != 'true'
         id: local_notes
         env:
           VERSION: ${{ steps.release_meta.outputs.VERSION }}
@@ -177,8 +178,8 @@ jobs:
         id: release_notes
         run: |
           # 优先使用 kittylog.app 内容，否则使用本地兜底
-          if [[ "${{ steps.kittylog_notes.outputs.found }}" == "true" ]]; then
-            BODY="${{ steps.kittylog_notes.outputs.body }}"
+          if [[ "${{ steps.kittylog_extract.outputs.found }}" == "true" ]]; then
+            BODY="${{ steps.kittylog_extract.outputs.body }}"
             SOURCE="kittylog.app"
           else
             BODY="${{ steps.local_notes.outputs.body }}"
@@ -205,14 +206,13 @@ jobs:
           echo "CHANGELOG_URL=$CHANGELOG_URL" >> $GITHUB_OUTPUT
 
       - name: 同步更新日志到 docs/changelog.md
-        if: steps.kittylog_notes.outputs.found == 'true'
         env:
           VERSION: ${{ steps.release_meta.outputs.VERSION }}
-          KITTYLOG_BODY: ${{ steps.kittylog_notes.outputs.body }}
+          RELEASE_BODY: ${{ steps.release_notes.outputs.body }}
         run: |
           set -euo pipefail
 
-          echo "📝 将 kittylog.app 更新日志同步到 docs/changelog.md..."
+          echo "📝 将更新日志同步到 docs/changelog.md..."
 
           # 检查 docs/changelog.md 是否已包含该版本
           if grep -q "## v${VERSION}" docs/changelog.md 2>/dev/null; then
@@ -230,7 +230,7 @@ jobs:
           # 写入新版本日志到文件开头
           {
             echo ""
-            echo "$KITTYLOG_BODY"
+            echo "$RELEASE_BODY"
             echo ""
             cat "$TEMP_FILE"
           } > docs/changelog.md
@@ -238,7 +238,6 @@ jobs:
           echo "✅ 已将 v${VERSION} 更新日志写入 docs/changelog.md"
 
       - name: 提交更新日志变更
-        if: steps.kittylog_notes.outputs.found == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -246,11 +245,32 @@ jobs:
           git add docs/changelog.md
           if git diff --cached --quiet; then
             echo "ℹ️ 无变更需要提交"
-          else
-            git commit -m "📝 docs: 同步 kittylog 更新日志至 v${{ steps.release_meta.outputs.VERSION }}"
-            git push origin main
-            echo "✅ 已提交并推送 docs/changelog.md 变更"
+            exit 0
           fi
+
+          # 重试机制：最多尝试 3 次推送
+          MAX_RETRIES=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "📝 尝试提交并推送 [$i/$MAX_RETRIES]..."
+
+            # 先拉取最新代码，解决可能的冲突
+            git pull --rebase origin main || true
+
+            if git commit -m "📝 docs: 同步更新日志至 v${{ steps.release_meta.outputs.VERSION }}"; then
+              if git push origin main; then
+                echo "✅ 已成功提交并推送 docs/changelog.md 变更"
+                exit 0
+              fi
+            fi
+
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "  ⏳ 推送失败，${i}s 后重试..."
+              sleep $i
+            fi
+          done
+
+          echo "❌ 推送失败，请手动检查"
+          exit 1
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
