@@ -121,14 +121,20 @@ router.beforeEach(async (to) => {
  * @param path - A router-resolvable location (for example a URL path or named route) identifying which route's chunks to preload
  */
 function prefetchRoute(path: string) {
-  const route = router.resolve(path);
-  if (route.matched.length > 0) {
-    // 触发路由组件的 dynamic import，浏览器会自动下载对应 chunk
-    route.matched.forEach((record) => {
-      if (typeof record.components?.default === 'function') {
-        (record.components.default as () => Promise<unknown>)();
-      }
-    });
+  try {
+    const route = router.resolve(path);
+    if (route.matched.length > 0) {
+      // 触发路由组件的 dynamic import，浏览器会自动下载对应 chunk
+      route.matched.forEach((record) => {
+        if (typeof record.components?.default === 'function') {
+          (record.components.default as () => Promise<unknown>)().catch(() => {
+            // chunk 下载失败不影响用户体验，后续导航时会重试
+          });
+        }
+      });
+    }
+  } catch {
+    // 路由解析失败时静默忽略
   }
 }
 
