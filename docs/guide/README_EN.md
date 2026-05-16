@@ -14,7 +14,38 @@
 
 **Nexus Terminal** is a modern, feature-rich web-based SSH / RDP / VNC client dedicated to providing a highly customizable remote connection experience.
 
-## ⚡ Performance Optimizations
+## 🔀 Differences from Upstream
+
+> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal).
+> Upstream baseline: `Heavrnl/nexus-terminal:main`
+> Compare URL: <https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
+
+Below is a summary of the key differences between this fork and upstream:
+
+### 🚀 Additions in This Fork
+
+| Category                             | Feature                                                                                                                      |
+| :----------------------------------- | :--------------------------------------------------------------------------------------------------------------------------- |
+| **AI Smart Assistant**               | Multi-model integration (OpenAI/Claude), NL2CMD natural language to terminal commands with 429 retry and structured output   |
+| **Batch Command Execution**          | Execute commands across multiple servers simultaneously with priority queue (low/normal/high/urgent) and SSH connection pool |
+| **Data Backup API**                  | `/api/v1/backup` supports export/import of 14 core data types including connections, keys, and tags                          |
+| **IP Geolocation**                   | Automatic IP geolocation on login events with SQLite persistent cache, ASN support, and multi-provider adapters              |
+| **SSH Jump Host Visualization**      | Structured route summary showing jump host paths and latency                                                                 |
+| **SSH Batch Status Collection**      | Consolidated into a single execution, 70-85% performance improvement on high-latency scenarios                               |
+| **Command Palette**                  | `Ctrl + K` quick action search and execution, supporting connection search, page navigation, and theme switching             |
+| **Health Check Endpoint**            | `/api/v1/health` checks SQLite connectivity, WebSocket status, disk space, and memory usage                                  |
+| **Structured Logging**               | pino-powered JSON structured output with custom timezone and sensitive data redaction                                        |
+| **Prometheus Metrics**               | Built-in application metrics collection endpoint, compatible with Grafana and other monitoring platforms                     |
+| **Configurable Rate Limiting**       | Flexible API rate limit control via environment variables (including dedicated AI route rate limiting)                       |
+| **Terminal Appearance Live Preview** | Real-time preview window in appearance settings for font, theme, stroke, and shadow changes                                  |
+| **Force Keyboard-Interactive Auth**  | New `keyboard-interactive` option for SSH connections, supporting TOTP/2FA server authentication                             |
+| **Unified Cache Manager**            | Type-safe localStorage operations with version control and TTL expiration management                                         |
+| **Unified Error Extractor**          | Eliminated duplicated error extraction patterns with globally unified error handling                                         |
+| **Data Import**                      | Settings page supports data import (alongside existing export), with database backup download                                |
+| **CDN Edge Deployment**              | Support for Cloudflare/CloudFront CDN to accelerate static resource distribution                                             |
+| **Documentation Site**               | Dedicated docs site at [nexus.cosr.eu.org](https://nexus.cosr.eu.org) with deployment guides, configuration, and FAQ         |
+
+### ⚡ Performance Optimizations
 
 | Optimization                        | Effect                                                                                                                      |
 | :---------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
@@ -36,32 +67,26 @@
 | **Terminal Data Compression**       | permessage-deflate protocol compression + 16ms micro-batching, reducing bandwidth usage                                     |
 | **CDN Edge Deployment**             | Support for Cloudflare/CloudFront CDN to accelerate static resource distribution                                            |
 
-### 🛠️ New Features
+### 🏗️ Architecture & Deployment
 
-- **Terminal Appearance Live Preview**: Real-time preview window in appearance settings for font, theme, stroke, and shadow changes
-- **Force Keyboard-Interactive Auth**: New `keyboard-interactive` option for SSH connections, supporting TOTP/2FA server authentication
-- **NL2CMD Natural Language Commands**: Multi-model integration (OpenAI/Claude), converting natural language directly to terminal commands (with 429 retry, structured output)
-- **Configurable Rate Limiting**: Flexible API rate limit control via environment variables (including dedicated AI route rate limiting)
-- **Unified Cache Manager**: Type-safe localStorage operations with version control and TTL expiration management
-- **Unified Error Extractor**: Eliminated duplicated error extraction patterns with globally unified error handling
-- **Health Check Endpoint**: `/api/v1/health` checks SQLite connectivity, WebSocket status, disk space, and memory usage
-- **Structured Logging**: pino-powered JSON structured output with text log levels, custom timezone, and sensitive data redaction
-- **Prometheus Metrics Endpoint**: Built-in application metrics collection, compatible with Grafana and other monitoring platforms
-- **Data Import**: Settings page supports data import (alongside existing export), with database backup download
-- **Data Backup API**: Export/import 14 core data types including connections, keys, and tags (`/api/v1/backup`)
-- **Command Palette**: Built-in Command Palette component for quick action search and execution
+| Improvement                                                      | Description                                                                                                                                      |
+| :--------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Docker Deployment Simplified**                                 | guacd embedded in remote-gateway container, deployment reduced from 4 to 3 containers                                                            |
+| **ARM64 Ready**                                                  | remote-gateway image embeds guacd, no manual guacd image replacement needed                                                                      |
+| **Modular Decomposition**                                        | SFTP service split into readdir/move/copy/path-operations/session executors; auth controller split into login/passkey/2FA/password action layers |
+| **FileManager Component Decomposition**                          | Split into composable functions (sort/filter, path navigation, column resize, layout settings, clipboard, item actions, action modal, download)  |
+| **Repository Base Class**                                        | Unified Repository-layer error handling and logging                                                                                              |
+| **Typed Error Hierarchy**                                        | `DatabaseError`, `ValidationError`, `ExternalServiceError` type-safe error subclasses                                                            |
+| **CSP Security Headers**                                         | Content-Security-Policy / X-Frame-Options / X-Content-Type-Options                                                                               |
+| **SSRF / Command Injection / Path Traversal / ReDoS Protection** | Complete security defense system                                                                                                                 |
+| **Docker Compose Production-Ready**                              | healthcheck, resource limits, restart policy, log rotation                                                                                       |
+| **Image Registry**                                               | Uses GitHub Container Registry (GHCR), namespace `ghcr.io/silentely`                                                                             |
 
-### 🏗️ Architecture & Quality
+### 📦 Retained from Upstream
 
-- **Modular Decomposition**: SFTP service split into readdir/move/copy/path-operations/session executors; auth controller split into login/passkey/2FA/password action layers
-- **FileManager Component Decomposition**: Split into composable functions (sort/filter, path navigation, column resize, layout settings, clipboard, item actions, action modal, download)
-- **Repository Base Class**: Unified Repository-layer error handling and logging
-- **Typed Error Hierarchy**: `DatabaseError`, `ValidationError`, `ExternalServiceError` type-safe error subclasses
-- **CSP Security Headers**: Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
-- **SSRF / Command Injection / Path Traversal / ReDoS Protection**: Complete security defense system
-- **Docker Compose Production-Ready**: healthcheck, resource limits, restart policy, log rotation
-- **Docker Deployment Simplified**: guacd embedded in remote-gateway, 3-container deployment
-- **IP Geolocation Enhanced**: SQLite persistent cache + ASN support + multi-provider adapters
+| Feature         | Description                                                                           |
+| :-------------- | :------------------------------------------------------------------------------------ |
+| **Desktop App** | Upstream provides a standalone Electron desktop client, not yet included in this fork |
 
 ---
 
