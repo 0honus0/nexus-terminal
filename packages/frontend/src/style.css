@@ -414,11 +414,11 @@ button:hover {
 
 /* ==========================================
    移动端安全区域适配 (iPhone 刘海 / Dynamic Island)
+   仅应用到 #app 避免 body padding 导致全屏布局溢出
    ========================================== */
 @supports (padding: env(safe-area-inset-top)) {
-  body {
+  #app {
     padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
@@ -426,9 +426,9 @@ button:hover {
 
 /* ==========================================
    移动端滚动行为优化
+   仅作用于终端容器，避免影响模态框/侧栏等区域
    ========================================== */
-/* 防止终端区域的过度滚动导致页面弹性回弹干扰 */
-html {
+.terminal-outer-wrapper {
   overscroll-behavior: none;
 }
 
