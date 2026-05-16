@@ -14,15 +14,7 @@
 
 **星枢终端（Nexus Terminal）** 是一款现代化、功能丰富的 Web SSH / RDP / VNC 客户端，致力于提供高度可定制的远程连接体验。
 
-## 🔀 与上游的不同之处
-
-> 本项目 Fork 自 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)。
-> 上游对比基线：`Heavrnl/nexus-terminal:main`
-> 在线对比链接：<https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
-
-以下为本 Fork 相对上游的长期改进方向（按主题汇总）：
-
-### ⚡ 性能优化
+## ⚡ 性能优化
 
 | 优化项                   | 效果                                                                              |
 | :----------------------- | :-------------------------------------------------------------------------------- |
@@ -59,46 +51,17 @@
 - **数据备份 API**：支持导出/导入连接、密钥、标签等 14 类核心数据（`/api/v1/backup`）
 - **命令面板**：内置 Command Palette 组件，支持快捷操作检索与执行
 
-### 🏗️ 架构重构
+### 🏗️ 架构与质量
 
-- **技术债务全面治理**：84 项技术债务全部清零（收敛率 100%），含 Codex 审查补漏 7 项
-- **类型安全治理**：`@ts-ignore` 全部清除，`any` 与弱类型用法已清零（业务源码范围内）
-- **SFTP 服务深度拆分**：`sftp.service.ts` 从 1884 行缩减至 243 行（**-87%**），拆分为 readdir/move/copy/path-operations/session 等独立执行器模块
-- **认证控制器分层重构**：`auth.controller.ts` 从 1592 行缩减至 1366 行（**-14%**），拆分为 login/passkey/2FA/password 等动作层 utils，SQL 组装统一下沉
-- **循环依赖清零**：`import/no-cycle` 受控豁免从 16 处收敛至 0，认证链路、数据库初始化链路、通知链路等全部解耦
-- **FileManager 组件拆分**：从 2851 行拆分为 composable 组合式函数（排序/过滤、路径导航、列宽调整、布局设置、剪贴板、文件项操作、操作模态框、下载）
-- **Repository 基类抽象**：统一 Repository 层错误处理与日志记录，15+ 文件受益
-- **类型化错误体系**：新增 `DatabaseError`、`ValidationError`、`ExternalServiceError` 等类型安全的错误子类
-- **ESLint Flat Config 迁移**：完成 Flat Config 迁移，旧配置链路全部下线，Vue SFC 全量纳入 lint
-- **CSP 安全头**：添加 Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
-- **统一错误响应格式**：全局 ErrorResponse 类型统一，消除 `{ message }` vs `{ success, error }` 混用
-- **安全配置环境变量化**：`security.config.ts` 支持环境变量覆盖，不再硬编码
-- **SSRF 防护**：URL 抓取前 DNS 解析并验证 IP 是否指向私网，支持 IPv4/IPv6
-- **命令注入防护**：Docker 容器 ID 白名单验证 + 批量命令 shell 元字符拒绝
-- **路径穿越防护**：文件上传/下载路径 `path.resolve()` + `startsWith()` 校验
-- **ReDoS 防护**：GitHub URL 正则优化，消除灾难性回溯
-- **AI 调用安全**：OpenAI/Claude API 端点路径用户可配置，含 SSRF 校验与 429 指数退避重试
-- **Docker Compose 生产就绪**：添加 healthcheck、资源限制、restart policy、日志轮转
-- **Docker 部署精简**：guacd 内嵌于 remote-gateway 容器，部署从 4 容器精简为 3 容器
-- **IP 地理定位增强**：SQLite 持久化缓存 + ASN 支持 + 多提供商适配器（ip-api/ipinfo）
-
-### 🧪 测试覆盖
-
-- **测试框架全面建设**：从几乎零测试到 3900+ 测试用例，100% 通过率
-- **E2E 测试（Playwright）**：8 个测试规范，覆盖认证、SSH、SFTP、远程桌面及边缘场景
-- **集成测试**：SSH/SFTP Mock 服务器、Guacamole 协议测试、Remote Gateway 测试
-- **单元测试**：Backend 134 测试文件，Frontend 62 测试文件
-- **新增 Store 测试**：settings / fileEditor / audit store 测试覆盖
-- **新增 Controller 测试**：settings.controller 39 个测试用例
-- **质量门禁**：`quality:check` 覆盖 debt + 三端 typecheck + lint + format
-
-### 🔒 依赖安全
-
-- **审计清零（2026-04-13）**：`npm audit --omit=dev` 与 `npm audit` 均为 0（critical/high/moderate/low 全清零）
-- **高危漏洞修复**：已完成 axios、qs、tar 等依赖的已知高危漏洞修复（CVE/GHSA）
-- **Dependabot 自动化**：配置自动依赖更新，持续监控安全风险
-- **依赖 overrides**：通过 npm overrides 强制使用安全版本
-- **XSS 防护**：AI 面板改用 DOMPurify 清洗，SFTP 压缩/解压增加路径白名单校验
+- **模块化拆分**：SFTP 服务拆分为 readdir/move/copy/path-operations/session 等独立执行器，auth 控制器拆分为 login/passkey/2FA/password 动作层
+- **FileManager 组件拆分**：从单文件拆分为 composable 组合式函数（排序/过滤、路径导航、列宽调整、布局设置、剪贴板、文件项操作、操作模态框、下载）
+- **Repository 基类抽象**：统一 Repository 层错误处理与日志记录
+- **类型化错误体系**：`DatabaseError`、`ValidationError`、`ExternalServiceError` 等类型安全的错误子类
+- **CSP 安全头**：Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
+- **SSRF / 命令注入 / 路径穿越 / ReDoS 防护**：完整的安全防御体系
+- **Docker Compose 生产就绪**：healthcheck、资源限制、restart policy、日志轮转
+- **Docker 部署精简**：guacd 内嵌于 remote-gateway 容器，3 容器部署
+- **IP 地理定位增强**：SQLite 持久化缓存 + ASN 支持 + 多提供商适配器
 
 ---
 
@@ -301,7 +264,7 @@ docker compose up -d
 
 ### CORS 跨域配置
 
-如果你需要配置额外的允许域名访问远程桌面网关（Remote Gateway），请参考 [CORS 配置文档](./docs/configuration/cors.md)。
+如果你需要配置额外的允许域名访问远程桌面网关（Remote Gateway），请参考 [CORS 配置文档](https://nexus.cosr.eu.org/configuration/cors)。
 
 **常见场景**：
 
@@ -320,13 +283,13 @@ remote-gateway:
     CORS_ALLOWED_ORIGINS: https://yourdomain.com,https://www.yourdomain.com
 ```
 
-详细说明请查看 [**CORS 配置完整文档**](./docs/configuration/cors.md)。
+详细说明请查看 [**CORS 配置完整文档**](https://nexus.cosr.eu.org/configuration/cors)。
 
 ## ⚠️ 注意事项
 
 1.  **双文件管理器**：可以在布局中添加两个文件管理器组件（实验性功能，可能存在不稳定情况）。
 2.  **多文本编辑器**：在同一布局中添加多个文本编辑器的功能尚未实现。
-3.  ARMv7 用户请参考 [部署文档](./docs/deployment/docker.md)。由于 Apache Guacamole 未提供 guacd 的 ARMv7 架构镜像，所以禁用 RDP 功能，相关镜像暂时不再拉取。
+3.  ARMv7 用户请参考 [部署文档](https://nexus.cosr.eu.org/deployment/docker)。由于 Apache Guacamole 未提供 guacd 的 ARMv7 架构镜像，所以禁用 RDP 功能，相关镜像暂时不再拉取。
 4.  数据备份可通过内置 API（`/api/v1/backup`）导出/导入，也可自行备份 `data` 目录。
 5.  由于浏览器限制，非https或者localhost无法复制终端内容，请使用https访问
 

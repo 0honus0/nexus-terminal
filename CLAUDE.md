@@ -39,8 +39,8 @@
 graph TD
     subgraph "Nexus Terminal Monorepo"
         A["nexus-terminal (根)"] --> B["packages"]
-        B --> C["backend<br/>Express + SQLite<br/>(207 TS文件, 24 数据表, 127 测试)"]
-        B --> D["frontend<br/>Vue 3 + Vite<br/>(240 TS/Vue, 24 Stores, 62 测试)"]
+        B --> C["backend<br/>Express + SQLite<br/>(207 TS文件, 25 数据表, 133 测试)"]
+        B --> D["frontend<br/>Vue 3 + Vite<br/>(240 TS/Vue, 24 Stores, 93 测试)"]
         B --> E["remote-gateway<br/>Guacamole Lite<br/>(2 源文件, 1 测试)"]
         A --> F["doc<br/>(技术债务、路线图)"]
     end

@@ -14,15 +14,7 @@
 
 **Nexus Terminal** is a modern, feature-rich web-based SSH / RDP / VNC client dedicated to providing a highly customizable remote connection experience.
 
-## 🔀 Differences from Upstream
-
-> This project is forked from [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal).
-> Upstream baseline: `Heavrnl/nexus-terminal:main`
-> Compare URL: <https://github.com/Heavrnl/nexus-terminal/compare/main...Silentely:main>
-
-Below is a long-term summary of this fork's enhancements compared to upstream:
-
-### ⚡ Performance Optimizations
+## ⚡ Performance Optimizations
 
 | Optimization                        | Effect                                                                                                                      |
 | :---------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
@@ -59,46 +51,17 @@ Below is a long-term summary of this fork's enhancements compared to upstream:
 - **Data Backup API**: Export/import 14 core data types including connections, keys, and tags (`/api/v1/backup`)
 - **Command Palette**: Built-in Command Palette component for quick action search and execution
 
-### 🏗️ Architecture Refactoring
+### 🏗️ Architecture & Quality
 
-- **Technical Debt Fully Governed**: 84 technical debt items fully cleared (100% convergence rate), including 7 Codex review fixes
-- **Type Safety Governance**: All `@ts-ignore` removed, `any` and weak typing cleared within business source code
-- **SFTP Service Deep Decomposition**: `sftp.service.ts` reduced from 1884 to 243 lines (**-87%**), split into readdir/move/copy/path-operations/session executor modules
-- **Auth Controller Layered Refactoring**: `auth.controller.ts` reduced from 1592 to 1366 lines (**-14%**), split into login/passkey/2FA/password action-layer utils with SQL assembly unified
-- **Cycle Dependencies Zeroed**: `import/no-cycle` controlled waivers converged from 16 to 0, decoupling auth chain, DB init chain, and notification chain
-- **FileManager Component Decomposition**: From 2851 lines split into composable functions (sort/filter, path navigation, column resize, layout settings, clipboard, item actions, action modal, download)
-- **Repository Base Class**: Unified Repository-layer error handling and logging, benefiting 15+ files
-- **Typed Error Hierarchy**: Added `DatabaseError`, `ValidationError`, `ExternalServiceError` type-safe error subclasses
-- **ESLint Flat Config Migration**: Completed migration to Flat Config, legacy config paths fully removed, Vue SFCs fully linted
-- **CSP Security Headers**: Added Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
-- **Unified Error Response Format**: Global ErrorResponse type, eliminating `{ message }` vs `{ success, error }` inconsistency
-- **Security Config Environment Variables**: `security.config.ts` supports env var overrides, no longer hardcoded
-- **Docker Compose Production-Ready**: Added healthcheck, resource limits, restart policy, and log rotation
-- **Docker Deployment Simplified**: guacd embedded in remote-gateway container, deployment reduced from 4 to 3 containers
-- **IP Geolocation Enhanced**: SQLite persistent cache + ASN support + multi-provider adapters (ip-api/ipinfo)
-
-### 🧪 Test Coverage
-
-- **Comprehensive Test Framework**: From near-zero tests to 3900+ test cases, 100% pass rate
-- **E2E Tests (Playwright)**: 8 test specs covering auth, SSH, SFTP, remote desktop, and edge cases
-- **Integration Tests**: SSH/SFTP mock servers, Guacamole protocol tests, Remote Gateway tests
-- **Unit Tests**: Backend 134 test files, Frontend 62 test files
-- **New Store Tests**: settings / fileEditor / audit store test coverage
-- **New Controller Tests**: 39 test cases for settings.controller
-- **Quality Gate**: `quality:check` covers debt + 3-way typecheck + lint + format
-
-### 🔒 Dependency Security
-
-- **Audit Cleared (2026-04-13)**: `npm audit --omit=dev` and `npm audit` both at 0 (critical/high/moderate/low all cleared)
-- **Critical Vulnerability Fixes**: Proactively patched known high-severity vulnerabilities in axios, qs, tar (CVE/GHSA)
-- **Dependabot Automation**: Configured automatic dependency updates for continuous security monitoring
-- **Dependency Overrides**: Enforced secure versions via npm overrides
-- **XSS Protection**: AI panel migrated to DOMPurify, SFTP compress/decompress added path whitelist validation
-- **SSRF Protection**: URL fetching resolves DNS and validates IPs against private ranges (IPv4/IPv6)
-- **Command Injection Prevention**: Docker container ID whitelist validation + batch command shell metacharacter rejection
-- **Path Traversal Prevention**: File upload/download paths verified with `path.resolve()` + `startsWith()` checks
-- **ReDoS Protection**: GitHub URL regex optimized to eliminate catastrophic backtracking
-- **AI Call Security**: OpenAI/Claude API endpoint paths user-configurable, with SSRF validation and 429 exponential backoff retry
+- **Modular Decomposition**: SFTP service split into readdir/move/copy/path-operations/session executors; auth controller split into login/passkey/2FA/password action layers
+- **FileManager Component Decomposition**: Split into composable functions (sort/filter, path navigation, column resize, layout settings, clipboard, item actions, action modal, download)
+- **Repository Base Class**: Unified Repository-layer error handling and logging
+- **Typed Error Hierarchy**: `DatabaseError`, `ValidationError`, `ExternalServiceError` type-safe error subclasses
+- **CSP Security Headers**: Content-Security-Policy / X-Frame-Options / X-Content-Type-Options
+- **SSRF / Command Injection / Path Traversal / ReDoS Protection**: Complete security defense system
+- **Docker Compose Production-Ready**: healthcheck, resource limits, restart policy, log rotation
+- **Docker Deployment Simplified**: guacd embedded in remote-gateway, 3-container deployment
+- **IP Geolocation Enhanced**: SQLite persistent cache + ASN support + multi-provider adapters
 
 ---
 
@@ -302,7 +265,7 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 
 1.  **Dual File Managers**: You can add two file manager components in the layout (experimental feature, may be unstable).
 2.  **Multiple Text Editors**: The functionality to add multiple text editors in the same layout has not yet been implemented.
-3.  For **ARMv7** users, please use the [docker-compose.yml](https://github.com/Silentely/nexus-terminal/blob/main/doc/arm/docker-compose.yml) provided here.
+3.  For **ARMv7** users, please refer to the [deployment guide](https://nexus.cosr.eu.org/deployment/docker).
     Since Apache Guacamole does not provide an ARMv7-compatible image for `guacd`, the RDP/VNC feature has been disabled, and related images will not be pulled for now.
 4.  Since I don't have an ARM machine on hand, I haven't conducted actual testing, so unexpected bugs may occur during runtime.
 5.  Data backup can be done via the built-in API (`/api/v1/backup`) for export/import, or by manually backing up the `data` directory.
