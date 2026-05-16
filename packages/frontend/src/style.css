@@ -411,3 +411,31 @@ button:hover {
     justify-content: center;
   }
 }
+
+/* ==========================================
+   移动端安全区域适配 (iPhone 刘海 / Dynamic Island)
+   ========================================== */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* ==========================================
+   移动端滚动行为优化
+   ========================================== */
+/* 防止终端区域的过度滚动导致页面弹性回弹干扰 */
+html {
+  overscroll-behavior: none;
+}
+
+/* 触屏设备禁止文本选择（终端场景不需要） */
+@media (hover: none) and (pointer: coarse) {
+  .xterm-screen {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
