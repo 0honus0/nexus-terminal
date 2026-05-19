@@ -215,6 +215,7 @@ REMOTE_GATEWAY_API_TOKEN=
 # GEO_PROVIDER=ip-api
 # IPINFO_TOKEN=
 # IP_API_USE_HTTPS=false
+# IP 地理位置数据由 IPLocate (https://iplocate.io) 提供
 
 # ===== WebSocket 多路复用 =====
 # ENABLE_MULTIPLEX=false
