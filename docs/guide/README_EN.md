@@ -290,7 +290,7 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 
 1.  **Dual File Managers**: You can add two file manager components in the layout (experimental feature, may be unstable).
 2.  **Multiple Text Editors**: The functionality to add multiple text editors in the same layout has not yet been implemented.
-3.  For **ARMv7** users, please refer to the [deployment guide](https://nexus.cosr.eu.org/deployment/docker).
+3.  For **ARMv7** users, please refer to the [deployment guide](https://nexus.cosr.eu.org/deployment).
     Since Apache Guacamole does not provide an ARMv7-compatible image for `guacd`, the RDP/VNC feature has been disabled, and related images will not be pulled for now.
 4.  Since I don't have an ARM machine on hand, I haven't conducted actual testing, so unexpected bugs may occur during runtime.
 5.  Data backup can be done via the built-in API (`/api/v1/backup`) for export/import, or by manually backing up the `data` directory.

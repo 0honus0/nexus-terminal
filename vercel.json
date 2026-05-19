@@ -1,4 +1,8 @@
 {
+  "rewrites": [
+    { "source": "/((?!assets/|favicon\\.ico|robots\\.txt|sitemap\\.xml|og-image\\.png|hashmap\\.json|404\\.html|\\.well-known/).*)", "destination": "/$1.html" },
+    { "source": "/((?!assets/|favicon\\.ico|robots\\.txt|sitemap\\.xml|og-image\\.png|hashmap\\.json|404\\.html|\\.well-known/).*)", "destination": "/$1/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

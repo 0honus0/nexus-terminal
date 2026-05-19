@@ -313,7 +313,7 @@ remote-gateway:
 
 1.  **双文件管理器**：可以在布局中添加两个文件管理器组件（实验性功能，可能存在不稳定情况）。
 2.  **多文本编辑器**：在同一布局中添加多个文本编辑器的功能尚未实现。
-3.  ARMv7 用户请参考 [部署文档](https://nexus.cosr.eu.org/deployment/docker)。由于 Apache Guacamole 未提供 guacd 的 ARMv7 架构镜像，所以禁用 RDP 功能，相关镜像暂时不再拉取。
+3.  ARMv7 用户请参考 [部署文档](https://nexus.cosr.eu.org/deployment)。由于 Apache Guacamole 未提供 guacd 的 ARMv7 架构镜像，所以禁用 RDP 功能，相关镜像暂时不再拉取。
 4.  数据备份可通过内置 API（`/api/v1/backup`）导出/导入，也可自行备份 `data` 目录。
 5.  由于浏览器限制，非https或者localhost无法复制终端内容，请使用https访问
 
