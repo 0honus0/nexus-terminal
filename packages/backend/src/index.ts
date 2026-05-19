@@ -145,14 +145,22 @@ const initializeEnvironment = async () => {
     try {
       // 确保追加前有换行符 (如果文件非空) - Use dataEnvPath here
       let prefix = '';
-      if (fs.existsSync(dataEnvPath)) {
+      const fileExists = fs.existsSync(dataEnvPath);
+      if (fileExists) {
         // Use dataEnvPath
         const content = fs.readFileSync(dataEnvPath, 'utf-8'); // Use dataEnvPath
         if (content.trim().length > 0 && !content.endsWith('\n')) {
           prefix = '\n';
         }
       }
-      fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim()); // Use dataEnvPath, trim() 移除开头的换行符
+      // 首次创建时以 mode 0o600 写入，确保密钥文件仅 owner 可读写
+      if (!fileExists) {
+        fs.writeFileSync(dataEnvPath, keysToAppend.trim(), { mode: 0o600 });
+      } else {
+        fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim());
+        // 追加后也收紧权限，防止历史文件权限过宽（如本地开发场景）
+        fs.chmodSync(dataEnvPath, 0o600);
+      }
       logger.warn(`[ENV Init] 已自动生成密钥并保存到 ${dataEnvPath}`); // Use dataEnvPath
       logger.warn('[ENV Init] !!! 重要：请务必备份此 data/.env 文件，并在生产环境中妥善保管 !!!');
     } catch (error: unknown) {

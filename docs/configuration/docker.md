@@ -2,6 +2,18 @@
 
 > 本文档整理可通过 Docker/Docker Compose 配置的环境变量。完整的变量参考请查看下方环境变量表格。
 
+::: danger ⚠️ v1.5.1 环境变量变更
+自 v1.5.1 起，以下环境变量**默认值已变更**：
+
+| 变量                           | 旧默认值                   | 新默认值                   |
+| ------------------------------ | -------------------------- | -------------------------- |
+| `REMOTE_GATEWAY_WS_PORT`       | `8080`                     | `8081`                     |
+| `REMOTE_GATEWAY_WS_URL_LOCAL`  | `ws://localhost:8080`      | `ws://localhost:8081`      |
+| `REMOTE_GATEWAY_WS_URL_DOCKER` | `ws://remote-gateway:8080` | `ws://remote-gateway:8081` |
+
+如果您的 `.env` 文件中显式设置了这些变量，请同步更新。同时 `docker-compose.yml` 中的端口映射也需更新（Frontend: `18111:80` → `18111:8080`，Remote Gateway WS: `8080` → `8081`）。
+:::
+
 ---
 
 ## 目录
@@ -39,8 +51,8 @@
 | -------------------------------- | ---------------------------- | ------------------------------------ |
 | `REMOTE_GATEWAY_API_BASE_LOCAL`  | `http://localhost:9090`      | 本地开发时远程网关 API 地址          |
 | `REMOTE_GATEWAY_API_BASE_DOCKER` | `http://remote-gateway:9090` | Docker 部署时远程网关 API 地址       |
-| `REMOTE_GATEWAY_WS_URL_LOCAL`    | `ws://localhost:8080`        | 本地开发时远程网关 WebSocket 地址    |
-| `REMOTE_GATEWAY_WS_URL_DOCKER`   | `ws://remote-gateway:8080`   | Docker 部署时远程网关 WebSocket 地址 |
+| `REMOTE_GATEWAY_WS_URL_LOCAL`    | `ws://localhost:8081`        | 本地开发时远程网关 WebSocket 地址    |
+| `REMOTE_GATEWAY_WS_URL_DOCKER`   | `ws://remote-gateway:8081`   | Docker 部署时远程网关 WebSocket 地址 |
 
 ### Remote Gateway API 鉴权（推荐）
 
@@ -118,9 +130,9 @@
 
 | 服务           | 外部端口      | 容器端口 | 描述                     |
 | -------------- | ------------- | -------- | ------------------------ |
-| frontend       | `18111`       | `80`     | Web 应用访问端口         |
+| frontend       | `18111`       | `8080`   | Web 应用访问端口         |
 | backend        | `3001` (内部) | `3001`   | API 服务端口             |
-| remote-gateway | `8080` (内部) | `8080`   | Guacamole WebSocket 端口 |
+| remote-gateway | `8081` (内部) | `8081`   | Guacamole WebSocket 端口 |
 | remote-gateway | `9090` (内部) | `9090`   | API 服务端口             |
 | guacd          | - (内部)      | `4822`   | Guacamole 协议端口       |
 
@@ -152,8 +164,8 @@ RP_ORIGIN=https://yourdomain.com
 # 远程网关地址
 REMOTE_GATEWAY_API_BASE_LOCAL=http://localhost:9090
 REMOTE_GATEWAY_API_BASE_DOCKER=http://remote-gateway:9090
-REMOTE_GATEWAY_WS_URL_LOCAL=ws://localhost:8080
-REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8080
+REMOTE_GATEWAY_WS_URL_LOCAL=ws://localhost:8081
+REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8081
 
 # Remote Gateway API 访问令牌（可选但强烈推荐；需与 docker-compose.yml 的 remote-gateway 一致）
 REMOTE_GATEWAY_API_TOKEN=
@@ -191,7 +203,7 @@ services:
     image: ghcr.io/silentely/nexus-terminal-frontend:latest
     container_name: nexus-terminal-frontend
     ports:
-      - '18111:80'
+      - '18111:8080'
     depends_on:
       - backend
       - remote-gateway
@@ -218,7 +230,7 @@ services:
       GUACD_HOST: localhost
       GUACD_PORT: 4822
       REMOTE_GATEWAY_API_PORT: 9090
-      REMOTE_GATEWAY_WS_PORT: 8080
+      REMOTE_GATEWAY_WS_PORT: 8081
       FRONTEND_URL: http://frontend
       MAIN_BACKEND_URL: http://backend:3001
       NODE_ENV: production
@@ -268,7 +280,7 @@ services:
         VITE_NOTIFICATION_TIMEOUT_MS: ${VITE_NOTIFICATION_TIMEOUT_MS:-3000}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     ports:
-      - '18111:80'
+      - '18111:8080'
     depends_on:
       - backend
       - remote-gateway

@@ -173,14 +173,14 @@ const ENV_SCHEMA: Record<keyof EnvironmentConfig, EnvVarSchema> = {
   REMOTE_GATEWAY_WS_URL_LOCAL: {
     required: false,
     type: 'string',
-    default: 'ws://localhost:8080',
+    default: 'ws://localhost:8081',
     validator: (value: string) => /^wss?:\/\/.+/.test(value),
     errorMessage: 'REMOTE_GATEWAY_WS_URL_LOCAL 必须是有效的 WS/WSS URL',
   },
   REMOTE_GATEWAY_WS_URL_DOCKER: {
     required: false,
     type: 'string',
-    default: 'ws://remote-gateway:8080',
+    default: 'ws://remote-gateway:8081',
     validator: (value: string) => /^wss?:\/\/.+/.test(value),
     errorMessage: 'REMOTE_GATEWAY_WS_URL_DOCKER 必须是有效的 WS/WSS URL',
   },

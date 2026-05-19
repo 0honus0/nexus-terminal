@@ -41,7 +41,11 @@ COPY --from=builder /app/packages/frontend/dist /usr/share/nginx/html
 COPY packages/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 
-EXPOSE 80
+EXPOSE 8080
 
+# 确保 nginx 运行时目录权限正确（非 root 用户需要写权限）
+RUN chown -R nginx:nginx /var/cache/nginx /var/run /var/log/nginx
+
+USER nginx
 
 CMD ["nginx", "-g", "daemon off;"]

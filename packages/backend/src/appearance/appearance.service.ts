@@ -22,17 +22,29 @@ const getNodeErrorCode = (error: unknown): string | undefined => {
   return typeof code === 'string' ? code : undefined;
 };
 
-// 确保预设 html-themes 目录存在
+// 确保预设 html-themes 目录存在（只读目录，无权限时降级）
 const ensurePresetHtmlThemesDirExists = async () => {
   // Renamed
   try {
     await fs.access(PRESET_HTML_THEMES_DIR);
   } catch {
-    // 目录不存在，创建它
-    await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
-    logger.debug(
-      `[AppearanceService] Created preset html-themes directory at ${PRESET_HTML_THEMES_DIR}`
-    );
+    // 目录不存在，尝试创建（Docker 非 root 用户可能无权限）
+    try {
+      await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
+      logger.debug(
+        `[AppearanceService] Created preset html-themes directory at ${PRESET_HTML_THEMES_DIR}`
+      );
+    } catch (createErr: unknown) {
+      const errCode = getNodeErrorCode(createErr);
+      // 仅对权限/只读文件系统错误降级，其它错误上抛
+      if (errCode === 'EACCES' || errCode === 'EROFS' || errCode === 'EPERM') {
+        logger.warn(
+          `[AppearanceService] 无法创建预设主题目录 ${PRESET_HTML_THEMES_DIR}（${errCode}），降级跳过`
+        );
+      } else {
+        throw createErr;
+      }
+    }
   }
 };
 // 在服务初始化时确保目录存在

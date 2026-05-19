@@ -66,17 +66,17 @@ export function handleRdpProxyConnection(ws: AuthenticatedWebSocket, request: Re
   const deploymentMode = process.env.DEPLOYMENT_MODE;
   let remoteGatewayWsBaseUrl: string;
   if (deploymentMode === 'local') {
-    remoteGatewayWsBaseUrl = process.env.REMOTE_GATEWAY_WS_URL_LOCAL || 'ws://localhost:8080';
+    remoteGatewayWsBaseUrl = process.env.REMOTE_GATEWAY_WS_URL_LOCAL || 'ws://localhost:8081';
     logger.debug(
       `[WebSocket Remote Desktop Proxy] Using LOCAL deployment mode. Target Base: ${remoteGatewayWsBaseUrl}`
     );
   } else if (deploymentMode === 'docker') {
-    remoteGatewayWsBaseUrl = process.env.REMOTE_GATEWAY_WS_URL_DOCKER || 'ws://remote-gateway:8080';
+    remoteGatewayWsBaseUrl = process.env.REMOTE_GATEWAY_WS_URL_DOCKER || 'ws://remote-gateway:8081';
     logger.debug(
       `[WebSocket Remote Desktop Proxy] Using DOCKER deployment mode. Target Base: ${remoteGatewayWsBaseUrl}`
     );
   } else {
-    remoteGatewayWsBaseUrl = 'ws://localhost:8080';
+    remoteGatewayWsBaseUrl = 'ws://localhost:8081';
     logger.warn(
       `[WebSocket Remote Desktop Proxy] Unknown deployment mode '${deploymentMode}'. Defaulting to safe fallback Target Base: ${remoteGatewayWsBaseUrl}`
     );

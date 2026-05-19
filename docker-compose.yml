@@ -7,7 +7,7 @@ services:
     image: ghcr.io/silentely/nexus-terminal-frontend:latest
     container_name: nexus-terminal-frontend
     ports:
-      - "18111:80"
+      - "18111:8080"
     depends_on:
       - backend
       - remote-gateway
@@ -15,7 +15,7 @@ services:
       - nexus-terminal-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ > /dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -66,7 +66,7 @@ services:
       GUACD_HOST: localhost
       GUACD_PORT: 4822
       REMOTE_GATEWAY_API_PORT: 9090
-      REMOTE_GATEWAY_WS_PORT: 8080
+      REMOTE_GATEWAY_WS_PORT: 8081
       FRONTEND_URL: http://frontend
       MAIN_BACKEND_URL: http://backend:3001
       NODE_ENV: production

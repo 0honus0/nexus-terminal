@@ -106,7 +106,7 @@ docker compose up -d
 npm install                                    # 安装所有子包依赖
 cd packages/backend && npm run dev             # 后端 :3001
 cd packages/frontend && npm run dev            # 前端 :5173
-cd packages/remote-gateway && npm run dev      # 网关 :8080/9090
+cd packages/remote-gateway && npm run dev      # 网关 :8081/9090
 ```
 
 ### 构建生产版本
@@ -230,7 +230,7 @@ npx playwright install          # 首次运行 E2E 需安装浏览器
 ### 部署架构
 
 ```
-Frontend (18111:80) -> Nginx + Vite build
+Frontend (18111:8080) -> Nginx + Vite build
   | API 代理
 Backend (3001) -> Express + SQLite + SSH2
   | WebSocket

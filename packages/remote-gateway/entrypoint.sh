@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# 新建文件默认权限为 600（仅 owner 可读写）
+umask 077
+
 # 启动脚本：先启动 guacd，再启动 Node.js 远程网关
 # guacd 作为前台进程管理，Node.js 作为后台进程
 

@@ -47,7 +47,7 @@
        │                              │                                         │
        ▼                              │  ┌─────────────────────────────────┐   │
 ┌──────────────┐    Guacamole WS      │  │    GuacamoleLite Server         │   │
-│   Browser    │ ──────────────────── │  │    (Port 8080)                  │   │
+│   Browser    │ ──────────────────── │  │    (Port 8081)                  │   │
 │  guacamole-  │                      │  │                                 │   │
 │  common-js   │                      │  │  • 解密验证 Token               │   │
 └──────────────┘                      │  │  • 建立 Guacd 连接（localhost） │   │
@@ -177,7 +177,7 @@ packages/remote-gateway/
 
 | 变量名                    | 默认值                | 描述                     |
 | ------------------------- | --------------------- | ------------------------ |
-| `REMOTE_GATEWAY_WS_PORT`  | 8080                  | Guacamole WebSocket 端口 |
+| `REMOTE_GATEWAY_WS_PORT`  | 8081                  | Guacamole WebSocket 端口 |
 | `REMOTE_GATEWAY_API_PORT` | 9090                  | API 服务端口             |
 | `GUACD_HOST`              | localhost             | Guacd 服务地址           |
 | `GUACD_PORT`              | 4822                  | Guacd 服务端口           |
@@ -246,7 +246,7 @@ npm start
 
 ```bash
 docker build -t nexus-terminal-remote-gateway .
-docker run -p 8080:8080 -p 9090:9090 \
+docker run -p 8081:8081 -p 9090:9090 \
   -e GUACD_HOST=localhost \
   -e GUACD_PORT=4822 \
   nexus-terminal-remote-gateway

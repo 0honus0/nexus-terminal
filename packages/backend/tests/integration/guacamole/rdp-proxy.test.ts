@@ -47,7 +47,7 @@ describe('RDP 代理测试', () => {
       const height = 1080;
 
       // 模拟连接 URL 构建
-      const remoteGatewayUrl = 'ws://localhost:8080';
+      const remoteGatewayUrl = 'ws://localhost:8081';
       const targetUrl = `${remoteGatewayUrl}/?token=${encodeURIComponent(rdpToken)}&width=${width}&height=${height}&dpi=96`;
 
       expect(targetUrl).toContain('token=');

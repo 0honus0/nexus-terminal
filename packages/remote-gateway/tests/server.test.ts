@@ -12,13 +12,13 @@ describe('Remote Gateway 服务器测试', () => {
   describe('服务器配置', () => {
     it('应该使用正确的默认配置', () => {
       const config = {
-        wsPort: process.env.REMOTE_GATEWAY_WS_PORT || 8080,
+        wsPort: process.env.REMOTE_GATEWAY_WS_PORT || 8081,
         apiPort: process.env.REMOTE_GATEWAY_API_PORT || 9090,
         guacdHost: process.env.GUACD_HOST || 'localhost',
         guacdPort: parseInt(process.env.GUACD_PORT || '4822', 10),
       };
 
-      expect(config.wsPort).toBe(8080);
+      expect(config.wsPort).toBe(8081);
       expect(config.apiPort).toBe(9090);
       expect(config.guacdHost).toBe('localhost');
       expect(config.guacdPort).toBe(4822);
@@ -29,7 +29,7 @@ describe('Remote Gateway 服务器测试', () => {
       process.env.REMOTE_GATEWAY_WS_PORT = '8081';
       process.env.REMOTE_GATEWAY_API_PORT = '9091';
 
-      const wsPort = process.env.REMOTE_GATEWAY_WS_PORT || 8080;
+      const wsPort = process.env.REMOTE_GATEWAY_WS_PORT || 8081;
       const apiPort = process.env.REMOTE_GATEWAY_API_PORT || 9090;
 
       expect(wsPort).toBe('8081');

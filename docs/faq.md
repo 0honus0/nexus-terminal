@@ -29,7 +29,89 @@ FRONTEND_PORT=8080
 ```yaml
 frontend:
   ports:
-    - '8080:80'
+    - '8080:8080'
+```
+
+### 从 v1.5.0 升级到 v1.5.1 后容器启动失败怎么办？
+
+v1.5.1 将容器运行用户从 root 切换为非 root，导致内部端口发生变更。常见问题及解决方法：
+
+**问题 1：Frontend 容器健康检查失败**
+
+现象：`docker compose ps` 显示 frontend 为 `unhealthy`
+
+原因：旧配置中 nginx 监听 `80`，新版本监听 `8080`
+
+解决：更新 `docker-compose.yml` 中的端口映射和 healthcheck：
+
+```yaml
+frontend:
+  ports:
+    - '18111:8080' # 旧值: '18111:80'
+  healthcheck:
+    test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/ > /dev/null 2>&1 || exit 1']
+```
+
+**问题 2：远程桌面（RDP/VNC）连接失败**
+
+现象：前端可以访问但无法连接远程桌面
+
+原因：Remote Gateway WebSocket 端口从 `8080` 改为 `8081`
+
+解决：更新宿主机 Nginx 配置中 `/guacamole/` 的代理目标：
+
+```nginx
+# 旧配置
+proxy_pass http://127.0.0.1:8080;
+
+# 新配置
+proxy_pass http://127.0.0.1:8081;
+```
+
+同时更新 `.env` 中的环境变量（如果显式设置了旧值）：
+
+```env
+# 旧值
+REMOTE_GATEWAY_WS_PORT=8080
+REMOTE_GATEWAY_WS_URL_LOCAL=ws://localhost:8080
+REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8080
+
+# 新值
+REMOTE_GATEWAY_WS_PORT=8081
+REMOTE_GATEWAY_WS_URL_LOCAL=ws://localhost:8081
+REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8081
+```
+
+**问题 3：`data/.env` 文件权限被拒绝**
+
+现象：容器启动时报 `EACCES: permission denied`
+
+原因：新版本将 `data/.env` 权限收紧为 `600`
+
+解决：容器 entrypoint 会在启动时自动修复权限，无需手动处理。如果仍有问题，执行：
+
+```bash
+docker compose down
+sudo chown -R $(id -u):$(id -g) ./data
+docker compose up -d
+```
+
+**完整升级步骤：**
+
+```bash
+# 1. 停止旧版本
+docker compose down
+
+# 2. 更新 docker-compose.yml（参考上方端口变更）
+
+# 3. 更新宿主机 Nginx 配置
+
+# 4. 拉取新镜像并启动
+docker compose pull && docker compose up -d
+
+# 5. 验证容器状态
+docker compose ps
+docker compose logs -f
 ```
 
 ### 可以不用 Docker 部署吗？
