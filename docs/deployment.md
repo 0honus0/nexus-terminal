@@ -56,9 +56,9 @@ Docker 部署包含三个容器，职责如下：
 
 | 容器               | 内部端口                      | 职责                                                                |
 | ------------------ | ----------------------------- | ------------------------------------------------------------------- |
-| **frontend**       | 80                            | 静态资源托管 + 反向代理（转发 `/api/` → backend、`/ws/` → backend） |
+| **frontend**       | 8080                          | 静态资源托管 + 反向代理（转发 `/api/` → backend、`/ws/` → backend） |
 | **backend**        | 3001                          | API 服务、SSH/SFTP 连接管理、认证、审计                             |
-| **remote-gateway** | 8080 (WebSocket) / 9090 (API) | Guacamole 网关，处理 RDP/VNC 远程桌面连接                           |
+| **remote-gateway** | 8081 (WebSocket) / 9090 (API) | Guacamole 网关，处理 RDP/VNC 远程桌面连接                           |
 
 ::: warning 注意
 前端容器的 nginx 默认只代理 `/api/` 和 `/ws/` 到 backend。**`/guacamole/` 不会自动转发到 remote-gateway**，需要在宿主机 Nginx 中单独处理（详见 [Nginx 反向代理配置](./deployment/nginx)）。
@@ -112,7 +112,7 @@ services:
       GUACD_HOST: localhost
       GUACD_PORT: 4822
       REMOTE_GATEWAY_API_PORT: 9090
-      REMOTE_GATEWAY_WS_PORT: 8080
+      REMOTE_GATEWAY_WS_PORT: 8081
       FRONTEND_URL: http://frontend
       MAIN_BACKEND_URL: http://backend:3001
     networks:

@@ -216,7 +216,7 @@ describe('RDP WebSocket Handler', () => {
 
       handleRdpProxyConnection(mockWs, mockRequest);
 
-      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('ws://localhost:8080'));
+      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('ws://localhost:8081'));
     });
 
     it('docker 模式应使用 remote-gateway URL', () => {
@@ -224,7 +224,7 @@ describe('RDP WebSocket Handler', () => {
 
       handleRdpProxyConnection(mockWs, mockRequest);
 
-      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('ws://remote-gateway:8080'));
+      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('ws://remote-gateway:8081'));
     });
 
     it('自定义 local URL 应覆盖默认值', () => {
@@ -256,7 +256,7 @@ describe('RDP WebSocket Handler', () => {
 
       handleRdpProxyConnection(mockWs, mockRequest);
 
-      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('ws://localhost:8080'));
+      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('ws://localhost:8081'));
     });
   });
 
@@ -412,13 +412,13 @@ describe('RDP WebSocket Handler', () => {
       process.env = {
         ...originalEnv,
         DEPLOYMENT_MODE: 'local',
-        REMOTE_GATEWAY_WS_URL_LOCAL: 'ws://localhost:8080/',
+        REMOTE_GATEWAY_WS_URL_LOCAL: 'ws://localhost:8081/',
       };
 
       handleRdpProxyConnection(mockWs, mockRequest);
 
       // 验证 URL 不包含双斜杠
-      expect(WebSocket).toHaveBeenCalledWith(expect.not.stringContaining('8080//'));
+      expect(WebSocket).toHaveBeenCalledWith(expect.not.stringContaining('8081//'));
 
       process.env = originalEnv;
     });

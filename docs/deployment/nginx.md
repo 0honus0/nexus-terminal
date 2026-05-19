@@ -67,7 +67,7 @@ server {
 
     # 远程桌面网关 WebSocket
     location /guacamole/ {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -83,7 +83,7 @@ server {
 适用于 Docker Compose 部署 + 宿主机 Nginx 反向代理的场景（最常见）。
 
 ::: warning 架构说明
-此模式下前端容器监听 `127.0.0.1:18111:8080`，宿主机 Nginx 统一入口代理到 `18111`。但前端容器内部的 nginx **仅代理 `/api/` 和 `/ws/` 到 backend**，不会转发 `/guacamole/`。因此 `/guacamole/` 必须在宿主机 Nginx 中单独代理到 `remote-gateway:8080`（宿主机上通常是 `127.0.0.1:8080`）。
+此模式下前端容器监听 `127.0.0.1:18111:8080`，宿主机 Nginx 统一入口代理到 `18111`。但前端容器内部的 nginx **仅代理 `/api/` 和 `/ws/` 到 backend**，不会转发 `/guacamole/`。因此 `/guacamole/` 必须在宿主机 Nginx 中单独代理到 `remote-gateway:8081`（宿主机上通常是 `127.0.0.1:8081`）。
 :::
 
 ```nginx
@@ -147,7 +147,7 @@ server {
 
     # Guacamole 远程桌面 WebSocket（直连 remote-gateway，不经过前端容器）
     location /guacamole/ {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -166,7 +166,7 @@ server {
 | 路径 | 代理目标 | 说明 |
 | --- | --- | --- |
 | `/`、`/api/`、`/ws/` | `127.0.0.1:18111` | 通过前端容器，由其内部分流 |
-| `/guacamole/` | `127.0.0.1:8080` | 直连 remote-gateway，前端容器不代理此路径 |
+| `/guacamole/` | `127.0.0.1:8081` | 直连 remote-gateway，前端容器不代理此路径 |
 :::
 
 ### Docker Compose 内部 Nginx 配置
@@ -180,12 +180,12 @@ upstream nexus_backend {
 }
 
 upstream nexus_gateway {
-    server remote-gateway:8080;
+    server remote-gateway:8081;
     keepalive 16;
 }
 
 server {
-    listen 8080;
+    listen 8081;
     server_name localhost;
 
     client_max_body_size 100m;
@@ -325,7 +325,7 @@ server {
 
     # Guacamole 远程桌面 WebSocket（直连 remote-gateway，不经过前端容器）
     location /guacamole/ {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -378,7 +378,7 @@ server {
 | 路径          | 用途                     | 后端服务       | 默认端口 |
 | ------------- | ------------------------ | -------------- | -------- |
 | `/ws/`        | SSH 终端、SFTP、批量执行 | backend        | 3001     |
-| `/guacamole/` | RDP/VNC 远程桌面         | remote-gateway | 8080     |
+| `/guacamole/` | RDP/VNC 远程桌面         | remote-gateway | 8081     |
 
 ### WebSocket 专用配置
 
@@ -422,7 +422,7 @@ server {
 
     # 远程桌面 WebSocket
     location /guacamole/ {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:8081;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
@@ -459,8 +459,8 @@ upstream nexus_backend_cluster {
 upstream nexus_gateway_cluster {
     ip_hash;  # 会话粘滞（远程桌面需要）
 
-    server 192.168.1.10:8080;
-    server 192.168.1.11:8080;
+    server 192.168.1.10:8081;
+    server 192.168.1.11:8081;
 
     keepalive 32;
 }
@@ -761,7 +761,7 @@ location /api/ {
 
 ```nginx
 location /guacamole/ {
-    proxy_pass http://127.0.0.1:8080;
+    proxy_pass http://127.0.0.1:8081;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -835,7 +835,7 @@ http {
     }
 
     upstream nexus_gateway {
-        server 127.0.0.1:8080;
+        server 127.0.0.1:8081;
         keepalive 16;
     }
 

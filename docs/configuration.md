@@ -182,7 +182,7 @@ sudo ufw deny 3001/tcp    # 不对外暴露后端端口
 | `GUACD_HOST`               | `localhost`           | Guacd 主机     |
 | `GUACD_PORT`               | `4822`                | Guacd 端口     |
 | `REMOTE_GATEWAY_API_PORT`  | `9090`                | API 端口       |
-| `REMOTE_GATEWAY_WS_PORT`   | `8080`                | WebSocket 端口 |
+| `REMOTE_GATEWAY_WS_PORT`   | `8081`                | WebSocket 端口 |
 | `FRONTEND_URL`             | `http://frontend`     | 前端 URL       |
 | `MAIN_BACKEND_URL`         | `http://backend:3001` | 后端 URL       |
 | `REMOTE_GATEWAY_API_TOKEN` | —                     | API Token      |
