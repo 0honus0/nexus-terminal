@@ -522,7 +522,8 @@
       "sftpManagerUnavailable": "SFTP manager unavailable",
       "missingSessionId": "Missing session ID",
       "pathReadFailed": "Failed to read terminal path.",
-      "pathReadTimeout": "Timed out while reading terminal path."
+      "pathReadTimeout": "Timed out while reading terminal path.",
+      "lineEndingConversionFailed": "Line ending conversion failed"
     },
     "notifications": {
       "copySuccess": "Copy successful",
@@ -552,6 +553,9 @@
     "saveError": "Save error",
     "editPathTooltip": "Click path to edit",
     "noOpenFile": "No file open",
+    "changeLineEndingTooltip": "Change line ending format",
+    "lineEndingAriaLabel": "Line ending selection",
+    "loadingLineEnding": "Loading...",
     "selectFileToEdit": "Select a file from the file manager to start editing.",
     "searchPlaceholder": "Search files...",
     "dropFilesHere": "Drop files here to upload",

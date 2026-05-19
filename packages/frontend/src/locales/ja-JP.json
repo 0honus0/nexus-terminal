@@ -522,7 +522,8 @@
       "sftpManagerUnavailable": "SFTP 管理器不可用",
       "missingSessionId": "缺少会话 ID",
       "pathReadFailed": "ターミナルのパスの読み取りに失敗しました",
-      "pathReadTimeout": "ターミナルのパスの読み取りがタイムアウトしました"
+      "pathReadTimeout": "ターミナルのパスの読み取りがタイムアウトしました",
+      "lineEndingConversionFailed": "改行コードの変換に失敗しました"
     },
     "notifications": {
       "copySuccess": "コピーに成功しました",
@@ -552,6 +553,9 @@
     "saveError": "保存中にエラーが発生しました",
     "editPathTooltip": "パスをクリックして編集",
     "noOpenFile": "ファイルが開いていません",
+    "changeLineEndingTooltip": "改行コード形式の変更",
+    "lineEndingAriaLabel": "改行コードの選択",
+    "loadingLineEnding": "読み込み中...",
     "selectFileToEdit": "ファイルマネージャーから編集するファイルを選択してください。",
     "searchPlaceholder": "ファイルを検索...",
     "dropFilesHere": "ファイルをここにドラッグ＆ドロップしてアップロード",

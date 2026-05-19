@@ -8,6 +8,7 @@ import type { SaveStatus, SftpReadFileSuccessPayload } from '../types/sftp.types
 import { extractErrorMessage } from '../utils/errorExtractor';
 import { workspaceEmitter } from '../composables/workspaceEvents';
 import { log } from '@/utils/log';
+import { convertLineEnding, detectLineEnding, type LineEnding } from '../utils/lineEnding';
 
 // --- 类型定义 ---
 // 文件信息，用于打开文件操作
@@ -29,6 +30,7 @@ export interface FileTab {
   rawContentBase64: string | null; // +++ 存储原始 Base64 数据 +++
   language: string;
   selectedEncoding: string; // 当前选择或自动检测到的编码
+  lineEnding: 'lf' | 'crlf' | 'cr'; // 当前换行符格式
   isLoading: boolean;
   loadingError: string | null;
   isSaving: boolean;
@@ -268,6 +270,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       tabToUpdate.content = initialContent;
       tabToUpdate.originalContent = initialContent;
       tabToUpdate.selectedEncoding = fileData.encodingUsed;
+      tabToUpdate.lineEnding = detectLineEnding(initialContent);
       tabToUpdate.isLoading = false;
       tabToUpdate.isModified = false;
       tabToUpdate.loadingError = null;
@@ -345,6 +348,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       rawContentBase64: null, // +++ 初始化为 null +++
       language: getLanguageFromFilename(targetFilePath),
       selectedEncoding: 'utf-8', // 初始默认，将由后端更新
+      lineEnding: 'lf', // 默认 LF，加载时会自动检测
       isLoading: true,
       loadingError: null,
       isSaving: false,
@@ -758,6 +762,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
       // 就地修改属性，避免替换对象导致外部引用失效
       tab.content = newContent;
       tab.selectedEncoding = newEncoding;
+      tab.lineEnding = detectLineEnding(newContent); // 编码切换后重新检测行尾格式
       tab.isLoading = false;
       tab.loadingError = null;
       // isModified 状态保持不变
@@ -776,6 +781,36 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     // finally {
     //     if (tab) tab.isLoading = false; // 确保加载状态被重置
     // }
+  };
+
+  // +++ 更改文件换行符格式 +++
+  const changeLineEnding = (tabId: string, newLineEnding: LineEnding) => {
+    const tab = tabs.value.get(tabId);
+    if (!tab) {
+      log.warn(`[文件编辑器 Store] 尝试更改不存在的标签页 ${tabId} 的换行符。`);
+      return;
+    }
+    if (tab.lineEnding === newLineEnding) {
+      log.info(`[文件编辑器 Store] 换行符已经是 ${newLineEnding}，无需更改。`);
+      return;
+    }
+
+    log.info(
+      `[文件编辑器 Store] 更换行符: ${tab.lineEnding} → ${newLineEnding} for ${tab.filePath} (Tab ID: ${tabId})`
+    );
+
+    try {
+      const newContent = convertLineEnding(tab.content, newLineEnding);
+      tab.content = newContent;
+      tab.lineEnding = newLineEnding;
+      tab.isModified = tab.content !== tab.originalContent;
+      tab.loadingError = null; // 清除可能存在的旧错误
+      log.info(`[文件编辑器 Store] 文件 ${tab.filePath} 换行符已更改为 ${newLineEnding}。`);
+    } catch (err: unknown) {
+      const errorMessage = extractErrorMessage(err, String(err));
+      log.error(`[文件编辑器 Store] 更换行符失败:`, err);
+      tab.loadingError = `${t('fileManager.errors.lineEndingConversionFailed', '换行符转换失败')}: ${errorMessage}`;
+    }
   };
 
   // +++ 更新标签页滚动位置 +++
@@ -859,6 +894,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     setActiveTab,
     updateFileContent, // 暴露新的更新方法
     changeEncoding, // +++ 暴露更改编码的方法 +++
+    changeLineEnding, // +++ 暴露更换行符的方法 +++
     reloadTab,
     triggerPopup, // 暴露新的触发方法
     // setEditorVisibility, // 移除

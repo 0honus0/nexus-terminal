@@ -134,6 +134,7 @@ const currentTabLanguage = computed(() => activeTab.value?.language ?? 'plaintex
 const currentTabFilePath = computed(() => activeTab.value?.filePath ?? '');
 const currentTabIsModified = computed(() => activeTab.value?.isModified ?? false); // 用于显示修改状态
 const currentSelectedEncoding = computed(() => activeTab.value?.selectedEncoding ?? 'utf-8');
+const currentLineEnding = computed(() => activeTab.value?.lineEnding ?? 'lf');
 const currentTabSessionName = computed(() => {
   const sessionId = activeTab.value?.sessionId;
   if (!sessionId) return null;
@@ -142,6 +143,11 @@ const currentTabSessionName = computed(() => {
 
 // Watch for changes in the selected encoding to update width
 watch(currentSelectedEncoding, () => {
+  updateSelectWidth();
+});
+
+// Watch for changes in the line ending to update width
+watch(currentLineEnding, () => {
   updateSelectWidth();
 });
 
@@ -197,6 +203,13 @@ const encodingOptions = ref([
   { value: 'cp874', text: 'Windows-874 (Thai)' },
 ]);
 
+// +++ 换行符选项 +++
+const lineEndingOptions = [
+  { value: 'lf', text: 'LF' },
+  { value: 'crlf', text: 'CRLF' },
+  { value: 'cr', text: 'CR' },
+] as const;
+
 // --- 事件处理 ---
 const handleSaveRequest = () => {
   if (activeTab.value) {
@@ -213,6 +226,21 @@ const handleEncodingChange = (event: Event) => {
     emitWorkspaceEvent('editor:changeEncoding', {
       tabId: activeTab.value.id,
       encoding: newEncoding,
+    });
+  }
+};
+
+// +++ 处理换行符更改事件 +++
+const handleLineEndingChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement;
+  const newLineEnding = target.value as 'lf' | 'crlf' | 'cr';
+  if (activeTab.value && newLineEnding && newLineEnding !== currentLineEnding.value) {
+    log.info(
+      `[EditorContainer] Line ending changed to ${newLineEnding} for tab ${activeTab.value.id}`
+    );
+    emitWorkspaceEvent('editor:changeLineEnding', {
+      tabId: activeTab.value.id,
+      lineEnding: newLineEnding,
     });
   }
 };
@@ -356,6 +384,24 @@ const handleKeyDown = (event: KeyboardEvent) => {
         </div>
         <span v-else-if="activeTab" class="encoding-select-placeholder">{{
           t('fileManager.loadingEncoding', '加载中...')
+        }}</span>
+
+        <!-- +++ 换行符选择下拉菜单 +++ -->
+        <div class="line-ending-select-wrapper" v-if="activeTab && !currentTabIsLoading">
+          <select
+            :value="currentLineEnding"
+            :aria-label="t('fileManager.lineEndingAriaLabel', '换行符选择')"
+            @change="handleLineEndingChange"
+            class="line-ending-select"
+            :title="t('fileManager.changeLineEndingTooltip', '更改换行符格式')"
+          >
+            <option v-for="option in lineEndingOptions" :key="option.value" :value="option.value">
+              {{ option.text }}
+            </option>
+          </select>
+        </div>
+        <span v-else-if="activeTab" class="line-ending-select-placeholder">{{
+          t('fileManager.loadingLineEnding', '加载中...')
         }}</span>
 
         <span v-if="currentTabSaveStatus === 'saving'" class="save-status saving"
@@ -580,6 +626,40 @@ const handleKeyDown = (event: KeyboardEvent) => {
   padding: 0.3rem 0.5rem;
   display: inline-block;
   min-width: 80px; /* 与 select 大致对齐 */
+  text-align: center;
+}
+
+.line-ending-select-wrapper {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.line-ending-select {
+  background-color: var(--editor-input-bg-color);
+  color: var(--editor-text-color);
+  border: 1px solid var(--editor-input-border-color);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+  cursor: pointer;
+  outline: none;
+}
+
+.line-ending-select:hover {
+  background-color: var(--editor-input-hover-bg-color);
+}
+
+.line-ending-select:focus {
+  border-color: var(--editor-input-focus-border-color);
+  box-shadow: 0 0 0 2px var(--color-primary, #3b82f6);
+}
+
+.line-ending-select-placeholder {
+  font-size: 0.85em;
+  color: var(--editor-text-muted-color);
+  padding: 0.3rem 0.5rem;
+  display: inline-block;
+  min-width: 50px;
   text-align: center;
 }
 </style>

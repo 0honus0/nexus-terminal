@@ -233,6 +233,8 @@ const currentTabFilePath = computed(() => activeTab.value?.filePath ?? '');
 const currentTabIsModified = computed(() => activeTab.value?.isModified ?? false);
 // +++ 计算当前选择的编码 (与 Container 逻辑一致) +++
 const currentSelectedEncoding = computed(() => activeTab.value?.selectedEncoding ?? 'utf-8');
+// +++ 计算当前选择的换行符 +++
+const currentLineEnding = computed(() => activeTab.value?.lineEnding ?? 'lf');
 // +++ 计算当前活动标签的会话名称 (与 Container 逻辑一致) +++
 const currentTabSessionName = computed(() => {
   const sessionId = activeTab.value?.sessionId;
@@ -293,6 +295,13 @@ const encodingOptions = ref([
   { value: 'tis-620', text: 'TIS-620 (Thai)' }, // Often cp874
   { value: 'cp874', text: 'Windows-874 (Thai)' },
 ]);
+
+// +++ 换行符选项 +++
+const lineEndingOptions = [
+  { value: 'lf', text: 'LF' },
+  { value: 'crlf', text: 'CRLF' },
+  { value: 'cr', text: 'CR' },
+] as const;
 
 // 保存当前激活的标签页
 const handleSaveRequest = () => {
@@ -398,6 +407,29 @@ const handleEncodingChange = (event: Event) => {
         changeEncodingInSession(sessionId, currentActiveTab.id, newEncoding); // 会话 Store
       } else {
         log.error('[FileEditorOverlay] 无法更改编码：非共享模式下缺少 sessionId。');
+      }
+    }
+  }
+};
+
+// +++ 处理换行符更改事件 +++
+const handleLineEndingChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement;
+  const newLineEnding = target.value as 'lf' | 'crlf' | 'cr';
+  const currentActiveTab = activeTab.value;
+
+  if (currentActiveTab && newLineEnding && newLineEnding !== currentLineEnding.value) {
+    log.info(
+      `[EditorOverlay] Line ending changed to ${newLineEnding} for tab ${currentActiveTab.id}`
+    );
+    if (shareFileEditorTabsBoolean.value) {
+      fileEditorStore.changeLineEnding(currentActiveTab.id, newLineEnding); // 全局 Store
+    } else {
+      const sessionId = popupFileInfo.value?.sessionId;
+      if (sessionId) {
+        sessionStore.changeLineEndingInSession(sessionId, currentActiveTab.id, newLineEnding); // 会话 Store
+      } else {
+        log.error('[FileEditorOverlay] 无法更换行符：非共享模式下缺少 sessionId。');
       }
     }
   }
@@ -584,6 +616,24 @@ onBeforeUnmount(() => {
           </div>
           <span v-else-if="activeTab" class="encoding-select-placeholder">{{
             t('fileManager.loadingEncoding', '加载中...')
+          }}</span>
+
+          <!-- +++ 换行符选择下拉菜单 +++ -->
+          <div class="line-ending-select-wrapper" v-if="activeTab && !currentTabIsLoading">
+            <select
+              :value="currentLineEnding"
+              :aria-label="t('fileManager.lineEndingAriaLabel', '换行符选择')"
+              @change="handleLineEndingChange"
+              class="line-ending-select"
+              :title="t('fileManager.changeLineEndingTooltip', '更改换行符格式')"
+            >
+              <option v-for="option in lineEndingOptions" :key="option.value" :value="option.value">
+                {{ option.text }}
+              </option>
+            </select>
+          </div>
+          <span v-else-if="activeTab" class="line-ending-select-placeholder">{{
+            t('fileManager.loadingLineEnding', '加载中...')
           }}</span>
 
           <span v-if="currentTabSaveStatus === 'saving'" class="save-status saving"
@@ -1019,6 +1069,40 @@ onBeforeUnmount(() => {
   padding: 0.3rem 0.5rem;
   display: inline-block;
   min-width: 80px; /* 与 select 大致对齐 */
+  text-align: center;
+}
+
+.line-ending-select-wrapper {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.line-ending-select {
+  background-color: var(--editor-input-bg-color);
+  color: var(--editor-text-color);
+  border: 1px solid var(--editor-input-border-color);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+  cursor: pointer;
+  outline: none;
+}
+
+.line-ending-select:hover {
+  background-color: var(--editor-input-hover-bg-color);
+}
+
+.line-ending-select:focus {
+  border-color: var(--editor-input-focus-border-color);
+  box-shadow: 0 0 0 2px var(--color-primary, #3b82f6);
+}
+
+.line-ending-select-placeholder {
+  font-size: 0.85em;
+  color: var(--editor-text-muted-color);
+  padding: 0.3rem 0.5rem;
+  display: inline-block;
+  min-width: 50px;
   text-align: center;
 }
 </style>

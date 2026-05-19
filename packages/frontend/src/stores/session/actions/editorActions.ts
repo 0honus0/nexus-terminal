@@ -7,6 +7,7 @@ import type { FileTab, SftpManagerInstance } from '../types';
 import type { FileInfo } from '../../fileEditor.store'; // 路径: packages/frontend/src/stores/fileEditor.store.ts
 import type { SftpReadFileSuccessPayload } from '../../../types/sftp.types'; // 路径: packages/frontend/src/types/sftp.types.ts
 import { log } from '@/utils/log';
+import { convertLineEnding, detectLineEnding, type LineEnding } from '../../../utils/lineEnding';
 
 // --- Editor Actions ---
 const loadTabContentInSession = async (
@@ -54,6 +55,7 @@ const loadTabContentInSession = async (
     currentTabState.originalContent = initialContent;
     currentTabState.rawContentBase64 = fileData.rawContentBase64;
     currentTabState.selectedEncoding = fileData.encodingUsed;
+    currentTabState.lineEnding = detectLineEnding(initialContent);
     currentTabState.isLoading = false;
     currentTabState.isModified = false;
     currentTabState.loadingError = null;
@@ -102,6 +104,7 @@ export const openFileInSession = (
       rawContentBase64: null,
       language: getLanguageFromFilename(fileInfo.name),
       selectedEncoding: 'utf-8',
+      lineEnding: 'lf', // 默认 LF，加载时会自动检测
       isLoading: true,
       loadingError: null,
       isSaving: false,
@@ -377,6 +380,7 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
     const newContent = decodeRawContent(tab.rawContentBase64, newEncoding);
     tab.content = newContent;
     tab.selectedEncoding = newEncoding;
+    tab.lineEnding = detectLineEnding(newContent); // 编码切换后重新检测行尾格式
     // tab.isModified 状态取决于新内容是否与 originalContent 不同，或者用户可能希望将更改编码视为'修改'
     // 这里我们假设仅更改编码预览不直接标记为 isModified，除非内容实际变化
     // 如果 newContent === tab.originalContent，isModified 可以保持不变或设为 false
@@ -393,6 +397,55 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
     );
     const errMsg = err instanceof Error ? err.message : String(err);
     tab.loadingError = `前端解码失败 (编码: ${newEncoding}): ${errMsg}`;
+  }
+};
+
+// +++ 更改文件换行符格式 +++
+export const changeLineEndingInSession = (
+  sessionId: string,
+  tabId: string,
+  newLineEnding: LineEnding,
+  dependencies?: {
+    t: ReturnType<typeof useI18n>['t'];
+  }
+) => {
+  const session = sessions.value.get(sessionId);
+  if (!session) {
+    log.warn(`[EditorActions] 尝试更改不存在的会话 ${sessionId} 中标签页 ${tabId} 的换行符。`);
+    return;
+  }
+  const tab = session.editorTabs.value.find((t) => t.id === tabId);
+  if (!tab) {
+    log.warn(`[EditorActions] 尝试更改会话 ${sessionId} 中不存在的标签页 ${tabId} 的换行符。`);
+    return;
+  }
+  if (tab.lineEnding === newLineEnding) {
+    log.info(
+      `[EditorActions] 会话 ${sessionId} 标签页 ${tabId} 换行符已经是 ${newLineEnding}，无需更改。`
+    );
+    return;
+  }
+
+  log.info(
+    `[EditorActions] 会话 ${sessionId} 标签页 ${tabId} 更换行符: ${tab.lineEnding} → ${newLineEnding}`
+  );
+
+  try {
+    const newContent = convertLineEnding(tab.content, newLineEnding);
+    tab.content = newContent;
+    tab.lineEnding = newLineEnding;
+    tab.isModified = tab.content !== tab.originalContent;
+    tab.loadingError = null; // 清除可能存在的旧错误
+    log.info(
+      `[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 换行符已更改为 ${newLineEnding}。`
+    );
+  } catch (err: unknown) {
+    log.error(`[EditorActions] 更换行符失败 (会话 ${sessionId}, 标签页 ${tabId}):`, err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errorMessage = dependencies?.t
+      ? dependencies.t('fileManager.errors.lineEndingConversionFailed', '换行符转换失败')
+      : '换行符转换失败';
+    tab.loadingError = `${errorMessage}: ${errMsg}`;
   }
 };
 

@@ -66,6 +66,7 @@ const createMockTab = (
   rawContentBase64: null,
   language: 'plaintext',
   selectedEncoding: 'utf-8',
+  lineEnding: 'lf',
   isLoading: false,
   loadingError: null,
   isSaving: false,

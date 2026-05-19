@@ -522,7 +522,8 @@
       "sftpManagerUnavailable": "SFTP 管理器不可用",
       "missingSessionId": "缺少会话 ID",
       "pathReadFailed": "读取终端路径失败",
-      "pathReadTimeout": "读取终端路径超时"
+      "pathReadTimeout": "读取终端路径超时",
+      "lineEndingConversionFailed": "换行符转换失败"
     },
     "notifications": {
       "copySuccess": "复制成功",
@@ -552,6 +553,9 @@
     "saveError": "保存出错",
     "editPathTooltip": "点击路径进行编辑",
     "noOpenFile": "未打开文件",
+    "changeLineEndingTooltip": "更改换行符格式",
+    "lineEndingAriaLabel": "换行符选择",
+    "loadingLineEnding": "加载中...",
     "selectFileToEdit": "请从文件管理器中选择文件以开始编辑。",
     "searchPlaceholder": "搜索文件...",
     "dropFilesHere": "将文件拖拽到此处上传",

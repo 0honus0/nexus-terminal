@@ -13,6 +13,7 @@ export interface EditorEventsDependencies {
     updateFileContent: (tabId: string, content: string) => void;
     saveFile: (tabId: string) => void;
     changeEncoding: (tabId: string, encoding: string) => void;
+    changeLineEnding: (tabId: string, lineEnding: 'lf' | 'crlf' | 'cr') => void;
     updateTabScrollPosition: (tabId: string, scrollTop: number, scrollLeft: number) => void;
     orderedTabs: Ref<FileTab[]>;
     activeTabId: Ref<string | null>;
@@ -23,6 +24,11 @@ export interface EditorEventsDependencies {
     updateFileContentInSession: (sessionId: string, tabId: string, content: string) => void;
     saveFileInSession: (sessionId: string, tabId: string) => void;
     changeEncodingInSession: (sessionId: string, tabId: string, encoding: string) => void;
+    changeLineEndingInSession: (
+      sessionId: string,
+      tabId: string,
+      lineEnding: 'lf' | 'crlf' | 'cr'
+    ) => void;
     updateTabScrollPositionInSession: (
       sessionId: string,
       tabId: string,
@@ -187,6 +193,32 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
   };
 
   /**
+   * 处理编辑器换行符更改事件
+   */
+  const handleChangeLineEnding = (payload: { tabId: string; lineEnding: 'lf' | 'crlf' | 'cr' }) => {
+    const isShared = shareFileEditorTabsBoolean.value;
+    log.info(
+      `[useEditorEvents] handleChangeLineEnding for tab ${payload.tabId} to ${payload.lineEnding}, Shared mode: ${isShared}`
+    );
+    if (isShared) {
+      fileEditorStore.changeLineEnding(payload.tabId, payload.lineEnding);
+    } else {
+      const currentActiveSessionId = activeSessionId.value;
+      if (currentActiveSessionId) {
+        sessionStore.changeLineEndingInSession(
+          currentActiveSessionId,
+          payload.tabId,
+          payload.lineEnding
+        );
+      } else {
+        log.warn(
+          '[useEditorEvents] Cannot change editor line ending: No active session in independent mode.'
+        );
+      }
+    }
+  };
+
+  /**
    * 处理编辑器滚动位置更新事件
    */
   const handleEditorScrollPositionUpdate = (payload: {
@@ -253,6 +285,7 @@ export function useEditorEvents(deps: EditorEventsDependencies) {
     handleUpdateEditorContent,
     handleSaveEditorTab,
     handleChangeEncoding,
+    handleChangeLineEnding,
     handleEditorScrollPositionUpdate,
     handleCloseOtherEditorTabs,
     handleCloseEditorTabsToRight,

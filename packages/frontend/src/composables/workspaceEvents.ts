@@ -22,6 +22,7 @@ export type WorkspaceEventPayloads = {
   'editor:updateContent': { tabId: string; content: string };
   'editor:saveTab': { tabId: string };
   'editor:changeEncoding': { tabId: string; encoding: string };
+  'editor:changeLineEnding': { tabId: string; lineEnding: 'lf' | 'crlf' | 'cr' };
   'editor:closeOtherTabs': { tabId: string };
   'editor:closeTabsToRight': { tabId: string };
   'editor:closeTabsToLeft': { tabId: string };

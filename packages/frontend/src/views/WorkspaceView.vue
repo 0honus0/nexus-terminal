@@ -83,6 +83,7 @@ const {
   handleUpdateEditorContent,
   handleSaveEditorTab,
   handleChangeEncoding,
+  handleChangeLineEnding,
   handleEditorScrollPositionUpdate,
   handleCloseOtherEditorTabs,
   handleCloseEditorTabsToRight,
@@ -225,6 +226,7 @@ onMounted(() => {
   subscribeToWorkspaceEvents('editor:updateContent', handleUpdateEditorContent);
   subscribeToWorkspaceEvents('editor:saveTab', _onEditorSaveTab);
   subscribeToWorkspaceEvents('editor:changeEncoding', handleChangeEncoding);
+  subscribeToWorkspaceEvents('editor:changeLineEnding', handleChangeLineEnding);
   subscribeToWorkspaceEvents('editor:closeOtherTabs', _onEditorCloseOtherTabs);
   subscribeToWorkspaceEvents('editor:closeTabsToRight', _onEditorCloseTabsToRight);
   subscribeToWorkspaceEvents('editor:closeTabsToLeft', _onEditorCloseTabsToLeft);
@@ -271,6 +273,7 @@ onBeforeUnmount(() => {
   unsubscribeFromWorkspaceEvents('editor:updateContent', handleUpdateEditorContent);
   unsubscribeFromWorkspaceEvents('editor:saveTab', _onEditorSaveTab);
   unsubscribeFromWorkspaceEvents('editor:changeEncoding', handleChangeEncoding);
+  unsubscribeFromWorkspaceEvents('editor:changeLineEnding', handleChangeLineEnding);
   unsubscribeFromWorkspaceEvents('editor:closeOtherTabs', _onEditorCloseOtherTabs);
   unsubscribeFromWorkspaceEvents('editor:closeTabsToRight', _onEditorCloseTabsToRight);
   unsubscribeFromWorkspaceEvents('editor:closeTabsToLeft', _onEditorCloseTabsToLeft);

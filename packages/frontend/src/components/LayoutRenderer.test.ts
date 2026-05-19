@@ -401,6 +401,7 @@ describe('LayoutRenderer.vue', () => {
           rawContentBase64: null,
           language: 'typescript',
           selectedEncoding: 'utf-8',
+          lineEnding: 'lf',
           isLoading: false,
           loadingError: null,
           isSaving: false,
