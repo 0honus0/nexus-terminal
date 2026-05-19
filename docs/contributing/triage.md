@@ -157,8 +157,8 @@ When more information is required, ask only for:
 ## Default doc lookup order
 
 1. `README.md`
-2. `doc/NGINX_PROXY.md`
-3. `doc/DOCKER_ENV.md`
-4. `doc/CORS_CONFIG.md`
-5. other `doc/**`
+2. `docs/deployment/nginx.md`
+3. `docs/configuration/docker.md`
+4. `docs/configuration/cors.md`
+5. other `docs/**`
 6. matching workspace source and tests

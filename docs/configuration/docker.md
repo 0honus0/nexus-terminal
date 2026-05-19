@@ -87,7 +87,7 @@
 | `IP_API_USE_HTTPS`           | `false`  | IP 地理定位 API 是否使用 HTTPS                                              |
 | `HEARTBEAT_INTERVAL_DESKTOP` | `30000`  | 桌面端心跳间隔（毫秒）                                                      |
 | `HEARTBEAT_INTERVAL_MOBILE`  | `12000`  | 移动端心跳间隔（毫秒）                                                      |
-| `MAX_MISSED_PONGS_DESKTOP`   | `3`      | 桌面端最大允许丢失 pong 次数，超过则断开连接                                |
+| `MAX_MISSED_PONGS_DESKTOP`   | `1`      | 桌面端最大允许丢失 pong 次数，超过则断开连接                                |
 | `MAX_MISSED_PONGS_MOBILE`    | `3`      | 移动端最大允许丢失 pong 次数，超过则断开连接                                |
 | `ENABLE_MULTIPLEX`           | `false`  | WebSocket 多路复用开关。设为 `true` 启用单连接多会话模式                    |
 | `TRUST_PROXY`                | -        | 是否信任代理 (`true`/`false`)                                               |
@@ -119,30 +119,30 @@
 
 ### 端口配置
 
-| 变量名                   | 默认值 | 描述                                           |
-| ------------------------ | ------ | ---------------------------------------------- |
-| `REMOTE_GATEWAY_API_PORT`| `9090` | Remote Gateway API 端口（Docker 内部通信端口） |
-| `REMOTE_GATEWAY_WS_PORT` | `8081` | Guacamole WebSocket 端口                       |
+| 变量名                    | 默认值 | 描述                                           |
+| ------------------------- | ------ | ---------------------------------------------- |
+| `REMOTE_GATEWAY_API_PORT` | `9090` | Remote Gateway API 端口（Docker 内部通信端口） |
+| `REMOTE_GATEWAY_WS_PORT`  | `8081` | Guacamole WebSocket 端口                       |
 
 ### Guacd 连接
 
-| 变量名             | 默认值                | 描述                                             |
-| ------------------ | --------------------- | ------------------------------------------------ |
-| `GUACD_HOST`       | `localhost`           | Guacd 服务地址（内嵌于同一容器，默认 localhost） |
-| `GUACD_PORT`       | `4822`                | Guacd 服务端口                                   |
+| 变量名       | 默认值      | 描述                                             |
+| ------------ | ----------- | ------------------------------------------------ |
+| `GUACD_HOST` | `localhost` | Guacd 服务地址（内嵌于同一容器，默认 localhost） |
+| `GUACD_PORT` | `4822`      | Guacd 服务端口                                   |
 
 ### CORS 白名单
 
-| 变量名             | 默认值                | 描述                                             |
-| ------------------ | --------------------- | ------------------------------------------------ |
-| `FRONTEND_URL`     | `http://frontend`     | 前端 URL（始终加入 CORS 白名单）                 |
-| `MAIN_BACKEND_URL` | `http://backend:3001` | 后端 URL（始终加入 CORS 白名单）                 |
+| 变量名             | 默认值                | 描述                             |
+| ------------------ | --------------------- | -------------------------------- |
+| `FRONTEND_URL`     | `http://frontend`     | 前端 URL（始终加入 CORS 白名单） |
+| `MAIN_BACKEND_URL` | `http://backend:3001` | 后端 URL（始终加入 CORS 白名单） |
 
 ### API 鉴权
 
-| 变量名                     | 默认值 | 描述                                                              |
-| -------------------------- | ------ | ----------------------------------------------------------------- |
-| `REMOTE_GATEWAY_API_TOKEN` | -      | 共享令牌。若配置，backend 的 `.env` 中也必须配置相同值            |
+| 变量名                     | 默认值 | 描述                                                   |
+| -------------------------- | ------ | ------------------------------------------------------ |
+| `REMOTE_GATEWAY_API_TOKEN` | -      | 共享令牌。若配置，backend 的 `.env` 中也必须配置相同值 |
 
 > ⚠️ 生产环境**强烈推荐**配置此令牌。未配置时，生产模式下会输出警告日志。
 
@@ -222,7 +222,7 @@ REMOTE_GATEWAY_API_TOKEN=
 # ===== 心跳与连接保活 =====
 # HEARTBEAT_INTERVAL_DESKTOP=30000
 # HEARTBEAT_INTERVAL_MOBILE=12000
-# MAX_MISSED_PONGS_DESKTOP=3
+# MAX_MISSED_PONGS_DESKTOP=1
 # MAX_MISSED_PONGS_MOBILE=3
 
 # ===== CORS 额外白名单 =====
@@ -287,7 +287,7 @@ services:
     image: ghcr.io/silentely/nexus-terminal-backend:latest
     container_name: nexus-terminal-backend
     env_file:
-      - .env                              # ← 仅 backend 读取 .env
+      - .env # ← 仅 backend 读取 .env
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -302,7 +302,7 @@ services:
     image: ghcr.io/silentely/nexus-terminal-remote-gateway:latest
     container_name: nexus-terminal-remote-gateway
     ports:
-      - "127.0.0.1:8081:8081"   # Guacamole WebSocket（宿主机 Nginx 需要直连）
+      - '127.0.0.1:8081:8081' # Guacamole WebSocket（宿主机 Nginx 需要直连）
     environment:
       # guacd 已内嵌于本容器，使用 localhost 连接
       GUACD_HOST: localhost
@@ -339,7 +339,7 @@ networks:
 > 重要说明：
 >
 > - 该变量是 **Vite 构建时变量**，通过 `import.meta.env` 读取。
-> - 使用 `heavrnl/nexus-terminal-frontend:latest` 预构建镜像时，运行时注入此变量不会生效。
+> - 使用 `ghcr.io/silentely/nexus-terminal-frontend:latest` 预构建镜像时，运行时注入此变量不会生效。
 > - 如需自定义，请改为自行构建 frontend 镜像，并在构建阶段传入。
 
 示例（改为 build 模式）：

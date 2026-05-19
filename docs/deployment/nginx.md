@@ -90,8 +90,9 @@ server {
 ```yaml
 remote-gateway:
   ports:
-    - "127.0.0.1:8081:8081"  # Guacamole WebSocket
+    - '127.0.0.1:8081:8081' # Guacamole WebSocket
 ```
+
 :::
 
 ```nginx
@@ -837,6 +838,11 @@ http {
     }
 
     # Upstream
+    upstream nexus_frontend {
+        server 127.0.0.1:18111;
+        keepalive 32;
+    }
+
     upstream nexus_backend {
         server 127.0.0.1:3001;
         keepalive 32;
@@ -928,4 +934,4 @@ server {
 
 ---
 
-**文档更新时间**：2025-12-21
+**文档更新时间**：2026-05-19

@@ -1,6 +1,6 @@
 # 高级配置
 
-本指南介绍 Nexus Terminal 的高级配置选项，帮助您根据实际需求进行精细调整。
+本指南涵盖 Nexus Terminal 的高级配置选项，包括 CORS、Passkey、WebSocket、日志和防火墙等。
 
 ## CORS 跨域配置
 
@@ -84,9 +84,9 @@ remote-gateway:
 
 ```dotenv
 HEARTBEAT_INTERVAL_DESKTOP=30000   # 桌面端心跳（毫秒）
-HEARTBEAT_INTERVAL_MOBILE=60000    # 移动端心跳（毫秒）
-MAX_MISSED_PONGS_DESKTOP=3         # 桌面端最大丢包次数
-MAX_MISSED_PONGS_MOBILE=5          # 移动端最大丢包次数
+HEARTBEAT_INTERVAL_MOBILE=12000    # 移动端心跳（毫秒）
+MAX_MISSED_PONGS_DESKTOP=1         # 桌面端最大丢包次数
+MAX_MISSED_PONGS_MOBILE=3          # 移动端最大丢包次数
 ```
 
 ### 多路复用

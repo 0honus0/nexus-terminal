@@ -139,7 +139,7 @@
 
 ### 1️⃣ 配置环境
 
-> 建议在 Debian（AMD64 架构）环境中部署，因本人无 ARM 设备，无法保证其兼容性。
+> 建议在 Debian（AMD64 架构）环境中部署，因开发者无 ARM 设备，无法保证其兼容性。
 
 新建文件夹
 
@@ -193,7 +193,7 @@ location / {
 
 重启docker服务
 
-```
+```bash
 sudo systemctl restart docker
 ```
 
