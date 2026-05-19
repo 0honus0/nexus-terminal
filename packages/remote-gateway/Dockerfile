@@ -45,6 +45,9 @@ RUN chmod +x /entrypoint.sh
 # 移除构建缓存
 RUN rm -rf /root/.npm /tmp/*
 
+# 修复 /app 目录权限，确保 guacd 用户可读写
+RUN chown -R guacd:guacd /app
+
 # 切回非 root 用户（guacd 镜像自带 guacd 用户）
 USER guacd
 

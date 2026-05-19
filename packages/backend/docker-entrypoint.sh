@@ -5,17 +5,25 @@
 set -e
 
 DATA_DIR="/app/data"
-UPLOADS_DIR="${DATA_DIR}/uploads"
-SESSIONS_DIR="${DATA_DIR}/sessions"
-BACKGROUND_DIR="${DATA_DIR}/background"
+DATA_ENV_PATH="${DATA_DIR}/.env"
 
 echo "[entrypoint] 检查数据目录..."
 
-# 创建必要的子目录（如果不存在）
-mkdir -p "$UPLOADS_DIR" "$SESSIONS_DIR" "$BACKGROUND_DIR"
+# 创建 paths.ts 中定义的所有数据子目录（如果不存在）
+mkdir -p "${DATA_DIR}/uploads" \
+         "${DATA_DIR}/sessions" \
+         "${DATA_DIR}/background" \
+         "${DATA_DIR}/custom_html_theme" \
+         "${DATA_DIR}/temp_suspended_ssh_logs"
 
 # 修复权限：确保 appuser 对数据目录有完全访问权限
 chown -R appuser:appgroup "$DATA_DIR"
+
+# 修复 .env 文件权限：密钥文件仅 owner 可读写
+if [ -f "$DATA_ENV_PATH" ]; then
+  chmod 600 "$DATA_ENV_PATH"
+  chown appuser:appgroup "$DATA_ENV_PATH"
+fi
 
 echo "[entrypoint] 目录权限已修复"
 
