@@ -185,7 +185,7 @@ upstream nexus_gateway {
 }
 
 server {
-    listen 8081;
+    listen 8080;
     server_name localhost;
 
     client_max_body_size 100m;

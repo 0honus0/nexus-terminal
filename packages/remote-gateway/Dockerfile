@@ -51,8 +51,8 @@ RUN chown -R guacd:guacd /app
 # 切回非 root 用户（guacd 镜像自带 guacd 用户）
 USER guacd
 
-# 暴露端口：9090=API, 8080=WebSocket, 4822=guacd（可选，供外部调试）
-EXPOSE 9090 8080
+# 暴露端口：9090=API, 8081=WebSocket, 4822=guacd（可选，供外部调试）
+EXPOSE 9090 8081
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:9090/health > /dev/null 2>&1 || exit 1
