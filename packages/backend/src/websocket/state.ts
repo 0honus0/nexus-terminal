@@ -33,7 +33,7 @@ export function registerChannel(ws: AuthenticatedWebSocket, sessionId: string): 
     transportChannels.set(ws, channels);
   }
   channels.add(sessionId);
-  logger.debug(`[WebSocket 状态] 注册通道 ${sessionId}，当前连接通道数: ${channels.size}`);
+  logger.debug({ sessionId, channelCount: channels.size }, '注册通道');
 }
 
 /**
@@ -47,9 +47,9 @@ export function unregisterChannel(ws: AuthenticatedWebSocket, sessionId: string)
     existingChannels.delete(sessionId);
     if (existingChannels.size === 0) {
       transportChannels.delete(ws);
-      logger.debug(`[WebSocket 状态] 物理连接的所有通道已注销`);
+      logger.debug('物理连接的所有通道已注销');
     } else {
-      logger.debug(`[WebSocket 状态] 注销通道 ${sessionId}，剩余通道数: ${existingChannels.size}`);
+      logger.debug({ sessionId, remaining: existingChannels.size }, '注销通道');
     }
   }
 }
@@ -105,7 +105,7 @@ export function registerUserSocket(userId: number, ws: AuthenticatedWebSocket): 
     return;
   }
   sockets.add(ws);
-  logger.info(`[WebSocket 状态] 用户 ${userId} 的连接已注册，当前连接数: ${sockets.size}`);
+  logger.info({ userId, connectionCount: sockets.size }, 'WebSocket 连接已注册');
 }
 
 /**
@@ -120,9 +120,9 @@ export function unregisterUserSocket(userId: number, ws: AuthenticatedWebSocket)
     sockets.delete(ws);
     if (sockets.size === 0) {
       userSockets.delete(userId);
-      logger.info(`[WebSocket 状态] 用户 ${userId} 的所有连接已断开，已清理映射。`);
+      logger.info({ userId }, '用户所有连接已断开，已清理映射');
     } else {
-      logger.info(`[WebSocket 状态] 用户 ${userId} 的一个连接已断开，剩余连接数: ${sockets.size}`);
+      logger.info({ userId, remaining: sockets.size }, '用户一个连接已断开');
     }
   }
 }
@@ -136,7 +136,7 @@ export function unregisterUserSocket(userId: number, ws: AuthenticatedWebSocket)
 export function broadcastToUser(userId: number, message: unknown): number {
   const sockets = userSockets.get(userId);
   if (!sockets || sockets.size === 0) {
-    logger.warn(`[WebSocket 广播] 用户 ${userId} 没有活动连接，消息未发送。`);
+    logger.warn({ userId }, '用户没有活动连接，消息未发送');
     return 0;
   }
 
@@ -150,10 +150,7 @@ export function broadcastToUser(userId: number, message: unknown): number {
         ws.send(messageStr);
         successCount++;
       } catch (error: unknown) {
-        logger.error(
-          `[WebSocket 广播] 向用户 ${userId} 的一个连接发送消息失败:`,
-          getErrorMessage(error)
-        );
+        logger.error({ userId, err: getErrorMessage(error) }, '向用户连接发送消息失败');
         deadSockets.push(ws);
       }
     } else {
@@ -165,7 +162,7 @@ export function broadcastToUser(userId: number, message: unknown): number {
   // 清理死连接
   if (deadSockets.length > 0) {
     deadSockets.forEach((ws) => sockets.delete(ws));
-    logger.info(`[WebSocket 广播] 已清理用户 ${userId} 的 ${deadSockets.length} 个死连接。`);
+    logger.info({ userId, deadCount: deadSockets.length }, '已清理死连接');
 
     // 如果所有连接都已死亡，清理整个映射
     if (sockets.size === 0) {
@@ -173,9 +170,7 @@ export function broadcastToUser(userId: number, message: unknown): number {
     }
   }
 
-  logger.info(
-    `[WebSocket 广播] 已向用户 ${userId} 的 ${successCount}/${sockets.size + deadSockets.length} 个连接发送消息。`
-  );
+  logger.info({ userId, successCount, totalCount: sockets.size + deadSockets.length }, '广播完成');
   return successCount;
 }
 

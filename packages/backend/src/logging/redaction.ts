@@ -16,13 +16,18 @@ const SENSITIVE_FIELD_PATTERNS = [
   /authorization/i,
   /credential/i,
   /passphrase/i,
+  /private[_-]?key/i,
   /private/i,
   /cookie/i,
   /session/i,
   /apikey/i,
-  /api_key/i,
+  /api[_-]?key/i,
   /key/i,
   /username/i,
+  /credit[_-]?card/i,
+  /card[_-]?number/i,
+  /ssn/i,
+  /social[_-]?security/i,
 ];
 
 const REDACTED_PLACEHOLDER = '[REDACTED]';
@@ -43,7 +48,7 @@ export function redactSensitiveData(value: unknown, depth = 0, seen = new WeakSe
   if (typeof value === 'string') {
     let redactedStr = value;
     redactedStr = redactedStr.replace(
-      /(\b(?:cookie|authorization|token|api[_-]?key|password|secret|passwd|pwd)\s*[:=]\s*["']?)([^\s;,&"']+)/gi,
+      /(\b(?:cookie|authorization|token|api[_-]?key|password|secret|passwd|pwd|credit[_-]?card|ssn|private[_-]?key)\s*[:=]\s*["']?)([^\s;,&"']+)/gi,
       '$1[REDACTED]'
     );
     redactedStr = redactedStr.replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+/gi, 'Bearer [REDACTED]');

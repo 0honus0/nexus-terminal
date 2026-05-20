@@ -32,6 +32,7 @@ import dashboardRoutes from '../services/dashboard.routes';
 import metricsRoutes from '../metrics/metrics.routes';
 import backupRoutes from '../backup/backup.routes';
 import { errorHandler, notFoundHandler } from '../middleware/error.middleware';
+import { requestLogger } from '../middleware/request-logger.middleware';
 
 type RateLimiter = ReturnType<typeof import('express-rate-limit').default>;
 
@@ -46,6 +47,9 @@ export const registerRoutes = (
   apiLimiter: RateLimiter,
   settingsLimiter: RateLimiter
 ) => {
+  // 请求级日志（为每个请求生成 requestId）
+  app.use(requestLogger);
+
   // 认证路由（限流策略已在 auth.routes.ts 中精细化配置）
   app.use('/api/v1/auth', authRouter);
 

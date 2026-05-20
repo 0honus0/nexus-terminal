@@ -25,8 +25,8 @@ export const errorHandler = (
     return next(err);
   }
 
-  // 生成请求追踪 ID
-  const requestId = crypto.randomBytes(8).toString('hex');
+  // 使用请求级 requestId（由 request-logger 中间件注入）
+  const requestId = req.requestId || crypto.randomBytes(8).toString('hex');
 
   // 判断是否是 AppError
   const isAppError = err instanceof AppError;

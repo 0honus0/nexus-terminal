@@ -52,7 +52,7 @@ export function createMultiplexTransport(ws: WebSocket): MultiplexTransport {
 
   const createChannel = (sid: string): ChannelState => {
     if (channels.has(sid)) {
-      logger.warn(`[Multiplex] 通道 ${sid} 已存在，将覆盖旧通道`);
+      logger.warn({ sid }, '通道已存在，将覆盖旧通道');
     }
 
     const channel: ChannelState = {
@@ -62,24 +62,24 @@ export function createMultiplexTransport(ws: WebSocket): MultiplexTransport {
     };
     channels.set(sid, channel);
 
-    logger.debug(`[Multiplex] 创建通道 ${sid}，当前通道数: ${channels.size}`);
+    logger.debug({ sid, channelCount: channels.size }, '创建通道');
     return channel;
   };
 
   const removeChannel = (sid: string): void => {
     if (channels.delete(sid)) {
-      logger.debug(`[Multiplex] 移除通道 ${sid}，剩余通道数: ${channels.size}`);
+      logger.debug({ sid, remaining: channels.size }, '移除通道');
     }
   };
 
   const sendToChannel = (sid: string, message: unknown): boolean => {
     if (!channels.has(sid)) {
-      logger.warn(`[Multiplex] 尝试向不存在的通道 ${sid} 发送消息`);
+      logger.warn({ sid }, '尝试向不存在的通道发送消息');
       return false;
     }
 
     if (ws.readyState !== WebSocket.OPEN) {
-      logger.warn(`[Multiplex] 物理连接未打开，无法向通道 ${sid} 发送消息`);
+      logger.warn({ sid }, '物理连接未打开，无法向通道发送消息');
       return false;
     }
 
@@ -91,7 +91,7 @@ export function createMultiplexTransport(ws: WebSocket): MultiplexTransport {
       ws.send(JSON.stringify(messageWithSid));
       return true;
     } catch (error) {
-      logger.error(`[Multiplex] 向通道 ${sid} 发送消息失败:`, error);
+      logger.error({ sid, err: error }, '向通道发送消息失败');
       return false;
     }
   };
@@ -112,7 +112,7 @@ export function createMultiplexTransport(ws: WebSocket): MultiplexTransport {
         ws.send(JSON.stringify(messageWithSid));
         successCount++;
       } catch (error) {
-        logger.error(`[Multiplex] 广播到通道 ${sid} 失败:`, error);
+        logger.error({ sid, err: error }, '广播到通道失败');
       }
     });
 
@@ -126,11 +126,11 @@ export function createMultiplexTransport(ws: WebSocket): MultiplexTransport {
   const cleanup = (): void => {
     const count = channels.size;
     channels.forEach((_channel, sid) => {
-      logger.debug(`[Multiplex] 清理通道 ${sid}`);
+      logger.debug({ sid }, '清理通道');
       destroyBatcher(sid);
       channels.delete(sid);
     });
-    logger.info(`[Multiplex] 已清理 ${count} 个通道`);
+    logger.info({ count }, '已清理通道');
   };
 
   return {
@@ -157,7 +157,7 @@ const activeTransports = new Map<WebSocket, MultiplexTransport>();
  */
 export function registerTransport(ws: WebSocket, transport: MultiplexTransport): void {
   activeTransports.set(ws, transport);
-  logger.debug(`[Multiplex] 注册传输，当前活跃连接数: ${activeTransports.size}`);
+  logger.debug({ activeCount: activeTransports.size }, '注册传输');
 }
 
 /**
@@ -165,7 +165,7 @@ export function registerTransport(ws: WebSocket, transport: MultiplexTransport):
  */
 export function unregisterTransport(ws: WebSocket): void {
   if (activeTransports.delete(ws)) {
-    logger.debug(`[Multiplex] 注销传输，剩余活跃连接数: ${activeTransports.size}`);
+    logger.debug({ remaining: activeTransports.size }, '注销传输');
   }
 }
 
@@ -184,7 +184,7 @@ export function cleanupAllTransports(): void {
     transport.cleanup();
   });
   activeTransports.clear();
-  logger.info('[Multiplex] 已清理所有传输');
+  logger.info('已清理所有传输');
 }
 
 /**
