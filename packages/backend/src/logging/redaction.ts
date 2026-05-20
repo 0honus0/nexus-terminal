@@ -48,7 +48,7 @@ export function redactSensitiveData(value: unknown, depth = 0, seen = new WeakSe
   if (typeof value === 'string') {
     let redactedStr = value;
     redactedStr = redactedStr.replace(
-      /(\b(?:cookie|authorization|token|api[_-]?key|password|secret|passwd|pwd|credit[_-]?card|ssn|private[_-]?key)\s*[:=]\s*["']?)([^\s;,&"']+)/gi,
+      /(\b(?:cookie|authorization|token|api[_-]?key|password|secret|passwd|pwd|credit[_-]?card|card[_-]?number|ssn|social[_-]?security|private[_-]?key)\s*[:=]\s*["']?)([^\s;,&"']+)/gi,
       '$1[REDACTED]'
     );
     redactedStr = redactedStr.replace(/\bBearer\s+[A-Za-z0-9\-._~+/]+/gi, 'Bearer [REDACTED]');

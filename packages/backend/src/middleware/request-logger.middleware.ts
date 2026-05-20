@@ -24,19 +24,25 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
 
   req.requestId = requestId;
 
-  // 跳过健康检查等高频低价值端点（支持尾斜杠）
-  const skip = SKIP_PATH_PREFIXES.some(
-    (prefix) => req.path === prefix || req.path === prefix + '/'
-  );
+  // 跳过健康检查等高频低价值端点（前缀匹配）
+  const skip = SKIP_PATH_PREFIXES.some((prefix) => req.path.startsWith(prefix));
 
   if (!skip) {
     logger.info({ requestId, method: req.method, path: req.path }, '请求开始');
   }
 
+  // 防止 finish + close 双触发导致重复日志
+  let isLogged = false;
   const logCompletion = () => {
-    if (skip) return;
+    if (skip || isLogged) return;
+    isLogged = true;
     const duration = Date.now() - startTime;
-    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+    let level: 'error' | 'warn' | 'info' = 'info';
+    if (res.statusCode >= 500) {
+      level = 'error';
+    } else if (res.statusCode >= 400) {
+      level = 'warn';
+    }
     logger[level](
       {
         requestId,
