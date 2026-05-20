@@ -108,10 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
 import { useTwoFactorAuth } from '../../composables/settings/useTwoFactorAuth';
-
-// const { t } = useI18n(); // $t is globally available in template
 
 const {
   twoFactorEnabled,

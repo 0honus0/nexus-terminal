@@ -25,15 +25,13 @@
 </template>
 
 <script setup lang="ts">
-import { useSettingsStore } from '../../stores/settings.store';
-import { useAppearanceStore } from '../../stores/appearance.store';
 import { useI18n } from 'vue-i18n';
+import { useSettingsStore } from '../../stores/settings.store';
 import { storeToRefs } from 'pinia';
 import { useAppearanceSettings } from '../../composables/settings/useAppearanceSettings';
 
 const settingsStore = useSettingsStore();
 const { settings } = storeToRefs(settingsStore);
-const appearanceStore = useAppearanceStore();
 const { t } = useI18n();
 
 const { openStyleCustomizer } = useAppearanceSettings();

@@ -25,7 +25,7 @@
         </button>
       </div>
 
-      <!-- Error state (Show first if error exists) -->
+      <!-- Error state -->
       <div
         v-if="settingsError"
         class="p-4 mb-4 border-l-4 border-error bg-error/10 text-error rounded"
@@ -34,7 +34,7 @@
       </div>
 
       <!-- Settings Content based on activeTab -->
-      <div v-else class="space-y-6">
+      <div class="space-y-6">
         <!-- Non-blocking CAPTCHA load error (e.g., 429 rate limit) -->
         <div
           v-if="captchaError"
@@ -153,7 +153,6 @@ import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '../stores/auth.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useCaptchaSettingsStore } from '../stores/captchaSettings.store';
-import { useAppearanceStore } from '../stores/appearance.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useVersionCheck } from '../composables/settings/useVersionCheck';
@@ -172,7 +171,6 @@ import AISettingsSection from '../components/settings/AISettingsSection.vue';
 
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
-const appearanceStore = useAppearanceStore(); // 实例化外观 store
 const { t } = useI18n();
 const { isUpdateAvailable, checkLatestVersion } = useVersionCheck();
 

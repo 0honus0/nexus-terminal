@@ -16,6 +16,7 @@ export function useIpBlacklist() {
 
   // --- IP Blacklist Enabled State & Method ---
   const ipBlacklistEnabled = ref(true); // Local state for the switch
+  const ipBlacklistToggleError = ref<string | null>(null);
 
   watch(
     ipBlacklistEnabledBoolean,
@@ -28,6 +29,7 @@ export function useIpBlacklist() {
   const handleUpdateIpBlacklistEnabled = async () => {
     const originalValue = ipBlacklistEnabled.value;
     const nextValue = !originalValue;
+    ipBlacklistToggleError.value = null;
     // 立即切换本地状态，失败时再回滚
     ipBlacklistEnabled.value = nextValue;
 
@@ -37,7 +39,10 @@ export function useIpBlacklist() {
     } catch (error: unknown) {
       log.error('更新 IP 黑名单启用状态失败:', error);
       ipBlacklistEnabled.value = originalValue; // Revert on failure
-      // Optionally, show an error message to the user
+      ipBlacklistToggleError.value = extractErrorMessage(
+        error,
+        t('settings.ipBlacklist.error.updateFailed', '更新 IP 黑名单启用状态失败')
+      );
     }
   };
 
@@ -153,13 +158,14 @@ export function useIpBlacklist() {
   });
 
   watch(ipBlacklistEnabled, (newValue) => {
-    if (newValue && ipBlacklist.entries.length === 0 && !ipBlacklist.loading) {
+    if (newValue && !ipBlacklist.loading) {
       fetchIpBlacklist();
     }
   });
 
   return {
     ipBlacklistEnabled,
+    ipBlacklistToggleError,
     handleUpdateIpBlacklistEnabled,
     blacklistSettingsForm,
     blacklistSettingsLoading,

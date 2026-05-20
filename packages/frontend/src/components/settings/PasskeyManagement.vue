@@ -138,10 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
 import { usePasskeyManagement } from '../../composables/settings/usePasskeyManagement';
-
-// const { t } = useI18n(); // $t is globally available in template
 
 const {
   passkeys,

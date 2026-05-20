@@ -98,6 +98,12 @@
           <small class="block mt-1 text-xs text-text-secondary">{{
             $t('settings.captcha.secretKeyHint')
           }}</small>
+          <small class="block mt-1 text-xs text-warning italic">{{
+            $t(
+              'settings.captcha.secretKeyEmptyHint',
+              '留空则保留原有密钥，如需清除请填写新值后保存。'
+            )
+          }}</small>
         </div>
       </div>
 
@@ -146,6 +152,12 @@
           <small class="block mt-1 text-xs text-text-secondary">{{
             $t('settings.captcha.secretKeyHint')
           }}</small>
+          <small class="block mt-1 text-xs text-warning italic">{{
+            $t(
+              'settings.captcha.secretKeyEmptyHint',
+              '留空则保留原有密钥，如需清除请填写新值后保存。'
+            )
+          }}</small>
         </div>
       </div>
 
@@ -154,9 +166,11 @@
         <button
           type="submit"
           :disabled="captchaLoading"
-          class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+          class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {{ $t('settings.captcha.saveButton') }}
+          {{
+            captchaLoading ? $t('common.saving', '保存中...') : $t('settings.captcha.saveButton')
+          }}
         </button>
         <p
           v-if="captchaMessage"
@@ -170,12 +184,9 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useCaptchaSettingsStore } from '../../stores/captchaSettings.store';
 import { useCaptchaSettings } from '../../composables/settings/useCaptchaSettings';
-
-// const { t } = useI18n(); // $t is globally available in template
 const captchaStore = useCaptchaSettingsStore();
 const { captchaSettings, captchaError } = storeToRefs(captchaStore); // To make v-if="!captchaSettings" reactive
 

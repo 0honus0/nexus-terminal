@@ -129,6 +129,7 @@ export function usePasskeyManagement() {
       await authStore.deletePasskey(credentialID);
       passkeyMessage.value = t('settings.passkey.success.deleted');
       passkeySuccess.value = true;
+      passkeyDeleteError.value = null;
       // authStore.fetchPasskeys() is usually called within deletePasskey in the store
     } catch (error: unknown) {
       log.error(`删除 Passkey ${credentialID} 失败:`, error);

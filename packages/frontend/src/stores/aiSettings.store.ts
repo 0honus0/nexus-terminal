@@ -57,9 +57,13 @@ export const useAISettingsStore = defineStore('aiSettings', () => {
   async function saveSettings(newSettings: AISettings): Promise<void> {
     isLoading.value = true;
     try {
-      const response = await apiClient.post('/ai/settings', newSettings);
+      const response = await apiClient.post<{
+        success: boolean;
+        settings?: AISettings;
+        message?: string;
+      }>('/ai/settings', newSettings);
       if (response.data.success) {
-        settings.value = newSettings;
+        settings.value = response.data.settings || newSettings;
       } else {
         throw new Error(response.data.message || '保存配置失败');
       }

@@ -167,15 +167,12 @@ export function useSystemSettings() {
     settings,
     (newSettings) => {
       if (newSettings) {
-        selectedLanguage.value = newSettings.language || 'en-US'; // Default to en-US
         selectedTimezone.value = newSettings.timezone || 'UTC';
         statusMonitorIntervalLocal.value = parseInt(
           newSettings.statusMonitorIntervalSeconds || '3',
           10
         );
         dockerInterval.value = parseInt(newSettings.dockerStatusIntervalSeconds || '2', 10);
-        // dockerExpandDefault.value is already reactive from storeToRefs (dockerDefaultExpandBoolean)
-        // but we keep a local ref for the form v-model and sync it.
         dockerExpandDefault.value = newSettings.dockerDefaultExpand === 'true';
       }
     },

@@ -170,6 +170,9 @@
         <p class="text-xs text-muted-foreground mt-1 ml-6">
           开启后 AI 请求/响应详情将输出到浏览器控制台和容器日志，用于排查问题
         </p>
+        <p class="text-xs text-warning mt-1 ml-6 italic">
+          注意：调试模式为会话级设置，页面刷新后将自动关闭
+        </p>
       </div>
 
       <!-- 操作按钮 -->
@@ -301,7 +304,7 @@ function handleProviderChange() {
     case 'claude':
       localSettings.value.baseUrl = AI_PROVIDER_DEFAULTS.claude.baseUrl;
       localSettings.value.model = AI_PROVIDER_DEFAULTS.claude.model;
-      delete localSettings.value.openaiEndpoint;
+      localSettings.value.openaiEndpoint = undefined;
       break;
   }
 }

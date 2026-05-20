@@ -45,6 +45,7 @@ export function useWorkspaceSettings() {
       popupEditorSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新弹窗编辑器设置失败:', error);
+      popupEditorEnabled.value = showPopupFileEditorBoolean.value;
       popupEditorMessage.value = extractErrorMessage(
         error,
         t('settings.popupEditor.error.saveFailed')
@@ -72,6 +73,7 @@ export function useWorkspaceSettings() {
       shareTabsSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新共享编辑器标签页设置失败:', error);
+      shareTabsEnabled.value = shareFileEditorTabsBoolean.value;
       shareTabsMessage.value = extractErrorMessage(
         error,
         t('settings.shareEditorTabs.error.saveFailed')
@@ -93,12 +95,12 @@ export function useWorkspaceSettings() {
     autoCopyMessage.value = '';
     autoCopySuccess.value = false;
     try {
-      const valueToSave = autoCopyEnabled.value ? 'true' : 'false';
-      await settingsStore.updateSetting('autoCopyOnSelect', valueToSave);
+      await settingsStore.updateSetting('autoCopyOnSelect', autoCopyEnabled.value);
       autoCopyMessage.value = t('settings.autoCopyOnSelect.success.saved');
       autoCopySuccess.value = true;
     } catch (error: unknown) {
       log.error('更新自动复制设置失败:', error);
+      autoCopyEnabled.value = autoCopyOnSelectBoolean.value;
       autoCopyMessage.value = extractErrorMessage(
         error,
         t('settings.autoCopyOnSelect.error.saveFailed')
@@ -128,6 +130,7 @@ export function useWorkspaceSettings() {
       workspaceSidebarPersistentSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新侧边栏固定设置失败:', error);
+      workspaceSidebarPersistentEnabled.value = workspaceSidebarPersistentBoolean.value;
       workspaceSidebarPersistentMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.error.sidebarPersistentSaveFailed')
@@ -363,6 +366,7 @@ export function useWorkspaceSettings() {
       fileManagerShowDeleteConfirmationSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新文件管理器删除确认设置失败:', error);
+      fileManagerShowDeleteConfirmationLocal.value = fileManagerShowDeleteConfirmationBoolean.value;
       fileManagerShowDeleteConfirmationMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.fileManagerDeleteConfirmError', '保存文件管理器删除确认设置失败。')
@@ -393,6 +397,7 @@ export function useWorkspaceSettings() {
       fileManagerSingleClickOpenFileSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新文件管理器文件打开方式设置失败:', error);
+      fileManagerSingleClickOpenFileLocal.value = fileManagerSingleClickOpenFileBoolean.value;
       fileManagerSingleClickOpenFileMessage.value = extractErrorMessage(
         error,
         t(
@@ -426,6 +431,7 @@ export function useWorkspaceSettings() {
       terminalEnableRightClickPasteSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新终端右键粘贴设置失败:', error);
+      terminalEnableRightClickPasteLocal.value = terminalEnableRightClickPasteBoolean.value;
       terminalEnableRightClickPasteMessage.value = extractErrorMessage(
         error,
         t('settings.workspace.terminalRightClickPasteError', '保存终端右键粘贴设置失败。')
@@ -453,6 +459,7 @@ export function useWorkspaceSettings() {
       showPopupFileManagerSuccess.value = true;
     } catch (error: unknown) {
       log.error('更新弹窗文件管理器设置失败:', error);
+      showPopupFileManagerLocal.value = showPopupFileManagerBoolean.value;
       showPopupFileManagerMessage.value = extractErrorMessage(
         error,
         t('settings.popupFileManager.error.saveFailed')

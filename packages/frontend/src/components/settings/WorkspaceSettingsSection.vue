@@ -29,7 +29,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="popupEditorLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -66,7 +67,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="showPopupFileManagerLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ t('common.save') }}
             </button>
@@ -105,7 +107,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="shareTabsLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -141,7 +144,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="autoCopyLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -180,7 +184,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="workspaceSidebarPersistentLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -239,7 +244,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="commandInputSyncLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -283,7 +289,8 @@
           <div class="flex items-center justify-between pt-2">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="showConnectionTagsLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -329,7 +336,8 @@
           <div class="flex items-center justify-between pt-2">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="showQuickCommandTagsLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -374,7 +382,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="terminalScrollbackLimitLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ t('common.save') }}
             </button>
@@ -501,7 +510,8 @@
           <div class="flex items-center justify-between pt-2">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="fileManagerShowDeleteConfirmationLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -553,7 +563,8 @@
           <div class="flex items-center justify-between pt-2">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="fileManagerSingleClickOpenFileLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -595,7 +606,8 @@
           <div class="flex items-center justify-between pt-2">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="terminalEnableRightClickPasteLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ $t('common.save') }}
             </button>
@@ -720,7 +732,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="statusMonitorLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ t('settings.statusMonitor.saveButton') }}
             </button>
@@ -775,7 +788,8 @@
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+              :disabled="dockerSettingsLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ t('settings.docker.saveButton') }}
             </button>
@@ -808,34 +822,42 @@ const systemSettings = useSystemSettings();
 
 const {
   popupEditorEnabled,
+  popupEditorLoading,
   popupEditorMessage,
   popupEditorSuccess,
   handleUpdatePopupEditorSetting,
   shareTabsEnabled,
+  shareTabsLoading,
   shareTabsMessage,
   shareTabsSuccess,
   handleUpdateShareTabsSetting,
   autoCopyEnabled,
+  autoCopyLoading,
   autoCopyMessage,
   autoCopySuccess,
   handleUpdateAutoCopySetting,
   workspaceSidebarPersistentEnabled,
+  workspaceSidebarPersistentLoading,
   workspaceSidebarPersistentMessage,
   workspaceSidebarPersistentSuccess,
   handleUpdateWorkspaceSidebarSetting,
   commandInputSyncTargetLocal,
+  commandInputSyncLoading,
   commandInputSyncMessage,
   commandInputSyncSuccess,
   handleUpdateCommandInputSyncTarget,
   showConnectionTagsLocal,
+  showConnectionTagsLoading,
   showConnectionTagsMessage,
   showConnectionTagsSuccess,
   handleUpdateShowConnectionTags,
   showQuickCommandTagsLocal,
+  showQuickCommandTagsLoading,
   showQuickCommandTagsMessage,
   showQuickCommandTagsSuccess,
   handleUpdateShowQuickCommandTags,
   terminalScrollbackLimitLocal,
+  terminalScrollbackLimitLoading,
   terminalScrollbackLimitMessage,
   terminalScrollbackLimitSuccess,
   handleUpdateTerminalScrollbackLimit,
@@ -850,10 +872,12 @@ const {
   sshSuspendKeepAliveSecondsSuccess,
   handleUpdateSshSuspendKeepAliveSeconds,
   fileManagerShowDeleteConfirmationLocal,
+  fileManagerShowDeleteConfirmationLoading,
   fileManagerShowDeleteConfirmationMessage,
   fileManagerShowDeleteConfirmationSuccess,
   handleUpdateFileManagerDeleteConfirmation,
   fileManagerSingleClickOpenFileLocal,
+  fileManagerSingleClickOpenFileLoading,
   fileManagerSingleClickOpenFileMessage,
   fileManagerSingleClickOpenFileSuccess,
   handleUpdateFileManagerSingleClickOpenFile,
@@ -863,6 +887,7 @@ const {
   terminalEnableRightClickPasteSuccess,
   handleUpdateTerminalRightClickPasteSetting,
   showPopupFileManagerLocal,
+  showPopupFileManagerLoading,
   showPopupFileManagerMessage,
   showPopupFileManagerSuccess,
   handleUpdateShowPopupFileManager,
@@ -880,11 +905,13 @@ const {
 
 const {
   statusMonitorIntervalLocal,
+  statusMonitorLoading,
   statusMonitorMessage,
   statusMonitorSuccess,
   handleUpdateStatusMonitorInterval,
   dockerInterval,
   dockerExpandDefault,
+  dockerSettingsLoading,
   dockerSettingsMessage,
   dockerSettingsSuccess,
   handleUpdateDockerSettings,

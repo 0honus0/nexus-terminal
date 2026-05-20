@@ -181,6 +181,10 @@
           {{ blacklistDeleteError }}
         </p>
       </div>
+      <!-- Toggle Error -->
+      <p v-if="ipBlacklistToggleError" class="mt-3 text-sm text-error">
+        {{ ipBlacklistToggleError }}
+      </p>
       <!-- End v-if="ipBlacklistEnabled" -->
       <!-- Message when disabled -->
       <div
@@ -194,13 +198,11 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from 'vue-i18n';
 import { useIpBlacklist } from '../../composables/settings/useIpBlacklist';
-
-// const { t } = useI18n(); // $t is globally available in template
 
 const {
   ipBlacklistEnabled,
+  ipBlacklistToggleError,
   handleUpdateIpBlacklistEnabled,
   blacklistSettingsForm,
   // blacklistSettingsLoading, // Not used directly in template, handled by form submit button state
