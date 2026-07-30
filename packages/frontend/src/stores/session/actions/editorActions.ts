@@ -230,6 +230,41 @@ export const saveFileInSession = async (
     }
 };
 
+export const reloadFileInSession = async (
+    sessionId: string,
+    tabId: string,
+    dependencies: {
+        getOrCreateSftpManager: (sessionId: string, instanceId: string) => SftpManagerInstance | null;
+        t: ReturnType<typeof useI18n>['t'];
+    }
+) => {
+    const session = sessions.value.get(sessionId);
+    const tab = session?.editorTabs.value.find(item => item.id === tabId);
+    if (!session || !tab || tab.isLoading || tab.isSaving) return;
+
+    const sftpManager = dependencies.getOrCreateSftpManager(sessionId, 'primary-editor');
+    if (!sftpManager) {
+        tab.loadingError = dependencies.t('fileManager.errors.sftpManagerNotFound');
+        return;
+    }
+
+    tab.isLoading = true;
+    tab.loadingError = null;
+    try {
+        const fileData = await sftpManager.readFile(tab.filePath);
+        const content = decodeRawContent(fileData.rawContentBase64, fileData.encodingUsed);
+        tab.rawContentBase64 = fileData.rawContentBase64;
+        tab.selectedEncoding = fileData.encodingUsed;
+        tab.content = content;
+        tab.originalContent = content;
+        tab.isModified = false;
+    } catch (err: any) {
+        tab.loadingError = `${dependencies.t('fileManager.errors.readFileFailed')}: ${err.message || err}`;
+    } finally {
+        tab.isLoading = false;
+    }
+};
+
 export const changeEncodingInSession = (sessionId: string, tabId: string, newEncoding: string) => {
     const session = sessions.value.get(sessionId);
     if (!session) {

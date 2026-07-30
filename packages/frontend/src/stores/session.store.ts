@@ -87,6 +87,8 @@ export const useSessionStore = defineStore('session', () => {
     editorActions.updateFileContentInSession(sessionId, tabId, newContent);
   const saveFileInSession = (sessionId: string, tabId: string) =>
     editorActions.saveFileInSession(sessionId, tabId, { getOrCreateSftpManager, t });
+  const reloadFileInSession = (sessionId: string, tabId: string) =>
+    editorActions.reloadFileInSession(sessionId, tabId, { getOrCreateSftpManager, t });
   const changeEncodingInSession = (sessionId: string, tabId: string, newEncoding: string) =>
     editorActions.changeEncodingInSession(sessionId, tabId, newEncoding);
   const closeOtherTabsInSession = (sessionId: string, targetTabId: string) =>
@@ -134,6 +136,7 @@ export const useSessionStore = defineStore('session', () => {
     setActiveEditorTabInSession,
     updateFileContentInSession,
     saveFileInSession,
+    reloadFileInSession,
     changeEncodingInSession,
     closeOtherTabsInSession,
     closeTabsToTheRightInSession,

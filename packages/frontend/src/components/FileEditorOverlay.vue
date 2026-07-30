@@ -44,6 +44,7 @@ const { currentEditorFontSize, currentEditorFontFamily } = storeToRefs(appearanc
 // 全局 Store Actions (用于共享模式)
 const {
    saveFile: saveGlobalFile,
+   reloadFile: reloadGlobalFile,
    closeTab: closeGlobalTab,
    setActiveTab: setGlobalActiveTab,
    updateFileContent: updateGlobalFileContent,
@@ -58,6 +59,7 @@ const {
 // 会话 Store Actions (用于非共享模式)
 const {
    saveFileInSession,
+   reloadFileInSession,
    closeEditorTabInSession,
    setActiveEditorTabInSession,
    updateFileContentInSession,
@@ -307,6 +309,19 @@ const handleSaveRequest = () => {
     }
 };
 
+const handleReloadRequest = async () => {
+    const tab = activeTab.value;
+    if (!tab) return;
+    if (tab.isModified && !window.confirm(t('fileManager.confirmDiscardChanges', 'Discard unsaved changes and reload?'))) return;
+
+    if (shareFileEditorTabsBoolean.value) {
+        await reloadGlobalFile(tab.id);
+    } else {
+        const sessionId = popupFileInfo.value?.sessionId;
+        if (sessionId) await reloadFileInSession(sessionId, tab.id);
+    }
+};
+
 // 激活标签页
 const handleActivateTab = (tabId: string) => {
     if (shareFileEditorTabsBoolean.value) {
@@ -545,6 +560,9 @@ onBeforeUnmount(() => {
           <span v-if="currentTabSaveStatus === 'saving'" class="save-status saving">{{ t('fileManager.saving') }}...</span>
           <span v-if="currentTabSaveStatus === 'success'" class="save-status success">✅ {{ t('fileManager.saveSuccess') }}</span>
           <span v-if="currentTabSaveStatus === 'error'" class="save-status error">❌ {{ t('fileManager.saveError') }}: {{ currentTabSaveError }}</span>
+          <button @click="handleReloadRequest" :disabled="currentTabIsSaving || currentTabIsLoading || !activeTab" class="save-btn">
+            {{ t('fileManager.actions.refresh', 'Refresh') }}
+          </button>
           <!-- +++ 移动端搜索按钮 (Font Awesome) +++ -->
           <button
             v-if="props.isMobile && activeTab && !currentTabIsLoading"

@@ -255,6 +255,36 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     };
 
     // 保存指定（或当前激活）标签页的文件
+    const reloadFile = async (tabIdToReload?: string) => {
+        const targetTabId = tabIdToReload ?? activeTabId.value;
+        const tab = targetTabId ? tabs.value.get(targetTabId) : undefined;
+        if (!tab || tab.isLoading || tab.isSaving) return;
+
+        const session = sessionStore.sessions.get(tab.sessionId);
+        const sftpManager = session?.sftpManagers.values().next().value;
+        if (!sftpManager) {
+            tab.loadingError = t('fileManager.errors.sftpManagerNotFound');
+            return;
+        }
+
+        tab.isLoading = true;
+        tab.loadingError = null;
+        try {
+            const fileData = await sftpManager.readFile(tab.filePath);
+            const content = decodeRawContent(fileData.rawContentBase64, fileData.encodingUsed);
+            tab.rawContentBase64 = fileData.rawContentBase64;
+            tab.selectedEncoding = fileData.encodingUsed;
+            tab.content = content;
+            tab.originalContent = content;
+            tab.isModified = false;
+        } catch (err: any) {
+            tab.loadingError = `${t('fileManager.errors.readFileFailed')}: ${err.message || err}`;
+        } finally {
+            tab.isLoading = false;
+        }
+    };
+
+    // 保存指定（或当前激活）标签页的文件
     const saveFile = async (tabIdToSave?: string) => {
         const targetTabId = tabIdToSave ?? activeTabId.value;
         if (!targetTabId) {
@@ -616,6 +646,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
 
         // 方法
         openFile,
+        reloadFile,
         saveFile,
         closeTab,
         closeOtherTabs, // +++ 暴露新 action +++
