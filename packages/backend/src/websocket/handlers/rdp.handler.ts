@@ -54,28 +54,61 @@ export function handleRdpProxyConnection(
 
     const cleanRemoteGatewayWsBaseUrl = remoteGatewayWsBaseUrl.endsWith('/') ? remoteGatewayWsBaseUrl.slice(0, -1) : remoteGatewayWsBaseUrl;
 
-    const remoteDesktopTargetUrl = `${cleanRemoteGatewayWsBaseUrl}/?token=${encodeURIComponent(rdpToken)}&width=${encodeURIComponent(rdpWidth)}&height=${encodeURIComponent(rdpHeight)}&dpi=${encodeURIComponent(calculatedDpi)}`;
+    const remoteDesktopTargetUrl = `${cleanRemoteGatewayWsBaseUrl}/?token=${encodeURIComponent(rdpToken)}&width=${encodeURIComponent(rdpWidth)}&height=${encodeURIComponent(rdpHeight)}&dpi=${encodeURIComponent(calculatedDpi)}&GUAC_AUDIO=${encodeURIComponent('audio/L16')}`;
+    const safeRemoteDesktopTargetUrl = `${cleanRemoteGatewayWsBaseUrl}/?token=[REDACTED]&width=${rdpWidth}&height=${rdpHeight}&dpi=${calculatedDpi}&GUAC_AUDIO=audio%2FL16`;
 
-    console.log(`WebSocket: Remote Desktop Proxy for ${ws.username} attempting to connect to ${remoteDesktopTargetUrl}`);
+    console.log(`WebSocket: Remote Desktop Proxy for ${ws.username} attempting to connect to ${safeRemoteDesktopTargetUrl}`);
 
     const rdpWs = new WebSocket(remoteDesktopTargetUrl);
     let clientWsClosed = false;
     let rdpWsClosed = false;
+    const pendingClientMessages: Array<{ message: RawData; isBinary: boolean; size: number }> = [];
+    let pendingClientBytes = 0;
+    const maxPendingClientBytes = 1024 * 1024;
+
+    const connectTimeout = setTimeout(() => {
+        if (rdpWs.readyState !== WebSocket.CONNECTING) return;
+        console.error(`[RDP 代理] 连接 remote-gateway 超时: ${safeRemoteDesktopTargetUrl}`);
+        rdpWs.terminate();
+        rdpWsClosed = true;
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.close(1013, 'Remote desktop gateway timeout');
+            clientWsClosed = true;
+        }
+    }, 15000);
 
     // --- 消息转发: Client -> RDP ---
-    ws.on('message', (message: RawData) => {
+    ws.on('message', (message: RawData, isBinary: boolean) => {
+        const messageText = isBinary ? null : message.toString();
+        // guacamole-lite uses the encrypted URL token to perform its own guacd
+        // handshake. Forwarding the browser tunnel's connect instruction starts
+        // a second handshake and leaves the client stuck in WAITING.
+        if (messageText && /^(?:\d+\.)?connect[,;]/.test(messageText)) {
+            console.log(`[RDP 代理 C->S] 已过滤浏览器重复 connect 指令。用户: ${ws.username}`);
+            return;
+        }
+
         if (rdpWs.readyState === WebSocket.OPEN) {
-            rdpWs.send(message);
-        } else {
-            console.warn(`[RDP 代理 C->S] 用户: ${ws.username}, 会话: ${ws.sessionId}, RDP WS 未打开，丢弃消息。`);
+            rdpWs.send(message, { binary: isBinary });
+        } else if (rdpWs.readyState === WebSocket.CONNECTING) {
+            const size = Array.isArray(message)
+                ? message.reduce((total, chunk) => total + chunk.byteLength, 0)
+                : message.byteLength;
+            if (pendingClientBytes + size > maxPendingClientBytes) {
+                console.error(`[RDP 代理 C->S] 等待队列超过 ${maxPendingClientBytes} 字节，关闭连接。用户: ${ws.username}`);
+                ws.close(1009, 'Remote desktop pending queue exceeded');
+                clientWsClosed = true;
+                return;
+            }
+            pendingClientMessages.push({ message, isBinary, size });
+            pendingClientBytes += size;
         }
     });
 
     // --- 消息转发: RDP -> Client ---
-    rdpWs.on('message', (message: RawData) => {
+    rdpWs.on('message', (message: RawData, isBinary: boolean) => {
         if (ws.readyState === WebSocket.OPEN) {
-            const messageString = message.toString('utf-8');
-            ws.send(messageString);
+            ws.send(message, { binary: isBinary });
         } else {
              console.warn(`[RDP 代理 S->C] 用户: ${ws.username}, 会话: ${ws.sessionId}, 客户端 WS 未打开，丢弃消息。`);
         }
@@ -92,7 +125,8 @@ export function handleRdpProxyConnection(
         clientWsClosed = true;
     });
     rdpWs.on('error', (error) => {
-         console.error(`[RDP 代理 RDP WS 错误] 用户: ${ws.username}, 会话: ${ws.sessionId}, 连接到 ${remoteDesktopTargetUrl} 时出错:`, error);
+         clearTimeout(connectTimeout);
+         console.error(`[RDP 代理 RDP WS 错误] 用户: ${ws.username}, 会话: ${ws.sessionId}, 连接到 ${safeRemoteDesktopTargetUrl} 时出错:`, error);
          if (!clientWsClosed && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
             console.log(`[RDP 代理] 因 RDP WS 错误关闭客户端 WS。会话: ${ws.sessionId}`);
             ws.close(1011, `RDP WS Error: ${error.message}`);
@@ -103,6 +137,7 @@ export function handleRdpProxyConnection(
 
     // --- 关闭处理 ---
     ws.on('close', (code, reason) => {
+        clearTimeout(connectTimeout);
         clientWsClosed = true;
         console.log(`[RDP 代理 客户端 WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 代码: ${code}, 原因: ${reason.toString()}`);
         if (!rdpWsClosed && rdpWs.readyState !== WebSocket.CLOSED && rdpWs.readyState !== WebSocket.CLOSING) {
@@ -112,8 +147,9 @@ export function handleRdpProxyConnection(
         }
     });
     rdpWs.on('close', (code, reason) => {
+        clearTimeout(connectTimeout);
         rdpWsClosed = true;
-         console.log(`[RDP 代理 RDP WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${remoteDesktopTargetUrl} 的连接已关闭。代码: ${code}, 原因: ${reason.toString()}`);
+         console.log(`[RDP 代理 RDP WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${safeRemoteDesktopTargetUrl} 的连接已关闭。代码: ${code}, 原因: ${reason.toString()}`);
         if (!clientWsClosed && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
             console.log(`[RDP 代理] 因 RDP WS 关闭而关闭客户端 WS。会话: ${ws.sessionId}`);
             ws.close(1000, 'RDP WS Closed');
@@ -122,6 +158,12 @@ export function handleRdpProxyConnection(
     });
 
     rdpWs.on('open', () => {
-         console.log(`[RDP 代理 RDP WS 打开] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${remoteDesktopTargetUrl} 的连接已建立。开始转发消息。`);
+         clearTimeout(connectTimeout);
+         console.log(`[RDP 代理 RDP WS 打开] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${safeRemoteDesktopTargetUrl} 的连接已建立。开始转发消息。`);
+         for (const pending of pendingClientMessages.splice(0)) {
+             if (rdpWs.readyState !== WebSocket.OPEN) break;
+             rdpWs.send(pending.message, { binary: pending.isBinary });
+             pendingClientBytes -= pending.size;
+         }
     });
 }

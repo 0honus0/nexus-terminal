@@ -10,8 +10,7 @@
     "doc": "doc"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "patch-package"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
@@ -39,7 +38,6 @@
     "@tailwindcss/postcss": "^4.1.4",
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "^2.0.10",
-    "patch-package": "^8.0.0",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
     "sqlite3": "^5.1.7"
