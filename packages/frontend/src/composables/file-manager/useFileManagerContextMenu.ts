@@ -122,7 +122,8 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
             .map(filename => fileList.value.find(f => f.filename === filename))
             .filter((item): item is FileListItem => !!item); // 过滤掉未找到的项并确保类型
 
-        const allFilesSelected = selectedFileItems.length === selectionSize && selectedFileItems.every(item => item.attrs.isFile);
+        const allFilesSelected = selectedFileItems.length === selectionSize
+            && selectedFileItems.every(item => item.attrs.isFile || item.attrs.isSymbolicLink);
 
         menu = [
             // 调整顺序：剪切、复制优先
@@ -163,7 +164,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
         menu = [];
 
         // --- 修改：区分文件和文件夹下载 ---
-        if (targetItem.attrs.isFile) {
+        if (targetItem.attrs.isFile || targetItem.attrs.isSymbolicLink) {
             menu.push({ label: t('fileManager.actions.download', { name: targetItem.filename }), action: () => onDownload([targetItem]), disabled: !(isConnected.value && isSftpReady.value) }); // 文件下载
         } else if (targetItem.attrs.isDirectory) {
             menu.push({ label: t('fileManager.actions.downloadFolder', { name: targetItem.filename }), action: () => onDownloadDirectory(targetItem), disabled: !(isConnected.value && isSftpReady.value) }); // 文件夹下载

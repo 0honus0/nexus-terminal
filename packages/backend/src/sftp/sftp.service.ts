@@ -788,7 +788,7 @@ export class SftpService {
                 }
 
                 try {
-                    const stats = await this.getStats(sftp, sourcePath);
+                    const stats = await this.getTargetStats(sftp, sourcePath);
                     if (stats.isDirectory()) {
                         console.log(`[SFTP ${sessionId}] Copying directory ${sourcePath} to ${destPath} (ID: ${requestId})`);
                         await this.copyDirectoryRecursive(sftp, sourcePath, destPath);
@@ -942,8 +942,21 @@ export class SftpService {
     }
 
     // +++ 辅助方法 - 递归复制目录 +++
-    private async copyDirectoryRecursive(sftp: SFTPWrapper, sourcePath: string, destPath: string): Promise<void> {
+    private async copyDirectoryRecursive(
+        sftp: SFTPWrapper,
+        sourcePath: string,
+        destPath: string,
+        ancestorRealPaths: ReadonlySet<string> = new Set()
+    ): Promise<void> {
         try {
+            const realPath = await this.getRealPath(sftp, sourcePath);
+            if (ancestorRealPaths.has(realPath)) {
+                console.warn(`[SFTP Copy Recurse] Skipping circular symbolic link: ${sourcePath} -> ${realPath}`);
+                return;
+            }
+            const nextAncestors = new Set(ancestorRealPaths);
+            nextAncestors.add(realPath);
+
             // Create destination directory
             await this.ensureDirectoryExists(sftp, destPath);
 
@@ -953,10 +966,12 @@ export class SftpService {
             for (const item of items) {
                 const currentSourcePath = pathModule.join(sourcePath, item.filename).replace(/\\/g, '/');
                 const currentDestPath = pathModule.join(destPath, item.filename).replace(/\\/g, '/');
-                const itemStats = item.attrs; // Assuming readdir provides stats
+                const itemStats = item.attrs.isSymbolicLink()
+                    ? await this.getTargetStats(sftp, currentSourcePath)
+                    : item.attrs;
 
                 if (itemStats.isDirectory()) {
-                    await this.copyDirectoryRecursive(sftp, currentSourcePath, currentDestPath);
+                    await this.copyDirectoryRecursive(sftp, currentSourcePath, currentDestPath, nextAncestors);
                 } else if (itemStats.isFile()) {
                     await this.copyFile(sftp, currentSourcePath, currentDestPath);
                 } else {
@@ -977,6 +992,31 @@ export class SftpService {
                     reject(err);
                 } else {
                     resolve(stats);
+                }
+            });
+        });
+    }
+
+    // Follow symbolic links when an operation needs the target type/content.
+    private getTargetStats(sftp: SFTPWrapper, path: string): Promise<Stats> {
+        return new Promise((resolve, reject) => {
+            sftp.stat(path, (err, stats) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(stats);
+                }
+            });
+        });
+    }
+
+    private getRealPath(sftp: SFTPWrapper, path: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            sftp.realpath(path, (err, realPath) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(realPath);
                 }
             });
         });

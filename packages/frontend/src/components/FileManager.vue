@@ -775,7 +775,7 @@ const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileList
     // 遍历数组中的每个文件项
     items.forEach(item => {
         // 确保只下载文件
-        if (!item.attrs.isFile) {
+        if (!item.attrs.isFile && !item.attrs.isSymbolicLink) {
             console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Skipping download for non-file item: ${item.filename}`);
             return;
         }
