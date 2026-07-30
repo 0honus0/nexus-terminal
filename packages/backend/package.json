@@ -4,7 +4,7 @@
    "private": true,
    "main": "dist/index.js",
    "scripts": {
-      "build": "tsc && node -e \"require('node:fs').cpSync('src/locales', 'dist/src/locales', { recursive: true })\"",
+      "build": "tsc && node -e \"require('node:fs').cpSync('src/locales', 'dist/locales', { recursive: true })\"",
       "start": "node dist/index.js",
       "dev": "cross-env NODE_ENV=development tsx watch src/index.ts"
    },

@@ -23,7 +23,6 @@ WORKDIR /app
 
 COPY --from=builder /app/dist ./dist
 
-COPY --from=builder /app/src/locales ./dist/locales
 COPY --from=builder /app/html-presets ./html-presets
 
 COPY packages/backend/package.json ./package.json
