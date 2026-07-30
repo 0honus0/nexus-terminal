@@ -163,17 +163,30 @@ const getScrollbackValue = (limit: number): number => {
   return Math.max(0, limit); // Ensure non-negative, return the number otherwise
 };
 
-// --- 右键粘贴功能 ---
+// --- 右键复制 / 粘贴功能 ---
 const handleContextMenuPaste = async (event: MouseEvent) => {
   event.preventDefault(); // 阻止默认右键菜单
+  if (!terminal) return;
+
   try {
+    // 有选区时本次右键只复制；清除选区后，下一次右键才执行粘贴。
+    if (terminal.hasSelection()) {
+      const selectedText = terminal.getSelection();
+      if (selectedText) await navigator.clipboard.writeText(selectedText);
+      terminal.clearSelection();
+      terminal.focus();
+      return;
+    }
+
     const text = await navigator.clipboard.readText();
-    if (text && terminal) {
+    if (text) {
       const processedText = text.replace(/\r\n?/g, '\n');
-      emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
+      // 交给 xterm 处理 bracketed-paste，避免控制序列作为普通字符显示。
+      terminal.paste(processedText);
+      terminal.focus();
     }
   } catch (err) {
-    console.error('[Terminal] Failed to paste via Right Click:', err);
+    console.error('[Terminal] Failed to copy/paste via Right Click:', err);
   }
 };
 
@@ -763,4 +776,3 @@ watchEffect(() => {
   该逻辑已移至 LayoutRenderer.vue
 */
 </style>
-
