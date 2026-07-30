@@ -4,34 +4,99 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      component:
+        description: Component to publish
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - backend
+          - frontend
+          - remote-gateway
+      image_tag:
+        description: Optional image tag (defaults to sha-<commit>)
+        required: false
+        type: string
 
 permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: publish-ghcr-${{ github.ref }}-${{ inputs.component || 'all' }}
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    name: Prepare publication
+    runs-on: ubuntu-latest
+    outputs:
+      components: ${{ steps.components.outputs.value }}
+      image_tag: ${{ steps.image_tag.outputs.value }}
+
+    steps:
+      - name: Select components
+        id: components
+        shell: bash
+        env:
+          REQUESTED_COMPONENT: ${{ inputs.component || 'all' }}
+        run: |
+          case "$REQUESTED_COMPONENT" in
+            all)
+              components='["backend","frontend","remote-gateway"]'
+              ;;
+            backend|frontend|remote-gateway)
+              components="[\"$REQUESTED_COMPONENT\"]"
+              ;;
+            *)
+              echo "Unsupported component: $REQUESTED_COMPONENT" >&2
+              exit 1
+              ;;
+          esac
+          echo "value=$components" >> "$GITHUB_OUTPUT"
+
+      - name: Select image tag
+        id: image_tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ -n "$RELEASE_TAG" ]]; then
+            image_tag="$RELEASE_TAG"
+          elif [[ -n "$REQUESTED_TAG" ]]; then
+            image_tag="$REQUESTED_TAG"
+          else
+            image_tag="sha-${GITHUB_SHA::12}"
+          fi
+
+          if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid Docker image tag: $image_tag" >&2
+            exit 1
+          fi
+          echo "value=$image_tag" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish ${{ matrix.component }}
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        component:
-          - frontend
-          - backend
-          - remote-gateway
+        component: ${{ fromJSON(needs.prepare.outputs.components) }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set image name and date tag
+      - name: Set image name
         id: image
         shell: bash
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "name=ghcr.io/${owner}/nexus-terminal-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -55,9 +120,10 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.name }}:latest
-            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.date }}
+            ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.image_tag }}
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}
