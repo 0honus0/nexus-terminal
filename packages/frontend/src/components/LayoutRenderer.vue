@@ -573,22 +573,26 @@ onBeforeUnmount(() => {
                            ></div>
                        </div>
 
-                       <!-- Terminal Instances -->
-                       <template v-for="[sessionId, sessionState] in sessionStore.sessions" :key="sessionId">
+                       <!-- Terminal Instances: v-show must live on a real DOM node. -->
+                       <div
+                           v-for="[sessionId, sessionState] in sessionStore.sessions"
+                           v-show="sessionId === activeSessionId"
+                           :key="sessionId"
+                           :class="['terminal-instance-wrapper absolute inset-0 w-full h-full', { 'terminal-transparent': isTerminalBackgroundEnabled }]"
+                           :style="{ zIndex: 3 }"
+                       >
                            <template v-if="sessionState.terminalManager">
                                <keep-alive>
                                    <component
                                        :is="componentMap.terminal"
-                                       v-show="sessionId === activeSessionId"
                                        :session-id="sessionId"
                                        :is-active="sessionId === activeSessionId"
-                                       :class="['terminal-instance-wrapper absolute inset-0 w-full h-full', { 'terminal-transparent': isTerminalBackgroundEnabled }]"
-                                       :style="{ zIndex: 3 }"
+                                       class="w-full h-full"
                                        :options="{}"
                                    />
                                </keep-alive>
                            </template>
-                       </template>
+                       </div>
                        <!-- Placeholder -->
                        <div v-if="!activeSessionId || !hasSshSessions"
                             class="absolute inset-0 flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4"
@@ -816,4 +820,3 @@ onBeforeUnmount(() => {
 
 
 </style>
-

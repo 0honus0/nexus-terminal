@@ -710,14 +710,6 @@ const closeFileManagerModal = () => {
         :sessions="sessionTabsWithStatus"
         :active-session-id="activeSessionId"
         :is-mobile="isMobile"
-        @activate-session="sessionStore.activateSession"
-        @close-session="sessionStore.closeSession"
-        @open-layout-configurator="handleOpenLayoutConfigurator"
-        @request-add-connection-from-popup="handleRequestAddConnection"
-        @request-edit-connection-from-popup="handleRequestEditConnection"
-        @close-other-sessions="handleCloseOtherSessions"
-        @close-sessions-to-right="handleCloseSessionsToRight"
-        @close-sessions-to-left="handleCloseSessionsToLeft"
     />
 
     <!-- --- 桌面端布局 --- -->
