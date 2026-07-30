@@ -231,6 +231,17 @@ const currentTabFilePath = computed(() => activeTab.value?.filePath ?? '');
 const currentTabIsModified = computed(() => activeTab.value?.isModified ?? false);
 // +++ 计算当前选择的编码 (与 Container 逻辑一致) +++
 const currentSelectedEncoding = computed(() => activeTab.value?.selectedEncoding ?? 'utf-8');
+const currentLineEnding = computed<'lf' | 'crlf' | 'cr'>(() => {
+  const content = activeTab.value?.content ?? '';
+  if (content.includes('\r\n')) return 'crlf';
+  if (content.includes('\r')) return 'cr';
+  return 'lf';
+});
+const lineEndingOptions = [
+  { value: 'lf', text: 'LF' },
+  { value: 'crlf', text: 'CRLF' },
+  { value: 'cr', text: 'CR' },
+] as const;
 // +++ 计算当前活动标签的会话名称 (与 Container 逻辑一致) +++
 const currentTabSessionName = computed(() => {
   const sessionId = activeTab.value?.sessionId;
@@ -307,6 +318,13 @@ const handleSaveRequest = () => {
              console.error("[FileEditorOverlay] 无法保存：非共享模式下缺少 sessionId。");
         }
     }
+};
+
+const handleLineEndingChange = (event: Event) => {
+    const selected = (event.target as HTMLSelectElement).value as 'lf' | 'crlf' | 'cr';
+    const normalized = activeEditorContent.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const delimiter = selected === 'crlf' ? '\r\n' : selected === 'cr' ? '\r' : '\n';
+    activeEditorContent.value = normalized.replace(/\n/g, delimiter);
 };
 
 const handleReloadRequest = async () => {
@@ -555,6 +573,18 @@ onBeforeUnmount(() => {
             </select>
           </div>
           <span v-else-if="activeTab" class="encoding-select-placeholder">{{ t('fileManager.loadingEncoding', '加载中...') }}</span>
+
+          <select
+            v-if="activeTab && !currentTabIsLoading"
+            :value="currentLineEnding"
+            @change="handleLineEndingChange"
+            class="encoding-select"
+            :title="t('fileManager.changeLineEndingTooltip', 'Change line ending format')"
+          >
+            <option v-for="option in lineEndingOptions" :key="option.value" :value="option.value">
+              {{ option.text }}
+            </option>
+          </select>
 
 
           <span v-if="currentTabSaveStatus === 'saving'" class="save-status saving">{{ t('fileManager.saving') }}...</span>
