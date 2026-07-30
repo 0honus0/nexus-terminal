@@ -93,12 +93,20 @@ export const requestStartSshSuspend = (sessionId: string): void => {
       }
 
       if (lastNonEmptyLineIndex !== -1) {
-        const lines = [];
-        for (let i = 0; i <= lastNonEmptyLineIndex; i++) {
-          // 获取行内容，translateToString(true) 会移除行尾空白
-          lines.push(buffer.getLine(i)?.translateToString(true) || '');
+        const maxBufferBytes = 1048576 - 1024;
+        const encoder = new TextEncoder();
+        const lines: string[] = [];
+        let totalBytes = 0;
+
+        // 优先保留最新的终端内容，避免超过后端 1MB 消息校验限制。
+        for (let i = lastNonEmptyLineIndex; i >= 0; i--) {
+          const line = buffer.getLine(i)?.translateToString(true) || '';
+          const lineBytes = encoder.encode(line).length + 1;
+          if (totalBytes + lineBytes > maxBufferBytes && lines.length > 0) break;
+          lines.push(line);
+          totalBytes += lineBytes;
         }
-        initialBuffer = lines.join('\n');
+        initialBuffer = lines.reverse().join('\n');
       }
       // join('\n') 会在行间添加换行符，如果最后一行是空字符串，末尾不会有多余的 \n
       // 如果最后一行非空，则自然以该行结束。
