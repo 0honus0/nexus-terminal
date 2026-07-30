@@ -35,10 +35,12 @@ export const createFavoritePath = async (req: Request, res: Response): Promise<v
 /**
  * 处理获取所有收藏路径的请求 (支持排序)
  */
-export const getAllFavoritePaths = async (req: Request, res: Response): Promise<void> => {
-    const sortBy = req.query.sortBy as FavoritePathSortBy | undefined;
-    const validSortByOptions: FavoritePathSortBy[] = ['name', 'last_used_at'];
-    const validSortBy: FavoritePathSortBy = sortBy && validSortByOptions.includes(sortBy) ? sortBy : 'name';
+export const getAllFavoritePaths = async (
+    req: Request<object, object, object, { sortBy?: string }>,
+    res: Response
+): Promise<void> => {
+    const sortBy = req.query.sortBy;
+    const validSortBy: FavoritePathSortBy = sortBy === 'last_used_at' ? 'last_used_at' : 'name';
 
     try {
         const favoritePaths = await FavoritePathsService.getAllFavoritePaths(validSortBy);

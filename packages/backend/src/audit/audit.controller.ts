@@ -4,22 +4,31 @@ import { AuditLogActionType } from '../types/audit.types';
 
 const auditLogService = new AuditLogService();
 
+interface AuditLogQuery {
+    limit?: string;
+    offset?: string;
+    action_type?: AuditLogActionType;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+}
+
 export class AuditController {
     /**
      * 获取审计日志列表 (GET /api/v1/audit-logs)
      * 支持分页和过滤查询参数: limit, offset, actionType, startDate, endDate
      */
-    async getAuditLogs(req: Request, res: Response): Promise<void> {
+    async getAuditLogs(req: Request<object, object, object, AuditLogQuery>, res: Response): Promise<void> {
         try {
             // 解析查询参数
-            const limit = parseInt(req.query.limit as string || '50', 10);
-            const offset = parseInt(req.query.offset as string || '0', 10);
+            const limit = parseInt(req.query.limit || '50', 10);
+            const offset = parseInt(req.query.offset || '0', 10);
             // 修正：从 req.query 中读取 action_type (snake_case)
-            const actionType = req.query.action_type as AuditLogActionType | undefined;
-            const startDate = req.query.startDate ? parseInt(req.query.startDate as string, 10) : undefined;
-            const endDate = req.query.endDate ? parseInt(req.query.endDate as string, 10) : undefined;
+            const actionType = req.query.action_type;
+            const startDate = req.query.startDate ? parseInt(req.query.startDate, 10) : undefined;
+            const endDate = req.query.endDate ? parseInt(req.query.endDate, 10) : undefined;
             // 解析 searchTerm 参数
-            const searchTerm = req.query.search as string | undefined;
+            const searchTerm = req.query.search;
 
 
             // 输入验证 (基本)

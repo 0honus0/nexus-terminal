@@ -327,9 +327,12 @@ export const updateRemoteHtmlPresetsRepositoryUrlController = async (req: Reques
 };
 
 // GET /api/v1/appearance/html-presets/remote/list
-export const listRemoteHtmlPresetsController = async (req: Request, res: Response): Promise<void> => {
+export const listRemoteHtmlPresetsController = async (
+    req: Request<object, object, object, { repoUrl?: string }>,
+    res: Response
+): Promise<void> => {
     try {
-        const repoUrl = req.query.repoUrl as string | undefined;
+        const repoUrl = req.query.repoUrl;
         const presets = await appearanceService.listRemoteHtmlPresets(repoUrl);
         res.status(200).json(presets);
     } catch (error: any) {
@@ -338,9 +341,12 @@ export const listRemoteHtmlPresetsController = async (req: Request, res: Respons
 };
 
 // GET /api/v1/appearance/html-presets/remote/content
-export const getRemoteHtmlPresetContentController = async (req: Request, res: Response): Promise<void> => {
+export const getRemoteHtmlPresetContentController = async (
+    req: Request<object, object, object, { fileUrl?: string }>,
+    res: Response
+): Promise<void> => {
     try {
-        const fileUrl = req.query.fileUrl as string;
+        const fileUrl = req.query.fileUrl;
         if (!fileUrl) {
             res.status(400).json({ message: 'fileUrl 查询参数不能为空' });
             return;

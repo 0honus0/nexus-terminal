@@ -947,8 +947,11 @@ export const getPublicCaptchaConfig = async (req: Request, res: Response): Promi
  * 或者特定用户是否配置了 Passkey (GET /api/v1/auth/passkey/has-configured?username=xxx)
  * 公开访问，用于登录页面判断是否显示 Passkey 登录按钮。
  */
-export const checkHasPasskeys = async (req: Request, res: Response): Promise<void> => {
-    const username = req.query.username as string | undefined;
+export const checkHasPasskeys = async (
+    req: Request<object, object, object, { username?: string }>,
+    res: Response
+): Promise<void> => {
+    const username = req.query.username;
     try {
         const hasPasskeys = await passkeyService.hasPasskeysConfigured(username);
         res.status(200).json({ hasPasskeys });

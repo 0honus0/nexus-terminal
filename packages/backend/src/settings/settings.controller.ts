@@ -277,10 +277,13 @@ export const settingsController = {
  /**
   * 获取 IP 黑名单列表 (分页)
    */
-  async getIpBlacklist(req: Request, res: Response): Promise<void> {
+  async getIpBlacklist(
+    req: Request<object, object, object, { limit?: string; offset?: string }>,
+    res: Response
+  ): Promise<void> {
     try {
-      const limit = parseInt(req.query.limit as string || '50', 10);
-      const offset = parseInt(req.query.offset as string || '0', 10);
+      const limit = parseInt(req.query.limit || '50', 10);
+      const offset = parseInt(req.query.offset || '0', 10);
       const result = await ipBlacklistService.getBlacklist(limit, offset);
       res.json(result);
     } catch (error: any) {

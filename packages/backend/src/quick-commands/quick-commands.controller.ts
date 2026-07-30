@@ -51,8 +51,11 @@ export const addQuickCommand = async (req: Request, res: Response): Promise<void
 /**
  * 处理获取所有快捷指令的请求 (支持排序)
  */
-export const getAllQuickCommands = async (req: Request, res: Response): Promise<void> => {
-    const sortBy = req.query.sortBy as QuickCommandSortBy | undefined;
+export const getAllQuickCommands = async (
+    req: Request<object, object, object, { sortBy?: string }>,
+    res: Response
+): Promise<void> => {
+    const sortBy = req.query.sortBy;
     // 验证 sortBy 参数
     const validSortBy: QuickCommandSortBy = (sortBy === 'name' || sortBy === 'usage_count') ? sortBy : 'name';
 

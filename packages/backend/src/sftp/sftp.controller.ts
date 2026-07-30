@@ -118,14 +118,24 @@ const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<b
     }
     return Boolean(state.sftp);
 };
+
+interface SftpDownloadQuery {
+    connectionId?: string;
+    sessionId?: string;
+    remotePath?: string;
+}
+
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
  */
-export const downloadFile = async (req: Request, res: Response): Promise<void> => {
+export const downloadFile = async (
+    req: Request<object, object, object, SftpDownloadQuery>,
+    res: Response
+): Promise<void> => {
     const userId = req.session.userId;
-    const connectionId = req.query.connectionId as string; // 从查询参数获取
-    const requestedSessionId = req.query.sessionId as string | undefined;
-    const remotePath = req.query.remotePath as string;   // 从查询参数获取
+    const connectionId = req.query.connectionId;
+    const requestedSessionId = req.query.sessionId;
+    const remotePath = req.query.remotePath;
 
     // 参数验证
     if (!userId) {
@@ -237,11 +247,14 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
 /**
  * 处理文件夹下载请求 (GET /api/v1/sftp/download-directory)
  */
-export const downloadDirectory = async (req: Request, res: Response): Promise<void> => {
+export const downloadDirectory = async (
+    req: Request<object, object, object, SftpDownloadQuery>,
+    res: Response
+): Promise<void> => {
     const userId = req.session.userId;
-    const connectionId = req.query.connectionId as string; // 从查询参数获取
-    const requestedSessionId = req.query.sessionId as string | undefined;
-    const remotePath = req.query.remotePath as string;   // 从查询参数获取
+    const connectionId = req.query.connectionId;
+    const requestedSessionId = req.query.sessionId;
+    const remotePath = req.query.remotePath;
 
     // 参数验证
     if (!userId) {
