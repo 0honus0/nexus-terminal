@@ -14,9 +14,6 @@ import type {
   AuthenticatorTransportFuture,
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
-  // The actual type for verification.registrationInfo is RegistrationInfo within @simplewebauthn/server
-  // and for verification.authenticationInfo is AuthenticationInfo.
-  // We will rely on TypeScript's inference from the VerifiedRegistrationResponse/VerifiedAuthenticationResponse types.
 } from '@simplewebauthn/server';
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository, User } from '../user/user.repository';
@@ -112,18 +109,14 @@ export class PasskeyService {
         throw new Error('User not found for the provided handle.');
     }
 
-    // The actual WebAuthn response is nested within the received object
-    const actualRegistrationResponse = (registrationResponseJSON as any).registrationResponse;
-
-    // Add a check for the presence of credential ID before calling the library
-    if (!actualRegistrationResponse || !actualRegistrationResponse.id) {
-      console.error('Missing credential ID in actualRegistrationResponse from client:', registrationResponseJSON);
+    if (!registrationResponseJSON.id) {
+      console.error('Missing credential ID in registration response from client:', registrationResponseJSON);
       throw new Error('Registration failed: Missing or malformed credential ID from client.');
     }
 
     const rpConfig = this.resolveRpConfig(requestOrigin);
     const verifyOpts: VerifyRegistrationResponseOpts = {
-      response: actualRegistrationResponse, // Use the nested object
+      response: registrationResponseJSON,
       expectedChallenge,
       expectedOrigin: rpConfig.rpOrigin,
       expectedRPID: rpConfig.rpId,
@@ -133,33 +126,17 @@ export class PasskeyService {
     const verification = await verifyRegistrationResponse(verifyOpts);
 
     if (verification.verified && verification.registrationInfo) {
-      const regInfo = verification.registrationInfo; 
+      const { credential, credentialBackedUp } = verification.registrationInfo;
       
-      // Based on the logs, credentialPublicKey, credentialID, counter, and transports
-      // are nested within regInfo.credential.
-      // credentialBackedUp is at the top level of regInfo.
-      const credentialDetails = (regInfo as any).credential;
-      const credentialBackedUp = (regInfo as any).credentialBackedUp; // This seems to be at the top level
-
-      if (!credentialDetails || typeof credentialDetails.publicKey !== 'object' || typeof credentialDetails.id !== 'string' || typeof credentialDetails.counter !== 'number') {
-        console.error('Verification successful, but registrationInfo.credential structure is unexpected or missing:', regInfo);
-        throw new Error('Failed to process registration info due to unexpected credential structure.');
-      }
-
-      const credentialPublicKey = credentialDetails.publicKey;
-      const credentialID = credentialDetails.id;
-      const counter = credentialDetails.counter;
-      const transports = credentialDetails.transports; // This might be undefined, handle appropriately
-      
-      const publicKeyBase64 = Buffer.from(credentialPublicKey).toString('base64');
+      const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
 
       const newPasskeyEntry: NewPasskey = {
         user_id: user.id,
-        credential_id: credentialID,
+        credential_id: credential.id,
         public_key: publicKeyBase64,
-        counter: counter,
-        transports: transports ? JSON.stringify(transports) : null,
-        backed_up: !!credentialBackedUp,
+        counter: credential.counter,
+        transports: credential.transports ? JSON.stringify(credential.transports) : null,
+        backed_up: credentialBackedUp,
       };
       return { ...verification, newPasskeyToSave: newPasskeyEntry };
     }
@@ -206,8 +183,8 @@ export class PasskeyService {
         if (authenticatorDataBytes.length < 37) {
           // console.warn(`[PasskeyService] WARNING: Decoded authenticatorData length (${authenticatorDataBytes.length} bytes) is less than the expected minimum of 37 bytes. This may lead to CBOR parsing errors and subsequent failures (e.g., 'cannot read counter').`);
         }
-      } catch (e: any) {
-        console.error('[PasskeyService] Error decoding authenticatorData from client response:', e.message);
+      } catch (error: unknown) {
+        console.error('[PasskeyService] Error decoding authenticatorData from client response:', error instanceof Error ? error.message : String(error));
         // Potentially re-throw or handle as a critical error, as this is unexpected.
       }
     } else {
@@ -226,57 +203,40 @@ export class PasskeyService {
       throw new Error('Authentication failed. Passkey not found.');
     }
 
-    let authenticatorCredentialID: Uint8Array;
-    try {
-        authenticatorCredentialID = base64UrlToUint8Array(passkey.credential_id);
-    } catch (e: any) {
-        console.error('[PasskeyService] Error decoding credential_id to Uint8Array:', passkey.credential_id, e.message);
-        throw new Error('Failed to decode credential_id.');
-    }
-
-    let authenticatorPublicKey: Uint8Array; // Changed type from Buffer to Uint8Array
+    let authenticatorPublicKey: Uint8Array<ArrayBuffer>;
     try {
         const pkBuffer = Buffer.from(passkey.public_key, 'base64');
-        // Ensure it's a plain Uint8Array instance
-        authenticatorPublicKey = new Uint8Array(pkBuffer.buffer, pkBuffer.byteOffset, pkBuffer.byteLength);
-    } catch (e: any) {
-        console.error('[PasskeyService] Error decoding public_key to Uint8Array:', passkey.public_key, e.message);
+        authenticatorPublicKey = Uint8Array.from(pkBuffer);
+    } catch (error: unknown) {
+        console.error('[PasskeyService] Error decoding public_key to Uint8Array:', passkey.public_key, error instanceof Error ? error.message : String(error));
         throw new Error('Failed to decode public_key.');
     }
     
     let authenticatorTransports: AuthenticatorTransportFuture[] | undefined;
     try {
-        authenticatorTransports = passkey.transports ? JSON.parse(passkey.transports) as AuthenticatorTransportFuture[] : undefined;
-    } catch (e: any) {
-        console.error('[PasskeyService] Error parsing transports JSON:', passkey.transports, e.message);
+        authenticatorTransports = passkey.transports ? JSON.parse(passkey.transports) : undefined;
+    } catch (error: unknown) {
+        console.error('[PasskeyService] Error parsing transports JSON:', passkey.transports, error instanceof Error ? error.message : String(error));
         authenticatorTransports = undefined;
     }
 
-    // This object structure should match what @simplewebauthn/server expects for its `credential` option parameter.
-    // Specifically, it expects `id`, `publicKey`, and `counter`.
-    const credentialObjectForLibrary = {
-      id: authenticatorCredentialID, // Renamed from credentialID
-      publicKey: authenticatorPublicKey, // Renamed from credentialPublicKey
+    const credential = {
+      id: passkey.credential_id,
+      publicKey: authenticatorPublicKey,
       counter: passkey.counter,
       transports: authenticatorTransports,
-      credentialBackedUp: !!passkey.backed_up,
-      credentialDeviceType: (passkey.backed_up ? 'multiDevice' : 'singleDevice') as 'multiDevice' | 'singleDevice',
     };
 
-    // Reverting to 'any' for verifyOpts due to issues with the library's
-    // type definitions for VerifyAuthenticationResponseOpts not recognizing 'authenticator' key.
-    // This aligns with the original code's approach and TODO comment.
     const rpConfig = this.resolveRpConfig(requestOrigin);
-    const verifyOpts: any = {
+    const verifyOpts: VerifyAuthenticationResponseOpts = {
       response: authenticationResponseJSON,
       expectedChallenge,
       expectedOrigin: rpConfig.rpOrigin,
       expectedRPID: rpConfig.rpId,
-      credential: credentialObjectForLibrary, // Renamed from authenticator to credential
+      credential,
       requireUserVerification: true,
     };
 
-    // Call without 'as VerifyAuthenticationResponseOpts' since verifyOpts is 'any'
     const verification = await verifyAuthenticationResponse(verifyOpts);
 
     if (verification.verified && verification.authenticationInfo) {

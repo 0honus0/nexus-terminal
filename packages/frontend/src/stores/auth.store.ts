@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia';
-import apiClient from '../utils/apiClient'; 
+import apiClient from '../utils/apiClient';
+import type {
+    AuthenticationResponseJSON,
+    PublicKeyCredentialCreationOptionsJSON,
+    RegistrationResponseJSON,
+} from '@simplewebauthn/browser';
 import router from '../router'; 
 import { setLocale } from '../i18n'; 
 
@@ -353,7 +358,7 @@ export const useAuthStore = defineStore('auth', {
         },
 
         // --- Passkey Actions ---
-        async loginWithPasskey(username: string, assertionResponse: any) {
+        async loginWithPasskey(username: string, assertionResponse: AuthenticationResponseJSON) {
             this.isLoading = true;
             this.error = null;
             this.loginRequires2FA = false; // Passkey login bypasses traditional 2FA
@@ -387,7 +392,7 @@ export const useAuthStore = defineStore('auth', {
             this.isLoading = true;
             this.error = null;
             try {
-                const response = await apiClient.post('/auth/passkey/registration-options', { username });
+                const response = await apiClient.post<PublicKeyCredentialCreationOptionsJSON>('/auth/passkey/registration-options', { username });
                 return response.data; // Returns FIDO2 creation options
             } catch (err: any) {
                 console.error('获取 Passkey 注册选项失败:', err);
@@ -398,7 +403,7 @@ export const useAuthStore = defineStore('auth', {
             }
         },
 
-        async registerPasskey(username: string, registrationResponse: any) {
+        async registerPasskey(username: string, registrationResponse: RegistrationResponseJSON) {
             this.isLoading = true;
             this.error = null;
             try {
