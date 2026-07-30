@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+
+**/node_modules
+**/dist
+**/.vite
+*.tsbuildinfo
+
+data
+packages/backend/data
+dist-scripts
+
+logs
+*.log
+npm-debug.log*
