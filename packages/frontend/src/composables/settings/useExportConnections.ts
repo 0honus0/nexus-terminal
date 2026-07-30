@@ -20,8 +20,9 @@ export function useExportConnections() {
       });
 
       let filename = 'nexus_connections_export.zip';
-      const disposition = response.headers['content-disposition'];
-      if (disposition && disposition.includes('attachment')) {
+      const dispositionHeader = response.headers['content-disposition'];
+      const disposition = typeof dispositionHeader === 'string' ? dispositionHeader : undefined;
+      if (disposition?.includes('attachment')) {
         const filenameRegex = /filename[^;=\n]*=(?:(['"])(.*?)\1|([^;\n]*))/;
         const matches = filenameRegex.exec(disposition);
         if (matches != null && (matches[2] || matches[3])) {
@@ -29,7 +30,9 @@ export function useExportConnections() {
         }
       }
 
-      const blob = new Blob([response.data], { type: response.headers['content-type'] || 'application/zip' });
+      const contentTypeHeader = response.headers['content-type'];
+      const contentType = typeof contentTypeHeader === 'string' ? contentTypeHeader : 'application/zip';
+      const blob = new Blob([response.data], { type: contentType });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type PropType, ref, watch, defineExpose, onMounted, onBeforeUnmount, nextTick } from 'vue'; // 添加 nextTick
+import { computed, type PropType, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'; // 添加 nextTick
 import { useI18n } from 'vue-i18n';
 import MonacoEditor from './MonacoEditor.vue'; 
 import FileEditorTabs from './FileEditorTabs.vue';
@@ -516,4 +516,3 @@ const handleKeyDown = (event: KeyboardEvent) => {
     text-align: center;
 }
 </style>
-

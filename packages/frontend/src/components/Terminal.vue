@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
-import { Terminal, ITerminalAddon, IDisposable } from 'xterm';
+import { Terminal, type ITerminalAddon, type IDisposable } from '@xterm/xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useSessionStore } from '../stores/session.store'; 
 import { storeToRefs } from 'pinia';
 import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from 'xterm-addon-web-links';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
-import 'xterm/css/xterm.css';
+import '@xterm/xterm/css/xterm.css';
 import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // +++ Import subscriber and off
 
 
