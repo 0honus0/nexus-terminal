@@ -33,6 +33,7 @@ import { handleRdpProxyConnection } from './handlers/rdp.handler';
 import {
     handleSshConnect,
     handleSshInput,
+    handleSshExecSilent,
     handleSshResize,
     handleSshResumeSuccess
 } from './handlers/ssh.handler';
@@ -89,6 +90,9 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                             break;
                         case 'ssh:input':
                             handleSshInput(ws, payload);
+                            break;
+                        case 'ssh:exec_silent':
+                            handleSshExecSilent(ws, payload, requestId);
                             break;
                         case 'ssh:resize':
                             handleSshResize(ws, payload);

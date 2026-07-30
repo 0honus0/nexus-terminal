@@ -153,6 +153,8 @@ const clipboardSourcePaths = ref<string[]>([]); // 存储源完整路径
 const clipboardSourceBaseDir = ref<string>(''); // 存储源目录
 
 const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会被 store 覆盖
+const isSyncingPathFromTerminal = ref(false);
+let silentExecCleanup: (() => void) | null = null;
 // --- 键盘导航状态 (移至 useFileManagerKeyboardNavigation) ---
 // const selectedIndex = ref<number>(-1);
 
@@ -1266,6 +1268,8 @@ onBeforeUnmount(() => {
  }
  unregisterPathFocusAction = null;
  document.removeEventListener('click', handleClickOutsidePathInput);
+ silentExecCleanup?.();
+ silentExecCleanup = null;
  sessionStore.removeSftpManager(props.sessionId, props.instanceId);
 });
 
@@ -1568,6 +1572,48 @@ const sendCdCommandToTerminal = () => {
   }
 };
 
+const syncPathFromTerminal = () => {
+  if (!currentSftpManager.value || !props.wsDeps.isConnected.value || isSyncingPathFromTerminal.value) return;
+
+  const requestId = generateRequestId();
+  const unregisterResult = props.wsDeps.onMessage('ssh:exec_silent:result', (payload, message) => {
+    if (message.requestId !== requestId) return;
+    finish();
+    const output = typeof payload?.output === 'string' ? payload.output.replace(/\r/g, '') : '';
+    const path = output.split('\n').map((line: string) => line.trim()).find((line: string) => line.startsWith('/'));
+    if (path) {
+      currentSftpManager.value?.loadDirectory(path);
+    } else {
+      uiNotificationsStore.showError(t('fileManager.errors.pathReadFailed', 'Failed to read terminal path.'));
+    }
+  });
+  const unregisterError = props.wsDeps.onMessage('ssh:exec_silent:error', (payload, message) => {
+    if (message.requestId !== requestId) return;
+    finish();
+    uiNotificationsStore.showError(payload?.error || t('fileManager.errors.pathReadFailed', 'Failed to read terminal path.'));
+  });
+  const timeout = window.setTimeout(() => {
+    finish();
+    uiNotificationsStore.showError(t('fileManager.errors.pathReadTimeout', 'Timed out while reading terminal path.'));
+  }, 6500);
+  const finish = () => {
+    unregisterResult();
+    unregisterError();
+    window.clearTimeout(timeout);
+    isSyncingPathFromTerminal.value = false;
+    silentExecCleanup = null;
+  };
+
+  silentExecCleanup?.();
+  silentExecCleanup = finish;
+  isSyncingPathFromTerminal.value = true;
+  props.wsDeps.sendMessage({
+    type: 'ssh:exec_silent',
+    requestId,
+    payload: { action: 'pwd', timeoutMs: 5000 },
+  });
+};
+
 
 // --- 打开弹窗编辑器的方法 ---
 const openPopupEditor = () => {
@@ -1666,6 +1712,14 @@ const handleOpenEditorClick = () => {
                 :title="t('fileManager.actions.cdToTerminal', 'Change terminal directory to current path')"
               >
                 <i class="fas fa-terminal text-base"></i>
+              </button>
+              <button
+                class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                @click.stop="syncPathFromTerminal"
+                :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath || isSyncingPathFromTerminal"
+                :title="t('fileManager.actions.syncFromTerminalPath', 'Sync file manager to terminal directory')"
+              >
+                <i :class="['fas', isSyncingPathFromTerminal ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-base']"></i>
               </button>
               <!-- 刷新按钮 -->
               <button

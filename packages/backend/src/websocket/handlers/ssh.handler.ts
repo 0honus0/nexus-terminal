@@ -8,6 +8,46 @@ import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-stor
 import { startDockerStatusPolling } from './docker.handler';
 import WebSocket from 'ws';
 
+const encodeForPosixPrintf = (value: string): string =>
+    Array.from(value)
+        .map(char => `\\${char.charCodeAt(0).toString(8).padStart(3, '0')}`)
+        .join('');
+
+const consumeSilentExecOutput = (state: ClientState, chunk: string): string => {
+    const pending = state.silentExec;
+    if (!pending) return chunk;
+
+    pending.buffer += chunk;
+    const startIndex = pending.buffer.indexOf(pending.startMarker);
+    if (startIndex === -1) {
+        // 请求期间的命令回显也应隐藏；只保留足够长度用于跨 chunk 匹配标记。
+        const keep = Math.max(pending.startMarker.length - 1, 0);
+        if (pending.buffer.length > keep) pending.buffer = pending.buffer.slice(-keep);
+        return '';
+    }
+
+    const outputStart = startIndex + pending.startMarker.length;
+    const endIndex = pending.buffer.indexOf(pending.endMarker, outputStart);
+    if (endIndex === -1) return '';
+
+    const output = pending.buffer
+        .slice(outputStart, endIndex)
+        .replace(/^\r?\n/, '')
+        .replace(/\r?\n$/, '');
+    const trailingOutput = pending.buffer.slice(endIndex + pending.endMarker.length);
+    clearTimeout(pending.timeout);
+    state.silentExec = undefined;
+
+    if (state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({
+            type: 'ssh:exec_silent:result',
+            requestId: pending.requestId,
+            payload: { output },
+        }));
+    }
+    return trailingOutput;
+};
+
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
     request: Request,
@@ -100,10 +140,10 @@ export async function handleSshConnect(
                 newState.isShellReady = true;
 
                 stream.on('data', (data: Buffer) => {
-                    if (ws.readyState === WebSocket.OPEN) {
+                    const visibleOutput = consumeSilentExecOutput(newState, data.toString('utf8'));
+                    if (visibleOutput && ws.readyState === WebSocket.OPEN) {
                         // 确保数据以 UTF-8 编码转换为 Base64
-                        const utf8Data = data.toString('utf8');
-                        ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(utf8Data, 'utf8').toString('base64'), encoding: 'base64' }));
+                        ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(visibleOutput, 'utf8').toString('base64'), encoding: 'base64' }));
                     }
                     // 如果会话被标记为待挂起，则将输出写入日志
                     const currentState = clientStates.get(newSessionId); // 获取最新的状态
@@ -224,6 +264,45 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
     } else if (!state.isShellReady) {
         console.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
     }
+}
+
+export function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: any, requestId?: string): void {
+    const sessionId = ws.sessionId;
+    const state = sessionId ? clientStates.get(sessionId) : undefined;
+    const fail = (error: string) => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ssh:exec_silent:error', requestId, payload: { error } }));
+        }
+    };
+
+    if (!requestId || payload?.action !== 'pwd') {
+        fail('无效的静默命令请求。');
+        return;
+    }
+    if (!state?.sshShellStream || !state.isShellReady) {
+        fail('SSH Shell 尚未就绪。');
+        return;
+    }
+    if (state.silentExec) {
+        fail('已有静默命令正在执行。');
+        return;
+    }
+
+    const markerId = requestId.replace(/[^a-zA-Z0-9]/g, '').slice(-24);
+    const startMarker = `__NEXUS_SILENT_BEGIN_${markerId}__`;
+    const endMarker = `__NEXUS_SILENT_END_${markerId}__`;
+    const timeoutMs = Math.min(Math.max(Number(payload?.timeoutMs) || 5000, 1000), 10000);
+    const timeout = setTimeout(() => {
+        if (state.silentExec?.requestId !== requestId) return;
+        state.silentExec = undefined;
+        fail('读取终端路径超时。');
+    }, timeoutMs);
+
+    state.silentExec = { requestId, startMarker, endMarker, buffer: '', timeout };
+    const encodedStart = encodeForPosixPrintf(startMarker);
+    const encodedEnd = encodeForPosixPrintf(endMarker);
+    const command = `stty -echo 2>/dev/null; printf '\\n${encodedStart}\\n'; pwd; printf '\\n${encodedEnd}\\n'; stty echo 2>/dev/null; printf '\\n'\r`;
+    state.sshShellStream.write(command);
 }
 
 export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void {
