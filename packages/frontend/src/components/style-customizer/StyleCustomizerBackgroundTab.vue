@@ -5,12 +5,14 @@ import { useAppearanceStore } from '../../stores/appearance.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { releaseRepositoryUrl } from '../../config/release';
 
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
 const appearanceStore = useAppearanceStore();
 const notificationsStore = useUiNotificationsStore();
+const defaultHtmlPresetRepositoryUrl = `${releaseRepositoryUrl}/tree/main/doc/custom_html_theme`;
 
 // Existing state for background image and overlay
 const {
@@ -73,7 +75,7 @@ const initializeEditableState = () => {
   // localTerminalCustomHTML.value = terminalCustomHTML.value || ''; // Replaced
   uploadError.value = null;
   currentActiveTab.value = activeHtmlPresetTab.value; // Sync with store state
-  localRemoteHtmlPresetsRepositoryUrl.value = remoteHtmlPresetsRepositoryUrl.value || 'https://github.com/Heavrnl/nexus-terminal/tree/main/doc/custom_html_theme';
+  localRemoteHtmlPresetsRepositoryUrl.value = remoteHtmlPresetsRepositoryUrl.value || defaultHtmlPresetRepositoryUrl;
 };
 
 onMounted(async () => {
@@ -592,7 +594,7 @@ const filteredRemoteHtmlPresets = computed(() => {
             id="remoteRepoUrl"
             v-model="localRemoteHtmlPresetsRepositoryUrl"
             class="flex-grow p-2 border border-border rounded bg-input text-foreground focus:ring-primary focus:border-primary"
-            :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder', 'https://github.com/Heavrnl/nexus-terminal/tree/main/doc/custom_html_theme')"
+            :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder', defaultHtmlPresetRepositoryUrl)"
           />
           <button @click="handleSaveRemoteRepositoryUrl" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap flex-shrink-0">
             {{ t('common.save') }}

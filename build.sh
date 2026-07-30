@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly IMAGE_PREFIX="${NEXUS_IMAGE_PREFIX:-nexus-terminal}"
+readonly IMAGE_PREFIX="${NEXUS_IMAGE_PREFIX:-ghcr.io/0honus0/nexus-terminal}"
 readonly IMAGE_TAG="${NEXUS_IMAGE_TAG:-latest}"
 
 usage() {
@@ -19,7 +19,7 @@ Commands:
   docker-save  Build and export the selected Docker images as tar archives.
 
 Environment variables:
-  NEXUS_IMAGE_PREFIX  Docker image prefix (default: nexus-terminal)
+  NEXUS_IMAGE_PREFIX  Docker image prefix (default: ghcr.io/0honus0/nexus-terminal)
   NEXUS_IMAGE_TAG     Docker image tag (default: latest)
 
 Examples:

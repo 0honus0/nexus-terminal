@@ -1,7 +1,7 @@
 
 services:
   frontend:
-    image: heavrnl/nexus-terminal-frontend:latest
+    image: ghcr.io/0honus0/nexus-terminal-frontend:latest
     container_name: nexus-terminal-frontend
     ports:
       - "18111:80"
@@ -12,7 +12,7 @@ services:
       - nexus-terminal-network
 
   backend:
-    image: heavrnl/nexus-terminal-backend:latest
+    image: ghcr.io/0honus0/nexus-terminal-backend:latest
     container_name: nexus-terminal-backend
     env_file:
       - .env
@@ -26,7 +26,7 @@ services:
       - nexus-terminal-network
 
   # remote-gateway:
-  #   image: heavrnl/nexus-terminal-remote-gateway:latest
+  #   image: ghcr.io/0honus0/nexus-terminal-remote-gateway:latest
   #   container_name: nexus-terminal-remote-gateway
   #   environment:
   #     GUACD_HOST: guacd
