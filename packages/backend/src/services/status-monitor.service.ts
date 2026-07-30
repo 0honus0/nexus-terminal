@@ -39,7 +39,10 @@ const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: nu
 export class StatusMonitorService {
     private clientStates: Map<string, ClientState>; // 使用导入的 ClientState
     // 用于存储上一次的 CPU 统计信息以计算使用率
-    private previousCpuStats = new Map<string, { total: number, idle: number, timestamp: number }>();
+    private previousCpuStats = new Map<string, { total: number, idle: number, timestamp: number, lastPercent: number }>();
+    private fetchInFlight = new Set<string>();
+    private bootstrapSamplePending = new Set<string>();
+    private bootstrapTimers = new Map<string, NodeJS.Timeout>();
 
     constructor(clientStates: Map<string, ClientState>) {
         this.clientStates = clientStates;
@@ -69,9 +72,10 @@ export class StatusMonitorService {
              intervalMs = 3000; // 出错时回退到 3 秒
          }
 
-         // 移除立即执行，让 setInterval 负责第一次调用，给连接更多准备时间
+         this.bootstrapSamplePending.add(sessionId);
+         void this.fetchAndSendServerStatus(sessionId);
          state.statusIntervalId = setInterval(() => {
-             this.fetchAndSendServerStatus(sessionId);
+             void this.fetchAndSendServerStatus(sessionId);
          }, intervalMs); // --- 使用获取到的间隔 ---
     }
 
@@ -88,6 +92,11 @@ export class StatusMonitorService {
             previousNetStats.delete(sessionId); // 清理网络统计缓存
             this.previousCpuStats.delete(sessionId); // 清理 CPU 统计缓存
         }
+        const bootstrapTimer = this.bootstrapTimers.get(sessionId);
+        if (bootstrapTimer) clearTimeout(bootstrapTimer);
+        this.bootstrapTimers.delete(sessionId);
+        this.bootstrapSamplePending.delete(sessionId);
+        this.fetchInFlight.delete(sessionId);
     }
 
     /**
@@ -95,20 +104,38 @@ export class StatusMonitorService {
      * @param sessionId 会话 ID
      */
     private async fetchAndSendServerStatus(sessionId: string): Promise<void> {
+        if (this.fetchInFlight.has(sessionId)) {
+            return;
+        }
         const state = this.clientStates.get(sessionId);
         if (!state || !state.sshClient || state.ws.readyState !== WebSocket.OPEN) {
             //console.warn(`[StatusMonitor] 无法获取会话 ${sessionId} 的状态，停止轮询。原因：状态无效、SSH断开或WS关闭。`);
             this.stopStatusPolling(sessionId);
             return;
         }
+        this.fetchInFlight.add(sessionId);
         try {
             // 传递 sessionId 给 fetchServerStatus 以便查找 previousNetStats
             const status = await this.fetchServerStatus(state.sshClient, sessionId);
-            state.ws.send(JSON.stringify({ type: 'status_update', payload: { connectionId: state.dbConnectionId, status } }));
+            if (state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'status_update', payload: { connectionId: state.dbConnectionId, status } }));
+            }
+
+            if (this.bootstrapSamplePending.delete(sessionId)) {
+                const timer = setTimeout(() => {
+                    this.bootstrapTimers.delete(sessionId);
+                    void this.fetchAndSendServerStatus(sessionId);
+                }, 500);
+                this.bootstrapTimers.set(sessionId, timer);
+            }
         } catch (error: any) {
             // --- 移除 console.warn ---
             // console.warn(`[StatusMonitor] 获取会话 ${sessionId} 服务器状态失败:`, error);
-            state.ws.send(JSON.stringify({ type: 'status_error', payload: { connectionId: state.dbConnectionId, message: `获取状态失败: ${error.message}` } }));
+            if (state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'status:error', payload: { connectionId: state.dbConnectionId, message: `获取状态失败: ${error.message}` } }));
+            }
+        } finally {
+            this.fetchInFlight.delete(sessionId);
         }
     }
 
@@ -155,61 +182,8 @@ export class StatusMonitorService {
 
 
              try {
-                 let freeCommand = 'free -m';
-                 let isBusyBox = false;
-                 try {
-                     const busyboxCheck = await this.executeSshCommand(sshClient, 'busybox --help');
-                     if (busyboxCheck.includes('BusyBox')) {
-                         freeCommand = 'free';
-                         isBusyBox = true;
-                     }
-                 } catch (err) {
-                     // 如果检查失败，默认使用 free -m
-                 }
-                 const freeOutput = await this.executeSshCommand(sshClient, freeCommand);
-                 const lines = freeOutput.split('\n');
-                 const memLine = lines.find(line => line.startsWith('Mem:'));
-                 const swapLine = lines.find(line => line.startsWith('Swap:'));
-                 if (memLine) {
-                     const parts = memLine.split(/\s+/);
-                     if (parts.length >= 3) {
-                         let totalVal = parseInt(parts[1], 10);
-                         let usedVal = parseInt(parts[2], 10);
-
-                         if (isBusyBox) { 
-                             if (!isNaN(totalVal)) totalVal = Math.round(totalVal / 1024);
-                             if (!isNaN(usedVal)) usedVal = Math.round(usedVal / 1024);
-                         }
-
-                         if (!isNaN(totalVal) && !isNaN(usedVal)) {
-                             status.memTotal = totalVal;
-                             status.memUsed = usedVal;
-                             status.memPercent = totalVal > 0 ? parseFloat(((usedVal / totalVal) * 100).toFixed(1)) : 0;
-                         }
-                     }
-                 }
-                 if (swapLine) {
-                     const parts = swapLine.split(/\s+/);
-                     if (parts.length >= 3) {
-                         let totalVal = parseInt(parts[1], 10);
-                         let usedVal = parseInt(parts[2], 10);
-
-                         if (isBusyBox) {
-                             if (!isNaN(totalVal)) totalVal = Math.round(totalVal / 1024);
-                             if (!isNaN(usedVal)) usedVal = Math.round(usedVal / 1024);
-                         }
-
-                         if (!isNaN(totalVal) && !isNaN(usedVal)) {
-                             status.swapTotal = totalVal;
-                             status.swapUsed = usedVal;
-                             status.swapPercent = totalVal > 0 ? parseFloat(((usedVal / totalVal) * 100).toFixed(1)) : 0;
-                         }
-                     }
-                 } else {
-                     status.swapTotal = 0;
-                     status.swapUsed = 0;
-                     status.swapPercent = 0;
-                 }
+                 const meminfoOutput = await this.executeSshCommand(sshClient, 'cat /proc/meminfo');
+                 Object.assign(status, this.parseProcMeminfo(meminfoOutput));
              } catch (err) { /* 静默处理 */ }
 
 
@@ -274,24 +248,25 @@ export class StatusMonitorService {
                         const totalDiff = currentCpuTimes.total - prevCpuStats.total;
                         const idleDiff = currentCpuTimes.idle - prevCpuStats.idle;
                         const timeDiffMs = now - prevCpuStats.timestamp; // Time difference in ms
+                        let nextPercent = prevCpuStats.lastPercent;
 
                         // Ensure positive difference and minimal time gap (e.g., > 100ms) to avoid division by zero or erratic results
-                        if (totalDiff > 0 && timeDiffMs > 100) {
-                            const usageRatio = 1.0 - (idleDiff / totalDiff);
+                        if (totalDiff < 0 || idleDiff < 0) {
+                            // CPU counters can reset after reboot; keep the last value and use this sample as a new baseline.
+                            nextPercent = prevCpuStats.lastPercent;
+                        } else if (totalDiff > 0 && timeDiffMs > 100) {
+                            const safeIdleDiff = Math.min(idleDiff, totalDiff);
+                            const usageRatio = 1.0 - (safeIdleDiff / totalDiff);
                             // Clamp value between 0 and 100, format to 1 decimal place
-                            status.cpuPercent = parseFloat((Math.max(0, Math.min(100, usageRatio * 100))).toFixed(1));
-                        } else {
-                            // If totalDiff is not positive or time gap too small, report 0 or keep previous value?
-                            // Reporting 0 might be misleading if the system is actually busy but no change was detected in the short interval.
-                            // Let's keep the previous value if available, otherwise 0.
-                            status.cpuPercent = prevCpuStats?.total > 0 ? status.cpuPercent : 0; // Keep existing status.cpuPercent if valid prev exists, else 0
+                            nextPercent = parseFloat((Math.max(0, Math.min(100, usageRatio * 100))).toFixed(1));
                         }
+                        status.cpuPercent = nextPercent;
+                        this.previousCpuStats.set(sessionId, { ...currentCpuTimes, timestamp: now, lastPercent: nextPercent });
                     } else {
                         // First run or timestamp issue, report 0 as we can't calculate a rate
                         status.cpuPercent = 0;
+                        this.previousCpuStats.set(sessionId, { ...currentCpuTimes, timestamp: now, lastPercent: 0 });
                     }
-                    // Store current stats for the next iteration
-                    this.previousCpuStats.set(sessionId, { ...currentCpuTimes, timestamp: now });
                 } else {
                     // Failed to parse /proc/stat, set to undefined or keep previous? Let's use undefined.
                     status.cpuPercent = undefined;
@@ -439,7 +414,7 @@ export class StatusMonitorService {
       * @param sshClientToFind 要查找的 SSH 客户端实例
       * @returns string | undefined 找到的会话 ID 或 undefined
       */
-     private findSessionIdForClient(sshClientToFind: Client): string | undefined {
+    private findSessionIdForClient(sshClientToFind: Client): string | undefined {
          for (const [sessionId, state] of this.clientStates.entries()) {
              if (state.sshClient === sshClientToFind) {
                  return sessionId;
@@ -447,6 +422,44 @@ export class StatusMonitorService {
          }
          return undefined;
      }
+
+    /**
+     * Parse Linux memory counters directly so locale and the installed `free`
+     * implementation cannot change units or column meanings.
+     */
+    private parseProcMeminfo(output: string): Pick<ServerStatus, 'memTotal' | 'memUsed' | 'memPercent' | 'swapTotal' | 'swapUsed' | 'swapPercent'> {
+        const values = new Map<string, number>();
+        for (const line of output.split('\n')) {
+            const match = line.match(/^([A-Za-z_()]+):\s+(\d+)\s+kB\s*$/);
+            if (match) values.set(match[1], Number(match[2]));
+        }
+
+        const totalKb = values.get('MemTotal');
+        if (!totalKb || totalKb <= 0) {
+            throw new Error('/proc/meminfo 中缺少有效的 MemTotal');
+        }
+
+        const fallbackAvailableKb =
+            (values.get('MemFree') ?? 0)
+            + (values.get('Buffers') ?? 0)
+            + (values.get('Cached') ?? 0)
+            + (values.get('SReclaimable') ?? 0)
+            - (values.get('Shmem') ?? 0);
+        const availableKb = Math.max(0, Math.min(totalKb, values.get('MemAvailable') ?? fallbackAvailableKb));
+        const usedKb = totalKb - availableKb;
+        const swapTotalKb = values.get('SwapTotal') ?? 0;
+        const swapFreeKb = Math.max(0, Math.min(swapTotalKb, values.get('SwapFree') ?? 0));
+        const swapUsedKb = swapTotalKb - swapFreeKb;
+
+        return {
+            memTotal: Math.round(totalKb / 1024),
+            memUsed: Math.round(usedKb / 1024),
+            memPercent: parseFloat(((usedKb / totalKb) * 100).toFixed(1)),
+            swapTotal: Math.round(swapTotalKb / 1024),
+            swapUsed: Math.round(swapUsedKb / 1024),
+            swapPercent: swapTotalKb > 0 ? parseFloat(((swapUsedKb / swapTotalKb) * 100).toFixed(1)) : 0,
+        };
+    }
 
     /**
      * Parses the output of /proc/stat to get total and idle CPU times.
@@ -474,10 +487,12 @@ export class StatusMonitorService {
                 return null;
             }
 
-            const idle = fields[3]; // The 4th field (index 3) is idle time
+            // Linux reports iowait separately, but tools such as btop treat it as idle.
+            const idle = fields[3] + (Number.isNaN(fields[4]) ? 0 : (fields[4] ?? 0));
 
-            // Total time is the sum of all fields. Filter out NaN values just in case.
-            const total = fields.reduce((sum, value) => sum + (isNaN(value) ? 0 : value), 0);
+            // guest/guest_nice are already included in user/nice, so only sum
+            // user..steal (the first eight counters) to avoid double counting.
+            const total = fields.slice(0, 8).reduce((sum, value) => sum + (isNaN(value) ? 0 : value), 0);
 
             // Final check for NaN just to be safe
             if (isNaN(total) || isNaN(idle)) {
