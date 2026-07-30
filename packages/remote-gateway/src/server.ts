@@ -1,4 +1,3 @@
-// @ts-ignore - Still need this for the import as no types exist
 import GuacamoleLite from 'guacamole-lite';
 import express, { Request, Response } from 'express';
 import http from 'http';
@@ -6,12 +5,22 @@ import crypto from 'crypto';
 import cors from 'cors';
 
 // --- 配置 ---
-const REMOTE_GATEWAY_WS_PORT = process.env.REMOTE_GATEWAY_WS_PORT || 8080; // 统一端口，或按需分开
-const REMOTE_GATEWAY_API_PORT = process.env.REMOTE_GATEWAY_API_PORT || 9090;
+const REMOTE_GATEWAY_WS_PORT = Number.parseInt(process.env.REMOTE_GATEWAY_WS_PORT || '8080', 10);
+const REMOTE_GATEWAY_API_PORT = Number.parseInt(process.env.REMOTE_GATEWAY_API_PORT || '9090', 10);
 const GUACD_HOST = process.env.GUACD_HOST || 'localhost';
 const GUACD_PORT = parseInt(process.env.GUACD_PORT || '4822', 10);
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const MAIN_BACKEND_URL = process.env.MAIN_BACKEND_URL || 'http://localhost:3000';
+
+for (const [name, port] of [
+    ['REMOTE_GATEWAY_WS_PORT', REMOTE_GATEWAY_WS_PORT],
+    ['REMOTE_GATEWAY_API_PORT', REMOTE_GATEWAY_API_PORT],
+    ['GUACD_PORT', GUACD_PORT],
+] as const) {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error(`${name} 必须是 1 到 65535 之间的整数。`);
+    }
+}
 
 // --- 启动时生成内存加密密钥 ---
 console.log("[Remote Gateway] 正在为此会话生成新的内存加密密钥...");
@@ -51,31 +60,24 @@ const clientOptions = {
     connectionDefaultSettings: {},
 };
 
-let guacServer: any;
+let guacServer: GuacamoleLite | undefined;
 
 try {
     console.log(`[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`);
     guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions);
     console.log(`[Remote Gateway] GuacamoleLite 初始化成功。`);
 
-    if (guacServer.on) {
-        guacServer.on('error', (error: Error) => {
-            console.error(`[Remote Gateway] GuacamoleLite 服务器错误:`, error);
-        });
-        guacServer.on('connection', (client: any) => {
-            const clientId = client.id || '未知客户端ID';
-            console.log(`[Remote Gateway] Guacd 连接事件触发。客户端 ID: ${clientId}`);
-
-            if (client && typeof client.on === 'function') {
-                client.on('disconnect', (reason: string) => {
-                    console.log(`[Remote Gateway] Guacd 连接断开。客户端 ID: ${clientId}, 原因: ${reason || '未知'}`);
-                });
-                client.on('error', (err: Error) => {
-                     console.error(`[Remote Gateway] Guacd 客户端错误。客户端 ID: ${clientId}, 错误:`, err);
-                });
-            }
-        });
-   }
+    guacServer.on('open', (client) => {
+        const clientId = client.connectionId || '未知客户端ID';
+        console.log(`[Remote Gateway] Guacd 连接已建立。客户端 ID: ${clientId}, Guacamole ID: ${client.guacamoleConnectionId || '未知'}`);
+    });
+    guacServer.on('close', (client, error) => {
+        const clientId = client.connectionId || '未知客户端ID';
+        console.log(`[Remote Gateway] Guacd 连接已关闭。客户端 ID: ${clientId}, 原因: ${error?.message || '正常关闭'}`);
+    });
+    guacServer.on('error', (client, error) => {
+        console.error(`[Remote Gateway] GuacamoleLite 客户端错误。客户端 ID: ${client.connectionId || '未知客户端ID'}:`, error);
+    });
 } catch (error) {
    console.error(`[Remote Gateway] 初始化 GuacamoleLite 失败:`, error);
    process.exit(1);
@@ -119,9 +121,9 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         return;
     }
 
-    let settings: any = {
-        hostname: hostname as string,
-        port: port as string,
+    const settings: Record<string, string> = {
+        hostname: String(hostname),
+        port: String(port),
         width: String(width || '1024'),
         height: String(height || '768'),
     };
@@ -131,19 +133,19 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
             res.status(400).json({ error: 'RDP 连接缺少 username 或 password' });
             return;
         }
-        settings.username = username as string;
-        settings.password = password as string;
-        settings.security = security || 'any'; // RDP 特有，使用默认值 'any'
-        settings['ignore-cert'] = String(ignoreCert || 'true'); // RDP 特有
+        settings.username = String(username);
+        settings.password = String(password);
+        settings.security = String(security || 'any'); // RDP 特有，使用默认值 'any'
+        settings['ignore-cert'] = String(ignoreCert ?? true); // RDP 特有
         settings.dpi = String(dpi || '96'); // RDP 特有
     } else if (protocol === 'vnc') {
         if (typeof password === 'undefined') {
             res.status(400).json({ error: 'VNC 连接缺少 password' });
             return;
         }
-        settings.password = password as string;
+        settings.password = String(password);
         if (username) { // VNC 可选 username
-            settings.username = username as string;
+            settings.username = String(username);
         }
         // VNC 特有的其他参数可以根据需要从 connectionConfig 中获取并添加
         // 例如: settings['enable-audio'] = connectionConfig.enableAudio || 'false';
@@ -194,13 +196,12 @@ const gracefulShutdown = (signal: string) => {
     tryExit();
   });
 
-  if (typeof guacServer !== 'undefined' && guacServer && typeof guacServer.close === 'function') {
+  if (guacServer) {
     console.log("[Remote Gateway] 正在关闭 Guacamole 服务器...");
-    guacServer.close(() => {
-        console.log("[Remote Gateway] Guacamole 服务器已关闭。");
-        guacClosed = true;
-        tryExit();
-    });
+    guacServer.close();
+    console.log("[Remote Gateway] Guacamole 服务器已关闭。");
+    guacClosed = true;
+    tryExit();
   } else {
     console.log("[Remote Gateway] Guacamole 服务器未运行或不支持 close() 方法。");
     guacClosed = true;
