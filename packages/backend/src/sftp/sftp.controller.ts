@@ -12,6 +12,7 @@ import { SftpCompressRequestPayload, SftpDecompressRequestPayload, SftpCompressS
 export const downloadFile = async (req: Request, res: Response): Promise<void> => {
     const userId = req.session.userId;
     const connectionId = req.query.connectionId as string; // 从查询参数获取
+    const requestedSessionId = req.query.sessionId as string | undefined;
     const remotePath = req.query.remotePath as string;   // 从查询参数获取
 
     // 参数验证
@@ -36,7 +37,14 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
     }
 
     console.log(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
+    if (requestedSessionId) {
+        const exactState = clientStates.get(requestedSessionId);
+        if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId && exactState.sftp) {
+            targetState = exactState;
+        }
+    }
     for (const [sessionId, state] of clientStates.entries()) {
+        if (targetState) break;
         // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
         if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
             targetState = state;
@@ -119,6 +127,7 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
 export const downloadDirectory = async (req: Request, res: Response): Promise<void> => {
     const userId = req.session.userId;
     const connectionId = req.query.connectionId as string; // 从查询参数获取
+    const requestedSessionId = req.query.sessionId as string | undefined;
     const remotePath = req.query.remotePath as string;   // 从查询参数获取
 
     // 参数验证
@@ -143,7 +152,14 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
     }
 
     console.log(`SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
+    if (requestedSessionId) {
+        const exactState = clientStates.get(requestedSessionId);
+        if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId && exactState.sftp) {
+            targetState = exactState;
+        }
+    }
     for (const [sessionId, state] of clientStates.entries()) {
+        if (targetState) break;
         // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
         if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
             targetState = state;

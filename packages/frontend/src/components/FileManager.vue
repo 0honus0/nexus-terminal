@@ -770,7 +770,7 @@ const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileList
         }
 
         const downloadPath = currentSftpManager.value!.joinPath(currentSftpManager.value!.currentPath.value, item.filename);
-        const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&remotePath=${encodeURIComponent(downloadPath)}`;
+        const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(props.sessionId)}&remotePath=${encodeURIComponent(downloadPath)}`;
         console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`);
 
         // 为每个文件创建一个链接并点击
@@ -814,7 +814,7 @@ const triggerDownloadDirectory = (item: FileListItem) => {
 
     const directoryPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
     // 定义新的后端 API 端点 URL (稍后实现)
-    const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&remotePath=${encodeURIComponent(directoryPath)}`;
+    const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(props.sessionId)}&remotePath=${encodeURIComponent(directoryPath)}`;
 
     console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Attempting directory download for ${item.filename}: ${downloadUrl}`);
 
