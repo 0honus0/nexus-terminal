@@ -24,7 +24,7 @@ export const getAllProxies = async (req: Request, res: Response) => {
 
 // 获取单个代理配置 (不含敏感信息)
 export const getProxyById = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     try {
         const proxyId = parseInt(id, 10);
         if (isNaN(proxyId)) {
@@ -76,7 +76,7 @@ export const createProxy = async (req: Request, res: Response) => {
 
 // 更新代理配置
 export const updateProxy = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     try {
         const proxyId = parseInt(id, 10);
          if (isNaN(proxyId)) {
@@ -114,7 +114,7 @@ export const updateProxy = async (req: Request, res: Response) => {
 
 // 删除代理配置
 export const deleteProxy = async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     try {
          const proxyId = parseInt(id, 10);
          if (isNaN(proxyId)) {

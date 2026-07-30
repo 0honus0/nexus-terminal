@@ -2,29 +2,20 @@ FROM node:20 AS builder
 
 WORKDIR /app
 
-
-# Copy root package files
-COPY package.json package-lock.json ./
-
-# Copy workspace package.json files to ensure npm ci works correctly in monorepo
-COPY packages/backend/package.json ./packages/backend/
-COPY packages/frontend/package.json ./packages/frontend/
-COPY packages/remote-gateway/package.json ./packages/remote-gateway/
-
-# Install dependencies (using install instead of ci for potential armv7 compatibility issues)
-RUN npm install
+COPY packages/frontend/package.json packages/frontend/package-lock.json ./
+RUN npm ci
 
 
-COPY packages/frontend/src ./packages/frontend/src
-COPY packages/frontend/index.html ./packages/frontend/
-COPY packages/frontend/tsconfig.json ./packages/frontend/
-COPY packages/frontend/vite.config.ts ./packages/frontend/
-COPY packages/frontend/public ./packages/frontend/public/
+COPY packages/frontend/src ./src
+COPY packages/frontend/index.html ./
+COPY packages/frontend/tsconfig.json ./
+COPY packages/frontend/vite.config.ts ./
+COPY packages/frontend/public ./public
 
 # Copy the root .env file into the builder stage so Vite can read it during build
 COPY .env ./.env
 
-RUN npm run build --workspace=@nexus-terminal/frontend
+RUN npm run build
 
 
 FROM nginx:stable-alpine

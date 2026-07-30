@@ -69,7 +69,7 @@ export const getAllQuickCommands = async (req: Request, res: Response): Promise<
  * 处理更新快捷指令的请求
  */
 export const updateQuickCommand = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     // 从请求体中解构出 name, command, 以及可选的 tagIds 和 variables
     const { name, command, tagIds, variables } = req.body;
 
@@ -131,7 +131,7 @@ export const updateQuickCommand = async (req: Request, res: Response): Promise<v
  * 处理删除快捷指令的请求
  */
 export const deleteQuickCommand = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });
@@ -155,7 +155,7 @@ export const deleteQuickCommand = async (req: Request, res: Response): Promise<v
  * 处理增加快捷指令使用次数的请求
  */
 export const incrementUsage = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });

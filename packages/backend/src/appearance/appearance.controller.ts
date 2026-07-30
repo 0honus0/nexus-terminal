@@ -124,7 +124,7 @@ export const uploadTerminalBackgroundController = async (req: Request, res: Resp
  * 获取背景图片文件
  */
 export const getBackgroundFileController = async (req: Request, res: Response): Promise<void> => {
-    const filename = req.params.filename;
+    const filename = req.params.filename as string;
 
     // 基本安全检查，防止路径遍历等
     if (!filename || typeof filename !== 'string' || filename.includes('..') || filename.includes('/')) {
@@ -206,7 +206,7 @@ export const listLocalHtmlPresetsController = async (req: Request, res: Response
 // GET /api/v1/appearance/html-presets/local/:themeName
 export const getLocalHtmlPresetContentController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const themeName = req.params.themeName;
+        const themeName = req.params.themeName as string;
         let content: string | null = null;
         let found = false;
 
@@ -266,7 +266,7 @@ export const createLocalHtmlPresetController = async (req: Request, res: Respons
 // PUT /api/v1/appearance/html-presets/local/:themeName
 export const updateLocalHtmlPresetController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const themeName = req.params.themeName;
+        const themeName = req.params.themeName as string;
         const { content } = req.body;
         if (content === undefined) {
             res.status(400).json({ message: '主题内容不能为空' });
@@ -287,7 +287,7 @@ export const updateLocalHtmlPresetController = async (req: Request, res: Respons
 // DELETE /api/v1/appearance/html-presets/local/:themeName
 export const deleteLocalHtmlPresetController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const themeName = req.params.themeName;
+        const themeName = req.params.themeName as string;
         // "本地删除" 现在总是删除用户自定义主题
         await appearanceService.deleteUserCustomHtmlTheme(themeName);
         res.status(200).json({ message: '用户自定义 HTML 主题删除成功' });

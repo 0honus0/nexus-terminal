@@ -45,7 +45,7 @@ export const createSshKey = async (req: Request, res: Response): Promise<void> =
  */
 export const getDecryptedSshKey = async (req: Request, res: Response): Promise<void> => {
      try {
-         const keyId = parseInt(req.params.id, 10);
+         const keyId = parseInt(req.params.id as string, 10);
          if (isNaN(keyId)) {
              res.status(400).json({ message: '无效的密钥 ID。' });
              return;
@@ -69,7 +69,7 @@ export const getDecryptedSshKey = async (req: Request, res: Response): Promise<v
  */
 export const updateSshKey = async (req: Request, res: Response): Promise<void> => {
     try {
-        const keyId = parseInt(req.params.id, 10);
+        const keyId = parseInt(req.params.id as string, 10);
         if (isNaN(keyId)) {
             res.status(400).json({ message: '无效的密钥 ID。' });
             return;
@@ -103,7 +103,7 @@ export const updateSshKey = async (req: Request, res: Response): Promise<void> =
  */
 export const deleteSshKey = async (req: Request, res: Response): Promise<void> => {
     try {
-        const keyId = parseInt(req.params.id, 10);
+        const keyId = parseInt(req.params.id as string, 10);
         if (isNaN(keyId)) {
             res.status(400).json({ message: '无效的密钥 ID。' });
             return;

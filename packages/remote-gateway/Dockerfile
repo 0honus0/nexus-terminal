@@ -8,7 +8,7 @@ WORKDIR /app
 COPY packages/remote-gateway/package.json packages/remote-gateway/package-lock.json* ./
 
 # Install ALL dependencies (including devDependencies like typescript)
-RUN npm install
+RUN npm ci
 
 # Copy source code and tsconfig
 COPY packages/remote-gateway/src ./src
@@ -19,7 +19,7 @@ COPY packages/remote-gateway/guacamole-lite.d.ts ./guacamole-lite.d.ts
 RUN npm run build
 
 # Remove development dependencies after build
-RUN npm prune --production
+RUN npm prune --omit=dev
 
 # --- Production Stage ---
 FROM node:20-alpine

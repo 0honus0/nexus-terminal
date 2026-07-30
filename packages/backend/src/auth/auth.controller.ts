@@ -274,7 +274,7 @@ export const listUserPasskeysHandler = async (req: Request, res: Response): Prom
 export const deleteUserPasskeyHandler = async (req: Request, res: Response): Promise<void> => {
     const userId = req.session.userId;
     const username = req.session.username;
-    const { credentialID } = req.params;
+    const credentialID = req.params.credentialID as string;
 
     if (!userId || !username) {
         res.status(401).json({ message: '用户未认证。' });
@@ -317,7 +317,7 @@ export const deleteUserPasskeyHandler = async (req: Request, res: Response): Pro
 export const updateUserPasskeyNameHandler = async (req: Request, res: Response): Promise<void> => {
     const userId = req.session.userId;
     const username = req.session.username;
-    const { credentialID } = req.params;
+    const credentialID = req.params.credentialID as string;
     const { name } = req.body;
 
     if (!userId || !username) {

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import * as terminalThemeService from './terminal-theme.service';
 import { CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/terminal-theme.types';
-import type { ITheme } from 'xterm';
+import type { ITheme } from '@xterm/xterm';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -36,7 +36,7 @@ export const getAllThemesController = async (req: Request, res: Response): Promi
  */
 export const getThemeByIdController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
         if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;
@@ -80,7 +80,7 @@ export const createThemeController = async (req: Request, res: Response): Promis
  */
 export const updateThemeController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
          if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;
@@ -112,7 +112,7 @@ export const updateThemeController = async (req: Request, res: Response): Promis
  */
 export const deleteThemeController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
          if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;
@@ -178,7 +178,7 @@ export const importThemeController = async (req: Request, res: Response): Promis
  */
 export const exportThemeController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
         if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;

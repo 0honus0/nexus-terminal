@@ -73,7 +73,7 @@ export class TransfersController {
         return;
       }
 
-      const { taskId } = req.params;
+      const taskId = req.params.taskId as string;
       if (!taskId) {
         res.status(400).json({ message: 'Task ID is required.' });
         return;
@@ -100,7 +100,7 @@ export class TransfersController {
         return;
       }
 
-      const { taskId } = req.params;
+      const taskId = req.params.taskId as string;
       if (!taskId) {
         res.status(400).json({ message: 'Task ID is required for cancellation.' });
         return;

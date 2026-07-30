@@ -37,7 +37,7 @@ class EmailSenderService implements INotificationSender {
       const finalSmtpPort =
         smtpPort ?? (globalSmtpPortStr ? parseInt(globalSmtpPortStr, 10) : 587);
       const finalSmtpSecure =
-        smtpSecure ?? globalSmtpSecureStr === "true" ?? false;
+        smtpSecure ?? (globalSmtpSecureStr === "true");
       const finalSmtpUser = smtpUser || globalSmtpUser;
       const finalSmtpPass = smtpPass || globalSmtpPass;
       const finalFrom =

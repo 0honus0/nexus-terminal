@@ -2,23 +2,14 @@ FROM node:20 AS builder
 
 WORKDIR /app
 
+COPY packages/backend/package.json packages/backend/package-lock.json ./
+RUN npm ci
 
-# Copy root package files including the lock file
-COPY package.json package-lock.json ./
+COPY packages/backend/src ./src
+COPY packages/backend/tsconfig.json ./
+COPY packages/backend/html-presets ./html-presets
 
-# Copy workspace package.json files to ensure npm ci works correctly in monorepo
-COPY packages/backend/package.json ./packages/backend/
-COPY packages/frontend/package.json ./packages/frontend/
-COPY packages/remote-gateway/package.json ./packages/remote-gateway/
-
-# Install dependencies (using install instead of ci for potential armv7/alpine compatibility issues)
-RUN npm install
-
-COPY packages/backend/src ./packages/backend/src
-COPY packages/backend/tsconfig.json ./packages/backend/
-COPY packages/backend/html-presets ./packages/backend/html-presets
-
-RUN npm run build --workspace=@nexus-terminal/backend
+RUN npm run build
 
 
 FROM node:20-alpine
@@ -30,14 +21,14 @@ RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++
 WORKDIR /app
 
 
-COPY --from=builder /app/packages/backend/dist ./dist
+COPY --from=builder /app/dist ./dist
 
-COPY --from=builder /app/packages/backend/src/locales ./dist/locales
-COPY --from=builder /app/packages/backend/html-presets ./html-presets
+COPY --from=builder /app/src/locales ./dist/locales
+COPY --from=builder /app/html-presets ./html-presets
 
 COPY packages/backend/package.json ./package.json
-COPY package-lock.json ./package-lock.json
-RUN npm install --omit=dev --prefer-offline
+COPY packages/backend/package-lock.json ./package-lock.json
+RUN npm ci --omit=dev --prefer-offline
 
 
 RUN apk del .build-deps

@@ -62,7 +62,7 @@ export class NotificationController {
 
     // PUT /api/v1/notifications/:id
     update = async (req: Request, res: Response): Promise<void> => {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
         const settingData: Partial<Omit<NotificationSetting, 'id' | 'created_at' | 'updated_at'>> = req.body;
 
         if (isNaN(id)) {
@@ -98,7 +98,7 @@ export class NotificationController {
 
     // DELETE /api/v1/notifications/:id
     delete = async (req: Request, res: Response): Promise<void> => {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
 
         if (isNaN(id)) {
           // Use i18next.t for i18n
@@ -139,7 +139,7 @@ export class NotificationController {
     // POST /api/v1/notifications/:id/test
     // Tests an existing, saved setting configuration by triggering a test event
     testSetting = async (req: Request, res: Response): Promise<void> => {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(req.params.id as string, 10);
 
         if (isNaN(id)) {
           // Use i18next.t for i18n

@@ -43,7 +43,7 @@ export const getConnections = async (req: Request, res: Response): Promise<void>
  */
 export const getConnectionById = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         if (isNaN(connectionId)) {
             res.status(400).json({ message: '无效的连接 ID。' });
             return;
@@ -67,7 +67,7 @@ export const getConnectionById = async (req: Request, res: Response): Promise<vo
  */
 export const updateConnection = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         if (isNaN(connectionId)) {
             res.status(400).json({ message: '无效的连接 ID。' });
             return;
@@ -96,7 +96,7 @@ export const updateConnection = async (req: Request, res: Response): Promise<voi
  */
 export const deleteConnection = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         if (isNaN(connectionId)) {
             res.status(400).json({ message: '无效的连接 ID。' });
             return;
@@ -121,7 +121,7 @@ export const deleteConnection = async (req: Request, res: Response): Promise<voi
  */
 export const testConnection = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         if (isNaN(connectionId)) {
             res.status(400).json({ message: '无效的连接 ID。' });
             return;
@@ -280,7 +280,7 @@ import axios from 'axios'; // axios 仍可能用于错误检查类型
  */
 export const getRdpSessionToken = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         if (isNaN(connectionId)) {
             res.status(400).json({ message: '无效的连接 ID。' });
             return;
@@ -376,7 +376,7 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
  */
 export const getVncSessionToken = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         if (isNaN(connectionId)) {
             res.status(400).json({ message: '无效的连接 ID。' });
             return;
@@ -460,7 +460,7 @@ export const getVncSessionToken = async (req: Request, res: Response): Promise<v
  */
 export const cloneConnection = async (req: Request, res: Response): Promise<void> => {
     try {
-        const originalConnectionId = parseInt(req.params.id, 10);
+        const originalConnectionId = parseInt(req.params.id as string, 10);
         const { name: newName } = req.body; // 从请求体获取新名称
 
         if (isNaN(originalConnectionId)) {
@@ -532,7 +532,7 @@ export const addTagToConnections = async (req: Request, res: Response): Promise<
  */
 export const updateConnectionTags = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connectionId = parseInt(req.params.id, 10);
+        const connectionId = parseInt(req.params.id as string, 10);
         const { tag_ids } = req.body;
 
         if (isNaN(connectionId)) {

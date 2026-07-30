@@ -294,7 +294,7 @@ export const settingsController = {
    */
   async deleteIpFromBlacklist(req: Request, res: Response): Promise<void> {
     try {
-      const ipToDelete = req.params.ip;
+      const ipToDelete = req.params.ip as string;
       if (!ipToDelete) {
         res.status(400).json({ message: '缺少要删除的 IP 地址' });
         return;

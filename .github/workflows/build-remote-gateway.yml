@@ -1,0 +1,25 @@
+name: Build remote gateway image
+
+on:
+  push:
+    paths:
+      - 'packages/remote-gateway/**'
+      - '.github/workflows/build-remote-gateway.yml'
+  pull_request:
+    paths:
+      - 'packages/remote-gateway/**'
+      - '.github/workflows/build-remote-gateway.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/remote-gateway/Dockerfile
+          push: false
+          cache-from: type=gha,scope=remote-gateway
+          cache-to: type=gha,mode=max,scope=remote-gateway

@@ -1,6 +1,6 @@
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
 import { TerminalTheme, CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/terminal-theme.types';
-import type { ITheme } from 'xterm';
+import type { ITheme } from '@xterm/xterm';
 
 /**
  * 获取所有终端主题
@@ -83,4 +83,3 @@ export const importTheme = async (themeData: ITheme, name: string): Promise<Term
     const dto: CreateTerminalThemeDto = { name, themeData };
     return createNewTheme(dto);
 };
-
