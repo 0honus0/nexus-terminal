@@ -1,11 +1,34 @@
 import { Request, Response } from 'express';
 import path from 'path';
-import { clientStates } from '../websocket';
+import { clientStates, sftpService } from '../websocket/state';
 import * as archiver from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import { SftpCompressRequestPayload, SftpDecompressRequestPayload, SftpCompressSuccessPayload, SftpCompressErrorPayload, SftpDecompressSuccessPayload, SftpDecompressErrorPayload } from '../websocket/types'; // Import payload types
+
+const pendingSftpInitializations = new Map<string, Promise<void>>();
+
+const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<boolean> => {
+    if (state.sftp) return true;
+    if (!state.sshClient) return false;
+
+    let pending = pendingSftpInitializations.get(sessionId);
+    if (!pending) {
+        pending = sftpService.initializeSftpSession(sessionId);
+        pendingSftpInitializations.set(sessionId, pending);
+    }
+    try {
+        await pending;
+    } catch (error) {
+        console.error(`SFTP 下载：重建会话 ${sessionId} 失败:`, error);
+    } finally {
+        if (pendingSftpInitializations.get(sessionId) === pending) {
+            pendingSftpInitializations.delete(sessionId);
+        }
+    }
+    return Boolean(state.sftp);
+};
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
  */
@@ -39,7 +62,8 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
     console.log(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
     if (requestedSessionId) {
         const exactState = clientStates.get(requestedSessionId);
-        if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId && exactState.sftp) {
+        if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId) {
+            await ensureSftpReady(requestedSessionId, exactState);
             targetState = exactState;
         }
     }
@@ -154,7 +178,8 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
     console.log(`SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
     if (requestedSessionId) {
         const exactState = clientStates.get(requestedSessionId);
-        if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId && exactState.sftp) {
+        if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId) {
+            await ensureSftpReady(requestedSessionId, exactState);
             targetState = exactState;
         }
     }
