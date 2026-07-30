@@ -1929,6 +1929,19 @@ const handleOpenEditorClick = () => {
 
           <!-- Empty Directory State -->
           <tbody v-else-if="filteredFileList.length === 0">
+               <tr v-if="currentSftpManager?.currentPath.value !== '/'"
+                   class="transition-colors duration-150 cursor-pointer select-none hover:bg-header/50"
+                   @click="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
+                   :data-filename="'..'"
+               >
+                 <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
+                   <i class="fas fa-level-up-alt text-primary" :style="{ fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }"></i>
+                 </td>
+                 <td class="border-b border-border align-middle" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">..</td>
+                 <td class="border-b border-border align-middle"></td>
+                 <td class="border-b border-border align-middle"></td>
+                 <td class="border-b border-border align-middle"></td>
+               </tr>
                <tr>
                    <td :colspan="5" class="px-4 py-6 text-center text-text-secondary italic">
                      {{ searchQuery ? t('fileManager.noSearchResults') : t('fileManager.emptyDirectory') }}
@@ -2042,5 +2055,4 @@ const handleOpenEditorClick = () => {
 <style scoped>
 /* Scoped styles removed for Tailwind CSS refactoring */
 </style>
-
 
