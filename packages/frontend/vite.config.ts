@@ -1,14 +1,18 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import monacoEditorPlugin from 'vite-plugin-monaco-editor';
+import { createRequire } from 'node:module';
+import type monacoEditorPlugin from 'vite-plugin-monaco-editor';
 import tailwindcss from '@tailwindcss/vite'
+
+const require = createRequire(import.meta.url);
+const monacoEditorPluginModule: { default: typeof monacoEditorPlugin } = require('vite-plugin-monaco-editor');
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     tailwindcss(),
-    // @ts-ignore because the plugin type might not perfectly match Vite's expected PluginOption type
-    (monacoEditorPlugin as any).default({})
+    monacoEditorPluginModule.default({})
   ],
   server: {
     proxy: {

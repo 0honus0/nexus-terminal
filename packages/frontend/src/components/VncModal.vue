@@ -3,8 +3,8 @@ import { ref, onMounted, onUnmounted, watch, nextTick, computed, watchEffect } f
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
-// @ts-ignore - guacamole-common-js 缺少官方类型定义
 import Guacamole from 'guacamole-common-js';
+import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
 
 const { t } = useI18n();
@@ -26,8 +26,9 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 
 const vncDisplayRef = ref<HTMLDivElement | null>(null);
 const vncContainerRef = ref<HTMLDivElement | null>(null);
-const guacClient = ref<any | null>(null);
-const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+const guacClient = ref<Client | null>(null);
+const connectionStatus = ref<ConnectionStatus>('disconnected');
 const isResizing = ref(false);
 const resizeStartX = ref(0);
 const resizeStartY = ref(0);
@@ -65,13 +66,13 @@ const sendInputTextToVnc = async () => {
     }
     console.log('[VncModal] Finished simulating keyboard input.');
     // vncPasteInputText.value = ''; // 如果希望发送后清空输入框，取消此行注释
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[VncModal] Error simulating keyboard input:', err);
-    statusMessage.value = t('vncModal.errors.simulateInputError', { error: err.message });
+    statusMessage.value = t('vncModal.errors.simulateInputError', { error: err instanceof Error ? err.message : String(err) });
   }
 };
-const keyboard = ref<any | null>(null);
-const mouse = ref<any | null>(null);
+const keyboard = ref<Keyboard | null>(null);
+const mouse = ref<Mouse | null>(null);
 // Initialize desiredModalWidth and desiredModalHeight from store or defaults
 const initialStoreWidth = settingsStore.settings.vncModalWidth
    ? parseInt(settingsStore.settings.vncModalWidth, 10)
@@ -141,10 +142,9 @@ const handleConnection = async () => {
     const tunnelUrl = `${remoteDesktopWsBaseUrl}?token=${encodeURIComponent(token)}&width=${desiredModalWidth.value}&height=${desiredModalHeight.value}`;
   
 
-    // @ts-ignore
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
 
-    tunnel.onerror = (status: any) => {
+    tunnel.onerror = (status: Status) => {
       const errorMessage = status.message || 'Unknown tunnel error';
       const errorCode = status.code || 'N/A';
       statusMessage.value = `${t('remoteDesktopModal.errors.tunnelError')} (${errorCode}): ${errorMessage}`;
@@ -152,14 +152,12 @@ const handleConnection = async () => {
       disconnectGuacamole();
     };
 
-    // @ts-ignore
     guacClient.value = new Guacamole.Client(tunnel);
-    guacClient.value.keepAliveFrequency = 3000;
 
     vncDisplayRef.value.appendChild(guacClient.value.getDisplay().getElement());
 
     guacClient.value.onstatechange = (state: number) => {
-      let currentStatus = '';
+      let currentStatus: ConnectionStatus | null = null;
       let i18nKeyPart = 'unknownState';
 
       switch (state) {
@@ -198,10 +196,10 @@ const handleConnection = async () => {
         case 5: i18nKeyPart = 'disconnected'; currentStatus = 'disconnected'; break;
       }
       statusMessage.value = t(`remoteDesktopModal.status.${i18nKeyPart}`, { state });
-      if (currentStatus) connectionStatus.value = currentStatus as 'disconnected' | 'connecting' | 'connected' | 'error';
+      if (currentStatus) connectionStatus.value = currentStatus;
     };
 
-    guacClient.value.onerror = (status: any) => {
+    guacClient.value.onerror = (status: Status) => {
       const errorMessage = status.message || 'Unknown client error';
       statusMessage.value = `${t('remoteDesktopModal.errors.clientError')}: ${errorMessage}`;
       connectionStatus.value = 'error';
@@ -224,9 +222,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
   try {
     const currentClipboardText = await navigator.clipboard.readText();
     if (currentClipboardText && guacClient.value) {
-      // @ts-ignore
       const stream = guacClient.value.createClipboardStream('text/plain');
-      // @ts-ignore
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
@@ -246,12 +242,12 @@ const trySyncClipboardOnDisplayFocus = async () => {
 const setupInputListeners = () => {
     if (!guacClient.value || !vncDisplayRef.value) return;
     try {
-        const displayEl = guacClient.value.getDisplay().getElement() as HTMLElement;
+        const displayEl = guacClient.value.getDisplay().getElement();
         displayEl.tabIndex = 0;
 
         const handleVncDisplayClick = () => {
-          const activeElement = document.activeElement as HTMLElement;
-          if (activeElement && (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')) {
+          const activeElement = document.activeElement;
+          if (activeElement instanceof HTMLElement && (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')) {
             activeElement.blur();
           }
           // Ensure the VNC display element gets focus when clicked
@@ -266,7 +262,6 @@ const setupInputListeners = () => {
         displayEl.addEventListener('mouseenter', handleMouseEnter);
         displayEl.addEventListener('mouseleave', handleMouseLeave);
 
-        // @ts-ignore
         mouse.value = new Guacamole.Mouse(displayEl);
         const display = guacClient.value.getDisplay();
         display.showCursor(true);
@@ -279,14 +274,8 @@ const setupInputListeners = () => {
           }
         }
 
-        // @ts-ignore
-        mouse.value.onmousedown = mouse.value.onmouseup = mouse.value.onmousemove = (mouseState: any) => {
-            if (guacClient.value) {
-                guacClient.value.sendMouseState(mouseState);
-            }
-        };
+        mouse.value.onEach(['mousedown', 'mouseup', 'mousemove'], forwardMouseEvent);
 
-        // @ts-ignore
         keyboard.value = new Guacamole.Keyboard(displayEl);
 
         keyboard.value.onkeydown = (keysym: number) => {
@@ -336,11 +325,15 @@ const removeInputListeners = () => {
         keyboard.value = null;
     }
      if (mouse.value) {
-        mouse.value.onmousedown = null;
-        mouse.value.onmouseup = null;
-        mouse.value.onmousemove = null;
+        mouse.value.offEach(['mousedown', 'mouseup', 'mousemove'], forwardMouseEvent);
         mouse.value = null;
     }
+};
+
+const forwardMouseEvent = (event: GuacamoleEvent) => {
+  if (event instanceof Guacamole.Mouse.Event && guacClient.value) {
+    guacClient.value.sendMouseState(event.state);
+  }
 };
 
 const disableVncKeyboard = () => {

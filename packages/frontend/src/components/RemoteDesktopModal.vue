@@ -3,10 +3,11 @@ import { ref, onMounted, onUnmounted, watch, nextTick, computed, watchEffect } f
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store'; 
-// @ts-ignore - guacamole-common-js 缺少官方类型定义
 import Guacamole from 'guacamole-common-js';
+import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
+import { isAxiosError } from 'axios';
 import apiClient from '../utils/apiClient';
-import { ConnectionInfo } from '../stores/connections.store';
+import type { ConnectionInfo } from '../stores/connections.store';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -27,16 +28,17 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 
 const rdpDisplayRef = ref<HTMLDivElement | null>(null);
 const rdpContainerRef = ref<HTMLDivElement | null>(null);
-const guacClient = ref<any | null>(null);
-const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+const guacClient = ref<Client | null>(null);
+const connectionStatus = ref<ConnectionStatus>('disconnected');
 const isResizing = ref(false);
 const resizeStartX = ref(0);
 const resizeStartY = ref(0);
 const initialModalWidthForResize = ref(0); 
 const initialModalHeightForResize = ref(0); 
 const statusMessage = ref('');
-const keyboard = ref<any | null>(null);
-const mouse = ref<any | null>(null);
+const keyboard = ref<Keyboard | null>(null);
+const mouse = ref<Mouse | null>(null);
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
 
@@ -115,10 +117,9 @@ const handleConnection = async () => {
       throw new Error(`Unsupported connection type: ${props.connection.type}`);
     }
 
-    // @ts-ignore
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
 
-    tunnel.onerror = (status: any) => {
+    tunnel.onerror = (status: Status) => {
       const errorMessage = status.message || 'Unknown tunnel error';
       const errorCode = status.code || 'N/A';
       statusMessage.value = `${t('remoteDesktopModal.errors.tunnelError')} (${errorCode}): ${errorMessage}`;
@@ -126,14 +127,12 @@ const handleConnection = async () => {
       disconnectGuacamole();
     };
 
-    // @ts-ignore
     guacClient.value = new Guacamole.Client(tunnel);
-    guacClient.value.keepAliveFrequency = 3000;
 
     rdpDisplayRef.value.appendChild(guacClient.value.getDisplay().getElement());
 
     guacClient.value.onstatechange = (state: number) => {
-      let currentStatus = '';
+      let currentStatus: ConnectionStatus | null = null;
       let i18nKeyPart = 'unknownState';
 
       switch (state) {
@@ -178,10 +177,10 @@ const handleConnection = async () => {
           break;
       }
       statusMessage.value = t(`remoteDesktopModal.status.${i18nKeyPart}`, { state });
-      if (currentStatus) connectionStatus.value = currentStatus as 'disconnected' | 'connecting' | 'connected' | 'error';
+      if (currentStatus) connectionStatus.value = currentStatus;
     };
 
-    guacClient.value.onerror = (status: any) => {
+    guacClient.value.onerror = (status: Status) => {
       const errorMessage = status.message || 'Unknown client error';
       statusMessage.value = `${t('remoteDesktopModal.errors.clientError')}: ${errorMessage}`;
       connectionStatus.value = 'error';
@@ -190,8 +189,11 @@ const handleConnection = async () => {
 
     guacClient.value.connect('');
 
-  } catch (error: any) {
-    statusMessage.value = `${t('remoteDesktopModal.errors.connectionFailed')}: ${error.response?.data?.message || error.message || String(error)}`;
+  } catch (error: unknown) {
+    const errorMessage = isAxiosError<{ message?: string }>(error)
+      ? error.response?.data?.message || error.message
+      : error instanceof Error ? error.message : String(error);
+    statusMessage.value = `${t('remoteDesktopModal.errors.connectionFailed')}: ${errorMessage}`;
     connectionStatus.value = 'error';
     disconnectGuacamole();
   }
@@ -204,9 +206,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
   try {
     const currentClipboardText = await navigator.clipboard.readText();
     if (currentClipboardText && guacClient.value) {
-      // @ts-ignore
       const stream = guacClient.value.createClipboardStream('text/plain');
-      // @ts-ignore
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
@@ -224,14 +224,14 @@ const trySyncClipboardOnDisplayFocus = async () => {
 const setupInputListeners = () => {
     if (!guacClient.value || !rdpDisplayRef.value) return;
     try {
-        const displayEl = guacClient.value.getDisplay().getElement() as HTMLElement;
+        const displayEl = guacClient.value.getDisplay().getElement();
         displayEl.tabIndex = 0; // 使 RDP 显示区域可聚焦
 
         // 添加点击事件监听器以处理失焦逻辑
         const handleRdpDisplayClick = () => {
-          const activeElement = document.activeElement as HTMLElement;
+          const activeElement = document.activeElement;
           // 检查活动元素是否是宽度或高度输入框
-          if (activeElement && (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')) {
+          if (activeElement instanceof HTMLElement && (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')) {
             activeElement.blur();
             console.log('[RDP Modal] Blurred input field on RDP display click.');
           }
@@ -256,7 +256,6 @@ const setupInputListeners = () => {
 
 
 
-        // @ts-ignore
         mouse.value = new Guacamole.Mouse(displayEl);
 
         const display = guacClient.value.getDisplay();
@@ -280,14 +279,8 @@ const setupInputListeners = () => {
 
 
 
-        // @ts-ignore
-        mouse.value.onmousedown = mouse.value.onmouseup = mouse.value.onmousemove = (mouseState: any) => {
-            if (guacClient.value) {
-                guacClient.value.sendMouseState(mouseState);
-            }
-        };
+        mouse.value.onEach(['mousedown', 'mouseup', 'mousemove'], forwardMouseEvent);
 
-        // @ts-ignore
         keyboard.value = new Guacamole.Keyboard(displayEl); // 将监听器附加到 RDP 显示元素
 
         keyboard.value.onkeydown = (keysym: number) => {
@@ -307,10 +300,8 @@ const setupInputListeners = () => {
         displayEl.addEventListener('focus', trySyncClipboardOnDisplayFocus);
 
         // Listen for clipboard data from RDP (RDP -> Host)
-        // @ts-ignore
         guacClient.value.onclipboard = async (stream, mimetype) => {
           if (mimetype === 'text/plain') {
-            // @ts-ignore
             const reader = new Guacamole.StringReader(stream);
             let text = '';
             reader.ontext = (chunk: string) => {
@@ -355,16 +346,19 @@ const removeInputListeners = () => {
         keyboard.value = null;
     }
      if (mouse.value) {
-        mouse.value.onmousedown = null;
-        mouse.value.onmouseup = null;
-        mouse.value.onmousemove = null;
+        mouse.value.offEach(['mousedown', 'mouseup', 'mousemove'], forwardMouseEvent);
         mouse.value = null;
     }
     // 清理剪贴板监听器
     if (guacClient.value) {
-        // @ts-ignore
         guacClient.value.onclipboard = null;
     }
+};
+
+const forwardMouseEvent = (event: GuacamoleEvent) => {
+  if (event instanceof Guacamole.Mouse.Event && guacClient.value) {
+    guacClient.value.sendMouseState(event.state);
+  }
 };
 
 const disableRdpKeyboard = () => {
