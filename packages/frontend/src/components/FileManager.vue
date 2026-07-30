@@ -1539,30 +1539,30 @@ const sendCdCommandToTerminal = () => {
     return;
   }
 
-  // 路径可能包含空格，需要用引号括起来以确保在各种 shell 中正确处理
-  const escapedPath = `"${currentPath}"`;
-  // 添加换行符以模拟按下 Enter 键执行命令
-  const command = `cd ${escapedPath}\n`;
+  // 单引号可避免路径里的 `$`、反引号等字符被 shell 展开。
+  const escapedPath = `'${currentPath.replace(/'/g, `'\\''`)}'`;
+  // 交互式终端使用 CR 模拟 Enter，避免部分 shell 只移动光标而不执行命令。
+  const command = `cd -- ${escapedPath}\r`;
 
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Sending command to terminal: ${command.trim()}`);
   try {
-    // 获取当前活动会话
-    const activeSession = sessionStore.activeSession;
-    if (!activeSession) {
-      console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: No active session found.`);
+    // FileManager 可以同时存在多个实例，必须使用自身绑定的会话，不能依赖全局活动会话。
+    const owningSession = sessionStore.sessions.get(props.sessionId);
+    if (!owningSession) {
+      console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Owning session not found.`);
       // 可选：添加 UI 通知
       // uiNotificationsStore.addNotification({ message: t('fileManager.errors.noActiveSession', 'No active session found.'), type: 'error' });
       return;
     }
     // 检查 terminalManager 是否存在
-    if (!activeSession.terminalManager) {
-        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Terminal manager not found for active session.`);
+    if (!owningSession.terminalManager) {
+        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Terminal manager not found for owning session.`);
         // 可选：添加 UI 通知
         // uiNotificationsStore.addNotification({ message: t('fileManager.errors.terminalManagerNotFound', 'Terminal manager not found.'), type: 'error' });
         return;
     }
     // 使用 terminalManager 的 sendData 方法发送命令
-    activeSession.terminalManager.sendData(command);
+    owningSession.terminalManager.sendData(command);
   } catch (error) {
     console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command to terminal:`, error);
   }
@@ -2055,4 +2055,3 @@ const handleOpenEditorClick = () => {
 <style scoped>
 /* Scoped styles removed for Tailwind CSS refactoring */
 </style>
-
