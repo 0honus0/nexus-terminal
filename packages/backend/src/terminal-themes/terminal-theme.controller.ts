@@ -34,9 +34,9 @@ export const getAllThemesController = async (req: Request, res: Response): Promi
 /**
  * 根据 ID 获取单个终端主题
  */
-export const getThemeByIdController = async (req: Request, res: Response): Promise<void> => {
+export const getThemeByIdController = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id as string, 10);
+        const id = parseInt(req.params.id, 10);
         if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;
@@ -78,9 +78,9 @@ export const createThemeController = async (req: Request, res: Response): Promis
 /**
  * 更新终端主题
  */
-export const updateThemeController = async (req: Request, res: Response): Promise<void> => {
+export const updateThemeController = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id as string, 10);
+        const id = parseInt(req.params.id, 10);
          if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;
@@ -110,9 +110,9 @@ export const updateThemeController = async (req: Request, res: Response): Promis
 /**
  * 删除终端主题
  */
-export const deleteThemeController = async (req: Request, res: Response): Promise<void> => {
+export const deleteThemeController = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id as string, 10);
+        const id = parseInt(req.params.id, 10);
          if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;
@@ -176,9 +176,9 @@ export const importThemeController = async (req: Request, res: Response): Promis
 /**
  * 导出终端主题
  */
-export const exportThemeController = async (req: Request, res: Response): Promise<void> => {
+export const exportThemeController = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     try {
-        const id = parseInt(req.params.id as string, 10);
+        const id = parseInt(req.params.id, 10);
         if (isNaN(id)) {
             res.status(400).json({ message: '无效的主题 ID' });
             return;

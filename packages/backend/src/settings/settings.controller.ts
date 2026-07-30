@@ -292,9 +292,9 @@ export const settingsController = {
   /**
    * 从 IP 黑名单中删除一个 IP
    */
-  async deleteIpFromBlacklist(req: Request, res: Response): Promise<void> {
+  async deleteIpFromBlacklist(req: Request<{ ip: string }>, res: Response): Promise<void> {
     try {
-      const ipToDelete = req.params.ip as string;
+      const ipToDelete = req.params.ip;
       if (!ipToDelete) {
         res.status(400).json({ message: '缺少要删除的 IP 地址' });
         return;

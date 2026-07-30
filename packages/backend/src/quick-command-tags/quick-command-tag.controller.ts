@@ -50,8 +50,8 @@ export const addQuickCommandTag = async (req: Request, res: Response): Promise<v
 /**
  * 处理更新快捷指令标签的请求
  */
-export const updateQuickCommandTag = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const updateQuickCommandTag = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
     const { name } = req.body;
 
     if (isNaN(id)) {
@@ -99,8 +99,8 @@ export const updateQuickCommandTag = async (req: Request, res: Response): Promis
 /**
  * 处理删除快捷指令标签的请求
  */
-export const deleteQuickCommandTag = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const deleteQuickCommandTag = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的标签 ID' });

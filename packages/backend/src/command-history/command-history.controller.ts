@@ -38,8 +38,8 @@ export const getAllCommands = async (req: Request, res: Response): Promise<void>
 /**
  * 处理根据 ID 删除命令历史记录的请求
  */
-export const deleteCommand = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const deleteCommand = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });

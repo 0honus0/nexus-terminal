@@ -1,4 +1,4 @@
-import express, { RequestHandler } from 'express';
+import express from 'express';
 import { isAuthenticated } from '../auth/auth.middleware';
 import {
     getAllProxies,
@@ -14,10 +14,10 @@ const router = express.Router();
 router.use(isAuthenticated);
 
 
-router.get('/', getAllProxies as RequestHandler);
-router.get('/:id', getProxyById as RequestHandler);
-router.post('/', createProxy as RequestHandler);
-router.put('/:id', updateProxy as RequestHandler); 
-router.delete('/:id', deleteProxy as RequestHandler); 
+router.get('/', getAllProxies);
+router.get('/:id', getProxyById);
+router.post('/', createProxy);
+router.put('/:id', updateProxy);
+router.delete('/:id', deleteProxy);
 
 export default router;

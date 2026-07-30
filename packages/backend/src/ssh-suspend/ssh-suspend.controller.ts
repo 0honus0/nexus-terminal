@@ -35,10 +35,10 @@ export class SshSuspendController {
     }
   } // Closes getSuspendedSshSessions
 
-  public async terminateAndRemoveSession(req: Request, res: Response): Promise<void> {
+  public async terminateAndRemoveSession(req: Request<{ suspendSessionId: string }>, res: Response): Promise<void> {
       try {
         const userId = req.session.userId;
-        const suspendSessionId = req.params.suspendSessionId as string;
+        const suspendSessionId = req.params.suspendSessionId;
   
         if (!userId) {
           res.status(401).json({ message: 'Unauthorized. User ID not found in session.' });
@@ -70,10 +70,10 @@ export class SshSuspendController {
       }
     }
   
-  public async removeSessionEntry(req: Request, res: Response): Promise<void> {
+  public async removeSessionEntry(req: Request<{ suspendSessionId: string }>, res: Response): Promise<void> {
       try {
         const userId = req.session.userId;
-        const suspendSessionId = req.params.suspendSessionId as string;
+        const suspendSessionId = req.params.suspendSessionId;
   
         if (!userId) {
           res.status(401).json({ message: 'Unauthorized. User ID not found in session.' });
@@ -104,10 +104,10 @@ export class SshSuspendController {
       }
     }
 
-  public async editSessionNameHttp(req: Request, res: Response): Promise<void> {
+  public async editSessionNameHttp(req: Request<{ suspendSessionId: string }>, res: Response): Promise<void> {
     try {
       const userId = req.session.userId;
-      const suspendSessionId = req.params.suspendSessionId as string;
+      const suspendSessionId = req.params.suspendSessionId;
       const { customName } = req.body; // 从请求体获取新名称
 
       if (!userId) {
@@ -142,10 +142,10 @@ export class SshSuspendController {
     }
   }
 
-  public async exportSessionLog(req: Request, res: Response): Promise<void> {
+  public async exportSessionLog(req: Request<{ suspendSessionId: string }>, res: Response): Promise<void> {
     try {
       const userId = req.session.userId;
-      const suspendSessionId = req.params.suspendSessionId as string;
+      const suspendSessionId = req.params.suspendSessionId;
 
       if (!userId) {
         res.status(401).json({ message: 'Unauthorized. User ID not found in session.' });

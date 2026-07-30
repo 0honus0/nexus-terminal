@@ -52,8 +52,8 @@ export const getAllFavoritePaths = async (req: Request, res: Response): Promise<
 /**
  * 处理根据 ID 获取单个收藏路径的请求
  */
-export const getFavoritePathById = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const getFavoritePathById = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });
@@ -77,8 +77,8 @@ export const getFavoritePathById = async (req: Request, res: Response): Promise<
 /**
  * 处理更新收藏路径的请求
  */
-export const updateFavoritePath = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const updateFavoritePath = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
     const { name, path } = req.body;
 
     if (isNaN(id)) {
@@ -122,8 +122,8 @@ export const updateFavoritePath = async (req: Request, res: Response): Promise<v
 /**
  * 处理删除收藏路径的请求
  */
-export const deleteFavoritePath = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const deleteFavoritePath = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });
@@ -146,8 +146,8 @@ export const deleteFavoritePath = async (req: Request, res: Response): Promise<v
 /**
  * 处理更新收藏路径上次使用时间的请求
  */
-export const incrementUsage = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const incrementUsage = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });
@@ -188,8 +188,8 @@ export const incrementUsage = async (req: Request, res: Response): Promise<void>
 /**
  * 处理更新收藏路径上次使用时间戳的请求 (PUT)
  */
-export const updateLastUsedTimestamp = async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
+export const updateLastUsedTimestamp = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const id = parseInt(req.params.id, 10);
 
     if (isNaN(id)) {
         res.status(400).json({ message: '无效的 ID' });

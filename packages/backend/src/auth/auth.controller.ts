@@ -271,10 +271,10 @@ export const listUserPasskeysHandler = async (req: Request, res: Response): Prom
 /**
  * 删除当前认证用户指定的 Passkey (DELETE /api/v1/user/passkeys/:credentialID)
  */
-export const deleteUserPasskeyHandler = async (req: Request, res: Response): Promise<void> => {
+export const deleteUserPasskeyHandler = async (req: Request<{ credentialID: string }>, res: Response): Promise<void> => {
     const userId = req.session.userId;
     const username = req.session.username;
-    const credentialID = req.params.credentialID as string;
+    const credentialID = req.params.credentialID;
 
     if (!userId || !username) {
         res.status(401).json({ message: '用户未认证。' });
@@ -314,10 +314,10 @@ export const deleteUserPasskeyHandler = async (req: Request, res: Response): Pro
 /**
  * 更新当前认证用户指定的 Passkey 名称 (PUT /api/v1/user/passkeys/:credentialID/name)
  */
-export const updateUserPasskeyNameHandler = async (req: Request, res: Response): Promise<void> => {
+export const updateUserPasskeyNameHandler = async (req: Request<{ credentialID: string }>, res: Response): Promise<void> => {
     const userId = req.session.userId;
     const username = req.session.username;
-    const credentialID = req.params.credentialID as string;
+    const credentialID = req.params.credentialID;
     const { name } = req.body;
 
     if (!userId || !username) {

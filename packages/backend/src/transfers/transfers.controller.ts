@@ -64,7 +64,7 @@ export class TransfersController {
     }
   }
 
-  public async getTaskStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async getTaskStatus(req: Request<{ taskId: string }>, res: Response, next: NextFunction): Promise<void> {
     try {
       // @ts-ignore
       const userId = req.session?.userId;
@@ -73,7 +73,7 @@ export class TransfersController {
         return;
       }
 
-      const taskId = req.params.taskId as string;
+      const taskId = req.params.taskId;
       if (!taskId) {
         res.status(400).json({ message: 'Task ID is required.' });
         return;
@@ -91,7 +91,7 @@ export class TransfersController {
     }
   }
 
-  public async cancelTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
+  public async cancelTransfer(req: Request<{ taskId: string }>, res: Response, next: NextFunction): Promise<void> {
     try {
       // @ts-ignore
       const userId = req.session?.userId;
@@ -100,7 +100,7 @@ export class TransfersController {
         return;
       }
 
-      const taskId = req.params.taskId as string;
+      const taskId = req.params.taskId;
       if (!taskId) {
         res.status(400).json({ message: 'Task ID is required for cancellation.' });
         return;

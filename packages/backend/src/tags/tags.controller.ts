@@ -46,8 +46,8 @@ export const getTags = async (req: Request, res: Response): Promise<void> => {
 /**
  * 获取单个标签信息 (GET /api/v1/tags/:id)
  */
-export const getTagById = async (req: Request, res: Response): Promise<void> => {
-    const tagId = parseInt(req.params.id as string, 10);
+export const getTagById = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const tagId = parseInt(req.params.id, 10);
 
     if (isNaN(tagId)) {
         res.status(400).json({ message: '无效的标签 ID。' });
@@ -70,8 +70,8 @@ export const getTagById = async (req: Request, res: Response): Promise<void> => 
 /**
  * 更新标签信息 (PUT /api/v1/tags/:id)
  */
-export const updateTag = async (req: Request, res: Response): Promise<void> => {
-    const tagId = parseInt(req.params.id as string, 10);
+export const updateTag = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const tagId = parseInt(req.params.id, 10);
     const { name } = req.body;
 
     if (isNaN(tagId)) {
@@ -108,8 +108,8 @@ export const updateTag = async (req: Request, res: Response): Promise<void> => {
 /**
  * 删除标签 (DELETE /api/v1/tags/:id)
  */
-export const deleteTag = async (req: Request, res: Response): Promise<void> => {
-    const tagId = parseInt(req.params.id as string, 10);
+export const deleteTag = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const tagId = parseInt(req.params.id, 10);
 
     if (isNaN(tagId)) {
         res.status(400).json({ message: '无效的标签 ID。' });
@@ -134,8 +134,8 @@ export const deleteTag = async (req: Request, res: Response): Promise<void> => {
 /**
  * 更新标签与连接的关联关系 (PUT /api/v1/tags/:id/connections)
  */
-export const updateTagConnections = async (req: Request, res: Response): Promise<void> => {
-    const tagId = parseInt(req.params.id as string, 10);
+export const updateTagConnections = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const tagId = parseInt(req.params.id, 10);
     const { connection_ids } = req.body; // 前端发送的是 connection_ids
 
     if (isNaN(tagId)) {
