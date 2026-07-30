@@ -1,8 +1,5 @@
 node_modules
 dist
-data
-sessions
-uploads
 .env
 .env.*
 *.log

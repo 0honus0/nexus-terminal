@@ -2,12 +2,12 @@ FROM node:24 AS builder
 
 WORKDIR /app
 
-COPY packages/backend/package.json packages/backend/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY packages/backend/src ./src
-COPY packages/backend/tsconfig.json ./
-COPY packages/backend/html-presets ./html-presets
+COPY src ./src
+COPY tsconfig.json ./
+COPY html-presets ./html-presets
 
 RUN npm run build
 
@@ -25,8 +25,7 @@ COPY --from=builder /app/dist ./dist
 
 COPY --from=builder /app/html-presets ./html-presets
 
-COPY packages/backend/package.json ./package.json
-COPY packages/backend/package-lock.json ./package-lock.json
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --prefer-offline
 
 

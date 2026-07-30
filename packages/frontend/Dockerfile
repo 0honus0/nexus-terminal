@@ -2,15 +2,15 @@ FROM node:24 AS builder
 
 WORKDIR /app
 
-COPY packages/frontend/package.json packages/frontend/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
 
-COPY packages/frontend/src ./src
-COPY packages/frontend/index.html ./
-COPY packages/frontend/tsconfig.json ./
-COPY packages/frontend/vite.config.ts ./
-COPY packages/frontend/public ./public
+COPY src ./src
+COPY index.html ./
+COPY tsconfig.json ./
+COPY vite.config.ts ./
+COPY public ./public
 
 RUN npm run build
 
@@ -24,7 +24,7 @@ RUN rm -rf /usr/share/nginx/html/*
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 
-COPY packages/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 
 EXPOSE 80

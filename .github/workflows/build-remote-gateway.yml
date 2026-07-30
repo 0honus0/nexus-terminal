@@ -4,12 +4,10 @@ on:
   push:
     paths:
       - 'packages/remote-gateway/**'
-      - '.dockerignore'
       - '.github/workflows/build-remote-gateway.yml'
   pull_request:
     paths:
       - 'packages/remote-gateway/**'
-      - '.dockerignore'
       - '.github/workflows/build-remote-gateway.yml'
 
 jobs:
@@ -20,7 +18,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
-          context: .
+          context: packages/remote-gateway
           file: packages/remote-gateway/Dockerfile
           push: false
           cache-from: type=gha,scope=remote-gateway

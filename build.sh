@@ -81,7 +81,7 @@ build_docker() {
     docker build \
         --file "$ROOT_DIR/packages/$component/Dockerfile" \
         --tag "$image" \
-        "$ROOT_DIR"
+        "$ROOT_DIR/packages/$component"
 }
 
 save_docker() {

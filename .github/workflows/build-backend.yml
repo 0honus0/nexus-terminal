@@ -4,12 +4,10 @@ on:
   push:
     paths:
       - 'packages/backend/**'
-      - '.dockerignore'
       - '.github/workflows/build-backend.yml'
   pull_request:
     paths:
       - 'packages/backend/**'
-      - '.dockerignore'
       - '.github/workflows/build-backend.yml'
 
 jobs:
@@ -20,7 +18,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
-          context: .
+          context: packages/backend
           file: packages/backend/Dockerfile
           push: false
           cache-from: type=gha,scope=backend
