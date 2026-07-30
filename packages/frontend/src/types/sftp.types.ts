@@ -18,6 +18,15 @@ export interface FileListItem {
     attrs: FileAttributes; // 文件属性
 }
 
+// 压缩/解压操作的实时进度
+export interface ArchiveProgressState {
+    active: boolean;
+    operation: 'compress' | 'decompress' | null;
+    fileCount: number;
+    currentFile: string | null;
+    archiveName: string | null;
+}
+
 // 类型定义：用于编辑器文件内容和编码 (从 useFileEditor 迁移)
 export interface EditorFileContent {
     content: string;

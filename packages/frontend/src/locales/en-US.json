@@ -452,6 +452,10 @@
       "decompress": "Decompress",
       "sendTo": "Send to..."
     },
+    "archiveProgress": {
+      "filesProcessed": "{count} files processed",
+      "starting": "Starting remote archive command..."
+    },
     "headers": {
       "type": "Type",
       "name": "Name",
@@ -1649,4 +1653,3 @@
     "copiedError": "Failed to copy path"
   }
 }
-

@@ -390,6 +390,10 @@
       "decompress": "解凍",
       "sendTo": "送信..."
     },
+        "archiveProgress": {
+            "filesProcessed": "{count} 件のファイルを処理しました",
+            "starting": "リモートアーカイブコマンドを開始しています..."
+        },
     "currentPath": "現在のパス",
         "dropFilesHere": "ファイルをここにドラッグ＆ドロップしてアップロード",
         "editPathTooltip": "パスをクリックして編集",

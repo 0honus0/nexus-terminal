@@ -1184,21 +1184,56 @@ export class SftpService {
                     return;
                 }
 
-                let stdoutData = '';
                 let stderrData = '';
-                let code: number | null = null; // Track exit code
+                let stdoutRemainder = '';
+                let stderrRemainder = '';
+                let code: number | null = null;
+                let fileCount = 0;
+                let lastProgressTime = 0;
+                let lastSeenFileName: string | undefined;
+                let streamFinished = false;
+
+                const sendProgress = (force = false) => {
+                    const now = Date.now();
+                    if (!force && now - lastProgressTime < 1000) return;
+                    lastProgressTime = now;
+                    this.sendArchiveProgress(state.ws, 'compress', requestId, fileCount, lastSeenFileName);
+                };
+
+                const consumeOutput = (chunk: string, remainder: string): string => {
+                    const lines = `${remainder}${chunk}`.split(/\r?\n/);
+                    const nextRemainder = lines.pop() || '';
+                    for (const line of lines) {
+                        const fileName = this.parseArchiveFileName(line, format);
+                        if (fileName) {
+                            fileCount++;
+                            lastSeenFileName = fileName;
+                        }
+                    }
+                    if (lastSeenFileName) sendProgress();
+                    return nextRemainder;
+                };
+
+                // 单个大文件可能很久没有逐文件输出；心跳用于表明远程命令仍在运行。
+                const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
 
                 stream.on('data', (data: Buffer) => {
-                    stdoutData += data.toString();
-                    // console.debug(`[SFTP Compress ${sessionId}] stdout: ${data.toString()}`);
+                    stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
                 });
                 stream.stderr.on('data', (data: Buffer) => {
-                    stderrData += data.toString();
-                    // console.debug(`[SFTP Compress ${sessionId}] stderr: ${data.toString()}`);
+                    const chunk = data.toString();
+                    stderrData = this.appendBoundedOutput(stderrData, chunk);
+                    stderrRemainder = consumeOutput(chunk, stderrRemainder);
                 });
 
                 stream.on('close', (exitCode: number | null) => {
-                    code = exitCode; // Store exit code
+                    if (streamFinished) return;
+                    streamFinished = true;
+                    clearInterval(heartbeatInterval);
+                    if (stdoutRemainder) stdoutRemainder = consumeOutput(`${stdoutRemainder}\n`, '');
+                    if (stderrRemainder) stderrRemainder = consumeOutput(`${stderrRemainder}\n`, '');
+                    code = exitCode;
+                    if (fileCount > 0) sendProgress(true);
                     console.log(`[SFTP Compress ${sessionId}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${stderrData.trim()}`);
                     if (code === 0 && !this.isErrorInStdErr(stderrData)) { // 检查退出码和 stderr
                         console.log(`[SFTP Compress ${sessionId}] Compression successful (ID: ${requestId}).`);
@@ -1216,11 +1251,11 @@ export class SftpService {
                     }
                 });
                  stream.on('error', (streamErr: Error) => { 
+                     if (streamFinished) return;
+                     streamFinished = true;
+                     clearInterval(heartbeatInterval);
                      console.error(`[SFTP Compress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
-                     // 避免重复发送错误
-                     if (!stderrData && code === undefined) { // 仅当 close 事件未触发且 stderr 为空时发送
-                          this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamErr.message);
-                     }
+                     this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamErr.message);
                  });
             });
         } catch (execError: any) {
@@ -1311,21 +1346,59 @@ export class SftpService {
                     return;
                 }
 
-                let stdoutData = '';
                 let stderrData = '';
-                let code: number | null = null; // Track exit code
+                let stdoutRemainder = '';
+                let stderrRemainder = '';
+                let code: number | null = null;
+                let fileCount = 0;
+                let lastProgressTime = 0;
+                let lastSeenFileName: string | undefined;
+                let streamFinished = false;
+                const progressFormat: 'decompress' | 'targz' | 'tarbz2' = lowerArchivePath.endsWith('.zip')
+                    ? 'decompress'
+                    : (lowerArchivePath.endsWith('.tar.bz2') || lowerArchivePath.endsWith('.tbz2') ? 'tarbz2' : 'targz');
+
+                const sendProgress = (force = false) => {
+                    const now = Date.now();
+                    if (!force && now - lastProgressTime < 1000) return;
+                    lastProgressTime = now;
+                    this.sendArchiveProgress(state.ws, 'decompress', requestId, fileCount, lastSeenFileName);
+                };
+
+                const consumeOutput = (chunk: string, remainder: string): string => {
+                    const lines = `${remainder}${chunk}`.split(/\r?\n/);
+                    const nextRemainder = lines.pop() || '';
+                    for (const line of lines) {
+                        const fileName = this.parseArchiveFileName(line, progressFormat);
+                        if (fileName) {
+                            fileCount++;
+                            lastSeenFileName = fileName;
+                        }
+                    }
+                    if (lastSeenFileName) sendProgress();
+                    return nextRemainder;
+                };
+
+                const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
 
                 stream.on('data', (data: Buffer) => {
-                    stdoutData += data.toString();
-                    // console.debug(`[SFTP Decompress ${sessionId}] stdout: ${data.toString()}`);
+                    // 必须持续消费 stdout，否则大型归档会耗尽 SSH 通道窗口并永久挂起。
+                    stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
                 });
                 stream.stderr.on('data', (data: Buffer) => {
-                    stderrData += data.toString();
-                    // console.debug(`[SFTP Decompress ${sessionId}] stderr: ${data.toString()}`);
+                    const chunk = data.toString();
+                    stderrData = this.appendBoundedOutput(stderrData, chunk);
+                    stderrRemainder = consumeOutput(chunk, stderrRemainder);
                 });
 
                 stream.on('close', (exitCode: number | null) => {
-                     code = exitCode; // Store exit code
+                    if (streamFinished) return;
+                    streamFinished = true;
+                    clearInterval(heartbeatInterval);
+                    if (stdoutRemainder) stdoutRemainder = consumeOutput(`${stdoutRemainder}\n`, '');
+                    if (stderrRemainder) stderrRemainder = consumeOutput(`${stderrRemainder}\n`, '');
+                    code = exitCode;
+                    if (fileCount > 0) sendProgress(true);
                     console.log(`[SFTP Decompress ${sessionId}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${stderrData.trim()}`);
                     if (code === 0 && !this.isErrorInStdErr(stderrData)) { // 检查退出码和 stderr
                         console.log(`[SFTP Decompress ${sessionId}] Decompression successful (ID: ${requestId}).`);
@@ -1343,11 +1416,11 @@ export class SftpService {
                     }
                 });
                  stream.on('error', (streamErr: Error) => {
+                     if (streamFinished) return;
+                     streamFinished = true;
+                     clearInterval(heartbeatInterval);
                      console.error(`[SFTP Decompress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
-                     // 避免重复发送错误
-                     if (!stderrData && code === undefined) { // 仅当 close 事件未触发且 stderr 为空时发送
-                         this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
-                     }
+                     this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
                  });
             });
         } catch (execError: any) {
@@ -1441,6 +1514,50 @@ export class SftpService {
         } else {
              console.warn(`[SFTP Decompress] WebSocket closed or invalid, cannot send error for request ${requestId}.`);
          }
+    }
+
+    /** 只保留最近的命令错误输出，避免大型归档把整个进程输出留在内存中。 */
+    private appendBoundedOutput(existing: string, chunk: string, maxLength = 65536): string {
+        const combined = existing + chunk;
+        return combined.length > maxLength ? combined.slice(-maxLength) : combined;
+    }
+
+    /** 从 zip、tar 和 unzip 的详细输出中提取正在处理的文件名。 */
+    private parseArchiveFileName(line: string, format: 'zip' | 'targz' | 'tarbz2' | 'decompress'): string | null {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+
+        if (format === 'zip') {
+            const match = trimmed.match(/^adding:\s+(.+?)(?:\s+\(.*\))?$/i);
+            return match?.[1]?.trim() || null;
+        }
+
+        if (format === 'decompress') {
+            const match = trimmed.match(/^(?:inflating|extracting|creating):\s+(.+)/i);
+            return match?.[1]?.trim() || null;
+        }
+
+        if (!trimmed.startsWith('/') && !/^tar(?:\s|:|\()/i.test(trimmed) && trimmed.length < 1024 && !/^[A-Za-z]+:\s/.test(trimmed)) {
+            return trimmed;
+        }
+        return null;
+    }
+
+    /** 发送归档进度或心跳；前端据此重置空闲超时。 */
+    private sendArchiveProgress(
+        ws: AuthenticatedWebSocket | undefined,
+        operation: 'compress' | 'decompress',
+        requestId: string,
+        fileCount: number,
+        currentFile?: string,
+    ): void {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: `sftp:${operation}:progress`,
+                requestId,
+                payload: { requestId, fileCount, currentFile },
+            }));
+        }
     }
 
     /** 检查 stderr 输出是否包含表示错误的常见模式 */

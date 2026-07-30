@@ -21,6 +21,7 @@ import type { WebSocketMessage } from '../types/websocket.types';
 import PathHistoryDropdown from './PathHistoryDropdown.vue';
 import { usePathHistoryStore } from '../stores/pathHistory.store';
 import FavoritePathsModal from './FavoritePathsModal.vue';
+import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 
 
@@ -81,6 +82,15 @@ const initializeSftpManager = (sessionId: string, instanceId: string) => {
 
 // 初始加载管理器
 initializeSftpManager(props.sessionId, props.instanceId);
+
+const emptyArchiveProgress = {
+  active: false,
+  operation: null as 'compress' | 'decompress' | null,
+  fileCount: 0,
+  currentFile: null as string | null,
+  archiveName: null as string | null,
+};
+const archiveProgress = computed(() => currentSftpManager.value?.archiveProgress ?? emptyArchiveProgress);
 
 
 // --- 文件上传模块 ---
@@ -2077,6 +2087,8 @@ const handleOpenEditorClick = () => {
 
      <!-- 使用 FileUploadPopup 组件 -->
      <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" />
+
+     <ArchiveProgressPopup :progress="archiveProgress" />
 
     <FileManagerContextMenu
       ref="contextMenuRef"
