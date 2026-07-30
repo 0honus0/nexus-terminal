@@ -10,10 +10,10 @@
    },
    "dependencies": {
       "@simplewebauthn/server": "^13.3.2",
+      "@zip.js/zip.js": "^2.8.34",
       "@xterm/xterm": "^6.0.0",
       "adm-zip": "^0.6.0",
       "archiver": "^8.0.0",
-      "archiver-zip-encrypted": "^2.0.0",
       "axios": "^1.19.0",
       "bcrypt": "^6.0.0",
       "date-fns": "^4.4.0",

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import path from 'path';
 import { clientStates, sftpService } from '../websocket/state';
-import * as archiver from 'archiver';
+import { Archiver, ZipArchive } from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
@@ -32,7 +32,7 @@ const readSftpDirectory = (sftp: SFTPWrapper, remotePath: string): Promise<any[]
 
 const addDirectoryToArchive = async (
     sftp: SFTPWrapper,
-    archive: ReturnType<typeof archiver.create>,
+    archive: Archiver,
     remotePath: string,
     archivePath: string,
     ancestorRealPaths: ReadonlySet<string> = new Set()
@@ -80,7 +80,7 @@ const streamDirectoryArchive = async (
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${baseName}.zip"`);
 
-    const archive = archiver.create('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on('warning', (err: Error) => {
         console.warn(`Archiver warning (用户 ${userId}, 路径 ${remotePath}):`, err);
     });

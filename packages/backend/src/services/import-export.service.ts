@@ -5,8 +5,7 @@ import * as TagService from '../tags/tag.service';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { decrypt, getEncryptionKeyBuffer as getCryptoKeyBuffer } from '../utils/crypto'; 
 import { getAllDecryptedSshKeys, DecryptedSshKeyDetails } from '../ssh_keys/ssh_key.service'; 
-import archiver from 'archiver';
-archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
+import { TextReader, Uint8ArrayWriter, ZipWriter } from '@zip.js/zip.js';
 
 
 
@@ -289,67 +288,32 @@ export const exportConnectionsAsEncryptedZip = async (includeSshKeys: boolean = 
             throw new Error('ENCRYPTION_KEY is not set or is empty, cannot password-protect the ZIP file.');
         }
         
-        return new Promise<Buffer>((resolve, reject) => {
-            const archive = archiver.create('zip-encrypted', {
-                zlib: { level: 9 },
-                encryptionMethod: 'aes256',
-                password: zipPassword
-            });
-
-            const buffers: Buffer[] = [];
-
-            archive.on('data', (chunk: Buffer) => {
-                buffers.push(chunk);
-            });
-
-            archive.on('warning', (err: Error) => {
-                console.warn('Archiver warning during export:', err);
-            });
-
-            // 'error' event should still be listened to for stream errors
-            archive.on('error', (err: Error) => {
-                console.error('Archiver stream error during export:', err);
-                reject(new Error(`Archiver stream failed during export: ${err.message}`));
-            });
-
-            // archive.finalize() returns a promise that resolves when the archive is fully written.
-            // No need to listen for 'finish' event separately if we await finalize().
-
-            archive.append(connectionsScriptContent, { name: 'connections.txt' });
-
-            if (includeSshKeys && allSshKeys.length > 0) {
-                // 创建一个名为 ssh_keys 的文件夹，并将每个密钥保存为一个单独的文件
-                // 确保 ssh_keys 目录首先被创建（如果 archive 库不自动创建）
-                // archive.append(null, { name: 'ssh_keys/', type: 'directory' }); // archiver 会自动创建目录结构
-
-                for (const sshKey of allSshKeys) {
-                    // DecryptedSshKeyDetails 包含 name 和 privateKey
-                    if (sshKey.name && sshKey.privateKey) {
-                        // 移除文件名中可能存在的非法字符，或进行更安全的编码
-                        // 为了简单起见，这里假设 sshKey.name 是一个有效的文件名组件
-                        const sanitizedKeyName = sshKey.name.replace(/[<>:"/\\|?*]/g, '_'); // 基本的文件名清理
-                        const filePathInZip = `ssh_keys/${sanitizedKeyName}.txt`;
-                        archive.append(sshKey.privateKey, { name: filePathInZip });
-                    } else {
-                        console.warn(`SSH 密钥 (ID: ${sshKey.id}) 缺少名称或私钥内容，跳过导出。`);
-                    }
-                }
-            }
-
-            archive.finalize()
-                .then(() => {
-                    console.log('Archiver finalized successfully.');
-                    resolve(Buffer.concat(buffers));
-                })
-                .catch(err => {
-                    console.error('Error during archive.finalize():', err);
-                    reject(new Error(`Failed to finalize archive: ${err.message}`));
-                });
+        const zipWriter = new ZipWriter(new Uint8ArrayWriter(), {
+            password: zipPassword,
+            encryptionStrength: 3,
+            level: 9,
         });
+
+        await zipWriter.add('connections.txt', new TextReader(connectionsScriptContent));
+
+        for (const sshKey of allSshKeys) {
+            if (sshKey.name && sshKey.privateKey) {
+                const sanitizedKeyName = sshKey.name.replace(/[<>:"/\\|?*]/g, '_');
+                await zipWriter.add(
+                    `ssh_keys/${sanitizedKeyName}.txt`,
+                    new TextReader(sshKey.privateKey),
+                );
+            } else {
+                console.warn(`SSH 密钥 (ID: ${sshKey.id}) 缺少名称或私钥内容，跳过导出。`);
+            }
+        }
+
+        const zipData = await zipWriter.close();
+        return Buffer.from(zipData);
 
     } catch (error: any) {
         console.error('Service: 导出连接 ZIP (outer try-catch) 时发生意外错误:', error);
-        throw new Error(`导出连接 ZIP (archiver) 失败: ${error.message}`);
+        throw new Error(`导出加密连接 ZIP 失败: ${error.message}`);
     }
 };
 
