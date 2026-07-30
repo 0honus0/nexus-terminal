@@ -1,6 +1,5 @@
-import { Request } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { AuthenticatedWebSocket, ClientState } from '../types';
+import { AuthenticatedWebSocket, ClientState, WebSocketRequest } from '../types';
 import { clientStates, sftpService, statusMonitorService, auditLogService, notificationService } from '../state';
 import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
@@ -50,7 +49,7 @@ const consumeSilentExecOutput = (state: ClientState, chunk: string): string => {
 
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
-    request: Request,
+    request: WebSocketRequest,
     payload: any
 ): Promise<void> {
     const sessionId = ws.sessionId;
@@ -71,7 +70,7 @@ export async function handleSshConnect(
     console.log(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' }));
 
-    const clientIp = (request as any).clientIpAddress || 'unknown';
+    const clientIp = request.clientIpAddress || 'unknown';
     let connInfo: SshService.DecryptedConnectionDetails | null = null;
 
     try {

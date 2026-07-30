@@ -29,7 +29,7 @@ const upload = multer({
         if (file.mimetype === 'application/json') {
             cb(null, true);
         } else {
-            (req as any).fileValidationError = '只允许上传 JSON 文件！';
+            req.fileValidationError = '只允许上传 JSON 文件！';
             cb(null, false);
         }
     }
@@ -45,8 +45,8 @@ router.get('/export', exportConnections);
 // POST /api/v1/connections/import - 导入连接配置
 router.post('/import', (req: Request, res: Response, next: NextFunction) => {
     upload.single('connectionsFile')(req, res, (err: any) => {
-        if ((req as any).fileValidationError) {
-            return res.status(400).json({ message: (req as any).fileValidationError });
+        if (req.fileValidationError) {
+            return res.status(400).json({ message: req.fileValidationError });
         }
         if (err instanceof multer.MulterError) {
             return res.status(400).json({ message: `文件上传错误: ${err.message}` });

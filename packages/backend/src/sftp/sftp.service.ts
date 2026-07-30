@@ -1038,58 +1038,31 @@ export class SftpService {
         } catch (statError: any) {
             // 2. 如果 stat 失败，检查是否是 "No such file" 错误
             if (statError.code === 'ENOENT' || (statError.message && statError.message.includes('No such file'))) {
-                // 目录不存在，尝试创建
+                const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
+                if (parentDir && parentDir !== '/' && parentDir !== '.') {
+                    await this.ensureDirectoryExists(sftp, parentDir);
+                }
                 try {
-                    // 3. 尝试递归创建 (ssh2 的 mkdir 支持非标准 recursive 属性)
-                    // 注意：这可能不适用于所有 SFTP 服务器
                     await new Promise<void>((resolveMkdir, rejectMkdir) => {
-                        // @ts-ignore - ssh2 types might not include 'recursive' in attributes
-                        sftp.mkdir(normalizedPath, { recursive: true }, (mkdirErr) => {
+                        sftp.mkdir(normalizedPath, (mkdirErr) => {
                             if (mkdirErr) {
-                                // 如果递归创建失败，尝试逐级创建
-                                console.warn(`[SFTP Util] Recursive mkdir failed for ${normalizedPath}, falling back to iterative creation:`, mkdirErr);
-                                rejectMkdir(mkdirErr); // Reject to trigger fallback
+                                rejectMkdir(new Error(`创建目录失败 ${normalizedPath}: ${mkdirErr.message}`));
                             } else {
-                                console.log(`[SFTP Util] Recursively created directory: ${normalizedPath}`);
+                                console.log(`[SFTP Util] Created directory: ${normalizedPath}`);
                                 resolveMkdir();
                             }
                         });
                     });
-                    return; // 递归创建成功
-                } catch (recursiveMkdirError) {
-                    // 4. 递归创建失败，回退到逐级创建
-                    const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
-                    if (parentDir && parentDir !== '/' && parentDir !== '.') {
-                        // 递归确保父目录存在
-                        await this.ensureDirectoryExists(sftp, parentDir);
-                    }
-                    // 创建当前目录
+                } catch (mkdirError: unknown) {
+                    console.error(`[SFTP Util] mkdir failed for ${normalizedPath}:`, mkdirError);
                     try {
-                        await new Promise<void>((resolveMkdir, rejectMkdir) => {
-                             sftp.mkdir(normalizedPath, (mkdirErr) => {
-                                if (mkdirErr) {
-                                    // 如果逐级创建也失败，则抛出错误
-                                    rejectMkdir(new Error(`创建目录失败 ${normalizedPath}: ${mkdirErr.message}`));
-                                } else {
-                                    console.log(`[SFTP Util] Iteratively created directory: ${normalizedPath}`);
-                                    resolveMkdir();
-                                }
-                            });
-                        });
-                    } catch (iterativeMkdirError: any) {
-                         console.error(`[SFTP Util] Iterative mkdir failed for ${normalizedPath}:`, iterativeMkdirError);
-                         // 检查是否是因为目录已存在（可能由并发操作创建）
-                         try {
-                             const finalStats = await this.getStats(sftp, normalizedPath);
-                             if (!finalStats.isDirectory()) {
-                                 throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
-                             }
-                             // 如果目录现在存在，则忽略错误
-                             console.log(`[SFTP Util] Directory ${normalizedPath} exists after iterative mkdir failure, likely created concurrently.`);
-                         } catch (finalStatError) {
-                             // 如果最终检查也失败，则抛出原始的逐级创建错误
-                             throw iterativeMkdirError;
-                         }
+                        const finalStats = await this.getStats(sftp, normalizedPath);
+                        if (!finalStats.isDirectory()) {
+                            throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
+                        }
+                        console.log(`[SFTP Util] Directory ${normalizedPath} exists after mkdir failure, likely created concurrently.`);
+                    } catch {
+                        throw mkdirError;
                     }
                 }
             } else {

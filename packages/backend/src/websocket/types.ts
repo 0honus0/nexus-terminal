@@ -1,5 +1,15 @@
 import WebSocket from 'ws';
 import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
+import type { Request } from 'express';
+
+export interface WebSocketRequest extends Request {
+    clientIpAddress: string;
+    isRdpProxy: boolean;
+    rdpToken?: string;
+    rdpWidth?: string;
+    rdpHeight?: string;
+    rdpDpi?: string;
+}
 
 // 扩展 WebSocket 类型以包含会话 ID
 export interface AuthenticatedWebSocket extends WebSocket {

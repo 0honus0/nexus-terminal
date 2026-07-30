@@ -16,7 +16,6 @@ export class TransfersController {
 
   public async initiateTransfer(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore // session可能没有强类型定义，或者userId是可选的
       const userId = req.session?.userId;
       if (!userId) {
         // 此检查是为了双重保险，理论上isAuthenticated中间件会阻止未认证的请求
@@ -50,7 +49,6 @@ export class TransfersController {
 
   public async getAllStatuses(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore
       const userId = req.session?.userId;
       if (!userId) {
         res.status(401).json({ message: '用户未认证或会话无效。' });
@@ -66,7 +64,6 @@ export class TransfersController {
 
   public async getTaskStatus(req: Request<{ taskId: string }>, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore
       const userId = req.session?.userId;
       if (!userId) {
         res.status(401).json({ message: '用户未认证或会话无效。' });
@@ -93,7 +90,6 @@ export class TransfersController {
 
   public async cancelTransfer(req: Request<{ taskId: string }>, res: Response, next: NextFunction): Promise<void> {
     try {
-      // @ts-ignore
       const userId = req.session?.userId;
       if (!userId) {
         res.status(401).json({ message: '用户未认证或会话无效。' });

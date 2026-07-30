@@ -1,7 +1,7 @@
 import WebSocket, { WebSocketServer, RawData } from 'ws';
-import { Request } from 'express';
 import {
     AuthenticatedWebSocket,
+    WebSocketRequest,
     SshSuspendStartRequest,
     SshSuspendListRequest,
     SshSuspendResumeRequest,
@@ -50,10 +50,10 @@ import {
 } from './handlers/sftp.handler';
 
 export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendService: SshSuspendService, sftpService: SftpService): void { // +++ Add sftpService parameter +++
-    wss.on('connection', (ws: AuthenticatedWebSocket, request: Request) => {
+    wss.on('connection', (ws: AuthenticatedWebSocket, request: WebSocketRequest) => {
         ws.isAlive = true;
-        const isRdpProxy = (request as any).isRdpProxy;
-        const clientIp = (request as any).clientIpAddress || 'unknown'; // Preserved from upgrade handler
+        const isRdpProxy = request.isRdpProxy;
+        const clientIp = request.clientIpAddress || 'unknown'; // Preserved from upgrade handler
 
         console.log(`WebSocket：客户端 ${ws.username} (ID: ${ws.userId}, IP: ${clientIp}, RDP Proxy: ${isRdpProxy}) 已连接。`);
 

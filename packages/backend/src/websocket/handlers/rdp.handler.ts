@@ -1,20 +1,19 @@
 import WebSocket, { RawData } from 'ws';
-import { Request } from 'express';
-import { AuthenticatedWebSocket } from '../types';
+import { AuthenticatedWebSocket, WebSocketRequest } from '../types';
 
 export function handleRdpProxyConnection(
     ws: AuthenticatedWebSocket,
-    request: Request
+    request: WebSocketRequest
 ): void {
-    const clientIp = (request as any).clientIpAddress || 'unknown';
+    const clientIp = request.clientIpAddress || 'unknown';
     console.log(`WebSocket：RDP 代理客户端 ${ws.username} (ID: ${ws.userId}, IP: ${clientIp}) 已连接。`);
 
     ws.on('pong', () => { ws.isAlive = true; });
 
     // Retrieve all necessary parameters passed from the upgrade handler
-    const rdpToken = (request as any).rdpToken;
-    const rdpWidthStr = (request as any).rdpWidth; // Get as string first
-    const rdpHeightStr = (request as any).rdpHeight; // Get as string first
+    const rdpToken = request.rdpToken;
+    const rdpWidthStr = request.rdpWidth;
+    const rdpHeightStr = request.rdpHeight;
 
     // --- 参数验证和 DPI 计算 ---
     if (!rdpToken || !rdpWidthStr || !rdpHeightStr) { // Check string presence

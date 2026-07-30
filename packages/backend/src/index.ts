@@ -186,14 +186,6 @@ if (!fs.existsSync(uploadsPath)) { // 确保 uploads 目录存在
 // app.use('/uploads', express.static(uploadsPath)); // 不再需要，文件通过 API 提供
 
 
-// 扩展 Express Request 类型
-declare module 'express-session' {
-    interface SessionData {
-        userId?: number;
-        username?: string;
-    }
-}
-
 const port = process.env.PORT || 3001;
 
 const getFirstHeaderValue = (value?: string | string[]): string | undefined => {

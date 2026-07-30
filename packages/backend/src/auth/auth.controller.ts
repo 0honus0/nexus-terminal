@@ -22,19 +22,6 @@ export interface User {
     two_factor_secret?: string | null;
 }
 
-declare module 'express-session' {
-    interface SessionData {
-        userId?: number;
-        username?: string;
-        tempTwoFactorSecret?: string;
-        requiresTwoFactor?: boolean;
-        currentChallenge?: string; // +++ For Passkey challenge storage
-        passkeyUserHandle?: string; // +++ For Passkey user handle (user ID as string)
-        passkeyOrigin?: string;
-        rememberMe?: boolean;
-    }
-}
-
 const firstHeaderValue = (value: string | string[] | undefined): string | undefined => {
     const rawValue = Array.isArray(value) ? value[0] : value;
     return rawValue?.split(',').map(item => item.trim()).find(Boolean);

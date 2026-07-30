@@ -49,7 +49,7 @@ export class NotificationController {
             // 记录审计日志 (Use event service)
             if (newSetting) {
                  eventService.emitEvent(AppEventType.NotificationSettingCreated, {
-                     userId: (req.session as any).userId, // Assuming userId is in session
+                     userId: req.session.userId,
                      details: { settingId: newSetting.id, name: newSetting.name, type: newSetting.channel_type }
                  });
             }
@@ -82,7 +82,7 @@ export class NotificationController {
                 const updatedSetting = await this.repository.getById(id);
                 // 记录审计日志 (Use event service)
                  eventService.emitEvent(AppEventType.NotificationSettingUpdated, {
-                     userId: (req.session as any).userId,
+                     userId: req.session.userId,
                      details: { settingId: id, updatedFields: Object.keys(settingData) }
                  });
                 res.status(200).json(updatedSetting);
@@ -117,7 +117,7 @@ export class NotificationController {
             if (success) {
                 // 记录审计日志 (Use event service)
                  eventService.emitEvent(AppEventType.NotificationSettingDeleted, {
-                     userId: (req.session as any).userId,
+                     userId: req.session.userId,
                      details: { settingId: id, name: settingToDelete.name, type: settingToDelete.channel_type } // Include name/type in audit
                  });
                 res.status(204).send(); // No Content
@@ -157,7 +157,7 @@ export class NotificationController {
 
             // Trigger the standard test event, passing the config to be used by the processor
             eventService.emitEvent(AppEventType.TestNotification, {
-                userId: (req.session as any).userId, // Optional: associate test with user
+                userId: req.session.userId,
               details: {
                  // Use i18next.t for i18n with interpolation
                  message: i18next.t('notificationController.testMessageSaved', { id, name: settingToTest.name }),
@@ -197,7 +197,7 @@ export class NotificationController {
         try {
             // Trigger the standard test event, passing the unsaved config to be used by the processor
             eventService.emitEvent(AppEventType.TestNotification, {
-                userId: (req.session as any).userId,
+                userId: req.session.userId,
               details: {
                  // Use i18next.t for i18n with interpolation
                  message: i18next.t('notificationController.testMessageUnsaved', { channelType: channel_type }),
