@@ -175,7 +175,7 @@ docker compose up -d
 
 ### 其他
 1. **移动端可以通过双指手势放大缩小终端字体**
-2. 如需启用 Passkey 登录，请在 `.env` 文件中设置 `RP_ID` 和 `RP_ORIGIN` 环境变量。
+2. 如需启用 Passkey 登录，请在 `.env` 文件中设置 `RP_ID` 和 `RP_ORIGIN`。两者均支持逗号分隔多域名；单个 `RP_ID` 配多个 `RP_ORIGIN` 时，可通过 WebAuthn Related Origins 共享同一 Passkey。
 
 
 ## ⚠️ 注意事项
@@ -201,4 +201,3 @@ docker compose up -d
 ## 📄 开源协议
 
 本项目采用 [GPL-3.0](LICENSE) 开源协议，详细信息请参阅 [LICENSE](LICENSE) 文件。
-

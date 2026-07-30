@@ -58,6 +58,7 @@ import pathHistoryRoutes from './path-history/path-history.routes';
 import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
 import { initializeWebSocket } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
+import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
 
 
 import './services/event.service'; 
@@ -195,6 +196,35 @@ declare module 'express-session' {
 
 const port = process.env.PORT || 3001;
 
+const getFirstHeaderValue = (value?: string | string[]): string | undefined => {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    return rawValue?.split(',').map(item => item.trim()).find(Boolean);
+};
+
+const getHostname = (host: string): string | undefined => {
+    try {
+        return new URL(`http://${host}`).hostname.toLowerCase();
+    } catch {
+        return undefined;
+    }
+};
+
+const resolvePasskeyRpIdFromHost = (host: string): string | undefined => {
+    const hostname = getHostname(host);
+    if (!hostname) return undefined;
+
+    const directMatch = config.passkeyRpConfigs.find(item => item.rpId === hostname);
+    if (directMatch) return directMatch.rpId;
+
+    return config.passkeyRpConfigs.find(item => {
+        try {
+            return new URL(item.rpOrigin).hostname.toLowerCase() === hostname;
+        } catch {
+            return false;
+        }
+    })?.rpId;
+};
+
 // 初始化数据库
 const initializeDatabase = async () => {
   try {
@@ -242,6 +272,19 @@ const startServer = () => {
     });
     app.use(sessionMiddleware);
     // --- 结束会话中间件配置 ---
+
+    // WebAuthn Related Origins：允许单个 RP_ID 在配置的多个域名间共享 Passkey。
+    app.get('/.well-known/webauthn', (req: Request, res: Response) => {
+        const host = getFirstHeaderValue(req.headers['x-forwarded-host']) || getFirstHeaderValue(req.headers.host);
+        const rpId = host ? resolvePasskeyRpIdFromHost(host) : undefined;
+        if (!rpId) {
+            res.status(404).json({ origins: [] });
+            return;
+        }
+
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.json({ origins: getPasskeyRelatedOriginsForRpId(rpId) });
+    });
 
 
     // --- 应用 API 路由 ---

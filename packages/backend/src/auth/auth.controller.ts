@@ -30,9 +30,24 @@ declare module 'express-session' {
         requiresTwoFactor?: boolean;
         currentChallenge?: string; // +++ For Passkey challenge storage
         passkeyUserHandle?: string; // +++ For Passkey user handle (user ID as string)
+        passkeyOrigin?: string;
         rememberMe?: boolean;
     }
 }
+
+const firstHeaderValue = (value: string | string[] | undefined): string | undefined => {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    return rawValue?.split(',').map(item => item.trim()).find(Boolean);
+};
+
+const getPasskeyRequestOrigin = (req: Request): string | undefined => {
+    const origin = firstHeaderValue(req.headers.origin);
+    if (origin) return origin;
+
+    const protocol = firstHeaderValue(req.headers['x-forwarded-proto']) || req.protocol;
+    const host = firstHeaderValue(req.headers['x-forwarded-host']) || firstHeaderValue(req.headers.host);
+    return protocol && host ? `${protocol}://${host}` : undefined;
+};
 
 // --- Passkey Controller Methods ---
 
@@ -49,10 +64,12 @@ export const generatePasskeyRegistrationOptionsHandler = async (req: Request, re
     }
 
     try {
+        const requestOrigin = getPasskeyRequestOrigin(req);
         // PasskeyService's generateRegistrationOptions expects userId as number
-        const options = await passkeyService.generateRegistrationOptions(username, userId);
+        const options = await passkeyService.generateRegistrationOptions(username, userId, requestOrigin);
         
         req.session.currentChallenge = options.challenge;
+        req.session.passkeyOrigin = requestOrigin;
         // The user.id from options is a Uint8Array. We need to store the original string userId for userHandle.
         req.session.passkeyUserHandle = userId.toString(); 
 
@@ -89,7 +106,8 @@ export const verifyPasskeyRegistrationHandler = async (req: Request, res: Respon
         const verification = await passkeyService.verifyRegistration(
             registrationResponse,
             expectedChallenge,
-            userHandle // userHandle is userId as string
+            userHandle, // userHandle is userId as string
+            req.session.passkeyOrigin || getPasskeyRequestOrigin(req)
         );
 
         if (verification.verified && verification.newPasskeyToSave) {
@@ -101,6 +119,7 @@ export const verifyPasskeyRegistrationHandler = async (req: Request, res: Respon
             
             delete req.session.currentChallenge;
             delete req.session.passkeyUserHandle;
+            delete req.session.passkeyOrigin;
             res.status(201).json({ verified: true, message: 'Passkey 注册成功。' });
         } else {
             console.warn(`[AuthController] Passkey 注册验证失败 (用户: ${userHandle}):`, verification);
@@ -119,10 +138,12 @@ export const generatePasskeyAuthenticationOptionsHandler = async (req: Request, 
     const { username } = req.body; // Can be initiated by username (if not logged in) or for currently logged-in user
 
     try {
+        const requestOrigin = getPasskeyRequestOrigin(req);
         // PasskeyService's generateAuthenticationOptions can optionally take a username
-        const options = await passkeyService.generateAuthenticationOptions(username);
+        const options = await passkeyService.generateAuthenticationOptions(username, requestOrigin);
         
         req.session.currentChallenge = options.challenge;
+        req.session.passkeyOrigin = requestOrigin;
         // For authentication, userHandle is not strictly needed in session beforehand if RP ID is specific enough
         // or if allowCredentials is used. We'll clear any old one just in case.
         delete req.session.passkeyUserHandle; 
@@ -159,7 +180,8 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
         // Pass the extracted authenticationResponseJSON to the service
         const verification = await passkeyService.verifyAuthentication(
             authenticationResponseJSON,
-            expectedChallenge
+            expectedChallenge,
+            req.session.passkeyOrigin || getPasskeyRequestOrigin(req)
         );
 
         if (verification.verified && verification.userId && verification.passkey) {
@@ -191,6 +213,7 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
             
             delete req.session.currentChallenge;
             delete req.session.passkeyUserHandle;
+            delete req.session.passkeyOrigin;
 
             res.status(200).json({
                 verified: true,

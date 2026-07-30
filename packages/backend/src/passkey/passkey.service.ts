@@ -20,10 +20,8 @@ import type {
 } from '@simplewebauthn/server';
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository, User } from '../user/user.repository';
-import { config } from '../config/app.config';
+import { config, type PasskeyRpConfig } from '../config/app.config';
 
-const RP_ID = config.rpId;
-const RP_ORIGIN = config.rpOrigin;
 const RP_NAME = config.appName;
 
 const textEncoder = new TextEncoder();
@@ -45,7 +43,26 @@ export class PasskeyService {
     private userRepo: typeof userRepository
   ) {}
 
-  async generateRegistrationOptions(username: string, userId: number) {
+  private resolveRpConfig(requestOrigin?: string): PasskeyRpConfig {
+    const configs = config.passkeyRpConfigs.length > 0
+      ? config.passkeyRpConfigs
+      : [{ rpId: config.rpId, rpOrigin: config.rpOrigin }];
+
+    if (!requestOrigin) return configs[0];
+
+    let normalizedOrigin: string;
+    try {
+      normalizedOrigin = new URL(requestOrigin).origin;
+    } catch {
+      throw new Error('Invalid passkey origin.');
+    }
+
+    const matchedConfig = configs.find(item => item.rpOrigin === normalizedOrigin);
+    if (!matchedConfig) throw new Error('Passkey origin is not configured.');
+    return matchedConfig;
+  }
+
+  async generateRegistrationOptions(username: string, userId: number, requestOrigin?: string) {
     const user = await this.userRepo.findUserById(userId);
     if (!user || user.username !== username) {
       throw new Error('User not found or username mismatch');
@@ -59,9 +76,10 @@ export class PasskeyService {
       transports: pk.transports ? JSON.parse(pk.transports) as AuthenticatorTransportFuture[] : undefined,
     }));
 
+    const rpConfig = this.resolveRpConfig(requestOrigin);
     const options: GenerateRegistrationOptionsOpts = {
       rpName: RP_NAME,
-      rpID: RP_ID,
+      rpID: rpConfig.rpId,
       userID: textEncoder.encode(userId.toString()),
       userName: username,
       userDisplayName: username,
@@ -82,7 +100,8 @@ export class PasskeyService {
   async verifyRegistration(
     registrationResponseJSON: RegistrationResponseJSON,
     expectedChallenge: string,
-    userHandleFromClient: string
+    userHandleFromClient: string,
+    requestOrigin?: string
   ): Promise<VerifiedRegistrationResponse & { newPasskeyToSave?: NewPasskey }> {
     const userId = parseInt(userHandleFromClient, 10);
     if (isNaN(userId)) {
@@ -102,11 +121,12 @@ export class PasskeyService {
       throw new Error('Registration failed: Missing or malformed credential ID from client.');
     }
 
+    const rpConfig = this.resolveRpConfig(requestOrigin);
     const verifyOpts: VerifyRegistrationResponseOpts = {
       response: actualRegistrationResponse, // Use the nested object
       expectedChallenge,
-      expectedOrigin: RP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: rpConfig.rpOrigin,
+      expectedRPID: rpConfig.rpId,
       requireUserVerification: true,
     };
 
@@ -146,7 +166,7 @@ export class PasskeyService {
     return verification;
   }
 
-  async generateAuthenticationOptions(username?: string) {
+  async generateAuthenticationOptions(username?: string, requestOrigin?: string) {
     let allowCredentials: {id: string, type: 'public-key', transports?: AuthenticatorTransportFuture[]}[] | undefined = undefined;
 
     if (username) {
@@ -161,8 +181,9 @@ export class PasskeyService {
       }
     }
 
+    const rpConfig = this.resolveRpConfig(requestOrigin);
     const options: GenerateAuthenticationOptionsOpts = {
-      rpID: RP_ID,
+      rpID: rpConfig.rpId,
       timeout: 60000,
       allowCredentials,
       userVerification: 'preferred',
@@ -174,7 +195,8 @@ export class PasskeyService {
 
   async verifyAuthentication(
     authenticationResponseJSON: AuthenticationResponseJSON,
-    expectedChallenge: string
+    expectedChallenge: string,
+    requestOrigin?: string
   ): Promise<VerifiedAuthenticationResponse & { passkey?: Passkey, userId?: number }> {
     
     // Decode and check authenticatorData length
@@ -244,11 +266,12 @@ export class PasskeyService {
     // Reverting to 'any' for verifyOpts due to issues with the library's
     // type definitions for VerifyAuthenticationResponseOpts not recognizing 'authenticator' key.
     // This aligns with the original code's approach and TODO comment.
+    const rpConfig = this.resolveRpConfig(requestOrigin);
     const verifyOpts: any = {
       response: authenticationResponseJSON,
       expectedChallenge,
-      expectedOrigin: RP_ORIGIN,
-      expectedRPID: RP_ID,
+      expectedOrigin: rpConfig.rpOrigin,
+      expectedRPID: rpConfig.rpId,
       credential: credentialObjectForLibrary, // Renamed from authenticator to credential
       requireUserVerification: true,
     };
