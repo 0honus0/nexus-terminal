@@ -121,14 +121,7 @@ export const requestStartSshSuspend = (sessionId: string): void => {
     };
     session.wsManager.sendMessage(message);
     console.log(`[${t('term.sshSuspend')}] 已发送 SSH_MARK_FOR_SUSPEND 请求 (会话 ID: ${sessionId}, 包含初始缓冲区: ${!!initialBuffer})`);
-    // 前端在发送此请求后，会话应保持活动状态，直到用户关闭标签页或网络断开。
-    // 后端会在 WebSocket 关闭时处理实际的挂起。
-    // 用户界面上可以给一个提示，表明“此会话已标记，关闭后将尝试挂起”。
-    useUiNotificationsStore().addNotification({
-      type: 'info',
-      message: t('sshSuspend.notifications.markedForSuspendInfo', { id: sessionId.slice(0,8) }),
-      timeout: 5000, // +++ 修改：duration -> timeout +++
-    });
+    // 成功提示由后端 ACK 驱动，避免先显示成功、随后又显示失败。
 
   } else {
     console.warn(`[${t('term.sshSuspend')}] 未找到会话或 WebSocket 管理器 (会话 ID: ${sessionId})，无法请求标记挂起。`);
@@ -487,15 +480,10 @@ const handleSshMarkedForSuspendAck = (payload: SshMarkedForSuspendAckPayload): v
   const uiNotificationsStore = useUiNotificationsStore();
   console.log(`[${t('term.sshSuspend')}] 接到 SSH_MARKED_FOR_SUSPEND_ACK:`, payload);
   if (payload.success) {
-    // 标记成功，用户可以继续使用会话，关闭时会自动尝试挂起。
-    // requestStartSshSuspend 中已经给过一个提示了。
-    // 这里可以再给一个更持久的提示，或者更新UI状态（例如在标签页上加个小图标）
-    // uiNotificationsStore.addNotification({
-    //   type: 'success',
-    //   message: t('sshSuspend.notifications.markedForSuspendSuccess', { id: payload.sessionId.slice(0,8) }),
-    // });
-    // 注意：此时不关闭会话，也不刷新挂起列表。实际挂起发生在后端WebSocket断开时。
-    // 可以在 sessions.value 中对应会话的状态里加一个标记 isMarkedForSuspend = true
+    uiNotificationsStore.addNotification({
+      type: 'success',
+      message: t('sshSuspend.notifications.markedForSuspendSuccess', { id: payload.sessionId.slice(0,8) }),
+    });
     const session = sessions.value.get(payload.sessionId);
     if (session) {
       session.isMarkedForSuspend = true; // 假设 SessionState 有此字段
