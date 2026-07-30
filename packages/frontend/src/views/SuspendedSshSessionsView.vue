@@ -266,7 +266,23 @@ const exportLog = async (session: SuspendedSshSession) => {
  // 不需要 emitWorkspaceEvent，因为导出日志通常不关闭模态框
 };
 
-let fetchIntervalId: number | undefined;
+let fetchTimeoutId: number | undefined;
+let pollIntervalMs = 3000;
+let pollingStopped = false;
+
+const schedulePoll = () => {
+  if (pollingStopped) return;
+  fetchTimeoutId = window.setTimeout(async () => {
+    const result = await sessionStore.fetchSuspendedSshSessions({
+      showLoadingIndicator: false,
+      notifyOnError: false,
+    });
+    pollIntervalMs = result.status === 429
+      ? Math.min(pollIntervalMs * 2, 60000)
+      : result.ok ? 3000 : Math.min(Math.max(pollIntervalMs, 10000), 60000);
+    schedulePoll();
+  }, pollIntervalMs);
+};
 
 onMounted(async () => {
   const connectionsStore = useConnectionsStore(); // +++ 获取 Connections Store 实例 +++
@@ -283,17 +299,14 @@ onMounted(async () => {
   // 立即获取一次挂起会话数据 (显示加载指示器)
   await sessionStore.fetchSuspendedSshSessions();
   
-  // 设置定时器，每3秒获取一次挂起会话数据 (不显示加载指示器)
-  fetchIntervalId = window.setInterval(async () => {
-    await sessionStore.fetchSuspendedSshSessions({ showLoadingIndicator: false });
-  }, 3000);
+  pollingStopped = false;
+  schedulePoll();
 });
 
 onUnmounted(() => {
   // 组件卸载时清除定时器
-  if (fetchIntervalId) {
-    clearInterval(fetchIntervalId);
-  }
+  pollingStopped = true;
+  if (fetchTimeoutId) clearTimeout(fetchTimeoutId);
 });
 
 </script>

@@ -28,6 +28,7 @@ import type { SuspendedSshSession } from '../../../types/ssh-suspend.types';
 import i18n from '../../../i18n'; 
 import type { ComposerTranslation } from 'vue-i18n'; 
 import apiClient from '../../../utils/apiClient'; 
+import { isAxiosError } from 'axios';
 
 const t: ComposerTranslation = i18n.global.t; 
 
@@ -162,8 +163,12 @@ export const requestUnmarkSshSuspend = (sessionId: string): void => {
 /**
  * 获取挂起的 SSH 会话列表 (通过 HTTP API)
  */
-export const fetchSuspendedSshSessions = async (options?: { showLoadingIndicator?: boolean }): Promise<void> => {
+export const fetchSuspendedSshSessions = async (options?: {
+  showLoadingIndicator?: boolean;
+  notifyOnError?: boolean;
+}): Promise<{ ok: boolean; status?: number }> => {
   const shouldShowLoading = options?.showLoadingIndicator ?? true;
+  const shouldNotifyOnError = options?.notifyOnError ?? true;
 
   if (shouldShowLoading) {
     isLoadingSuspendedSessions.value = true;
@@ -174,16 +179,19 @@ export const fetchSuspendedSshSessions = async (options?: { showLoadingIndicator
     const response = await apiClient.get<SuspendedSshSession[]>('ssh-suspend/suspended-sessions');
     suspendedSshSessions.value = response.data;
     console.log(`[${t('term.sshSuspend')}] 已通过 HTTP 获取挂起列表，数量: ${response.data.length}`);
+    return { ok: true, status: 200 };
   } catch (error) {
     console.error(`[${t('term.sshSuspend')}] 通过 HTTP 获取挂起列表失败:`, error);
-    // 可选：通知用户错误
-    const uiNotificationsStore = useUiNotificationsStore();
-    uiNotificationsStore.addNotification({
-      type: 'error',
-      message: t('sshSuspend.notifications.fetchListError', { error: String(error) }),
-    });
+    const status = isAxiosError(error) ? error.response?.status : undefined;
+    if (shouldNotifyOnError) {
+      const uiNotificationsStore = useUiNotificationsStore();
+      uiNotificationsStore.addNotification({
+        type: 'error',
+        message: t('sshSuspend.notifications.fetchListError', { error: String(error) }),
+      });
+    }
     // 即使失败，也可能需要清空旧数据或保留旧数据，具体取决于产品需求
-    // suspendedSshSessions.value = []; // 例如，失败时清空
+    return { ok: false, status };
   } finally {
     if (shouldShowLoading) {
       isLoadingSuspendedSessions.value = false;

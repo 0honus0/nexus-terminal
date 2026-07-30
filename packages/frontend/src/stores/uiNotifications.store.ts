@@ -12,12 +12,23 @@ export interface UINotification {
 export const useUiNotificationsStore = defineStore('uiNotifications', () => {
   const notifications = ref<UINotification[]>([]);
   let nextId = 0;
+  const lastErrorAt = new Map<string, number>();
+  const ERROR_DEDUPE_MS = 15000;
 
   /**
    * 添加一个新通知
    * @param notification - 通知对象 (至少包含 type 和 message)
    */
   const addNotification = (notification: Omit<UINotification, 'id'> & { timeout?: number }) => { // Ensure timeout is part of the input type for clarity
+    if (notification.type === 'error') {
+      const now = Date.now();
+      const previous = lastErrorAt.get(notification.message);
+      if (previous && now - previous < ERROR_DEDUPE_MS) return;
+      lastErrorAt.set(notification.message, now);
+      for (const [message, shownAt] of lastErrorAt) {
+        if (now - shownAt >= ERROR_DEDUPE_MS) lastErrorAt.delete(message);
+      }
+    }
     const id = nextId++;
     // Force a 3-second timeout for all notifications
     const newNotification: UINotification = { ...notification, id, timeout: 3000 };
