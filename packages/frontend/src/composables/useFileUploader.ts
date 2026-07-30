@@ -137,6 +137,11 @@ wsDeps;
             let cleanRelativePath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
             // 移除末尾斜杠（如果有），因为文件名会加上
             cleanRelativePath = cleanRelativePath.endsWith('/') ? cleanRelativePath.slice(0, -1) : cleanRelativePath;
+            // webkitRelativePath 已包含文件名（如 folder/sub/file.txt），只取目录部分。
+            const relativeParts = cleanRelativePath.split('/');
+            if (relativeParts.length > 1 && relativeParts[relativeParts.length - 1] === file.name) {
+                cleanRelativePath = relativeParts.slice(0, -1).join('/');
+            }
             // 拼接路径，确保 cleanRelativePath 和 file.name 之间只有一个斜杠
             finalRemotePath = `${basePath}${cleanRelativePath ? cleanRelativePath + '/' : ''}${file.name}`;
         } else {
@@ -232,7 +237,11 @@ wsDeps;
 
         const upload = uploads[uploadId];
         if (upload) {
-            const errorMessage = typeof payload === 'string' ? payload : t('fileManager.errors.uploadFailed');
+            const errorMessage = typeof payload === 'string'
+                ? payload
+                : (typeof payload?.message === 'string' && payload.message.trim()
+                    ? payload.message
+                    : t('fileManager.errors.uploadFailed'));
             console.error(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`, errorMessage);
             upload.status = 'error';
             upload.error = errorMessage; // 使用 payload 作为错误消息
