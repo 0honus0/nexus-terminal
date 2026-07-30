@@ -18,6 +18,32 @@ export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultV
     }
 };
 
+const isDarkColor = (color: string): boolean => {
+    const match = color.trim().match(/^#([0-9a-f]{6})$/i);
+    if (!match) return false;
+    const value = Number.parseInt(match[1], 16);
+    const red = (value >> 16) & 0xff;
+    const green = (value >> 8) & 0xff;
+    const blue = value & 0xff;
+    return (red * 299 + green * 587 + blue * 114) / 1000 < 128;
+};
+
+const normalizeUiTheme = (theme: Record<string, string>): Record<string, string> => {
+    const normalized = { ...defaultUiTheme, ...theme };
+    const dark = isDarkColor(normalized['--app-bg-color'] || '#ffffff');
+    const fallback = (key: string, value: string) => {
+        if (!Object.prototype.hasOwnProperty.call(theme, key)) normalized[key] = value;
+    };
+
+    fallback('--input-bg-color', dark ? '#1e293b' : '#ffffff');
+    fallback('--input-text-color', dark ? '#f8fafc' : normalized['--text-color']);
+    fallback('--input-placeholder-color', dark ? '#94a3b8' : normalized['--text-color-secondary']);
+    fallback('--input-disabled-bg-color', dark ? '#0b1220' : '#f3f4f6');
+    fallback('--input-disabled-text-color', dark ? '#64748b' : '#6b7280');
+    fallback('--input-disabled-border-color', dark ? '#334155' : '#d1d5db');
+    return normalized;
+};
+
 export const useAppearanceStore = defineStore('appearance', () => {
     const { isMobile } = useDeviceDetection(); // + 获取设备检测结果
 
@@ -48,7 +74,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
     // 移除 availableTerminalThemes 计算属性，直接使用 allTerminalThemes
     // 当前应用的 UI 主题 (CSS 变量对象)
     const currentUiTheme = computed<Record<string, string>>(() => {
-        return safeJsonParse(appearanceSettings.value.customUiTheme, defaultUiTheme);
+        const parsed = safeJsonParse<unknown>(appearanceSettings.value.customUiTheme, defaultUiTheme);
+        return normalizeUiTheme(
+            typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+                ? parsed as Record<string, string>
+                : {}
+        );
     });
 
     // 当前激活的终端主题 ID

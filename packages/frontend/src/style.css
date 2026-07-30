@@ -27,6 +27,7 @@
   --color-icon-hover: var(--icon-hover-color);
   --color-split-line: var(--split-line-color);
   --color-split-line-hover: var(--split-line-hover-color);
+  --color-input: var(--input-bg-color);
   --color-input-focus-border: var(--input-focus-border-color);
   --color-overlay: var(--overlay-bg-color);
   --color-success: var(--color-success);
@@ -60,6 +61,12 @@
   --icon-hover-color: var(--link-hover-color); /* 图标悬停颜色 */
   --split-line-color: var(--border-color); /* 分割线颜色 */
   --split-line-hover-color: var(--border-color); /* 分割线悬停颜色 */
+  --input-bg-color: #ffffff;
+  --input-text-color: #333333;
+  --input-placeholder-color: #666666;
+  --input-disabled-bg-color: #f3f4f6;
+  --input-disabled-text-color: #6b7280;
+  --input-disabled-border-color: #d1d5db;
   --input-focus-border-color: var(--link-active-color); /* 输入框聚焦边框颜色 */
   --input-focus-glow: var(--link-active-color); /* 输入框聚焦光晕值 */
   --overlay-bg-color: rgba(0, 0, 0, 0.6); /* Added Overlay Background Color */
@@ -187,6 +194,29 @@ hr {
 }
 
 /* Input focus styles */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+textarea,
+select {
+    background-color: var(--input-bg-color);
+    color: var(--input-text-color);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--input-placeholder-color);
+    opacity: 1;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):disabled,
+textarea:disabled,
+select:disabled {
+    background-color: var(--input-disabled-bg-color) !important;
+    color: var(--input-disabled-text-color) !important;
+    -webkit-text-fill-color: var(--input-disabled-text-color);
+    border-color: var(--input-disabled-border-color) !important;
+    opacity: 1 !important;
+}
+
 input:focus, textarea:focus, select:focus {
     border-color: var(--input-focus-border-color) !important; /* Use new variable, !important might be needed depending on specificity */
     outline: 0;

@@ -46,6 +46,12 @@ export const defaultUiTheme: Record<string, string> = {
   '--icon-hover-color': 'var(--link-hover-color)', // 图标悬停颜色 (自动更新)
   '--split-line-color': 'var(--border-color)', /* 分割线颜色 */
   '--split-line-hover-color': 'var(--border-color)', /* 分割线悬停颜色 */
+  '--input-bg-color': '#ffffff',
+  '--input-text-color': 'var(--text-color)',
+  '--input-placeholder-color': 'var(--text-color-secondary)',
+  '--input-disabled-bg-color': '#f3f4f6',
+  '--input-disabled-text-color': '#6b7280',
+  '--input-disabled-border-color': '#d1d5db',
   '--input-focus-border-color': 'var(--link-active-color)', /* 输入框聚焦边框颜色 (自动更新) */
   '--input-focus-glow': 'var(--link-active-color)', /* 输入框聚焦光晕值 (自动更新) */
   '--overlay-bg-color': 'rgba(0, 0, 0, 0.6)', /* Added Overlay Background - 恢复 rgba 以支持透明度 */
