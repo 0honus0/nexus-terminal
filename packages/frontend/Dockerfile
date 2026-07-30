@@ -1,4 +1,4 @@
-FROM node:20 AS builder
+FROM node:24 AS builder
 
 WORKDIR /app
 
@@ -11,9 +11,6 @@ COPY packages/frontend/index.html ./
 COPY packages/frontend/tsconfig.json ./
 COPY packages/frontend/vite.config.ts ./
 COPY packages/frontend/public ./public
-
-# Copy the root .env file into the builder stage so Vite can read it during build
-COPY .env ./.env
 
 RUN npm run build
 

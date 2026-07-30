@@ -1,4 +1,4 @@
-FROM node:20 AS builder
+FROM node:24 AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY packages/backend/html-presets ./html-presets
 RUN npm run build
 
 
-FROM node:20-alpine
+FROM node:24-alpine
 
 
 # Install build dependencies including setuptools for node-gyp
