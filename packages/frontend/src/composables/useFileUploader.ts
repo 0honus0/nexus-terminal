@@ -31,6 +31,7 @@ wsDeps;
 
     // 对 uploads 字典使用 reactive 以获得更好的深度响应性
     const uploads = reactive<Record<string, UploadItem>>({});
+    const uploadContinuations = new Map<string, () => void>();
 
     // --- 上传逻辑 ---
 
@@ -71,9 +72,11 @@ wsDeps;
                 offset += currentChunkSize; 
                 
 
-                if (!isLast) {                                     
-                    nextTick(readNextChunk);
+                // 等待后端确认该分块已经写入后再继续，避免大文件把写流和内存压满。
+                if (!isLast) {
+                    uploadContinuations.set(uploadId, readNextChunk);
                 } else {
+                    uploadContinuations.delete(uploadId);
                     console.log(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
                     
                 }
@@ -167,6 +170,7 @@ wsDeps;
         if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
             console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
             upload.status = 'cancelled'; // 立即更新状态
+            uploadContinuations.delete(uploadId);
 
             if (notifyBackend && wsDeps.value.isConnected.value) { 
                 wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } }); 
@@ -220,7 +224,7 @@ wsDeps;
 
     const onUploadError = (payload: MessagePayload, message: WebSocketMessage) => {
         // 从 message 中获取 uploadId，因为 payload 此时是错误字符串
-        const uploadId = message.uploadId;
+        const uploadId = message.uploadId || payload?.uploadId;
         if (!uploadId) {
              console.warn(`[FileUploader ${sessionIdForLog.value}] Received upload:error with missing uploadId:`, message);
              return;
@@ -232,6 +236,7 @@ wsDeps;
             console.error(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`, errorMessage);
             upload.status = 'error';
             upload.error = errorMessage; // 使用 payload 作为错误消息
+            uploadContinuations.delete(uploadId);
 
             // 让错误消息可见时间长一些
             setTimeout(() => {
@@ -305,6 +310,16 @@ wsDeps;
             console.warn(`[FileUploader ${sessionIdForLog.value}] Received upload:progress for unknown upload ID: ${uploadId}`);
         }
     };
+
+    const onUploadChunkAck = (payload: MessagePayload, message: WebSocketMessage) => {
+        const uploadId = message.uploadId || payload?.uploadId;
+        if (!uploadId || uploads[uploadId]?.status !== 'uploading') return;
+        const continueUpload = uploadContinuations.get(uploadId);
+        if (continueUpload) {
+            uploadContinuations.delete(uploadId);
+            nextTick(continueUpload);
+        }
+    };
     
 
     // --- 动态注册和注销处理器 ---
@@ -322,6 +337,7 @@ wsDeps;
         const unregisterUploadResume = wsDeps.value.onMessage('sftp:upload:resume', onUploadResume);
         const unregisterUploadCancelled = wsDeps.value.onMessage('sftp:upload:cancelled', onUploadCancelled);
         const unregisterUploadProgress = wsDeps.value.onMessage('sftp:upload:progress', onUploadProgress);
+        const unregisterUploadChunkAck = wsDeps.value.onMessage('sftp:upload:chunk:ack', onUploadChunkAck);
 
         onCleanup(() => {
             unregisterUploadReady?.();
@@ -331,6 +347,7 @@ wsDeps;
             unregisterUploadResume?.();
             unregisterUploadCancelled?.();
             unregisterUploadProgress?.();
+            unregisterUploadChunkAck?.();
         });
     });
 
@@ -343,6 +360,7 @@ wsDeps;
         Object.keys(uploads).forEach(uploadId => {
             cancelUpload(uploadId, true); // 卸载时通知后端
         });
+        uploadContinuations.clear();
     });
 
     return {

@@ -1633,10 +1633,16 @@ export class SftpService {
                             type: 'sftp:upload:progress',
                             uploadId: uploadId,
                             payload: {
+                                uploadId,
                                 bytesWritten: uploadState.bytesWritten,
                                 totalSize: uploadState.totalSize,
                                 progress: Math.min(100, progressPercent)
                             }
+                        }));
+                        state.ws.send(JSON.stringify({
+                            type: 'sftp:upload:chunk:ack',
+                            uploadId,
+                            payload: { uploadId, chunkIndex, bytesWritten: uploadState.bytesWritten }
                         }));
                     }
                     
