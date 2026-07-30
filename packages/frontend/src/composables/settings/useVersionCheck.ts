@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 import pkg from '../../../package.json'; // 调整路径以正确导入 package.json
 import { useI18n } from 'vue-i18n';
+import { isNewerRelease, latestReleaseApiUrl } from '../../config/release';
 
 export function useVersionCheck() {
   const { t } = useI18n();
@@ -11,8 +12,9 @@ export function useVersionCheck() {
   const versionCheckError = ref<string | null>(null);
 
   const isUpdateAvailable = computed(() => {
-    // 简单的字符串比较，假设 tag 格式为 vX.Y.Z
-    return latestVersion.value && latestVersion.value !== `v${appVersion.value}`;
+    return latestVersion.value
+      ? isNewerRelease(latestVersion.value, appVersion.value)
+      : false;
   });
 
   const checkLatestVersion = async () => {
@@ -20,7 +22,7 @@ export function useVersionCheck() {
     versionCheckError.value = null;
     latestVersion.value = null;
     try {
-      const response = await axios.get('https://api.github.com/repos/Heavrnl/nexus-terminal/releases/latest');
+      const response = await axios.get(latestReleaseApiUrl);
       if (response.data && response.data.tag_name) {
         latestVersion.value = response.data.tag_name;
       } else {
