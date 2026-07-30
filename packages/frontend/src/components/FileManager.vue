@@ -59,6 +59,7 @@ const props = defineProps({
 const { t } = useI18n();
 const route = useRoute(); // Keep for download URL generation for now
 const sessionStore = useSessionStore(); // 实例化 Session Store
+const effectiveSessionId = computed(() => sessionStore.resolveSessionId(props.sessionId));
 
 // --- 获取并存储 SFTP 管理器实例 ---
 // 使用 shallowRef 存储管理器实例，以便在 sessionId 变化时切换
@@ -81,7 +82,7 @@ const initializeSftpManager = (sessionId: string, instanceId: string) => {
 };
 
 // 初始加载管理器
-initializeSftpManager(props.sessionId, props.instanceId);
+initializeSftpManager(effectiveSessionId.value, props.instanceId);
 
 const emptyArchiveProgress = {
   active: false,
@@ -100,7 +101,7 @@ const {
     startFileUpload,
     cancelUpload,
 } = useFileUploader(
-    computed(() => props.sessionId),
+    effectiveSessionId,
     // 传递 manager 的 currentPath 和 fileList ref
     computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
     computed(() => currentSftpManager.value?.fileList.value ?? []),
@@ -420,12 +421,12 @@ const handleItemAction = (item: FileListItem) => {
         }
 
         if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, props.sessionId);
+          fileEditorStore.triggerPopup(realPath, effectiveSessionId.value);
         }
         if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, props.sessionId, props.instanceId);
+          fileEditorStore.openFile(realPath, effectiveSessionId.value, props.instanceId);
         } else {
-          sessionStore.openFileInSession(props.sessionId, fileInfo);
+          sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
         }
       } else { // targetType is 'unknown' or not provided as expected
         console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}'). Defaulting to open as file.`);
@@ -433,12 +434,12 @@ const handleItemAction = (item: FileListItem) => {
         const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename;
         const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
         if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, props.sessionId);
+          fileEditorStore.triggerPopup(realPath, effectiveSessionId.value);
         }
         if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, props.sessionId, props.instanceId);
+          fileEditorStore.openFile(realPath, effectiveSessionId.value, props.instanceId);
         } else {
-          sessionStore.openFileInSession(props.sessionId, fileInfo);
+          sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
         }
       }
     };
@@ -516,13 +517,13 @@ const handleItemAction = (item: FileListItem) => {
     const fileInfo: FileInfo = { name: item.filename, fullPath: filePath };
 
     if (settingsStore.showPopupFileEditorBoolean) {
-      fileEditorStore.triggerPopup(filePath, props.sessionId);
+      fileEditorStore.triggerPopup(filePath, effectiveSessionId.value);
     }
 
     if (shareFileEditorTabsBoolean.value) {
-      fileEditorStore.openFile(filePath, props.sessionId, props.instanceId);
+      fileEditorStore.openFile(filePath, effectiveSessionId.value, props.instanceId);
     } else {
-      sessionStore.openFileInSession(props.sessionId, fileInfo);
+      sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
     }
   }
 };
@@ -780,7 +781,7 @@ const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileList
         }
 
         const downloadPath = currentSftpManager.value!.joinPath(currentSftpManager.value!.currentPath.value, item.filename);
-        const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(props.sessionId)}&remotePath=${encodeURIComponent(downloadPath)}`;
+        const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(effectiveSessionId.value)}&remotePath=${encodeURIComponent(downloadPath)}`;
         console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`);
 
         // 为每个文件创建一个链接并点击
@@ -824,7 +825,7 @@ const triggerDownloadDirectory = (item: FileListItem) => {
 
     const directoryPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
     // 定义新的后端 API 端点 URL (稍后实现)
-    const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(props.sessionId)}&remotePath=${encodeURIComponent(directoryPath)}`;
+    const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(effectiveSessionId.value)}&remotePath=${encodeURIComponent(directoryPath)}`;
 
     console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Attempting directory download for ${item.filename}: ${downloadUrl}`);
 
@@ -1202,7 +1203,7 @@ watch(() => focusSwitcherStore.activateFileManagerSearchTrigger, (newValue, oldV
     // 检查 newValue > oldValue 确保是递增触发，避免重复执行
     // 检查是否是当前活动会话的此实例（如果需要区分实例）
     // 目前假设搜索触发器对会话内的所有 FileManager 生效
-    if (newValue > (oldValue ?? 0) && props.sessionId === sessionStore.activeSessionId) {
+    if (newValue > (oldValue ?? 0) && effectiveSessionId.value === sessionStore.activeSessionId) {
         console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Received search activation trigger for active session.`);
         activateSearch(); // 调用组件内部的激活搜索方法
     }
@@ -1214,8 +1215,9 @@ watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
         closePathHistory(); // 关闭可能打开的路径历史下拉菜单
         pathHistoryStore.setSearchTerm(''); // 清空搜索词
+        if (oldSessionId) sessionStore.removeSftpManager(oldSessionId, props.instanceId);
         // 1. 重新初始化 SFTP 管理器
-        initializeSftpManager(newSessionId, props.instanceId);
+        initializeSftpManager(sessionStore.resolveSessionId(newSessionId), props.instanceId);
 
         // 2. 重置 UI 状态
         clearSelection();
@@ -1236,7 +1238,7 @@ let unregisterPathFocusAction: (() => void) | null = null; // 路径编辑框注
 onMounted(() => {
   // 注册搜索框聚焦动作
   const focusSearchActionWrapper = async (): Promise<boolean | undefined> => {
-    if (props.sessionId === sessionStore.activeSessionId) {
+    if (effectiveSessionId.value === sessionStore.activeSessionId) {
       console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Executing search focus action for active session.`);
       closePathHistory(); // Close path history if open
       return focusSearchInput();
@@ -1249,7 +1251,7 @@ onMounted(() => {
 
   // 注册路径编辑框聚焦动作
   const focusPathActionWrapper = async (): Promise<boolean | undefined> => {
-     if (props.sessionId === sessionStore.activeSessionId) {
+     if (effectiveSessionId.value === sessionStore.activeSessionId) {
        console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Executing path edit focus action for active session.`);
        // startPathEdit 本身不是 async，但注册时需要包装成 async 以匹配类型
        startPathEdit(); // 调用暴露的方法
@@ -1280,7 +1282,7 @@ onBeforeUnmount(() => {
  document.removeEventListener('click', handleClickOutsidePathInput);
  silentExecCleanup?.();
  silentExecCleanup = null;
- sessionStore.removeSftpManager(props.sessionId, props.instanceId);
+ sessionStore.removeSftpManager(effectiveSessionId.value, props.instanceId);
 });
 
 // +++ 监听蒙版可见性，动态调整高度 +++
@@ -1561,7 +1563,7 @@ const sendCdCommandToTerminal = () => {
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Sending command to terminal: ${command.trim()}`);
   try {
     // FileManager 可以同时存在多个实例，必须使用自身绑定的会话，不能依赖全局活动会话。
-    const owningSession = sessionStore.sessions.get(props.sessionId);
+    const owningSession = sessionStore.sessions.get(effectiveSessionId.value);
     if (!owningSession) {
       console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Owning session not found.`);
       // 可选：添加 UI 通知
@@ -1633,7 +1635,7 @@ const openPopupEditor = () => {
     return;
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering popup editor without specific file.`);
-  fileEditorStore.triggerPopup('', props.sessionId); // 修复：使用空字符串触发空编辑器
+  fileEditorStore.triggerPopup('', effectiveSessionId.value); // 修复：使用空字符串触发空编辑器
 };
 // --- 行大小调整逻辑 ---
 const handleWheel = (event: WheelEvent) => {
@@ -1655,7 +1657,7 @@ const handleWheel = (event: WheelEvent) => {
 // +++ 聚焦搜索框的方法 +++
 const focusSearchInput = (): boolean => {
   // 检查当前会话是否激活，防止后台实例响应
-  if (props.sessionId !== sessionStore.activeSessionId) {
+  if (effectiveSessionId.value !== sessionStore.activeSessionId) {
       console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Ignoring focus request for inactive session.`);
       return false;
   }
@@ -1690,7 +1692,7 @@ const handleOpenEditorClick = () => {
     return;
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering popup editor directly.`);
-  fileEditorStore.triggerPopup('', props.sessionId); // 修复：传递空字符串而不是 null
+  fileEditorStore.triggerPopup('', effectiveSessionId.value); // 修复：传递空字符串而不是 null
  };
  
  // +++ Favorite Paths Modal Logic +++

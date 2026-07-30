@@ -4,7 +4,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useConnectionsStore, type ConnectionInfo } from '../../connections.store'; 
-import { sessions, activeSessionId } from '../state';
+import { sessions, activeSessionId, clearSessionIdAliases, registerSessionIdAlias, resolveSessionId } from '../state';
 import { generateSessionId } from '../utils';
 import type { SessionState, SshTerminalInstance, StatusMonitorInstance, DockerManagerInstance, SftpManagerInstance, WsManagerInstance } from '../types';
 
@@ -126,30 +126,33 @@ export const openNewSession = (
 
     console.log(`[SessionActions/ssh:connected] 收到消息。前端初始SID: ${originalFrontendSessionIdForHandler}, 后端SID: ${backendSID}, 后端CID: ${backendCID}`);
 
-    const sessionToUpdate = sessions.value.get(originalFrontendSessionIdForHandler);
+    const currentFrontendSessionId = resolveSessionId(originalFrontendSessionIdForHandler);
+    const sessionToUpdate = sessions.value.get(currentFrontendSessionId);
 
     if (sessionToUpdate) {
       if (sessionToUpdate.connectionId !== backendCID) {
-        console.warn(`[SessionActions/ssh:connected] 后端CID ${backendCID} 与会话 ${originalFrontendSessionIdForHandler} 的期望CID ${sessionToUpdate.connectionId} 不匹配。终止SID更新。`);
+        console.warn(`[SessionActions/ssh:connected] 后端CID ${backendCID} 与会话 ${currentFrontendSessionId} 的期望CID ${sessionToUpdate.connectionId} 不匹配。终止SID更新。`);
         return;
       }
 
-      if (backendSID && backendSID !== originalFrontendSessionIdForHandler) {
-        console.log(`[SessionActions/ssh:connected] 会话ID需要更新：从 ${originalFrontendSessionIdForHandler} 到 ${backendSID}。`);
+      if (backendSID && backendSID !== currentFrontendSessionId) {
+        console.log(`[SessionActions/ssh:connected] 会话ID需要更新：从 ${currentFrontendSessionId} 到 ${backendSID}。`);
         const currentSessions = new Map(sessions.value);
-        currentSessions.delete(originalFrontendSessionIdForHandler);
+        currentSessions.delete(currentFrontendSessionId);
 
         sessionToUpdate.sessionId = backendSID; // 更新会话对象内部的sessionId
 
         currentSessions.set(backendSID, sessionToUpdate);
         sessions.value = currentSessions;
+        registerSessionIdAlias(currentFrontendSessionId, backendSID);
+        registerSessionIdAlias(originalFrontendSessionIdForHandler, backendSID);
 
-        if (activeSessionId.value === originalFrontendSessionIdForHandler) {
+        if (activeSessionId.value === currentFrontendSessionId) {
           activeSessionId.value = backendSID;
           console.log(`[SessionActions/ssh:connected] 活动会话ID已更新为 ${backendSID}。`);
         }
         console.log(`[SessionActions/ssh:connected] 会话存储已更新，新键为 ${backendSID}。`);
-      } else if (backendSID === originalFrontendSessionIdForHandler) {
+      } else if (backendSID === currentFrontendSessionId) {
         console.log(`[SessionActions/ssh:connected] 后端SID ${backendSID} 与前端SID匹配。无需重新键控。`);
       } else {
         console.error(`[SessionActions/ssh:connected] 从后端收到的 ssh:connected 消息中缺少有效的sessionId。Payload:`, connectedPayload);
@@ -188,6 +191,7 @@ export const openNewSession = (
 };
 
 export const activateSession = (sessionId: string) => {
+  sessionId = resolveSessionId(sessionId);
   if (sessions.value.has(sessionId)) {
     if (activeSessionId.value !== sessionId) {
       activeSessionId.value = sessionId;
@@ -201,6 +205,7 @@ export const activateSession = (sessionId: string) => {
 };
 
 export const closeSession = (sessionId: string) => {
+  sessionId = resolveSessionId(sessionId);
   console.log(`[SessionActions] 请求关闭会话 ID: ${sessionId}`);
   const sessionToClose = sessions.value.get(sessionId);
   if (!sessionToClose) {
@@ -238,6 +243,7 @@ export const closeSession = (sessionId: string) => {
   // 2. 从 Map 中移除会话
   const newSessionsMap = new Map(sessions.value);
   newSessionsMap.delete(sessionId);
+  clearSessionIdAliases(sessionId);
   sessions.value = newSessionsMap;
   console.log(`[SessionActions] 已从 Map 中移除会话: ${sessionId}`);
 

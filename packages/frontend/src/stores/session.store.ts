@@ -16,6 +16,7 @@ import {
   
   suspendedSshSessions,
   isLoadingSuspendedSessions,
+  resolveSessionId,
 } from './session/state';
 
 
@@ -72,37 +73,37 @@ export const useSessionStore = defineStore('session', () => {
 
   // SFTP Manager Actions
   const getOrCreateSftpManager = (sessionId: string, instanceId: string) =>
-    sftpManagerActions.getOrCreateSftpManager(sessionId, instanceId, { t });
+    sftpManagerActions.getOrCreateSftpManager(resolveSessionId(sessionId), instanceId, { t });
   const removeSftpManager = (sessionId: string, instanceId: string) =>
-    sftpManagerActions.removeSftpManager(sessionId, instanceId);
+    sftpManagerActions.removeSftpManager(resolveSessionId(sessionId), instanceId);
 
   // Editor Actions
   const openFileInSession = (sessionId: string, fileInfo: FileInfo) =>
-    editorActions.openFileInSession(sessionId, fileInfo, { getOrCreateSftpManager, t });
+    editorActions.openFileInSession(resolveSessionId(sessionId), fileInfo, { getOrCreateSftpManager, t });
   const closeEditorTabInSession = (sessionId: string, tabId: string) =>
-    editorActions.closeEditorTabInSession(sessionId, tabId);
+    editorActions.closeEditorTabInSession(resolveSessionId(sessionId), tabId);
   const setActiveEditorTabInSession = (sessionId: string, tabId: string) =>
-    editorActions.setActiveEditorTabInSession(sessionId, tabId);
+    editorActions.setActiveEditorTabInSession(resolveSessionId(sessionId), tabId);
   const updateFileContentInSession = (sessionId: string, tabId: string, newContent: string) =>
-    editorActions.updateFileContentInSession(sessionId, tabId, newContent);
+    editorActions.updateFileContentInSession(resolveSessionId(sessionId), tabId, newContent);
   const saveFileInSession = (sessionId: string, tabId: string) =>
-    editorActions.saveFileInSession(sessionId, tabId, { getOrCreateSftpManager, t });
+    editorActions.saveFileInSession(resolveSessionId(sessionId), tabId, { getOrCreateSftpManager, t });
   const reloadFileInSession = (sessionId: string, tabId: string) =>
-    editorActions.reloadFileInSession(sessionId, tabId, { getOrCreateSftpManager, t });
+    editorActions.reloadFileInSession(resolveSessionId(sessionId), tabId, { getOrCreateSftpManager, t });
   const changeEncodingInSession = (sessionId: string, tabId: string, newEncoding: string) =>
-    editorActions.changeEncodingInSession(sessionId, tabId, newEncoding);
+    editorActions.changeEncodingInSession(resolveSessionId(sessionId), tabId, newEncoding);
   const closeOtherTabsInSession = (sessionId: string, targetTabId: string) =>
-    editorActions.closeOtherTabsInSession(sessionId, targetTabId);
+    editorActions.closeOtherTabsInSession(resolveSessionId(sessionId), targetTabId);
   const closeTabsToTheRightInSession = (sessionId: string, targetTabId: string) =>
-    editorActions.closeTabsToTheRightInSession(sessionId, targetTabId);
+    editorActions.closeTabsToTheRightInSession(resolveSessionId(sessionId), targetTabId);
   const closeTabsToTheLeftInSession = (sessionId: string, targetTabId: string) =>
-    editorActions.closeTabsToTheLeftInSession(sessionId, targetTabId);
+    editorActions.closeTabsToTheLeftInSession(resolveSessionId(sessionId), targetTabId);
   const updateTabScrollPositionInSession = (sessionId: string, tabId: string, scrollTop: number, scrollLeft: number) =>
-    editorActions.updateTabScrollPositionInSession(sessionId, tabId, scrollTop, scrollLeft);
+    editorActions.updateTabScrollPositionInSession(resolveSessionId(sessionId), tabId, scrollTop, scrollLeft);
 
   // Command Input Actions
   const updateSessionCommandInput = (sessionId: string, content: string) =>
-    commandInputActions.updateSessionCommandInput(sessionId, content);
+    commandInputActions.updateSessionCommandInput(resolveSessionId(sessionId), content);
 
 
   return {
@@ -131,6 +132,7 @@ export const useSessionStore = defineStore('session', () => {
     cleanupAllSessions,
     getOrCreateSftpManager,
     removeSftpManager,
+    resolveSessionId,
     openFileInSession,
     closeEditorTabInSession,
     setActiveEditorTabInSession,
