@@ -456,6 +456,7 @@
             "copySuccess": "コピーに成功しました",
             "moveSuccess": "移動に成功しました",
             "compressSuccess": "{name} を正常に圧縮しました",
+            "compressSuccessWithWarning": "{name} の圧縮は完了しましたが、一部のファイルがスキップされました: {warning}",
             "decompressSuccess": "{name} を正常に解凍しました",
             "pathCopied": "パスがクリップボードにコピーされました"
         },

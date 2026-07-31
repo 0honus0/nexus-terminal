@@ -8,7 +8,13 @@ const props = defineProps<{ progress: ArchiveProgressState }>();
 const emit = defineEmits<{ (event: 'cancel'): void }>();
 const { t } = useI18n();
 
-const popupRef = ref<HTMLElement | null>(null);
+const popupRef = ref<HTMLElement | { $el?: unknown } | null>(null);
+const getPopupElement = (): HTMLElement | null => {
+  const candidate = popupRef.value;
+  if (candidate instanceof HTMLElement) return candidate;
+  const componentElement = candidate && typeof candidate === 'object' ? candidate.$el : null;
+  return componentElement instanceof HTMLElement ? componentElement : null;
+};
 const minimized = ref(false);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
@@ -36,7 +42,7 @@ const popupStyle = computed(() => ({
 }));
 
 const clampPosition = () => {
-  const element = popupRef.value;
+  const element = getPopupElement();
   if (!element) return;
   const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
   const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
@@ -68,8 +74,9 @@ const restorePosition = () => {
     // Ignore malformed storage.
   }
   nextTick(() => {
-    if (popupRef.value) {
-      position.value = { x: 16, y: Math.max(16, window.innerHeight - popupRef.value.offsetHeight - 16) };
+    const element = getPopupElement();
+    if (element) {
+      position.value = { x: 16, y: Math.max(16, window.innerHeight - element.offsetHeight - 16) };
     }
   });
 };
@@ -91,7 +98,7 @@ const stopDragging = () => {
 
 const startDragging = (event: PointerEvent) => {
   if ((event.target as HTMLElement).closest('button')) return;
-  const rect = popupRef.value?.getBoundingClientRect();
+  const rect = getPopupElement()?.getBoundingClientRect();
   if (!rect) return;
   dragging.value = true;
   dragOffsetX = event.clientX - rect.left;

@@ -578,10 +578,18 @@ export function createSftpActionsManager(
            };
            resetTimeout();
 
-           unregisterSuccess = onMessage('sftp:compress:success', (_payload: MessagePayload, message: WebSocketMessage) => {
+           unregisterSuccess = onMessage('sftp:compress:success', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
                cleanupOperation();
-               uiNotificationsStore.showSuccess(t('fileManager.notifications.compressSuccess', { name: archiveName }));
+               const successPayload = payload as { warning?: string };
+               if (successPayload.warning) {
+                   uiNotificationsStore.showWarning(t('fileManager.notifications.compressSuccessWithWarning', {
+                       name: archiveName,
+                       warning: successPayload.warning,
+                   }));
+               } else {
+                   uiNotificationsStore.showSuccess(t('fileManager.notifications.compressSuccess', { name: archiveName }));
+               }
                loadDirectory(currentPathRef.value, true);
                resolve();
            });

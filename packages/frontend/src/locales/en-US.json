@@ -515,6 +515,7 @@
     "moveSuccess": "Move successful",
     "cdCommandSent": "CD command sent to terminal",
     "compressSuccess": "Compressed {name} successfully",
+    "compressSuccessWithWarning": "Compressed {name}, but some files were skipped: {warning}",
     "decompressSuccess": "Decompressed {name} successfully",
     "pathCopied": "Path copied to clipboard"
   },

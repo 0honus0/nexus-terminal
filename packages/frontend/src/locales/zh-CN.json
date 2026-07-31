@@ -515,6 +515,7 @@
     "moveSuccess": "移动成功",
     "cdCommandSent": "CD 命令已发送到终端",
     "compressSuccess": "压缩 {name} 成功",
+    "compressSuccessWithWarning": "压缩 {name} 已完成，但有文件被跳过：{warning}",
     "decompressSuccess": "解压 {name} 成功",
     "pathCopied": "路径已复制到剪贴板"
   },

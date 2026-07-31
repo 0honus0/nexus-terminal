@@ -297,6 +297,7 @@ export interface SftpCompressRequestPayload {
 export interface SftpCompressSuccessPayload {
     message: string;
     requestId: string;
+    warning?: string;
 }
 
 // S -> C: Compression error

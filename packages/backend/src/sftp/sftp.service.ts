@@ -56,6 +56,7 @@ interface NetworkStats {
 const DEFAULT_POLLING_INTERVAL = 1000;
 const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: number }>();
 const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
+const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
 const UPLOAD_WRITE_HIGH_WATER_MARK = 1024 * 1024;
 
 // Interface for tracking active uploads
@@ -1220,6 +1221,9 @@ export class SftpService {
             'exit "$status";',
             '}',
         ].join(' ');
+        const archiveResultCheck = format === 'zip'
+            ? `if [ "$archive_status" -ne 0 ]; then if [ -s ${quotedTemporaryArchive} ] && zip -T ${quotedTemporaryArchive} >/dev/null 2>&1; then printf '${ARCHIVE_WARNING_MARKER}%s\n' "$archive_status"; else exit "$archive_status"; fi; fi`
+            : 'if [ "$archive_status" -ne 0 ]; then exit "$archive_status"; fi';
         const command = [
             `cd ${quotedTargetDir} || exit $?`,
             `rm -rf -- ${quotedWorkspace}`,
@@ -1229,7 +1233,7 @@ export class SftpService {
             countCommand,
             `${archiveCommand} & archive_pid=$!`,
             'wait "$archive_pid"; archive_status=$?; archive_pid=',
-            'if [ "$archive_status" -ne 0 ]; then exit "$archive_status"; fi',
+            archiveResultCheck,
             `mv -f -- ${quotedTemporaryArchive} ${quotedDestinationName}`,
         ].join('; ');
 
@@ -1250,6 +1254,8 @@ export class SftpService {
                 let stderrRemainder = '';
                 let fileCount = 0;
                 let totalFiles: number | undefined;
+                let archiveWarningCode: number | undefined;
+                let archiveWarningData = '';
                 let lastProgressTime = 0;
                 let lastSeenFileName: string | undefined;
                 let streamFinished = false;
@@ -1269,6 +1275,14 @@ export class SftpService {
                             totalFiles = parsedTotal > 0 ? parsedTotal : undefined;
                             sendProgress(true);
                             continue;
+                        }
+                        const parsedWarningCode = this.parseArchiveWarningCode(line);
+                        if (parsedWarningCode !== null) {
+                            archiveWarningCode = parsedWarningCode;
+                            continue;
+                        }
+                        if (/\b(?:zip|tar) warning:/i.test(line)) {
+                            archiveWarningData = this.appendBoundedOutput(archiveWarningData, `${line.trim()}\n`, 8192);
                         }
                         const fileName = this.parseArchiveFileName(line, format);
                         if (fileName) {
@@ -1308,8 +1322,15 @@ export class SftpService {
                     if (stdoutRemainder) stdoutRemainder = consumeOutput(`${stdoutRemainder}\n`, '');
                     if (stderrRemainder) stderrRemainder = consumeOutput(`${stderrRemainder}\n`, '');
                     if (fileCount > 0) sendProgress(true);
-                    if (exitCode === 0 && !this.isErrorInStdErr(stderrData)) {
-                        const successPayload: SftpCompressSuccessPayload = { message: '压缩成功', requestId };
+                    if (exitCode === 0) {
+                        const warningDetails = archiveWarningData.trim() || (archiveWarningCode !== undefined
+                            ? `ZIP 完成时返回警告代码 ${archiveWarningCode}，部分在压缩期间变化或消失的文件可能未包含在归档中。`
+                            : undefined);
+                        const successPayload: SftpCompressSuccessPayload = {
+                            message: warningDetails ? '压缩完成，但存在警告' : '压缩成功',
+                            requestId,
+                            ...(warningDetails ? { warning: warningDetails } : {}),
+                        };
                         if (state.ws.readyState === WebSocket.OPEN) {
                             state.ws.send(JSON.stringify({ type: 'sftp:compress:success', requestId, payload: successPayload }));
                         }
@@ -1677,6 +1698,14 @@ export class SftpService {
         if (!trimmed.startsWith(ARCHIVE_TOTAL_MARKER)) return null;
         const total = Number.parseInt(trimmed.slice(ARCHIVE_TOTAL_MARKER.length), 10);
         return Number.isFinite(total) && total >= 0 ? total : 0;
+    }
+
+    /** Parse a warning exit code emitted after a valid ZIP archive was preserved. */
+    private parseArchiveWarningCode(line: string): number | null {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith(ARCHIVE_WARNING_MARKER)) return null;
+        const code = Number.parseInt(trimmed.slice(ARCHIVE_WARNING_MARKER.length), 10);
+        return Number.isFinite(code) && code > 0 ? code : 0;
     }
 
     /** 从 zip、tar 和 unzip 的详细输出中提取正在处理的文件名。 */
