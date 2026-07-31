@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import path from 'path';
+import type { Readable } from 'node:stream';
 import { clientStates, sftpService } from '../websocket/state';
 import { Archiver, ZipArchive } from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
@@ -35,9 +36,13 @@ const addDirectoryToArchive = async (
     archive: Archiver,
     remotePath: string,
     archivePath: string,
-    ancestorRealPaths: ReadonlySet<string> = new Set()
+    ancestorRealPaths: ReadonlySet<string> = new Set(),
+    activeStreams: Set<Readable> = new Set(),
+    isAborted: () => boolean = () => false,
 ): Promise<void> => {
+    if (isAborted()) return;
     const realPath = await getSftpRealPath(sftp, remotePath);
+    if (isAborted()) return;
     if (ancestorRealPaths.has(realPath)) {
         console.warn(`SFTP 归档：跳过循环软链接 ${remotePath} -> ${realPath}`);
         return;
@@ -46,8 +51,10 @@ const addDirectoryToArchive = async (
     const nextAncestors = new Set(ancestorRealPaths);
     nextAncestors.add(realPath);
     const entries = await readSftpDirectory(sftp, remotePath);
+    if (isAborted()) return;
 
     for (const entry of entries) {
+        if (isAborted()) return;
         const currentRemotePath = path.posix.join(remotePath, entry.filename);
         const currentArchivePath = path.posix.join(archivePath, entry.filename);
         const targetStats: Stats = entry.attrs.isSymbolicLink()
@@ -56,10 +63,15 @@ const addDirectoryToArchive = async (
 
         if (targetStats.isDirectory()) {
             archive.append(Buffer.alloc(0), { name: `${currentArchivePath}/` });
-            await addDirectoryToArchive(sftp, archive, currentRemotePath, currentArchivePath, nextAncestors);
+            await addDirectoryToArchive(sftp, archive, currentRemotePath, currentArchivePath, nextAncestors, activeStreams, isAborted);
         } else if (targetStats.isFile()) {
             const fileStream = sftp.createReadStream(currentRemotePath);
+            activeStreams.add(fileStream);
+            const forgetStream = () => activeStreams.delete(fileStream);
+            fileStream.once('end', forgetStream);
+            fileStream.once('close', forgetStream);
             fileStream.on('error', (streamError: Error) => {
+                forgetStream();
                 console.error(`SFTP 归档：读取 ${currentRemotePath} 失败:`, streamError);
                 archive.emit('error', streamError);
             });
@@ -80,7 +92,21 @@ const streamDirectoryArchive = async (
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${baseName}.zip"`);
 
-    const archive = new ZipArchive({ zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const activeStreams = new Set<Readable>();
+    let completed = false;
+    let aborted = false;
+    const abortDownload = () => {
+        if (completed || aborted) return;
+        aborted = true;
+        for (const stream of activeStreams) stream.destroy();
+        activeStreams.clear();
+        archive.abort();
+    };
+    res.once('close', () => {
+        if (!res.writableEnded) abortDownload();
+    });
+    res.once('finish', () => { completed = true; });
     archive.on('warning', (err: Error) => {
         console.warn(`Archiver warning (用户 ${userId}, 路径 ${remotePath}):`, err);
     });
@@ -94,8 +120,8 @@ const streamDirectoryArchive = async (
     });
     archive.pipe(res);
 
-    await addDirectoryToArchive(sftp, archive, remotePath, '');
-    await archive.finalize();
+    await addDirectoryToArchive(sftp, archive, remotePath, '', new Set(), activeStreams, () => aborted);
+    if (!aborted) await archive.finalize();
 };
 
 const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<boolean> => {
@@ -221,12 +247,11 @@ export const downloadFile = async (
             }
         });
 
-        readStream.pipe(res); // 将文件流直接传输给客户端
+        readStream.pipe(res);
 
-        // 监听响应对象的 close 事件，确保流被正确关闭 (虽然 pipe 通常会处理)
-        res.on('close', () => {
+        res.once('close', () => {
+            if (!res.writableEnded && !readStream.destroyed) readStream.destroy();
             console.log(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
-
         });
 
         console.log(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);

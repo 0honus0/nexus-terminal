@@ -27,6 +27,7 @@ export const getOrCreateSftpManager = (
         const currentSftpPath = ref<string>('.'); // 每个实例有自己的路径
         const wsDeps: WebSocketDependencies = {
             sendMessage: session.wsManager.sendMessage,
+            sendBinaryMessage: session.wsManager.sendBinaryMessage,
             onMessage: session.wsManager.onMessage,
             isConnected: session.wsManager.isConnected,
             isSftpReady: session.wsManager.isSftpReady,

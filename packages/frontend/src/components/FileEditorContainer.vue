@@ -379,7 +379,9 @@ const handleKeyDown = (event: KeyboardEvent) => {
   display: flex;
   flex-direction: column;
   color: #f0f0f0;
-  overflow: hidden; /* 重要：防止内容溢出 */
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* 标签栏区域 */
@@ -413,6 +415,16 @@ const handleKeyDown = (event: KeyboardEvent) => {
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    min-width: 0;
+    min-height: 0;
+}
+
+.editor-instance {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
 }
 
 .editor-loading, .editor-error, .editor-placeholder {
@@ -473,10 +485,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
 .save-status.success { color: #4CAF50; background-color: #e8f5e9; }
 .save-status.error { color: #f44336; background-color: #ffebee; }
 
-.editor-instance {
-  flex-grow: 1;
-  min-height: 0;
-}
 </style>
 
 <style scoped> /* Add new styles below existing scoped styles */

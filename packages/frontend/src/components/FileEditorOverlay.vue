@@ -94,9 +94,25 @@ const startY = ref(0);
 const startWidthPx = ref(0);
 const startHeightPx = ref(0);
 const minWidth = 400; // 最小宽度
-const minHeight = 300; // 最小高度
+const minHeight = 300;
+const maxPopupWidth = () => Math.max(minWidth, window.innerWidth - 24);
+const maxPopupHeight = () => Math.max(minHeight, window.innerHeight - 24);
+const scheduleEditorLayout = () => {
+    if (editorLayoutFrame !== null) cancelAnimationFrame(editorLayoutFrame);
+    editorLayoutFrame = requestAnimationFrame(() => {
+        editorLayoutFrame = null;
+        monacoEditorRef.value?.layout();
+    });
+};
+const clampPopupSize = () => {
+    popupWidthPx.value = Math.min(Math.max(minWidth, popupWidthPx.value), maxPopupWidth());
+    popupHeightPx.value = Math.min(Math.max(minHeight, popupHeightPx.value), maxPopupHeight());
+    scheduleEditorLayout();
+};
 const encodingSelectRef = ref<HTMLSelectElement | null>(null); // +++ Ref for the select element +++
-const codeMirrorMobileEditorRef = ref<InstanceType<typeof CodeMirrorMobileEditor> | null>(null); // +++ Ref for CodeMirrorMobileEditor +++
+const codeMirrorMobileEditorRef = ref<InstanceType<typeof CodeMirrorMobileEditor> | null>(null);
+const monacoEditorRef = ref<InstanceType<typeof MonacoEditor> | null>(null);
+let editorLayoutFrame: number | null = null;
 
 // --- 计算属性，用于模板绑定 ---
 const popupStyle = computed(() => {
@@ -487,8 +503,9 @@ const handleResize = (event: MouseEvent) => {
     if (!isResizing.value) return;
     const diffX = event.clientX - startX.value;
     const diffY = event.clientY - startY.value;
-    popupWidthPx.value = Math.max(minWidth, startWidthPx.value + diffX);
-    popupHeightPx.value = Math.max(minHeight, startHeightPx.value + diffY);
+    popupWidthPx.value = Math.min(maxPopupWidth(), Math.max(minWidth, startWidthPx.value + diffX));
+    popupHeightPx.value = Math.min(maxPopupHeight(), Math.max(minHeight, startHeightPx.value + diffY));
+    scheduleEditorLayout();
 };
 
 const stopResize = () => {
@@ -513,7 +530,10 @@ watch(popupTrigger, () => {
     console.log(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
 
     isVisible.value = true;
-
+    void nextTick(() => {
+        clampPopupSize();
+        scheduleEditorLayout();
+    });
 
 });
 
@@ -528,8 +548,11 @@ watch(currentSelectedEncoding, () => {
 
 
 // 组件卸载时清理事件监听器
+onMounted(() => window.addEventListener('resize', clampPopupSize));
 onBeforeUnmount(() => {
-    stopResize(); // 确保移除监听器
+    stopResize();
+    window.removeEventListener('resize', clampPopupSize);
+    if (editorLayoutFrame !== null) cancelAnimationFrame(editorLayoutFrame);
 });
 
 </script>
@@ -624,6 +647,7 @@ onBeforeUnmount(() => {
         <!-- Desktop Editor -->
         <MonacoEditor
           v-else-if="activeTab && !props.isMobile"
+          ref="monacoEditorRef"
           :key="`monaco-${activeTab.id}`"
           v-model="activeEditorContent"
           :language="currentTabLanguage"
@@ -691,7 +715,9 @@ onBeforeUnmount(() => {
   flex-direction: column;
   color: #f0f0f0;
   overflow: hidden;
-  position: relative; /* 为拖拽手柄定位 */
+  position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* 移动设备上布满屏幕 */
@@ -803,11 +829,13 @@ onBeforeUnmount(() => {
 
 /* 编辑器内容区域，包含加载、错误、编辑器实例 */
 .editor-content-area {
-    flex-grow: 1;
-    display: flex; /* 使内部元素能填充 */
+    flex: 1 1 auto;
+    display: flex;
     flex-direction: column;
-    overflow: hidden; /* 内部编辑器滚动 */
-    position: relative; /* 用于占位符定位 */
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
 }
 
 .editor-loading, .editor-error, .editor-placeholder {
@@ -896,7 +924,10 @@ onBeforeUnmount(() => {
 .save-status.error { color: #f44336; background-color: #ffebee; }
 
 .editor-instance {
-  flex-grow: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   min-height: 0;
 }
 

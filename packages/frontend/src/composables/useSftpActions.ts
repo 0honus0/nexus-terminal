@@ -10,6 +10,7 @@ import { useUiNotificationsStore } from '../stores/uiNotifications.store';
  */
 export interface WebSocketDependencies {
     sendMessage: (message: WebSocketMessage) => void;
+    sendBinaryMessage: (frame: ArrayBuffer) => void;
     onMessage: (type: string, handler: MessageHandler) => () => void;
     isConnected: ComputedRef<boolean>;
     isSftpReady: Readonly<Ref<boolean>>;
@@ -39,8 +40,9 @@ export interface SftpManagerInstance {
    writeFile: (path: string, content: string, encoding?: string) => Promise<void>;
    copyItems: (sourcePaths: string[], destinationDir: string) => void;
    moveItems: (sourcePaths: string[], destinationDir: string) => void;
-   compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2') => Promise<void>; // Assume async
-   decompressItem: (item: FileListItem) => Promise<void>; // Assume async
+   compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2') => Promise<void>;
+   decompressItem: (item: FileListItem) => Promise<void>;
+   cancelArchive: () => void;
    joinPath: (base: string, name: string) => string;
    setInitialLoadDone: (value: boolean) => void;
 
@@ -102,6 +104,8 @@ export function createSftpActionsManager(
     const archiveProgress = reactive<ArchiveProgressState>({
         active: false,
         operation: null,
+        requestId: null,
+        cancelling: false,
         fileCount: 0,
         totalFiles: null,
         percent: null,
@@ -112,6 +116,8 @@ export function createSftpActionsManager(
     const resetArchiveProgress = () => {
         archiveProgress.active = false;
         archiveProgress.operation = null;
+        archiveProgress.requestId = null;
+        archiveProgress.cancelling = false;
         archiveProgress.fileCount = 0;
         archiveProgress.totalFiles = null;
         archiveProgress.percent = null;
@@ -537,6 +543,8 @@ export function createSftpActionsManager(
 
            archiveProgress.active = true;
            archiveProgress.operation = 'compress';
+           archiveProgress.requestId = requestId;
+           archiveProgress.cancelling = false;
            archiveProgress.fileCount = 0;
            archiveProgress.totalFiles = null;
            archiveProgress.percent = null;
@@ -546,6 +554,7 @@ export function createSftpActionsManager(
            let unregisterSuccess: (() => void) | null = null;
            let unregisterError: (() => void) | null = null;
            let unregisterProgress: (() => void) | null = null;
+           let unregisterCancelled: (() => void) | null = null;
            let unregisterCommandNotFound: (() => void) | null = null;
            let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -554,6 +563,7 @@ export function createSftpActionsManager(
                unregisterSuccess?.();
                unregisterError?.();
                unregisterProgress?.();
+               unregisterCancelled?.();
                unregisterCommandNotFound?.();
                resetArchiveProgress();
            };
@@ -595,6 +605,18 @@ export function createSftpActionsManager(
                if (progress.currentFile) archiveProgress.currentFile = progress.currentFile;
            });
 
+           unregisterCancelled = onMessage('sftp:archive:cancelled', (payload: MessagePayload, message: WebSocketMessage) => {
+               const cancelledRequestId = message.requestId || payload?.requestId;
+               if (cancelledRequestId !== requestId) return;
+               cleanupOperation();
+               if (payload?.cleaned === false) {
+                   uiNotificationsStore.showWarning(t('fileManager.archiveProgress.cancelledCleanupFailed', '压缩已停止，但连接中断导致临时文件可能需要手动清理'));
+               } else {
+                   uiNotificationsStore.showInfo(t('fileManager.archiveProgress.cancelled', '压缩已停止，临时文件已清理'));
+               }
+               reject(new Error('ARCHIVE_CANCELLED'));
+           });
+
            unregisterCommandNotFound = onMessage('sftp:command_not_found', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
                const commandPayload = payload as { operation: string, command: string };
@@ -608,6 +630,19 @@ export function createSftpActionsManager(
                requestId,
                payload: { sources: sourcePaths, destination: destinationPath, format }
            });
+       });
+   };
+
+   const cancelArchive = () => {
+       if (!archiveProgress.active || archiveProgress.operation !== 'compress' || !archiveProgress.requestId || archiveProgress.cancelling) {
+           return;
+       }
+       archiveProgress.cancelling = true;
+       const requestId = archiveProgress.requestId;
+       sendMessage({
+           type: 'sftp:archive:cancel',
+           requestId,
+           payload: { requestId },
        });
    };
 
@@ -625,6 +660,8 @@ export function createSftpActionsManager(
 
            archiveProgress.active = true;
            archiveProgress.operation = 'decompress';
+           archiveProgress.requestId = requestId;
+           archiveProgress.cancelling = false;
            archiveProgress.fileCount = 0;
            archiveProgress.totalFiles = null;
            archiveProgress.percent = null;
@@ -1259,8 +1296,9 @@ export function createSftpActionsManager(
         writeFile,
         copyItems, // +++ 暴露 copyItems +++
        moveItems, // +++ 暴露 moveItems +++
-       compressItems, // +++ 暴露 compressItems +++
-       decompressItem, // +++ 暴露 decompressItem +++
+       compressItems,
+       decompressItem,
+       cancelArchive,
        joinPath, // 暴露辅助函数
        // clearSftpError, // 移除 clearSftpError
 

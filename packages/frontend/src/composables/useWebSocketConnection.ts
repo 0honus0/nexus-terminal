@@ -314,6 +314,20 @@ export function createWebSocketConnectionManager(
         }
     };
 
+    /** Send an already encoded binary protocol frame without JSON/base64 wrapping. */
+    const sendBinaryMessage = (frame: ArrayBuffer) => {
+        if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+            try {
+                ws.value.send(frame);
+            } catch (error) {
+                console.error(`[WebSocket ${instanceSessionId}] 发送二进制消息失败:`, error);
+                throw error;
+            }
+        } else {
+            throw new Error(`WebSocket 未连接，无法发送二进制消息（状态: ${connectionStatus.value}）`);
+        }
+    };
+
     /**
      * 注册一个消息处理器
      * @param {string} type - 要监听的消息类型
@@ -358,6 +372,7 @@ export function createWebSocketConnectionManager(
         connect,
         disconnect,
         sendMessage,
+        sendBinaryMessage,
         onMessage,
     };
 }

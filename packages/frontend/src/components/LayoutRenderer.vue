@@ -164,6 +164,7 @@ const componentProps = computed(() => {
          // sftpManager: currentActiveSession.sftpManager, // 移除 sftpManager，因为它现在由 FileManager 内部管理
          wsDeps: { // 恢复 wsDeps
            sendMessage: currentActiveSession.wsManager.sendMessage,
+           sendBinaryMessage: currentActiveSession.wsManager.sendBinaryMessage,
            onMessage: currentActiveSession.wsManager.onMessage,
            isConnected: currentActiveSession.wsManager.isConnected, // 恢复 isConnected
            isSftpReady: currentActiveSession.wsManager.isSftpReady // 恢复 isSftpReady
@@ -254,6 +255,7 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
          // sftpManager: activeSession.value.sftpManager, // 移除 sftpManager
          wsDeps: { // 恢复 wsDeps
            sendMessage: activeSession.value.wsManager.sendMessage,
+           sendBinaryMessage: activeSession.value.wsManager.sendBinaryMessage,
            onMessage: activeSession.value.wsManager.onMessage,
            isConnected: activeSession.value.wsManager.isConnected, // 直接传递 ref
            isSftpReady: activeSession.value.wsManager.isSftpReady  // 直接传递 ref

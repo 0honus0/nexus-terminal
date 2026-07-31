@@ -1,4 +1,4 @@
-import { Client, SFTPWrapper, Stats, WriteStream } from 'ssh2';
+import { Client, ClientChannel, SFTPWrapper, Stats, WriteStream } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import * as pathModule from 'path'; 
@@ -63,7 +63,10 @@ interface ActiveUpload {
     remotePath: string;
     temporaryPath: string;
     totalSize: number;
+    bytesAccepted: number;
     bytesWritten: number;
+    nextChunkIndex: number;
+    receivedLastChunk: boolean;
     stream: WriteStream;
     sessionId: string; // Link back to the session for cleanup
     relativePath?: string;
@@ -76,17 +79,30 @@ interface PendingUpload {
     temporaryPath: string;
 }
 
+interface ActiveArchiveOperation {
+    sessionId: string;
+    requestId: string;
+    temporaryPath: string;
+    stream: ClientChannel;
+    heartbeatInterval: ReturnType<typeof setInterval>;
+    cancelled: boolean;
+}
+
 export class SftpService {
     private clientStates: Map<string, ClientState>; // 使用导入的 ClientState
     private activeUploads: Map<string, ActiveUpload>; // Map<uploadId, ActiveUpload>
     private pendingUploads: Map<string, PendingUpload>;
     private cancelledUploadIds: Set<string>;
+    private activeArchives: Map<string, ActiveArchiveOperation>;
+    private cancelledArchiveIds: Set<string>;
 
     constructor(clientStates: Map<string, ClientState>) {
         this.clientStates = clientStates;
         this.activeUploads = new Map(); // Initialize the map
         this.pendingUploads = new Map();
         this.cancelledUploadIds = new Set();
+        this.activeArchives = new Map();
+        this.cancelledArchiveIds = new Set();
     }
 
     /**
@@ -138,16 +154,12 @@ export class SftpService {
      */
     cleanupSftpSession(sessionId: string): void {
         const state = this.clientStates.get(sessionId);
-        const sftp = state?.sftp;
-        if (!state || !sftp) return;
+        if (!state) return;
+        const sftp = state.sftp;
+        const cleanupTasks: Promise<unknown>[] = [];
 
-        console.log(`[SFTP] 正在清理 ${sessionId} 的 SFTP 会话...`);
-        const cleanupTasks: Promise<void>[] = [];
         this.activeUploads.forEach((upload, uploadId) => {
-            if (upload.sessionId === sessionId) {
-                console.warn(`[SFTP] Cleaning up active upload ${uploadId} for session ${sessionId} due to SFTP session cleanup.`);
-                cleanupTasks.push(this.cancelUploadInternal(uploadId, 'SFTP session ended'));
-            }
+            if (upload.sessionId === sessionId) cleanupTasks.push(this.cancelUploadInternal(uploadId, 'SFTP session ended'));
         });
         this.pendingUploads.forEach((upload, uploadId) => {
             if (upload.sessionId === sessionId) {
@@ -155,9 +167,12 @@ export class SftpService {
                 cleanupTasks.push(this.removeRemoteUploadFile(sessionId, upload.temporaryPath));
             }
         });
+        this.activeArchives.forEach((archive) => {
+            if (archive.sessionId === sessionId) cleanupTasks.push(this.cancelArchive(sessionId, archive.requestId, false));
+        });
 
         void Promise.allSettled(cleanupTasks).finally(() => {
-            sftp.end();
+            if (sftp) sftp.end();
             if (state.sftp === sftp) state.sftp = undefined;
         });
     }
@@ -1144,18 +1159,16 @@ export class SftpService {
     async compress(sessionId: string, payload: SftpCompressRequestPayload): Promise<void> {
         const state = this.clientStates.get(sessionId);
         const { sources, destinationArchiveName, format, targetDirectory, requestId } = payload;
+        const archiveKey = `${sessionId}:${requestId}`;
 
-        if (!state || !state.sshClient) {
-            console.warn(`[SFTP Compress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 compress (ID: ${requestId})`);
+        if (!state?.sshClient) {
             this.sendCompressError(state?.ws, 'SSH 会话未就绪', requestId);
             return;
         }
 
-        // 命令检查
         const requiredCommand = format === 'zip' ? 'zip' : 'tar';
         try {
-            const commandExists = await this.checkCommandExists(state, sessionId, requiredCommand); // 传递 sessionId
-            if (!commandExists) {
+            if (!await this.checkCommandExists(state, sessionId, requiredCommand)) {
                 this.sendCompressError(state.ws, `命令 '${requiredCommand}' 在服务器上未找到`, requestId, `Command '${requiredCommand}' not found on server.`);
                 return;
             }
@@ -1164,69 +1177,56 @@ export class SftpService {
             return;
         }
 
-        console.debug(`[SFTP Compress ${sessionId}] Received request (ID: ${requestId}). Sources: ${sources.join(', ')}, Dest: ${destinationArchiveName}, Format: ${format}, Dir: ${targetDirectory}`);
+        if (this.cancelledArchiveIds.delete(archiveKey)) return;
 
-        // 构建目标压缩包的完整路径
-        const destinationArchivePath = pathModule.posix.join(targetDirectory, destinationArchiveName);
-
-        // --- 构建 Shell 命令 ---
-        let command: string;
-        // --- 修改：计算相对路径并引用 ---
-        const relativeSources = sources.map((s: string) => {
-            // 计算相对于 targetDirectory 的路径
-            const relativePath = pathModule.posix.relative(targetDirectory, s);
-            // 如果计算出的相对路径为空或'.', 表示源文件就在目标目录下，直接使用文件名
-            // 否则使用计算出的相对路径
-            return (relativePath === '' || relativePath === '.') ? pathModule.posix.basename(s) : relativePath;
-        });
-        const quotedRelativeSources = relativeSources.map((s: string) => `"${s.replace(/"/g, '\\"')}"`).join(' ');
-        
-        // 确保目标目录和压缩包路径被正确引用
-        const quotedTargetDir = `"${targetDirectory.replace(/"/g, '\\"')}"`;
-        // const quotedDestPath = `"${destinationArchivePath.replace(/"/g, '\\"')}"`; // 目标路径在命令中不直接使用，使用相对名称
-        const quotedDestName = `"${destinationArchiveName.replace(/"/g, '\\"')}"`;
-
-        const cdCommand = `cd ${quotedTargetDir}`;
-        // Count archive entries before starting so verbose output can be converted to an
-        // overall percentage. A failed/unsupported count naturally degrades to zero.
-        const countCommand = `total=$(find ${quotedRelativeSources} -print 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
-
-        switch (format) {
-            case 'zip':
-                // zip -r [归档名] [源文件/目录列表]
-                // 需要在目标目录执行
-                command = `${cdCommand} && ${countCommand} && zip -r ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
-                break;
-            case 'targz':
-                // tar -czvf [归档名] [源文件/目录列表]
-                // 需要在目标目录执行
-                command = `${cdCommand} && ${countCommand} && tar -czvf ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
-                break;
-            case 'tarbz2':
-                // tar -cjvf [归档名] [源文件/目录列表]
-                // 需要在目标目录执行
-                command = `${cdCommand} && ${countCommand} && tar -cjvf ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
-                break;
-            default:
-                this.sendCompressError(state.ws, `不支持的压缩格式: ${format}`, requestId);
+        const extension = format === 'zip' ? '.zip' : format === 'targz' ? '.tar.gz' : '.tar.bz2';
+        const safeRequestId = requestId.replace(/[^A-Za-z0-9_-]/g, '_');
+        const temporaryArchiveName = `.nexus-archive-${safeRequestId}${extension}`;
+        const temporaryArchivePath = pathModule.posix.join(targetDirectory, temporaryArchiveName);
+        const shellQuote = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
+        const relativeSources: string[] = [];
+        for (const source of sources) {
+            const relativePath = pathModule.posix.relative(targetDirectory, source);
+            if (relativePath === '..' || relativePath.startsWith('../')) {
+                this.sendCompressError(state.ws, `压缩源路径不在目标目录内: ${source}`, requestId);
                 return;
+            }
+            const normalized = (relativePath === '' || relativePath === '.')
+                ? pathModule.posix.basename(source)
+                : relativePath;
+            relativeSources.push(`./${normalized.replace(/^\.\/+/, '')}`);
         }
+        const temporaryArchiveRelativePath = `./${temporaryArchiveName}`;
+        const destinationArchiveRelativePath = `./${destinationArchiveName}`;
+        const quotedSources = relativeSources.map(shellQuote).join(' ');
+        const quotedTargetDir = shellQuote(targetDirectory);
+        const quotedTemporaryName = shellQuote(temporaryArchiveRelativePath);
+        const quotedDestinationName = shellQuote(destinationArchiveRelativePath);
+        const cleanupTrap = `trap ${shellQuote(`rm -f ${temporaryArchiveRelativePath}`)} EXIT HUP INT TERM`;
+        const countCommand = `total=$(find ${quotedSources} -print 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
+        const archiveCommand = format === 'zip'
+            ? `zip -r ${quotedTemporaryName} ${quotedSources}`
+            : format === 'targz'
+                ? `tar -czvf ${quotedTemporaryName} ${quotedSources}`
+                : `tar -cjvf ${quotedTemporaryName} ${quotedSources}`;
+        const command = `cd ${quotedTargetDir} && rm -f ${quotedTemporaryName} && ${cleanupTrap} && ${countCommand} && ${archiveCommand} && mv -f ${quotedTemporaryName} ${quotedDestinationName}`;
 
-        console.log(`[SFTP Compress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
-
-        // --- 执行命令 ---
         try {
             state.sshClient.exec(command, (err, stream) => {
                 if (err) {
-                    console.error(`[SFTP Compress ${sessionId}] Failed to start exec for compress (ID: ${requestId}):`, err);
                     this.sendCompressError(state.ws, `执行压缩命令失败: ${err.message}`, requestId);
+                    return;
+                }
+                if (this.cancelledArchiveIds.delete(archiveKey)) {
+                    try { stream.signal('TERM'); } catch { /* already closing */ }
+                    try { stream.close(); } catch { stream.destroy(); }
+                    void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
                     return;
                 }
 
                 let stderrData = '';
                 let stdoutRemainder = '';
                 let stderrRemainder = '';
-                let code: number | null = null;
                 let fileCount = 0;
                 let totalFiles: number | undefined;
                 let lastProgressTime = 0;
@@ -1239,7 +1239,6 @@ export class SftpService {
                     lastProgressTime = now;
                     this.sendArchiveProgress(state.ws, 'compress', requestId, fileCount, lastSeenFileName, totalFiles);
                 };
-
                 const consumeOutput = (chunk: string, remainder: string): string => {
                     const lines = `${remainder}${chunk}`.split(/\r?\n/);
                     const nextRemainder = lines.pop() || '';
@@ -1260,53 +1259,86 @@ export class SftpService {
                     return nextRemainder;
                 };
 
-                // 单个大文件可能很久没有逐文件输出；心跳用于表明远程命令仍在运行。
                 const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
+                const operation: ActiveArchiveOperation = {
+                    sessionId,
+                    requestId,
+                    temporaryPath: temporaryArchivePath,
+                    stream,
+                    heartbeatInterval,
+                    cancelled: false,
+                };
+                this.activeArchives.set(archiveKey, operation);
 
-                stream.on('data', (data: Buffer) => {
-                    stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
-                });
+                stream.on('data', (data: Buffer) => { stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder); });
                 stream.stderr.on('data', (data: Buffer) => {
                     const chunk = data.toString();
                     stderrData = this.appendBoundedOutput(stderrData, chunk);
                     stderrRemainder = consumeOutput(chunk, stderrRemainder);
                 });
-
                 stream.on('close', (exitCode: number | null) => {
                     if (streamFinished) return;
                     streamFinished = true;
                     clearInterval(heartbeatInterval);
+                    const active = this.activeArchives.get(archiveKey);
+                    if (active === operation) this.activeArchives.delete(archiveKey);
+                    if (operation.cancelled || !active) return;
+
                     if (stdoutRemainder) stdoutRemainder = consumeOutput(`${stdoutRemainder}\n`, '');
                     if (stderrRemainder) stderrRemainder = consumeOutput(`${stderrRemainder}\n`, '');
-                    code = exitCode;
                     if (fileCount > 0) sendProgress(true);
-                    console.log(`[SFTP Compress ${sessionId}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${stderrData.trim()}`);
-                    if (code === 0 && !this.isErrorInStdErr(stderrData)) { // 检查退出码和 stderr
-                        console.log(`[SFTP Compress ${sessionId}] Compression successful (ID: ${requestId}).`);
-                        const successPayload: SftpCompressSuccessPayload = {
-                            message: '压缩成功',
-                            requestId: requestId
-                        };
-                        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                             state.ws.send(JSON.stringify({ type: 'sftp:compress:success', requestId: requestId, payload: successPayload })); // Ensure requestId is included
+                    if (exitCode === 0 && !this.isErrorInStdErr(stderrData)) {
+                        const successPayload: SftpCompressSuccessPayload = { message: '压缩成功', requestId };
+                        if (state.ws.readyState === WebSocket.OPEN) {
+                            state.ws.send(JSON.stringify({ type: 'sftp:compress:success', requestId, payload: successPayload }));
                         }
                     } else {
-                        const errorDetails = stderrData.trim() || `压缩命令退出，代码: ${code ?? 'N/A'}`;
-                        console.error(`[SFTP Compress ${sessionId}] Compression failed (ID: ${requestId}): ${errorDetails}`);
-                        this.sendCompressError(state.ws, '压缩失败', requestId, errorDetails);
+                        void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
+                        const details = stderrData.trim() || `压缩命令退出，代码: ${exitCode ?? 'N/A'}`;
+                        this.sendCompressError(state.ws, '压缩失败', requestId, details);
                     }
                 });
-                 stream.on('error', (streamErr: Error) => { 
-                     if (streamFinished) return;
-                     streamFinished = true;
-                     clearInterval(heartbeatInterval);
-                     console.error(`[SFTP Compress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
-                     this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamErr.message);
-                 });
+                stream.on('error', (streamError: Error) => {
+                    if (streamFinished) return;
+                    streamFinished = true;
+                    clearInterval(heartbeatInterval);
+                    if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
+                    if (operation.cancelled) return;
+                    void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
+                    this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamError.message);
+                });
             });
         } catch (execError: any) {
-            console.error(`[SFTP Compress ${sessionId}] Compress command caught unexpected error during exec setup (ID: ${requestId}):`, execError);
+            void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
             this.sendCompressError(state.ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
+        }
+    }
+
+    async cancelArchive(sessionId: string, requestId: string, notifyClient = true): Promise<void> {
+        const state = this.clientStates.get(sessionId);
+        const archiveKey = `${sessionId}:${requestId}`;
+        const operation = this.activeArchives.get(archiveKey);
+        this.cancelledArchiveIds.add(archiveKey);
+
+        let cleaned = true;
+        if (operation) {
+            operation.cancelled = true;
+            this.activeArchives.delete(archiveKey);
+            clearInterval(operation.heartbeatInterval);
+            try { operation.stream.signal('TERM'); } catch { /* channel may already be closing */ }
+            try { operation.stream.close(); } catch { operation.stream.destroy(); }
+            cleaned = await this.removeRemoteUploadFile(sessionId, operation.temporaryPath);
+            this.cancelledArchiveIds.delete(archiveKey);
+        } else {
+            setTimeout(() => this.cancelledArchiveIds.delete(archiveKey), 30000);
+        }
+
+        if (notifyClient && state?.ws.readyState === WebSocket.OPEN) {
+            state.ws.send(JSON.stringify({
+                type: 'sftp:archive:cancelled',
+                requestId,
+                payload: { requestId, cleaned },
+            }));
         }
     }
 
@@ -1545,7 +1577,7 @@ export class SftpService {
             if (error.includes('在服务器上未找到')) {
                  ws.send(JSON.stringify({ type: 'sftp:command_not_found', payload: { operation: 'compress', command: error.match(/'([^']+)'/)?.[1] || 'unknown', message: details || error }, requestId }));
             } else {
-                 ws.send(JSON.stringify({ type: 'sftp:compress:error', payload }));
+                 ws.send(JSON.stringify({ type: 'sftp:compress:error', requestId, payload }));
             }
          } else {
              console.warn(`[SFTP Compress] WebSocket closed or invalid, cannot send error for request ${requestId}.`);
@@ -1561,7 +1593,7 @@ export class SftpService {
             if (error.includes('在服务器上未找到')) {
                 ws.send(JSON.stringify({ type: 'sftp:command_not_found', payload: { operation: 'decompress', command: error.match(/'([^']+)'/)?.[1] || 'unknown', message: details || error }, requestId }));
             } else {
-                ws.send(JSON.stringify({ type: 'sftp:decompress:error', payload }));
+                ws.send(JSON.stringify({ type: 'sftp:decompress:error', requestId, payload }));
             }
         } else {
              console.warn(`[SFTP Decompress] WebSocket closed or invalid, cannot send error for request ${requestId}.`);
@@ -1701,7 +1733,10 @@ export class SftpService {
                 remotePath,
                 temporaryPath,
                 totalSize,
+                bytesAccepted: 0,
                 bytesWritten: 0,
+                nextChunkIndex: 0,
+                receivedLastChunk: false,
                 stream,
                 sessionId,
                 relativePath,
@@ -1722,8 +1757,8 @@ export class SftpService {
                 const finalState = this.activeUploads.get(uploadId);
                 if (!finalState) return; // Cancel/error already owns cleanup.
 
-                if (finalState.bytesWritten < finalState.totalSize) {
-                    const message = `最终文件大小 (${finalState.bytesWritten}) 小于预期 (${finalState.totalSize})`;
+                if (finalState.bytesWritten !== finalState.totalSize || !finalState.receivedLastChunk) {
+                    const message = `最终文件不完整（写入 ${finalState.bytesWritten}/${finalState.totalSize} 字节，结束分块: ${finalState.receivedLastChunk ? '是' : '否'}）`;
                     if (state.ws.readyState === WebSocket.OPEN) {
                         state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message } }));
                     }
@@ -1778,111 +1813,117 @@ export class SftpService {
         }
     }
 
-    /** Handle an incoming file chunk */
-    // --- FIX: Make async to handle await for drain ---
-    async handleUploadChunk(sessionId: string, uploadId: string, chunkIndex: number, dataBase64: string): Promise<void> {
+    /** Handle a decoded NXUP binary file chunk. */
+    async handleUploadChunk(
+        sessionId: string,
+        uploadId: string,
+        chunkIndex: number,
+        chunkBuffer: Buffer,
+        isLast: boolean,
+    ): Promise<void> {
         const state = this.clientStates.get(sessionId);
         const uploadState = this.activeUploads.get(uploadId);
 
-        if (!state || !state.sftp) {
-            // Session or SFTP gone, can't process chunk. Upload might be cleaned up elsewhere.
-            console.warn(`[SFTP Upload ${uploadId}] Received chunk ${chunkIndex}, but session ${sessionId} or SFTP is invalid.`);
-            this.cancelUploadInternal(uploadId, 'Session or SFTP invalid');
+        if (!state?.sftp) {
+            console.warn(`[SFTP Upload ${uploadId}] Received binary chunk ${chunkIndex}, but session ${sessionId} or SFTP is invalid.`);
+            void this.cancelUploadInternal(uploadId, 'Session or SFTP invalid');
             return;
         }
         if (!uploadState) {
-            console.warn(`[SFTP Upload ${uploadId}] Received chunk ${chunkIndex}, but no active upload found.`);
+            console.warn(`[SFTP Upload ${uploadId}] Received binary chunk ${chunkIndex}, but no active upload found.`);
             return;
         }
 
+        const rejectChunk = (message: string) => {
+            console.error(`[SFTP Upload ${uploadId}] ${message}`);
+            if (state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message } }));
+            }
+            void this.cancelUploadInternal(uploadId, message);
+        };
+
+        if (chunkIndex !== uploadState.nextChunkIndex) {
+            rejectChunk(`上传分块顺序错误：期望 ${uploadState.nextChunkIndex}，收到 ${chunkIndex}`);
+            return;
+        }
+        if (uploadState.receivedLastChunk) {
+            rejectChunk(`结束分块之后又收到分块 ${chunkIndex}`);
+            return;
+        }
+
+        const nextAcceptedBytes = uploadState.bytesAccepted + chunkBuffer.length;
+        if (nextAcceptedBytes > uploadState.totalSize) {
+            rejectChunk(`上传数据超过声明大小：${nextAcceptedBytes}/${uploadState.totalSize} 字节`);
+            return;
+        }
+        const reachesDeclaredSize = nextAcceptedBytes === uploadState.totalSize;
+        if (isLast !== reachesDeclaredSize) {
+            rejectChunk(isLast
+                ? `结束分块过早：${nextAcceptedBytes}/${uploadState.totalSize} 字节`
+                : `已达到声明大小但分块未标记结束：${nextAcceptedBytes}/${uploadState.totalSize} 字节`);
+            return;
+        }
+
+        uploadState.nextChunkIndex += 1;
+        uploadState.bytesAccepted = nextAcceptedBytes;
+        uploadState.receivedLastChunk = isLast;
+
         try {
-            const chunkBuffer = Buffer.from(dataBase64, 'base64');
-            const writeSuccess = uploadState.stream.write(chunkBuffer, (err) => {
-                 // A cancellation removes this exact state before destroying the stream.
-                 // Ignore callbacks already queued by a chunk that was in flight.
-                 if (this.activeUploads.get(uploadId) !== uploadState) return;
-                 if (err) {
-                     
-                     console.error(`[SFTP Upload ${uploadId}] Error writing chunk ${chunkIndex} to ${uploadState.remotePath}:`, err);
-                     state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `写入块 ${chunkIndex} 失败: ${err.message}` } }));
-                     
-                     this.cancelUploadInternal(uploadId, `Write error on chunk ${chunkIndex}`);
-                 } else {
-                    
-                    uploadState.bytesWritten += chunkBuffer.length;
+            const writeSuccess = uploadState.stream.write(chunkBuffer, (error) => {
+                if (this.activeUploads.get(uploadId) !== uploadState) return;
+                if (error) {
+                    rejectChunk(`写入块 ${chunkIndex} 失败: ${error.message}`);
+                    return;
+                }
 
-                    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                        const progressPercent = Math.round((uploadState.bytesWritten / uploadState.totalSize) * 100);
-                        state.ws.send(JSON.stringify({
-                            type: 'sftp:upload:progress',
-                            uploadId: uploadId,
-                            payload: {
-                                uploadId,
-                                bytesWritten: uploadState.bytesWritten,
-                                totalSize: uploadState.totalSize,
-                                progress: Math.min(100, progressPercent)
-                            }
-                        }));
-                        state.ws.send(JSON.stringify({
-                            type: 'sftp:upload:chunk:ack',
+                uploadState.bytesWritten += chunkBuffer.length;
+                if (state.ws.readyState === WebSocket.OPEN) {
+                    const progressPercent = uploadState.totalSize === 0
+                        ? 100
+                        : Math.round((uploadState.bytesWritten / uploadState.totalSize) * 100);
+                    state.ws.send(JSON.stringify({
+                        type: 'sftp:upload:progress',
+                        uploadId,
+                        payload: {
                             uploadId,
-                            payload: { uploadId, chunkIndex, bytesWritten: uploadState.bytesWritten }
-                        }));
-                    }
-                    
+                            bytesWritten: uploadState.bytesWritten,
+                            totalSize: uploadState.totalSize,
+                            progress: Math.min(100, progressPercent),
+                        },
+                    }));
+                    state.ws.send(JSON.stringify({
+                        type: 'sftp:upload:chunk:ack',
+                        uploadId,
+                        payload: { uploadId, chunkIndex, bytesWritten: uploadState.bytesWritten },
+                    }));
+                }
 
-                    
-                    if (uploadState.bytesWritten >= uploadState.totalSize) {
-                         if (!uploadState.stream.writableEnded) {
-                             uploadState.stream.end((endErr: Error & { code?: string } | undefined) => {
-                                 
-                                 const streamStateInEndCallback = uploadState?.stream;
-                                 if (endErr) {
-                                     if (endErr.code === 'ERR_STREAM_DESTROYED' && uploadState && uploadState.bytesWritten >= uploadState.totalSize) {
-                                         console.warn(`[SFTP Upload ${uploadId}] stream.end() CALLBACK reported ERR_STREAM_DESTROYED, but all bytes written. UploadId: ${uploadId}. Error:`, endErr);
-                                         console.log(`[SFTP Upload ${uploadId}] Treating ERR_STREAM_DESTROYED as non-fatal for this upload. Expecting 'close' event to finalize success for ${uploadState.remotePath}.`);
-                                     } else {
-                                         console.error(`[SFTP Upload ${uploadId}] Error from stream.end() CALLBACK for ${uploadState?.remotePath || 'unknown path'}:`, endErr);
-                                         if (state && state.ws) {
-                                             state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `结束写入流时出错: ${endErr.message}` } }));
-                                         }
-                                         this.cancelUploadInternal(uploadId, `Stream end error: ${endErr.message}`, endErr);
-                                     }
-                                 }
-                             });
-                         }
-                    }
-                 }
+                if (isLast && uploadState.bytesWritten === uploadState.totalSize && !uploadState.stream.writableEnded) {
+                    uploadState.stream.end((endError: Error & { code?: string } | undefined) => {
+                        if (!endError) return;
+                        if (endError.code === 'ERR_STREAM_DESTROYED' && uploadState.bytesWritten === uploadState.totalSize) {
+                            console.warn(`[SFTP Upload ${uploadId}] Stream already closed after all bytes were written.`);
+                            return;
+                        }
+                        rejectChunk(`结束写入流时出错: ${endError.message}`);
+                    });
+                }
             });
 
             if (!writeSuccess) {
                 if (!uploadState.drainPromise) {
-                    uploadState.drainPromise = new Promise<void>(resolve => {
+                    uploadState.drainPromise = new Promise<void>((resolve) => {
                         uploadState.stream.once('drain', () => {
-                            
-                            uploadState.drainPromise = null; 
+                            uploadState.drainPromise = null;
                             resolve();
                         });
                     });
                 }
-                try {
-                    await uploadState.drainPromise;
-                    
-                } catch (drainError) {
-                    console.error(`[SFTP Upload ${uploadId}] Error awaiting drain promise for chunk ${chunkIndex}:`, drainError);
-                    this.cancelUploadInternal(uploadId, 'Error waiting for drain promise');
-                    throw drainError;
-                }
+                await uploadState.drainPromise;
             }
-
-            
-            
-
-            
-     } catch (error: any) {
-            console.error(`[SFTP Upload ${uploadId}] Error handling chunk ${chunkIndex} for ${uploadState?.remotePath}:`, error);
-            state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `处理块 ${chunkIndex} 时出错: ${error.message}` } }));
-            this.cancelUploadInternal(uploadId, `Error handling chunk ${chunkIndex}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            rejectChunk(`处理二进制分块 ${chunkIndex} 时出错: ${message}`);
         }
     }
 
@@ -2021,22 +2062,23 @@ export class SftpService {
         });
     }
 
-    private async removeRemoteUploadFile(sessionId: string, remotePath: string): Promise<void> {
+    private async removeRemoteUploadFile(sessionId: string, remotePath: string): Promise<boolean> {
         for (let attempt = 1; attempt <= 3; attempt++) {
             const state = this.clientStates.get(sessionId);
-            if (!state?.sftp) return;
+            if (!state?.sftp) return false;
             try {
                 await this.unlinkSftpPath(state.sftp, remotePath, true);
-                return;
+                return true;
             } catch (error) {
                 if (attempt === 3) {
                     console.warn(`[SFTP Upload] Unable to remove temporary file ${remotePath}:`, error);
-                    return;
+                    return false;
                 }
                 // Some servers briefly keep the file handle busy after stream.destroy().
                 await new Promise(resolve => setTimeout(resolve, attempt * 200));
             }
         }
+        return false;
     }
 
     private isNoSuchFileError(error: unknown): boolean {

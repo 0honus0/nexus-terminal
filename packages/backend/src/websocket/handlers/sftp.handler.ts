@@ -104,6 +104,12 @@ export async function handleSftpOperation(
                     sftpService.compress(sessionId, compressPayload);
                 } else throw new Error("Missing 'sources' (array), 'destination', 'format', or 'requestId' in payload for compress");
                 break;
+            case 'sftp:archive:cancel': {
+                const archiveRequestId = payload?.requestId || requestId;
+                if (archiveRequestId) await sftpService.cancelArchive(sessionId, archiveRequestId);
+                else throw new Error("Missing 'requestId' in payload for archive cancellation");
+                break;
+            }
             case 'sftp:decompress':
                 if (payload?.source && requestId) {
                     const decompressPayload = {
@@ -144,19 +150,38 @@ export async function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload:
     await sftpService.startUpload(sessionId, payload.uploadId, payload.remotePath, payload.size, relativePath);
 }
 
-export async function handleSftpUploadChunk(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
+export interface BinaryUploadChunkPayload {
+    uploadId: string;
+    chunkIndex: number;
+    isLast: boolean;
+    data: Buffer;
+}
+
+export async function handleSftpUploadChunk(ws: AuthenticatedWebSocket, payload: BinaryUploadChunkPayload): Promise<void> {
     const sessionId = ws.sessionId;
     const state = sessionId ? clientStates.get(sessionId) : undefined;
-    if (!sessionId || !state) return; // Silently ignore if session is gone
+    if (!sessionId || !state) return;
 
-     if (!payload?.uploadId || typeof payload?.chunkIndex !== 'number' || typeof payload?.data !== 'string') {
-        console.error(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 sftp:upload:chunk 请求，但缺少 uploadId, chunkIndex 或 data。`);
+    if (
+        !payload.uploadId
+        || !Number.isInteger(payload.chunkIndex)
+        || payload.chunkIndex < 0
+        || typeof payload.isLast !== 'boolean'
+        || !Buffer.isBuffer(payload.data)
+    ) {
+        console.error(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的无效二进制上传分块。`);
         if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId: payload?.uploadId, message: '上传分块格式无效' } }));
+            ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId: payload.uploadId, message: '二进制上传分块格式无效' } }));
         }
         return;
     }
-    await sftpService.handleUploadChunk(sessionId, payload.uploadId, payload.chunkIndex, payload.data);
+    await sftpService.handleUploadChunk(
+        sessionId,
+        payload.uploadId,
+        payload.chunkIndex,
+        payload.data,
+        payload.isLast,
+    );
 }
 
 export async function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload: any): Promise<void> {

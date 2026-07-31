@@ -1,5 +1,4 @@
-import { ref, reactive, onUnmounted, readonly, type Ref, watchEffect } from 'vue';
-import { createWebSocketConnectionManager } from './useWebSocketConnection'; 
+import { reactive, onUnmounted, type Ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../types/sftp.types'; 
 import type { UploadItem } from '../types/upload.types'; 
@@ -9,9 +8,51 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 import type { WebSocketDependencies } from './useSftpActions'; 
 
 
-// 512 KiB keeps each JSON/WebSocket frame comfortably bounded while reducing
-// application-level round trips by 8x compared with the previous 64 KiB chunks.
-const UPLOAD_CHUNK_SIZE = 512 * 1024;
+// Keep a bounded pipeline so network latency does not leave the SFTP write stream idle.
+// Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
+const UPLOAD_CHUNK_SIZE = 1024 * 1024;
+const UPLOAD_MAX_IN_FLIGHT = 4;
+const UPLOAD_FRAME_MAGIC = [0x4e, 0x58, 0x55, 0x50] as const; // NXUP
+const UPLOAD_FRAME_VERSION = 1;
+const UPLOAD_FRAME_FIXED_HEADER_SIZE = 12;
+const MAX_UPLOAD_ID_BYTES = 512;
+
+interface UploadTransferState {
+    file: File;
+    offset: number;
+    nextChunkIndex: number;
+    inFlight: number;
+    pumping: boolean;
+}
+
+const textEncoder = new TextEncoder();
+
+const encodeUploadChunkFrame = (
+    uploadId: string,
+    chunkIndex: number,
+    isLast: boolean,
+    chunk: ArrayBuffer,
+): ArrayBuffer => {
+    const uploadIdBytes = textEncoder.encode(uploadId);
+    if (uploadIdBytes.byteLength === 0 || uploadIdBytes.byteLength > MAX_UPLOAD_ID_BYTES) {
+        throw new Error('上传任务 ID 长度无效');
+    }
+    if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0 || chunkIndex > 0xffffffff) {
+        throw new Error(`上传分块序号无效: ${chunkIndex}`);
+    }
+
+    const frame = new ArrayBuffer(UPLOAD_FRAME_FIXED_HEADER_SIZE + uploadIdBytes.byteLength + chunk.byteLength);
+    const bytes = new Uint8Array(frame);
+    bytes.set(UPLOAD_FRAME_MAGIC, 0);
+    const view = new DataView(frame);
+    view.setUint8(4, UPLOAD_FRAME_VERSION);
+    view.setUint8(5, isLast ? 1 : 0);
+    view.setUint16(6, uploadIdBytes.byteLength, false);
+    view.setUint32(8, chunkIndex, false);
+    bytes.set(uploadIdBytes, UPLOAD_FRAME_FIXED_HEADER_SIZE);
+    bytes.set(new Uint8Array(chunk), UPLOAD_FRAME_FIXED_HEADER_SIZE + uploadIdBytes.byteLength);
+    return frame;
+};
 
 const generateUploadId = (): string => {
     return `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -31,97 +72,83 @@ export function useFileUploader(
     wsDeps: Ref<WebSocketDependencies> 
 ) {
     const { t } = useI18n();
-wsDeps;
 
     // 对 uploads 字典使用 reactive 以获得更好的深度响应性
     const uploads = reactive<Record<string, UploadItem>>({});
-    const uploadContinuations = new Map<string, () => void>();
+    const uploadTransferStates = new Map<string, UploadTransferState>();
 
     // --- 上传逻辑 ---
 
-    const sendFileChunks = (uploadId: string, file: File, startByte = 0) => {
+    const pumpUpload = async (uploadId: string): Promise<void> => {
+        const transfer = uploadTransferStates.get(uploadId);
         const upload = uploads[uploadId];
-        // 在继续之前检查连接和上传状态
-        if (!wsDeps.value.isConnected.value || !upload || upload.status !== 'uploading') { 
-            console.warn(`[FileUploader ${sessionIdForLog.value}] Cannot send chunk for ${uploadId}. Connection: ${wsDeps.value.isConnected.value}, Upload status: ${upload?.status}`);
-            return;
-        }
+        if (!transfer || transfer.pumping || !upload || upload.status !== 'uploading') return;
 
-        const chunkSize = UPLOAD_CHUNK_SIZE;
-        const reader = new FileReader();
-        let offset = startByte;
-        let chunkIndex = 0; // Initialize chunk index counter
-        let currentChunkSize = 0; // Store the size of the chunk being processed
-
-        reader.onload = (e) => {
-            const currentUpload = uploads[uploadId];
-            // *发送前* 再次检查连接和状态
-            if (!wsDeps.value.isConnected.value || !currentUpload || currentUpload.status !== 'uploading') { 
-                 console.warn(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} status changed or disconnected before sending chunk at offset ${offset}.`);
-                 return; // 如果状态改变或断开连接，则停止发送
+        transfer.pumping = true;
+        try {
+            if (transfer.file.size === 0 && transfer.offset === 0 && transfer.inFlight === 0) {
+                transfer.inFlight = 1;
+                transfer.offset = 1;
+                wsDeps.value.sendBinaryMessage(
+                    encodeUploadChunkFrame(uploadId, 0, true, new ArrayBuffer(0)),
+                );
+                return;
             }
 
-            const chunkResult = e.target?.result as string;
-            // 确保结果是字符串并且包含 base64 前缀
-            if (typeof chunkResult === 'string' && chunkResult.startsWith('data:')) {
-                const chunkBase64 = chunkResult.split(',')[1];
-                const isLast = offset + chunkSize >= file.size;
+            while (
+                wsDeps.value.isConnected.value
+                && uploads[uploadId]?.status === 'uploading'
+                && transfer.inFlight < UPLOAD_MAX_IN_FLIGHT
+                && transfer.offset < transfer.file.size
+            ) {
+                const slice = transfer.file.slice(transfer.offset, transfer.offset + UPLOAD_CHUNK_SIZE);
+                const chunk = await slice.arrayBuffer();
+                if (!wsDeps.value.isConnected.value || uploads[uploadId]?.status !== 'uploading') return;
 
-                wsDeps.value.sendMessage({ 
-                    type: 'sftp:upload:chunk',
-                    payload: { uploadId, chunkIndex: chunkIndex++, data: chunkBase64, isLast }
-                });
-
-                
-                offset += currentChunkSize; 
-                
-
-                // 等待后端确认该分块已经写入后再继续，避免大文件把写流和内存压满。
-                if (!isLast) {
-                    uploadContinuations.set(uploadId, readNextChunk);
-                } else {
-                    uploadContinuations.delete(uploadId);
-                    console.log(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
-                    
-                }
-            } else {
-                 console.error(`[FileUploader ${sessionIdForLog.value}] FileReader returned unexpected result for ${uploadId}:`, chunkResult);
-                 currentUpload.status = 'error';
-                 currentUpload.error = t('fileManager.errors.readFileError');
+                transfer.offset += slice.size;
+                const chunkIndex = transfer.nextChunkIndex++;
+                const isLast = transfer.offset >= transfer.file.size;
+                transfer.inFlight += 1;
+                wsDeps.value.sendBinaryMessage(
+                    encodeUploadChunkFrame(uploadId, chunkIndex, isLast, chunk),
+                );
             }
-        };
-
-        reader.onerror = () => {
-            console.error(`[FileUploader ${sessionIdForLog.value}] FileReader error for upload ID: ${uploadId}`);
+        } catch (error) {
+            console.error(`[FileUploader ${sessionIdForLog.value}] Failed to read upload chunk for ${uploadId}:`, error);
             const failedUpload = uploads[uploadId];
             if (failedUpload) {
                 failedUpload.status = 'error';
                 failedUpload.error = t('fileManager.errors.readFileError');
             }
-        };
-
-        const readNextChunk = () => {
-            // 读取下一个块之前再次检查状态
-            if (offset < file.size && uploads[uploadId]?.status === 'uploading') {
-                const slice = file.slice(offset, offset + chunkSize);
-                currentChunkSize = slice.size; 
-                reader.readAsDataURL(slice);
+            uploadTransferStates.delete(uploadId);
+            if (wsDeps.value.isConnected.value) {
+                wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
             }
-        };
-
-        // 开始读取第一个块（或恢复时的下一个块）
-        if (file.size > 0) {
-             readNextChunk();
-        } else {
-             // 立即处理零字节文件
-             console.log(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
-             // Send chunkIndex 0 for zero-byte file
-             wsDeps.value.sendMessage({ type: 'sftp:upload:chunk', payload: { uploadId, chunkIndex: 0, data: '', isLast: true } });
-             upload.progress = 100;
-             
+        } finally {
+            const current = uploadTransferStates.get(uploadId);
+            if (current) {
+                current.pumping = false;
+                if (
+                    uploads[uploadId]?.status === 'uploading'
+                    && current.inFlight < UPLOAD_MAX_IN_FLIGHT
+                    && current.offset < current.file.size
+                ) queueMicrotask(() => void pumpUpload(uploadId));
+            }
         }
     };
 
+    const sendFileChunks = (uploadId: string, file: File, startByte = 0) => {
+        if (!uploadTransferStates.has(uploadId)) {
+            uploadTransferStates.set(uploadId, {
+                file,
+                offset: startByte,
+                nextChunkIndex: Math.floor(startByte / UPLOAD_CHUNK_SIZE),
+                inFlight: 0,
+                pumping: false,
+            });
+        }
+        void pumpUpload(uploadId);
+    };
 
     const startFileUpload = (file: File, relativePath?: string) => {
         // Roo: 使用 .value 访问响应式的 sessionIdForLog
@@ -179,7 +206,7 @@ wsDeps;
         if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
             console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
             upload.status = 'cancelled'; // 立即更新状态
-            uploadContinuations.delete(uploadId);
+            uploadTransferStates.delete(uploadId);
 
             if (notifyBackend && wsDeps.value.isConnected.value) { 
                 wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } }); 
@@ -226,7 +253,7 @@ wsDeps;
             console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
             upload.status = 'success';
             upload.progress = 100;
-
+            uploadTransferStates.delete(uploadId);
 
             // 立即删除记录
             if (uploads[uploadId]) { // 确保记录仍然存在
@@ -256,7 +283,7 @@ wsDeps;
             console.error(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`, errorMessage);
             upload.status = 'error';
             upload.error = errorMessage; // 使用 payload 作为错误消息
-            uploadContinuations.delete(uploadId);
+            uploadTransferStates.delete(uploadId);
 
             // 让错误消息可见时间长一些
             setTimeout(() => {
@@ -286,7 +313,7 @@ wsDeps;
         if (upload && upload.status === 'paused') {
             console.log(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
             upload.status = 'uploading';
-            sendFileChunks(uploadId, upload.file);
+            void pumpUpload(uploadId);
         }
     };
 
@@ -295,6 +322,7 @@ wsDeps;
         if (!uploadId) return;
         const upload = uploads[uploadId];
         if (upload) {
+            uploadTransferStates.delete(uploadId);
             // 状态可能已经由用户操作设置为 'cancelled'
             if (upload.status !== 'cancelled') {
                  upload.status = 'cancelled';
@@ -333,12 +361,11 @@ wsDeps;
 
     const onUploadChunkAck = (payload: MessagePayload, message: WebSocketMessage) => {
         const uploadId = message.uploadId || payload?.uploadId;
-        if (!uploadId || uploads[uploadId]?.status !== 'uploading') return;
-        const continueUpload = uploadContinuations.get(uploadId);
-        if (continueUpload) {
-            uploadContinuations.delete(uploadId);
-            continueUpload();
-        }
+        if (!uploadId) return;
+        const transfer = uploadTransferStates.get(uploadId);
+        if (!transfer) return;
+        transfer.inFlight = Math.max(0, transfer.inFlight - 1);
+        if (uploads[uploadId]?.status === 'uploading') void pumpUpload(uploadId);
     };
     
 
@@ -380,7 +407,7 @@ wsDeps;
         Object.keys(uploads).forEach(uploadId => {
             cancelUpload(uploadId, true); // 卸载时通知后端
         });
-        uploadContinuations.clear();
+        uploadTransferStates.clear();
     });
 
     return {

@@ -88,6 +88,8 @@ initializeSftpManager(effectiveSessionId.value, props.instanceId);
 const emptyArchiveProgress = {
   active: false,
   operation: null as 'compress' | 'decompress' | null,
+  requestId: null as string | null,
+  cancelling: false,
   fileCount: 0,
   totalFiles: null as number | null,
   percent: null as number | null,
@@ -820,82 +822,22 @@ const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileList
 
 // +++ 文件夹下载触发器 +++
 const triggerDownloadDirectory = (item: FileListItem) => {
-    if (!props.wsDeps.isConnected.value) {
-        return;
-    }
+    if (!props.wsDeps.isConnected.value) return;
     const currentConnectionId = props.dbConnectionId;
-    if (!currentConnectionId) {
-        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot download directory: Missing connection ID.`);
-        return;
-    }
-    if (!currentSftpManager.value) {
-        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot download directory: SFTP manager is not available.`);
-        return;
-    }
-
-    // 确保是目录
-    if (!item.attrs.isDirectory) {
-        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Skipping directory download for non-directory item: ${item.filename}`);
-        return;
-    }
+    if (!currentConnectionId || !currentSftpManager.value || !item.attrs.isDirectory) return;
 
     const directoryPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
-    // 定义新的后端 API 端点 URL (稍后实现)
     const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(effectiveSessionId.value)}&remotePath=${encodeURIComponent(directoryPath)}`;
 
-    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Attempting directory download for ${item.filename}: ${downloadUrl}`);
-
-    // --- 修改：使用 fetch 尝试下载，并处理后端未实现的情况 ---
-    fetch(downloadUrl)
-        .then(async response => {
-            if (response.ok) {
-                // 后端实现成功，尝试触发下载
-                const blob = await response.blob();
-                // 从 Content-Disposition 头获取文件名 (需要后端设置)
-                const contentDisposition = response.headers.get('content-disposition');
-                let filename = `${item.filename}.zip`; // 默认文件名
-                if (contentDisposition) {
-                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
-                    if (filenameMatch && filenameMatch.length > 1) {
-                        filename = filenameMatch[1];
-                    }
-                }
-
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                // --- 修正：移除 ZIP 文件名中的双引号以兼容 Chrome ---
-                const safeZipFilename = filename.replace(/"/g, '');
-                link.setAttribute('download', safeZipFilename);
-                // --- 结束修正 ---
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href); // 释放对象 URL
-                console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Directory download triggered for: ${filename}`);
-            } else {
-                // 处理错误，例如 404 Not Found
-                console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Directory download failed: ${response.status} ${response.statusText}`);
-                // 尝试读取错误信息体
-                let errorMsg = `Server responded with status ${response.status}`;
-                try {
-                    const errorData = await response.json(); // 假设后端返回 JSON 错误
-                    errorMsg = errorData.message || errorMsg;
-                } catch (e) {
-                    // 如果响应体不是 JSON 或读取失败
-                    try {
-                       const textError = await response.text();
-                       if (textError) errorMsg = textError;
-                    } catch (e2) { /* ignore */}
-                }
-
-            }
-        })
-        .catch(error => {
-            console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Network error during directory download:`, error);
-        });
-    
+    // Let the browser stream the response directly to disk. Converting the complete
+    // archive to a Blob first doubled memory usage and delayed the visible download.
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', `${item.filename.replace(/"/g, '')}.zip`);
+    document.body.appendChild(link);
+    link.click();
+    window.setTimeout(() => link.remove(), 100);
 };
-
 
 
 // +++ 压缩/解压处理函数 +++
@@ -907,7 +849,10 @@ const handleCompress = (items: FileListItem[], format: CompressFormat) => {
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Requesting compression for ${items.length} items, format: ${format}`);
   // 调用 SFTP 管理器上的新方法 (将在 useSftpActions.ts 中实现)
-  currentSftpManager.value.compressItems(items, format);
+  void currentSftpManager.value.compressItems(items, format).catch((error) => {
+    if (error instanceof Error && error.message === 'ARCHIVE_CANCELLED') return;
+    console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Compression failed:`, error);
+  });
 };
 
 const handleDecompress = (item: FileListItem) => {
@@ -918,7 +863,9 @@ const handleDecompress = (item: FileListItem) => {
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Requesting decompression for item: ${item.filename}`);
   // 调用 SFTP 管理器上的新方法 (将在 useSftpActions.ts 中实现)
-  currentSftpManager.value.decompressItem(item);
+  void currentSftpManager.value.decompressItem(item).catch((error) => {
+    console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Decompression failed:`, error);
+  });
 };
 
 
@@ -2115,7 +2062,7 @@ const handleOpenEditorClick = () => {
      <!-- 使用 FileUploadPopup 组件 -->
      <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" @cancel-all="cancelAllUploads" />
 
-     <ArchiveProgressPopup :progress="archiveProgress" />
+     <ArchiveProgressPopup :progress="archiveProgress" @cancel="currentSftpManager?.cancelArchive()" />
 
     <FileManagerContextMenu
       ref="contextMenuRef"

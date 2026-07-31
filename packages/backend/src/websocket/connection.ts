@@ -51,6 +51,55 @@ import {
     handleSftpUploadCancel
 } from './handlers/sftp.handler';
 
+
+const UPLOAD_FRAME_MAGIC = Buffer.from('NXUP', 'ascii');
+const UPLOAD_FRAME_VERSION = 1;
+const UPLOAD_FRAME_FIXED_HEADER_SIZE = 12;
+const MAX_UPLOAD_ID_BYTES = 512;
+const MAX_UPLOAD_CHUNK_BYTES = 1024 * 1024;
+
+const rawDataToBuffer = (message: RawData): Buffer => {
+    if (Buffer.isBuffer(message)) return message;
+    if (Array.isArray(message)) return Buffer.concat(message);
+    return Buffer.from(message);
+};
+
+const parseBinaryUploadChunk = (message: RawData) => {
+    const frame = rawDataToBuffer(message);
+    if (frame.length < UPLOAD_FRAME_FIXED_HEADER_SIZE) {
+        throw new Error('二进制上传帧过短');
+    }
+    if (!frame.subarray(0, 4).equals(UPLOAD_FRAME_MAGIC)) {
+        throw new Error('未知的二进制消息类型');
+    }
+    if (frame.readUInt8(4) !== UPLOAD_FRAME_VERSION) {
+        throw new Error(`不支持的上传协议版本: ${frame.readUInt8(4)}`);
+    }
+
+    const flags = frame.readUInt8(5);
+    if ((flags & ~1) !== 0) throw new Error('上传帧包含未知标志');
+    const uploadIdLength = frame.readUInt16BE(6);
+    const chunkIndex = frame.readUInt32BE(8);
+    if (uploadIdLength === 0 || uploadIdLength > MAX_UPLOAD_ID_BYTES) {
+        throw new Error('上传任务 ID 长度无效');
+    }
+    const payloadOffset = UPLOAD_FRAME_FIXED_HEADER_SIZE + uploadIdLength;
+    if (payloadOffset > frame.length) throw new Error('上传帧头长度越界');
+
+    const uploadId = frame.toString('utf8', UPLOAD_FRAME_FIXED_HEADER_SIZE, payloadOffset);
+    if (!uploadId) throw new Error('上传任务 ID 为空');
+    const data = frame.subarray(payloadOffset);
+    if (data.length > MAX_UPLOAD_CHUNK_BYTES) {
+        throw new Error(`上传分块超过限制: ${data.length}/${MAX_UPLOAD_CHUNK_BYTES} 字节`);
+    }
+    return {
+        uploadId,
+        chunkIndex,
+        isLast: (flags & 1) === 1,
+        data,
+    };
+};
+
 export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendService: SshSuspendService, sftpService: SftpService): void { // +++ Add sftpService parameter +++
     wss.on('connection', (ws: AuthenticatedWebSocket, request: WebSocketRequest) => {
         ws.isAlive = true;
@@ -65,7 +114,20 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
             handleRdpProxyConnection(ws, request);
         } else {
             // Standard SSH/SFTP/Docker connection
-            ws.on('message', async (message: RawData) => {
+            ws.on('message', async (message: RawData, isBinary: boolean) => {
+                if (isBinary) {
+                    try {
+                        await handleSftpUploadChunk(ws, parseBinaryUploadChunk(message));
+                    } catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : String(error);
+                        console.error(`WebSocket：来自 ${ws.username} 的无效二进制消息: ${errorMessage}`);
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { message: errorMessage } }));
+                        }
+                    }
+                    return;
+                }
+
                 let parsedMessage: any;
                 try {
                     parsedMessage = JSON.parse(message.toString());
@@ -128,6 +190,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                         case 'sftp:copy':
                         case 'sftp:move':
                         case 'sftp:compress':
+                        case 'sftp:archive:cancel':
                         case 'sftp:decompress':
                             await handleSftpOperation(ws, type, payload, requestId);
                             break;
@@ -135,9 +198,6 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                         // SFTP Upload Cases
                         case 'sftp:upload:start':
                             await handleSftpUploadStart(ws, payload);
-                            break;
-                        case 'sftp:upload:chunk':
-                            await handleSftpUploadChunk(ws, payload);
                             break;
                         case 'sftp:upload:cancel':
                             await handleSftpUploadCancel(ws, payload);

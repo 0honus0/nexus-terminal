@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import * as monaco from 'monaco-editor';
 
 const FONT_SIZE_STORAGE_KEY = 'monacoEditorFontSize'; // localStorage key
@@ -47,6 +47,20 @@ const emit = defineEmits(['update:modelValue', 'request-save', 'update:scrollPos
 
 const editorContainer = ref<HTMLElement | null>(null);
 let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
+let resizeObserver: ResizeObserver | null = null;
+let layoutFrame: number | null = null;
+let wheelHandler: ((event: WheelEvent) => void) | null = null;
+
+const layout = () => {
+  if (!editorInstance || !editorContainer.value) return;
+  const { clientWidth, clientHeight } = editorContainer.value;
+  if (clientWidth <= 0 || clientHeight <= 0) return;
+  if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
+  layoutFrame = requestAnimationFrame(() => {
+    layoutFrame = null;
+    editorInstance?.layout({ width: clientWidth, height: clientHeight });
+  });
+};
 
 // 用于驱动编辑器实例的 ref，并与 localStorage 和 props.fontSize 同步
 const internalEditorFontSize = ref(props.fontSize);
@@ -78,7 +92,7 @@ onMounted(() => {
       theme: props.theme,
       fontSize: internalEditorFontSize.value, // 使用 internalEditorFontSize
       fontFamily: props.fontFamily, // 使用 prop 的字体家族
-      automaticLayout: true,
+      automaticLayout: false,
       readOnly: props.readOnly,
       minimap: { enabled: true },
       lineNumbers: 'on',
@@ -136,37 +150,11 @@ onMounted(() => {
     });
  
    
-    editorInstance.onDidChangeModelContent(() => {
-      if (editorInstance) {
-        const currentValue = editorInstance.getValue();
-        if (currentValue !== props.modelValue) {
-          emit('update:modelValue', currentValue);
-        }
-      }
-    });
-
-    //Ctrl+S / Cmd+S
-    editorInstance.addAction({
-      id: 'save-file',
-      label: 'Save File',
-      keybindings: [
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-      ],
-      precondition: undefined, 
-      keybindingContext: undefined, 
-      contextMenuGroupId: 'navigation', 
-      contextMenuOrder: 1.5, 
-      run: () => {
-        console.log('[MonacoEditor] Save action triggered (Ctrl+S / Cmd+S)');
-        emit('request-save');
-      },
-    });
-
     // --- 添加带防抖的鼠标滚轮缩放功能 ---
     const editorDomNode = editorInstance?.getDomNode();
     if (editorDomNode && editorInstance) {
         // console.log('[MonacoEditor] Adding wheel event listener.');
-        editorDomNode.addEventListener('wheel', (event: WheelEvent) => {
+        wheelHandler = (event: WheelEvent) => {
             if (event.ctrlKey && editorInstance) {
                 event.preventDefault();
                 const currentSizeOpt = editorInstance.getOption(monaco.editor.EditorOption.fontSize);
@@ -187,11 +175,15 @@ onMounted(() => {
                     emit('update:fontSize', newSize); // 发出事件以更新 store
                 }
             }
-        }, { passive: false });
+        };
+        editorDomNode.addEventListener('wheel', wheelHandler, { passive: false });
     } else {
         // console.error('[MonacoEditor] editorDomNode or editorInstance is null, cannot add wheel listener.');
     }
 
+    resizeObserver = new ResizeObserver(layout);
+    resizeObserver.observe(editorContainer.value);
+    void nextTick(layout);
 
     // --- 移除鼠标滚轮缩放功能 ---
     // const editorDomNode = editorInstance?.getDomNode();
@@ -256,6 +248,12 @@ watch(() => props.fontSize, (newGlobalSize) => {
 });
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
+  const editorDomNode = editorInstance?.getDomNode();
+  if (editorDomNode && wheelHandler) editorDomNode.removeEventListener('wheel', wheelHandler);
+  wheelHandler = null;
   if (editorInstance) {
     editorInstance.dispose();
     editorInstance = null;
@@ -263,7 +261,8 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-  focus: () => editorInstance?.focus()
+  focus: () => editorInstance?.focus(),
+  layout,
 });
 
 </script>
@@ -271,8 +270,10 @@ defineExpose({
 <style scoped>
 .monaco-editor-container {
   width: 100%;
-  height: 100%; 
-  min-height: 300px;
-  text-align: left; 
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  text-align: left;
 }
 </style>

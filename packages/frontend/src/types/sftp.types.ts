@@ -22,6 +22,8 @@ export interface FileListItem {
 export interface ArchiveProgressState {
     active: boolean;
     operation: 'compress' | 'decompress' | null;
+    requestId: string | null;
+    cancelling: boolean;
     fileCount: number;
     totalFiles: number | null;
     percent: number | null;
