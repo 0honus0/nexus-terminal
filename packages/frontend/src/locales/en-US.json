@@ -434,6 +434,7 @@
       "downloadMultiple": "Download {count} items",
       "downloadFolder": "Download Folder",
       "cancel": "Cancel",
+      "cancelAll": "Cancel all",
       "save": "Save",
       "closeTab": "Close Tab",
       "closeEditor": "Close Editor",

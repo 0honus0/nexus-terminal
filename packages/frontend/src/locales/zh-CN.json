@@ -434,6 +434,7 @@
       "downloadMultiple": "下载 {count} 个项目",
       "downloadFolder": "下载文件夹",
       "cancel": "取消",
+      "cancelAll": "全部取消",
       "save": "保存",
       "closeTab": "关闭标签页",
       "closeEditor": "关闭编辑器",

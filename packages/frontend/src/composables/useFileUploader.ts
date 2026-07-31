@@ -194,6 +194,13 @@ wsDeps;
         }
     };
 
+    const cancelAllUploads = () => {
+        const cancellableIds = Object.values(uploads)
+            .filter(upload => ['pending', 'uploading', 'paused'].includes(upload.status))
+            .map(upload => upload.id);
+        cancellableIds.forEach(uploadId => cancelUpload(uploadId, true));
+    };
+
     // --- 消息处理器 ---
 
     const onUploadReady = (payload: MessagePayload, message: WebSocketMessage) => {
@@ -380,5 +387,6 @@ wsDeps;
         uploads, 
         startFileUpload,
         cancelUpload,
+        cancelAllUploads,
     };
 }

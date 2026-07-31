@@ -8,17 +8,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'cancel-upload', uploadId: string): void; // 定义取消上传事件
+  (e: 'cancel-upload', uploadId: string): void;
+  (e: 'cancel-all'): void;
 }>();
 
 const { t } = useI18n();
 
-// 计算是否有可见的上传任务（非已完成或已取消的）
-const hasVisibleUploads = computed(() => {
-  return Object.values(props.uploads).some(
-    upload => upload.status !== 'success' && upload.status !== 'cancelled'
-  );
-});
+const cancellableCount = computed(() => Object.values(props.uploads).filter(
+  upload => ['pending', 'uploading', 'paused'].includes(upload.status)
+).length);
 
 // 计算显示的上传列表（可以过滤掉已完成/取消的，或者全部显示）
 // 这里选择全部显示，让用户能看到最终状态
@@ -30,12 +28,26 @@ const uploadList = computed(() => Object.values(props.uploads).filter(upload => 
 const handleCancel = (uploadId: string) => {
   emit('cancel-upload', uploadId);
 };
+
+const handleCancelAll = () => {
+  emit('cancel-all');
+};
 </script>
 
 <template>
   <!-- 仅当有上传任务时显示 -->
   <div v-if="uploadList.length > 0" class="fixed bottom-4 right-4 bg-background border border-border rounded-md shadow-md p-3 max-w-xs max-h-48 overflow-y-auto z-[1001] text-sm">
-    <h4 class="m-0 mb-2 text-sm font-semibold border-b border-border pb-1">{{ t('fileManager.uploadTasks') }}:</h4>
+    <div class="mb-2 flex items-center justify-between gap-3 border-b border-border pb-1">
+      <h4 class="m-0 text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
+      <button
+        v-if="cancellableCount > 1"
+        type="button"
+        class="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
+        @click="handleCancelAll"
+      >
+        {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
+      </button>
+    </div>
     <ul class="list-none p-0 m-0">
       <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2">
         <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>

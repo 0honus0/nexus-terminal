@@ -359,6 +359,7 @@
         "modalTitle": "ファイルマネージャー",
         "actions": {
             "cancel": "キャンセル",
+            "cancelAll": "すべてキャンセル",
             "cdToTerminal": "ターミナルのディレクトリを現在のパスに変更",
             "changePermissions": "権限を変更",
             "closeEditor": "エディターを閉じる",
