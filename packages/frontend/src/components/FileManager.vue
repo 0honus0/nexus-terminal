@@ -1681,12 +1681,12 @@ const handleOpenEditorClick = () => {
  </script>
 
 <template>
-  <div class="flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
-    <div class="flex items-center justify-between flex-wrap gap-2 p-2 bg-header  flex-shrink-0">
+  <div class="file-manager-root flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
+    <div class="file-manager-toolbar flex items-center justify-between flex-wrap gap-2 p-2 bg-header flex-shrink-0">
         <!-- Wrapper for Path Actions and Path Bar -->
-        <div class="flex items-center gap-2 flex-grow min-w-0"> <!-- Added gap-2, flex-grow, min-w-0 -->
+        <div class="file-manager-path-row flex items-center gap-2 flex-grow min-w-0"> <!-- Added gap-2, flex-grow, min-w-0 -->
             <!-- Path Actions -->
-            <div class="flex items-center flex-shrink-0"> <!-- Removed mr-auto -->
+            <div class="file-manager-path-actions flex items-center flex-shrink-0"> <!-- Removed mr-auto -->
               <!-- CD 到终端按钮 -->
               <button
                 class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
@@ -1809,7 +1809,7 @@ const handleOpenEditorClick = () => {
             </div>
         </div> <!-- End Wrapper -->
        <!-- Main Actions Bar -->
-       <div class="flex items-center gap-2 flex-shrink-0">
+       <div class="file-manager-actions flex items-center gap-2 flex-shrink-0">
             <input type="file" ref="fileInputRef" @change="handleFileSelected" multiple class="hidden" />
             <!-- 打开编辑器按钮 -->
             <button
@@ -1817,49 +1817,49 @@ const handleOpenEditorClick = () => {
               @click="openPopupEditor"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.openEditor', 'Open Popup Editor')"
-              class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="far fa-edit text-sm"></i> <!-- 使用编辑图标 -->
-              <span v-if="!props.isMobile">{{ t('fileManager.actions.openEditor', 'Open Editor') }}</span> <!-- 添加 i18n key -->
+              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.openEditor', 'Open Editor') }}</span> <!-- 添加 i18n key -->
             </button>
             <!-- 上传按钮 -->
             <button
               @click="triggerFileUpload"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.uploadFile')"
-              class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="fas fa-upload text-sm"></i>
-              <span v-if="!props.isMobile">{{ t('fileManager.actions.upload') }}</span>
+              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.upload') }}</span>
             </button>
             <button
               @click="handleNewFolderContextMenuClick"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.newFolder')"
-              class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="fas fa-folder-plus text-sm"></i>
-              <span v-if="!props.isMobile">{{ t('fileManager.actions.newFolder') }}</span>
+              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.newFolder') }}</span>
             </button>
             <button
               @click="handleNewFileContextMenuClick"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.newFile')"
-              class="flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="far fa-file-alt text-sm"></i>
-              <span v-if="!props.isMobile">{{ t('fileManager.actions.newFile') }}</span>
+              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.newFile') }}</span>
             </button>
             <!-- 多选模式切换按钮 (仅移动端) -->
             <button
               v-if="props.isMobile"
               @click="toggleMultiSelectMode"
               :title="isMultiSelectMode ? t('fileManager.actions.exitMultiSelect', 'Exit Multi-Select Mode') : t('fileManager.actions.multiSelect', 'Enter Multi-Select Mode')"
-              class="flex items-center gap-1 px-1.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="file-manager-action-button flex items-center gap-1 px-1.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               :class="{
                 'hover:bg-header hover:border-primary hover:text-primary': !isMultiSelectMode,
                 'bg-primary text-white border-primary': isMultiSelectMode
@@ -2093,5 +2093,78 @@ const handleOpenEditorClick = () => {
 </template>
 
 <style scoped>
-/* Scoped styles removed for Tailwind CSS refactoring */
+.file-manager-root {
+  container-type: inline-size;
+  container-name: file-manager-pane;
+}
+.file-manager-toolbar,
+.file-manager-path-row,
+.file-manager-actions {
+  min-width: 0;
+}
+.file-manager-path-actions {
+  min-width: max-content;
+}
+.file-manager-actions {
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.file-manager-action-button {
+  min-height: 1.75rem;
+  min-width: 1.75rem;
+  justify-content: center;
+  white-space: nowrap;
+}
+.file-manager-action-label {
+  min-width: 0;
+}
+@container file-manager-pane (max-width: 760px) {
+  .file-manager-toolbar {
+    align-items: stretch;
+  }
+  .file-manager-path-row {
+    flex: 1 1 100%;
+    order: 1;
+  }
+  .file-manager-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    order: 2;
+  }
+}
+@container file-manager-pane (max-width: 520px) {
+  .file-manager-path-row {
+    flex-wrap: wrap;
+  }
+  .file-manager-path-actions {
+    flex-wrap: wrap;
+  }
+  .file-manager-actions {
+    gap: 0.35rem;
+  }
+  .file-manager-action-button {
+    padding-left: 0.45rem !important;
+    padding-right: 0.45rem !important;
+  }
+}
+@container file-manager-pane (max-width: 420px) {
+  .file-manager-action-label {
+    display: none;
+  }
+  .file-manager-action-button {
+    width: 1.85rem;
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
+  }
+}
+@container file-manager-pane (max-width: 320px) {
+  .file-manager-toolbar {
+    padding: 0.35rem;
+    gap: 0.35rem;
+  }
+  .file-manager-actions {
+    gap: 0.25rem;
+  }
+}
 </style>

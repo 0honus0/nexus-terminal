@@ -1,7 +1,7 @@
 <template>
   <!-- 根元素，包含内边距、背景、边框和文本样式 -->
   <div class="status-monitor p-4 bg-background text-foreground h-full overflow-y-auto text-sm" :class="{ 'bg-header': !activeSessionId }">
-  <h4 v-if="activeSessionId" class="mt-0 mb-4 border-b border-border pb-2 text-base font-medium">
+  <h4 v-if="activeSessionId" class="status-monitor-title mt-0 mb-4 border-b border-border pb-2 text-base font-medium">
     {{ t('statusMonitor.title') }}
   </h4>
 
@@ -349,6 +349,87 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 </script>
 
 <style scoped>
+.status-monitor {
+  container-type: inline-size;
+  container-name: status-monitor-pane;
+  min-width: 0;
+}
+.status-grid,
+.status-item,
+.value-wrapper {
+  min-width: 0;
+}
+.status-item label {
+  min-width: max-content;
+}
+.cpu-model-value,
+.os-name-value,
+.ip-address-value {
+  min-width: 0;
+}
+.resource-monitor-group {
+  grid-template-columns: minmax(0, 1fr);
+}
+.network-values {
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+@container status-monitor-pane (min-width: 560px) {
+  .resource-monitor-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .resource-monitor-group .status-item {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+}
+@container status-monitor-pane (max-width: 380px) {
+  .status-monitor {
+    padding: 0.6rem !important;
+    font-size: 0.76rem;
+  }
+  .status-monitor-title {
+    margin-bottom: 0.65rem;
+    padding-bottom: 0.45rem;
+  }
+  .status-grid {
+    gap: 0.55rem;
+  }
+  .status-item {
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: stretch;
+    gap: 0.3rem !important;
+  }
+  .status-item label {
+    min-width: 0;
+    white-space: normal;
+    font-size: 0.7rem;
+    line-height: 1.25;
+  }
+  .value-wrapper {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .mem-disk-details {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+  .network-values {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem !important;
+  }
+}
+@container status-monitor-pane (max-width: 260px) {
+  .status-monitor {
+    padding: 0.45rem !important;
+  }
+  .mem-disk-details {
+    display: none;
+  }
+}
+
 ::v-deep(.el-progress-bar__outer) {
   background-color: var(--header-bg-color) !important; 
 }

@@ -1,38 +1,38 @@
 <template>
   <div class="status-charts grid grid-cols-1 gap-4 mt-4">
     <div class="chart-container bg-header rounded p-3">
-      <div class="flex justify-between items-center mb-2">
+      <div class="chart-title-row flex justify-between items-center mb-2">
         <h5 class="text-sm font-medium text-text-secondary">{{ $t('statusMonitor.cpuUsageTitle') }}</h5>
         <span class="text-xs text-text-tertiary ml-2">
           {{ $t('statusMonitor.latestCpuValue', { value: cpuChartData.datasets[0].data[MAX_DATA_POINTS - 1]?.toFixed(1) }) }}
         </span>
       </div>
-      <div class="chart-wrapper h-40">
+      <div class="chart-wrapper">
         <Line :data="cpuChartData" :options="percentageChartOptions" :key="cpuChartKey" />
       </div>
     </div>
     <!-- 内存使用图表已注释掉 -->
     <!--
     <div class="chart-container bg-header rounded p-3">
-      <div class="flex justify-between items-center mb-2">
+      <div class="chart-title-row flex justify-between items-center mb-2">
         <h5 class="text-sm font-medium text-text-secondary">{{ $t('statusMonitor.memoryUsageTitleUnit', { unit: memoryUnitIsGB ? 'GB' : 'MB' }) }}</h5>
         <span class="text-xs text-text-tertiary ml-2">
            {{ $t('statusMonitor.latestMemoryValue', { value: memoryChartData.datasets[0].data[MAX_DATA_POINTS - 1]?.toFixed(1), unit: memoryUnitIsGB ? 'GB' : 'MB' }) }}
         </span>
       </div>
-      <div class="chart-wrapper h-40">
+      <div class="chart-wrapper">
         <Line :data="memoryChartData" :options="memoryChartOptions" :key="memoryChartKey" />
       </div>
     </div>
     -->
     <div class="chart-container bg-header rounded p-3">
-      <div class="flex justify-between items-center mb-2">
+      <div class="chart-title-row flex justify-between items-center mb-2">
         <h5 class="text-sm font-medium text-text-secondary">{{ $t('statusMonitor.networkSpeedTitleUnit', { unit: networkRateUnitIsMB ? 'MB/s' : 'KB/s' }) }}</h5>
         <span class="text-xs text-text-tertiary ml-2">
           {{ $t('statusMonitor.latestNetworkValue', { download: networkChartData.datasets[0].data[MAX_DATA_POINTS - 1]?.toFixed(1), upload: networkChartData.datasets[1].data[MAX_DATA_POINTS - 1]?.toFixed(1), unit: networkRateUnitIsMB ? 'MB/s' : 'KB/s' }) }}
         </span>
       </div>
-      <div class="chart-wrapper h-40">
+      <div class="chart-wrapper">
         <Line :data="networkChartData" :options="networkChartOptions" :key="networkChartKey" />
       </div>
     </div>
@@ -452,3 +452,37 @@ onMounted(() => {
 });
 
 </script>
+
+<style scoped>
+.status-charts {
+  container-type: inline-size;
+  container-name: status-charts-pane;
+  min-width: 0;
+}
+.chart-container {
+  min-width: 0;
+}
+.chart-title-row {
+  min-width: 0;
+  gap: 0.5rem;
+}
+.chart-title-row h5,
+.chart-title-row span {
+  min-width: 0;
+}
+.chart-wrapper {
+  height: clamp(7rem, 24cqw, 10rem);
+  min-height: 5.5rem;
+}
+@container status-charts-pane (max-width: 360px) {
+  .status-charts { gap: 0.65rem; margin-top: 0.65rem; }
+  .chart-container { padding: 0.55rem; }
+  .chart-title-row { align-items: flex-start; flex-direction: column; gap: 0.15rem; margin-bottom: 0.35rem; }
+  .chart-title-row span { margin-left: 0; font-size: 0.68rem; }
+  .chart-wrapper { height: 6.5rem; }
+}
+@container status-charts-pane (max-width: 260px) {
+  .chart-container { padding: 0.45rem; }
+  .chart-wrapper { height: 5.25rem; }
+}
+</style>
