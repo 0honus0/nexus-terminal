@@ -392,6 +392,7 @@
     },
         "archiveProgress": {
             "filesProcessed": "{count} 件のファイルを処理しました",
+            "filesProcessedTotal": "{count}/{total} 件を処理済み",
             "starting": "リモートアーカイブコマンドを開始しています..."
         },
     "currentPath": "現在のパス",

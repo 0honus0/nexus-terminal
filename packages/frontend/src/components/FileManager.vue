@@ -88,6 +88,8 @@ const emptyArchiveProgress = {
   active: false,
   operation: null as 'compress' | 'decompress' | null,
   fileCount: 0,
+  totalFiles: null as number | null,
+  percent: null as number | null,
   currentFile: null as string | null,
   archiveName: null as string | null,
 };

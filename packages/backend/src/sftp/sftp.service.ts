@@ -55,6 +55,7 @@ interface NetworkStats {
 // Note: These constants seem related to StatusMonitorService, not SftpService.
 const DEFAULT_POLLING_INTERVAL = 1000;
 const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: number }>();
+const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
 
 // Interface for tracking active uploads
 interface ActiveUpload {
@@ -1164,22 +1165,25 @@ export class SftpService {
         const quotedDestName = `"${destinationArchiveName.replace(/"/g, '\\"')}"`;
 
         const cdCommand = `cd ${quotedTargetDir}`;
+        // Count archive entries before starting so verbose output can be converted to an
+        // overall percentage. A failed/unsupported count naturally degrades to zero.
+        const countCommand = `total=$(find ${quotedRelativeSources} -print 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
 
         switch (format) {
             case 'zip':
                 // zip -r [归档名] [源文件/目录列表]
                 // 需要在目标目录执行
-                command = `${cdCommand} && zip -r ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
+                command = `${cdCommand} && ${countCommand} && zip -r ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
                 break;
             case 'targz':
                 // tar -czvf [归档名] [源文件/目录列表]
                 // 需要在目标目录执行
-                command = `${cdCommand} && tar -czvf ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
+                command = `${cdCommand} && ${countCommand} && tar -czvf ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
                 break;
             case 'tarbz2':
                 // tar -cjvf [归档名] [源文件/目录列表]
                 // 需要在目标目录执行
-                command = `${cdCommand} && tar -cjvf ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
+                command = `${cdCommand} && ${countCommand} && tar -cjvf ${quotedDestName} ${quotedRelativeSources}`; // 使用相对路径
                 break;
             default:
                 this.sendCompressError(state.ws, `不支持的压缩格式: ${format}`, requestId);
@@ -1202,6 +1206,7 @@ export class SftpService {
                 let stderrRemainder = '';
                 let code: number | null = null;
                 let fileCount = 0;
+                let totalFiles: number | undefined;
                 let lastProgressTime = 0;
                 let lastSeenFileName: string | undefined;
                 let streamFinished = false;
@@ -1210,13 +1215,19 @@ export class SftpService {
                     const now = Date.now();
                     if (!force && now - lastProgressTime < 1000) return;
                     lastProgressTime = now;
-                    this.sendArchiveProgress(state.ws, 'compress', requestId, fileCount, lastSeenFileName);
+                    this.sendArchiveProgress(state.ws, 'compress', requestId, fileCount, lastSeenFileName, totalFiles);
                 };
 
                 const consumeOutput = (chunk: string, remainder: string): string => {
                     const lines = `${remainder}${chunk}`.split(/\r?\n/);
                     const nextRemainder = lines.pop() || '';
                     for (const line of lines) {
+                        const parsedTotal = this.parseArchiveTotal(line);
+                        if (parsedTotal !== null) {
+                            totalFiles = parsedTotal > 0 ? parsedTotal : undefined;
+                            sendProgress(true);
+                            continue;
+                        }
                         const fileName = this.parseArchiveFileName(line, format);
                         if (fileName) {
                             fileCount++;
@@ -1332,17 +1343,16 @@ export class SftpService {
 
         // 使用在方法开始处声明的 lowerArchivePath
         if (lowerArchivePath.endsWith('.zip')) {
-            // unzip -o [压缩包名]
-            // 需要在目标目录执行
-            command = `${cdCommand} && unzip -o ${quotedArchiveBasename}`;
+            // List first to provide an exact total; extraction still proceeds when the
+            // listing command cannot determine a count (the pipeline yields zero).
+            const countCommand = `total=$(unzip -Z1 ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
+            command = `${cdCommand} && ${countCommand} && unzip -o ${quotedArchiveBasename}`;
         } else if (lowerArchivePath.endsWith('.tar.gz') || lowerArchivePath.endsWith('.tgz')) {
-            // tar -xzvf [压缩包名]
-            // 需要在目标目录执行
-            command = `${cdCommand} && tar -xzvf ${quotedArchiveBasename}`;
+            const countCommand = `total=$(tar -tzf ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
+            command = `${cdCommand} && ${countCommand} && tar -xzvf ${quotedArchiveBasename}`;
         } else if (lowerArchivePath.endsWith('.tar.bz2') || lowerArchivePath.endsWith('.tbz2')) {
-            // tar -xjvf [压缩包名]
-            // 需要在目标目录执行
-            command = `${cdCommand} && tar -xjvf ${quotedArchiveBasename}`;
+            const countCommand = `total=$(tar -tjf ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
+            command = `${cdCommand} && ${countCommand} && tar -xjvf ${quotedArchiveBasename}`;
         } else {
             this.sendDecompressError(state.ws, `不支持的压缩文件格式: ${archivePath}`, requestId);
             return;
@@ -1364,6 +1374,7 @@ export class SftpService {
                 let stderrRemainder = '';
                 let code: number | null = null;
                 let fileCount = 0;
+                let totalFiles: number | undefined;
                 let lastProgressTime = 0;
                 let lastSeenFileName: string | undefined;
                 let streamFinished = false;
@@ -1375,13 +1386,19 @@ export class SftpService {
                     const now = Date.now();
                     if (!force && now - lastProgressTime < 1000) return;
                     lastProgressTime = now;
-                    this.sendArchiveProgress(state.ws, 'decompress', requestId, fileCount, lastSeenFileName);
+                    this.sendArchiveProgress(state.ws, 'decompress', requestId, fileCount, lastSeenFileName, totalFiles);
                 };
 
                 const consumeOutput = (chunk: string, remainder: string): string => {
                     const lines = `${remainder}${chunk}`.split(/\r?\n/);
                     const nextRemainder = lines.pop() || '';
                     for (const line of lines) {
+                        const parsedTotal = this.parseArchiveTotal(line);
+                        if (parsedTotal !== null) {
+                            totalFiles = parsedTotal > 0 ? parsedTotal : undefined;
+                            sendProgress(true);
+                            continue;
+                        }
                         const fileName = this.parseArchiveFileName(line, progressFormat);
                         if (fileName) {
                             fileCount++;
@@ -1535,6 +1552,14 @@ export class SftpService {
         return combined.length > maxLength ? combined.slice(-maxLength) : combined;
     }
 
+    /** Parse the private line emitted before an archive command starts. */
+    private parseArchiveTotal(line: string): number | null {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith(ARCHIVE_TOTAL_MARKER)) return null;
+        const total = Number.parseInt(trimmed.slice(ARCHIVE_TOTAL_MARKER.length), 10);
+        return Number.isFinite(total) && total >= 0 ? total : 0;
+    }
+
     /** 从 zip、tar 和 unzip 的详细输出中提取正在处理的文件名。 */
     private parseArchiveFileName(line: string, format: 'zip' | 'targz' | 'tarbz2' | 'decompress'): string | null {
         const trimmed = line.trim();
@@ -1563,12 +1588,16 @@ export class SftpService {
         requestId: string,
         fileCount: number,
         currentFile?: string,
+        totalFiles?: number,
     ): void {
         if (ws && ws.readyState === WebSocket.OPEN) {
+            const percent = totalFiles && totalFiles > 0
+                ? Math.min(100, Math.round((fileCount / totalFiles) * 100))
+                : undefined;
             ws.send(JSON.stringify({
                 type: `sftp:${operation}:progress`,
                 requestId,
-                payload: { requestId, fileCount, currentFile },
+                payload: { requestId, fileCount, totalFiles, percent, currentFile },
             }));
         }
     }

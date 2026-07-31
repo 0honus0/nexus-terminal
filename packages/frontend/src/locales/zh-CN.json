@@ -454,6 +454,7 @@
     },
     "archiveProgress": {
       "filesProcessed": "已处理 {count} 个文件",
+      "filesProcessedTotal": "已处理 {count}/{total} 个条目",
       "starting": "正在启动远程归档命令..."
     },
     "headers": {

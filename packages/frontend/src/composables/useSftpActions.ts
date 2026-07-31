@@ -103,6 +103,8 @@ export function createSftpActionsManager(
         active: false,
         operation: null,
         fileCount: 0,
+        totalFiles: null,
+        percent: null,
         currentFile: null,
         archiveName: null,
     });
@@ -111,6 +113,8 @@ export function createSftpActionsManager(
         archiveProgress.active = false;
         archiveProgress.operation = null;
         archiveProgress.fileCount = 0;
+        archiveProgress.totalFiles = null;
+        archiveProgress.percent = null;
         archiveProgress.currentFile = null;
         archiveProgress.archiveName = null;
     };
@@ -534,6 +538,8 @@ export function createSftpActionsManager(
            archiveProgress.active = true;
            archiveProgress.operation = 'compress';
            archiveProgress.fileCount = 0;
+           archiveProgress.totalFiles = null;
+           archiveProgress.percent = null;
            archiveProgress.currentFile = null;
            archiveProgress.archiveName = archiveName;
 
@@ -582,8 +588,10 @@ export function createSftpActionsManager(
            unregisterProgress = onMessage('sftp:compress:progress', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
                resetTimeout();
-               const progress = payload as { fileCount?: number, currentFile?: string };
+               const progress = payload as { fileCount?: number, totalFiles?: number, percent?: number, currentFile?: string };
                if (typeof progress.fileCount === 'number') archiveProgress.fileCount = progress.fileCount;
+               if (typeof progress.totalFiles === 'number') archiveProgress.totalFiles = progress.totalFiles;
+               if (typeof progress.percent === 'number') archiveProgress.percent = progress.percent;
                if (progress.currentFile) archiveProgress.currentFile = progress.currentFile;
            });
 
@@ -618,6 +626,8 @@ export function createSftpActionsManager(
            archiveProgress.active = true;
            archiveProgress.operation = 'decompress';
            archiveProgress.fileCount = 0;
+           archiveProgress.totalFiles = null;
+           archiveProgress.percent = null;
            archiveProgress.currentFile = null;
            archiveProgress.archiveName = item.filename;
 
@@ -666,8 +676,10 @@ export function createSftpActionsManager(
            unregisterProgress = onMessage('sftp:decompress:progress', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
                resetTimeout();
-               const progress = payload as { fileCount?: number, currentFile?: string };
+               const progress = payload as { fileCount?: number, totalFiles?: number, percent?: number, currentFile?: string };
                if (typeof progress.fileCount === 'number') archiveProgress.fileCount = progress.fileCount;
+               if (typeof progress.totalFiles === 'number') archiveProgress.totalFiles = progress.totalFiles;
+               if (typeof progress.percent === 'number') archiveProgress.percent = progress.percent;
                if (progress.currentFile) archiveProgress.currentFile = progress.currentFile;
            });
 

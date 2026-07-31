@@ -27,8 +27,20 @@ const displayFileName = computed(() => {
         <i class="fas fa-cog fa-spin"></i>
         <span>{{ operationLabel }} {{ progress.archiveName || '...' }}</span>
       </div>
-      <div class="space-y-0.5 text-xs text-text-secondary">
-        <div v-if="progress.fileCount > 0">
+      <div class="space-y-1.5 text-xs text-text-secondary">
+        <div v-if="progress.percent !== null" class="space-y-1">
+          <div class="flex items-center justify-between gap-4">
+            <span>{{ t('fileManager.archiveProgress.filesProcessedTotal', { count: progress.fileCount, total: progress.totalFiles }) }}</span>
+            <span class="font-mono font-semibold text-foreground">{{ progress.percent }}%</span>
+          </div>
+          <div class="h-1.5 overflow-hidden rounded-full bg-border">
+            <div
+              class="h-full rounded-full bg-primary transition-[width] duration-200"
+              :style="{ width: `${progress.percent}%` }"
+            ></div>
+          </div>
+        </div>
+        <div v-else-if="progress.fileCount > 0">
           {{ t('fileManager.archiveProgress.filesProcessed', { count: progress.fileCount }) }}
         </div>
         <div v-if="displayFileName" class="truncate" :title="progress.currentFile || ''">

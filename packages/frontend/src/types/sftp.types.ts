@@ -23,6 +23,8 @@ export interface ArchiveProgressState {
     active: boolean;
     operation: 'compress' | 'decompress' | null;
     fileCount: number;
+    totalFiles: number | null;
+    percent: number | null;
     currentFile: string | null;
     archiveName: string | null;
 }
