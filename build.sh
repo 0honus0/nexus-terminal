@@ -3,32 +3,37 @@
 set -Eeuo pipefail
 
 readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly IMAGE_PREFIX="${NEXUS_IMAGE_PREFIX:-ghcr.io/0honus0/nexus-terminal}"
+readonly IMAGE_REPOSITORY="${NEXUS_IMAGE_REPOSITORY:-${NEXUS_IMAGE_PREFIX:-ghcr.io/0honus0/nexus-terminal}}"
 readonly IMAGE_TAG="${NEXUS_IMAGE_TAG:-latest}"
+readonly IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 
 usage() {
-    cat <<'EOF'
+    cat <<'USAGE'
 Usage:
   ./build.sh local [all|backend|frontend|remote-gateway]
-  ./build.sh docker [all|backend|frontend|remote-gateway]
-  ./build.sh docker-save [all|backend|frontend|remote-gateway] [output-directory]
+  ./build.sh docker [all]
+  ./build.sh docker-save [all] [output-directory]
 
 Commands:
   local        Run npm ci and npm run build in the selected package directories.
-  docker       Build the selected Docker images.
-  docker-save  Build and export the selected Docker images as tar archives.
+  docker       Build the single unified runtime image.
+  docker-save  Build and export the unified runtime image as one tar archive.
 
 Environment variables:
-  NEXUS_IMAGE_PREFIX  Docker image prefix (default: ghcr.io/0honus0/nexus-terminal)
-  NEXUS_IMAGE_TAG     Docker image tag (default: latest)
+  NEXUS_IMAGE_REPOSITORY  Image repository (default: ghcr.io/0honus0/nexus-terminal)
+  NEXUS_IMAGE_TAG         Image tag (default: latest)
+  VITE_API_BASE_URL        Optional frontend API base URL embedded at build time
+
+The optional "all" argument is accepted for compatibility with older commands.
 
 Examples:
   ./build.sh local
   ./build.sh local frontend
-  ./build.sh docker backend
-  NEXUS_IMAGE_TAG=dev ./build.sh docker all
+  ./build.sh docker
+  NEXUS_IMAGE_TAG=dev ./build.sh docker
+  ./build.sh docker-save ./dist-scripts/docker-images
   ./build.sh docker-save all ./dist-scripts/docker-images
-EOF
+USAGE
 }
 
 require_command() {
@@ -37,27 +42,6 @@ require_command() {
         echo "Required command not found: $command_name" >&2
         exit 1
     fi
-}
-
-select_components() {
-    case "$1" in
-        all)
-            COMPONENTS=(backend frontend remote-gateway)
-            ;;
-        backend|frontend|remote-gateway)
-            COMPONENTS=("$1")
-            ;;
-        *)
-            echo "Unknown build target: $1" >&2
-            usage >&2
-            exit 2
-            ;;
-    esac
-}
-
-image_name() {
-    local component="$1"
-    printf '%s-%s:%s' "$IMAGE_PREFIX" "$component" "$IMAGE_TAG"
 }
 
 build_local() {
@@ -73,35 +57,36 @@ build_local() {
 }
 
 build_docker() {
-    local component="$1"
-    local image
-    image="$(image_name "$component")"
+    local -a build_args=()
 
-    echo "==> Building Docker image $image"
+    if [[ -n "${VITE_API_BASE_URL:-}" ]]; then
+        build_args+=(--build-arg "VITE_API_BASE_URL=$VITE_API_BASE_URL")
+    fi
+
+    echo "==> Building unified Docker image $IMAGE"
     docker build \
-        --file "$ROOT_DIR/packages/$component/Dockerfile" \
-        --tag "$image" \
-        "$ROOT_DIR/packages/$component"
+        "${build_args[@]}" \
+        --file "$ROOT_DIR/Dockerfile" \
+        --tag "$IMAGE" \
+        "$ROOT_DIR"
 }
 
 save_docker() {
-    local component="$1"
-    local output_dir="$2"
-    local image archive_name
+    local output_dir="$1"
+    local archive_name
 
-    image="$(image_name "$component")"
-    archive_name="${image//\//_}"
+    archive_name="${IMAGE//\//_}"
     archive_name="${archive_name//:/-}.tar"
 
     mkdir -p "$output_dir"
-    echo "==> Saving Docker image $image to $output_dir/$archive_name"
-    docker save --output "$output_dir/$archive_name" "$image"
+    echo "==> Saving Docker image $IMAGE to $output_dir/$archive_name"
+    docker save --output "$output_dir/$archive_name" "$IMAGE"
 }
 
 main() {
     local mode="${1:-}"
-    local target="${2:-all}"
-    local output_dir="${3:-$ROOT_DIR/dist-scripts/docker-images}"
+    local target="${2:-}"
+    local output_dir
     local component
 
     if [[ "$mode" == "-h" || "$mode" == "--help" ]]; then
@@ -114,27 +99,43 @@ main() {
         exit 2
     fi
 
-    select_components "$target"
-
     case "$mode" in
         local)
             require_command npm
-            for component in "${COMPONENTS[@]}"; do
-                build_local "$component"
-            done
+            target="${target:-all}"
+            case "$target" in
+                all)
+                    for component in backend frontend remote-gateway; do
+                        build_local "$component"
+                    done
+                    ;;
+                backend|frontend|remote-gateway)
+                    build_local "$target"
+                    ;;
+                *)
+                    echo "Unknown local build target: $target" >&2
+                    usage >&2
+                    exit 2
+                    ;;
+            esac
             ;;
         docker)
             require_command docker
-            for component in "${COMPONENTS[@]}"; do
-                build_docker "$component"
-            done
+            if [[ -n "$target" && "$target" != "all" ]]; then
+                echo "Docker builds now produce one unified image; unsupported target: $target" >&2
+                exit 2
+            fi
+            build_docker
             ;;
         docker-save)
             require_command docker
-            for component in "${COMPONENTS[@]}"; do
-                build_docker "$component"
-                save_docker "$component" "$output_dir"
-            done
+            if [[ "$target" == "all" ]]; then
+                output_dir="${3:-$ROOT_DIR/dist-scripts/docker-images}"
+            else
+                output_dir="${target:-$ROOT_DIR/dist-scripts/docker-images}"
+            fi
+            build_docker
+            save_docker "$output_dir"
             ;;
         *)
             echo "Unknown build mode: $mode" >&2

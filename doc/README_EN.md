@@ -6,7 +6,7 @@
 
 [![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](https://github.com/0honus0/nexus-terminal/blob/main/LICENSE)
 
-[docker-url]: https://github.com/0honus0/nexus-terminal/pkgs/container/nexus-terminal-frontend
+[docker-url]: https://github.com/0honus0/nexus-terminal/pkgs/container/nexus-terminal
 
 </div>
 
@@ -65,7 +65,7 @@ https://github.com/0honus0/nexus-terminal/releases/latest
 
 ### 1️⃣ Configure Environment
 
-> It is recommended to deploy in a Debian (AMD64 architecture) environment. Since I do not have an ARM device, compatibility with ARM is not guaranteed.
+> Published images support AMD64 and ARM64. ARM64 deployments need the `guacd` image adjustment described below.
 
 Create a new folder
 ```bash
@@ -81,11 +81,20 @@ Download the [**docker-compose.yml**](https://raw.githubusercontent.com/0honus0/
 wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/.env -O .env
 ```
 
+The frontend, backend, and remote gateway now share the single `ghcr.io/0honus0/nexus-terminal` image. Compose still runs three isolated containers with the existing service names and internal addresses, while Docker downloads and stores the image layers only once.
 
 > ⚠️ **Note:**
 >
-> * For **arm64** users, replace `guacamole/guacd:latest` with `guacamole/guacd:1.6.0-RC1` in the `docker-compose.yml` file.
-> * For **armv7** users, please refer to the additional notes below.
+> * On **ARM64**, set `GUACD_IMAGE=guacamole/guacd:1.6.0-RC1` in `.env`.
+> * The current publication workflow targets only `linux/amd64` and `linux/arm64`; ARMv7 images are no longer published.
+
+#### How environment variables take effect
+
+* The root `.env` file is automatically used by Docker Compose for `${VARIABLE}` interpolation and is passed to the backend and remote gateway through `env_file`.
+* Values explicitly declared under `environment` in `docker-compose.yml` override `env_file`; same-name shell variables used when invoking Compose take precedence for those `${VARIABLE}` substitutions. Custom variables not listed in Compose are still passed to the Node services through `.env` and `env_file`.
+* On first startup, the backend generates `ENCRYPTION_KEY` and `SESSION_SECRET` in the persistent `./data/.env` file. No migration is needed when upgrading to the unified image, but the whole `data` directory must be backed up.
+* `VITE_*` variables are frontend build-time settings. Changing them in the runtime `.env` file cannot rewrite the already generated static assets. The default same-origin API setup does not require `VITE_API_BASE_URL`. For a custom source build, run `VITE_API_BASE_URL=https://api.example.com ./build.sh docker`.
+* After changing runtime `.env`, run `docker compose up -d --force-recreate` so the containers are recreated with the new configuration.
 
 Configure nginx
 ```conf
@@ -127,16 +136,31 @@ docker compose up -d
 ```
 
 ### 3️⃣ Update
-Note: Running with docker-compose does not require pulling the source code unless you plan to build it yourself. Simply execute the following commands in the project directory to update.
-```bash
-docker compose down
-```
+
+A Compose deployment does not require the source repository. To update the unified image, run:
+
 ```bash
 docker compose pull
+docker compose up -d --remove-orphans
 ```
+
+All three Nexus Terminal containers reference the same image, so Docker reuses the layers instead of storing three copies.
+
+### 4️⃣ Build the Unified Image from Source
+
 ```bash
-docker compose up -d
+git clone https://github.com/0honus0/nexus-terminal.git
+cd nexus-terminal
+./build.sh docker
 ```
+
+The default image is `ghcr.io/0honus0/nexus-terminal:latest`. Override the repository and tag when needed:
+
+```bash
+NEXUS_IMAGE_REPOSITORY=local/nexus-terminal NEXUS_IMAGE_TAG=dev ./build.sh docker
+```
+
+Set the same values in `.env`, then run `docker compose up -d`.
 ## 📚 Usage Guide
 
 ### Suspend Session Component
@@ -186,10 +210,8 @@ You can right-click in the SSH tab to select "Suspend Session" (long-press on mo
 
 1.  **Dual File Managers**: You can add two file manager components in the layout (experimental feature, may be unstable).
 2.  **Multiple Text Editors**: The functionality to add multiple text editors in the same layout has not yet been implemented.
-3. For **ARMv7** users, please use the [docker-compose.yml](https://github.com/0honus0/nexus-terminal/blob/main/doc/arm/docker-compose.yml) provided here.
-Since Apache Guacamole does not provide an ARMv7-compatible image for `guacd`, the RDP/VNC feature has been disabled, and related images will not be pulled for now.
-4. Since I don't have an ARM machine on hand, I haven't conducted actual testing, so unexpected bugs may occur during runtime.
-5. For data backup, please back up the **data** folder in the directory yourself. This project does not provide any backup functionality.
+3. The published unified image currently targets AMD64 and ARM64. ARMv7 is no longer included.
+4. For data backup, back up the entire **data** folder, including `data/.env`. The project does not provide an automatic backup service.
 
 
 ## 💐 Acknowledgements

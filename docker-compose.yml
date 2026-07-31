@@ -1,51 +1,96 @@
+x-nexus-service: &nexus-service
+  image: ${NEXUS_IMAGE_REPOSITORY:-ghcr.io/0honus0/nexus-terminal}:${NEXUS_IMAGE_TAG:-latest}
+  restart: unless-stopped
+  networks:
+    - nexus-terminal-network
+
 services:
   frontend:
-    image: ghcr.io/0honus0/nexus-terminal-frontend:latest
+    <<: *nexus-service
+    command: ["frontend"]
     container_name: nexus-terminal-frontend
     ports:
-      - "18111:80"
+      - "${NEXUS_HTTP_PORT:-18111}:80"
     depends_on:
-      - backend
-      - remote-gateway
-    networks:
-      - nexus-terminal-network
+      backend:
+        condition: service_healthy
+      remote-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   backend:
-    image: ghcr.io/0honus0/nexus-terminal-backend:latest
+    <<: *nexus-service
+    command: ["backend"]
     container_name: nexus-terminal-backend
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      PORT: 3001
+      PORT: ${BACKEND_PORT:-3001}
+      APP_NAME: ${APP_NAME:-Nexus Terminal}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-docker}
+      REMOTE_GATEWAY_API_BASE_LOCAL: ${REMOTE_GATEWAY_API_BASE_LOCAL:-http://localhost:9090}
+      REMOTE_GATEWAY_API_BASE_DOCKER: ${REMOTE_GATEWAY_API_BASE_DOCKER:-http://remote-gateway:9090}
+      REMOTE_GATEWAY_WS_URL_LOCAL: ${REMOTE_GATEWAY_WS_URL_LOCAL:-ws://localhost:8080}
+      REMOTE_GATEWAY_WS_URL_DOCKER: ${REMOTE_GATEWAY_WS_URL_DOCKER:-ws://remote-gateway:8080}
+      GUACD_HOST: ${GUACD_HOST:-guacd}
+      GUACD_PORT: ${GUACD_PORT:-4822}
+      RP_ID: ${RP_ID:-}
+      RP_ORIGIN: ${RP_ORIGIN:-}
     volumes:
       - ./data:/app/data
-    networks:
-      - nexus-terminal-network
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const net=require('net');const p=Number(process.env.PORT||3001);const s=net.connect(p,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000)"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
 
   remote-gateway:
-    image: ghcr.io/0honus0/nexus-terminal-remote-gateway:latest
+    <<: *nexus-service
+    command: ["remote-gateway"]
     container_name: nexus-terminal-remote-gateway
+    env_file:
+      - .env
     environment:
-      GUACD_HOST: guacd
-      GUACD_PORT: 4822
-      REMOTE_GATEWAY_API_PORT: 9090
-      REMOTE_GATEWAY_WS_PORT: 8080
-      FRONTEND_URL: http://frontend
-      MAIN_BACKEND_URL: http://backend:3001
       NODE_ENV: production
-    networks:
-      - nexus-terminal-network
+      GUACD_HOST: ${GUACD_HOST:-guacd}
+      GUACD_PORT: ${GUACD_PORT:-4822}
+      REMOTE_GATEWAY_API_PORT: ${REMOTE_GATEWAY_API_PORT:-9090}
+      REMOTE_GATEWAY_WS_PORT: ${REMOTE_GATEWAY_WS_PORT:-8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://frontend}
+      MAIN_BACKEND_URL: ${MAIN_BACKEND_URL:-http://backend:3001}
     depends_on:
-      - guacd
-      - backend
+      guacd:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const net=require('net');const p=Number(process.env.REMOTE_GATEWAY_API_PORT||9090);const s=net.connect(p,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000)"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
 
   guacd:
-    image: guacamole/guacd:latest
+    image: ${GUACD_IMAGE:-guacamole/guacd:latest}
     container_name: nexus-terminal-guacd
+    restart: unless-stopped
     networks:
       - nexus-terminal-network
-    restart: unless-stopped
 
 networks:
   nexus-terminal-network:
@@ -54,5 +99,5 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: fd01::/80    
-          gateway: fd01::1    
+        - subnet: ${NEXUS_IPV6_SUBNET:-fd01::/80}
+          gateway: ${NEXUS_IPV6_GATEWAY:-fd01::1}

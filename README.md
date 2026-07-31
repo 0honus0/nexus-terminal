@@ -7,7 +7,7 @@
 <br>
 [中文](./README.md) | [English](./doc/README_EN.md)
 
-[docker-url]: https://github.com/0honus0/nexus-terminal/pkgs/container/nexus-terminal-frontend
+[docker-url]: https://github.com/0honus0/nexus-terminal/pkgs/container/nexus-terminal
 
 </div>
 
@@ -66,7 +66,7 @@ https://github.com/0honus0/nexus-terminal/releases/latest
 
 ### 1️⃣ 配置环境
 
-> 建议在 Debian（AMD64 架构）环境中部署，因本人无 ARM 设备，无法保证其兼容性。
+> 发布镜像支持 AMD64 与 ARM64。ARM64 环境中的 `guacd` 镜像需要按下方说明调整。
 
 新建文件夹
 ```bash
@@ -78,10 +78,21 @@ mkdir ./nexus-terminal && cd ./nexus-terminal
 ```bash
 wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/.env -O .env
 ```
+
+Frontend、Backend 和 Remote Gateway 现在共用同一个镜像 `ghcr.io/0honus0/nexus-terminal`。Compose 仍使用三个独立容器运行不同角色，因此进程隔离、服务名称和内部网络地址保持不变，但镜像只需下载和保存一份。
+
 > ⚠️ **注意：**
 >
-> * **arm64 用户**请将 `docker-compose.yml` 中的镜像 `guacamole/guacd:latest` 替换为 `guacamole/guacd:1.6.0-RC1`。
-> * **armv7 用户**请参考下方注意事项。
+> * **ARM64 用户**请在 `.env` 中将 `GUACD_IMAGE` 设置为 `guacamole/guacd:1.6.0-RC1`。
+> * 当前发布 workflow 仅构建 `linux/amd64` 和 `linux/arm64`，不再提供 ARMv7 镜像。
+
+#### 环境变量如何生效
+
+* 项目根目录 `.env` 由 Docker Compose 自动用于 `${变量}` 插值，并通过 `env_file` 传入 Backend 与 Remote Gateway。
+* `docker-compose.yml` 中 `environment` 明确声明的值优先于 `env_file`；启动命令前设置的同名 Shell 环境变量会优先用于这些 `${变量}` 插值。未在 Compose 中列出的自定义变量仍可通过 `.env` 的 `env_file` 透传给 Node 服务。
+* Backend 首次启动会自动生成 `ENCRYPTION_KEY` 和 `SESSION_SECRET`，保存到持久化目录 `./data/.env`。升级统一镜像不需要迁移该文件，但必须与整个 `data` 目录一起备份。
+* `VITE_*` 属于前端构建时变量，只能在构建统一镜像时注入；运行时修改 `.env` 不会改写已经生成的前端静态文件。当前默认使用同源 API，不需要设置 `VITE_API_BASE_URL`。自构建时可执行 `VITE_API_BASE_URL=https://api.example.com ./build.sh docker`。
+* 修改运行时 `.env` 后需要执行 `docker compose up -d --force-recreate`，仅重启容器不一定会重新读取全部 Compose 配置。
 
 
 
@@ -128,16 +139,31 @@ docker compose up -d
 ```
 
 ### 3️⃣ 更新
-注意：docker-compose 运行不需要拉取仓库源码，除非你打算自己build，否则只需要在项目目录执行以下命令即可更新。
-```bash
-docker compose down
-```
+
+Compose 部署不需要拉取源码。统一镜像更新时执行：
+
 ```bash
 docker compose pull
+docker compose up -d --remove-orphans
 ```
+
+三个 Nexus Terminal 容器引用同一镜像，Docker 会自动复用镜像层，不会保存三份。
+
+### 4️⃣ 从源码构建统一镜像
+
 ```bash
-docker compose up -d
+git clone https://github.com/0honus0/nexus-terminal.git
+cd nexus-terminal
+./build.sh docker
 ```
+
+默认生成 `ghcr.io/0honus0/nexus-terminal:latest`。可以覆盖仓库名和标签：
+
+```bash
+NEXUS_IMAGE_REPOSITORY=local/nexus-terminal NEXUS_IMAGE_TAG=dev ./build.sh docker
+```
+
+随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 和 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。
 ## 📚 使用指南
 
 ### 挂起会话组件
@@ -182,7 +208,7 @@ docker compose up -d
 
 1.  **双文件管理器**：可以在布局中添加两个文件管理器组件（实验性功能，可能存在不稳定情况）。
 2.  **多文本编辑器**：在同一布局中添加多个文本编辑器的功能尚未实现。
-3. ARMv7 用户请使用此处的 [docker-compose.yml](https://github.com/0honus0/nexus-terminal/blob/main/doc/arm/docker-compose.yml)。由于 Apache Guacamole 未提供 guacd 的 ARMv7 架构镜像，所以禁用 RDP 功能，相关镜像暂时不再拉取。
+3. 当前统一镜像发布目标为 AMD64 和 ARM64。ARMv7 已不在发布范围内。
 4. 关于数据备份，请自行备份目录下的 data 文件夹，本项目不提供相关备份功能。
 5. 由于浏览器限制，非https或者localhost无法复制终端内容，请使用https访问
 

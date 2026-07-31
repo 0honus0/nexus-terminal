@@ -1,20 +1,10 @@
-name: Publish container images
+name: Publish container image
 
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      component:
-        description: Component to publish
-        required: true
-        default: all
-        type: choice
-        options:
-          - all
-          - backend
-          - frontend
-          - remote-gateway
       image_tag:
         description: Optional image tag (defaults to sha-<commit>)
         required: false
@@ -25,7 +15,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: publish-ghcr-${{ github.ref }}-${{ inputs.component || 'all' }}
+  group: publish-ghcr-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -33,32 +23,11 @@ jobs:
     name: Prepare publication
     runs-on: ubuntu-latest
     outputs:
-      components: ${{ steps.components.outputs.value }}
       image_tag: ${{ steps.image_tag.outputs.value }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-
-      - name: Select components
-        id: components
-        shell: bash
-        env:
-          REQUESTED_COMPONENT: ${{ inputs.component || 'all' }}
-        run: |
-          case "$REQUESTED_COMPONENT" in
-            all)
-              components='["backend","frontend","remote-gateway"]'
-              ;;
-            backend|frontend|remote-gateway)
-              components="[\"$REQUESTED_COMPONENT\"]"
-              ;;
-            *)
-              echo "Unsupported component: $REQUESTED_COMPONENT" >&2
-              exit 1
-              ;;
-          esac
-          echo "value=$components" >> "$GITHUB_OUTPUT"
 
       - name: Select image tag
         id: image_tag
@@ -104,13 +73,9 @@ jobs:
           done
 
   publish:
-    name: Publish ${{ matrix.component }}
+    name: Publish unified image
     needs: prepare
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        component: ${{ fromJSON(needs.prepare.outputs.components) }}
 
     steps:
       - name: Checkout repository
@@ -121,7 +86,7 @@ jobs:
         shell: bash
         run: |
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          echo "name=ghcr.io/${owner}/nexus-terminal-${{ matrix.component }}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${owner}/nexus-terminal" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -139,8 +104,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
-          context: packages/${{ matrix.component }}
-          file: packages/${{ matrix.component }}/Dockerfile
+          context: .
+          file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
@@ -150,5 +115,5 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.image_tag }}
-          cache-from: type=gha,scope=${{ matrix.component }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+          cache-from: type=gha,scope=unified-image
+          cache-to: type=gha,mode=max,scope=unified-image

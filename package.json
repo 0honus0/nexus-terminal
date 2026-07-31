@@ -7,8 +7,8 @@
     "build:backend": "./build.sh local backend",
     "build:frontend": "./build.sh local frontend",
     "build:remote-gateway": "./build.sh local remote-gateway",
-    "docker:build": "./build.sh docker all",
-    "docker:save": "./build.sh docker-save all"
+    "docker:build": "./build.sh docker",
+    "docker:save": "./build.sh docker-save"
   },
   "repository": {
     "type": "git",
