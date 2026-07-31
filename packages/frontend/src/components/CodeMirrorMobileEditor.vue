@@ -6,7 +6,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef, computed } from 'vue';
 import { EditorState, Compartment } from '@codemirror/state';
 import { useAppearanceStore } from '../stores/appearance.store';
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, dropCursor } from '@codemirror/view';
 import { syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching, foldGutter, foldKeymap } from '@codemirror/language';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
@@ -104,7 +104,6 @@ const createEditorState = (doc: string, languageExtension: any) => {
       vscodeDark,
       lineNumbers(), 
       history(),
-      highlightActiveLineGutter(),
       foldGutter(), 
       drawSelection(), 
       dropCursor(),
