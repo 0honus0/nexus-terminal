@@ -21,7 +21,11 @@ export function createWebSocketConnectionManager(
     sessionId: string,
     dbConnectionId: string,
     t: ReturnType<typeof useI18n>['t'],
-    options?: { isResumeFlow?: boolean; getIsMarkedForSuspend?: () => boolean }
+    options?: {
+        isResumeFlow?: boolean;
+        getIsMarkedForSuspend?: () => boolean;
+        getTerminalDimensions?: () => { cols: number; rows: number } | undefined;
+    }
 ) {
     // --- Instance State ---
     // 每个实例拥有独立的 WebSocket 对象、状态和消息处理器
@@ -182,8 +186,18 @@ export function createWebSocketConnectionManager(
                 statusMessage.value = getStatusText('wsConnected');
                 // 状态保持 'connecting' 直到收到 ssh:connected
                 if (!isResumeFlow) {
-                    // 对于普通连接，发送 ssh:connect 并等待 ssh:connected 来更新状态
-                    sendMessage({ type: 'ssh:connect', payload: { connectionId: instanceDbConnectionId } });
+                    // Reuse the already-rendered frontend session ID to avoid re-keying and
+                    // remounting the terminal after SSH authentication completes. Also open
+                    // the PTY at its real size instead of creating 80x24 and resizing later.
+                    const dimensions = options?.getTerminalDimensions?.();
+                    sendMessage({
+                        type: 'ssh:connect',
+                        payload: {
+                            connectionId: instanceDbConnectionId,
+                            clientSessionId: instanceSessionId,
+                            ...(dimensions ? dimensions : {}),
+                        },
+                    });
                 } else {
                     // 对于恢复流程，WebSocket 打开即表示连接基础已建立
                     // 后续的 SSH_SUSPEND_RESUME_REQUEST 会完成会话的恢复

@@ -95,15 +95,17 @@ export const openNewSession = (
       disposables: [],
   };
 
+  let getTerminalDimensions: (() => { cols: number; rows: number } | undefined) | undefined;
   const wsManager = createWebSocketConnectionManager(
-      newSessionId, // 这个 sessionId 在 wsManager 内部使用，可能与 SessionState.sessionId 不同步（如果后者被后端更新）
+      newSessionId,
       dbConnId,
       t,
       {
           isResumeFlow: isResume,
           getIsMarkedForSuspend: () => {
               return !!newSessionPartial.isMarkedForSuspend;
-          }
+          },
+          getTerminalDimensions: () => getTerminalDimensions?.(),
       }
   );
   newSessionPartial.wsManager = wsManager; // 将 wsManager 添加回部分对象
@@ -114,6 +116,11 @@ export const openNewSession = (
       isConnected: wsManager.isConnected,
   };
   const terminalManager = createSshTerminalManager(newSessionId, sshTerminalDeps, t);
+  getTerminalDimensions = () => {
+      const terminal = terminalManager.terminalInstance.value;
+      if (!terminal || terminal.cols <= 0 || terminal.rows <= 0) return undefined;
+      return { cols: terminal.cols, rows: terminal.rows };
+  };
   const statusMonitorDeps: StatusMonitorDependencies = {
       onMessage: wsManager.onMessage,
       isConnected: wsManager.isConnected,

@@ -82,6 +82,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
             clearTimeout(state.pendingDirectoryChange.timeout);
             state.pendingDirectoryChange = undefined;
         }
+        if (state.backgroundStartupTimer) {
+            clearTimeout(state.backgroundStartupTimer);
+            state.backgroundStartupTimer = undefined;
+        }
 
         // 1. 停止状态轮询 (如果存在)
         if (statusMonitorService) statusMonitorService.stopStatusPolling(sessionId);

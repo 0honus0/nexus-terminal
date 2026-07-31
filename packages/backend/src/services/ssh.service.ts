@@ -139,35 +139,30 @@ export const getConnectionDetails = async (connectionId: number): Promise<Decryp
                 const jumpHostConnectionIds: number[] = JSON.parse(typedRawConnInfo.jump_chain);
 
                 if (Array.isArray(jumpHostConnectionIds) && jumpHostConnectionIds.length > 0) {
-                    fullConnInfo.jump_chain = []; // Initialize for JumpHostDetail objects
-
-                    for (let i = 0; i < jumpHostConnectionIds.length; i++) {
-                        const hopConnectionId = jumpHostConnectionIds[i];
+                    const hopTargetDetailsList = await Promise.all(jumpHostConnectionIds.map(async (hopConnectionId, index) => {
                         if (typeof hopConnectionId !== 'number') {
-                            throw new Error(`Jump host ID at index ${i} in jump_chain for connection ${connectionId} is not a number. Found: ${hopConnectionId}`);
+                            throw new Error(`Jump host ID at index ${index} in jump_chain for connection ${connectionId} is not a number. Found: ${hopConnectionId}`);
                         }
                         if (hopConnectionId === connectionId) {
                             throw new Error(`Connection ${connectionId} cannot have itself (ID: ${hopConnectionId}) in its own jump_chain. This would cause a loop.`);
                         }
+                        return getConnectionDetails(hopConnectionId);
+                    }));
 
-
-                        const hopTargetDetails: DecryptedConnectionDetails = await getConnectionDetails(hopConnectionId);
-
-                        const decryptedHop: JumpHostDetail = {
-                            id: `hop-${connectionId}-via-${hopConnectionId}-idx-${i}`, // A unique ID for this specific hop in this chain
-                            name: hopTargetDetails.name || `Jump Host ${i + 1} (Conn ID ${hopConnectionId})`,
+                    fullConnInfo.jump_chain = hopTargetDetailsList.map((hopTargetDetails, index): JumpHostDetail => {
+                        const hopConnectionId = jumpHostConnectionIds[index];
+                        return {
+                            id: `hop-${connectionId}-via-${hopConnectionId}-idx-${index}`,
+                            name: hopTargetDetails.name || `Jump Host ${index + 1} (Conn ID ${hopConnectionId})`,
                             host: hopTargetDetails.host,
                             port: hopTargetDetails.port,
                             username: hopTargetDetails.username,
                             auth_method: hopTargetDetails.auth_method,
-                            // Credentials should already be decrypted by the recursive call
                             password: hopTargetDetails.password,
                             privateKey: hopTargetDetails.privateKey,
                             passphrase: hopTargetDetails.passphrase,
                         };
-                        
-                        fullConnInfo.jump_chain.push(decryptedHop);
-                    }
+                    });
                 } else {
                      console.log(`SshService: Parsed jump_chain for connection ${connectionId} is empty or not an array after parsing.`);
                 }
@@ -198,20 +193,24 @@ const _setupSshClientListenersAndConnect = (
         const logPrefix = `SshService: Client for ${connNameForLog} (ID: ${connectionIdForUpdate ?? 'N/A'}, ${isFinalClient ? 'Final' : 'Intermediate'}) -`;
 
         const eventHandlers = {
-            ready: async () => {
+            ready: () => {
                 console.log(`${logPrefix} SSH connection successful. Target: ${config.host || (config.sock ? 'stream-based' : 'unknown')}`);
                 client.removeListener('error', eventHandlers.error);
                 client.removeListener('close', eventHandlers.close);
 
-                if (isFinalClient && connectionIdForUpdate !== null && connectionIdForUpdate !== -1) { // -1 for unsaved tests
-                    try {
-                        const currentTimeSeconds = Math.floor(Date.now() / 1000);
-                        await ConnectionRepository.updateLastConnected(connectionIdForUpdate, currentTimeSeconds);
-                    } catch (updateError) {
-                        console.error(`SshService: Failed to update last_connected_at for connection ID ${connectionIdForUpdate}:`, updateError);
-                    }
-                }
+                // The transport and authentication are complete. Do not hold the interactive
+                // shell path behind a best-effort analytics/database write.
                 resolve(client);
+
+                if (isFinalClient && connectionIdForUpdate !== null && connectionIdForUpdate !== -1) { // -1 for unsaved tests
+                    const currentTimeSeconds = Math.floor(Date.now() / 1000);
+                    setImmediate(() => {
+                        void ConnectionRepository.updateLastConnected(connectionIdForUpdate, currentTimeSeconds)
+                            .catch(updateError => {
+                                console.error(`SshService: Failed to update last_connected_at for connection ID ${connectionIdForUpdate}:`, updateError);
+                            });
+                    });
+                }
             },
             error: (err: Error) => {
                 client.removeListener('ready', eventHandlers.ready);

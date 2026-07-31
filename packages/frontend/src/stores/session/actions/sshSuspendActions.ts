@@ -735,12 +735,6 @@ export const registerSshSuspendHandlers = (wsManager: WsManagerInstance): void =
 
   console.log(`[${t('term.sshSuspend')}] SSH 挂起模式的 WebSocket 消息处理器已注册 (移除了名称编辑相关的处理器)。`);
 
-  // 连接建立后，主动获取一次挂起列表
-  // 考虑：是否应该在这里做，或者在应用启动时做一次？
-  // 如果 wsManager 是针对某个具体会话的，那么每个会话连接时都获取列表可能不是最优。
-  // 更好的地方可能是在 App.vue 或主会话 store 初始化时，通过一个“全局”的 wsManager (如果存在) 或其中一个 wsManager 获取。
-  // 但如果挂起列表只通过当前连接的 ws 通道获取，那这里是合适的。
-  // 假设 getActiveWsManager 能取到这个 wsManager 实例，那 actions.ts 里的 fetchSuspendedSshSessions() 会用它
-  // 这里直接调用 fetchSuspendedSshSessions() 也可以
-  fetchSuspendedSshSessions();
+  // SuspendedSshSessionsView fetches and polls while it is visible. Fetching the same
+  // global list for every new SSH tab adds unrelated HTTP work to the connect path.
 };

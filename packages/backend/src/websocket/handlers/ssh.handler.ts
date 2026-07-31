@@ -350,6 +350,7 @@ export async function handleSshConnect(
     request: WebSocketRequest,
     payload: any
 ): Promise<void> {
+    const connectStartedAt = Date.now();
     const sessionId = ws.sessionId;
     const existingState = sessionId ? clientStates.get(sessionId) : undefined;
 
@@ -374,11 +375,21 @@ export async function handleSshConnect(
     try {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' }));
         connInfo = await SshService.getConnectionDetails(dbConnectionId);
+        const connectionDetailsReadyAt = Date.now();
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
         const sshClient = await SshService.establishSshConnection(connInfo);
+        const sshTransportReadyAt = Date.now();
 
-        const newSessionId = uuidv4();
+        const requestedSessionId = typeof payload?.clientSessionId === 'string'
+            ? payload.clientSessionId.trim()
+            : '';
+        const canReuseClientSessionId = /^[A-Za-z0-9_-]{8,128}$/.test(requestedSessionId)
+            && !clientStates.has(requestedSessionId);
+        const newSessionId = canReuseClientSessionId ? requestedSessionId : uuidv4();
+        if (requestedSessionId && !canReuseClientSessionId) {
+            console.warn(`WebSocket: 客户端会话 ID 无效或冲突，已回退到服务端 UUID。`);
+        }
         ws.sessionId = newSessionId; // Assign new sessionId to the WebSocket
 
         const dbConnectionIdAsNumber = parseInt(dbConnectionId, 10);
@@ -397,8 +408,32 @@ export async function handleSshConnect(
             connectionName: connInfo!.name,
             ipAddress: clientIp,
             isShellReady: false,
+            backgroundServicesStarted: false,
         };
         clientStates.set(newSessionId, newState);
+
+        const startBackgroundServices = (): void => {
+            const currentState = clientStates.get(newSessionId);
+            if (!currentState || currentState.backgroundServicesStarted) return;
+
+            currentState.backgroundServicesStarted = true;
+            if (currentState.backgroundStartupTimer) {
+                clearTimeout(currentState.backgroundStartupTimer);
+                currentState.backgroundStartupTimer = undefined;
+            }
+
+            void statusMonitorService.startStatusPolling(newSessionId)
+                .catch(error => console.error(`[StatusMonitor ${newSessionId}] 延后启动失败:`, error));
+            void startDockerStatusPolling(newSessionId)
+                .catch(error => console.error(`[Docker Polling ${newSessionId}] 延后启动失败:`, error));
+        };
+
+        const scheduleBackgroundServices = (delayMs: number): void => {
+            if (newState.backgroundServicesStarted) return;
+            if (newState.backgroundStartupTimer) clearTimeout(newState.backgroundStartupTimer);
+            newState.backgroundStartupTimer = setTimeout(startBackgroundServices, delayMs);
+        };
+        let terminalOutputObserved = false;
         console.log(`WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`);
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: 'SSH 连接成功，正在打开 Shell...' }));
@@ -440,7 +475,16 @@ export async function handleSshConnect(
                 // commands during login; start it only when the file manager asks to
                 // read the terminal cwd or to synchronize the terminal directory.
 
+                // If a shell produces no banner or prompt, still start background services shortly.
+                scheduleBackgroundServices(1000);
+
                 stream.on('data', (data: Buffer) => {
+                    if (!terminalOutputObserved) {
+                        terminalOutputObserved = true;
+                        // Let the login banner/prompt reach the browser first. The status and
+                        // Docker probes open additional exec channels and can contend on slow hosts.
+                        scheduleBackgroundServices(150);
+                    }
                     const visibleOutput = filterSshShellOutput(newState, data.toString('utf8'));
                     if (visibleOutput && ws.readyState === WebSocket.OPEN) {
                         // 确保数据以 UTF-8 编码转换为 Base64
@@ -484,6 +528,12 @@ export async function handleSshConnect(
                         sessionId: newSessionId
                     }
                 }));
+                const shellReadyAt = Date.now();
+                console.log(
+                    `[SSH Timing ${newSessionId}] 配置 ${connectionDetailsReadyAt - connectStartedAt}ms, `
+                    + `SSH握手 ${sshTransportReadyAt - connectionDetailsReadyAt}ms, `
+                    + `Shell ${shellReadyAt - sshTransportReadyAt}ms, 总计 ${shellReadyAt - connectStartedAt}ms`,
+                );
                 console.log(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
                 auditLogService.logAction('SSH_CONNECT_SUCCESS', {
                     userId: ws.userId,
@@ -506,8 +556,6 @@ export async function handleSshConnect(
                     .then(() => console.log(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
                     .catch(sftpInitError => console.error(`WebSocket: 会话 ${newSessionId} 异步初始化 SFTP 失败:`, sftpInitError));
 
-                statusMonitorService.startStatusPolling(newSessionId);
-                startDockerStatusPolling(newSessionId); // Start Docker polling
             });
         } catch (shellError: any) {
             console.error(`SSH: 会话 ${newSessionId} 打开 Shell 时发生意外错误:`, shellError);
