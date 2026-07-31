@@ -472,6 +472,9 @@
     },
     "errors": {
       "generic": "Error",
+      "terminalPathChangeFailed": "Failed to change terminal directory",
+      "pathReadFailed": "Failed to read the terminal directory.",
+      "pathReadTimeout": "Timed out while reading the terminal directory.",
       "missingConnectionId": "Cannot get current connection ID",
       "createFolderFailed": "Failed to create folder",
       "deleteFailed": "Failed to delete",
@@ -506,6 +509,8 @@
       "copyPathFailed": "Failed to copy path"
   },
   "notifications": {
+    "terminalPathQueued": "A foreground command is running. The directory change is safely queued until the shell prompt returns.",
+    "terminalPathChanged": "Terminal directory changed to {path}",
     "copySuccess": "Copy successful",
     "moveSuccess": "Move successful",
     "cdCommandSent": "CD command sent to terminal",

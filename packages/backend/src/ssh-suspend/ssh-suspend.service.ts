@@ -51,6 +51,10 @@ export class SshSuspendService extends EventEmitter {
     connectionId: string;
     logIdentifier: string;
     customSuspendName?: string;
+    shellPid?: number;
+    shellKind?: 'bash' | 'zsh' | 'other';
+    shellIntegrationReady?: boolean;
+    shellAtPrompt?: boolean;
   }): Promise<string | null> {
     const {
       userId,
@@ -61,6 +65,10 @@ export class SshSuspendService extends EventEmitter {
       connectionId,
       logIdentifier,
       customSuspendName,
+      shellPid,
+      shellKind,
+      shellIntegrationReady,
+      shellAtPrompt,
     } = details;
     console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Called for userId=${userId}, originalSessionId=${originalSessionId}`);
 
@@ -100,6 +108,10 @@ export class SshSuspendService extends EventEmitter {
       backendSshStatus: 'hanging',
       originalSessionId,
       userId,
+      shellPid,
+      shellKind,
+      shellIntegrationReady,
+      shellAtPrompt,
     };
 
     userSessions.set(suspendSessionId, sessionDetails);
@@ -217,7 +229,17 @@ export class SshSuspendService extends EventEmitter {
    * @param suspendSessionId 要恢复的挂起会话ID。
    * @returns Promise<{ sshClient: Client; channel: ClientChannel; logData: string; connectionName: string; originalConnectionId: string; } | null> 恢复成功则返回客户端、通道、日志数据、连接名和原始连接ID，否则返回null。
    */
-  async resumeSession(userId: number, suspendSessionId: string): Promise<{ sshClient: Client; channel: ClientChannel; logData: string; connectionName: string; originalConnectionId: string; } | null> {
+  async resumeSession(userId: number, suspendSessionId: string): Promise<{
+    sshClient: Client;
+    channel: ClientChannel;
+    logData: string;
+    connectionName: string;
+    originalConnectionId: string;
+    shellPid?: number;
+    shellKind?: 'bash' | 'zsh' | 'other';
+    shellIntegrationReady?: boolean;
+    shellAtPrompt?: boolean;
+  } | null> {
     // console.log(`[SshSuspendService][用户: ${userId}] resumeSession 调用，suspendSessionId: ${suspendSessionId}`);
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
@@ -249,7 +271,16 @@ export class SshSuspendService extends EventEmitter {
     }
     
     // 在从 userSessions 删除会话之前，保存需要返回的会话详细信息
-    const { sshClient, channel, connectionName, connectionId: originalConnectionId } = session;
+    const {
+      sshClient,
+      channel,
+      connectionName,
+      connectionId: originalConnectionId,
+      shellPid,
+      shellKind,
+      shellIntegrationReady,
+      shellAtPrompt,
+    } = session;
 
     userSessions.delete(suspendSessionId);
     // console.log(`[SshSuspendService][用户: ${userId}] resumeSession: 已从内存中删除挂起会话 ${suspendSessionId} 的记录。`);
@@ -268,7 +299,11 @@ export class SshSuspendService extends EventEmitter {
       channel,
       logData,
       connectionName,
-      originalConnectionId
+      originalConnectionId,
+      shellPid,
+      shellKind,
+      shellIntegrationReady,
+      shellAtPrompt,
     };
   }
 

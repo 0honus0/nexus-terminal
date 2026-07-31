@@ -12,40 +12,236 @@ const encodeForPosixPrintf = (value: string): string =>
         .map(char => `\\${char.charCodeAt(0).toString(8).padStart(3, '0')}`)
         .join('');
 
-const consumeSilentExecOutput = (state: ClientState, chunk: string): string => {
-    const pending = state.silentExec;
+const SHELL_PROMPT_MARKER = '\x1b]777;NEXUS_PROMPT\x07';
+
+const quotePosixShellArg = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+
+const sendSshRequestMessage = (state: ClientState, type: string, requestId: string, payload: Record<string, unknown>): void => {
+    if (state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({ type, requestId, payload }));
+    }
+};
+
+const executeSshCommand = (state: ClientState, command: string, timeoutMs = 5000): Promise<string> =>
+    new Promise((resolve, reject) => {
+        let stdout = '';
+        let stderr = '';
+        let settled = false;
+        let channel: any;
+        const finish = (error?: Error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (error) reject(error);
+            else resolve(stdout);
+        };
+        const timeout = setTimeout(() => {
+            try { channel?.close(); } catch { /* ignore */ }
+            finish(new Error('SSH command timed out'));
+        }, timeoutMs);
+
+        state.sshClient.exec(command, (err, stream) => {
+            if (err) {
+                finish(err);
+                return;
+            }
+            channel = stream;
+            stream.on('data', (data: Buffer) => { stdout += data.toString('utf8'); });
+            stream.stderr.on('data', (data: Buffer) => { stderr += data.toString('utf8'); });
+            stream.on('error', (streamError: Error) => finish(streamError));
+            stream.on('close', (code: number | undefined) => {
+                if (code && code !== 0) {
+                    finish(new Error(stderr.trim() || `SSH command exited with code ${code}`));
+                } else {
+                    finish();
+                }
+            });
+        });
+    });
+
+const parseAbsolutePath = (output: string): string => {
+    const candidate = output.replace(/\r/g, '').split('\n').map(line => line.trim()).find(line => line.startsWith('/'));
+    if (!candidate) throw new Error('Remote command did not return an absolute path');
+    return candidate;
+};
+
+const readShellCurrentPath = async (state: ClientState): Promise<string> => {
+    if (!state.shellPid) throw new Error('Shell PID is unavailable');
+    return parseAbsolutePath(await executeSshCommand(state, `readlink /proc/${state.shellPid}/cwd`, 5000));
+};
+
+const resolveRemoteDirectory = async (state: ClientState, requestedPath: string): Promise<string> =>
+    parseAbsolutePath(await executeSshCommand(state, `cd ${quotePosixShellArg(requestedPath)} 2>/dev/null && pwd -P`, 5000));
+
+const clearPendingDirectoryChange = (state: ClientState): void => {
+    if (state.pendingDirectoryChange) clearTimeout(state.pendingDirectoryChange.timeout);
+    state.pendingDirectoryChange = undefined;
+};
+
+async function handleShellPrompt(state: ClientState): Promise<void> {
+    const pending = state.pendingDirectoryChange;
+    if (!pending || !state.sshShellStream) return;
+
+    if (!pending.executing) {
+        pending.executing = true;
+        state.shellAtPrompt = false;
+        // The marker is emitted immediately before the shell starts reading a fresh line.
+        // Ctrl-U defensively clears any stale line-editor buffer without touching a child process.
+        state.sshShellStream.write(`\x15cd ${quotePosixShellArg(pending.path)}\r`);
+        return;
+    }
+
+    clearPendingDirectoryChange(state);
+    try {
+        const currentPath = await readShellCurrentPath(state);
+        if (currentPath !== pending.expectedPath) {
+            throw new Error(`Shell remained in ${currentPath}`);
+        }
+        sendSshRequestMessage(state, 'ssh:change_directory:result', pending.requestId, { path: currentPath });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendSshRequestMessage(state, 'ssh:change_directory:error', pending.requestId, { error: message });
+    }
+}
+
+const consumePromptMarkers = (state: ClientState, chunk: string): string => {
+    let data = (state.shellControlRemainder || '') + chunk;
+    state.shellControlRemainder = '';
+    let visible = '';
+    let cursor = 0;
+    let markerIndex = data.indexOf(SHELL_PROMPT_MARKER, cursor);
+    while (markerIndex !== -1) {
+        visible += data.slice(cursor, markerIndex);
+        state.shellAtPrompt = true;
+        state.shellIntegrationReady = true;
+        void handleShellPrompt(state);
+        cursor = markerIndex + SHELL_PROMPT_MARKER.length;
+        markerIndex = data.indexOf(SHELL_PROMPT_MARKER, cursor);
+    }
+
+    const tail = data.slice(cursor);
+    let partialLength = 0;
+    const maxPartial = Math.min(tail.length, SHELL_PROMPT_MARKER.length - 1);
+    for (let length = maxPartial; length > 0; length--) {
+        if (SHELL_PROMPT_MARKER.startsWith(tail.slice(-length))) {
+            partialLength = length;
+            break;
+        }
+    }
+    if (partialLength > 0) {
+        state.shellControlRemainder = tail.slice(-partialLength);
+        visible += tail.slice(0, -partialLength);
+    } else {
+        visible += tail;
+    }
+    return visible;
+};
+
+const buildPromptHookBody = (shellKind: 'bash' | 'zsh'): string => {
+    const markerFunction = "__nexus_prompt_marker(){ printf '\\033]777;NEXUS_PROMPT\\007'; };";
+    if (shellKind === 'bash') {
+        return [
+            markerFunction,
+            "if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then",
+            'case " ${PROMPT_COMMAND[*]} " in',
+            '*" __nexus_prompt_marker "*) ;;',
+            '*) PROMPT_COMMAND+=(__nexus_prompt_marker) ;;',
+            'esac;',
+            'else',
+            'case ";${PROMPT_COMMAND-};" in',
+            '*";__nexus_prompt_marker;"*) ;;',
+            '*) PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}__nexus_prompt_marker" ;;',
+            'esac;',
+            'fi',
+        ].join(' ');
+    }
+    return `autoload -Uz add-zsh-hook 2>/dev/null; ${markerFunction} add-zsh-hook -d precmd __nexus_prompt_marker 2>/dev/null; add-zsh-hook precmd __nexus_prompt_marker`;
+};
+
+const buildPromptHookCommand = (shellKind: 'bash' | 'zsh', startMarker: string, endMarker: string): string => {
+    const encodedStart = encodeForPosixPrintf(startMarker);
+    const encodedEnd = encodeForPosixPrintf(endMarker);
+    return [
+        'stty -echo 2>/dev/null;',
+        `${buildPromptHookBody(shellKind)};`,
+        `printf '\\n${encodedStart}ok${encodedEnd}\\n';`,
+        'stty echo 2>/dev/null;',
+        "printf '\\n'",
+    ].join(' ') + '\r';
+};
+
+const installPromptHook = (state: ClientState): void => {
+    if (!state.sshShellStream || (state.shellKind !== 'bash' && state.shellKind !== 'zsh')) return;
+
+    const token = `${Date.now()}${Math.random().toString(36).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '');
+    const startMarker = `__NEXUS_HOOK_BEGIN_${token}__`;
+    const endMarker = `__NEXUS_HOOK_END_${token}__`;
+    const timeout = setTimeout(() => { state.shellSetup = undefined; }, 5000);
+    state.shellSetup = { phase: 'hook', startMarker, endMarker, buffer: '', timeout };
+    state.sshShellStream.write(buildPromptHookCommand(state.shellKind, startMarker, endMarker));
+};
+
+const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
+    const pending = state.shellSetup;
     if (!pending) return chunk;
 
     pending.buffer += chunk;
     const startIndex = pending.buffer.indexOf(pending.startMarker);
     if (startIndex === -1) {
-        // 请求期间的命令回显也应隐藏；只保留足够长度用于跨 chunk 匹配标记。
         const keep = Math.max(pending.startMarker.length - 1, 0);
         if (pending.buffer.length > keep) pending.buffer = pending.buffer.slice(-keep);
         return '';
     }
-
     const outputStart = startIndex + pending.startMarker.length;
     const endIndex = pending.buffer.indexOf(pending.endMarker, outputStart);
     if (endIndex === -1) return '';
 
-    const output = pending.buffer
-        .slice(outputStart, endIndex)
-        .replace(/^\r?\n/, '')
-        .replace(/\r?\n$/, '');
+    const output = pending.buffer.slice(outputStart, endIndex).trim();
     const trailingOutput = pending.buffer.slice(endIndex + pending.endMarker.length);
     clearTimeout(pending.timeout);
-    state.silentExec = undefined;
+    state.shellSetup = undefined;
 
-    if (state.ws.readyState === WebSocket.OPEN) {
-        state.ws.send(JSON.stringify({
-            type: 'ssh:exec_silent:result',
-            requestId: pending.requestId,
-            payload: { output },
-        }));
+    if (pending.phase === 'probe') {
+        const match = output.match(/^(\d+):(bash|zsh|other)$/);
+        if (match) {
+            state.shellPid = Number.parseInt(match[1], 10);
+            state.shellKind = match[2] as 'bash' | 'zsh' | 'other';
+            queueMicrotask(() => installPromptHook(state));
+        }
+    } else if (pending.phase === 'hook' && output === 'ok') {
+        state.shellIntegrationReady = true;
     }
     return trailingOutput;
 };
+
+export const filterSshShellOutput = (state: ClientState, chunk: string): string => {
+    const setupFiltered = consumeShellSetupOutput(state, chunk);
+    return consumePromptMarkers(state, setupFiltered);
+};
+
+const buildShellProbeCommand = (startMarker: string, endMarker: string): string => {
+    const encodedStart = encodeForPosixPrintf(startMarker);
+    const encodedEnd = encodeForPosixPrintf(endMarker);
+    return [
+        'stty -echo 2>/dev/null;',
+        'if [ -n "${BASH_VERSION-}" ]; then __nexus_shell_kind=bash; elif [ -n "${ZSH_VERSION-}" ]; then __nexus_shell_kind=zsh; else __nexus_shell_kind=other; fi;',
+        `printf '\\n${encodedStart}%s:%s${encodedEnd}\\n' "$$" "$__nexus_shell_kind";`,
+        'stty echo 2>/dev/null;',
+        "printf '\\n'",
+    ].join(' ') + '\r';
+};
+
+const startShellIntegration = (state: ClientState): void => {
+    if (!state.sshShellStream) return;
+    const token = `${Date.now()}${Math.random().toString(36).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '');
+    const startMarker = `__NEXUS_SHELL_BEGIN_${token}__`;
+    const endMarker = `__NEXUS_SHELL_END_${token}__`;
+    const timeout = setTimeout(() => { state.shellSetup = undefined; }, 5000);
+    state.shellIntegrationReady = false;
+    state.shellSetup = { phase: 'probe', startMarker, endMarker, buffer: '', timeout };
+    state.sshShellStream.write(buildShellProbeCommand(startMarker, endMarker));
+};
+
 
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
@@ -139,7 +335,7 @@ export async function handleSshConnect(
                 newState.isShellReady = true;
 
                 stream.on('data', (data: Buffer) => {
-                    const visibleOutput = consumeSilentExecOutput(newState, data.toString('utf8'));
+                    const visibleOutput = filterSshShellOutput(newState, data.toString('utf8'));
                     if (visibleOutput && ws.readyState === WebSocket.OPEN) {
                         // 确保数据以 UTF-8 编码转换为 Base64
                         ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(visibleOutput, 'utf8').toString('base64'), encoding: 'base64' }));
@@ -167,6 +363,8 @@ export async function handleSshConnect(
                         });
                     }
                 });
+                startShellIntegration(newState);
+
                 stream.on('close', () => {
                     console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
                     if (ws.readyState === WebSocket.OPEN) {
@@ -259,13 +457,16 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
     }
     const data = payload?.data;
     if (typeof data === 'string' && state.isShellReady) { // Check isShellReady
+        // Any user input may be a partial command or belong to a foreground program.
+        // Wait for the next explicit prompt marker before injecting a queued cd.
+        state.shellAtPrompt = false;
         state.sshShellStream.write(data);
     } else if (!state.isShellReady) {
         console.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
     }
 }
 
-export function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: any, requestId?: string): void {
+export async function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: any, requestId?: string): Promise<void> {
     const sessionId = ws.sessionId;
     const state = sessionId ? clientStates.get(sessionId) : undefined;
     const fail = (error: string) => {
@@ -278,30 +479,81 @@ export function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: any, re
         fail('无效的静默命令请求。');
         return;
     }
-    if (!state?.sshShellStream || !state.isShellReady) {
+    if (!state?.sshClient || !state.isShellReady) {
         fail('SSH Shell 尚未就绪。');
         return;
     }
-    if (state.silentExec) {
-        fail('已有静默命令正在执行。');
+    if (!state.shellPid) {
+        fail('终端路径集成尚未就绪，请稍后重试。');
         return;
     }
 
-    const markerId = requestId.replace(/[^a-zA-Z0-9]/g, '').slice(-24);
-    const startMarker = `__NEXUS_SILENT_BEGIN_${markerId}__`;
-    const endMarker = `__NEXUS_SILENT_END_${markerId}__`;
-    const timeoutMs = Math.min(Math.max(Number(payload?.timeoutMs) || 5000, 1000), 10000);
-    const timeout = setTimeout(() => {
-        if (state.silentExec?.requestId !== requestId) return;
-        state.silentExec = undefined;
-        fail('读取终端路径超时。');
-    }, timeoutMs);
+    try {
+        // This runs on an independent SSH exec channel. Reading /proc/<shell>/cwd does
+        // not write into the PTY, so cat/vim/sleep and other foreground jobs are untouched.
+        const output = await readShellCurrentPath(state);
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ssh:exec_silent:result', requestId, payload: { output } }));
+        }
+    } catch (error) {
+        fail(error instanceof Error ? error.message : String(error));
+    }
+}
 
-    state.silentExec = { requestId, startMarker, endMarker, buffer: '', timeout };
-    const encodedStart = encodeForPosixPrintf(startMarker);
-    const encodedEnd = encodeForPosixPrintf(endMarker);
-    const command = `stty -echo 2>/dev/null; printf '\\n${encodedStart}\\n'; pwd; printf '\\n${encodedEnd}\\n'; stty echo 2>/dev/null; printf '\\n'\r`;
-    state.sshShellStream.write(command);
+export async function handleSshChangeDirectory(ws: AuthenticatedWebSocket, payload: any, requestId?: string): Promise<void> {
+    const sessionId = ws.sessionId;
+    const state = sessionId ? clientStates.get(sessionId) : undefined;
+    const fail = (error: string) => {
+        if (requestId && state) sendSshRequestMessage(state, 'ssh:change_directory:error', requestId, { error });
+    };
+
+    if (!requestId || typeof payload?.path !== 'string' || !payload.path.startsWith('/')) {
+        fail('无效的终端目录切换请求。');
+        return;
+    }
+    if (!state?.sshShellStream || !state.isShellReady || !state.shellPid || !state.shellIntegrationReady) {
+        fail('终端路径集成尚未就绪。');
+        return;
+    }
+    if (state.shellKind !== 'bash' && state.shellKind !== 'zsh') {
+        fail('当前 Shell 不支持安全目录队列；为避免影响前台程序，未发送 cd。');
+        return;
+    }
+
+    let expectedPath: string;
+    try {
+        expectedPath = await resolveRemoteDirectory(state, payload.path);
+    } catch {
+        fail('目标目录不存在或无权访问。');
+        return;
+    }
+
+    if (state.pendingDirectoryChange) {
+        const previous = state.pendingDirectoryChange;
+        clearPendingDirectoryChange(state);
+        sendSshRequestMessage(state, 'ssh:change_directory:error', previous.requestId, { error: '已被新的目录切换请求替代。' });
+    }
+
+    const timeout = setTimeout(() => {
+        if (state.pendingDirectoryChange?.requestId !== requestId) return;
+        clearPendingDirectoryChange(state);
+        sendSshRequestMessage(state, 'ssh:change_directory:error', requestId, { error: '等待 Shell 返回提示符超时。' });
+    }, 10 * 60 * 1000);
+    state.pendingDirectoryChange = {
+        requestId,
+        path: payload.path,
+        expectedPath,
+        executing: false,
+        timeout,
+    };
+    sendSshRequestMessage(state, 'ssh:change_directory:queued', requestId, {
+        path: payload.path,
+        waitingForPrompt: !state.shellAtPrompt,
+    });
+
+    if (state.shellAtPrompt) {
+        await handleShellPrompt(state);
+    }
 }
 
 export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void {

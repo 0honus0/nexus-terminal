@@ -33,6 +33,11 @@ export interface SuspendSessionDetails {
   originalSessionId: string;
   /** 用户ID */
   userId: number;
+  /** Terminal shell integration metadata retained across suspend/resume. */
+  shellPid?: number;
+  shellKind?: 'bash' | 'zsh' | 'other';
+  shellIntegrationReady?: boolean;
+  shellAtPrompt?: boolean;
 }
 
 /**

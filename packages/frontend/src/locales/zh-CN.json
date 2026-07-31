@@ -472,6 +472,9 @@
     },
     "errors": {
       "generic": "错误",
+      "terminalPathChangeFailed": "终端目录切换失败",
+      "pathReadFailed": "无法读取终端当前目录。",
+      "pathReadTimeout": "读取终端目录超时。",
       "missingConnectionId": "无法获取当前连接 ID",
       "createFolderFailed": "创建文件夹失败",
       "deleteFailed": "删除失败",
@@ -506,6 +509,8 @@
       "copyPathFailed": "复制路径失败"
   },
   "notifications": {
+    "terminalPathQueued": "前台命令正在运行，目录切换已安全排队，将在 Shell 返回提示符后执行。",
+    "terminalPathChanged": "终端目录已切换到 {path}",
     "copySuccess": "复制成功",
     "moveSuccess": "移动成功",
     "cdCommandSent": "CD 命令已发送到终端",

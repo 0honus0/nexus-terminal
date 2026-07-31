@@ -34,6 +34,8 @@ import {
     handleSshConnect,
     handleSshInput,
     handleSshExecSilent,
+    handleSshChangeDirectory,
+    filterSshShellOutput,
     handleSshResize,
     handleSshResumeSuccess
 } from './handlers/ssh.handler';
@@ -92,7 +94,10 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                             handleSshInput(ws, payload);
                             break;
                         case 'ssh:exec_silent':
-                            handleSshExecSilent(ws, payload, requestId);
+                            await handleSshExecSilent(ws, payload, requestId);
+                            break;
+                        case 'ssh:change_directory':
+                            await handleSshChangeDirectory(ws, payload, requestId);
                             break;
                         case 'ssh:resize':
                             handleSshResize(ws, payload);
@@ -184,6 +189,10 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                         connectionName: result.connectionName, // 从结果中恢复
                                         ipAddress: clientIp,
                                         isShellReady: true, // 假设恢复后 Shell 立即可用
+                                        shellPid: result.shellPid,
+                                        shellKind: result.shellKind,
+                                        shellIntegrationReady: result.shellIntegrationReady,
+                                        shellAtPrompt: result.shellAtPrompt,
                                     };
                                     clientStates.set(newFrontendSessionId, newSessionState);
                                     ws.sessionId = newFrontendSessionId; // 将当前 ws 与新会话关联
@@ -205,10 +214,14 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                     // 重新设置事件监听器，将数据流导向新的前端会话
                                     result.channel.removeAllListeners('data'); // 清除 SshSuspendService 可能设置的监听器
                                     result.channel.on('data', (data: Buffer) => {
-                                        if (ws.readyState === WebSocket.OPEN) {
-                                            // console.debug(`[WebSocket Handler][${type}] 发送 ssh:output for ${newFrontendSessionId}`);
-                                            // 保持与 ssh.handler.ts 中 ssh:output 格式一致
-                                            ws.send(JSON.stringify({ type: 'ssh:output', payload: data.toString('base64'), encoding: 'base64' }));
+                                        const visibleOutput = filterSshShellOutput(newSessionState, data.toString('utf8'));
+                                        if (visibleOutput && ws.readyState === WebSocket.OPEN) {
+                                            // Keep the restored stream on the same shell-control filtering path.
+                                            ws.send(JSON.stringify({
+                                                type: 'ssh:output',
+                                                payload: Buffer.from(visibleOutput, 'utf8').toString('base64'),
+                                                encoding: 'base64',
+                                            }));
                                         }
                                     });
                                     result.channel.on('close', () => {
@@ -227,9 +240,10 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
                                     // 发送缓存日志块
                                     console.log('[SSH Suspend Backend] Log data to send to frontend:', result.logData);
+                                    const filteredLogData = filterSshShellOutput(newSessionState, result.logData);
                                     const logChunkResponse: SshOutputCachedChunk = {
                                         type: 'SSH_OUTPUT_CACHED_CHUNK',
-                                        payload: { frontendSessionId: newFrontendSessionId, data: result.logData, isLastChunk: true }
+                                        payload: { frontendSessionId: newFrontendSessionId, data: filteredLogData, isLastChunk: true }
                                     };
                                     if (ws.readyState === WebSocket.OPEN) {
                                         ws.send(JSON.stringify(logChunkResponse));

@@ -411,6 +411,9 @@
             "fileDecodeError": "ファイルのデコードに失敗しました (UTF-8 エンコーディングではない可能性があります)",
             "fileExists": "ファイル \"{name}\" はすでに存在します。",
             "generic": "エラー",
+            "terminalPathChangeFailed": "ターミナルのディレクトリ変更に失敗しました",
+            "pathReadFailed": "ターミナルの現在のディレクトリを取得できませんでした。",
+            "pathReadTimeout": "ターミナルのディレクトリ取得がタイムアウトしました。",
             "invalidPermissionsFormat": "無効な権限形式です。3 桁または 4 桁の 8 進数を入力してください (例: 755 または 0755)。",
             "loadDirectoryFailed": "ディレクトリの読み込みに失敗しました",
             "missingConnectionId": "現在の接続 ID を取得できません",
@@ -447,6 +450,8 @@
         "loadingFile": "ファイルをロード中...",
         "noOpenFile": "ファイルが開いていません",
         "notifications": {
+          "terminalPathQueued": "フォアグラウンドコマンドの実行中です。シェルのプロンプトが戻った後に安全に実行されます。",
+          "terminalPathChanged": "ターミナルのディレクトリを {path} に変更しました",
             "cdCommandSent": "CD コマンドがターミナルに送信されました",
             "copySuccess": "コピーに成功しました",
             "moveSuccess": "移動に成功しました",

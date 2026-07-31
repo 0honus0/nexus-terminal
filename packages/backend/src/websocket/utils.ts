@@ -74,9 +74,13 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
     if (state) {
         console.log(`WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`);
 
-        if (state.silentExec) {
-            clearTimeout(state.silentExec.timeout);
-            state.silentExec = undefined;
+        if (state.shellSetup) {
+            clearTimeout(state.shellSetup.timeout);
+            state.shellSetup = undefined;
+        }
+        if (state.pendingDirectoryChange) {
+            clearTimeout(state.pendingDirectoryChange.timeout);
+            state.pendingDirectoryChange = undefined;
         }
 
         // 1. 停止状态轮询 (如果存在)
@@ -98,6 +102,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
                     connectionId: String(state.dbConnectionId),
                     logIdentifier: state.suspendLogPath, // 这是基于 originalSessionId 的日志标识
                     customSuspendName: undefined, // 如果需要，可以从 state 或其他地方获取
+                    shellPid: state.shellPid,
+                    shellKind: state.shellKind,
+                    shellIntegrationReady: state.shellIntegrationReady,
+                    shellAtPrompt: state.shellAtPrompt,
                 };
                 
                 // 从 state 中“分离”SSH资源，防止后续意外关闭

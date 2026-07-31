@@ -168,7 +168,9 @@ const clipboardSourceBaseDir = ref<string>(''); // 存储源目录
 
 const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会被 store 覆盖
 const isSyncingPathFromTerminal = ref(false);
+const isChangingTerminalPath = ref(false);
 let silentExecCleanup: (() => void) | null = null;
+let terminalPathChangeCleanup: (() => void) | null = null;
 // --- 键盘导航状态 (移至 useFileManagerKeyboardNavigation) ---
 // const selectedIndex = ref<number>(-1);
 
@@ -1285,6 +1287,8 @@ onBeforeUnmount(() => {
  document.removeEventListener('click', handleClickOutsidePathInput);
  silentExecCleanup?.();
  silentExecCleanup = null;
+ terminalPathChangeCleanup?.();
+ terminalPathChangeCleanup = null;
  sessionStore.removeSftpManager(effectiveSessionId.value, props.instanceId);
 });
 
@@ -1546,45 +1550,49 @@ const cancelSearch = () => {
     isSearchActive.value = false;
 };
 
-// --- 发送 CD 命令到终端的方法 ---
+// --- Safely queue a directory change for the interactive shell ---
 const sendCdCommandToTerminal = () => {
-  if (!currentSftpManager.value || !props.wsDeps.isConnected.value) {
-    console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot send CD command: SFTP manager not ready or not connected.`);
-    return;
-  }
+  if (!currentSftpManager.value || !props.wsDeps.isConnected.value || isChangingTerminalPath.value) return;
   const currentPath = currentSftpManager.value.currentPath.value;
-  if (!currentPath) {
-    console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot send CD command: Current path is empty.`);
-    return;
-  }
+  if (!currentPath) return;
 
-  // 单引号可避免路径里的 `$`、反引号等字符被 shell 展开。
-  const escapedPath = `'${currentPath.replace(/'/g, `'\\''`)}'`;
-  // 交互式终端使用 CR 模拟 Enter，避免部分 shell 只移动光标而不执行命令。
-  const command = `cd -- ${escapedPath}\r`;
+  terminalPathChangeCleanup?.();
+  const requestId = generateRequestId();
+  let unregisterResult = () => {};
+  let unregisterQueued = () => {};
+  let unregisterError = () => {};
+  const finish = () => {
+    unregisterResult();
+    unregisterQueued();
+    unregisterError();
+    isChangingTerminalPath.value = false;
+    terminalPathChangeCleanup = null;
+  };
 
-  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Sending command to terminal: ${command.trim()}`);
-  try {
-    // FileManager 可以同时存在多个实例，必须使用自身绑定的会话，不能依赖全局活动会话。
-    const owningSession = sessionStore.sessions.get(effectiveSessionId.value);
-    if (!owningSession) {
-      console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Owning session not found.`);
-      // 可选：添加 UI 通知
-      // uiNotificationsStore.addNotification({ message: t('fileManager.errors.noActiveSession', 'No active session found.'), type: 'error' });
-      return;
+  unregisterResult = props.wsDeps.onMessage('ssh:change_directory:result', (payload, message) => {
+    if (message.requestId !== requestId) return;
+    finish();
+    uiNotificationsStore.showSuccess(t('fileManager.notifications.terminalPathChanged', { path: payload?.path || currentPath }));
+  });
+  unregisterQueued = props.wsDeps.onMessage('ssh:change_directory:queued', (payload, message) => {
+    if (message.requestId !== requestId) return;
+    if (payload?.waitingForPrompt) {
+      uiNotificationsStore.showInfo(t('fileManager.notifications.terminalPathQueued'));
     }
-    // 检查 terminalManager 是否存在
-    if (!owningSession.terminalManager) {
-        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command: Terminal manager not found for owning session.`);
-        // 可选：添加 UI 通知
-        // uiNotificationsStore.addNotification({ message: t('fileManager.errors.terminalManagerNotFound', 'Terminal manager not found.'), type: 'error' });
-        return;
-    }
-    // 使用 terminalManager 的 sendData 方法发送命令
-    owningSession.terminalManager.sendData(command);
-  } catch (error) {
-    console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to send command to terminal:`, error);
-  }
+  });
+  unregisterError = props.wsDeps.onMessage('ssh:change_directory:error', (payload, message) => {
+    if (message.requestId !== requestId) return;
+    finish();
+    uiNotificationsStore.showError(payload?.error || t('fileManager.errors.terminalPathChangeFailed'));
+  });
+
+  terminalPathChangeCleanup = finish;
+  isChangingTerminalPath.value = true;
+  props.wsDeps.sendMessage({
+    type: 'ssh:change_directory',
+    requestId,
+    payload: { path: currentPath },
+  });
 };
 
 const syncPathFromTerminal = () => {
@@ -1723,10 +1731,10 @@ const handleOpenEditorClick = () => {
               <button
                 class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
                 @click.stop="sendCdCommandToTerminal"
-                :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
+                :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath || isChangingTerminalPath"
                 :title="t('fileManager.actions.cdToTerminal', 'Change terminal directory to current path')"
               >
-                <i class="fas fa-terminal text-base"></i>
+                <i :class="['fas', isChangingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-base']"></i>
               </button>
               <button
                 class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
