@@ -17,7 +17,7 @@ services:
       remote-gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -45,11 +45,7 @@ services:
     volumes:
       - ./data:/app/data
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "const net=require('net');const p=Number(process.env.PORT||3001);const s=net.connect(p,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000)"
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${PORT:-3001}/api/v1/status"]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -75,11 +71,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "const net=require('net');const p=Number(process.env.REMOTE_GATEWAY_API_PORT||9090);const s=net.connect(p,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000)"
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 $${REMOTE_GATEWAY_API_PORT:-9090} && nc -z 127.0.0.1 $${REMOTE_GATEWAY_WS_PORT:-8080}"]
       interval: 10s
       timeout: 3s
       retries: 10
