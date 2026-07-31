@@ -19,6 +19,11 @@ const operationLabel = computed(() => props.progress.operation === 'compress'
   ? t('fileManager.contextMenu.compress')
   : t('fileManager.contextMenu.decompress'));
 
+const normalizedPercent = computed(() => {
+  const percent = props.progress.percent ?? 0;
+  return Math.min(100, Math.max(0, percent));
+});
+
 const displayFileName = computed(() => {
   const name = props.progress.currentFile;
   if (!name) return null;
@@ -154,8 +159,17 @@ onBeforeUnmount(() => {
             <span>{{ t('fileManager.archiveProgress.filesProcessedTotal', { count: progress.fileCount, total: progress.totalFiles }) }}</span>
             <span class="font-mono text-text-muted">{{ progress.fileCount }}/{{ progress.totalFiles }}</span>
           </div>
-          <div class="progress-track">
-            <div class="progress-value" :style="{ width: `${progress.percent}%` }"></div>
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="normalizedPercent"
+          >
+            <div
+              class="progress-value"
+              :style="{ transform: `scaleX(${normalizedPercent / 100})` }"
+            ></div>
           </div>
         </div>
         <div v-else-if="progress.fileCount > 0" class="text-xs">
@@ -194,7 +208,7 @@ onBeforeUnmount(() => {
   z-index: 1001;
   width: min(390px, calc(100vw - 16px));
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border-color) 75%, var(--primary-color));
+  border: 1px solid color-mix(in srgb, var(--border-color) 75%, var(--link-active-color, #007bff));
   border-radius: 12px;
   background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
   color: var(--text-color);
@@ -210,7 +224,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 10px 12px;
   cursor: grab;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 16%, transparent), transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 16%, transparent), transparent);
 }
 .archive-title, .archive-actions { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .archive-icon {
@@ -220,14 +234,14 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 9px;
-  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
-  color: var(--primary-color);
+  background: color-mix(in srgb, var(--link-active-color, #007bff) 20%, transparent);
+  color: var(--link-active-color, #007bff);
 }
 .percent-badge {
   border-radius: 999px;
   padding: 2px 7px;
-  background: color-mix(in srgb, var(--primary-color) 17%, transparent);
-  color: var(--primary-color);
+  background: color-mix(in srgb, var(--link-active-color, #007bff) 17%, transparent);
+  color: var(--link-active-color, #007bff);
   font: 600 11px ui-monospace, monospace;
 }
 .icon-button {
@@ -241,7 +255,17 @@ onBeforeUnmount(() => {
 .icon-button:hover { background: color-mix(in srgb, var(--border-color) 65%, transparent); color: var(--text-color); }
 .archive-progress-body { display: grid; gap: 10px; border-top: 1px solid var(--border-color); padding: 11px 12px 12px; }
 .progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: var(--border-color); }
-.progress-value { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 55%, white)); transition: width 180ms ease; }
+.progress-value {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background-color: var(--link-active-color, #007bff);
+  background-image: linear-gradient(90deg, var(--link-active-color, #007bff), color-mix(in srgb, var(--link-active-color, #007bff) 55%, white));
+  transition: transform 180ms ease;
+  will-change: transform;
+}
 .current-file { display: flex; align-items: center; gap: 7px; min-width: 0; border-radius: 7px; background: color-mix(in srgb, var(--border-color) 40%, transparent); padding: 7px 9px; font-size: 12px; color: var(--text-color-secondary); }
 .stop-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); padding: 7px 10px; color: rgb(248, 113, 113); font-size: 12px; font-weight: 600; }
 .stop-button:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }

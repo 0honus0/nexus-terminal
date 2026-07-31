@@ -82,7 +82,7 @@ interface PendingUpload {
 interface ActiveArchiveOperation {
     sessionId: string;
     requestId: string;
-    temporaryPath: string;
+    workspacePath: string;
     stream: ClientChannel;
     heartbeatInterval: ReturnType<typeof setInterval>;
     cancelled: boolean;
@@ -1181,8 +1181,8 @@ export class SftpService {
 
         const extension = format === 'zip' ? '.zip' : format === 'targz' ? '.tar.gz' : '.tar.bz2';
         const safeRequestId = requestId.replace(/[^A-Za-z0-9_-]/g, '_');
-        const temporaryArchiveName = `.nexus-archive-${safeRequestId}${extension}`;
-        const temporaryArchivePath = pathModule.posix.join(targetDirectory, temporaryArchiveName);
+        const workspaceName = `.nexus-archive-${safeRequestId}.work`;
+        const workspacePath = pathModule.posix.join(targetDirectory, workspaceName);
         const shellQuote = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
         const relativeSources: string[] = [];
         for (const source of sources) {
@@ -1196,20 +1196,42 @@ export class SftpService {
                 : relativePath;
             relativeSources.push(`./${normalized.replace(/^\.\/+/, '')}`);
         }
-        const temporaryArchiveRelativePath = `./${temporaryArchiveName}`;
+
+        const workspaceRelativePath = `./${workspaceName}`;
+        const temporaryArchiveRelativePath = `${workspaceRelativePath}/archive${extension}`;
         const destinationArchiveRelativePath = `./${destinationArchiveName}`;
         const quotedSources = relativeSources.map(shellQuote).join(' ');
         const quotedTargetDir = shellQuote(targetDirectory);
-        const quotedTemporaryName = shellQuote(temporaryArchiveRelativePath);
+        const quotedWorkspace = shellQuote(workspaceRelativePath);
+        const quotedTemporaryArchive = shellQuote(temporaryArchiveRelativePath);
         const quotedDestinationName = shellQuote(destinationArchiveRelativePath);
-        const cleanupTrap = `trap ${shellQuote(`rm -f ${temporaryArchiveRelativePath}`)} EXIT HUP INT TERM`;
         const countCommand = `total=$(find ${quotedSources} -print 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
         const archiveCommand = format === 'zip'
-            ? `zip -r ${quotedTemporaryName} ${quotedSources}`
+            ? `zip -b ${quotedWorkspace} -r ${quotedTemporaryArchive} ${quotedSources}`
             : format === 'targz'
-                ? `tar -czvf ${quotedTemporaryName} ${quotedSources}`
-                : `tar -cjvf ${quotedTemporaryName} ${quotedSources}`;
-        const command = `cd ${quotedTargetDir} && rm -f ${quotedTemporaryName} && ${cleanupTrap} && ${countCommand} && ${archiveCommand} && mv -f ${quotedTemporaryName} ${quotedDestinationName}`;
+                ? `tar -czvf ${quotedTemporaryArchive} ${quotedSources}`
+                : `tar -cjvf ${quotedTemporaryArchive} ${quotedSources}`;
+        const cleanupFunction = [
+            'cleanup_archive() {',
+            'status=$?;',
+            'trap - EXIT HUP INT TERM;',
+            'if [ -n "${archive_pid:-}" ]; then kill "$archive_pid" 2>/dev/null || true; stop_attempt=0; while kill -0 "$archive_pid" 2>/dev/null && [ "$stop_attempt" -lt 5 ]; do sleep 0.2; stop_attempt=$((stop_attempt + 1)); done; kill -9 "$archive_pid" 2>/dev/null || true; wait "$archive_pid" 2>/dev/null || true; fi;',
+            `rm -rf -- ${quotedWorkspace};`,
+            'exit "$status";',
+            '}',
+        ].join(' ');
+        const command = [
+            `cd ${quotedTargetDir} || exit $?`,
+            `rm -rf -- ${quotedWorkspace}`,
+            `mkdir -p -- ${quotedWorkspace} || exit $?`,
+            cleanupFunction,
+            'trap cleanup_archive EXIT HUP INT TERM',
+            countCommand,
+            `${archiveCommand} & archive_pid=$!`,
+            'wait "$archive_pid"; archive_status=$?; archive_pid=',
+            'if [ "$archive_status" -ne 0 ]; then exit "$archive_status"; fi',
+            `mv -f -- ${quotedTemporaryArchive} ${quotedDestinationName}`,
+        ].join('; ');
 
         try {
             state.sshClient.exec(command, (err, stream) => {
@@ -1218,9 +1240,8 @@ export class SftpService {
                     return;
                 }
                 if (this.cancelledArchiveIds.delete(archiveKey)) {
-                    try { stream.signal('TERM'); } catch { /* already closing */ }
-                    try { stream.close(); } catch { stream.destroy(); }
-                    void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
+                    void this.stopArchiveChannel(stream)
+                        .then(() => this.removeRemoteArchiveWorkspace(sessionId, workspacePath));
                     return;
                 }
 
@@ -1263,7 +1284,7 @@ export class SftpService {
                 const operation: ActiveArchiveOperation = {
                     sessionId,
                     requestId,
-                    temporaryPath: temporaryArchivePath,
+                    workspacePath,
                     stream,
                     heartbeatInterval,
                     cancelled: false,
@@ -1293,7 +1314,7 @@ export class SftpService {
                             state.ws.send(JSON.stringify({ type: 'sftp:compress:success', requestId, payload: successPayload }));
                         }
                     } else {
-                        void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
+                        void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
                         const details = stderrData.trim() || `压缩命令退出，代码: ${exitCode ?? 'N/A'}`;
                         this.sendCompressError(state.ws, '压缩失败', requestId, details);
                     }
@@ -1304,12 +1325,12 @@ export class SftpService {
                     clearInterval(heartbeatInterval);
                     if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
                     if (operation.cancelled) return;
-                    void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
+                    void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
                     this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamError.message);
                 });
             });
         } catch (execError: any) {
-            void this.removeRemoteUploadFile(sessionId, temporaryArchivePath);
+            void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
             this.sendCompressError(state.ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
         }
     }
@@ -1325,11 +1346,12 @@ export class SftpService {
             operation.cancelled = true;
             this.activeArchives.delete(archiveKey);
             clearInterval(operation.heartbeatInterval);
-            try { operation.stream.signal('TERM'); } catch { /* channel may already be closing */ }
-            try { operation.stream.close(); } catch { operation.stream.destroy(); }
-            cleaned = await this.removeRemoteUploadFile(sessionId, operation.temporaryPath);
+            await this.stopArchiveChannel(operation.stream);
+            cleaned = await this.removeRemoteArchiveWorkspace(sessionId, operation.workspacePath);
             this.cancelledArchiveIds.delete(archiveKey);
         } else {
+            // Cancellation may arrive while command availability is still being checked.
+            // compress() consumes this marker before creating any workspace.
             setTimeout(() => this.cancelledArchiveIds.delete(archiveKey), 30000);
         }
 
@@ -1340,6 +1362,49 @@ export class SftpService {
                 payload: { requestId, cleaned },
             }));
         }
+    }
+
+
+    /** Ask the remote wrapper shell to stop its compressor, then wait for its EXIT trap. */
+    private async stopArchiveChannel(stream: ClientChannel): Promise<void> {
+        await new Promise<void>((resolve) => {
+            let settled = false;
+            let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
+            let finalTimer: ReturnType<typeof setTimeout> | undefined;
+
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                if (forceCloseTimer) clearTimeout(forceCloseTimer);
+                if (finalTimer) clearTimeout(finalTimer);
+                stream.off('close', onClose);
+                stream.off('error', onError);
+                resolve();
+            };
+            const onClose = () => finish();
+            const onError = () => finish();
+
+            stream.once('close', onClose);
+            stream.once('error', onError);
+            try {
+                stream.signal('TERM');
+            } catch {
+                // The channel may already be closing; the listeners/timeouts still settle.
+            }
+
+            forceCloseTimer = setTimeout(() => {
+                if (settled) return;
+                try {
+                    stream.close();
+                } catch {
+                    stream.destroy();
+                }
+            }, 1500);
+            finalTimer = setTimeout(() => {
+                if (!stream.destroyed) stream.destroy();
+                finish();
+            }, 4000);
+        });
     }
 
     /**
@@ -2060,6 +2125,78 @@ export class SftpService {
                 }
             });
         });
+    }
+
+    private lstatSftpPath(sftp: SFTPWrapper, remotePath: string): Promise<Stats | null> {
+        return new Promise((resolve, reject) => {
+            sftp.lstat(remotePath, (error, stats) => {
+                if (!error) {
+                    resolve(stats);
+                } else if (this.isNoSuchFileError(error)) {
+                    resolve(null);
+                } else {
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    private readSftpDirectoryEntries(sftp: SFTPWrapper, remotePath: string): Promise<Array<{ filename: string; attrs: Stats }>> {
+        return new Promise((resolve, reject) => {
+            sftp.readdir(remotePath, (error, entries) => {
+                if (error) reject(error);
+                else resolve(entries);
+            });
+        });
+    }
+
+    private rmdirSftpPath(sftp: SFTPWrapper, remotePath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            sftp.rmdir(remotePath, (error) => {
+                if (!error || this.isNoSuchFileError(error)) resolve();
+                else reject(error);
+            });
+        });
+    }
+
+    private async removeSftpPathRecursive(sftp: SFTPWrapper, remotePath: string): Promise<void> {
+        const stats = await this.lstatSftpPath(sftp, remotePath);
+        if (!stats) return;
+
+        if (!stats.isDirectory() || stats.isSymbolicLink()) {
+            await this.unlinkSftpPath(sftp, remotePath, true);
+            return;
+        }
+
+        const entries = await this.readSftpDirectoryEntries(sftp, remotePath);
+        for (const entry of entries) {
+            await this.removeSftpPathRecursive(sftp, pathModule.posix.join(remotePath, entry.filename));
+        }
+        await this.rmdirSftpPath(sftp, remotePath);
+    }
+
+    private async removeRemoteArchiveWorkspace(sessionId: string, workspacePath: string): Promise<boolean> {
+        const workspaceName = pathModule.posix.basename(workspacePath);
+        if (!/^\.nexus-archive-[A-Za-z0-9_-]+\.work$/.test(workspaceName)) {
+            console.error(`[SFTP Archive] Refusing to recursively remove unexpected path: ${workspacePath}`);
+            return false;
+        }
+
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            const state = this.clientStates.get(sessionId);
+            if (!state?.sftp) return false;
+            try {
+                await this.removeSftpPathRecursive(state.sftp, workspacePath);
+                return true;
+            } catch (error) {
+                if (attempt === 5) {
+                    console.warn(`[SFTP Archive] Unable to remove workspace ${workspacePath}:`, error);
+                    return false;
+                }
+                await new Promise(resolve => setTimeout(resolve, attempt * 250));
+            }
+        }
+        return false;
     }
 
     private async removeRemoteUploadFile(sessionId: string, remotePath: string): Promise<boolean> {
