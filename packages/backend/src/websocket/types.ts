@@ -38,6 +38,12 @@ export interface ClientState { // 导出以便 Service 可以导入
     shellKind?: 'bash' | 'zsh' | 'other';
     shellAtPrompt?: boolean;
     shellIntegrationReady?: boolean;
+    shellProbePromise?: Promise<void>;
+    shellProbeResolve?: () => void;
+    shellProbeReject?: (error: Error) => void;
+    shellHookPromise?: Promise<void>;
+    shellHookResolve?: () => void;
+    shellHookReject?: (error: Error) => void;
     shellSetup?: {
         phase: 'probe' | 'hook';
         startMarker: string;

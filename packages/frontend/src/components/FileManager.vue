@@ -64,6 +64,7 @@ const effectiveSessionId = computed(() => sessionStore.resolveSessionId(props.se
 // --- 获取并存储 SFTP 管理器实例 ---
 // 使用 shallowRef 存储管理器实例，以便在 sessionId 变化时切换
 const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
+const sftpReadyStateByManager = new WeakMap<SftpManagerInstance, boolean>();
 
 const initializeSftpManager = (sessionId: string, instanceId: string) => {
     const manager = sessionStore.getOrCreateSftpManager(sessionId, instanceId);
@@ -1130,6 +1131,13 @@ watchEffect((onCleanup) => {
     let unregisterSuccess: (() => void) | undefined;
     let unregisterError: (() => void) | undefined;
     let timeoutId: NodeJS.Timeout | number | undefined; // 修正类型以兼容 Node 和浏览器环境
+    const manager = currentSftpManager.value;
+    const isManagerReady = !!(manager && props.wsDeps.isConnected.value && props.wsDeps.isSftpReady.value);
+    const wasManagerReady = manager ? sftpReadyStateByManager.get(manager) : undefined;
+
+    if (manager) {
+        sftpReadyStateByManager.set(manager, isManagerReady);
+    }
 
     const cleanupListeners = () => {
         unregisterSuccess?.();
@@ -1142,8 +1150,8 @@ watchEffect((onCleanup) => {
 
     // 修改：添加 ?. 访问 isLoading, 检查 manager 的 initialLoadDone
     // 只有在连接就绪、SFTP 就绪、管理器存在、未加载且 initialLoadDone 为 false 时才获取初始路径
-    if (currentSftpManager.value && props.wsDeps.isConnected.value && props.wsDeps.isSftpReady.value && !currentSftpManager.value.isLoading.value && !currentSftpManager.value.initialLoadDone.value) {
-        console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Connection ready for manager, fetching initial path for the first time (isLoading: ${currentSftpManager.value.isLoading.value}, initialLoadDone: ${currentSftpManager.value.initialLoadDone.value}).`);
+    if (manager && isManagerReady && !manager.isLoading.value && !manager.initialLoadDone.value) {
+        console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Connection ready for manager, fetching initial path for the first time (isLoading: ${manager.isLoading.value}, initialLoadDone: ${manager.initialLoadDone.value}).`);
         // isFetchingInitialPath 状态移除, 使用 isLoading 状态
 
         // 仍然使用 props.wsDeps 中的 sendMessage 和 onMessage
@@ -1186,22 +1194,17 @@ watchEffect((onCleanup) => {
             cleanupListeners();
         }, 10000); // 10 秒超时
 
-    } else if (currentSftpManager.value && props.wsDeps.isConnected.value && props.wsDeps.isSftpReady.value && currentSftpManager.value.initialLoadDone.value) {
-        // 连接恢复，并且之前已经加载过 (initialLoadDone is true)
-        // 显式地重新加载管理器中记录的当前路径，以防内部状态被重置
-        const pathBeforeReconnect = currentSftpManager.value.currentPath.value;
-        console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Connection re-established. Explicitly reloading previous path: ${pathBeforeReconnect}`);
-        // 检查是否正在加载，避免并发请求
-        if (!currentSftpManager.value.isLoading.value) {
-             // 使用 false 参数可能表示非强制刷新，如果 SFTP 管理器支持的话
-             // 主要目的是确保视图与管理器状态同步到重连前的路径
-            currentSftpManager.value.loadDirectory(pathBeforeReconnect, false);
+    } else if (manager && isManagerReady && manager.initialLoadDone.value) {
+        if (wasManagerReady === false && !manager.isLoading.value) {
+            const pathBeforeReconnect = manager.currentPath.value;
+            console.log(`[FileManager ${props.sessionId}-${props.instanceId}] SFTP connection recovered. Reloading previous path: ${pathBeforeReconnect}`);
+            manager.loadDirectory(pathBeforeReconnect, false);
         } else {
-            console.log(`[FileManager ${props.sessionId}-${props.instanceId}] SFTP manager is currently loading, skipping explicit path reload on reconnect.`);
+            console.log(`[FileManager ${props.sessionId}-${props.instanceId}] SFTP manager is already ready. Keeping cached directory without reload.`);
         }
         cleanupListeners(); // 清理可能存在的旧监听器
 
-    } else if (!props.wsDeps.isConnected.value && currentSftpManager.value?.initialLoadDone.value) { // 检查 manager 的 initialLoadDone
+    } else if (!isManagerReady && manager?.initialLoadDone.value) { // 检查 manager 的 initialLoadDone
         // 连接丢失，不需要重置 initialLoadDone，因为我们希望在重连时恢复状态
         // 只需要清理监听器
         console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Connection lost (was previously loaded).`);
@@ -1230,7 +1233,7 @@ watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
         closePathHistory(); // 关闭可能打开的路径历史下拉菜单
         pathHistoryStore.setSearchTerm(''); // 清空搜索词
-        if (oldSessionId) sessionStore.removeSftpManager(oldSessionId, props.instanceId);
+        // 保留旧会话的 SFTP manager。切换回该会话时直接复用目录树和当前路径，避免重新加载。
         // 1. 重新初始化 SFTP 管理器
         initializeSftpManager(sessionStore.resolveSessionId(newSessionId), props.instanceId);
 

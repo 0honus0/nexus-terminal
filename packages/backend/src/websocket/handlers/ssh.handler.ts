@@ -183,15 +183,71 @@ const buildPromptHookCommand = (shellKind: 'bash' | 'zsh', startMarker: string, 
     ].join(' ') + '\r';
 };
 
-const installPromptHook = (state: ClientState): void => {
-    if (!state.sshShellStream || (state.shellKind !== 'bash' && state.shellKind !== 'zsh')) return;
+const resolveShellProbe = (state: ClientState): void => {
+    const resolve = state.shellProbeResolve;
+    state.shellProbePromise = undefined;
+    state.shellProbeResolve = undefined;
+    state.shellProbeReject = undefined;
+    resolve?.();
+};
+
+const rejectShellProbe = (state: ClientState, error: Error): void => {
+    const reject = state.shellProbeReject;
+    state.shellProbePromise = undefined;
+    state.shellProbeResolve = undefined;
+    state.shellProbeReject = undefined;
+    reject?.(error);
+};
+
+const resolveShellHook = (state: ClientState): void => {
+    const resolve = state.shellHookResolve;
+    state.shellHookPromise = undefined;
+    state.shellHookResolve = undefined;
+    state.shellHookReject = undefined;
+    resolve?.();
+};
+
+const rejectShellHook = (state: ClientState, error: Error): void => {
+    const reject = state.shellHookReject;
+    state.shellHookPromise = undefined;
+    state.shellHookResolve = undefined;
+    state.shellHookReject = undefined;
+    state.shellIntegrationReady = false;
+    reject?.(error);
+};
+
+const installPromptHook = (state: ClientState): Promise<void> => {
+    if (state.shellIntegrationReady) return Promise.resolve();
+    if (state.shellHookPromise) return state.shellHookPromise;
+    if (!state.sshShellStream) return Promise.reject(new Error('SSH Shell 尚未就绪。'));
+    if (state.shellKind !== 'bash' && state.shellKind !== 'zsh') {
+        return Promise.reject(new Error('当前 Shell 不支持安全目录队列；为避免影响前台程序，未发送 cd。'));
+    }
+
+    const hookPromise = new Promise<void>((resolve, reject) => {
+        state.shellHookResolve = resolve;
+        state.shellHookReject = reject;
+    });
+    state.shellHookPromise = hookPromise;
 
     const token = `${Date.now()}${Math.random().toString(36).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '');
     const startMarker = `__NEXUS_HOOK_BEGIN_${token}__`;
     const endMarker = `__NEXUS_HOOK_END_${token}__`;
-    const timeout = setTimeout(() => { state.shellSetup = undefined; }, 5000);
+    const timeout = setTimeout(() => {
+        state.shellSetup = undefined;
+        rejectShellHook(state, new Error('终端提示符集成初始化超时。'));
+    }, 5000);
+
     state.shellSetup = { phase: 'hook', startMarker, endMarker, buffer: '', timeout };
-    state.sshShellStream.write(buildPromptHookCommand(state.shellKind, startMarker, endMarker));
+    try {
+        state.sshShellStream.write(buildPromptHookCommand(state.shellKind, startMarker, endMarker));
+    } catch (error) {
+        clearTimeout(timeout);
+        state.shellSetup = undefined;
+        rejectShellHook(state, error instanceof Error ? error : new Error(String(error)));
+    }
+
+    return hookPromise;
 };
 
 const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
@@ -219,10 +275,17 @@ const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
         if (match) {
             state.shellPid = Number.parseInt(match[1], 10);
             state.shellKind = match[2] as 'bash' | 'zsh' | 'other';
-            queueMicrotask(() => installPromptHook(state));
+            resolveShellProbe(state);
+        } else {
+            rejectShellProbe(state, new Error('无法识别终端路径探测结果。'));
         }
-    } else if (pending.phase === 'hook' && output === 'ok') {
-        state.shellIntegrationReady = true;
+    } else if (pending.phase === 'hook') {
+        if (output === 'ok') {
+            state.shellIntegrationReady = true;
+            resolveShellHook(state);
+        } else {
+            rejectShellHook(state, new Error('终端提示符集成初始化失败。'));
+        }
     }
     return trailingOutput;
 };
@@ -244,15 +307,41 @@ const buildShellProbeCommand = (startMarker: string, endMarker: string): string 
     ].join(' ') + '\r';
 };
 
-const startShellIntegration = (state: ClientState): void => {
-    if (!state.sshShellStream) return;
+const ensureShellProbe = (state: ClientState): Promise<void> => {
+    if (state.shellPid) return Promise.resolve();
+    if (state.shellProbePromise) return state.shellProbePromise;
+    if (!state.sshShellStream) return Promise.reject(new Error('SSH Shell 尚未就绪。'));
+
+    const probePromise = new Promise<void>((resolve, reject) => {
+        state.shellProbeResolve = resolve;
+        state.shellProbeReject = reject;
+    });
+    state.shellProbePromise = probePromise;
+
     const token = `${Date.now()}${Math.random().toString(36).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '');
     const startMarker = `__NEXUS_SHELL_BEGIN_${token}__`;
     const endMarker = `__NEXUS_SHELL_END_${token}__`;
-    const timeout = setTimeout(() => { state.shellSetup = undefined; }, 5000);
+    const timeout = setTimeout(() => {
+        state.shellSetup = undefined;
+        rejectShellProbe(state, new Error('终端路径探测超时。'));
+    }, 5000);
+
     state.shellIntegrationReady = false;
     state.shellSetup = { phase: 'probe', startMarker, endMarker, buffer: '', timeout };
-    state.sshShellStream.write(buildShellProbeCommand(startMarker, endMarker));
+    try {
+        state.sshShellStream.write(buildShellProbeCommand(startMarker, endMarker));
+    } catch (error) {
+        clearTimeout(timeout);
+        state.shellSetup = undefined;
+        rejectShellProbe(state, error instanceof Error ? error : new Error(String(error)));
+    }
+
+    return probePromise;
+};
+
+const ensureShellPromptHook = async (state: ClientState): Promise<void> => {
+    await ensureShellProbe(state);
+    await installPromptHook(state);
 };
 
 
@@ -347,6 +436,10 @@ export async function handleSshConnect(
                 newState.sshShellStream = stream;
                 newState.isShellReady = true;
 
+                // Shell path integration is intentionally lazy. Do not inject probe
+                // commands during login; start it only when the file manager asks to
+                // read the terminal cwd or to synchronize the terminal directory.
+
                 stream.on('data', (data: Buffer) => {
                     const visibleOutput = filterSshShellOutput(newState, data.toString('utf8'));
                     if (visibleOutput && ws.readyState === WebSocket.OPEN) {
@@ -376,8 +469,6 @@ export async function handleSshConnect(
                         });
                     }
                 });
-                startShellIntegration(newState);
-
                 stream.on('close', () => {
                     console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
                     if (ws.readyState === WebSocket.OPEN) {
@@ -492,18 +583,16 @@ export async function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: a
         fail('无效的静默命令请求。');
         return;
     }
-    if (!state?.sshClient || !state.isShellReady) {
+    if (!state?.sshClient || !state.sshShellStream || !state.isShellReady) {
         fail('SSH Shell 尚未就绪。');
-        return;
-    }
-    if (!state.shellPid) {
-        fail('终端路径集成尚未就绪，请稍后重试。');
         return;
     }
 
     try {
+        await ensureShellProbe(state);
         // This runs on an independent SSH exec channel. Reading /proc/<shell>/cwd does
-        // not write into the PTY, so cat/vim/sleep and other foreground jobs are untouched.
+        // not write into the PTY, so cat/vim/sleep and other foreground jobs are untouched
+        // after the one-time lazy shell PID probe has completed.
         const output = await readShellCurrentPath(state);
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ssh:exec_silent:result', requestId, payload: { output } }));
@@ -524,12 +613,8 @@ export async function handleSshChangeDirectory(ws: AuthenticatedWebSocket, paylo
         fail('无效的终端目录切换请求。');
         return;
     }
-    if (!state?.sshShellStream || !state.isShellReady || !state.shellPid || !state.shellIntegrationReady) {
-        fail('终端路径集成尚未就绪。');
-        return;
-    }
-    if (state.shellKind !== 'bash' && state.shellKind !== 'zsh') {
-        fail('当前 Shell 不支持安全目录队列；为避免影响前台程序，未发送 cd。');
+    if (!state?.sshShellStream || !state.isShellReady) {
+        fail('SSH Shell 尚未就绪。');
         return;
     }
 
@@ -538,6 +623,18 @@ export async function handleSshChangeDirectory(ws: AuthenticatedWebSocket, paylo
         expectedPath = await resolveRemoteDirectory(state, payload.path);
     } catch {
         fail('目标目录不存在或无权访问。');
+        return;
+    }
+
+    try {
+        await ensureShellPromptHook(state);
+    } catch (error) {
+        fail(error instanceof Error ? error.message : String(error));
+        return;
+    }
+
+    if ((state.shellKind !== 'bash' && state.shellKind !== 'zsh') || !state.shellIntegrationReady) {
+        fail('当前 Shell 不支持安全目录队列；为避免影响前台程序，未发送 cd。');
         return;
     }
 
