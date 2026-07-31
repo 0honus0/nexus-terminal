@@ -85,6 +85,9 @@ async function handleShellPrompt(state: ClientState): Promise<void> {
     if (!pending.executing) {
         pending.executing = true;
         state.shellAtPrompt = false;
+        // The PTY echoes injected input and its Enter newline. Hide only this internal
+        // command until the next prompt marker, then redraw the prompt in place.
+        state.suppressOutputUntilPrompt = true;
         // The marker is emitted immediately before the shell starts reading a fresh line.
         // Ctrl-U defensively clears any stale line-editor buffer without touching a child process.
         state.sshShellStream.write(`\x15cd ${quotePosixShellArg(pending.path)}\r`);
@@ -105,13 +108,21 @@ async function handleShellPrompt(state: ClientState): Promise<void> {
 }
 
 const consumePromptMarkers = (state: ClientState, chunk: string): string => {
-    let data = (state.shellControlRemainder || '') + chunk;
+    const data = (state.shellControlRemainder || '') + chunk;
     state.shellControlRemainder = '';
     let visible = '';
     let cursor = 0;
     let markerIndex = data.indexOf(SHELL_PROMPT_MARKER, cursor);
+
     while (markerIndex !== -1) {
-        visible += data.slice(cursor, markerIndex);
+        if (state.suppressOutputUntilPrompt) {
+            // Replace the old prompt line instead of forwarding the injected command echo
+            // and the CR/LF produced by the remote terminal driver.
+            visible += '\r\x1b[2K';
+            state.suppressOutputUntilPrompt = false;
+        } else {
+            visible += data.slice(cursor, markerIndex);
+        }
         state.shellAtPrompt = true;
         state.shellIntegrationReady = true;
         void handleShellPrompt(state);
@@ -128,11 +139,13 @@ const consumePromptMarkers = (state: ClientState, chunk: string): string => {
             break;
         }
     }
+
+    const completeTail = partialLength > 0 ? tail.slice(0, -partialLength) : tail;
+    if (!state.suppressOutputUntilPrompt) {
+        visible += completeTail;
+    }
     if (partialLength > 0) {
         state.shellControlRemainder = tail.slice(-partialLength);
-        visible += tail.slice(0, -partialLength);
-    } else {
-        visible += tail;
     }
     return visible;
 };

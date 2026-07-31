@@ -46,6 +46,7 @@ export interface ClientState { // 导出以便 Service 可以导入
         timeout: NodeJS.Timeout;
     };
     shellControlRemainder?: string;
+    suppressOutputUntilPrompt?: boolean;
     pendingDirectoryChange?: {
         requestId: string;
         path: string;
