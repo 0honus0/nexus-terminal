@@ -1,4 +1,4 @@
-import { ref, reactive, nextTick, onUnmounted, readonly, type Ref, watchEffect } from 'vue';
+import { ref, reactive, onUnmounted, readonly, type Ref, watchEffect } from 'vue';
 import { createWebSocketConnectionManager } from './useWebSocketConnection'; 
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../types/sftp.types'; 
@@ -8,6 +8,10 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 
 import type { WebSocketDependencies } from './useSftpActions'; 
 
+
+// 512 KiB keeps each JSON/WebSocket frame comfortably bounded while reducing
+// application-level round trips by 8x compared with the previous 64 KiB chunks.
+const UPLOAD_CHUNK_SIZE = 512 * 1024;
 
 const generateUploadId = (): string => {
     return `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -43,7 +47,7 @@ wsDeps;
             return;
         }
 
-        const chunkSize = 1024 * 64; // 64KB 块大小
+        const chunkSize = UPLOAD_CHUNK_SIZE;
         const reader = new FileReader();
         let offset = startByte;
         let chunkIndex = 0; // Initialize chunk index counter
@@ -326,7 +330,7 @@ wsDeps;
         const continueUpload = uploadContinuations.get(uploadId);
         if (continueUpload) {
             uploadContinuations.delete(uploadId);
-            nextTick(continueUpload);
+            continueUpload();
         }
     };
     

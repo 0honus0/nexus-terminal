@@ -56,6 +56,7 @@ interface NetworkStats {
 const DEFAULT_POLLING_INTERVAL = 1000;
 const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: number }>();
 const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
+const UPLOAD_WRITE_HIGH_WATER_MARK = 1024 * 1024;
 
 // Interface for tracking active uploads
 interface ActiveUpload {
@@ -1691,7 +1692,11 @@ export class SftpService {
 
             // 确保 state.sftp 存在
             if (!state.sftp) throw new Error('SFTP session is not available after pre-check.');
-            const stream = state.sftp.createWriteStream(remotePath);
+            // A larger writable buffer lets ssh2 pipeline several SFTP packets for each
+            // application chunk instead of repeatedly stalling at the old 64 KiB boundary.
+            const stream = state.sftp.createWriteStream(remotePath, {
+                highWaterMark: UPLOAD_WRITE_HIGH_WATER_MARK,
+            });
             const uploadState: ActiveUpload = {
                 remotePath,
                 totalSize,
