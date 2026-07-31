@@ -551,7 +551,8 @@ const {
 } = useFileManagerSelection({
   // 传递当前显示的列表 (已排序和过滤)
   displayedFileList: filteredFileList, // 现在 filteredFileList 已定义
-  onItemAction: handleItemAction, // 传递动作回调
+  onItemAction: handleItemAction,
+  activateOnSingleClick: (item) => props.isMobile || item.attrs.isDirectory || item.filename === '..',
 });
 
 // 自定义 handleItemClick 函数以支持移动端多选模式
@@ -565,6 +566,15 @@ const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect
     return;
   }
   originalHandleItemClick(event, item);
+};
+
+const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
+  if (props.isMobile || isMultiSelectMode.value || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (item.attrs.isFile || item.attrs.isSymbolicLink) {
+    event.preventDefault();
+    event.stopPropagation();
+    handleItemAction(item);
+  }
 };
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
@@ -1031,7 +1041,7 @@ const {
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
   fileListContainerRef: fileListContainerRef,
   // 当 Enter 键按下时，模拟鼠标单击
-  onEnterPress: (item) => handleItemClick(new MouseEvent('click'), item),
+  onEnterPress: (item) => handleItemAction(item),
 });
 
 
@@ -2056,6 +2066,7 @@ const handleOpenEditorClick = () => {
                 :key="item.filename"
                 :draggable="item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
+                @dblclick="handleItemDoubleClick($event, item)"
                 class="transition-colors duration-150 select-none"
                 :class="[
                     { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },

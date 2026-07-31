@@ -8,10 +8,13 @@ export interface UseFileManagerSelectionOptions {
   displayedFileList: Ref<Readonly<FileListItem[]>>;
   // 回调函数，当需要执行导航或打开文件时调用
   onItemAction: (item: FileListItem) => void;
+  // Desktop files can opt out of single-click activation while keeping selection.
+  activateOnSingleClick?: (item: FileListItem) => boolean;
 }
 
 export function useFileManagerSelection(options: UseFileManagerSelectionOptions) {
   const { displayedFileList, onItemAction } = options;
+  const activateOnSingleClick = options.activateOnSingleClick ?? (() => true);
 
   const selectedItems = ref(new Set<string>());
   const lastClickedIndex = ref(-1); // 索引相对于 displayedFileList
@@ -108,7 +111,7 @@ export function useFileManagerSelection(options: UseFileManagerSelectionOptions)
       // --- 调用外部传入的动作回调 ---
       // 只有单击时才执行导航或打开文件
       // 标记执行动作 (只在普通单击时)
-      shouldPerformAction = true;
+      shouldPerformAction = activateOnSingleClick(item);
     }
 
     // 在函数末尾根据标志决定是否执行动作
