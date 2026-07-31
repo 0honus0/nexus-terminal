@@ -129,13 +129,13 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
                         // SFTP Upload Cases
                         case 'sftp:upload:start':
-                            handleSftpUploadStart(ws, payload);
+                            await handleSftpUploadStart(ws, payload);
                             break;
                         case 'sftp:upload:chunk':
                             await handleSftpUploadChunk(ws, payload);
                             break;
                         case 'sftp:upload:cancel':
-                            handleSftpUploadCancel(ws, payload);
+                            await handleSftpUploadCancel(ws, payload);
                             break;
 
                         // --- SSH Suspend Cases ---
