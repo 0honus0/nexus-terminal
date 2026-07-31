@@ -3,7 +3,8 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'; // Added computed
 import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
-import { useConnectionsStore } from '../stores/connections.store'; // 请确认此路径是否正确
+import { useConnectionsStore } from '../stores/connections.store';
+import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 
 interface Props {
   visible: boolean;
@@ -13,6 +14,7 @@ const props = defineProps<Props>();
 const emit = defineEmits(['update:visible']);
 const { t, locale } = useI18n(); // +++ 解构出 locale +++
 const connectionsStore = useConnectionsStore();
+const uiNotificationsStore = useUiNotificationsStore();
 
 // Helper function to get connection name by ID
 // 注意: 此函数假设 'connectionsStore.connections' 是一个包含连接对象的数组，
@@ -72,6 +74,7 @@ const transferTasks = ref<TransferTask[]>([]);
 const isLoading = ref(false);
 const errorLoading = ref<string | null>(null);
 const pollingIntervalId = ref<number | null>(null);
+const pendingTaskActions = ref<Record<string, 'cancel' | 'remove'>>({});
 
 // Computed property for sorted and limited tasks
 const displayedTasks = computed(() => {
@@ -204,35 +207,50 @@ const handleClose = () => {
 };
 
 const isTaskCancellable = (taskStatus: TransferTask['status']): boolean => {
-  return ['queued', 'in-progress', 'connecting', 'transferring', 'cancelling'].includes(taskStatus);
+  return ['queued', 'in-progress', 'connecting', 'transferring'].includes(taskStatus);
 };
 
-const isTaskCancelling = (taskStatus: TransferTask['status']): boolean => {
-  return taskStatus === 'cancelling';
+const isTaskFinal = (taskStatus: TransferTask['status']): boolean => {
+  return ['completed', 'failed', 'partially-completed', 'cancelled'].includes(taskStatus);
 };
 
-const handleCancelTask = async (taskId: string) => {
-  // 可以在这里添加一个确认对话框
-  // const confirmed = window.confirm(t('transferProgressModal.confirmCancel', '您确定要终止此传输任务吗？'));
-  // if (!confirmed) return;
+const isTaskActionPending = (taskId: string): boolean => Boolean(pendingTaskActions.value[taskId]);
 
+const setTaskAction = (taskId: string, action?: 'cancel' | 'remove') => {
+  const next = { ...pendingTaskActions.value };
+  if (action) next[taskId] = action;
+  else delete next[taskId];
+  pendingTaskActions.value = next;
+};
+
+const handleTaskAction = async (task: TransferTask) => {
+  if (isTaskActionPending(task.taskId)) return;
+  if (!isTaskCancellable(task.status) && !isTaskFinal(task.status)) return;
+
+  const action = isTaskCancellable(task.status) ? 'cancel' : 'remove';
+  setTaskAction(task.taskId, action);
   try {
-    // 更新UI，将任务状态临时设置为 'cancelling' 或禁用按钮
-    const task = transferTasks.value.find(t => t.taskId === taskId);
-    if (task) {
-
+    if (action === 'cancel') {
+      task.status = 'cancelling';
+      await apiClient.post(`/transfers/cancel/${task.taskId}`);
+      uiNotificationsStore.showInfo(t('transferProgressModal.cancelRequested'));
+    } else {
+      await apiClient.delete(`/transfers/${task.taskId}`);
+      transferTasks.value = transferTasks.value.filter(item => item.taskId !== task.taskId);
+      uiNotificationsStore.showSuccess(t('transferProgressModal.removeSuccess'));
     }
-
-    await apiClient.post(`/transfers/cancel/${taskId}`);
-    const taskBeingCancelled = transferTasks.value.find(t => t.taskId === taskId);
-    if (taskBeingCancelled && ['queued', 'in-progress', 'connecting', 'transferring'].includes(taskBeingCancelled.status)) {
-      taskBeingCancelled.status = 'cancelling';
-    }
-    
-    // 立即刷新一次列表，或者等待下一次轮询
-    fetchTransferTasks();
+    await fetchTransferTasks();
   } catch (error: any) {
-    console.error(`Failed to cancel task ${taskId}:`, error);
+    console.error(`Failed to ${action} task ${task.taskId}:`, error);
+    uiNotificationsStore.showError(
+      error.response?.data?.message
+      || (action === 'cancel'
+        ? t('transferProgressModal.error.cancelFailed')
+        : t('transferProgressModal.error.removeFailed'))
+    );
+    await fetchTransferTasks();
+  } finally {
+    setTaskAction(task.taskId);
   }
 };
 
@@ -287,14 +305,25 @@ const handleCancelTask = async (taskId: string) => {
                   {{ getDisplayStatus(task.status) }}
                 </span>
                 <button
-                  v-if="isTaskCancellable(task.status)"
-                  @click="handleCancelTask(task.taskId)"
-                  :disabled="isTaskCancelling(task.status)"
-                  class="px-2 py-0.5 text-xs bg-red-500 hover:bg-red-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  :title="isTaskCancelling(task.status) ? t('transferProgressModal.cancellingTooltip', '终止中...') : t('transferProgressModal.cancelTaskTooltip', '终止任务')"
+                  v-if="isTaskCancellable(task.status) || isTaskFinal(task.status) || task.status === 'cancelling'"
+                  @click="handleTaskAction(task)"
+                  :disabled="task.status === 'cancelling' || isTaskActionPending(task.taskId)"
+                  :class="[
+                    'px-2 py-0.5 text-xs text-white rounded-md focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
+                    isTaskFinal(task.status)
+                      ? 'bg-gray-500 hover:bg-gray-600 focus:ring-gray-400'
+                      : 'bg-red-500 hover:bg-red-600 focus:ring-red-400'
+                  ]"
+                  :title="isTaskFinal(task.status)
+                    ? t('transferProgressModal.removeTaskTooltip')
+                    : t('transferProgressModal.cancelTaskTooltip')"
                 >
-                  <i v-if="isTaskCancelling(task.status)" class="fas fa-spinner fa-spin mr-1"></i>
-                  {{ isTaskCancelling(task.status) ? t('transferProgressModal.cancellingButton', '终止中') : t('transferProgressModal.cancelButton', '终止') }}
+                  <i v-if="task.status === 'cancelling' || isTaskActionPending(task.taskId)" class="fas fa-spinner fa-spin mr-1"></i>
+                  {{ task.status === 'cancelling'
+                    ? t('transferProgressModal.cancellingButton')
+                    : isTaskFinal(task.status)
+                      ? t('transferProgressModal.removeButton')
+                      : t('transferProgressModal.cancelButton') }}
                 </button>
               </div>
             </div>

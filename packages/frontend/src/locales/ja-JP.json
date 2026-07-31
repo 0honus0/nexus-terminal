@@ -1519,7 +1519,8 @@
     "errorLoading": "転送タスクの読み込みに失敗しました：{error}",
     "error": {
       "unknown": "不明なエラー",
-      "cancelFailed": "タスクの终止に失敗しました。"
+      "cancelFailed": "タスクの终止に失敗しました。",
+      "removeFailed": "タスク履歴の削除に失敗しました。"
     },
     "noTasks": "現在アクティブな転送タスクはありません。",
     "task": {
@@ -1540,6 +1541,9 @@
     },
     "confirmCancel": "この転送タスクを终止してもよろしいですか？",
     "cancelRequested": "终止リクエストを送信しました。",
+    "removeSuccess": "タスク履歴を削除しました。",
+    "removeTaskTooltip": "タスク履歴を削除",
+    "removeButton": "削除",
     "cancelTaskTooltip": "タスクを终止",
     "cancellingTooltip": "终止中...",
     "cancelButton": "终止",

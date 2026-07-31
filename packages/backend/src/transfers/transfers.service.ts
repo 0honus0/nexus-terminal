@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid'; 
-import { Client, ConnectConfig, SFTPWrapper } from 'ssh2';
+import { Client, ClientChannel, ConnectConfig, SFTPWrapper } from 'ssh2';
 import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transfers.types';
 import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
@@ -15,6 +15,23 @@ export class TransfersService {
 
   constructor() {
     console.info('[TransfersService] Initialized.');
+  }
+
+  private isFinalTaskStatus(status: TransferTask['status']): boolean {
+    return ['completed', 'failed', 'partially-completed', 'cancelled'].includes(status);
+  }
+
+  public removeTransferTask(taskId: string, userId: string | number): 'removed' | 'not-found' | 'active' {
+    const task = this.transferTasks.get(taskId);
+    if (!task || task.userId !== userId) {
+      return 'not-found';
+    }
+    // Never hide a task while an AbortController can still own live SSH channels.
+    if (!this.isFinalTaskStatus(task.status) || this.taskAbortControllers.has(taskId)) {
+      return 'active';
+    }
+    this.transferTasks.delete(taskId);
+    return 'removed';
   }
 
   public async initiateNewTransfer(payload: InitiateTransferPayload, userId: string | number): Promise<TransferTask> {
@@ -69,30 +86,30 @@ export class TransfersService {
       console.warn(`[TransfersService] Attempt to cancel non-existent task ${taskId} or task not owned by user ${userId}.`);
       return false;
     }
+    if (this.isFinalTaskStatus(task.status)) {
+      return false;
+    }
 
     const abortController = this.taskAbortControllers.get(taskId);
-    if (abortController) {
-      console.info(`[TransfersService] Cancelling task ${taskId}.`);
-      abortController.abort(); // 触发终止信号
-
-      // 更新主任务状态
-      // 假设 'cancelling' 和 'cancelled' 是有效的状态
-      if (task.status !== 'completed' && task.status !== 'failed' && task.status !== 'cancelled') {
-        this.updateOverallTaskStatus(taskId, 'cancelling', 'Task cancellation initiated by user.');
-        // 可以在 processTransferTask 的 finally 中将状态设置为 'cancelled'
-      }
-
-      // 更新所有未完成的子任务状态
-      task.subTasks.forEach(subTask => {
-        if (subTask.status !== 'completed' && subTask.status !== 'failed' && subTask.status !== 'cancelled') {
-          this.updateSubTaskStatus(taskId, subTask.subTaskId, 'cancelled', subTask.progress, 'Cancelled due to parent task cancellation.');
-        }
-      });
-      
+    if (!abortController) {
+      console.warn(`[TransfersService] No AbortController found for active task ${taskId}.`);
+      return false;
+    }
+    if (abortController.signal.aborted) {
       return true;
     }
-    console.warn(`[TransfersService] No AbortController found for task ${taskId} to cancel.`);
-    return false;
+
+    console.info(`[TransfersService] Cancelling task ${taskId}.`);
+    this.updateOverallTaskStatus(taskId, 'cancelling', 'Task cancellation initiated by user.');
+    task.subTasks.forEach(subTask => {
+      if (!['completed', 'failed', 'cancelled'].includes(subTask.status)) {
+        this.updateSubTaskStatus(taskId, subTask.subTaskId, 'cancelled', subTask.progress, 'Cancelled due to parent task cancellation.');
+      }
+    });
+    // Abort after the status transition so synchronous abort listeners cannot race the UI
+    // back to an in-progress aggregate state.
+    abortController.abort();
+    return true;
   }
 
   private buildSshConnectConfig(
@@ -739,17 +756,30 @@ private async executeRemoteTransferOnSource(
       
       await new Promise<void>((resolveCmd, rejectCmd) => {
         let streamClosed = false;
+        let commandStream: ClientChannel | undefined;
+        let timeoutHandle: NodeJS.Timeout | undefined;
+
+        const cleanupCommandListeners = () => {
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          signal.removeEventListener('abort', onAbortCmd);
+        };
+        const terminateCommandStream = () => {
+          if (!commandStream || streamClosed) return;
+          try { commandStream.signal('TERM'); } catch { /* channel may already be closing */ }
+          try { commandStream.close(); } catch { /* channel may already be closed */ }
+        };
         const onAbortCmd = () => {
-          if (!streamClosed) {
-            console.warn(`[TransfersService] Abort signal received for command stream of sub-task ${subTaskId}. Attempting to close stream.`);
-          }
+          console.warn(`[TransfersService] Abort signal received for command stream of sub-task ${subTaskId}. Terminating remote command.`);
+          cleanupCommandListeners();
+          terminateCommandStream();
           rejectCmd(new DOMException('Command cancelled by user.', 'AbortError'));
         };
         signal.addEventListener('abort', onAbortCmd, { once: true });
 
         const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
-        const timeoutHandle = setTimeout(() => {
+        timeoutHandle = setTimeout(() => {
           signal.removeEventListener('abort', onAbortCmd);
+          terminateCommandStream();
           if (!streamClosed) rejectCmd(new Error(`${commandTypeForLogic} command timed out for ${sourceItem.name}.`));
         }, COMMAND_TIMEOUT_MS);
 
@@ -757,41 +787,41 @@ private async executeRemoteTransferOnSource(
         if (cmdOptions.sshPassCommand) execOptions.pty = true;
 
         sourceSshClient.exec(commandToExecute, execOptions, (err, stream) => {
-          if (signal.aborted && !streamClosed) { // Check signal immediately after exec callback
-             clearTimeout(timeoutHandle);
-             signal.removeEventListener('abort', onAbortCmd);
-             stream?.close(); // Attempt to close if stream exists
-             return rejectCmd(new DOMException('Command cancelled by user (at exec).', 'AbortError'));
-          }
           if (err) {
-            clearTimeout(timeoutHandle);
-            signal.removeEventListener('abort', onAbortCmd);
-            return rejectCmd(new Error(`Failed to execute command: ${err.message}`));
+            cleanupCommandListeners();
+            return rejectCmd(signal.aborted
+              ? new DOMException('Command cancelled by user (at exec).', 'AbortError')
+              : new Error(`Failed to execute command: ${err.message}`));
+          }
+
+          commandStream = stream;
+          if (signal.aborted) {
+            terminateCommandStream();
+            cleanupCommandListeners();
+            return rejectCmd(new DOMException('Command cancelled by user (at exec).', 'AbortError'));
           }
 
           stream.on('data', (data: Buffer) => {
-            if (signal.aborted) return; // Stop processing data if aborted
-            // ... (progress update logic)
+            if (signal.aborted) return;
             if (commandTypeForLogic === 'rsync') {
               const output = data.toString();
               const progressMatch = output.match(/(\d+)%/);
-              if (progressMatch && progressMatch[1]) {
+              if (progressMatch?.[1]) {
                 this.updateSubTaskStatus(taskId, subTaskId, 'transferring', parseInt(progressMatch[1], 10));
               }
             } else {
-                this.updateSubTaskStatus(taskId, subTaskId, 'transferring', 50, 'SCP in progress...');
+              this.updateSubTaskStatus(taskId, subTaskId, 'transferring', 50, 'SCP in progress...');
             }
           });
           let stderrCombined = '';
           stream.stderr.on('data', (data: Buffer) => {
-            if (signal.aborted) return;
-            stderrCombined += data.toString();
+            if (!signal.aborted) stderrCombined += data.toString();
           });
           stream.on('close', (code: number | null) => {
             streamClosed = true;
-            clearTimeout(timeoutHandle);
-            signal.removeEventListener('abort', onAbortCmd);
-            if (signal.aborted) { // Check if aborted during the command run
+            commandStream = undefined;
+            cleanupCommandListeners();
+            if (signal.aborted) {
               return rejectCmd(new DOMException('Command cancelled by user (on close).', 'AbortError'));
             }
             if (code === 0) {
@@ -803,11 +833,11 @@ private async executeRemoteTransferOnSource(
           });
           stream.on('error', (streamErr: Error) => {
             streamClosed = true;
-            clearTimeout(timeoutHandle);
-            signal.removeEventListener('abort', onAbortCmd);
-             if (signal.aborted && streamErr.message.includes('closed')) { // If aborted and stream closed, treat as AbortError
-                return rejectCmd(new DOMException('Command stream error due to cancellation.', 'AbortError'));
-             }
+            commandStream = undefined;
+            cleanupCommandListeners();
+            if (signal.aborted) {
+              return rejectCmd(new DOMException('Command stream error due to cancellation.', 'AbortError'));
+            }
             rejectCmd(streamErr);
           });
         });
@@ -885,8 +915,8 @@ private async executeRemoteTransferOnSource(
     if (task) {
       const subTask = task.subTasks.find(st => st.subTaskId === subTaskId);
       if (subTask) {
-        // Prevent overwriting a final state with a transient one unless it's a retry mechanism (not implemented here)
-        if ((subTask.status === 'completed' || subTask.status === 'failed') && (newStatus !== 'completed' && newStatus !== 'failed')) {
+        const finalSubTaskStatuses: TransferSubTask['status'][] = ['completed', 'failed', 'cancelled'];
+        if (finalSubTaskStatuses.includes(subTask.status) && newStatus !== subTask.status) {
             console.warn(`[TransfersService] Attempted to update final sub-task ${subTaskId} status '${subTask.status}' to '${newStatus}'. Ignoring.`);
             return;
         }
@@ -894,7 +924,7 @@ private async executeRemoteTransferOnSource(
         subTask.status = newStatus;
         if (progress !== undefined) subTask.progress = Math.min(100, Math.max(0, progress)); // Clamp progress
         if (message !== undefined) subTask.message = message;
-        if ((newStatus === 'completed' || newStatus === 'failed') && !subTask.endTime) {
+        if (['completed', 'failed', 'cancelled'].includes(newStatus) && !subTask.endTime) {
             subTask.endTime = new Date();
         }
         task.updatedAt = new Date();
@@ -911,10 +941,14 @@ private async executeRemoteTransferOnSource(
   private updateOverallTaskStatus(taskId: string, newStatus: TransferTask['status'], message?: string): void {
     const task = this.transferTasks.get(taskId);
     if (task) {
-        const isCurrentStatusFinal = task.status === 'completed' || task.status === 'failed' || task.status === 'partially-completed';
+        const isCurrentStatusFinal = this.isFinalTaskStatus(task.status);
         // Check if newStatus is one of the transient states
         const isNewStatusTransient = newStatus === 'queued' || newStatus === 'in-progress';
 
+        if (task.status === 'cancelled' && newStatus !== 'cancelled') {
+            console.warn(`[TransfersService] Attempted to overwrite cancelled task ${taskId} with '${newStatus}'. Ignoring.`);
+            return;
+        }
         if (isCurrentStatusFinal && isNewStatusTransient) {
             // If current status is final and new status is transient, ignore the update.
             console.warn(`[TransfersService] Attempted to update final task ${taskId} status '${task.status}' to transient '${newStatus}'. Ignoring.`);
@@ -938,6 +972,7 @@ private async executeRemoteTransferOnSource(
 
     let completedCount = 0;
     let failedCount = 0;
+    let cancelledCount = 0;
     let inProgressCount = 0;
     let queuedCount = 0;
     let totalProgress = 0;
@@ -945,6 +980,7 @@ private async executeRemoteTransferOnSource(
 
     if (numSubTasks === 0) {
       task.overallProgress = 0;
+      task.updatedAt = new Date();
       return;
     }
 
@@ -956,11 +992,17 @@ private async executeRemoteTransferOnSource(
           break;
         case 'failed':
           failedCount++;
+          totalProgress += st.progress || 0;
+          break;
+        case 'cancelled':
+          cancelledCount++;
+          totalProgress += st.progress || 0;
           break;
         case 'transferring':
-        case 'connecting': 
+        case 'connecting':
+        case 'cancelling':
           inProgressCount++;
-          totalProgress += (st.progress !== undefined ? st.progress : (st.status === 'connecting' ? 5 : 0)); // Small progress for connecting
+          totalProgress += st.progress !== undefined ? st.progress : (st.status === 'connecting' ? 5 : 0);
           break;
         case 'queued':
           queuedCount++;
@@ -968,30 +1010,31 @@ private async executeRemoteTransferOnSource(
       }
     });
 
-    task.overallProgress = numSubTasks > 0 ? Math.round(totalProgress / numSubTasks) : 0;
-
+    task.overallProgress = Math.round(totalProgress / numSubTasks);
+    const terminalCount = completedCount + failedCount + cancelledCount;
     let newOverallStatus: TransferTask['status'];
-    if (failedCount === numSubTasks) {
+
+    if (task.status === 'cancelled') {
+      newOverallStatus = 'cancelled';
+    } else if (task.status === 'cancelling' || cancelledCount > 0) {
+      newOverallStatus = terminalCount === numSubTasks ? 'cancelled' : 'cancelling';
+    } else if (failedCount === numSubTasks) {
       newOverallStatus = 'failed';
     } else if (completedCount === numSubTasks) {
       newOverallStatus = 'completed';
-    } else if (failedCount > 0 && (completedCount + failedCount === numSubTasks)) {
+    } else if (failedCount > 0 && completedCount + failedCount === numSubTasks) {
       newOverallStatus = 'partially-completed';
     } else if (inProgressCount > 0 || (queuedCount > 0 && (failedCount > 0 || completedCount > 0))) {
-      // If anything is in progress, or if some are queued while others are done/failed, it's in-progress
       newOverallStatus = 'in-progress';
     } else if (queuedCount === numSubTasks) {
-      newOverallStatus = 'queued'; // All subtasks are still queued
+      newOverallStatus = 'queued';
     } else {
-      newOverallStatus = 'in-progress'; // Or 'partially-completed' if completedCount > 0
-      if (completedCount > 0 && queuedCount > 0 && failedCount === 0 && inProgressCount === 0) {
-        newOverallStatus = 'partially-completed'; // More accurate for this specific mix
-      }
+      newOverallStatus = 'in-progress';
     }
-    
+
     if (task.status !== newOverallStatus) {
-        console.info(`[TransfersService] Task ${taskId} overall status changing from ${task.status} to ${newOverallStatus} (P: ${task.overallProgress}%)`);
-        task.status = newOverallStatus;
+      console.info(`[TransfersService] Task ${taskId} overall status changing from ${task.status} to ${newOverallStatus} (P: ${task.overallProgress}%)`);
+      task.status = newOverallStatus;
     }
     task.updatedAt = new Date();
   }

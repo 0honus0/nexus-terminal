@@ -1528,7 +1528,8 @@
     "errorLoading": "加载传输任务失败：{error}",
     "error": {
       "unknown": "未知错误",
-      "cancelFailed": "终止任务失败。"
+      "cancelFailed": "终止任务失败。",
+      "removeFailed": "移除任务记录失败。"
     },
     "noTasks": "当前没有活动的传输任务。",
     "task": {
@@ -1549,6 +1550,9 @@
     },
     "confirmCancel": "您确定要终止此传输任务吗？",
     "cancelRequested": "已发送终止请求。",
+    "removeSuccess": "任务记录已移除。",
+    "removeTaskTooltip": "移除任务记录",
+    "removeButton": "移除",
     "cancelTaskTooltip": "终止任务",
     "cancellingTooltip": "正在终止......",
     "cancelButton": "终止",
