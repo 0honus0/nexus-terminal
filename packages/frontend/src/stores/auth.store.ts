@@ -7,6 +7,7 @@ import type {
 } from '@simplewebauthn/browser';
 import router from '../router'; 
 import { setLocale } from '../i18n'; 
+import { useSessionStore } from './session.store';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
 interface UserInfo {
@@ -101,6 +102,14 @@ export const useAuthStore = defineStore('auth', {
             this.error = errorMessage;
         },
 
+        cleanupActiveSshSessions() {
+            try {
+                useSessionStore().cleanupAllSessions();
+            } catch (cleanupError) {
+                console.warn('清理 SSH 会话失败:', cleanupError);
+            }
+        },
+
         // 登录 Action - 更新为接受 LoginPayload + optional captchaToken
         async login(payload: LoginPayload & { captchaToken?: string }) { // Add captchaToken to payload
             this.isLoading = true;
@@ -182,6 +191,7 @@ export const useAuthStore = defineStore('auth', {
             this.isLoading = true;
             this.error = null;
             this.loginRequires2FA = false; // 重置 2FA 状态
+            this.cleanupActiveSshSessions();
             try {
                 // 调用后端的登出 API
                 await apiClient.post('/auth/logout'); // 使用 apiClient
@@ -219,6 +229,7 @@ export const useAuthStore = defineStore('auth', {
                     this.isAuthenticated = false;
                     this.user = null;
                     this.loginRequires2FA = false;
+                    this.cleanupActiveSshSessions();
                     // Removed passkeys clear on unauthenticated
                 }
             } catch (error: any) {
@@ -227,6 +238,7 @@ export const useAuthStore = defineStore('auth', {
                 this.isAuthenticated = false;
                 this.user = null;
                 this.loginRequires2FA = false;
+                this.cleanupActiveSshSessions();
                 // Removed passkeys clear on error
                 // 可选：如果不是 401 错误，可以记录更详细的日志
             } finally {

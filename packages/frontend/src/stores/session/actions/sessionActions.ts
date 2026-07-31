@@ -21,6 +21,33 @@ const findConnectionInfo = (connectionId: number | string, connectionsStore: Ret
   return connectionsStore.connections.find(c => c.id === Number(connectionId));
 };
 
+const captureTerminalSnapshot = (session: SessionState): string | undefined => {
+  const terminal = session.terminalManager?.terminalInstance?.value;
+  const activeBuffer = terminal?.buffer.active;
+  if (!terminal || !activeBuffer) return undefined;
+
+  const encoder = new TextEncoder();
+  const maxBytes = 1024 * 1024;
+  const maxLines = 1000;
+  const lines: string[] = [];
+  let totalBytes = 0;
+
+  for (let i = activeBuffer.length - 1; i >= 0 && lines.length < maxLines; i--) {
+    const line = activeBuffer.getLine(i)?.translateToString(true) ?? '';
+    const lineBytes = encoder.encode(line).length + 2;
+    if (totalBytes + lineBytes > maxBytes && lines.length > 0) break;
+    lines.push(line);
+    totalBytes += lineBytes;
+  }
+
+  while (lines.length > 0 && lines[0].trim() === '') {
+    lines.shift();
+  }
+
+  if (lines.length === 0) return undefined;
+  return `${lines.reverse().join('\r\n')}\r\n`;
+};
+
 // --- Actions ---
 export const openNewSession = (
     connectionOrId: ConnectionInfo | number | string,
@@ -140,6 +167,10 @@ export const openNewSession = (
         const currentSessions = new Map(sessions.value);
         currentSessions.delete(currentFrontendSessionId);
 
+        const terminalSnapshot = captureTerminalSnapshot(sessionToUpdate);
+        if (terminalSnapshot) {
+          sessionToUpdate.pendingOutput = [terminalSnapshot, ...(sessionToUpdate.pendingOutput ?? [])];
+        }
         sessionToUpdate.sessionId = backendSID; // 更新会话对象内部的sessionId
 
         currentSessions.set(backendSID, sessionToUpdate);
