@@ -518,7 +518,12 @@ export function createSftpActionsManager(
            const parentDir = currentPathRef.value;
            let archiveBaseName = 'archive';
            if (items.length === 1) {
-               archiveBaseName = items[0].filename.split('.')[0];
+               const sourceName = items[0].filename;
+               // Dotfiles such as .env have no basename before the first dot. Preserve
+               // their complete name; for regular files only remove the final suffix.
+               archiveBaseName = sourceName.startsWith('.')
+                   ? sourceName
+                   : sourceName.replace(/\.[^./]+$/, '') || sourceName;
            } else if (items.length > 1) {
                const parentFolderName = parentDir.split('/').pop();
                if (parentFolderName && parentFolderName !== 'root') archiveBaseName = parentFolderName;
