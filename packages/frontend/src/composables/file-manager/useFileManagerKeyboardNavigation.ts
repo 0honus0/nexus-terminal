@@ -7,6 +7,7 @@ export interface UseFileManagerKeyboardNavigationOptions {
   filteredFileList: ComputedRef<Readonly<FileListItem[]>>; // 当前显示的（已过滤/排序）文件列表
   currentPath: Ref<string>; // 当前路径 (用于判断是否显示 '..')
   fileListContainerRef: Ref<HTMLDivElement | null>; // 文件列表容器的引用 (用于滚动)
+  getEstimatedRowHeight?: () => number;
 
   // 回调函数
   onEnterPress: (item: FileListItem) => void; // 按下 Enter 键时触发的回调
@@ -17,6 +18,7 @@ export function useFileManagerKeyboardNavigation(options: UseFileManagerKeyboard
     filteredFileList,
     currentPath,
     fileListContainerRef,
+    getEstimatedRowHeight,
     onEnterPress,
   } = options;
 
@@ -35,19 +37,15 @@ export function useFileManagerKeyboardNavigation(options: UseFileManagerKeyboard
     if (selectedIndex.value < 0 || !fileListContainerRef.value) return;
 
     const container = fileListContainerRef.value;
-    // 使用更通用的选择器获取所有数据行
-    const rows = container.querySelectorAll('tbody > tr'); // Changed selector
-    if (selectedIndex.value >= rows.length) return; // 索引超出范围
-
-    const selectedRow = rows[selectedIndex.value] as HTMLElement;
-
-    if (selectedRow) {
-        // 使用 scrollIntoView 使元素可见，滚动最小距离
-        selectedRow.scrollIntoView({
-            behavior: 'smooth', // 可以使用 'auto' 来实现即时滚动
-            block: 'nearest',
-        });
+    let selectedRow = container.querySelector<HTMLElement>(`[data-list-index="${selectedIndex.value}"]`);
+    if (!selectedRow && getEstimatedRowHeight) {
+      const rowHeight = Math.max(1, getEstimatedRowHeight());
+      container.scrollTop = Math.max(0, selectedIndex.value * rowHeight - container.clientHeight / 2);
+      await nextTick();
+      selectedRow = container.querySelector<HTMLElement>(`[data-list-index="${selectedIndex.value}"]`);
     }
+
+    selectedRow?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
   };
 
   // --- 键盘事件处理 ---

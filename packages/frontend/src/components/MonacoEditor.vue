@@ -4,7 +4,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
-import * as monaco from 'monaco-editor';
+import * as monaco from '@monaco-editor-api';
+import '@monaco-basic-languages';
+import '@monaco-json-language';
 
 const FONT_SIZE_STORAGE_KEY = 'monacoEditorFontSize'; // localStorage key
 

@@ -82,13 +82,8 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
             clearTimeout(state.pendingDirectoryChange.timeout);
             state.pendingDirectoryChange = undefined;
         }
-        if (state.backgroundStartupTimer) {
-            clearTimeout(state.backgroundStartupTimer);
-            state.backgroundStartupTimer = undefined;
-        }
-
         // 1. 停止状态轮询 (如果存在)
-        if (statusMonitorService) statusMonitorService.stopStatusPolling(sessionId);
+        if (statusMonitorService) statusMonitorService.clearSession(sessionId);
 
         // 2. 清理 SFTP 会话 (如果存在)
         if (sftpService) sftpService.cleanupSftpSession(sessionId);
@@ -153,16 +148,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         }
 
 
-        // 4. 清理 Docker 状态轮询定时器
-        if (state.dockerStatusIntervalId) {
-            clearInterval(state.dockerStatusIntervalId);
-            console.log(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
-        }
-
-        // 5. 从状态 Map 中移除
+        // 4. 从状态 Map 中移除
         clientStates.delete(sessionId);
 
-        // 6. 清除 WebSocket 上的 sessionId 关联 (可选，因为 ws 可能已关闭)
+        // 5. 清除 WebSocket 上的 sessionId 关联 (可选，因为 ws 可能已关闭)
         if (state.ws && state.ws.sessionId === sessionId) {
             delete state.ws.sessionId;
         }

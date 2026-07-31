@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, type PropType, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'; // 添加 nextTick
+import { computed, type PropType, ref, watch, onMounted, onBeforeUnmount, nextTick, defineAsyncComponent } from 'vue'; // 添加 nextTick
 import { useI18n } from 'vue-i18n';
-import MonacoEditor from './MonacoEditor.vue'; 
 import FileEditorTabs from './FileEditorTabs.vue';
 import type { FileTab } from '../stores/fileEditor.store'; 
 import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
@@ -10,6 +9,8 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; // +++ 导入外观 Store +++
 import { storeToRefs } from 'pinia';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+
+const MonacoEditor = defineAsyncComponent(() => import('./MonacoEditor.vue'));
 
 const { t } = useI18n();
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++

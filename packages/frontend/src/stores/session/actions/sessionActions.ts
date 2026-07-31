@@ -122,6 +122,7 @@ export const openNewSession = (
       return { cols: terminal.cols, rows: terminal.rows };
   };
   const statusMonitorDeps: StatusMonitorDependencies = {
+      sendMessage: wsManager.sendMessage,
       onMessage: wsManager.onMessage,
       isConnected: wsManager.isConnected,
   };

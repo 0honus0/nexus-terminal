@@ -152,7 +152,7 @@
 
 <script setup lang="ts">
 
-import { ref, computed, watch, type PropType, nextTick } from 'vue'; 
+import { ref, computed, watch, type PropType, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue';
 import { ElProgress } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import StatusCharts from './StatusCharts.vue';
@@ -204,6 +204,36 @@ const props = defineProps({
 const currentSessionState = computed(() => {
   return props.activeSessionId ? sessions.value.get(props.activeSessionId) : null;
 });
+
+let attachedStatusManager: { activate: () => void; deactivate: () => void } | null = null;
+let componentActive = false;
+
+const syncStatusSubscription = () => {
+  const nextManager = currentSessionState.value?.statusMonitorManager ?? null;
+  if (attachedStatusManager === nextManager) return;
+  if (componentActive) attachedStatusManager?.deactivate();
+  attachedStatusManager = nextManager;
+  if (componentActive) attachedStatusManager?.activate();
+};
+
+const activateStatusComponent = () => {
+  if (componentActive) return;
+  componentActive = true;
+  attachedStatusManager = currentSessionState.value?.statusMonitorManager ?? null;
+  attachedStatusManager?.activate();
+};
+
+const deactivateStatusComponent = () => {
+  if (!componentActive) return;
+  componentActive = false;
+  attachedStatusManager?.deactivate();
+};
+
+watch(currentSessionState, syncStatusSubscription);
+onMounted(activateStatusComponent);
+onActivated(activateStatusComponent);
+onDeactivated(deactivateStatusComponent);
+onBeforeUnmount(deactivateStatusComponent);
 
 const currentServerStatus = computed<ServerStatus | null>(() => {
   return currentSessionState.value?.statusMonitorManager?.serverStatus?.value ?? null;

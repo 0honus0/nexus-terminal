@@ -382,6 +382,38 @@ const filteredFileList = computed(() => {
     );
 });
 
+const FILE_VIRTUALIZATION_THRESHOLD = 250;
+const FILE_LIST_OVERSCAN = 12;
+const fileListScrollTop = ref(0);
+const fileListViewportHeight = ref(600);
+let fileListResizeObserver: ResizeObserver | null = null;
+
+const estimatedFileRowHeight = computed(() => Math.max(24, 34 * rowSizeMultiplier.value));
+const shouldVirtualizeFileList = computed(() => filteredFileList.value.length > FILE_VIRTUALIZATION_THRESHOLD);
+const virtualStartIndex = computed(() => {
+    if (!shouldVirtualizeFileList.value) return 0;
+    return Math.max(0, Math.floor(fileListScrollTop.value / estimatedFileRowHeight.value) - FILE_LIST_OVERSCAN);
+});
+const virtualEndIndex = computed(() => {
+    if (!shouldVirtualizeFileList.value) return filteredFileList.value.length;
+    const visibleRows = Math.ceil(fileListViewportHeight.value / estimatedFileRowHeight.value);
+    return Math.min(filteredFileList.value.length, virtualStartIndex.value + visibleRows + FILE_LIST_OVERSCAN * 2);
+});
+const virtualFileList = computed(() => filteredFileList.value.slice(virtualStartIndex.value, virtualEndIndex.value));
+const virtualTopPadding = computed(() => shouldVirtualizeFileList.value ? virtualStartIndex.value * estimatedFileRowHeight.value : 0);
+const virtualBottomPadding = computed(() => shouldVirtualizeFileList.value
+    ? Math.max(0, (filteredFileList.value.length - virtualEndIndex.value) * estimatedFileRowHeight.value)
+    : 0);
+
+const handleFileListScroll = () => {
+    fileListScrollTop.value = fileListContainerRef.value?.scrollTop ?? 0;
+};
+
+const resetFileListScroll = () => {
+    fileListScrollTop.value = 0;
+    if (fileListContainerRef.value) fileListContainerRef.value.scrollTop = 0;
+};
+
 const handleSort = (key: keyof FileListItem | 'type' | 'size' | 'mtime') => {
     if (sortKey.value === key) {
         sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
@@ -988,6 +1020,7 @@ const {
   // 修改：传递 manager 的 currentPath ref
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
   fileListContainerRef: fileListContainerRef,
+  getEstimatedRowHeight: () => estimatedFileRowHeight.value,
   // 当 Enter 键按下时，模拟鼠标单击
   onEnterPress: (item) => handleItemAction(item),
 });
@@ -998,18 +1031,22 @@ const {
 watch(() => currentSftpManager.value?.currentPath.value, () => {
     selectedIndex.value = -1;
     clearSelection();
+    resetFileListScroll();
 });
 watch(searchQuery, () => {
     selectedIndex.value = -1;
     clearSelection(); // 清空选择
+    resetFileListScroll();
 });
 watch(sortKey, () => {
     selectedIndex.value = -1;
     clearSelection(); // 清空选择
+    resetFileListScroll();
 });
 watch(sortDirection, () => {
     selectedIndex.value = -1;
     clearSelection(); // 清空选择
+    resetFileListScroll();
 });
 
 
@@ -1024,8 +1061,14 @@ const saveLayoutSettings = () => {
 
 // --- 生命周期钩子 ---
 onMounted(() => {
-    // --- 移除 onMounted 中的加载逻辑 ---
-    // Initial load logic is handled by watchEffect below and the main sftp loading watchEffect
+    const container = fileListContainerRef.value;
+    if (!container) return;
+    const updateViewportHeight = () => {
+      fileListViewportHeight.value = Math.max(1, container.clientHeight);
+    };
+    updateViewportHeight();
+    fileListResizeObserver = new ResizeObserver(updateViewportHeight);
+    fileListResizeObserver.observe(container);
 });
 
 // +++ 使用 watchEffect 响应式地加载和应用布局设置 +++
@@ -1231,6 +1274,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+ fileListResizeObserver?.disconnect();
+ fileListResizeObserver = null;
  // 注销搜索框动作
  if (unregisterSearchFocusAction) {
    unregisterSearchFocusAction();
@@ -1882,6 +1927,7 @@ const handleOpenEditorClick = () => {
       @click="fileListContainerRef?.focus()"
       @keydown="handleKeydown"
       @wheel="handleWheel"
+      @scroll="handleFileListScroll"
       @contextmenu.prevent="showContextMenu($event)"
       tabindex="0"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
@@ -2002,6 +2048,7 @@ const handleOpenEditorClick = () => {
                 @dragleave="handleDragLeaveRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
                 @drop.prevent="handleDropOnRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } }, $event)"
                 :data-filename="'..'"
+                :data-list-index="0"
                 >
               <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
                 <i class="fas fa-level-up-alt text-primary" :style="{ fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }"></i>
@@ -2012,7 +2059,10 @@ const handleOpenEditorClick = () => {
               <td class="border-b border-border align-middle"></td>
             </tr>
             <!-- File Entries -->
-            <tr v-for="(item, index) in filteredFileList"
+            <tr v-if="virtualTopPadding > 0" aria-hidden="true">
+              <td :colspan="5" class="p-0 border-0" :style="{ height: `${virtualTopPadding}px` }"></td>
+            </tr>
+            <tr v-for="(item, index) in virtualFileList"
                 :key="item.filename"
                 :draggable="item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
@@ -2020,11 +2070,12 @@ const handleOpenEditorClick = () => {
                 class="transition-colors duration-150 select-none"
                 :class="[
                     { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
-                    { 'bg-primary text-white': selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) },
-                    { 'hover:bg-header/50': !(selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex)) },
+                    { 'bg-primary text-white': selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) },
+                    { 'hover:bg-header/50': !(selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex)) },
                     { 'outline-dashed outline-2 outline-offset-[-1px] outline-primary': item.attrs.isDirectory && dragOverTarget === item.filename }
                 ]"
                :data-filename="item.filename"
+               :data-list-index="virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0)"
                @contextmenu.prevent.stop="showContextMenu($event, item)"
                @dragover.prevent="handleDragOverRow(item, $event)"
                @dragleave="handleDragLeaveRow(item)"
@@ -2038,21 +2089,24 @@ const handleOpenEditorClick = () => {
                       ? 'fas fa-link text-cyan-500'
                       : `${getFileIconClassBase(item.filename)} text-text-secondary`,
                   {
-                    'text-white': selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex)
+                    'text-white': selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex)
                   }
                 ]"
                 :style="{ fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }"></i>
               </td>
               <td class="border-b border-border truncate align-middle" :class="{'font-medium': item.attrs.isDirectory}" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.filename }}</td>
               <td class="border-b border-border truncate align-middle" :class="[
-                selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
+                selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
               ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}</td> 
               <td class="border-b border-border truncate font-mono align-middle" :class="[
-                selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
+                selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
               ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ formatMode(item.attrs.mode) }}</td>
               <td class="border-b border-border truncate align-middle" :class="[
-                selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
+                selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
               ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ new Date(item.attrs.mtime).toLocaleString() }}</td> 
+            </tr>
+            <tr v-if="virtualBottomPadding > 0" aria-hidden="true">
+              <td :colspan="5" class="p-0 border-0" :style="{ height: `${virtualBottomPadding}px` }"></td>
             </tr>
           </tbody>
         </table>

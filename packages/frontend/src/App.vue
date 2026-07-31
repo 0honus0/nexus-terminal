@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute } from 'vue-router';
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useDeviceDetection } from './composables/useDeviceDetection';
@@ -12,7 +12,6 @@ import { useSessionStore } from './stores/session.store';
 import { useFavoritePathsStore } from './stores/favoritePaths.store';
 import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
-import FileEditorOverlay from './components/FileEditorOverlay.vue';
 import StyleCustomizer from './components/StyleCustomizer.vue';
 import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
 import RemoteDesktopModal from './components/RemoteDesktopModal.vue';
@@ -20,6 +19,8 @@ import VncModal from './components/VncModal.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
 import { releaseRepository, releaseRepositoryUrl } from './config/release';
+
+const FileEditorOverlay = defineAsyncComponent(() => import('./components/FileEditorOverlay.vue'));
 
 const { t } = useI18n();
 const authStore = useAuthStore();

@@ -37,7 +37,9 @@ import {
     handleSshChangeDirectory,
     filterSshShellOutput,
     handleSshResize,
-    handleSshResumeSuccess
+    handleSshResumeSuccess,
+    handleStatusSubscribe,
+    handleStatusUnsubscribe
 } from './handlers/ssh.handler';
 import {
     handleDockerGetStatus,
@@ -163,6 +165,12 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                             break;
                         case 'ssh:resize':
                             handleSshResize(ws, payload);
+                            break;
+                        case 'status:subscribe':
+                            handleStatusSubscribe(ws);
+                            break;
+                        case 'status:unsubscribe':
+                            handleStatusUnsubscribe(ws);
                             break;
 
                         // Docker Cases

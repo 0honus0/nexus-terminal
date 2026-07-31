@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ConnectionInfo } from '../stores/connections.store';
+import type { SessionState } from '../stores/session/types';
 import { computed, defineAsyncComponent, type PropType, type Component, ref, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'; // Added onBeforeUnmount, nextTick and CSSProperties
 import { useI18n } from 'vue-i18n';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
@@ -113,6 +114,34 @@ const currentLeftSidebarComponent = computed(() => {
 const currentRightSidebarComponent = computed(() => {
   return activeRightSidebarPane.value ? componentMap[activeRightSidebarPane.value] : null;
 });
+
+const MAX_RENDERED_TERMINALS = 3;
+const renderedTerminalOrder = ref<string[]>([]);
+
+const renderedTerminalSessions = computed<Array<[string, SessionState]>>(() => {
+  const result: Array<[string, SessionState]> = [];
+  for (const sessionId of renderedTerminalOrder.value) {
+    const session = sessionStore.sessions.get(sessionId);
+    if (session) result.push([sessionId, session]);
+  }
+  return result;
+});
+
+watch(
+  () => [props.activeSessionId, ...sessionStore.sessions.keys()],
+  () => {
+    const existingIds = new Set(sessionStore.sessions.keys());
+    const nextOrder = renderedTerminalOrder.value.filter(id => existingIds.has(id));
+    if (props.activeSessionId && existingIds.has(props.activeSessionId)) {
+      const withoutActive = nextOrder.filter(id => id !== props.activeSessionId);
+      withoutActive.push(props.activeSessionId);
+      renderedTerminalOrder.value = withoutActive.slice(-MAX_RENDERED_TERMINALS);
+    } else {
+      renderedTerminalOrder.value = nextOrder.slice(-MAX_RENDERED_TERMINALS);
+    }
+  },
+  { immediate: true },
+);
 
 const hasSshSessions = computed(() => {
  // Check if any session has a terminalManager (indicates SSH)
@@ -577,7 +606,7 @@ onBeforeUnmount(() => {
 
                        <!-- Terminal Instances: v-show must live on a real DOM node. -->
                        <div
-                           v-for="[sessionId, sessionState] in sessionStore.sessions"
+                           v-for="[sessionId, sessionState] in renderedTerminalSessions"
                            v-show="sessionId === activeSessionId"
                            :key="sessionId"
                            :class="['terminal-instance-wrapper absolute inset-0 w-full h-full', { 'terminal-transparent': isTerminalBackgroundEnabled }]"

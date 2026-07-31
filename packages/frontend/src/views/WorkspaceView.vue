@@ -153,6 +153,7 @@ onMounted(() => {
   subscribeWorkspaceEvent('terminal:input', handleTerminalInput);
   subscribeWorkspaceEvent('terminal:resize', handleTerminalResize);
   subscribeWorkspaceEvent('terminal:ready', handleTerminalReady);
+  subscribeWorkspaceEvent('terminal:detached', handleTerminalDetached);
   subscribeWorkspaceEvent('terminal:clear', handleClearTerminal);
   subscribeWorkspaceEvent('terminal:scrollToBottomRequest', handleScrollToBottomRequest);
 
@@ -332,6 +333,11 @@ onBeforeUnmount(() => {
     // *** 修正：传递包含 terminal 和 searchAddon 的完整 payload ***
     sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalReady(payload);
 };
+
+ const handleTerminalDetached = (payload: { sessionId: string; terminal: XtermTerminal; snapshot?: string }) => {
+    sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalDetached(payload);
+ };
+
 
 // --- 搜索事件处理 ---
 const handleSearch = (term: string) => { // +++ 修改 +++

@@ -163,6 +163,22 @@ const getScrollbackValue = (limit: number): number => {
   return Math.max(0, limit); // Ensure non-negative, return the number otherwise
 };
 
+const captureTerminalSnapshot = (term: Terminal): string | undefined => {
+  const buffer = term.buffer.active;
+  const encoder = new TextEncoder();
+  const lines: string[] = [];
+  let bytes = 0;
+  for (let index = buffer.length - 1; index >= 0 && lines.length < 1000; index -= 1) {
+    const line = buffer.getLine(index)?.translateToString(true) ?? '';
+    const lineBytes = encoder.encode(line).length + 2;
+    if (bytes + lineBytes > 1024 * 1024 && lines.length > 0) break;
+    lines.push(line);
+    bytes += lineBytes;
+  }
+  while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+  return lines.length > 0 ? `${lines.reverse().join('\r\n')}\r\n` : undefined;
+};
+
 // --- 右键复制 / 粘贴功能 ---
 const handleContextMenuPaste = async (event: MouseEvent) => {
   event.preventDefault(); // 阻止默认右键菜单
@@ -605,6 +621,11 @@ onBeforeUnmount(() => {
   observedElement = null;
 
   if (terminal) {
+    emitWorkspaceEvent('terminal:detached', {
+      sessionId: props.sessionId,
+      terminal,
+      snapshot: captureTerminalSnapshot(terminal),
+    });
     console.log(`[Terminal ${props.sessionId}] Disposing terminal instance.`);
     terminal.dispose();
     terminal = null;

@@ -28,9 +28,6 @@ export interface ClientState { // 导出以便 Service 可以导入
     connectionName?: string; // 连接名称字段
     sftp?: SFTPWrapper; //  sftp 实例 (由 SftpService 管理)
     statusIntervalId?: NodeJS.Timeout; // 状态轮询 ID (由 StatusMonitorService 管理)
-    dockerStatusIntervalId?: NodeJS.Timeout; //  Docker 状态轮询 ID
-    backgroundStartupTimer?: NodeJS.Timeout; // 延后非交互式状态探测，优先显示终端
-    backgroundServicesStarted?: boolean;
     ipAddress?: string; //  IP 地址字段
     isShellReady?: boolean; // 标记 Shell 是否已准备好处理输入和调整大小
     isSuspendedByService?: boolean; // 标记此会话是否已被 SshSuspendService 接管

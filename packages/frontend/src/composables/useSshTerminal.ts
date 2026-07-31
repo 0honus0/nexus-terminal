@@ -30,7 +30,23 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     // const searchResultCount = ref(0);
     // const currentSearchResultIndex = ref(-1);
     const terminalOutputBuffer = ref<(string | Uint8Array)[]>([]); // 缓冲 WebSocket 消息直到终端准备好
+    const MAX_BUFFERED_OUTPUT_BYTES = 1024 * 1024;
+    const outputEncoder = new TextEncoder();
+    let bufferedOutputBytes = 0;
     const isSshConnected = ref(false); // 跟踪 SSH 连接状态
+
+    const outputSize = (data: string | Uint8Array): number => (
+        typeof data === 'string' ? outputEncoder.encode(data).length : data.byteLength
+    );
+
+    const bufferTerminalOutput = (data: string | Uint8Array) => {
+        terminalOutputBuffer.value.push(data);
+        bufferedOutputBytes += outputSize(data);
+        while (bufferedOutputBytes > MAX_BUFFERED_OUTPUT_BYTES && terminalOutputBuffer.value.length > 1) {
+            const removed = terminalOutputBuffer.value.shift();
+            if (removed) bufferedOutputBytes -= outputSize(removed);
+        }
+    };
 
     // 辅助函数：获取终端消息文本
     const getTerminalText = (key: string, params?: Record<string, any>): string => {
@@ -74,10 +90,20 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
                  term.write(data);
             });
             terminalOutputBuffer.value = []; // 清空内部缓冲区
+            bufferedOutputBytes = 0;
         }
         
         // 可以在这里自动聚焦或执行其他初始化操作
         // term.focus(); // 也许在 ssh:connected 时聚焦更好
+    };
+
+    const handleTerminalDetached = (payload: { terminal: Terminal; snapshot?: string }) => {
+        if (terminalInstance.value !== payload.terminal) return;
+        terminalInstance.value = null;
+        searchAddon.value = null;
+        terminalOutputBuffer.value = [];
+        bufferedOutputBytes = 0;
+        if (payload.snapshot) bufferTerminalOutput(payload.snapshot);
     };
 
     const handleTerminalData = (data: string) => {
@@ -147,7 +173,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             // console.log(`[会话 ${sessionId}][SSH前端] 写入完成。`);
         } else {
             // 如果终端还没准备好，先缓冲输出
-            terminalOutputBuffer.value.push(outputData);
+            bufferTerminalOutput(outputData);
         }
     };
 
@@ -177,10 +203,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
 
         // 清空可能存在的旧缓冲（虽然理论上此时应该已经 ready 了）
-        if (terminalOutputBuffer.value.length > 0) {
+        if (terminalOutputBuffer.value.length > 0 && terminalInstance.value) {
              console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接时仍有缓冲数据，正在写入...`);
              terminalOutputBuffer.value.forEach(data => terminalInstance.value?.write(data));
              terminalOutputBuffer.value = [];
+             bufferedOutputBytes = 0;
         }
     };
 
@@ -329,6 +356,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     return {
         // 公共接口
         handleTerminalReady,
+        handleTerminalDetached,
         handleTerminalData, // 这个处理来自 xterm.js 的输入
         handleTerminalResize,
         sendData, // 允许外部直接发送数据

@@ -4,7 +4,6 @@ import { clientStates, sftpService, statusMonitorService, auditLogService, notif
 import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
-import { startDockerStatusPolling } from './docker.handler';
 import WebSocket from 'ws';
 
 const encodeForPosixPrintf = (value: string): string =>
@@ -408,32 +407,8 @@ export async function handleSshConnect(
             connectionName: connInfo!.name,
             ipAddress: clientIp,
             isShellReady: false,
-            backgroundServicesStarted: false,
         };
         clientStates.set(newSessionId, newState);
-
-        const startBackgroundServices = (): void => {
-            const currentState = clientStates.get(newSessionId);
-            if (!currentState || currentState.backgroundServicesStarted) return;
-
-            currentState.backgroundServicesStarted = true;
-            if (currentState.backgroundStartupTimer) {
-                clearTimeout(currentState.backgroundStartupTimer);
-                currentState.backgroundStartupTimer = undefined;
-            }
-
-            void statusMonitorService.startStatusPolling(newSessionId)
-                .catch(error => console.error(`[StatusMonitor ${newSessionId}] 延后启动失败:`, error));
-            void startDockerStatusPolling(newSessionId)
-                .catch(error => console.error(`[Docker Polling ${newSessionId}] 延后启动失败:`, error));
-        };
-
-        const scheduleBackgroundServices = (delayMs: number): void => {
-            if (newState.backgroundServicesStarted) return;
-            if (newState.backgroundStartupTimer) clearTimeout(newState.backgroundStartupTimer);
-            newState.backgroundStartupTimer = setTimeout(startBackgroundServices, delayMs);
-        };
-        let terminalOutputObserved = false;
         console.log(`WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`);
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: 'SSH 连接成功，正在打开 Shell...' }));
@@ -475,16 +450,7 @@ export async function handleSshConnect(
                 // commands during login; start it only when the file manager asks to
                 // read the terminal cwd or to synchronize the terminal directory.
 
-                // If a shell produces no banner or prompt, still start background services shortly.
-                scheduleBackgroundServices(1000);
-
                 stream.on('data', (data: Buffer) => {
-                    if (!terminalOutputObserved) {
-                        terminalOutputObserved = true;
-                        // Let the login banner/prompt reach the browser first. The status and
-                        // Docker probes open additional exec channels and can contend on slow hosts.
-                        scheduleBackgroundServices(150);
-                    }
                     const visibleOutput = filterSshShellOutput(newState, data.toString('utf8'));
                     if (visibleOutput && ws.readyState === WebSocket.OPEN) {
                         // 确保数据以 UTF-8 编码转换为 Base64
@@ -741,14 +707,16 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
     }
 }
 
-// 处理会话恢复后的状态监控启动
-export function handleSshResumeSuccess(sessionId: string): void {
-    const state = clientStates.get(sessionId);
-    if (state && state.sshClient) {
-        statusMonitorService.startStatusPolling(sessionId);
-        // 如果 Docker 状态也需要恢复，可以在这里添加
-        // startDockerStatusPolling(sessionId);
-    } else {
-        console.error(`[SSH Handler ${sessionId}] 无法为恢复的会话启动状态轮询：未找到会话状态或 SSH 客户端。`);
-    }
+export function handleStatusSubscribe(ws: AuthenticatedWebSocket): void {
+    const sessionId = ws.sessionId;
+    if (!sessionId || !clientStates.has(sessionId)) return;
+    void statusMonitorService.startStatusPolling(sessionId)
+        .catch(error => console.error(`[StatusMonitor ${sessionId}] 启动失败:`, error));
 }
+
+export function handleStatusUnsubscribe(ws: AuthenticatedWebSocket): void {
+    if (ws.sessionId) statusMonitorService.stopStatusPolling(ws.sessionId);
+}
+
+// 恢复会话后等待前端状态面板显式订阅，避免无界面的后台采样。
+export function handleSshResumeSuccess(_sessionId: string): void {}

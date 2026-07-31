@@ -3,430 +3,339 @@ import { WebSocket } from 'ws';
 import { ClientState } from '../websocket';
 import { settingsService } from '../settings/settings.service';
 
-
 interface ServerStatus {
     cpuPercent?: number;
     memPercent?: number;
-    memUsed?: number; // MB
-    memTotal?: number; // MB
+    memUsed?: number;
+    memTotal?: number;
     swapPercent?: number;
-    swapUsed?: number; // MB
-    swapTotal?: number; // MB
+    swapUsed?: number;
+    swapTotal?: number;
     diskPercent?: number;
-    diskUsed?: number; // KB
-    diskTotal?: number; // KB
+    diskUsed?: number;
+    diskTotal?: number;
     cpuModel?: string;
-    netRxRate?: number; // Bytes per second
-    netTxRate?: number; // Bytes per second
+    netRxRate?: number;
+    netTxRate?: number;
     netInterface?: string;
     osName?: string;
-    loadAvg?: number[]; // 系统平均负载 [1min, 5min, 15min]
-    timestamp: number; // 状态获取时间戳
+    loadAvg?: number[];
+    timestamp: number;
 }
-
 
 interface NetworkStats {
     [interfaceName: string]: {
         rx_bytes: number;
         tx_bytes: number;
-    }
+    };
 }
 
+interface StaticStatusInfo {
+    osName: string;
+    cpuModel: string;
+    netInterface?: string;
+}
 
-// 用于存储上一次的网络统计信息以计算速率
-const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: number }>();
+const previousNetStats = new Map<string, { rx: number; tx: number; timestamp: number }>();
+
+const SECTION_PREFIX = '__NEXUS_STATUS_';
+const SECTION_NAMES = [
+    'OS_RELEASE',
+    'CPU_MODEL',
+    'MEMINFO',
+    'DISK',
+    'PROC_STAT',
+    'LOADAVG',
+    'NET_ROUTE',
+    'NET_DEV',
+] as const;
+
+type SectionName = typeof SECTION_NAMES[number];
 
 export class StatusMonitorService {
-    private clientStates: Map<string, ClientState>; // 使用导入的 ClientState
-    // 用于存储上一次的 CPU 统计信息以计算使用率
-    private previousCpuStats = new Map<string, { total: number, idle: number, timestamp: number, lastPercent: number }>();
+    private previousCpuStats = new Map<string, { total: number; idle: number; timestamp: number; lastPercent: number }>();
+    private staticInfo = new Map<string, StaticStatusInfo>();
     private fetchInFlight = new Set<string>();
+    private subscribedSessions = new Set<string>();
+    private startInFlight = new Set<string>();
     private bootstrapSamplePending = new Set<string>();
     private bootstrapTimers = new Map<string, NodeJS.Timeout>();
 
-    constructor(clientStates: Map<string, ClientState>) {
-        this.clientStates = clientStates;
-    }
+    constructor(private readonly clientStates: Map<string, ClientState>) {}
 
-    /**
-     * 启动指定会话的状态轮询
-     * @param sessionId 会话 ID
-     */
     async startStatusPolling(sessionId: string): Promise<void> {
-        const state = this.clientStates.get(sessionId);
-        if (!state || !state.sshClient) {
-            return;
+        this.subscribedSessions.add(sessionId);
+        const initialState = this.clientStates.get(sessionId);
+        if (!initialState?.sshClient || initialState.statusIntervalId || this.startInFlight.has(sessionId)) return;
+
+        this.startInFlight.add(sessionId);
+        try {
+            let intervalMs = 3000;
+            try {
+                intervalMs = Math.max(1000, (await settingsService.getStatusMonitorIntervalSeconds()) * 1000);
+            } catch (error) {
+                console.error(`[StatusMonitor ${sessionId}] 获取轮询间隔设置失败，使用默认值 3000ms:`, error);
+            }
+
+            const state = this.clientStates.get(sessionId);
+            if (!this.subscribedSessions.has(sessionId) || !state?.sshClient || state.statusIntervalId) return;
+
+            this.bootstrapSamplePending.add(sessionId);
+            state.statusIntervalId = setInterval(() => {
+                void this.fetchAndSendServerStatus(sessionId);
+            }, intervalMs);
+            void this.fetchAndSendServerStatus(sessionId);
+        } finally {
+            this.startInFlight.delete(sessionId);
         }
-        if (state.statusIntervalId) {
-             return;
-         }
-
-         // +++ 从 settingsService 获取轮询间隔 +++
-         let intervalMs: number;
-         try {
-             const intervalSeconds = await settingsService.getStatusMonitorIntervalSeconds();
-             intervalMs = intervalSeconds * 1000;
-             console.log(`[StatusMonitor ${sessionId}] 使用配置的轮询间隔: ${intervalSeconds} 秒 (${intervalMs}ms)`);
-         } catch (error) {
-             console.error(`[StatusMonitor ${sessionId}] 获取轮询间隔设置失败，将使用默认值 3000ms:`, error);
-             intervalMs = 3000; // 出错时回退到 3 秒
-         }
-
-         this.bootstrapSamplePending.add(sessionId);
-         void this.fetchAndSendServerStatus(sessionId);
-         state.statusIntervalId = setInterval(() => {
-             void this.fetchAndSendServerStatus(sessionId);
-         }, intervalMs); // --- 使用获取到的间隔 ---
     }
 
-    /**
-     * 停止指定会话的状态轮询
-     * @param sessionId 会话 ID
-     */
     stopStatusPolling(sessionId: string): void {
+        this.subscribedSessions.delete(sessionId);
         const state = this.clientStates.get(sessionId);
         if (state?.statusIntervalId) {
-            //console.warn(`[StatusMonitor] 停止会话 ${sessionId} 的状态轮询。`);
             clearInterval(state.statusIntervalId);
             state.statusIntervalId = undefined;
-            previousNetStats.delete(sessionId); // 清理网络统计缓存
-            this.previousCpuStats.delete(sessionId); // 清理 CPU 统计缓存
         }
+
         const bootstrapTimer = this.bootstrapTimers.get(sessionId);
         if (bootstrapTimer) clearTimeout(bootstrapTimer);
         this.bootstrapTimers.delete(sessionId);
         this.bootstrapSamplePending.delete(sessionId);
-        this.fetchInFlight.delete(sessionId);
+        previousNetStats.delete(sessionId);
+        this.previousCpuStats.delete(sessionId);
     }
 
-    /**
-     * 获取并发送服务器状态给客户端
-     * @param sessionId 会话 ID
-     */
+    clearSession(sessionId: string): void {
+        this.stopStatusPolling(sessionId);
+        this.startInFlight.delete(sessionId);
+        this.staticInfo.delete(sessionId);
+    }
+
     private async fetchAndSendServerStatus(sessionId: string): Promise<void> {
-        if (this.fetchInFlight.has(sessionId)) {
-            return;
-        }
+        if (this.fetchInFlight.has(sessionId)) return;
+
         const state = this.clientStates.get(sessionId);
-        if (!state || !state.sshClient || state.ws.readyState !== WebSocket.OPEN) {
-            //console.warn(`[StatusMonitor] 无法获取会话 ${sessionId} 的状态，停止轮询。原因：状态无效、SSH断开或WS关闭。`);
+        if (!state?.sshClient || state.ws.readyState !== WebSocket.OPEN) {
             this.stopStatusPolling(sessionId);
             return;
         }
+
         this.fetchInFlight.add(sessionId);
         try {
-            // 传递 sessionId 给 fetchServerStatus 以便查找 previousNetStats
             const status = await this.fetchServerStatus(state.sshClient, sessionId);
-            if (state.ws.readyState === WebSocket.OPEN) {
-                state.ws.send(JSON.stringify({ type: 'status_update', payload: { connectionId: state.dbConnectionId, status } }));
+            if (state.ws.readyState === WebSocket.OPEN && state.statusIntervalId) {
+                state.ws.send(JSON.stringify({
+                    type: 'status_update',
+                    payload: { connectionId: state.dbConnectionId, status },
+                }));
             }
 
-            if (this.bootstrapSamplePending.delete(sessionId)) {
+            if (this.bootstrapSamplePending.delete(sessionId) && state.statusIntervalId) {
                 const timer = setTimeout(() => {
                     this.bootstrapTimers.delete(sessionId);
                     void this.fetchAndSendServerStatus(sessionId);
                 }, 500);
                 this.bootstrapTimers.set(sessionId, timer);
             }
-        } catch (error: any) {
-            // --- 移除 console.warn ---
-            // console.warn(`[StatusMonitor] 获取会话 ${sessionId} 服务器状态失败:`, error);
-            if (state.ws.readyState === WebSocket.OPEN) {
-                state.ws.send(JSON.stringify({ type: 'status:error', payload: { connectionId: state.dbConnectionId, message: `获取状态失败: ${error.message}` } }));
+        } catch (error) {
+            if (state.ws.readyState === WebSocket.OPEN && state.statusIntervalId) {
+                const message = error instanceof Error ? error.message : String(error);
+                state.ws.send(JSON.stringify({
+                    type: 'status:error',
+                    payload: { connectionId: state.dbConnectionId, message: `获取状态失败: ${message}` },
+                }));
             }
         } finally {
             this.fetchInFlight.delete(sessionId);
         }
     }
 
-     /**
-      * 通过 SSH 执行命令获取服务器状态信息
-      * @param sshClient SSH 客户端实例
-      * @param sessionId 当前会话 ID，用于网络速率计算
-      * @returns Promise<ServerStatus> 服务器状态信息
-      */
-     private async fetchServerStatus(sshClient: Client, sessionId: string): Promise<ServerStatus> {
-        //  console.debug(`[StatusMonitor ${sessionId}] Fetching server status...`);
-         const timestamp = Date.now();
-         let status: Partial<ServerStatus> = { timestamp };
+    private async fetchServerStatus(sshClient: Client, sessionId: string): Promise<ServerStatus> {
+        const timestamp = Date.now();
+        const includeStatic = !this.staticInfo.has(sessionId);
+        const output = await this.executeSshCommand(sshClient, this.buildCombinedStatusCommand(includeStatic));
+        const sections = this.parseSections(output);
 
-         try {
-             // --- OS Name ---
-             try {
-                 const osReleaseOutput = await this.executeSshCommand(sshClient, 'cat /etc/os-release');
-                 const nameMatch = osReleaseOutput.match(/^PRETTY_NAME="?([^"]+)"?/m);
-                 status.osName = nameMatch ? nameMatch[1] : (osReleaseOutput.match(/^NAME="?([^"]+)"?/m)?.[1] ?? 'Unknown');
-             } catch (err) { }
-
-             try {
-                 let cpuModelOutput = '';
-                 try {
-                     cpuModelOutput = await this.executeSshCommand(sshClient, "cat /proc/cpuinfo | grep 'model name' | head -n 1");
-                     status.cpuModel = cpuModelOutput.match(/model name\s*:\s*(.*)/i)?.[1].trim();
-                 } catch (procErr) {
-
-                     try {
-                         cpuModelOutput = await this.executeSshCommand(sshClient, "lscpu | grep 'Model name:'");
-                         status.cpuModel = cpuModelOutput.match(/Model name:\s+(.*)/)?.[1].trim();
-                     } catch (lscpuErr) {
-
-                     }
-                 }
-                 if (!status.cpuModel) {
-                     status.cpuModel = 'Unknown';
-                 }
-             } catch (err) {
-
-                 status.cpuModel = 'Unknown';
-             }
-
-
-             try {
-                 const meminfoOutput = await this.executeSshCommand(sshClient, 'cat /proc/meminfo');
-                 Object.assign(status, this.parseProcMeminfo(meminfoOutput));
-             } catch (err) { /* 静默处理 */ }
-
-
-             try {
-                 let dfCommand = "df -kP /"; // 优先尝试 POSIX 标准格式
-                 let dfOutput: string;
-                 try {
-                     dfOutput = await this.executeSshCommand(sshClient, dfCommand);
-                 } catch (errP) {
-                     dfCommand = "df -k /"; // 备用方案
-                     try {
-                        dfOutput = await this.executeSshCommand(sshClient, dfCommand);
-                     } catch (errK) {
-                        dfOutput = "";
-                     }
-                 }
-
-                 if (dfOutput) {
-                     const lines = dfOutput.split('\n');
-                     let parsedDiskInfo = false;
-                     // 从第二行开始查找根挂载点信息 (跳过表头)
-                     for (let i = 1; i < lines.length; i++) {
-                         const line = lines[i].trim();
-                         // 确保是根挂载点，通常以 " /" 结尾
-                         if (line.endsWith(" /")) {
-                             const parts = line.split(/\s+/);
-                             // 预期 parts 至少包含: 文件系统, 总量(KB), 已用(KB), 可用(KB), 百分比%, 挂载点
-                             // 例如: /dev/sda1 10307920 3841884 5941800 40% /
-                             if (parts.length >= 5) {
-                                 const total = parseInt(parts[1], 10);
-                                 const used = parseInt(parts[2], 10);
-                                 const percentStr = parts.find(p => p.endsWith('%')); // 查找百分比字符串
-
-                                 if (percentStr) {
-                                     const percentMatch = percentStr.match(/(\d+)%/);
-                                     if (!isNaN(total) && !isNaN(used) && percentMatch && percentMatch[1]) {
-                                         status.diskTotal = total; // KB
-                                         status.diskUsed = used;   // KB
-                                         status.diskPercent = parseFloat(percentMatch[1]);
-                                         parsedDiskInfo = true;
-                                         break;
-                                     }
-                                 }
-                             }
-                         }
-                     }
-
-                 }
-             } catch (err) {
-                 // 如果捕获到错误 (例如 executeSshCommand 内部的 Promise reject), disk* 字段将保持 undefined
-             }
-
-            try {
-                const procStatOutput = await this.executeSshCommand(sshClient, 'cat /proc/stat');
-                const currentCpuTimes = this.parseProcStat(procStatOutput);
-                const now = Date.now(); // Use a consistent timestamp
-
-                if (currentCpuTimes) {
-                    const prevCpuStats = this.previousCpuStats.get(sessionId);
-
-                    if (prevCpuStats && prevCpuStats.timestamp < now) {
-                        const totalDiff = currentCpuTimes.total - prevCpuStats.total;
-                        const idleDiff = currentCpuTimes.idle - prevCpuStats.idle;
-                        const timeDiffMs = now - prevCpuStats.timestamp; // Time difference in ms
-                        let nextPercent = prevCpuStats.lastPercent;
-
-                        // Ensure positive difference and minimal time gap (e.g., > 100ms) to avoid division by zero or erratic results
-                        if (totalDiff < 0 || idleDiff < 0) {
-                            // CPU counters can reset after reboot; keep the last value and use this sample as a new baseline.
-                            nextPercent = prevCpuStats.lastPercent;
-                        } else if (totalDiff > 0 && timeDiffMs > 100) {
-                            const safeIdleDiff = Math.min(idleDiff, totalDiff);
-                            const usageRatio = 1.0 - (safeIdleDiff / totalDiff);
-                            // Clamp value between 0 and 100, format to 1 decimal place
-                            nextPercent = parseFloat((Math.max(0, Math.min(100, usageRatio * 100))).toFixed(1));
-                        }
-                        status.cpuPercent = nextPercent;
-                        this.previousCpuStats.set(sessionId, { ...currentCpuTimes, timestamp: now, lastPercent: nextPercent });
-                    } else {
-                        // First run or timestamp issue, report 0 as we can't calculate a rate
-                        status.cpuPercent = 0;
-                        this.previousCpuStats.set(sessionId, { ...currentCpuTimes, timestamp: now, lastPercent: 0 });
-                    }
-                } else {
-                    // Failed to parse /proc/stat, set to undefined or keep previous? Let's use undefined.
-                    status.cpuPercent = undefined;
-                }
-            } catch (err) {
-                // Failed to execute cat /proc/stat
-                status.cpuPercent = undefined;
-                // console.warn(`[StatusMonitor ${sessionId}] Failed to get CPU stats via /proc/stat:`, err);
-            }
-
-            try {
-                const uptimeOutput = await this.executeSshCommand(sshClient, 'uptime');
-                 const match = uptimeOutput.match(/load average(?:s)?:\s*([\d.]+)[, ]?\s*([\d.]+)[, ]?\s*([\d.]+)/);
-                 if (match) status.loadAvg = [parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])];
-             } catch (err) { /* 静默处理 */ }
-
-
-             try {
-                 const currentStats = await this.parseProcNetDev(sshClient);
-                 if (currentStats) {
-                     const defaultInterface = await this.getDefaultInterface(sshClient) || Object.keys(currentStats).find(iface => iface !== 'lo'); // Detect or fallback excluding loopback
-
-                     if (defaultInterface && currentStats[defaultInterface]) {
-                         status.netInterface = defaultInterface;
-                         const currentRx = currentStats[defaultInterface].rx_bytes;
-                         const currentTx = currentStats[defaultInterface].tx_bytes;
-                         const prevStats = previousNetStats.get(sessionId);
-
-                         if (prevStats && prevStats.timestamp < timestamp) {
-                             const timeDiffSeconds = (timestamp - prevStats.timestamp) / 1000;
-                             if (timeDiffSeconds > 0.1) {
-                                 status.netRxRate = Math.max(0, Math.round((currentRx - prevStats.rx) / timeDiffSeconds));
-                                 status.netTxRate = Math.max(0, Math.round((currentTx - prevStats.tx) / timeDiffSeconds));
-                             } else { status.netRxRate = 0; status.netTxRate = 0; }
-                         } else { status.netRxRate = 0; status.netTxRate = 0; }
-
-                         previousNetStats.set(sessionId, { rx: currentRx, tx: currentTx, timestamp });
-                     } else { /* 静默处理 */ }
-                 }
-             } catch (err) { /* 静默处理 */ }
-
-         } catch (error) {
-             console.error(`[StatusMonitor ${sessionId}] General error fetching server status:`, error);
-         }
-
-         return status as ServerStatus;
-     }
-
-    /**
-     * 解析 /proc/net/dev 的输出
-     * @param sshClient SSH 客户端实例
-     * @returns Promise<NetworkStats | null> 解析后的网络统计信息或 null
-     */
-    private async parseProcNetDev(sshClient: Client): Promise<NetworkStats | null> {
-        let output: string;
-        try {
-            // 将命令执行放入 try...catch
-            output = await this.executeSshCommand(sshClient, 'cat /proc/net/dev');
-        } catch (error) {
-            // 如果命令失败，记录警告并返回 null
-
-            return null;
+        let staticInfo = this.staticInfo.get(sessionId);
+        if (!staticInfo) {
+            const netStats = this.parseProcNetDev(sections.get('NET_DEV') ?? '');
+            staticInfo = {
+                osName: this.parseOsName(sections.get('OS_RELEASE') ?? ''),
+                cpuModel: (sections.get('CPU_MODEL') ?? '').trim() || 'Unknown',
+                netInterface: this.parseDefaultInterface(sections.get('NET_ROUTE') ?? '', netStats),
+            };
+            this.staticInfo.set(sessionId, staticInfo);
         }
-        // 如果命令成功，继续解析
-        try {
-            const lines = output.split('\n').slice(2); // Skip header lines
-            const stats: NetworkStats = {};
-            for (const line of lines) {
-                const parts = line.trim().split(/:\s+|\s+/);
-                if (parts.length < 17) continue;
-                const interfaceName = parts[0];
-                const rx_bytes = parseInt(parts[1], 10);
-                const tx_bytes = parseInt(parts[9], 10);
-                if (!isNaN(rx_bytes) && !isNaN(tx_bytes)) {
-                    stats[interfaceName] = { rx_bytes, tx_bytes };
+
+        const status: ServerStatus = {
+            timestamp,
+            osName: staticInfo.osName,
+            cpuModel: staticInfo.cpuModel,
+            netInterface: staticInfo.netInterface,
+        };
+
+        const meminfo = sections.get('MEMINFO');
+        if (meminfo) Object.assign(status, this.parseProcMeminfo(meminfo));
+
+        const disk = sections.get('DISK');
+        if (disk) Object.assign(status, this.parseDiskUsage(disk));
+
+        const cpuTimes = this.parseProcStat(sections.get('PROC_STAT') ?? '');
+        if (cpuTimes) {
+            const previous = this.previousCpuStats.get(sessionId);
+            let cpuPercent = previous?.lastPercent ?? 0;
+            if (previous && previous.timestamp < timestamp) {
+                const totalDiff = cpuTimes.total - previous.total;
+                const idleDiff = cpuTimes.idle - previous.idle;
+                if (totalDiff > 0 && idleDiff >= 0) {
+                    cpuPercent = Number((Math.max(0, Math.min(1, 1 - Math.min(idleDiff, totalDiff) / totalDiff)) * 100).toFixed(1));
                 }
             }
-            return Object.keys(stats).length > 0 ? stats : null;
-        } catch (parseError) {
-            return null;
+            status.cpuPercent = cpuPercent;
+            this.previousCpuStats.set(sessionId, { ...cpuTimes, timestamp, lastPercent: cpuPercent });
         }
-    }
 
-    /**
-     * 获取默认网络接口名称 (Linux specific)
-     * @param sshClient SSH 客户端实例
-     * @returns Promise<string | null> 默认接口名称或 null
-     */
-    private async getDefaultInterface(sshClient: Client): Promise<string | null> {
-        try {
-            // 使用 ip route 命令查找默认路由对应的接口
-            const output = await this.executeSshCommand(sshClient, "ip route get 1.1.1.1 | grep -oP 'dev\\s+\\K\\S+'");
-            const interfaceName = output.trim();
-            if (interfaceName) return interfaceName;
-            // 如果 ip route 没返回有效接口名，也尝试 fallback
+        const loadFields = (sections.get('LOADAVG') ?? '').trim().split(/\s+/).slice(0, 3).map(Number);
+        if (loadFields.length === 3 && loadFields.every(Number.isFinite)) status.loadAvg = loadFields;
 
-
-        } catch (error) {
-
-        try {
-             const netDevOutput = await this.executeSshCommand(sshClient, 'cat /proc/net/dev');
-             const lines = netDevOutput.split('\n').slice(2);
-             for (const line of lines) {
-                     const iface = line.trim().split(':')[0];
-                     if (iface && iface !== 'lo') {
-                         return iface;
-                     }
-                 }
-            } catch (fallbackError) {
-
+        const netStats = this.parseProcNetDev(sections.get('NET_DEV') ?? '');
+        let netInterface = staticInfo.netInterface;
+        if (!netInterface || !netStats[netInterface]) {
+            netInterface = Object.keys(netStats).find(name => name !== 'lo');
+            staticInfo.netInterface = netInterface;
+            status.netInterface = netInterface;
+        }
+        if (netInterface && netStats[netInterface]) {
+            const current = netStats[netInterface];
+            const previous = previousNetStats.get(sessionId);
+            if (previous && previous.timestamp < timestamp) {
+                const elapsedSeconds = (timestamp - previous.timestamp) / 1000;
+                status.netRxRate = elapsedSeconds > 0
+                    ? Math.max(0, Math.round((current.rx_bytes - previous.rx) / elapsedSeconds))
+                    : 0;
+                status.netTxRate = elapsedSeconds > 0
+                    ? Math.max(0, Math.round((current.tx_bytes - previous.tx) / elapsedSeconds))
+                    : 0;
+            } else {
+                status.netRxRate = 0;
+                status.netTxRate = 0;
             }
-
-            return null;
+            previousNetStats.set(sessionId, { rx: current.rx_bytes, tx: current.tx_bytes, timestamp });
         }
 
-        return null;
+        return status;
     }
 
-    /**
-     * 在 SSH 连接上执行单个命令
-     * @param sshClient SSH 客户端实例
-     * @param command 要执行的命令
-     * @returns Promise<string> 命令的标准输出
-     * @throws Error 如果命令执行失败
-     */
+    private buildCombinedStatusCommand(includeStatic: boolean): string {
+        const marker = (name: SectionName): string => `printf '\\n${SECTION_PREFIX}${name}__\\n';`;
+        const commands: string[] = ['export LC_ALL=C;'];
+
+        if (includeStatic) {
+            commands.push(
+                marker('OS_RELEASE'),
+                'cat /etc/os-release 2>/dev/null || true;',
+                marker('CPU_MODEL'),
+                "awk -F: '/model name|Hardware|Processor/{value=$2; sub(/^[[:space:]]+/, \"\", value); if (value != \"\") { print value; exit }}' /proc/cpuinfo 2>/dev/null || true;",
+                marker('NET_ROUTE'),
+                'cat /proc/net/route 2>/dev/null || true;',
+            );
+        }
+
+        commands.push(
+            marker('MEMINFO'),
+            'cat /proc/meminfo 2>/dev/null || true;',
+            marker('DISK'),
+            'df -kP / 2>/dev/null || df -k / 2>/dev/null || true;',
+            marker('PROC_STAT'),
+            "sed -n '1p' /proc/stat 2>/dev/null || true;",
+            marker('LOADAVG'),
+            'cat /proc/loadavg 2>/dev/null || true;',
+            marker('NET_DEV'),
+            'cat /proc/net/dev 2>/dev/null || true;',
+        );
+
+        return commands.join(' ');
+    }
+
+    private parseSections(output: string): Map<SectionName, string> {
+        const sections = new Map<SectionName, string>();
+        let current: SectionName | null = null;
+        const linesBySection = new Map<SectionName, string[]>();
+
+        for (const line of output.replace(/\r/g, '').split('\n')) {
+            const match = line.match(/^__NEXUS_STATUS_([A-Z_]+)__$/);
+            if (match && SECTION_NAMES.includes(match[1] as SectionName)) {
+                current = match[1] as SectionName;
+                if (!linesBySection.has(current)) linesBySection.set(current, []);
+                continue;
+            }
+            if (current) linesBySection.get(current)?.push(line);
+        }
+
+        linesBySection.forEach((lines, name) => sections.set(name, lines.join('\n').trim()));
+        return sections;
+    }
+
+    private parseOsName(output: string): string {
+        return output.match(/^PRETTY_NAME="?([^"\n]+)"?/m)?.[1]
+            ?? output.match(/^NAME="?([^"\n]+)"?/m)?.[1]
+            ?? 'Unknown';
+    }
+
+    private parseDefaultInterface(routeOutput: string, netStats: NetworkStats): string | undefined {
+        for (const line of routeOutput.split('\n').slice(1)) {
+            const fields = line.trim().split(/\s+/);
+            if (fields.length >= 4 && fields[1] === '00000000') return fields[0];
+        }
+        return Object.keys(netStats).find(name => name !== 'lo');
+    }
+
+    private parseProcNetDev(output: string): NetworkStats {
+        const stats: NetworkStats = {};
+        for (const line of output.split('\n').slice(2)) {
+            const separator = line.indexOf(':');
+            if (separator < 0) continue;
+            const interfaceName = line.slice(0, separator).trim();
+            const fields = line.slice(separator + 1).trim().split(/\s+/).map(Number);
+            if (!interfaceName || fields.length < 9 || !Number.isFinite(fields[0]) || !Number.isFinite(fields[8])) continue;
+            stats[interfaceName] = { rx_bytes: fields[0], tx_bytes: fields[8] };
+        }
+        return stats;
+    }
+
+    private parseDiskUsage(output: string): Pick<ServerStatus, 'diskTotal' | 'diskUsed' | 'diskPercent'> {
+        const lines = output.split('\n').map(line => line.trim()).filter(Boolean);
+        const dataLine = lines.slice(1).find(line => line.endsWith(' /')) ?? (lines.length > 0 ? lines[lines.length - 1] : '');
+        const fields = dataLine.split(/\s+/);
+        const percentField = fields.find((field: string) => /^\d+%$/.test(field));
+        const total = Number(fields[1]);
+        const used = Number(fields[2]);
+        const percent = percentField ? Number(percentField.slice(0, -1)) : Number.NaN;
+        return {
+            diskTotal: Number.isFinite(total) ? total : undefined,
+            diskUsed: Number.isFinite(used) ? used : undefined,
+            diskPercent: Number.isFinite(percent) ? percent : undefined,
+        };
+    }
+
     private executeSshCommand(sshClient: Client, command: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            let output = '';
-            sshClient.exec(command, (err, stream) => {
-                if (err) {
-                    return reject(new Error(`执行命令 '${command}' 失败: ${err.message}`));
-                }
-                stream.on('close', (code: number, signal?: string) => {
-                    resolve(output.trim());
-                }).on('data', (data: Buffer) => {
-                    output += data.toString('utf8');
-                }).stderr.on('data', (data: Buffer) => {
+            let stdout = '';
+            let stderr = '';
+            sshClient.exec(command, (error, stream) => {
+                if (error) return reject(error);
+                stream.on('data', (data: Buffer) => { stdout += data.toString('utf8'); });
+                stream.stderr.on('data', (data: Buffer) => { stderr += data.toString('utf8'); });
+                stream.on('error', reject);
+                stream.on('close', (code?: number) => {
+                    if (code && code !== 0 && !stdout) reject(new Error(stderr.trim() || `状态命令退出码 ${code}`));
+                    else resolve(stdout);
                 });
             });
         });
     }
 
-     /**
-      * 查找与给定 SSH 客户端关联的会话 ID (辅助函数)
-      * @param sshClientToFind 要查找的 SSH 客户端实例
-      * @returns string | undefined 找到的会话 ID 或 undefined
-      */
-    private findSessionIdForClient(sshClientToFind: Client): string | undefined {
-         for (const [sessionId, state] of this.clientStates.entries()) {
-             if (state.sshClient === sshClientToFind) {
-                 return sessionId;
-             }
-         }
-         return undefined;
-     }
-
-    /**
-     * Parse Linux memory counters directly so locale and the installed `free`
-     * implementation cannot change units or column meanings.
-     */
     private parseProcMeminfo(output: string): Pick<ServerStatus, 'memTotal' | 'memUsed' | 'memPercent' | 'swapTotal' | 'swapUsed' | 'swapPercent'> {
         const values = new Map<string, number>();
         for (const line of output.split('\n')) {
@@ -435,9 +344,7 @@ export class StatusMonitorService {
         }
 
         const totalKb = values.get('MemTotal');
-        if (!totalKb || totalKb <= 0) {
-            throw new Error('/proc/meminfo 中缺少有效的 MemTotal');
-        }
+        if (!totalKb || totalKb <= 0) throw new Error('/proc/meminfo 中缺少有效的 MemTotal');
 
         const fallbackAvailableKb =
             (values.get('MemFree') ?? 0)
@@ -454,56 +361,20 @@ export class StatusMonitorService {
         return {
             memTotal: Math.round(totalKb / 1024),
             memUsed: Math.round(usedKb / 1024),
-            memPercent: parseFloat(((usedKb / totalKb) * 100).toFixed(1)),
+            memPercent: Number(((usedKb / totalKb) * 100).toFixed(1)),
             swapTotal: Math.round(swapTotalKb / 1024),
             swapUsed: Math.round(swapUsedKb / 1024),
-            swapPercent: swapTotalKb > 0 ? parseFloat(((swapUsedKb / swapTotalKb) * 100).toFixed(1)) : 0,
+            swapPercent: swapTotalKb > 0 ? Number(((swapUsedKb / swapTotalKb) * 100).toFixed(1)) : 0,
         };
     }
 
-    /**
-     * Parses the output of /proc/stat to get total and idle CPU times.
-     * @param output The string output from `cat /proc/stat`.
-     * @returns An object with total and idle times, or null if parsing fails.
-     */
-    private parseProcStat(output: string): { total: number, idle: number } | null {
-        try {
-            const lines = output.split('\n');
-            // Find the line starting with "cpu " (aggregate of all cores)
-            const cpuLine = lines.find(line => line.startsWith('cpu '));
-            if (!cpuLine) {
-                // console.warn("Could not find 'cpu ' line in /proc/stat");
-                return null;
-            }
-
-            // Fields documented in `man proc`: cpu user nice system idle iowait irq softirq steal guest guest_nice
-            // We need to handle potential missing fields at the end (guest times are not always present)
-            const fieldsStr = cpuLine.trim().split(/\s+/).slice(1); // Remove 'cpu' prefix
-            const fields = fieldsStr.map(Number); // Convert remaining fields to numbers
-
-            // We need at least the first 4 fields (user, nice, system, idle)
-            if (fields.length < 4 || fields.slice(0, 4).some(isNaN)) {
-                // console.warn("Invalid format or missing required fields in 'cpu ' line:", cpuLine);
-                return null;
-            }
-
-            // Linux reports iowait separately, but tools such as btop treat it as idle.
-            const idle = fields[3] + (Number.isNaN(fields[4]) ? 0 : (fields[4] ?? 0));
-
-            // guest/guest_nice are already included in user/nice, so only sum
-            // user..steal (the first eight counters) to avoid double counting.
-            const total = fields.slice(0, 8).reduce((sum, value) => sum + (isNaN(value) ? 0 : value), 0);
-
-            // Final check for NaN just to be safe
-            if (isNaN(total) || isNaN(idle)) {
-                // console.warn("NaN detected after parsing /proc/stat fields:", fields);
-                return null;
-            }
-
-            return { total, idle };
-        } catch (e) {
-            // console.error("Error parsing /proc/stat:", e);
-            return null;
-        }
+    private parseProcStat(output: string): { total: number; idle: number } | null {
+        const cpuLine = output.split('\n').find(line => line.startsWith('cpu '));
+        if (!cpuLine) return null;
+        const fields = cpuLine.trim().split(/\s+/).slice(1).map(Number);
+        if (fields.length < 4 || fields.slice(0, 4).some(value => !Number.isFinite(value))) return null;
+        const idle = fields[3] + (Number.isFinite(fields[4]) ? fields[4] : 0);
+        const total = fields.slice(0, 8).reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
+        return Number.isFinite(total) && Number.isFinite(idle) ? { total, idle } : null;
     }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSessionStore } from '../stores/session.store';
 import { storeToRefs } from 'pinia';
@@ -14,6 +14,36 @@ const emitWorkspaceEvent = useWorkspaceEventEmitter();
 
 // --- Get Docker Manager Instance from Active Session ---
 const dockerManager = computed(() => activeSession.value?.dockerManager);
+
+let attachedDockerManager: { activate: () => void; deactivate: () => void } | null = null;
+let componentActive = false;
+
+const syncDockerManager = () => {
+  const nextManager = dockerManager.value ?? null;
+  if (nextManager === attachedDockerManager) return;
+  if (componentActive) attachedDockerManager?.deactivate();
+  attachedDockerManager = nextManager;
+  if (componentActive) attachedDockerManager?.activate();
+};
+
+const activateDockerComponent = () => {
+  if (componentActive) return;
+  componentActive = true;
+  attachedDockerManager = dockerManager.value ?? null;
+  attachedDockerManager?.activate();
+};
+
+const deactivateDockerComponent = () => {
+  if (!componentActive) return;
+  componentActive = false;
+  attachedDockerManager?.deactivate();
+};
+
+watch(dockerManager, syncDockerManager);
+onMounted(activateDockerComponent);
+onActivated(activateDockerComponent);
+onDeactivated(deactivateDockerComponent);
+onBeforeUnmount(deactivateDockerComponent);
 
 // --- Computed properties based on Docker Manager state ---
 const containers = computed(() => dockerManager.value?.containers.value ?? []);
