@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { UploadItem } from '../types/upload.types'; 
+
+const POSITION_KEY = 'nexusUploadPopupPosition';
 
 const props = defineProps<{
   uploads: Record<string, UploadItem>; // 接收上传任务字典
@@ -14,6 +16,12 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
+const popupRef = ref<HTMLElement | null>(null);
+const position = ref({ x: 16, y: 16 });
+const dragging = ref(false);
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused'].includes(upload.status)
 ).length);
@@ -25,6 +33,83 @@ const uploadList = computed(() => Object.values(props.uploads).filter(upload => 
   return !isEffectivelySuccess && upload.status !== 'cancelled';
 }));
 
+const popupStyle = computed(() => ({
+  left: `${position.value.x}px`,
+  top: `${position.value.y}px`,
+}));
+
+const clampPosition = () => {
+  const element = popupRef.value;
+  if (!element) return;
+  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
+  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
+  position.value = {
+    x: Math.min(Math.max(8, position.value.x), maxX),
+    y: Math.min(Math.max(8, position.value.y), maxY),
+  };
+};
+
+const savePosition = () => {
+  try {
+    localStorage.setItem(POSITION_KEY, JSON.stringify(position.value));
+  } catch {
+    // Drag position persistence is optional.
+  }
+};
+
+const restorePosition = async () => {
+  try {
+    const saved = localStorage.getItem(POSITION_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as { x?: number; y?: number };
+      if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+        position.value = { x: parsed.x as number, y: parsed.y as number };
+        await nextTick();
+        clampPosition();
+        return;
+      }
+    }
+  } catch {
+    // Ignore malformed storage.
+  }
+
+  await nextTick();
+  const element = popupRef.value;
+  if (element) {
+    position.value = {
+      x: Math.max(8, window.innerWidth - element.offsetWidth - 16),
+      y: Math.max(8, window.innerHeight - element.offsetHeight - 16),
+    };
+  }
+};
+
+const handlePointerMove = (event: PointerEvent) => {
+  if (!dragging.value) return;
+  position.value = { x: event.clientX - dragOffsetX, y: event.clientY - dragOffsetY };
+  clampPosition();
+};
+
+const stopDragging = () => {
+  if (!dragging.value) return;
+  dragging.value = false;
+  document.body.style.userSelect = '';
+  window.removeEventListener('pointermove', handlePointerMove);
+  window.removeEventListener('pointerup', stopDragging);
+  savePosition();
+};
+
+const startDragging = (event: PointerEvent) => {
+  if ((event.target as HTMLElement).closest('button')) return;
+  const rect = popupRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  dragging.value = true;
+  dragOffsetX = event.clientX - rect.left;
+  dragOffsetY = event.clientY - rect.top;
+  document.body.style.userSelect = 'none';
+  window.addEventListener('pointermove', handlePointerMove);
+  window.addEventListener('pointerup', stopDragging);
+};
+
 const handleCancel = (uploadId: string) => {
   emit('cancel-upload', uploadId);
 };
@@ -32,13 +117,30 @@ const handleCancel = (uploadId: string) => {
 const handleCancelAll = () => {
   emit('cancel-all');
 };
+
+watch(() => uploadList.value.length, async (count) => {
+  if (count <= 0) return;
+  await restorePosition();
+}, { immediate: true });
+
+onMounted(() => window.addEventListener('resize', clampPosition));
+onBeforeUnmount(() => {
+  stopDragging();
+  window.removeEventListener('resize', clampPosition);
+});
 </script>
 
 <template>
   <!-- 仅当有上传任务时显示 -->
-  <div v-if="uploadList.length > 0" class="fixed bottom-4 right-4 bg-background border border-border rounded-md shadow-md p-3 max-w-xs max-h-48 overflow-y-auto z-[1001] text-sm">
-    <div class="mb-2 flex items-center justify-between gap-3 border-b border-border pb-1">
-      <h4 class="m-0 text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
+  <div
+    v-if="uploadList.length > 0"
+    ref="popupRef"
+    class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-48 overflow-hidden z-[1001] text-sm"
+    :class="{ dragging }"
+    :style="popupStyle"
+  >
+    <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
+      <h4 class="m-0 min-w-0 truncate text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
       <button
         v-if="cancellableCount > 1"
         type="button"
@@ -48,8 +150,8 @@ const handleCancelAll = () => {
         {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
       </button>
     </div>
-    <ul class="list-none p-0 m-0">
-      <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2">
+    <ul class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
+      <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2 last:mb-0">
         <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
         <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" :value="upload.progress" max="100" class="w-20 h-2 flex-shrink-0 [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
         <span v-if="upload.status === 'uploading' && upload.progress < 100" class="text-xs flex-shrink-0"> {{ upload.progress }}%</span>
@@ -63,3 +165,26 @@ const handleCancelAll = () => {
   </div>
 </template>
 
+<style scoped>
+.upload-popup {
+  width: min(320px, calc(100vw - 16px));
+}
+.upload-popup.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+.upload-popup-header {
+  cursor: grab;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 10%, transparent), transparent);
+}
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(128, 128, 128, 0.3);
+  border-radius: 10px;
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
+}
+</style>

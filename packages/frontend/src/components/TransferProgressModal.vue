@@ -1,6 +1,6 @@
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'; // Added computed
+import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store';
@@ -15,6 +15,93 @@ const emit = defineEmits(['update:visible']);
 const { t, locale } = useI18n(); // +++ 解构出 locale +++
 const connectionsStore = useConnectionsStore();
 const uiNotificationsStore = useUiNotificationsStore();
+
+const MODAL_POSITION_KEY = 'nexusTransferProgressModalPosition';
+const modalRef = ref<HTMLElement | null>(null);
+const modalPosition = ref({ x: 0, y: 0 });
+const isDraggingModal = ref(false);
+let modalDragOffsetX = 0;
+let modalDragOffsetY = 0;
+
+const modalStyle = computed(() => ({
+  left: `${modalPosition.value.x}px`,
+  top: `${modalPosition.value.y}px`,
+}));
+
+const clampModalPosition = () => {
+  const element = modalRef.value;
+  if (!element) return;
+  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
+  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
+  modalPosition.value = {
+    x: Math.min(Math.max(8, modalPosition.value.x), maxX),
+    y: Math.min(Math.max(8, modalPosition.value.y), maxY),
+  };
+};
+
+const saveModalPosition = () => {
+  try {
+    localStorage.setItem(MODAL_POSITION_KEY, JSON.stringify(modalPosition.value));
+  } catch {
+    // Position persistence is optional.
+  }
+};
+
+const restoreModalPosition = async () => {
+  try {
+    const saved = localStorage.getItem(MODAL_POSITION_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as { x?: number; y?: number };
+      if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+        modalPosition.value = { x: parsed.x as number, y: parsed.y as number };
+        await nextTick();
+        clampModalPosition();
+        return;
+      }
+    }
+  } catch {
+    // Ignore malformed storage.
+  }
+
+  await nextTick();
+  const element = modalRef.value;
+  if (element) {
+    modalPosition.value = {
+      x: Math.max(8, (window.innerWidth - element.offsetWidth) / 2),
+      y: Math.max(8, (window.innerHeight - element.offsetHeight) / 2),
+    };
+  }
+};
+
+const handleModalPointerMove = (event: PointerEvent) => {
+  if (!isDraggingModal.value) return;
+  modalPosition.value = {
+    x: event.clientX - modalDragOffsetX,
+    y: event.clientY - modalDragOffsetY,
+  };
+  clampModalPosition();
+};
+
+const stopModalDragging = () => {
+  if (!isDraggingModal.value) return;
+  isDraggingModal.value = false;
+  document.body.style.userSelect = '';
+  window.removeEventListener('pointermove', handleModalPointerMove);
+  window.removeEventListener('pointerup', stopModalDragging);
+  saveModalPosition();
+};
+
+const startModalDragging = (event: PointerEvent) => {
+  if ((event.target as HTMLElement).closest('button')) return;
+  const rect = modalRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  isDraggingModal.value = true;
+  modalDragOffsetX = event.clientX - rect.left;
+  modalDragOffsetY = event.clientY - rect.top;
+  document.body.style.userSelect = 'none';
+  window.addEventListener('pointermove', handleModalPointerMove);
+  window.addEventListener('pointerup', stopModalDragging);
+};
 
 // Helper function to get connection name by ID
 // 注意: 此函数假设 'connectionsStore.connections' 是一个包含连接对象的数组，
@@ -157,7 +244,9 @@ const formatDate = (dateInput: string | Date): string => {
 };
 
 onMounted(() => {
+  window.addEventListener('resize', clampModalPosition);
   if (props.visible) {
+    void restoreModalPosition();
     fetchTransferTasks();
     if (pollingIntervalId.value === null) {
        pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
@@ -166,6 +255,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopModalDragging();
+  window.removeEventListener('resize', clampModalPosition);
   if (pollingIntervalId.value !== null) {
     clearInterval(pollingIntervalId.value);
     pollingIntervalId.value = null;
@@ -175,6 +266,7 @@ onUnmounted(() => {
 watch(() => props.visible, (newVisible) => {
   // internalVisible.value = newVisible; // 由下面的watch处理
   if (newVisible) {
+    void restoreModalPosition();
     fetchTransferTasks(); // 模态框可见时立即获取一次数据
     if (pollingIntervalId.value === null) { // 只有在没有定时器时才启动
       pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
@@ -193,6 +285,7 @@ const internalVisible = ref(props.visible);
 // 监听 props.visible 的变化来更新 internalVisible
 watch(() => props.visible, (newVisibleValue) => {
   internalVisible.value = newVisibleValue;
+  if (newVisibleValue) void restoreModalPosition();
 }, { immediate: true }); // 确保初始状态同步
 
 // 监听 internalVisible 的变化来 emit update:visible
@@ -259,17 +352,24 @@ const handleTaskAction = async (task: TransferTask) => {
 <template>
   <div
     v-if="internalVisible"
-    class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"
+    class="fixed inset-0 bg-overlay z-50 p-4"
     @click.self="handleClose"
   >
-    <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border w-full max-w-3xl max-h-[85vh] flex flex-col" :style="{ borderColor: 'var(--border-color)' }">
+    <div
+      ref="modalRef"
+      class="transfer-progress-panel fixed bg-background text-foreground rounded-lg shadow-xl border w-full max-w-3xl max-h-[85vh] flex flex-col"
+      :class="{ dragging: isDraggingModal }"
+      :style="[modalStyle, { borderColor: 'var(--border-color)' }]"
+    >
       <!-- Header -->
-      <h3 class="text-xl font-semibold text-center mb-6 flex-shrink-0">
-        {{ t('transferProgressModal.title', '文件传输进度') }}
-      </h3>
+      <div class="transfer-progress-header flex-shrink-0 px-6 py-4" @pointerdown="startModalDragging">
+        <h3 class="m-0 text-center text-xl font-semibold">
+          {{ t('transferProgressModal.title', '文件传输进度') }}
+        </h3>
+      </div>
 
       <!-- Content Area -->
-      <div class="flex-grow overflow-y-auto mb-6 pr-2 space-y-4 custom-scrollbar">
+      <div class="flex-grow overflow-y-auto mb-6 px-6 pr-8 space-y-4 custom-scrollbar">
         <div v-if="isLoading && transferTasks.length === 0" class="text-center text-text-secondary py-10">
           <svg class="animate-spin h-8 w-8 text-primary mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -375,7 +475,7 @@ const handleTaskAction = async (task: TransferTask) => {
       </div>
 
       <!-- Footer -->
-      <div class="flex justify-end items-center pt-4 mt-auto flex-shrink-0 border-t" :style="{ borderTopColor: 'var(--border-color)' }">
+      <div class="flex justify-end items-center px-6 py-4 mt-auto flex-shrink-0 border-t" :style="{ borderTopColor: 'var(--border-color)' }">
         <button
           @click="handleClose"
           class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out"
@@ -390,6 +490,20 @@ const handleTaskAction = async (task: TransferTask) => {
 <style scoped>
 .bg-overlay {
   background-color: rgba(0, 0, 0, 0.6); /* Slightly darker overlay */
+}
+
+.transfer-progress-panel {
+  width: min(48rem, calc(100vw - 32px));
+  overflow: hidden;
+}
+.transfer-progress-panel.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+.transfer-progress-header {
+  cursor: grab;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 10%, transparent), transparent);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
