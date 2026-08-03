@@ -352,6 +352,13 @@
         },
         "waitingForSsh": "SSH接続を待機中..."
     },
+"workspace": {
+    "terminal": {
+        "mobileCopy": "コピー",
+        "mobilePaste": "貼り付け",
+        "mobileSelectAll": "すべて選択"
+    }
+},
 "fileEditor": {
     "title": "ファイルエディタ"
   },

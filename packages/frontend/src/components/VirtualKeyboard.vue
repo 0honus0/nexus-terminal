@@ -15,7 +15,10 @@ const sendKey = (keyDef: KeyDefinition) => {
     emit('toggle-modifier', keyDef.modifier);
     return;
   }
-  const sequence = applyVirtualKeyModifiers(keyDef.sequence);
+  const baseSequence = (props.ctrlActive || props.altActive) && keyDef.modifiedSequence
+    ? keyDef.modifiedSequence
+    : keyDef.sequence;
+  const sequence = applyVirtualKeyModifiers(baseSequence);
   console.log(`[VirtualKeyboard] Sending key: ${JSON.stringify(sequence)}`);
   emit('send-key', sequence);
 };
@@ -24,6 +27,7 @@ const sendKey = (keyDef: KeyDefinition) => {
 type KeyDefinition = {
   label: string;
   sequence: string;
+  modifiedSequence?: string;
   type: 'control' | 'navigation' | 'special';
 } | {
   label: 'Ctrl' | 'Alt';
@@ -60,28 +64,39 @@ const primaryKeys: KeyDefinition[] = [
   { label: 'Alt', type: 'modifier', modifier: 'alt' },
   { label: 'Tab', sequence: '\t', type: 'control' },
   { label: 'Esc', sequence: '\x1b', type: 'control' },
-  { label: 'Del', sequence: '\x1b[3~', type: 'navigation' },
+  // 手机键盘上的 Del 通常表示向左擦除；有修饰键时仍使用标准 Delete 编码。
+  { label: 'Del', sequence: '\x7f', modifiedSequence: '\x1b[3~', type: 'control' },
 ];
 
-const navigationKeys: KeyDefinition[] = [
-  { label: '↑', sequence: '\x1b[A', type: 'navigation' },
-  { label: '↓', sequence: '\x1b[B', type: 'navigation' },
-  { label: '←', sequence: '\x1b[D', type: 'navigation' },
-  { label: '→', sequence: '\x1b[C', type: 'navigation' },
-  { label: 'Home', sequence: '\x1b[1~', type: 'navigation' },
-  { label: 'End', sequence: '\x1b[4~', type: 'navigation' },
-  { label: 'PgUp', sequence: '\x1b[5~', type: 'navigation' },
-  { label: 'PgDn', sequence: '\x1b[6~', type: 'navigation' },
-  { label: 'Ins', sequence: '\x1b[2~', type: 'navigation' },
-];
-
-const functionKeys: KeyDefinition[] = [
-  { label: 'F1', sequence: '\x1b[11~', type: 'special' }, { label: 'F2', sequence: '\x1b[12~', type: 'special' },
-  { label: 'F3', sequence: '\x1b[13~', type: 'special' }, { label: 'F4', sequence: '\x1b[14~', type: 'special' },
-  { label: 'F5', sequence: '\x1b[15~', type: 'special' }, { label: 'F6', sequence: '\x1b[17~', type: 'special' },
-  { label: 'F7', sequence: '\x1b[18~', type: 'special' }, { label: 'F8', sequence: '\x1b[19~', type: 'special' },
-  { label: 'F9', sequence: '\x1b[20~', type: 'special' }, { label: 'F10', sequence: '\x1b[21~', type: 'special' },
-  { label: 'F11', sequence: '\x1b[23~', type: 'special' }, { label: 'F12', sequence: '\x1b[24~', type: 'special' },
+// 下方三排统一为七列，方向键放在右侧并保持真实键盘的倒 T 关系。
+const secondaryKeyRows: KeyDefinition[][] = [
+  [
+    { label: 'Home', sequence: '\x1b[1~', type: 'navigation' },
+    { label: 'End', sequence: '\x1b[4~', type: 'navigation' },
+    { label: 'PgUp', sequence: '\x1b[5~', type: 'navigation' },
+    { label: 'PgDn', sequence: '\x1b[6~', type: 'navigation' },
+    { label: 'Ins', sequence: '\x1b[2~', type: 'navigation' },
+    { label: '↑', sequence: '\x1b[A', type: 'navigation' },
+    { label: 'F1', sequence: '\x1b[11~', type: 'special' },
+  ],
+  [
+    { label: 'F2', sequence: '\x1b[12~', type: 'special' },
+    { label: 'F3', sequence: '\x1b[13~', type: 'special' },
+    { label: 'F4', sequence: '\x1b[14~', type: 'special' },
+    { label: 'F5', sequence: '\x1b[15~', type: 'special' },
+    { label: '←', sequence: '\x1b[D', type: 'navigation' },
+    { label: '↓', sequence: '\x1b[B', type: 'navigation' },
+    { label: '→', sequence: '\x1b[C', type: 'navigation' },
+  ],
+  [
+    { label: 'F6', sequence: '\x1b[17~', type: 'special' },
+    { label: 'F7', sequence: '\x1b[18~', type: 'special' },
+    { label: 'F8', sequence: '\x1b[19~', type: 'special' },
+    { label: 'F9', sequence: '\x1b[20~', type: 'special' },
+    { label: 'F10', sequence: '\x1b[21~', type: 'special' },
+    { label: 'F11', sequence: '\x1b[23~', type: 'special' },
+    { label: 'F12', sequence: '\x1b[24~', type: 'special' },
+  ],
 ];
 </script>
 
@@ -106,26 +121,16 @@ const functionKeys: KeyDefinition[] = [
       </button>
     </div>
 
-    <div class="navigation-key-row">
+    <div
+      v-for="(keyRow, rowIndex) in secondaryKeyRows"
+      :key="rowIndex"
+      class="secondary-key-row"
+    >
       <button
-        v-for="keyDef in navigationKeys"
+        v-for="keyDef in keyRow"
         :key="keyDef.label"
         type="button"
         class="virtual-key compact-key rounded border border-border bg-input text-foreground hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150"
-        :title="keyDef.label"
-        @pointerdown.prevent
-        @click="sendKey(keyDef)"
-      >
-        {{ keyDef.label }}
-      </button>
-    </div>
-
-    <div class="function-key-row">
-      <button
-        v-for="keyDef in functionKeys"
-        :key="keyDef.label"
-        type="button"
-        class="virtual-key function-key rounded border border-border bg-input text-foreground hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary transition-colors duration-150"
         :title="keyDef.label"
         @pointerdown.prevent
         @click="sendKey(keyDef)"
@@ -147,8 +152,7 @@ const functionKeys: KeyDefinition[] = [
 }
 
 .primary-key-row,
-.navigation-key-row,
-.function-key-row {
+.secondary-key-row {
   display: grid;
   gap: 2px;
   width: 100%;
@@ -158,12 +162,8 @@ const functionKeys: KeyDefinition[] = [
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.navigation-key-row {
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-}
-
-.function-key-row {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+.secondary-key-row {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .virtual-key {
@@ -173,8 +173,7 @@ const functionKeys: KeyDefinition[] = [
 }
 
 .primary-key,
-.compact-key,
-.function-key {
+.compact-key {
   min-width: 0;
   height: 1.8rem;
   padding: 0;
@@ -185,8 +184,7 @@ const functionKeys: KeyDefinition[] = [
   font-size: 0.75rem;
 }
 
-.compact-key,
-.function-key {
+.compact-key {
   font-size: clamp(0.55rem, 2.5vw, 0.7rem);
 }
 

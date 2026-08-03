@@ -407,7 +407,10 @@
   },
   "workspace": {
     "terminal": {
-      "reconnectingMsg": "Attempting to reconnect..."
+      "reconnectingMsg": "Attempting to reconnect...",
+      "mobileCopy": "Copy",
+      "mobilePaste": "Paste",
+      "mobileSelectAll": "Select All"
     }
   },
 "fileEditor": {

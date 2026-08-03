@@ -6,6 +6,7 @@ import { useAppearanceStore } from '../stores/appearance.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useSessionStore } from '../stores/session.store'; 
 import { storeToRefs } from 'pinia';
+import { useI18n } from 'vue-i18n';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
@@ -45,9 +46,17 @@ const RESIZE_THRESHOLD = 0.5; // px
 
 
 const { isMobile } = useDeviceDetection(); // 设备检测
+const { t } = useI18n();
 
 let initialPinchDistance = 0;
 let currentFontSizeOnPinchStart = 0;
+let mobileLongPressTimer: number | null = null;
+let mobileLongPressStart: { x: number; y: number } | null = null;
+let mobileLongPressTriggered = false;
+let suppressMobileContextMenuUntil = 0;
+const MOBILE_LONG_PRESS_DELAY = 520;
+const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
+const mobileClipboardMenu = ref({ visible: false, x: 0, y: 0, hasSelection: false });
 
 // --- Appearance Store ---
 const appearanceStore = useAppearanceStore();
@@ -176,6 +185,9 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
   event.preventDefault(); // 阻止默认右键菜单
   if (!terminal) return;
 
+  // 手机端使用专门的长按菜单，避免 contextmenu 事件直接触发粘贴。
+  if (isMobile.value) return;
+
   try {
     // 有选区时本次右键只复制；清除选区后，下一次右键才执行粘贴。
     if (terminal.hasSelection()) {
@@ -210,6 +222,135 @@ const removeContextMenuListener = () => {
   }
 };
 
+const clearMobileLongPressTimer = () => {
+  if (mobileLongPressTimer !== null) {
+    window.clearTimeout(mobileLongPressTimer);
+    mobileLongPressTimer = null;
+  }
+};
+
+const closeMobileClipboardMenu = (clearSelection = false) => {
+  mobileClipboardMenu.value.visible = false;
+  if (clearSelection) terminal?.clearSelection();
+};
+
+const getTerminalCellAtPoint = (clientX: number, clientY: number) => {
+  if (!terminal?.element) return null;
+  const screenElement = terminal.element.querySelector<HTMLElement>('.xterm-screen');
+  if (!screenElement) return null;
+
+  const rect = screenElement.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const column = Math.max(0, Math.min(terminal.cols - 1, Math.floor((clientX - rect.left) / (rect.width / terminal.cols))));
+  const viewportRow = Math.max(0, Math.min(terminal.rows - 1, Math.floor((clientY - rect.top) / (rect.height / terminal.rows))));
+  return {
+    column,
+    bufferRow: terminal.buffer.active.viewportY + viewportRow,
+  };
+};
+
+const selectTerminalWordAtPoint = (clientX: number, clientY: number): boolean => {
+  if (!terminal) return false;
+  const position = getTerminalCellAtPoint(clientX, clientY);
+  if (!position) return false;
+
+  const line = terminal.buffer.active.getLine(position.bufferRow);
+  if (!line) return false;
+
+  const hasTextAtColumn = (column: number): boolean => {
+    const chars = line.getCell(column)?.getChars() ?? '';
+    return chars.length > 0 && !/^\s+$/u.test(chars);
+  };
+
+  let selectedColumn = position.column;
+  // 宽字符的后半格没有 chars，向左寻找真实字符单元格。
+  while (selectedColumn > 0 && !hasTextAtColumn(selectedColumn) && line.getCell(selectedColumn)?.getWidth() === 0) {
+    selectedColumn -= 1;
+  }
+
+  if (!hasTextAtColumn(selectedColumn)) {
+    terminal.selectLines(position.bufferRow, position.bufferRow);
+    return terminal.hasSelection();
+  }
+
+  let startColumn = selectedColumn;
+  let endColumn = selectedColumn;
+  while (startColumn > 0 && hasTextAtColumn(startColumn - 1)) startColumn -= 1;
+  while (endColumn + 1 < terminal.cols && hasTextAtColumn(endColumn + 1)) endColumn += 1;
+
+  terminal.select(startColumn, position.bufferRow, endColumn - startColumn + 1);
+  return terminal.hasSelection();
+};
+
+const openMobileClipboardMenu = (clientX: number, clientY: number) => {
+  if (!terminalOuterWrapperRef.value || !terminal) return;
+  const wrapperRect = terminalOuterWrapperRef.value.getBoundingClientRect();
+  const estimatedMenuWidth = 190;
+  const relativeX = Math.max(8, Math.min(wrapperRect.width - estimatedMenuWidth - 8, clientX - wrapperRect.left - estimatedMenuWidth / 2));
+  const relativeY = Math.max(8, Math.min(wrapperRect.height - 48, clientY - wrapperRect.top - 56));
+  mobileClipboardMenu.value = {
+    visible: true,
+    x: relativeX,
+    y: relativeY,
+    hasSelection: terminal.hasSelection(),
+  };
+};
+
+const triggerMobileLongPress = (clientX: number, clientY: number) => {
+  if (!terminal || !props.isActive) return;
+  mobileLongPressTriggered = true;
+  suppressMobileContextMenuUntil = Date.now() + 1200;
+  selectTerminalWordAtPoint(clientX, clientY);
+  openMobileClipboardMenu(clientX, clientY);
+  navigator.vibrate?.(12);
+};
+
+const handleMobileContextMenu = (event: MouseEvent) => {
+  if (!isMobile.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
+  selectTerminalWordAtPoint(event.clientX, event.clientY);
+  openMobileClipboardMenu(event.clientX, event.clientY);
+};
+
+const copyMobileTerminalSelection = async () => {
+  const selectedText = terminal?.getSelection();
+  if (!selectedText) return;
+  try {
+    await navigator.clipboard.writeText(selectedText);
+    closeMobileClipboardMenu();
+  } catch (error) {
+    console.error('[Terminal] 手机端复制终端内容失败:', error);
+  }
+};
+
+const pasteMobileTerminalClipboard = async () => {
+  if (!terminal) return;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) terminal.paste(text.replace(/\r\n?/g, '\n'));
+    terminal.clearSelection();
+    closeMobileClipboardMenu();
+    terminal.focus();
+  } catch (error) {
+    console.error('[Terminal] 手机端读取剪贴板失败:', error);
+  }
+};
+
+const selectAllMobileTerminalContent = () => {
+  if (!terminal) return;
+  terminal.selectAll();
+  mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+};
+
+const handleDocumentPointerDown = (event: PointerEvent) => {
+  if (!mobileClipboardMenu.value.visible) return;
+  const target = event.target;
+  if (target instanceof Element && target.closest('.mobile-terminal-clipboard-menu')) return;
+  closeMobileClipboardMenu(true);
+};
+
 
 // --- 移动端模式下通过双指放大缩小终端字号 ---
 const getDistanceBetweenTouches = (touches: TouchList): number => {
@@ -222,6 +363,20 @@ const getDistanceBetweenTouches = (touches: TouchList): number => {
 };
 
 const handleTouchStart = (event: TouchEvent) => {
+  clearMobileLongPressTimer();
+  if (event.touches.length === 1 && isMobile.value) {
+    const touch = event.touches[0];
+    closeMobileClipboardMenu(true);
+    mobileLongPressTriggered = false;
+    mobileLongPressStart = { x: touch.clientX, y: touch.clientY };
+    mobileLongPressTimer = window.setTimeout(() => {
+      mobileLongPressTimer = null;
+      if (mobileLongPressStart) triggerMobileLongPress(mobileLongPressStart.x, mobileLongPressStart.y);
+    }, MOBILE_LONG_PRESS_DELAY);
+    return;
+  }
+
+  mobileLongPressStart = null;
   if (event.touches.length === 2 && terminal) {
     event.preventDefault(); 
     initialPinchDistance = getDistanceBetweenTouches(event.touches);
@@ -230,6 +385,18 @@ const handleTouchStart = (event: TouchEvent) => {
 };
 
 const handleTouchMove = (event: TouchEvent) => {
+  if (event.touches.length === 1 && mobileLongPressStart) {
+    const touch = event.touches[0];
+    const moved = Math.hypot(touch.clientX - mobileLongPressStart.x, touch.clientY - mobileLongPressStart.y);
+    if (mobileLongPressTriggered) {
+      event.preventDefault();
+    } else if (moved > MOBILE_LONG_PRESS_MOVE_TOLERANCE) {
+      clearMobileLongPressTimer();
+      mobileLongPressStart = null;
+    }
+    return;
+  }
+
   if (event.touches.length === 2 && terminal && initialPinchDistance > 0) {
     event.preventDefault();
     const currentDistance = getDistanceBetweenTouches(event.touches);
@@ -249,6 +416,12 @@ const handleTouchMove = (event: TouchEvent) => {
 };
 
 const handleTouchEnd = (event: TouchEvent) => {
+  clearMobileLongPressTimer();
+  mobileLongPressStart = null;
+  if (mobileLongPressTriggered) {
+    event.preventDefault();
+    mobileLongPressTriggered = false;
+  }
   if (event.touches.length < 2) {
     initialPinchDistance = 0; // Reset pinch distance
   }
@@ -576,6 +749,8 @@ onMounted(() => {
       terminalRef.value.addEventListener('touchmove', handleTouchMove, { passive: false });
       terminalRef.value.addEventListener('touchend', handleTouchEnd, { passive: false });
       terminalRef.value.addEventListener('touchcancel', handleTouchEnd, { passive: false }); // Also handle cancel
+      terminalRef.value.addEventListener('contextmenu', handleMobileContextMenu);
+      document.addEventListener('pointerdown', handleDocumentPointerDown);
     }
 
 
@@ -625,7 +800,10 @@ onBeforeUnmount(() => {
         terminalRef.value.removeEventListener('touchmove', handleTouchMove);
         terminalRef.value.removeEventListener('touchend', handleTouchEnd);
         terminalRef.value.removeEventListener('touchcancel', handleTouchEnd);
+        terminalRef.value.removeEventListener('contextmenu', handleMobileContextMenu);
+        document.removeEventListener('pointerdown', handleDocumentPointerDown);
     }
+    clearMobileLongPressTimer();
 
 
 
@@ -733,6 +911,25 @@ watchEffect(() => {
   <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper">
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
+    <div
+      v-if="isMobile && mobileClipboardMenu.visible"
+      class="mobile-terminal-clipboard-menu"
+      :style="{ left: `${mobileClipboardMenu.x}px`, top: `${mobileClipboardMenu.y}px` }"
+      @pointerdown.stop
+      @click.stop
+    >
+      <button
+        type="button"
+        :disabled="!mobileClipboardMenu.hasSelection"
+        @click="copyMobileTerminalSelection"
+      >{{ t('workspace.terminal.mobileCopy') }}</button>
+      <button type="button" @click="pasteMobileTerminalClipboard">
+        {{ t('workspace.terminal.mobilePaste') }}
+      </button>
+      <button type="button" @click="selectAllMobileTerminalContent">
+        {{ t('workspace.terminal.mobileSelectAll') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -749,6 +946,46 @@ watchEffect(() => {
   height: 100%;
   /* position: relative;  移除了 position relative */
   /* z-index 调整或移除，因为背景层不再在此组件内 */
+}
+
+.mobile-terminal-clipboard-menu {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  min-width: 180px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 0.65rem;
+  background: var(--app-bg-color);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  touch-action: manipulation;
+}
+
+.mobile-terminal-clipboard-menu button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 0;
+  border-right: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mobile-terminal-clipboard-menu button:last-child {
+  border-right: 0;
+}
+
+.mobile-terminal-clipboard-menu button:active {
+  background: var(--link-active-bg-color);
+  color: var(--link-active-color);
+}
+
+.mobile-terminal-clipboard-menu button:disabled {
+  opacity: 0.4;
 }
 
 /* 文字描边和阴影样式 */

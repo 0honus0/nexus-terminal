@@ -407,7 +407,10 @@
   },
   "workspace": {
     "terminal": {
-      "reconnectingMsg": "正在尝试重新连接..."
+      "reconnectingMsg": "正在尝试重新连接...",
+      "mobileCopy": "复制",
+      "mobilePaste": "粘贴",
+      "mobileSelectAll": "全选"
     }
   },
 "fileEditor": {
