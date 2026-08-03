@@ -1310,6 +1310,8 @@
   "quickCommands": {
     "searchPlaceholder": "搜索名称或指令...",
     "add": "添加",
+    "switchToName": "当前显示指令，点击显示名称",
+    "switchToCommand": "当前显示名称，点击显示指令",
     "sortByName": "名称",
     "sortByUsage": "使用频率",
     "usageCount": "使用次数",

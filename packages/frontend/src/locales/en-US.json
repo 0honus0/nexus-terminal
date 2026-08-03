@@ -1306,6 +1306,8 @@
   "quickCommands": {
     "searchPlaceholder": "Search name or command...",
     "add": "Add",
+    "switchToName": "Showing commands; click to show names",
+    "switchToCommand": "Showing names; click to show commands",
     "sortByName": "Name",
     "sortByUsage": "Usage Frequency",
     "usageCount": "Usage Count",

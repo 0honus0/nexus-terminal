@@ -25,6 +25,12 @@
                 :class="{ 'bg-primary/20 text-primary': isCompactMode }">
           <i :class="['fas', isCompactMode ? 'fa-compress-alt' : 'fa-expand-alt', 'text-base']"></i>
         </button>
+        <!-- Command Display Mode Toggle Button -->
+        <button @click="toggleCommandDisplayMode"
+                class="quick-commands-control-button w-8 h-8 border border-border/50 rounded-lg text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150 flex-shrink-0 flex items-center justify-center"
+                :title="commandDisplayModeTitle">
+          <i :class="['fas', commandDisplayMode === 'name' ? 'fa-tag' : 'fa-terminal', 'text-base']"></i>
+        </button>
         <!-- Add Button -->
         <button @click="openAddForm" class="quick-commands-control-button w-8 h-8 bg-primary text-white border-none rounded-lg text-sm font-semibold cursor-pointer shadow-md transition-colors duration-200 ease-in-out hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary flex-shrink-0 flex items-center justify-center" :title="$t('quickCommands.add', '添加快捷指令')">
           <i class="fas fa-plus text-base"></i>
@@ -66,14 +72,15 @@
                 <div v-for="groupData in filteredAndGroupedCommands" :key="groupData.groupName" class="mb-1 last:mb-0">
                     <!-- Group Header - Modified for inline editing -->
                     <div
-                        class="group font-semibold flex items-center text-foreground rounded-md hover:bg-header/80 transition-colors duration-150"
-                        :style="{ padding: isCompactMode ? `calc(0.25rem * var(--qc-row-size-multiplier)) calc(0.75rem * var(--qc-row-size-multiplier))` : `calc(0.5rem * var(--qc-row-size-multiplier)) calc(0.75rem * var(--qc-row-size-multiplier))` }"
-                        :class="{ 'cursor-pointer': editingTagId !== (groupData.tagId === null ? 'untagged' : groupData.tagId) }"
+                        class="quick-command-group-header group font-semibold flex items-center text-foreground rounded-md hover:bg-header/80 transition-colors duration-150"
+                        :class="[
+                          { 'cursor-pointer': editingTagId !== (groupData.tagId === null ? 'untagged' : groupData.tagId) },
+                          { 'quick-command-group-header-compact': isCompactMode }
+                        ]"
                         @click="editingTagId !== (groupData.tagId === null ? 'untagged' : groupData.tagId) ? toggleGroup(groupData.groupName) : null"
                     >
                         <i
-                            :class="['fas', expandedGroups[groupData.groupName] ? 'fa-chevron-down' : 'fa-chevron-right', 'mr-2 w-4 text-center text-text-secondary group-hover:text-foreground transition-transform duration-200 ease-in-out', {'transform rotate-0': !expandedGroups[groupData.groupName]}]"
-                            :style="{ fontSize: `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"
+                            :class="['fas', expandedGroups[groupData.groupName] ? 'fa-chevron-down' : 'fa-chevron-right', 'quick-command-group-chevron text-center text-text-secondary group-hover:text-foreground transition-transform duration-200 ease-in-out', {'transform rotate-0': !expandedGroups[groupData.groupName]}]"
                             @click.stop="toggleGroup(groupData.groupName)"
                             class="cursor-pointer flex-shrink-0"
                         ></i>
@@ -85,7 +92,6 @@
                             type="text"
                             v-model="editedTagName"
                             class="bg-input border border-primary rounded px-1 py-0 w-full"
-                            :style="{ fontSize: `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"
                             @blur="finishEditingTag"
                             @keydown.enter.prevent="finishEditingTag"
                             @keydown.esc.prevent="cancelEditingTag"
@@ -95,7 +101,6 @@
                         <span
                             v-else
                             class="inline-block overflow-hidden text-ellipsis whitespace-nowrap"
-                            :style="{ fontSize: `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"
                             :class="{ 'cursor-pointer hover:underline': true }"
                             :title="t('quickCommands.tags.clickToEditTag', '点击编辑标签')"
                             @click.stop="startEditingTag(groupData.tagId, groupData.groupName)"
@@ -119,18 +124,11 @@
                         >
                             <!-- Command Info -->
                             <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
-                                <span v-if="cmd.name"
-                                      class="font-medium truncate text-foreground"
-                                      :class="{'mb-0.5': !isCompactMode, 'leading-tight': isCompactMode}"
-                                      :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }">{{ cmd.name }}</span>
-                                <span v-if="!isCompactMode && cmd.command"
-                                      class="truncate font-mono"
-                                      :class="{ 'text-sm': !cmd.name, 'text-text-secondary': true }"
-                                      :style="{ fontSize: `calc(0.75em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }">{{ cmd.command }}</span>
-                                <span v-else-if="isCompactMode && !cmd.name && cmd.command"
-                                      class="truncate font-mono text-xs text-text-secondary/70 leading-tight"
-                                      :style="{ fontSize: `calc(0.65em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` }">{{ cmd.command }}</span>
-                                <span class="quick-command-narrow-command font-mono text-text-secondary" :title="cmd.command">{{ cmd.command }}</span>
+                                <span
+                                  class="quick-command-display-text truncate"
+                                  :class="commandDisplayMode === 'name' ? 'font-medium text-foreground' : 'font-mono text-text-secondary'"
+                                  :title="getCommandDisplayText(cmd)"
+                                >{{ getCommandDisplayText(cmd) }}</span>
                             </div>
                             <!-- Actions -->
                             <div class="quick-command-actions flex items-center flex-shrink-0 transition-opacity duration-150"
@@ -166,18 +164,11 @@
                 >
                     <!-- Command Info -->
                     <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
-                        <span v-if="cmd.name"
-                              class="font-medium truncate text-foreground"
-                              :class="{'mb-0.5': !isCompactMode, 'leading-tight': isCompactMode}"
-                              :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }">{{ cmd.name }}</span>
-                        <span v-if="!isCompactMode && cmd.command"
-                              class="truncate font-mono"
-                              :class="{ 'text-sm': !cmd.name, 'text-text-secondary': true }"
-                              :style="{ fontSize: `calc(0.75em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }">{{ cmd.command }}</span>
-                        <span v-else-if="isCompactMode && !cmd.name && cmd.command"
-                              class="truncate font-mono text-xs text-text-secondary/70 leading-tight"
-                              :style="{ fontSize: `calc(0.65em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` }">{{ cmd.command }}</span>
-                        <span class="quick-command-narrow-command font-mono text-text-secondary" :title="cmd.command">{{ cmd.command }}</span>
+                        <span
+                          class="quick-command-display-text truncate"
+                          :class="commandDisplayMode === 'name' ? 'font-medium text-foreground' : 'font-mono text-text-secondary'"
+                          :title="getCommandDisplayText(cmd)"
+                        >{{ getCommandDisplayText(cmd) }}</span>
                     </div>
                     <!-- Actions -->
                     <div class="quick-command-actions flex items-center flex-shrink-0 transition-opacity duration-150"
@@ -267,6 +258,20 @@ const editingTagId = ref<number | null | 'untagged'>(null);
 const editedTagName = ref('');
 const tagInputRefs = ref(new Map<string | number, HTMLInputElement | null>());
 
+type QuickCommandDisplayMode = 'name' | 'command';
+const QUICK_COMMAND_DISPLAY_MODE_KEY = 'quickCommandsDisplayMode';
+const loadCommandDisplayMode = (): string | null => {
+  try {
+    return typeof window !== 'undefined'
+      ? window.localStorage.getItem(QUICK_COMMAND_DISPLAY_MODE_KEY)
+      : null;
+  } catch {
+    return null;
+  }
+};
+const storedCommandDisplayMode = loadCommandDisplayMode();
+const commandDisplayMode = ref<QuickCommandDisplayMode>(storedCommandDisplayMode === 'name' ? 'name' : 'command');
+
 // +++ 右键菜单状态 +++
 const quickCommandContextMenuVisible = ref(false);
 const quickCommandContextMenuPosition = ref({ x: 0, y: 0 });
@@ -331,6 +336,26 @@ const isCompactMode = computed(() => quickCommandsCompactModeBoolean.value);
 const toggleCompactMode = () => {
   const currentMode = quickCommandsCompactModeBoolean.value;
   settingsStore.updateSetting('quickCommandsCompactMode', String(!currentMode));
+};
+
+const commandDisplayModeTitle = computed(() => commandDisplayMode.value === 'name'
+  ? t('quickCommands.switchToCommand', '当前显示名称，点击显示指令')
+  : t('quickCommands.switchToName', '当前显示指令，点击显示名称'));
+
+const toggleCommandDisplayMode = () => {
+  commandDisplayMode.value = commandDisplayMode.value === 'name' ? 'command' : 'name';
+  try {
+    window.localStorage.setItem(QUICK_COMMAND_DISPLAY_MODE_KEY, commandDisplayMode.value);
+  } catch {
+    // Storage may be unavailable in privacy-restricted browser contexts.
+  }
+};
+
+const getCommandDisplayText = (command: QuickCommandFE): string => {
+  if (commandDisplayMode.value === 'name') {
+    return command.name?.trim() || command.command;
+  }
+  return command.command;
 };
 
 // --- Helper function for selection check ---
@@ -804,8 +829,27 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
 .quick-command-info {
   min-width: 0;
 }
-.quick-command-narrow-command {
-  display: none;
+.quick-command-group-header {
+  min-width: 0;
+  padding: calc(0.4rem * var(--qc-row-size-multiplier)) 0.2rem;
+  font-size: calc(0.82rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+  line-height: 1.25;
+}
+.quick-command-group-header-compact {
+  padding-top: calc(0.22rem * var(--qc-row-size-multiplier));
+  padding-bottom: calc(0.22rem * var(--qc-row-size-multiplier));
+}
+.quick-command-group-chevron {
+  width: 0.75rem;
+  margin-right: 0.3rem;
+  font-size: 0.72rem;
+}
+.quick-command-group-header input {
+  font-size: inherit;
+}
+.quick-command-display-text {
+  font-size: calc(0.8rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+  line-height: 1.3;
 }
 @container quick-commands-pane (max-width: 340px) {
   .quick-commands-controls {
@@ -824,10 +868,15 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     font-size: 0.82rem !important;
   }
   .quick-commands-list-area {
-    padding: 0.4rem;
+    padding: 0.3rem;
   }
   .quick-command-group-list {
-    padding-left: 0.35rem !important;
+    padding-left: 0.2rem !important;
+  }
+  .quick-command-group-header {
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+    font-size: 0.8rem;
   }
   .quick-command-row {
     padding-left: 0.45rem !important;
@@ -861,11 +910,7 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   .quick-command-actions {
     display: none;
   }
-  .quick-command-info > :not(.quick-command-narrow-command) {
-    display: none;
-  }
-  .quick-command-narrow-command {
-    display: block;
+  .quick-command-display-text {
     width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
