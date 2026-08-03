@@ -73,6 +73,38 @@ const router = createRouter({
   routes,
 });
 
+const DYNAMIC_IMPORT_RELOAD_KEY = 'nexus-dynamic-import-reload';
+const isStaleDynamicImportError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Loading chunk .* failed/i.test(message);
+};
+
+router.onError(async (error, to) => {
+  if (!isStaleDynamicImportError(error)) return;
+
+  const reloadTarget = to.fullPath || window.location.pathname;
+  if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY) === reloadTarget) return;
+  sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, reloadTarget);
+
+  if ('caches' in window) {
+    const cacheNames = await caches.keys();
+    await Promise.all(
+      cacheNames
+        .filter((cacheName) => cacheName.startsWith('nexus-terminal-cache-'))
+        .map((cacheName) => caches.delete(cacheName))
+    );
+  }
+  const registration = await navigator.serviceWorker?.getRegistration();
+  await registration?.update().catch(() => undefined);
+  window.location.reload();
+});
+
+router.afterEach((to) => {
+  if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY) === to.fullPath) {
+    sessionStorage.removeItem(DYNAMIC_IMPORT_RELOAD_KEY);
+  }
+});
+
 // 添加全局前置守卫
 router.beforeEach((to, from, next) => {
   // 在守卫内部获取 store 实例，确保 Pinia 已初始化

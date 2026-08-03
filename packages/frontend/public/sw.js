@@ -1,7 +1,6 @@
-const CACHE_NAME = 'nexus-terminal-cache-v1';
+const CACHE_PREFIX = 'nexus-terminal-cache-';
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 const urlsToCache = [
-  '/',
-  '/index.html',
   '/manifest.json',
   '/icons/icon-72x72.png',
   '/icons/icon-96x96.png',
@@ -14,39 +13,47 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
         return cache.addAll(urlsToCache);
       })
   );
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) return;
+
+  // HTML、JS 和 CSS 始终交给浏览器/服务器处理，避免升级后引用旧哈希资源。
+  const isAppIcon = requestUrl.pathname.startsWith('/icons/');
+  const isManifest = requestUrl.pathname === '/manifest.json';
+  if (!isAppIcon && !isManifest) return;
+
   event.respondWith(
-    caches.match(event.request)
+    fetch(event.request)
       .then((response) => {
-        if (response) {
-          return response;
+        if (response.ok) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
         }
-        return fetch(event.request);
-      }
-    )
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    Promise.all([
+      caches.keys().then((cacheNames) => Promise.all(
+        cacheNames
+          .filter((cacheName) => cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME)
+          .map((cacheName) => caches.delete(cacheName))
+      )),
+      self.clients.claim(),
+    ])
   );
 });

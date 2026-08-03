@@ -86,8 +86,9 @@ app.use(i18n); // 使用 i18n
 // --- PWA Service Worker Registration ---
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').then(registration => {
+      navigator.serviceWorker.register('/sw.js?v=3', { updateViaCache: 'none' }).then(registration => {
         console.log('SW registered: ', registration);
+        registration.update().catch(() => undefined);
       }).catch(registrationError => {
         console.log('SW registration failed: ', registrationError);
       });
