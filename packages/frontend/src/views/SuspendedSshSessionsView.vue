@@ -39,9 +39,9 @@
               <div class="font-bold text-lg flex items-center">
                 <span
                   v-if="editingSuspendSessionId !== session.suspendSessionId"
-                  class="cursor-pointer hover:text-primary"
-                  :title="$t('suspendedSshSessions.tooltip.editName')"
-                  @click="startEditingName(session)"
+                  :class="session.backendSshStatus === 'marked_active' ? '' : 'cursor-pointer hover:text-primary'"
+                  :title="session.backendSshStatus === 'marked_active' ? undefined : $t('suspendedSshSessions.tooltip.editName')"
+                  @click="session.backendSshStatus !== 'marked_active' && startEditingName(session)"
                 >
                   {{ session.customSuspendName || session.connectionName }}
                 </span>
@@ -58,17 +58,21 @@
                 <span
                   :class="[
                     'px-2 py-0.5 text-xs font-semibold rounded-full ml-2 whitespace-nowrap', /* +++ 调整了 padding 和增加了 ml-2, whitespace-nowrap +++ */
-                    session.backendSshStatus === 'hanging' ? 'bg-green-100 text-green-700 dark:bg-green-700 dark:text-green-100' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-700 dark:text-yellow-100'
+                    session.backendSshStatus === 'hanging'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-700 dark:text-green-100'
+                      : session.backendSshStatus === 'marked_active'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-700 dark:text-blue-100'
+                        : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-700 dark:text-yellow-100'
                   ]"
                 >
-                  {{ session.backendSshStatus === 'hanging' ? $t('suspendedSshSessions.status.hanging') : $t('suspendedSshSessions.status.disconnected') }}
+                  {{ statusLabel(session) }}
                 </span>
               </div>
               <div class="text-sm text-muted-color">
                 {{ $t('suspendedSshSessions.label.originalConnection') }}: {{ session.connectionName }}
               </div>
               <div class="text-xs text-muted-color mt-1">
-                {{ $t('suspendedSshSessions.label.suspendedAt') }}: {{ formatDateTime(session.suspendStartTime) }}
+                {{ session.backendSshStatus === 'marked_active' ? $t('suspendedSshSessions.label.markedAt') : $t('suspendedSshSessions.label.suspendedAt') }}: {{ formatDateTime(session.suspendStartTime) }}
               </div>
               <div
                 v-if="session.backendSshStatus === 'disconnected_by_backend' && session.disconnectionTimestamp"
@@ -82,7 +86,7 @@
               
               <div class="actions flex flex-col space-y-2 mt-1">
                 <button
-                  v-if="session.backendSshStatus === 'hanging'"
+                  v-if="session.backendSshStatus === 'marked_active' || session.backendSshStatus === 'hanging'"
                   @click="resumeSession(session)"
                   :title="$t('suspendedSshSessions.action.resume')"
                   class="responsive-button-padding py-1.5 text-sm font-medium rounded-md text-button-text bg-button hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors duration-150 inline-flex items-center"
@@ -99,7 +103,7 @@
                   <span class="button-session-text">{{ $t('suspendedSshSessions.action.remove') }}</span>
                 </button>
                <button
-                 v-if="session.backendSshStatus === 'disconnected_by_backend' || session.backendSshStatus === 'hanging'"
+                 v-if="session.backendSshStatus !== 'marked_active'"
                  @click="exportLog(session)"
                  :title="$t('suspendedSshSessions.action.exportLog')"
                  class="responsive-button-padding py-1.5 text-sm font-medium rounded-md text-button-text bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150 inline-flex items-center"
@@ -178,6 +182,12 @@ const formatDateTime = (isoString?: string) => {
   }
 };
 
+const statusLabel = (session: SuspendedSshSession) => {
+  if (session.backendSshStatus === 'marked_active') return t('suspendedSshSessions.status.marked');
+  if (session.backendSshStatus === 'hanging') return t('suspendedSshSessions.status.hanging');
+  return t('suspendedSshSessions.status.disconnected');
+};
+
 const startEditingName = (session: SuspendedSshSession) => { // async 不再需要，聚焦由 watcher 处理
   editingSuspendSessionId.value = session.suspendSessionId;
   currentEditingNameValue.value = session.customSuspendName || session.connectionName;
@@ -226,7 +236,9 @@ const resumeSession = async (session: SuspendedSshSession) => { // 参数类型�
 };
 
 const removeSession = (session: SuspendedSshSession) => { // 参数类型改为 SuspendedSshSession
-  if (session.backendSshStatus === 'hanging') {
+  if (session.backendSshStatus === 'marked_active') {
+    sessionStore.requestUnmarkSshSuspend(session.suspendSessionId);
+  } else if (session.backendSshStatus === 'hanging') {
     sessionStore.terminateAndRemoveSshSession(session.suspendSessionId);
   } else if (session.backendSshStatus === 'disconnected_by_backend') {
     sessionStore.removeSshSessionEntry(session.suspendSessionId);

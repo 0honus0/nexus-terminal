@@ -68,12 +68,11 @@ export function parsePortsString(portsString: string | undefined | null): PortIn
  * 清理指定会话 ID 关联的所有资源
  * @param sessionId - 会话 ID
  */
-export const cleanupClientConnection = async (sessionId: string | undefined): Promise<string | null> => {
-    if (!sessionId) return null;
+export const cleanupClientConnection = async (sessionId: string | undefined): Promise<void> => {
+    if (!sessionId) return;
 
     const state = clientStates.get(sessionId);
     if (state) {
-        let createdSuspendSessionId: string | null = null;
         console.log(`WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`);
 
         if (state.shellSetup) {
@@ -138,7 +137,6 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
                 });
 
                 if (newSuspendId) {
-                    createdSuspendSessionId = newSuspendId;
                     console.log(`WebSocket: 会话 ${sessionId} 已成功移交给 SshSuspendService，新的挂起ID: ${newSuspendId}。SSH 连接将由服务管理。`);
                     // SSH 资源已移交，不需要在这里关闭它们
                 } else {
@@ -174,9 +172,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
         }
 
         console.log(`WebSocket: 会话 ${sessionId} 已清理。`);
-        return createdSuspendSessionId;
     } else {
         // console.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
-        return null;
     }
 };

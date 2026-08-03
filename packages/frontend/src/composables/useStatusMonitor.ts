@@ -23,6 +23,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
     let subscribed = false;
     let unregisterUpdate: (() => void) | null = null;
     let unregisterError: (() => void) | null = null;
+    let unregisterConnected: (() => void) | null = null;
 
     const updateHistory = (historyRef: Ref<(number | null)[]>, value: number | undefined) => {
         historyRef.value = [...historyRef.value.slice(1), Number.isFinite(value) ? value! : null];
@@ -49,16 +50,31 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
     };
 
     const registerHandlers = () => {
-        if (unregisterUpdate || unregisterError) return;
-        unregisterUpdate = onMessage('status_update', handleStatusUpdate);
-        unregisterError = onMessage('status:error', handleStatusError);
+        if (!unregisterUpdate) {
+            unregisterUpdate = onMessage('status_update', handleStatusUpdate);
+        }
+        if (!unregisterError) {
+            unregisterError = onMessage('status:error', handleStatusError);
+        }
+        if (!unregisterConnected) {
+            unregisterConnected = onMessage('ssh:connected', () => {
+                if (consumerCount === 0) return;
+                // 恢复流程中 WebSocket 打开时会暂时处于 connected，但此时后端的
+                // SSH ClientState 还未建立，过早发送的订阅会被忽略。收到真正的
+                // ssh:connected 后重新订阅，确保状态采集器一定启动。
+                subscribed = false;
+                subscribe();
+            });
+        }
     };
 
     const unregisterHandlers = () => {
         unregisterUpdate?.();
         unregisterError?.();
+        unregisterConnected?.();
         unregisterUpdate = null;
         unregisterError = null;
+        unregisterConnected = null;
     };
 
     const subscribe = () => {

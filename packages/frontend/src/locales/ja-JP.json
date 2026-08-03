@@ -1483,6 +1483,31 @@
             "passphraseUpdateNote": "パスフレーズを保持または削除するには空のままにします。更新するには新しいパスフレーズを入力してください。"
         }
     },
+  "suspendedSshSessions": {
+    "modalTitle": "中断された SSH セッション",
+    "searchPlaceholder": "セッションを検索（名前、接続名など）",
+    "loading": "中断されたセッションを読み込み中...",
+    "noResults": "条件に一致する中断セッションはありません。",
+    "tooltip": {
+      "editName": "クリックして名前を編集"
+    },
+    "label": {
+      "originalConnection": "元の接続",
+      "suspendedAt": "中断日時",
+      "markedAt": "マーク日時"
+    },
+    "disconnectedAt": "{time} に切断されました",
+    "status": {
+      "marked": "終了待ち",
+      "hanging": "アクティブ",
+      "disconnected": "切断済み"
+    },
+    "action": {
+      "resume": "復元",
+      "remove": "削除",
+      "exportLog": "ログをエクスポート"
+    }
+  },
   "time": {
     "unknown": "不明な時間",
     "invalidDate": "無効な日付"
@@ -1504,8 +1529,6 @@
       "nameEditedSuccess": "中断されたセッション名は「{name}」に更新されました。",
       "nameEditedError": "中断されたセッション名の編集に失敗しました: {error}",
       "markedForSuspendSuccess": "セッション {id} は正常に中断マークが付けられました。",
-      "suspendSuccess": "セッション {id} は正常に中断されました。",
-      "suspendError": "セッションの中断に失敗しました: {error}",
       "markForSuspendError": "セッションの中断マーク付けに失敗しました: {error}",
       "unmarkedSuccess": "セッション {id} の中断マークは正常に解除されました。",
       "unmarkError": "セッションの中断マーク解除に失敗しました: {error}",

@@ -1814,41 +1814,6 @@ const handleOpenEditorClick = () => {
               />
             </div>
             </div> 
-            <div class="file-manager-path-break" aria-hidden="true"></div>
-            <div ref="pathInputWrapperRef" class="file-manager-path-input relative flex items-center bg-background border border-border rounded px-1.5 py-0.5"
-                 :class="{ 'flex-grow min-w-0': isEditingPath || showPathHistoryDropdown, 'w-fit max-w-full': !isEditingPath && !showPathHistoryDropdown }">
-              <span v-show="!isEditingPath && !showPathHistoryDropdown" @click="startPathEdit" class="text-text-secondary pr-2 cursor-text truncate">
-                <strong
-                  :title="t('fileManager.editPathTooltip')"
-                  class="font-medium text-link px-1 rounded transition-colors duration-200"
-                  :class="{
-                    'hover:bg-black/5': currentSftpManager && props.wsDeps.isConnected.value,
-                    'opacity-60 cursor-not-allowed': !currentSftpManager || !props.wsDeps.isConnected.value
-                  }"
-                >
-                  {{ currentSftpManager?.currentPath?.value ?? '/' }}
-                </strong>
-              </span>
-              <input
-                v-show="isEditingPath || showPathHistoryDropdown"
-                ref="pathInputRef"
-                type="text"
-                v-model="editablePath"
-                class="flex-grow bg-transparent text-foreground p-0.5 outline-none min-w-[100px]"
-                data-focus-id="fileManagerPathInput"
-                @focus="handlePathInputFocus"
-                @input="handlePathInputChange"
-                @keydown="handlePathInputKeydown"
-                @blur="handlePathInput"
-              />
-              <PathHistoryDropdown
-                v-if="showPathHistoryDropdown"
-                ref="pathHistoryDropdownRef"
-                @pathSelected="handlePathSelectedFromDropdown"
-                @closeDropdown="closePathHistory"
-                class="left-0 right-0 top-full mt-1"
-              />
-            </div>
         </div> <!-- End Wrapper -->
        <!-- Main Actions Bar -->
        <div class="file-manager-actions flex items-center gap-1 flex-shrink-0">
@@ -1910,6 +1875,40 @@ const handleOpenEditorClick = () => {
               <i class="fas fa-check-square text-sm"></i>
             </button>
          </div>
+       <!-- Path is the final item in the primary toolbar row. -->
+       <div ref="pathInputWrapperRef" class="file-manager-path-input relative flex items-center bg-background border border-border rounded px-1.5 py-0.5 min-w-0">
+         <span v-show="!isEditingPath && !showPathHistoryDropdown" @click="startPathEdit" class="text-text-secondary pr-2 cursor-text truncate min-w-0">
+           <strong
+             :title="t('fileManager.editPathTooltip')"
+             class="font-medium text-link px-1 rounded transition-colors duration-200"
+             :class="{
+               'hover:bg-black/5': currentSftpManager && props.wsDeps.isConnected.value,
+               'opacity-60 cursor-not-allowed': !currentSftpManager || !props.wsDeps.isConnected.value
+             }"
+           >
+             {{ currentSftpManager?.currentPath?.value ?? '/' }}
+           </strong>
+         </span>
+         <input
+           v-show="isEditingPath || showPathHistoryDropdown"
+           ref="pathInputRef"
+           type="text"
+           v-model="editablePath"
+           class="flex-grow bg-transparent text-foreground p-0.5 outline-none min-w-[100px]"
+           data-focus-id="fileManagerPathInput"
+           @focus="handlePathInputFocus"
+           @input="handlePathInputChange"
+           @keydown="handlePathInputKeydown"
+           @blur="handlePathInput"
+         />
+         <PathHistoryDropdown
+           v-if="showPathHistoryDropdown"
+           ref="pathHistoryDropdownRef"
+           @pathSelected="handlePathSelectedFromDropdown"
+           @closeDropdown="closePathHistory"
+           class="left-0 right-0 top-full mt-1"
+         />
+       </div>
      </div>
 
 
@@ -2153,16 +2152,18 @@ const handleOpenEditorClick = () => {
 .file-manager-actions {
   min-width: 0;
 }
+.file-manager-toolbar {
+  justify-content: flex-start !important;
+  column-gap: 0.35rem;
+  row-gap: 0.3rem;
+}
 .file-manager-path-actions {
   min-width: 0;
   max-width: 100%;
 }
 .file-manager-path-row {
-  flex-wrap: wrap;
-}
-.file-manager-path-break {
-  flex-basis: 100%;
-  height: 0;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 .file-manager-path-button {
   flex: 0 0 1.75rem;
@@ -2171,10 +2172,17 @@ const handleOpenEditorClick = () => {
 .file-manager-path-input {
   max-width: 100%;
 }
+.file-manager-path-input {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  order: 3;
+}
 .file-manager-actions {
+  flex: 0 0 auto;
   max-width: 100%;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  order: 2;
 }
 .file-manager-action-button {
   min-height: 1.75rem;
@@ -2185,23 +2193,8 @@ const handleOpenEditorClick = () => {
 .file-manager-action-label {
   min-width: 0;
 }
-@container file-manager-pane (max-width: 760px) {
-  .file-manager-toolbar {
-    align-items: stretch;
-  }
-  .file-manager-path-row {
-    flex: 1 1 100%;
-    order: 1;
-  }
-  .file-manager-actions {
-    flex: 1 1 100%;
-    justify-content: flex-start;
-    order: 2;
-  }
-}
 @container file-manager-pane (max-width: 520px) {
   .file-manager-path-actions {
-    width: 100%;
     flex-wrap: wrap;
     row-gap: 0.15rem;
   }

@@ -103,7 +103,8 @@ export const openNewSession = (
       {
           isResumeFlow: isResume,
           getIsMarkedForSuspend: () => {
-              return !!newSessionPartial.isMarkedForSuspend;
+              const currentSessionId = resolveSessionId(newSessionId);
+              return !!sessions.value.get(currentSessionId)?.isMarkedForSuspend;
           },
           getTerminalDimensions: () => getTerminalDimensions?.(),
       }

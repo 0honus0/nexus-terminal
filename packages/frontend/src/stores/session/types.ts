@@ -46,6 +46,7 @@ export interface SessionState {
   commandInputContent: Ref<string>; // 当前会话的命令输入框内容
   isResuming?: boolean; // 标记会话是否正在从挂起状态恢复
   isMarkedForSuspend?: boolean; // +++ 标记会话是否已被用户请求标记为待挂起 +++
+  suspendMarkedAt?: string;
   createdAt: number; // 记录会话创建的时间戳，用于排序
   disposables?: (() => void)[]; // 用于存储清理函数，例如取消注册消息处理器
   pendingOutput?: PendingTerminalOutput[]; // 用于暂存恢复会话时，在终端实例准备好之前收到的输出

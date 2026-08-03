@@ -17,7 +17,7 @@ export interface SuspendedSshSession {
    * - 'hanging': SSH 连接仍在后端保持活跃。
    * - 'disconnected_by_backend': SSH 连接已从后端意外断开。
    */
-  backendSshStatus: 'hanging' | 'disconnected_by_backend';
+  backendSshStatus: 'marked_active' | 'hanging' | 'disconnected_by_backend';
   /**
    * 如果连接已从后端断开 (backendSshStatus === 'disconnected_by_backend')，
    * 则此字段表示断开连接的时间戳，ISO 格式的日期字符串。

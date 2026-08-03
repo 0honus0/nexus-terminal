@@ -42,7 +42,7 @@
       <div class="resource-monitor-group grid gap-3 mb-3">
         <!-- CPU 使用率 -->
         <!-- 设置第一列固定宽度为 80px -->
-        <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
+        <div class="status-item resource-status-item cpu-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.cpuLabel') }}</label>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
@@ -125,7 +125,7 @@
     </div>
 
      <!-- 网络速率，仅在有活动会话且有数据时显示 -->
-     <div v-if="activeSessionId && currentServerStatus" class="status-item grid grid-cols-[auto_1fr] items-center gap-3 mt-2">
+     <div v-if="activeSessionId && currentServerStatus" class="status-item network-status-item grid grid-cols-[auto_1fr] items-center gap-3 mt-2">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.networkLabel') }} ({{ currentServerStatus?.netInterface || '...' }}):</label>
           <div class="network-values flex items-center justify-start gap-4"> <!-- 减小间距 -->
             <span class="rate down inline-flex items-center gap-1 text-green-500 text-xs whitespace-nowrap">
@@ -395,6 +395,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   container-name: status-monitor-pane;
   min-width: 0;
   padding: 0.75rem !important;
+  --status-progress-font-size: 9px;
 }
 .status-monitor-title {
   margin-bottom: 0.75rem !important;
@@ -448,6 +449,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor {
     padding: 0.5rem !important;
     font-size: 0.76rem;
+    --status-progress-font-size: 7px;
   }
   .status-monitor-title {
     margin-bottom: 0.65rem;
@@ -507,6 +509,13 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     grid-column: 1 / -1;
     flex-direction: row;
   }
+  .resource-monitor-group .cpu-status-item {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+    row-gap: 0 !important;
+  }
+  .cpu-status-item .value-wrapper {
+    grid-column: auto;
+  }
   .resource-status-item .resource-inline-details {
     display: none;
   }
@@ -514,21 +523,32 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     overflow-wrap: anywhere;
     white-space: normal;
   }
-  .network-values {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.2rem !important;
+  .network-status-item {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: center;
+    gap: 0.45rem !important;
+  }
+  .network-status-item label {
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .network-status-item .network-values {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: 0.55rem !important;
+    row-gap: 0.15rem !important;
   }
   ::v-deep(.themed-progress .el-progress-bar__outer) {
     height: 11px !important;
   }
-  ::v-deep(.themed-progress .el-progress-bar__innerText) {
-    font-size: 8px !important;
-    line-height: 11px;
-    top: 0;
-  }
 }
 @container status-monitor-pane (max-width: 260px) {
+  .status-monitor {
+    --status-progress-font-size: 6px;
+  }
   .resource-status-item label {
     font-size: 0.64rem;
   }
@@ -538,9 +558,18 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   ::v-deep(.themed-progress .el-progress-bar__outer) {
     height: 10px !important;
   }
-  ::v-deep(.themed-progress .el-progress-bar__innerText) {
-    font-size: 7px !important;
-    line-height: 10px;
+}
+@container status-monitor-pane (max-width: 220px) {
+  .resource-monitor-group .cpu-status-item {
+    grid-template-columns: minmax(0, 1fr) !important;
+    row-gap: 0.18rem !important;
+  }
+  .cpu-status-item .value-wrapper {
+    grid-column: 1 / -1;
+  }
+  .network-status-item {
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: stretch;
   }
 }
 
@@ -554,8 +583,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   transition: none !important;
 }
 ::v-deep(.el-progress-bar__innerText) {
-  font-size: 10px;
+  font-size: var(--status-progress-font-size) !important;
+  line-height: 1 !important;
   position: relative;
-  top: -0.5px;       
+  top: 0;
 }
 </style>
