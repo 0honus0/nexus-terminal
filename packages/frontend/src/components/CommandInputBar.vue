@@ -11,12 +11,16 @@ import QuickCommandsModal from './QuickCommandsModal.vue';
 import SuspendedSshSessionsModal from './SuspendedSshSessionsModal.vue'; 
 import { useFileEditorStore } from '../stores/fileEditor.store'; 
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+import { applyTerminalModifiers } from '../utils/terminalModifiers';
 
 
 defineOptions({ inheritAttrs: false });
 
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
-const emit = defineEmits(['toggle-virtual-keyboard']);
+const emit = defineEmits<{
+  (e: 'toggle-virtual-keyboard'): void;
+  (e: 'consume-virtual-modifiers'): void;
+}>();
 
 const { t } = useI18n();
 const focusSwitcherStore = useFocusSwitcherStore();
@@ -43,6 +47,8 @@ const props = defineProps<{
   // No props defined here currently
   isMobile?: boolean;
   isVirtualKeyboardVisible?: boolean; // +++ Add prop to receive state +++
+  virtualCtrlActive?: boolean;
+  virtualAltActive?: boolean;
 }>();
 // --- 移除本地 commandInput ref ---
 // const commandInput = ref('');
@@ -221,6 +227,19 @@ const handleCommandInputKeydown = (event: KeyboardEvent) => {
 };
 
 const handleSharedInputKeydown = (event: KeyboardEvent) => {
+  if (props.isMobile && !isSearching.value && (props.virtualCtrlActive || props.virtualAltActive)) {
+    const sequence = applyTerminalModifiers(event.key, {
+      ctrl: Boolean(props.virtualCtrlActive),
+      alt: Boolean(props.virtualAltActive),
+    });
+    if (sequence !== null && activeSessionId.value) {
+      event.preventDefault();
+      emit('consume-virtual-modifiers');
+      emitWorkspaceEvent('terminal:input', { sessionId: activeSessionId.value, data: sequence });
+      return;
+    }
+  }
+
   if (!isSearching.value) {
     handleCommandInputKeydown(event);
     return;
@@ -243,6 +262,22 @@ const handleSharedInputKeydown = (event: KeyboardEvent) => {
     event.preventDefault();
     findNext();
   }
+};
+
+const handleSharedBeforeInput = (event: InputEvent) => {
+  if (!props.isMobile || isSearching.value || event.isComposing || event.inputType !== 'insertText') return;
+  if (!props.virtualCtrlActive && !props.virtualAltActive) return;
+  if (!event.data || !activeSessionId.value) return;
+
+  const sequence = applyTerminalModifiers(event.data, {
+    ctrl: Boolean(props.virtualCtrlActive),
+    alt: Boolean(props.virtualAltActive),
+  });
+  if (sequence === null) return;
+
+  event.preventDefault();
+  emit('consume-virtual-modifiers');
+  emitWorkspaceEvent('terminal:input', { sessionId: activeSessionId.value, data: sequence });
 };
 
 //  Handle blur event on command input
@@ -373,6 +408,7 @@ const handleQuickCommandExecute = (command: string) => {
         ref="commandInputRef"
         :data-focus-id="isSearching ? 'terminalSearch' : 'commandInput'"
         @keydown="handleSharedInputKeydown"
+        @beforeinput="handleSharedBeforeInput"
         @blur="handleSharedInputBlur"
       />
 

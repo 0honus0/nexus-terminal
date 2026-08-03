@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, computed, ref, shallowRef, type PropType } from 'vue';
+import { onMounted, onBeforeUnmount, computed, ref, shallowRef, nextTick, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useLayoutStore, type LayoutNode } from '../stores/layout.store'; // +++ Import LayoutNode +++
@@ -26,6 +26,7 @@ import {
   type WorkspaceEventPayloads
 } from '../composables/workspaceEvents';
 import type { WebSocketDependencies } from '../composables/useSftpActions'; 
+import { applyTerminalModifiers } from '../utils/terminalModifiers';
 
 // --- Setup ---
 const { t } = useI18n();
@@ -82,6 +83,20 @@ const showLayoutConfigurator = ref(false); // 控制布局配置器可见性
 const currentSearchTerm = ref(''); // 当前搜索的关键词
 const mobileTerminalRef = ref<InstanceType<typeof Terminal> | null>(null);
 const isVirtualKeyboardVisible = ref(false); 
+const isVirtualCtrlActive = ref(false);
+const isVirtualAltActive = ref(false);
+const mobileCommandInputBarRef = ref<InstanceType<typeof CommandInputBar> | null>(null);
+
+const clearVirtualModifiers = () => {
+  isVirtualCtrlActive.value = false;
+  isVirtualAltActive.value = false;
+};
+
+const toggleVirtualModifier = (modifier: 'ctrl' | 'alt') => {
+  if (modifier === 'ctrl') isVirtualCtrlActive.value = !isVirtualCtrlActive.value;
+  else isVirtualAltActive.value = !isVirtualAltActive.value;
+  nextTick(() => mobileCommandInputBarRef.value?.focusCommandInput());
+};
 
 const subscribeToWorkspaceEvents = useWorkspaceEventSubscriber();
 const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
@@ -287,7 +302,18 @@ onBeforeUnmount(() => {
  // 处理终端输入 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-input', sessionId, data)
  const handleTerminalInput = (payload: { sessionId: string; data: string }) => {
-   const { sessionId, data } = payload; // 解构 payload
+   const { sessionId } = payload;
+   let data = payload.data;
+   if (isMobile.value && sessionId === activeSessionId.value && (isVirtualCtrlActive.value || isVirtualAltActive.value)) {
+     const modifiedData = applyTerminalModifiers(data, {
+       ctrl: isVirtualCtrlActive.value,
+       alt: isVirtualAltActive.value,
+     });
+     if (modifiedData !== null) {
+       data = modifiedData;
+       clearVirtualModifiers();
+     }
+   }
    const session = sessionStore.sessions.get(sessionId);
    const manager = session?.terminalManager as (SshTerminalInstance | undefined);
    if (!session || !manager) {
@@ -551,6 +577,7 @@ const handleVirtualKeyPress = (keySequence: string) => {
  if (terminalManager && typeof terminalManager.sendData === 'function') {
    console.log(`[WorkspaceView Mobile] Sending virtual key sequence: ${JSON.stringify(keySequence)}`);
    terminalManager.sendData(keySequence);
+   clearVirtualModifiers();
  } else {
    console.warn(`[WorkspaceView Mobile] Cannot send virtual key for session ${currentSession.sessionId}, terminal manager or sendData method not available.`);
  }
@@ -559,6 +586,7 @@ const handleVirtualKeyPress = (keySequence: string) => {
 // +++ Function to toggle virtual keyboard visibility +++
 const toggleVirtualKeyboard = () => {
  isVirtualKeyboardVisible.value = !isVirtualKeyboardVisible.value;
+ if (!isVirtualKeyboardVisible.value) clearVirtualModifiers();
 };
 
 // RDP 事件处理方法已被移除
@@ -734,6 +762,7 @@ const closeFileManagerModal = () => {
         </div>
       </div>
       <CommandInputBar
+        ref="mobileCommandInputBarRef"
         class="mobile-command-bar"
         :is-mobile="isMobile"
         @send-command="handleSendCommand"
@@ -743,13 +772,19 @@ const closeFileManagerModal = () => {
         @close-search="handleCloseSearch"
         @clear-terminal="handleClearTerminal"
         :is-virtual-keyboard-visible="isVirtualKeyboardVisible"
+        :virtual-ctrl-active="isVirtualCtrlActive"
+        :virtual-alt-active="isVirtualAltActive"
         @toggle-virtual-keyboard="toggleVirtualKeyboard"
+        @consume-virtual-modifiers="clearVirtualModifiers"
       />
       <!-- +++ Use v-show for VirtualKeyboard and bind visibility +++ -->
       <VirtualKeyboard
         v-show="isVirtualKeyboardVisible"
         class="mobile-virtual-keyboard"
+        :ctrl-active="isVirtualCtrlActive"
+        :alt-active="isVirtualAltActive"
         @send-key="handleVirtualKeyPress"
+        @toggle-modifier="toggleVirtualModifier"
       />
     </template>
 
