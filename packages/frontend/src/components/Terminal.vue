@@ -53,6 +53,9 @@ let currentFontSizeOnPinchStart = 0;
 let mobileLongPressTimer: number | null = null;
 let mobileLongPressStart: { x: number; y: number } | null = null;
 let mobileLongPressTriggered = false;
+let mobileTouchSelectionActive = false;
+let mobileSelectionBaseRange: { startColumn: number; startRow: number; endColumn: number; endRow: number } | null = null;
+let mobileSelectionLastPoint: { x: number; y: number } | null = null;
 let suppressMobileContextMenuUntil = 0;
 const MOBILE_LONG_PRESS_DELAY = 520;
 const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
@@ -231,7 +234,11 @@ const clearMobileLongPressTimer = () => {
 
 const closeMobileClipboardMenu = (clearSelection = false) => {
   mobileClipboardMenu.value.visible = false;
-  if (clearSelection) terminal?.clearSelection();
+  if (clearSelection) {
+    terminal?.clearSelection();
+    mobileSelectionBaseRange = null;
+    mobileTouchSelectionActive = false;
+  }
 };
 
 const getTerminalCellAtPoint = (clientX: number, clientY: number) => {
@@ -282,6 +289,39 @@ const selectTerminalWordAtPoint = (clientX: number, clientY: number): boolean =>
   return terminal.hasSelection();
 };
 
+const captureMobileSelectionBaseRange = () => {
+  const range = terminal?.getSelectionPosition();
+  mobileSelectionBaseRange = range ? {
+    startColumn: range.start.x,
+    startRow: range.start.y,
+    endColumn: range.end.x,
+    endRow: range.end.y,
+  } : null;
+};
+
+const updateMobileSelectionToPoint = (clientX: number, clientY: number) => {
+  if (!terminal || !mobileSelectionBaseRange) return;
+  const position = getTerminalCellAtPoint(clientX, clientY);
+  if (!position) return;
+
+  let targetColumn = position.column;
+  const targetLine = terminal.buffer.active.getLine(position.bufferRow);
+  // 拖到宽字符后半格时，将选区落到完整字符的起始单元格。
+  while (targetColumn > 0 && targetLine?.getCell(targetColumn)?.getWidth() === 0) targetColumn -= 1;
+
+  const columns = terminal.cols;
+  const baseStart = mobileSelectionBaseRange.startRow * columns + mobileSelectionBaseRange.startColumn;
+  const baseEnd = mobileSelectionBaseRange.endRow * columns + mobileSelectionBaseRange.endColumn;
+  const target = position.bufferRow * columns + targetColumn;
+
+  const selectionStart = target < baseStart ? target : baseStart;
+  const selectionEnd = target < baseStart ? baseEnd : Math.max(baseEnd, target + 1);
+  const startRow = Math.floor(selectionStart / columns);
+  const startColumn = selectionStart % columns;
+  terminal.select(startColumn, startRow, Math.max(1, selectionEnd - selectionStart));
+  mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+};
+
 const openMobileClipboardMenu = (clientX: number, clientY: number) => {
   if (!terminalOuterWrapperRef.value || !terminal) return;
   const wrapperRect = terminalOuterWrapperRef.value.getBoundingClientRect();
@@ -299,9 +339,13 @@ const openMobileClipboardMenu = (clientX: number, clientY: number) => {
 const triggerMobileLongPress = (clientX: number, clientY: number) => {
   if (!terminal || !props.isActive) return;
   mobileLongPressTriggered = true;
+  mobileTouchSelectionActive = true;
   suppressMobileContextMenuUntil = Date.now() + 1200;
   selectTerminalWordAtPoint(clientX, clientY);
-  openMobileClipboardMenu(clientX, clientY);
+  captureMobileSelectionBaseRange();
+  mobileSelectionLastPoint = { x: clientX, y: clientY };
+  // 手指松开后再显示菜单，按住拖动期间专注调整选区。
+  mobileClipboardMenu.value.visible = false;
   navigator.vibrate?.(12);
 };
 
@@ -310,6 +354,7 @@ const handleMobileContextMenu = (event: MouseEvent) => {
   event.preventDefault();
   event.stopPropagation();
   if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
+  mobileTouchSelectionActive = true;
   selectTerminalWordAtPoint(event.clientX, event.clientY);
   openMobileClipboardMenu(event.clientX, event.clientY);
 };
@@ -319,6 +364,7 @@ const copyMobileTerminalSelection = async () => {
   if (!selectedText) return;
   try {
     await navigator.clipboard.writeText(selectedText);
+    mobileTouchSelectionActive = false;
     closeMobileClipboardMenu();
   } catch (error) {
     console.error('[Terminal] 手机端复制终端内容失败:', error);
@@ -331,6 +377,7 @@ const pasteMobileTerminalClipboard = async () => {
     const text = await navigator.clipboard.readText();
     if (text) terminal.paste(text.replace(/\r\n?/g, '\n'));
     terminal.clearSelection();
+    mobileTouchSelectionActive = false;
     closeMobileClipboardMenu();
     terminal.focus();
   } catch (error) {
@@ -368,6 +415,8 @@ const handleTouchStart = (event: TouchEvent) => {
     const touch = event.touches[0];
     closeMobileClipboardMenu(true);
     mobileLongPressTriggered = false;
+    mobileSelectionBaseRange = null;
+    mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
     mobileLongPressStart = { x: touch.clientX, y: touch.clientY };
     mobileLongPressTimer = window.setTimeout(() => {
       mobileLongPressTimer = null;
@@ -390,6 +439,8 @@ const handleTouchMove = (event: TouchEvent) => {
     const moved = Math.hypot(touch.clientX - mobileLongPressStart.x, touch.clientY - mobileLongPressStart.y);
     if (mobileLongPressTriggered) {
       event.preventDefault();
+      updateMobileSelectionToPoint(touch.clientX, touch.clientY);
+      mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
     } else if (moved > MOBILE_LONG_PRESS_MOVE_TOLERANCE) {
       clearMobileLongPressTimer();
       mobileLongPressStart = null;
@@ -420,8 +471,18 @@ const handleTouchEnd = (event: TouchEvent) => {
   mobileLongPressStart = null;
   if (mobileLongPressTriggered) {
     event.preventDefault();
+    if (event.type === 'touchcancel') {
+      closeMobileClipboardMenu(true);
+    } else {
+      const changedTouch = event.changedTouches[0];
+      const menuPoint = changedTouch
+        ? { x: changedTouch.clientX, y: changedTouch.clientY }
+        : mobileSelectionLastPoint;
+      if (menuPoint) openMobileClipboardMenu(menuPoint.x, menuPoint.y);
+    }
     mobileLongPressTriggered = false;
   }
+  mobileSelectionLastPoint = null;
   if (event.touches.length < 2) {
     initialPinchDistance = 0; // Reset pinch distance
   }
@@ -587,6 +648,8 @@ onMounted(() => {
     // --- 监听并处理选中即复制 ---
     let currentSelection = ''; // 存储当前选区内容，避免重复复制空内容
     const handleSelectionChange = () => {
+        // 手机长按拖选必须由用户点击“复制”确认，不受“选中即复制”设置影响。
+        if (mobileTouchSelectionActive) return;
         if (terminal && autoCopyOnSelectBoolean.value) {
             const newSelection = terminal.getSelection();
             // 仅在选区内容发生变化且不为空时执行复制
