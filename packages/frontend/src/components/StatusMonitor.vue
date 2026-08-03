@@ -447,14 +447,14 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   top: 50%;
   left: clamp(1.35rem, var(--progress-percentage), calc(100% - 0.15rem));
   z-index: 1;
-  color: #fff;
+  color: var(--text-color);
   font-size: var(--status-progress-font-size);
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
   transform: translate(-100%, -50%);
-  text-shadow: 0 1px 1px rgb(0 0 0 / 45%);
+  text-shadow: none;
 }
 .resource-monitor-group {
   grid-template-columns: minmax(0, 1fr);

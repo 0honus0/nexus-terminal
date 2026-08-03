@@ -21,6 +21,26 @@
          </form>
       </div>
       <hr class="border-border/50">
+      <!-- Popup Editor Close Behavior -->
+      <div class="settings-section-content">
+         <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.workspace.editorCloseBehaviorTitle') }}</h3>
+         <form @submit.prevent="handleUpdateClearEditorTabsOnClose" class="space-y-4">
+             <div class="flex items-center">
+                 <input type="checkbox" id="clearFileEditorTabsOnClose" v-model="clearEditorTabsOnCloseEnabled"
+                        class="h-4 w-4 rounded border-border text-primary focus:ring-primary mr-2 cursor-pointer">
+                 <label for="clearFileEditorTabsOnClose" class="text-sm text-foreground cursor-pointer select-none">{{ $t('settings.workspace.editorCloseBehaviorLabel') }}</label>
+             </div>
+             <p class="text-xs text-text-secondary mt-1">{{ $t('settings.workspace.editorCloseBehaviorDescription') }}</p>
+             <div class="flex items-center justify-between">
+                <button type="submit" :disabled="clearEditorTabsOnCloseLoading"
+                        class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
+                  {{ $t('common.save') }}
+                </button>
+                <p v-if="clearEditorTabsOnCloseMessage" :class="['text-sm', clearEditorTabsOnCloseSuccess ? 'text-success' : 'text-error']">{{ clearEditorTabsOnCloseMessage }}</p>
+             </div>
+         </form>
+      </div>
+      <hr class="border-border/50">
       <!-- Popup File Manager -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.popupFileManager.title') }}</h3>
@@ -353,6 +373,11 @@ const {
   popupEditorMessage,
   popupEditorSuccess,
   handleUpdatePopupEditorSetting,
+  clearEditorTabsOnCloseEnabled,
+  clearEditorTabsOnCloseLoading,
+  clearEditorTabsOnCloseMessage,
+  clearEditorTabsOnCloseSuccess,
+  handleUpdateClearEditorTabsOnClose,
   shareTabsEnabled,
   shareTabsMessage,
   shareTabsSuccess,

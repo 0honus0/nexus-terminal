@@ -36,6 +36,7 @@ interface SettingsState {
   maxLoginAttempts?: string;
   loginBanDuration?: string;
   showPopupFileEditor?: string; // 'true' or 'false'
+  clearFileEditorTabsOnClose?: string; // 'true' or 'false' - 点击弹窗编辑器关闭按钮时清空文件缓存
   showPopupFileManager?: string; // 'true' or 'false' - NEW: 弹窗文件管理器
   shareFileEditorTabs?: string; // 'true' or 'false'
   ipWhitelistEnabled?: string; // 添加 IP 白名单启用状态 'true' or 'false'
@@ -117,6 +118,9 @@ export const useSettingsStore = defineStore('settings', () => {
       // --- 设置默认值 (如果后端未返回) ---
       if (settings.value.showPopupFileEditor === undefined) {
           settings.value.showPopupFileEditor = 'true';
+      }
+      if (settings.value.clearFileEditorTabsOnClose === undefined) {
+          settings.value.clearFileEditorTabsOnClose = 'false';
       }
       // +++  showPopupFileManager 默认值 (改为 false) +++
       if (settings.value.showPopupFileManager === undefined) {
@@ -411,7 +415,7 @@ export const useSettingsStore = defineStore('settings', () => {
     // 移除外观相关的键检查
     const allowedKeys: Array<keyof SettingsState> = [
         'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
-        'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
+        'showPopupFileEditor', 'clearFileEditorTabsOnClose', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
         'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
@@ -520,7 +524,7 @@ export const useSettingsStore = defineStore('settings', () => {
      // 移除外观相关的键检查
     const allowedKeys: Array<keyof SettingsState> = [
         'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
-        'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
+        'showPopupFileEditor', 'clearFileEditorTabsOnClose', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
         'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
@@ -754,6 +758,10 @@ export const useSettingsStore = defineStore('settings', () => {
       return settings.value.shareFileEditorTabs !== 'false';
   });
 
+  const clearFileEditorTabsOnCloseBoolean = computed(() => {
+      return settings.value.clearFileEditorTabsOnClose === 'true';
+  });
+
   // Getter for IP Whitelist enabled status
   const ipWhitelistEnabled = computed(() => settings.value.ipWhitelistEnabled === 'true');
 
@@ -898,6 +906,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showPopupFileEditorBoolean,
     showPopupFileManagerBoolean, // +++ 暴露弹窗文件管理器 getter +++
     shareFileEditorTabsBoolean,
+    clearFileEditorTabsOnCloseBoolean,
     ipWhitelistEnabled, // 暴露 IP 白名单启用状态
     ipBlacklistEnabledBoolean, // <-- NEW: 暴露 IP 黑名单启用状态 getter
     autoCopyOnSelectBoolean,

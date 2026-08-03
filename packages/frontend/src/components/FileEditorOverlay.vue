@@ -36,7 +36,11 @@ const {
 } = storeToRefs(fileEditorStore);
 
 // 设置 Store (用于判断模式)
-const { showPopupFileEditorBoolean, shareFileEditorTabsBoolean } = storeToRefs(settingsStore);
+const {
+    showPopupFileEditorBoolean,
+    shareFileEditorTabsBoolean,
+    clearFileEditorTabsOnCloseBoolean,
+} = storeToRefs(settingsStore);
 
 // 从 Appearance Store 获取编辑器字体大小和字体
 const { currentEditorFontSize, currentEditorFontFamily } = storeToRefs(appearanceStore);
@@ -47,6 +51,7 @@ const {
    saveFile: saveGlobalFile,
    reloadFile: reloadGlobalFile,
    closeTab: closeGlobalTab,
+   closeAllTabs: closeAllGlobalTabs,
    setActiveTab: setGlobalActiveTab,
    updateFileContent: updateGlobalFileContent,
    // + 添加右键菜单操作 actions
@@ -62,6 +67,7 @@ const {
    saveFileInSession,
    reloadFileInSession,
    closeEditorTabInSession,
+   closeAllEditorTabsInSession,
    setActiveEditorTabInSession,
    updateFileContentInSession,
    // + 添加右键菜单操作 actions
@@ -481,9 +487,24 @@ const handleOpenSearch = () => {
   }
 };
  
-// 关闭弹窗 (保持不变)
-const handleCloseContainer = () => {
+// 点击遮罩空白处只隐藏编辑器，始终保留已打开文件缓存。
+const hideEditorOverlay = () => {
     isVisible.value = false;
+};
+
+// 关闭按钮根据工作区设置决定是否清空当前编辑器的全部文件缓存。
+const handleCloseButton = () => {
+    if (clearFileEditorTabsOnCloseBoolean.value) {
+        if (shareFileEditorTabsBoolean.value) {
+            closeAllGlobalTabs();
+        } else {
+            const sessionId = popupFileInfo.value?.sessionId;
+            if (sessionId) {
+                closeAllEditorTabsInSession(sessionId);
+            }
+        }
+    }
+    hideEditorOverlay();
 };
 
 
@@ -560,7 +581,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- 使用本地 isVisible 控制显示 (App.vue 中已有 v-if="showPopupFileEditorBoolean") -->
-  <div v-if="isVisible" class="editor-overlay-backdrop" @click.self="handleCloseContainer"> <!-- 恢复点击背景关闭 -->
+  <div v-if="isVisible" class="editor-overlay-backdrop" @click.self="hideEditorOverlay">
     <!-- 编辑器弹窗/容器，应用动态样式 -->
     <div class="editor-popup" :style="popupStyle">
 
@@ -630,14 +651,14 @@ onBeforeUnmount(() => {
             {{ t('fileManager.actions.save') }}
           </button>
 
-          <button v-if="!props.isMobile" @click="handleCloseContainer" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
+          <button v-if="!props.isMobile" @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
         </div>
-        <button v-if="props.isMobile" @click="handleCloseContainer" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
+        <button v-if="props.isMobile" @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
       </div>
        <!-- 如果没有活动标签页 -->
       <div v-else class="editor-header editor-header-placeholder" :class="{ 'is-mobile': props.isMobile }">
         <span>{{ t('fileManager.noOpenFile') }}</span>
-         <button @click="handleCloseContainer" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
+         <button @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
       </div>
 
       <!-- 编辑器内容区域 (现在基于 activeTab) -->
@@ -686,7 +707,7 @@ onBeforeUnmount(() => {
    <!--
    <div v-if="editorVisibleState === 'minimized'" class="editor-minimized-bar" @click="setEditorVisibility('visible')">
        <span>File Editor</span>
-       <button @click.stop="handleCloseContainer">✖</button>
+       <button @click.stop="handleCloseButton">✖</button>
    </div>
    -->
 </template>

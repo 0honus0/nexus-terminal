@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
-import { Terminal, type ITerminalAddon, type IDisposable } from '@xterm/xterm';
+import { Terminal, type ITheme, type ITerminalAddon, type IDisposable } from '@xterm/xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
 import { useSettingsStore } from '../stores/settings.store';
@@ -53,6 +53,7 @@ let currentFontSizeOnPinchStart = 0;
 const appearanceStore = useAppearanceStore();
 const {
   effectiveTerminalTheme,
+  isTerminalBackgroundEnabled,
   currentTerminalFontFamily,
   currentTerminalFontSize,
   // --- 文字描边和阴影状态 ---
@@ -66,6 +67,12 @@ const {
   terminalTextShadowColor,
   initialAppearanceDataLoaded, 
 } = storeToRefs(appearanceStore);
+
+const resolveTerminalTheme = (theme: ITheme): ITheme => (
+  isTerminalBackgroundEnabled.value
+    ? { ...theme, background: 'rgba(0, 0, 0, 0)' }
+    : theme
+);
  
 const isTerminalDomReady = ref(false); 
  
@@ -255,7 +262,7 @@ onMounted(() => {
       cursorBlink: true,
       fontSize: currentTerminalFontSize.value, 
       fontFamily: currentTerminalFontFamily.value, // 使用 store 中的字体设置
-      theme: effectiveTerminalTheme.value, // 使用 store 中的当前 xterm 主题 (now effectiveTerminalTheme)
+      theme: resolveTerminalTheme(effectiveTerminalTheme.value),
       rows: 24, // 初始行数
       cols: 80, // 初始列数
       allowTransparency: true,
@@ -441,11 +448,10 @@ onMounted(() => {
     });
 
     // --- 监听外观变化 ---
-    watch(effectiveTerminalTheme, (newTheme) => { // Changed from currentTerminalTheme
+    watch([effectiveTerminalTheme, isTerminalBackgroundEnabled], ([newTheme]) => {
       if (terminal) {
         console.log(`[Terminal ${props.sessionId}] 应用新终端主题 (effective)。`);
-        // 直接修改 options 对象
-        terminal.options.theme = newTheme;
+        terminal.options.theme = resolveTerminalTheme(newTheme);
         // 修改选项后需要刷新终端才能生效
         try {
             // 刷新整个视口

@@ -82,6 +82,8 @@ export const useSessionStore = defineStore('session', () => {
     editorActions.openFileInSession(resolveSessionId(sessionId), fileInfo, { getOrCreateSftpManager, t });
   const closeEditorTabInSession = (sessionId: string, tabId: string) =>
     editorActions.closeEditorTabInSession(resolveSessionId(sessionId), tabId);
+  const closeAllEditorTabsInSession = (sessionId: string) =>
+    editorActions.closeAllEditorTabsInSession(resolveSessionId(sessionId));
   const setActiveEditorTabInSession = (sessionId: string, tabId: string) =>
     editorActions.setActiveEditorTabInSession(resolveSessionId(sessionId), tabId);
   const updateFileContentInSession = (sessionId: string, tabId: string, newContent: string) =>
@@ -135,6 +137,7 @@ export const useSessionStore = defineStore('session', () => {
     resolveSessionId,
     openFileInSession,
     closeEditorTabInSession,
+    closeAllEditorTabsInSession,
     setActiveEditorTabInSession,
     updateFileContentInSession,
     saveFileInSession,

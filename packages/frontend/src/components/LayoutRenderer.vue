@@ -561,6 +561,7 @@ onBeforeUnmount(() => {
                            ></div>
                            <!-- Color Overlay -->
                            <div
+                               v-if="terminalBackgroundImage"
                                class="terminal-background-overlay-layer"
                                :style="{
                                    position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
@@ -817,12 +818,13 @@ onBeforeUnmount(() => {
   background-color: var(--border-color) !important; /* Override hover effect */
 }
 
-.terminal-pane-container.has-global-terminal-background .terminal-outer-wrapper.terminal-transparent {
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-outer-wrapper {
   background-color: transparent !important; /* 使 Terminal.vue 的最外层容器背景透明 */
 }
 
-.terminal-pane-container.has-global-terminal-background .terminal-outer-wrapper.terminal-transparent .terminal-inner-container .xterm-viewport,
-.terminal-pane-container.has-global-terminal-background .terminal-outer-wrapper.terminal-transparent .terminal-inner-container .xterm-screen {
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container .xterm,
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container .xterm-viewport,
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container .xterm-screen {
   background-color: transparent !important;
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@nexus-terminal/remote-gateway",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.js",
   "allowScripts": {
     "esbuild@0.28.1": true

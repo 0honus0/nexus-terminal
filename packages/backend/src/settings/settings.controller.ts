@@ -75,7 +75,7 @@ export const settingsController = {
 
       const allowedSettingsKeys = [
           'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
-          'showPopupFileEditor', 'shareFileEditorTabs', 'ipWhitelistEnabled',
+          'showPopupFileEditor', 'clearFileEditorTabsOnClose', 'shareFileEditorTabs', 'ipWhitelistEnabled',
           'autoCopyOnSelect', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
           'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
           'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++

@@ -61,6 +61,7 @@
        <div
         v-else
         class="quick-command-list list-none p-0 m-0 outline-none"
+        :class="{ 'quick-command-list-small-type': isSmallQuickCommandTypography }"
         ref="commandListContainerRef"
         tabindex="0"
         @wheel.ctrl.prevent="handleWheel"
@@ -126,7 +127,9 @@
                             <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
                                 <span
                                   class="quick-command-display-text truncate"
-                                  :class="commandDisplayMode === 'name' ? 'font-normal text-text-secondary/80' : 'font-mono font-normal text-text-secondary/70'"
+                                  :class="commandDisplayMode === 'name'
+                                    ? 'quick-command-display-name font-normal text-text-secondary/80'
+                                    : 'quick-command-display-code font-mono font-normal text-text-secondary/70'"
                                   :title="getCommandDisplayText(cmd)"
                                 >{{ getCommandDisplayText(cmd) }}</span>
                             </div>
@@ -166,7 +169,9 @@
                     <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
                         <span
                           class="quick-command-display-text truncate"
-                          :class="commandDisplayMode === 'name' ? 'font-normal text-text-secondary/80' : 'font-mono font-normal text-text-secondary/70'"
+                          :class="commandDisplayMode === 'name'
+                            ? 'quick-command-display-name font-normal text-text-secondary/80'
+                            : 'quick-command-display-code font-mono font-normal text-text-secondary/70'"
                           :title="getCommandDisplayText(cmd)"
                         >{{ getCommandDisplayText(cmd) }}</span>
                     </div>
@@ -332,6 +337,7 @@ const flatFilteredCommands = computed(() => {
 
 // --- Compact Mode ---
 const isCompactMode = computed(() => quickCommandsCompactModeBoolean.value);
+const isSmallQuickCommandTypography = computed(() => quickCommandRowSizeMultiplier.value < 1);
 
 const toggleCompactMode = () => {
   const currentMode = quickCommandsCompactModeBoolean.value;
@@ -848,9 +854,28 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   font-size: inherit;
 }
 .quick-command-display-text {
-  font-size: calc(0.74rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
   font-weight: 400;
   line-height: 1.3;
+}
+.quick-command-display-name {
+  /* 与原项目一致：名称跟随界面字体。 */
+  font-family: inherit;
+  font-size: calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+}
+.quick-command-display-code {
+  /* 与原项目一致：指令使用等宽字体。 */
+  font-size: calc(0.75em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+}
+.quick-command-list-small-type .quick-command-display-text {
+  font-size: calc(0.7rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+  font-weight: 450;
+  letter-spacing: 0.005em;
+}
+.quick-command-list-small-type .quick-command-display-name {
+  font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+}
+.quick-command-list-small-type .quick-command-display-code {
+  font-family: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
 }
 @container quick-commands-pane (max-width: 340px) {
   .quick-commands-controls {
@@ -888,6 +913,17 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   }
   .quick-command-action-button {
     padding: 0.25rem !important;
+  }
+  .quick-command-display-text {
+    font-size: calc(0.7rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+    font-weight: 450;
+    letter-spacing: 0.005em;
+  }
+  .quick-command-display-name {
+    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+  }
+  .quick-command-display-code {
+    font-family: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   }
 }
 @container quick-commands-pane (max-width: 240px) {

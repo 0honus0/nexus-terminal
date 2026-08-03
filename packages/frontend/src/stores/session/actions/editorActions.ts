@@ -124,6 +124,18 @@ export const closeEditorTabInSession = (sessionId: string, tabId: string) => {
     }
 };
 
+export const closeAllEditorTabsInSession = (sessionId: string) => {
+    const session = sessions.value.get(sessionId);
+    if (!session) {
+        console.error(`[EditorActions] 尝试清空不存在的会话 ${sessionId} 的编辑器标签页`);
+        return;
+    }
+
+    console.log(`[EditorActions] 清空会话 ${sessionId} 的全部编辑器标签页缓存。`);
+    session.editorTabs.value.splice(0, session.editorTabs.value.length);
+    session.activeEditorTabId.value = null;
+};
+
 export const setActiveEditorTabInSession = (sessionId: string, tabId: string) => {
     const session = sessions.value.get(sessionId);
     if (!session) {

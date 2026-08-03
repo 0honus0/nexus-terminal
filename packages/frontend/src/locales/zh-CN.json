@@ -910,6 +910,11 @@
       "sidebarPersistentTitle": "侧边栏行为",
       "sidebarPersistentLabel": "弹出后固定侧边栏 (不自动收回)",
       "sidebarPersistentDescription": "开启后，点击侧边栏外部区域不会自动收回侧边栏。",
+      "editorCloseBehaviorTitle": "文件编辑器关闭行为",
+      "editorCloseBehaviorLabel": "点击编辑器关闭按钮时清空全部已打开文件缓存",
+      "editorCloseBehaviorDescription": "默认关闭。开启后，点击编辑器右上角关闭按钮会清空当前编辑器的全部文件标签和内容缓存；点击弹窗空白区域仍只隐藏编辑器并保留缓存。",
+      "editorCloseBehaviorSuccess": "文件编辑器关闭行为设置已保存。",
+      "editorCloseBehaviorError": "保存文件编辑器关闭行为设置失败。",
       "success": {
         "sidebarPersistentSaved": "侧边栏设置已保存。",
         "showConnectionTagsSaved": "连接标签显示设置已保存。",
