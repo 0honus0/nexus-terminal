@@ -126,7 +126,7 @@
                             <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
                                 <span
                                   class="quick-command-display-text truncate"
-                                  :class="commandDisplayMode === 'name' ? 'font-medium text-foreground' : 'font-mono text-text-secondary'"
+                                  :class="commandDisplayMode === 'name' ? 'font-normal text-text-secondary/80' : 'font-mono font-normal text-text-secondary/70'"
                                   :title="getCommandDisplayText(cmd)"
                                 >{{ getCommandDisplayText(cmd) }}</span>
                             </div>
@@ -166,7 +166,7 @@
                     <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
                         <span
                           class="quick-command-display-text truncate"
-                          :class="commandDisplayMode === 'name' ? 'font-medium text-foreground' : 'font-mono text-text-secondary'"
+                          :class="commandDisplayMode === 'name' ? 'font-normal text-text-secondary/80' : 'font-mono font-normal text-text-secondary/70'"
                           :title="getCommandDisplayText(cmd)"
                         >{{ getCommandDisplayText(cmd) }}</span>
                     </div>
@@ -848,7 +848,8 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   font-size: inherit;
 }
 .quick-command-display-text {
-  font-size: calc(0.8rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+  font-size: calc(0.74rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+  font-weight: 400;
   line-height: 1.3;
 }
 @container quick-commands-pane (max-width: 340px) {
@@ -915,7 +916,7 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     line-height: 1.35;
   }
 }
