@@ -217,13 +217,6 @@ NEXUS_IMAGE_REPOSITORY=local/nexus-terminal NEXUS_IMAGE_TAG=dev ./build.sh docke
 
 *   预设主题方案来源于优秀的 [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) 项目。
 
-## ☕ 捐赠
-
-如果你觉得这个项目对你有帮助，欢迎通过以下方式请我喝杯咖啡：
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/0heavrnl)
-
-
 ## 📄 开源协议
 
 本项目采用 [GPL-3.0](LICENSE) 开源协议，详细信息请参阅 [LICENSE](LICENSE) 文件。

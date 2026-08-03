@@ -1,6 +1,6 @@
 {
   "name": "nexus-terminal",
-  "version": "1.5.8",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "build": "./build.sh local all",
