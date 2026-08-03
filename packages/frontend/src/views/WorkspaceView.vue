@@ -86,6 +86,21 @@ const isVirtualKeyboardVisible = ref(false);
 const isVirtualCtrlActive = ref(false);
 const isVirtualAltActive = ref(false);
 const mobileCommandInputBarRef = ref<InstanceType<typeof CommandInputBar> | null>(null);
+const mobileViewportHeight = ref<number | null>(null);
+
+const mobileWorkspaceStyle = computed(() => {
+  if (!isMobile.value || mobileViewportHeight.value === null) return undefined;
+  return { '--mobile-viewport-height': `${mobileViewportHeight.value}px` };
+});
+
+const updateMobileViewportHeight = () => {
+  if (!isMobile.value) {
+    mobileViewportHeight.value = null;
+    return;
+  }
+  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  mobileViewportHeight.value = Math.round(viewportHeight);
+};
 
 const clearVirtualModifiers = () => {
   isVirtualCtrlActive.value = false;
@@ -161,6 +176,9 @@ onMounted(() => {
   console.log('[工作区视图] 组件已挂载。');
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleGlobalKeyDown);
+  updateMobileViewportHeight();
+  window.addEventListener('resize', updateMobileViewportHeight);
+  window.visualViewport?.addEventListener('resize', updateMobileViewportHeight);
   // 确保布局已初始化 (layoutStore 内部会处理)
 
   // +++ 订阅工作区事件 +++
@@ -207,6 +225,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   console.log('[工作区视图] 组件即将卸载，清理工作区事件监听...');
   window.removeEventListener('keydown', handleGlobalKeyDown);
+  window.removeEventListener('resize', updateMobileViewportHeight);
+  window.visualViewport?.removeEventListener('resize', updateMobileViewportHeight);
 
   while (workspaceEventCleanups.length > 0) {
     const cleanup = workspaceEventCleanups.pop();
@@ -717,7 +737,10 @@ const closeFileManagerModal = () => {
 
 <template>
   <!-- *** 动态 class 绑定，添加 is-mobile 类 *** -->
-  <div :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile }]">
+  <div
+    :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile }]"
+    :style="mobileWorkspaceStyle"
+  >
     <!-- TerminalTabBar 始终渲染, 传递 isMobile 状态 -->
     <TerminalTabBar
         :sessions="sessionTabsWithStatus"
@@ -887,7 +910,13 @@ const closeFileManagerModal = () => {
   /* Ensure flex column layout */
   display: flex; /* Uncommented */
   flex-direction: column; /* Uncommented */
-  /* Height is already handled by .workspace-view and .with-header */
+  height: var(--mobile-viewport-height, 100dvh);
+  min-height: 0;
+  transition: none;
+}
+
+.workspace-view.is-mobile.with-header {
+  height: calc(var(--mobile-viewport-height, 100dvh) - 55px);
 }
 
 .workspace-view.is-mobile .main-content-area {
@@ -898,7 +927,8 @@ const closeFileManagerModal = () => {
 .mobile-content-area {
   display: flex; /* Use flex for the terminal container */
   flex-direction: column; /* Stack elements vertically if needed */
-  flex-grow: 1; /* Allow this area to take up remaining space */
+  flex: 1 1 0; /* Allow the terminal to shrink when the phone keyboard opens */
+  min-height: 0;
   overflow: hidden; /* Prevent overflow */
   position: relative; /* Needed for potential absolute positioning inside */
   /* Remove desktop margins/borders */
