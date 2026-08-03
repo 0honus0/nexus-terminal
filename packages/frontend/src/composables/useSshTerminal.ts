@@ -129,6 +129,12 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         terminalInstance.value = term;
         searchAddon.value = addon; // *** 存储 searchAddon 实例 ***
 
+        // SSH 可能先于 xterm 组件完成连接。终端实例就绪后强制补发当前尺寸，
+        // 避免此前 Shell 未就绪时发送的 resize 被后端忽略后又被前端去重。
+        if (isSshConnected.value && term.cols > 0 && term.rows > 0) {
+            handleTerminalResize({ cols: term.cols, rows: term.rows }, true);
+        }
+
         
         // 1. 处理 SessionState.pendingOutput (来自 SSH_OUTPUT_CACHED_CHUNK 的早期数据)
         const currentSessionState = globalSessionsRef.value.get(sessionId);
@@ -180,12 +186,12 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         sendInputData(data);
     };
 
-    const handleTerminalResize = (dimensions: { cols: number; rows: number }) => {
+    const handleTerminalResize = (dimensions: { cols: number; rows: number }, force = false) => {
         // 只有在连接状态下才发送 resize 命令给后端
         if (isConnected.value) {
             if (!Number.isInteger(dimensions.cols) || !Number.isInteger(dimensions.rows)
                 || dimensions.cols < 2 || dimensions.rows < 1 || dimensions.cols > 1000 || dimensions.rows > 500) return;
-            if (dimensions.cols === lastSentCols && dimensions.rows === lastSentRows) return;
+            if (!force && dimensions.cols === lastSentCols && dimensions.rows === lastSentRows) return;
             lastSentCols = dimensions.cols;
             lastSentRows = dimensions.rows;
             sendMessage({ type: 'ssh:resize', sessionId, payload: dimensions });
@@ -236,12 +242,12 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             // 检查尺寸是否有效
             if (currentDimensions.cols > 0 && currentDimensions.rows > 0) {
                 console.log(`[会话 ${sessionId}][SSH终端模块] SSH 连接成功，主动发送初始尺寸:`, currentDimensions);
-                handleTerminalResize(currentDimensions);
+                handleTerminalResize(currentDimensions, true);
             } else {
                 console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接成功，但获取到的初始尺寸无效，跳过发送 resize:`, currentDimensions);
             }
         } else {
-             console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接成功，但 terminalInstance 不可用，无法发送初始 resize。`);
+             console.debug(`[会话 ${sessionId}][SSH终端模块] SSH 已连接，等待终端实例就绪后补发初始 resize。`);
         }
 
 
