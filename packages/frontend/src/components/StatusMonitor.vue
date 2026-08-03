@@ -45,15 +45,16 @@
         <div class="status-item resource-status-item cpu-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.cpuLabel') }}</label>
           <div class="value-wrapper flex items-center gap-2">
-            <el-progress
-              :percentage="displayCpuPercent"
-              :stroke-width="16"
-              color="#3b82f6"
-              :show-text="true"
-              :text-inside="true"
-              :format="formatPercentageText"
-              class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
-            />
+            <div class="progress-track flex-grow">
+              <el-progress
+                :percentage="displayCpuPercent"
+                :stroke-width="16"
+                color="#3b82f6"
+                :show-text="false"
+                class="themed-progress" :class="{ 'no-transition': isSwitchingSession }"
+              />
+              <span class="progress-percentage" :style="progressPercentageStyle(displayCpuPercent)">{{ formatPercentageText(displayCpuPercent) }}</span>
+            </div>
             <!-- 移除 w-12 和 text-right 以实现左对齐 -->
           </div>
         </div>
@@ -66,15 +67,16 @@
             {{ memDisplay }}
           </span>
           <div class="value-wrapper flex items-center gap-2">
-            <el-progress
-              :percentage="displayMemPercent"
-              :stroke-width="16"
-              color="#22c55e"
-              :show-text="true"
-              :text-inside="true"
-              :format="formatPercentageText"
-              class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
-            />
+            <div class="progress-track flex-grow">
+              <el-progress
+                :percentage="displayMemPercent"
+                :stroke-width="16"
+                color="#22c55e"
+                :show-text="false"
+                class="themed-progress" :class="{ 'no-transition': isSwitchingSession }"
+              />
+              <span class="progress-percentage" :style="progressPercentageStyle(displayMemPercent)">{{ formatPercentageText(displayMemPercent) }}</span>
+            </div>
             <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ memDisplay }}</span>
           </div>
         </div>
@@ -87,15 +89,16 @@
             {{ swapDisplay }}
           </span>
           <div class="value-wrapper flex items-center gap-2">
-            <el-progress
-              :percentage="displaySwapPercent"
-              :stroke-width="16"
-              :color="(currentServerStatus?.swapPercent ?? 0) > 0 ? '#eab308' : '#6b7280'"
-              :show-text="true"
-              :text-inside="true"
-              :format="formatPercentageText"
-              class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
-            />
+            <div class="progress-track flex-grow">
+              <el-progress
+                :percentage="displaySwapPercent"
+                :stroke-width="16"
+                :color="(currentServerStatus?.swapPercent ?? 0) > 0 ? '#eab308' : '#6b7280'"
+                :show-text="false"
+                class="themed-progress" :class="{ 'no-transition': isSwitchingSession }"
+              />
+              <span class="progress-percentage" :style="progressPercentageStyle(displaySwapPercent)">{{ formatPercentageText(displaySwapPercent) }}</span>
+            </div>
             <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ swapDisplay }}</span>
           </div>
         </div>
@@ -108,15 +111,16 @@
             {{ diskDisplay }}
           </span>
           <div class="value-wrapper flex items-center gap-2">
-            <el-progress
-              :percentage="displayDiskPercent"
-              :stroke-width="16"
-              color="#a855f7"
-              :show-text="true"
-              :text-inside="true"
-              :format="formatPercentageText"
-              class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
-            />
+            <div class="progress-track flex-grow">
+              <el-progress
+                :percentage="displayDiskPercent"
+                :stroke-width="16"
+                color="#a855f7"
+                :show-text="false"
+                class="themed-progress" :class="{ 'no-transition': isSwitchingSession }"
+              />
+              <span class="progress-percentage" :style="progressPercentageStyle(displayDiskPercent)">{{ formatPercentageText(displayDiskPercent) }}</span>
+            </div>
             <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ diskDisplay }}</span>
           </div>
         </div>
@@ -183,6 +187,9 @@ const { statusMonitorShowIpBoolean } = storeToRefs(settingsStore); //  获取 IP
 const isSwitchingSession = ref(false);
 
 const formatPercentageText = (percentage: number): string => `${Math.round(percentage)}%`;
+const progressPercentageStyle = (percentage: number): Record<string, string> => ({
+  '--progress-percentage': `${Math.min(100, Math.max(0, percentage))}%`,
+});
 
 interface ServerStatus {
   cpuPercent?: number;
@@ -422,6 +429,31 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .ip-address-value {
   min-width: 0;
 }
+.ip-address-value {
+  font-size: 0.8rem;
+}
+.progress-track {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.progress-track .themed-progress {
+  width: 100%;
+}
+.progress-percentage {
+  position: absolute;
+  top: 50%;
+  left: clamp(1.35rem, var(--progress-percentage), calc(100% - 0.15rem));
+  z-index: 1;
+  color: #fff;
+  font-size: var(--status-progress-font-size);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-100%, -50%);
+  text-shadow: 0 1px 1px rgb(0 0 0 / 45%);
+}
 .resource-monitor-group {
   grid-template-columns: minmax(0, 1fr);
   gap: 0.55rem !important;
@@ -479,6 +511,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
   .ip-address-value {
     width: 100%;
+    font-size: 0.7rem;
+    line-height: 1.2;
     text-align: right;
   }
   .value-wrapper {
@@ -508,13 +542,6 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .resource-status-item .value-wrapper {
     grid-column: 1 / -1;
     flex-direction: row;
-  }
-  .resource-monitor-group .cpu-status-item {
-    grid-template-columns: 38px minmax(0, 1fr) !important;
-    row-gap: 0 !important;
-  }
-  .cpu-status-item .value-wrapper {
-    grid-column: auto;
   }
   .resource-status-item .resource-inline-details {
     display: none;
@@ -581,11 +608,5 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 ::v-deep(.themed-progress.no-transition .el-progress-bar__inner) {
   transition: none !important;
-}
-::v-deep(.el-progress-bar__innerText) {
-  font-size: var(--status-progress-font-size) !important;
-  line-height: 1 !important;
-  position: relative;
-  top: 0;
 }
 </style>

@@ -1734,48 +1734,48 @@ const handleOpenEditorClick = () => {
             <div class="file-manager-path-actions flex items-center flex-shrink-0"> <!-- Removed mr-auto -->
               <!-- CD 到终端按钮 -->
               <button
-                class="file-manager-path-button flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
                 @click.stop="sendCdCommandToTerminal"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath || isChangingTerminalPath"
                 :title="t('fileManager.actions.cdToTerminal', 'Change terminal directory to current path')"
               >
-                <i :class="['fas', isChangingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-base']"></i>
+                <i :class="['fas', isChangingTerminalPath ? 'fa-spinner fa-spin' : 'fa-terminal', 'text-sm']"></i>
               </button>
               <button
-                class="file-manager-path-button flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
                 @click.stop="syncPathFromTerminal"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath || isSyncingPathFromTerminal"
                 :title="t('fileManager.actions.syncFromTerminalPath', 'Sync file manager to terminal directory')"
               >
-                <i :class="['fas', isSyncingPathFromTerminal ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-base']"></i>
+                <i :class="['fas', isSyncingPathFromTerminal ? 'fa-spinner fa-spin' : 'fa-folder-open', 'text-sm']"></i>
               </button>
               <!-- 刷新按钮 -->
               <button
-                class="file-manager-path-button flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
                 @click.stop="currentSftpManager?.loadDirectory(currentSftpManager?.currentPath?.value ?? '/', true)"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
                 :title="t('fileManager.actions.refresh')"
               >
-                <i class="fas fa-sync-alt text-base"></i>
+                <i class="fas fa-sync-alt text-sm"></i>
               </button>
               <button
-                class="file-manager-path-button flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
                 @click.stop="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || currentSftpManager?.currentPath?.value === '/' || isEditingPath"
                 :title="t('fileManager.actions.parentDirectory')"
               >
-                <i class="fas fa-arrow-up text-base"></i>
+                <i class="fas fa-arrow-up text-sm"></i>
               </button>
              <!-- Search Area -->
-             <div class="flex items-center flex-shrink-0">
+             <div class="file-manager-search-slot flex items-center flex-shrink-0" :class="{ 'is-active': isSearchActive }">
                  <button
                      v-if="!isSearchActive"
-                     class="file-manager-path-button flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                     class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
                      @click.stop="activateSearch"
                      :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
                      :title="t('fileManager.searchPlaceholder')"
                  >
-                     <i class="fas fa-search text-base"></i>
+                     <i class="fas fa-search text-sm"></i>
                  </button>
                  <div v-else class="file-manager-search-box relative flex items-center min-w-[150px] flex-shrink">
                      <i class="fas fa-search absolute left-2 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"></i>
@@ -1796,14 +1796,14 @@ const handleOpenEditorClick = () => {
                      <!-- <button @click="searchQuery = ''; searchInputRef?.focus()" v-if="searchQuery" class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground">&times;</button> -->
                  </div>
              </div>
-             <div class="relative flex-shrink-0">
+             <div class="file-manager-favorite-slot relative flex-shrink-0">
               <!-- Favorite Paths Button -->
               <button
                   ref="favoritePathsButtonRef"
-                  class="file-manager-path-button flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 hover:enabled:bg-black/10 hover:enabled:text-foreground"
+                  class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
                   @click="toggleFavoritePathsModal"
               >
-                  <i class="fas fa-star text-base"></i>
+                  <i class="fas fa-star text-sm"></i>
               </button>
               <!-- Favorite Paths Modal -->
               <FavoritePathsModal
@@ -2211,6 +2211,40 @@ const handleOpenEditorClick = () => {
   }
 }
 @container file-manager-pane (max-width: 420px) {
+  .file-manager-path-row {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .file-manager-path-actions {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.25rem;
+    width: 100%;
+  }
+  .file-manager-path-actions > * {
+    min-width: 0;
+  }
+  .file-manager-path-button {
+    width: 100% !important;
+    height: 1.85rem !important;
+    min-width: 0;
+    padding-left: 0.25rem !important;
+    padding-right: 0.25rem !important;
+    flex-basis: auto;
+  }
+  .file-manager-search-slot,
+  .file-manager-favorite-slot {
+    width: 100%;
+  }
+  .file-manager-favorite-slot {
+    grid-column: 6;
+  }
+  .file-manager-search-slot.is-active {
+    grid-column: 1 / -1;
+  }
+  .file-manager-search-slot.is-active .file-manager-search-box {
+    width: 100%;
+  }
   .file-manager-action-label {
     display: none;
   }
@@ -2232,9 +2266,9 @@ const handleOpenEditorClick = () => {
     gap: 0.3rem;
   }
   .file-manager-path-button {
-    width: 1.55rem !important;
-    height: 1.55rem !important;
-    flex-basis: 1.55rem;
+    width: 100% !important;
+    height: 1.75rem !important;
+    flex-basis: auto;
   }
   .file-manager-path-button i {
     font-size: 0.8rem !important;

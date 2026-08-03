@@ -565,6 +565,13 @@ const handleQuickCommandExecute = (command: string) => {
     padding-right: 0.65rem;
   }
 }
+@container command-bar-pane (max-width: 280px) {
+  .command-bar-controls {
+    flex: 1 0 100%;
+    width: 100%;
+    justify-content: space-evenly;
+  }
+}
 @container command-bar-pane (max-width: 240px) {
   .command-bar-button {
     width: 1.7rem !important;
