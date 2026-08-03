@@ -174,6 +174,7 @@ export interface SshSuspendStartedResponse {
     suspendSessionId: string;  // The new ID for the suspended session
     success: boolean;
     error?: string;
+    sessionClosed?: boolean;
   };
 }
 

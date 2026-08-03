@@ -68,11 +68,12 @@ export function parsePortsString(portsString: string | undefined | null): PortIn
  * 清理指定会话 ID 关联的所有资源
  * @param sessionId - 会话 ID
  */
-export const cleanupClientConnection = async (sessionId: string | undefined) => { // Made async
-    if (!sessionId) return;
+export const cleanupClientConnection = async (sessionId: string | undefined): Promise<string | null> => {
+    if (!sessionId) return null;
 
     const state = clientStates.get(sessionId);
     if (state) {
+        let createdSuspendSessionId: string | null = null;
         console.log(`WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`);
 
         if (state.shellSetup) {
@@ -107,6 +108,8 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         // 3. 处理 SSH 连接 (核心修改点)
         if (state.isMarkedForSuspend && state.sshClient && state.sshShellStream && state.suspendLogPath && state.ws.userId !== undefined) {
             console.log(`WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`);
+            const sshClientToPass = state.sshClient;
+            const channelToPass = state.sshShellStream;
             try {
                 const takeoverDetails = {
                     userId: state.ws.userId,
@@ -124,8 +127,6 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
                 };
                 
                 // 从 state 中“分离”SSH资源，防止后续意外关闭
-                const sshClientToPass = state.sshClient;
-                const channelToPass = state.sshShellStream;
                 state.sshClient = undefined as any; // 清除引用
                 state.sshShellStream = undefined; // 清除引用
                 state.isSuspendedByService = true; // 标记为已被服务接管（即使是尝试接管）
@@ -137,6 +138,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
                 });
 
                 if (newSuspendId) {
+                    createdSuspendSessionId = newSuspendId;
                     console.log(`WebSocket: 会话 ${sessionId} 已成功移交给 SshSuspendService，新的挂起ID: ${newSuspendId}。SSH 连接将由服务管理。`);
                     // SSH 资源已移交，不需要在这里关闭它们
                 } else {
@@ -148,9 +150,8 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
                 }
             } catch (error) {
                 console.error(`WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 时发生错误:`, error);
-                // 发生错误，也执行常规关闭以防资源泄露
-                if (state.sshClient) state.sshClient.end(); // 如果引用还在，尝试关闭
-                if (state.sshShellStream) state.sshShellStream.end(); // 如果引用还在，尝试关闭
+                try { channelToPass.end(); } catch { /* ignore cleanup error */ }
+                try { sshClientToPass.end(); } catch { /* ignore cleanup error */ }
                 state.isSuspendedByService = false; // 重置标记
             }
         } else if (!state.isSuspendedByService && state.sshClient) {
@@ -173,7 +174,9 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         }
 
         console.log(`WebSocket: 会话 ${sessionId} 已清理。`);
+        return createdSuspendSessionId;
     } else {
         // console.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
+        return null;
     }
 };

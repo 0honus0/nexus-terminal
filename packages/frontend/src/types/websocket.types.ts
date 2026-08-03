@@ -83,6 +83,7 @@ export interface SshSuspendStartedRespPayload {
   suspendSessionId: string;
   success: boolean;
   error?: string;
+  sessionClosed?: boolean;
 }
 
 export interface SshSuspendListResponsePayload {

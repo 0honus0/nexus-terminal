@@ -1538,6 +1538,8 @@
       "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
       "nameEditedError": "Failed to edit suspended session name: {error}",
       "markedForSuspendSuccess": "Session {id} successfully marked for suspend.",
+      "suspendSuccess": "Session {id} was suspended successfully.",
+      "suspendError": "Failed to suspend session: {error}",
       "markForSuspendError": "Failed to mark session for suspend: {error}",
       "unmarkedSuccess": "Session {id} unmarked from suspend successfully.",
       "unmarkError": "Failed to unmark session from suspend: {error}",

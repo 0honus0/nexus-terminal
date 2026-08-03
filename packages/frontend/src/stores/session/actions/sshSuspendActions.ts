@@ -4,7 +4,7 @@ import { sessions, suspendedSshSessions, isLoadingSuspendedSessions, activeSessi
 import type {
   MessagePayload,
   WebSocketMessage,
-  SshMarkForSuspendReqMessage,
+  SshSuspendStartReqMessage,
   SshUnmarkForSuspendReqMessage, 
   SshSuspendResumeReqMessage,
   SshSuspendTerminateReqMessage,
@@ -12,6 +12,7 @@ import type {
   
   
   SshMarkedForSuspendAckPayload,
+  SshSuspendStartedRespPayload,
   SshUnmarkedForSuspendAckPayload, 
   SshSuspendListResponsePayload,
   SshSuspendResumedNotifPayload,
@@ -118,12 +119,12 @@ export const requestStartSshSuspend = (sessionId: string): void => {
       console.warn(`[${t('term.sshSuspend')}] 未能获取会话 ${sessionId} 的终端实例以提取初始缓冲区。`);
     }
 
-    const message: SshMarkForSuspendReqMessage = {
-      type: 'SSH_MARK_FOR_SUSPEND',
+    const message: SshSuspendStartReqMessage = {
+      type: 'SSH_SUSPEND_START',
       payload: { sessionId, initialBuffer: initialBuffer || undefined }, // +++ 将 initialBuffer 添加到 payload +++
     };
     session.wsManager.sendMessage(message);
-    console.log(`[${t('term.sshSuspend')}] 已发送 SSH_MARK_FOR_SUSPEND 请求 (会话 ID: ${sessionId}, 包含初始缓冲区: ${!!initialBuffer})`);
+    console.log(`[${t('term.sshSuspend')}] 已发送 SSH_SUSPEND_START 请求 (会话 ID: ${sessionId}, 包含初始缓冲区: ${!!initialBuffer})`);
     // 成功提示由后端 ACK 驱动，避免先显示成功、随后又显示失败。
 
   } else {
@@ -476,8 +477,34 @@ export const exportSshSessionLog = async (suspendSessionId: string): Promise<voi
 
 // --- S2C Message Handlers ---
 
-// 旧的 handleSshSuspendStartedResp 不再需要，因为流程已改变
-// const handleSshSuspendStartedResp = (payload: SshSuspendStartedRespPayload): void => { ... };
+const handleSshSuspendStartedResp = async (payload: SshSuspendStartedRespPayload): Promise<void> => {
+  const uiNotificationsStore = useUiNotificationsStore();
+  if (!payload.success) {
+    if (payload.sessionClosed) closeSessionAction(payload.frontendSessionId);
+    uiNotificationsStore.addNotification({
+      type: 'error',
+      message: t('sshSuspend.notifications.suspendError', { error: payload.error || t('term.unknownError') }),
+    });
+    return;
+  }
+
+  const activeSession = sessions.value.get(payload.frontendSessionId);
+  if (activeSession && !suspendedSshSessions.value.some(item => item.suspendSessionId === payload.suspendSessionId)) {
+    suspendedSshSessions.value.push({
+      suspendSessionId: payload.suspendSessionId,
+      connectionName: activeSession.connectionName,
+      connectionId: activeSession.connectionId,
+      suspendStartTime: new Date().toISOString(),
+      backendSshStatus: 'hanging',
+    });
+  }
+  closeSessionAction(payload.frontendSessionId);
+  await fetchSuspendedSshSessions({ showLoadingIndicator: false, notifyOnError: true });
+  uiNotificationsStore.addNotification({
+    type: 'success',
+    message: t('sshSuspend.notifications.suspendSuccess', { id: payload.frontendSessionId.slice(0, 8) }),
+  });
+};
 
 const handleSshMarkedForSuspendAck = (payload: SshMarkedForSuspendAckPayload): void => {
   const uiNotificationsStore = useUiNotificationsStore();
@@ -733,7 +760,7 @@ export const registerSshSuspendHandlers = (wsManager: WsManagerInstance): void =
 
   // 注意：wsManager.onMessage 返回一个注销函数，如果需要，可以收集它们并在会话关闭时调用。
   // 但通常这些处理器会随 wsManager 实例的生命周期一起存在。
-  // wsManager.onMessage('SSH_SUSPEND_STARTED_RESP', (p: MessagePayload) => handleSshSuspendStartedResp(p as SshSuspendStartedRespPayload));
+  wsManager.onMessage('SSH_SUSPEND_STARTED', (p: MessagePayload) => void handleSshSuspendStartedResp(p as SshSuspendStartedRespPayload));
   wsManager.onMessage('SSH_MARKED_FOR_SUSPEND_ACK', (p: MessagePayload) => handleSshMarkedForSuspendAck(p as SshMarkedForSuspendAckPayload));
   wsManager.onMessage('SSH_UNMARKED_FOR_SUSPEND_ACK', (p: MessagePayload) => handleSshUnmarkedForSuspendAck(p as SshUnmarkedForSuspendAckPayload)); 
   wsManager.onMessage('SSH_SUSPEND_LIST_RESPONSE', (p: MessagePayload) => handleSshSuspendListResponse(p as SshSuspendListResponsePayload));

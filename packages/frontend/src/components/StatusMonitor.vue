@@ -26,11 +26,11 @@
     <!-- 状态网格 -->
     <div v-else class="status-grid grid gap-3">
       <!-- IP 地址 (如果启用) -->
-      <div v-if="statusMonitorShowIpBoolean && activeSessionId && sessionIpAddress" class="status-item grid grid-cols-[auto_1fr] items-center gap-3">
+      <div v-if="statusMonitorShowIpBoolean && activeSessionId && sessionIpAddress" class="status-item ip-status-item grid grid-cols-[auto_1fr] items-center gap-3">
         <label class="font-semibold text-text-secondary text-left whitespace-nowrap">IP:</label>
-        <div class="flex items-center">
+        <div class="flex min-w-0 items-center justify-end">
           <span
-            class="ip-address-value truncate text-left cursor-pointer hover:text-primary transition-colors"
+            class="ip-address-value truncate text-right cursor-pointer hover:text-primary transition-colors"
             :title="sessionIpAddress"
             @click="copyIpToClipboard(sessionIpAddress)">
             {{ sessionIpAddress }}
@@ -394,6 +394,19 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   container-type: inline-size;
   container-name: status-monitor-pane;
   min-width: 0;
+  padding: 0.75rem !important;
+}
+.status-monitor-title {
+  margin-bottom: 0.75rem !important;
+  padding-bottom: 0.5rem !important;
+}
+.status-grid {
+  gap: 0.6rem !important;
+}
+.system-info-group {
+  gap: 0.5rem !important;
+  margin-top: 0.75rem !important;
+  padding-top: 0.6rem !important;
 }
 .status-grid,
 .status-item,
@@ -410,6 +423,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 .resource-monitor-group {
   grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem !important;
+  margin-bottom: 0.55rem !important;
 }
 .resource-compact-summary {
   display: none;
@@ -431,7 +446,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 @container status-monitor-pane (max-width: 380px) {
   .status-monitor {
-    padding: 0.6rem !important;
+    padding: 0.5rem !important;
     font-size: 0.76rem;
   }
   .status-monitor-title {
@@ -439,7 +454,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     padding-bottom: 0.45rem;
   }
   .status-grid {
-    gap: 0.55rem;
+    gap: 0.4rem;
   }
   .status-item {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -452,22 +467,41 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     font-size: 0.7rem;
     line-height: 1.25;
   }
+  .ip-status-item {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: center;
+    gap: 0.5rem !important;
+  }
+  .ip-status-item label {
+    white-space: nowrap;
+  }
+  .ip-address-value {
+    width: 100%;
+    text-align: right;
+  }
   .value-wrapper {
     align-items: stretch;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.18rem;
   }
   .resource-monitor-group .resource-status-item {
     grid-template-columns: auto minmax(0, 1fr) !important;
     align-items: center;
-    column-gap: 0.5rem !important;
-    row-gap: 0.3rem !important;
+    column-gap: 0.4rem !important;
+    row-gap: 0.18rem !important;
+  }
+  .resource-status-item label {
+    white-space: nowrap;
+    font-size: 0.68rem;
+    line-height: 1.1;
   }
   .resource-status-item .resource-compact-summary {
     display: block;
-    overflow-wrap: anywhere;
-    font-size: 0.66rem;
-    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.64rem;
+    line-height: 1.1;
   }
   .resource-status-item .value-wrapper {
     grid-column: 1 / -1;
@@ -486,15 +520,27 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     gap: 0.2rem !important;
   }
   ::v-deep(.themed-progress .el-progress-bar__outer) {
-    height: 12px !important;
+    height: 11px !important;
+  }
+  ::v-deep(.themed-progress .el-progress-bar__innerText) {
+    font-size: 8px !important;
+    line-height: 11px;
+    top: 0;
   }
 }
 @container status-monitor-pane (max-width: 260px) {
+  .resource-status-item label {
+    font-size: 0.64rem;
+  }
   .resource-status-item .resource-compact-summary {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
   }
   ::v-deep(.themed-progress .el-progress-bar__outer) {
-    height: 11px !important;
+    height: 10px !important;
+  }
+  ::v-deep(.themed-progress .el-progress-bar__innerText) {
+    font-size: 7px !important;
+    line-height: 10px;
   }
 }
 

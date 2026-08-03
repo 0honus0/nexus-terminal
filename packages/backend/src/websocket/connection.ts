@@ -258,6 +258,62 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
                         // --- SSH Suspend Cases ---
 
+                        case 'SSH_SUSPEND_START': {
+                            const suspendPayload = payload as SshSuspendStartRequest['payload'];
+                            const targetSessionId = suspendPayload.sessionId;
+                            const activeSessionState = clientStates.get(targetSessionId);
+                            const fail = (error: string, sessionClosed = false) => {
+                                if (ws.readyState === WebSocket.OPEN) {
+                                    const response: SshSuspendStartedResponse = {
+                                        type: 'SSH_SUSPEND_STARTED',
+                                        payload: { frontendSessionId: targetSessionId, suspendSessionId: '', success: false, error, sessionClosed },
+                                    };
+                                    ws.send(JSON.stringify(response));
+                                }
+                            };
+
+                            if (!ws.userId) {
+                                fail('用户认证失败');
+                                break;
+                            }
+                            if (targetSessionId !== ws.sessionId || activeSessionState?.ws !== ws
+                                || !activeSessionState.sshClient || !activeSessionState.sshShellStream) {
+                                fail('未找到可挂起的活动 SSH 会话');
+                                break;
+                            }
+
+                            let cleanupAttempted = false;
+                            try {
+                                activeSessionState.isMarkedForSuspend = true;
+                                activeSessionState.suspendLogPath = targetSessionId;
+                                if (suspendPayload.initialBuffer) {
+                                    const formattedInitialBuffer = suspendPayload.initialBuffer.endsWith('\n')
+                                        ? suspendPayload.initialBuffer
+                                        : `${suspendPayload.initialBuffer}\n`;
+                                    await temporaryLogStorageService.writeToLog(targetSessionId, formattedInitialBuffer);
+                                }
+                                cleanupAttempted = true;
+                                const suspendSessionId = await cleanupClientConnection(targetSessionId);
+                                if (!suspendSessionId) throw new Error('后端未能接管 SSH 会话');
+
+                                if (ws.readyState === WebSocket.OPEN) {
+                                    const response: SshSuspendStartedResponse = {
+                                        type: 'SSH_SUSPEND_STARTED',
+                                        payload: { frontendSessionId: targetSessionId, suspendSessionId, success: true },
+                                    };
+                                    ws.send(JSON.stringify(response));
+                                }
+                            } catch (error) {
+                                if (!cleanupAttempted) {
+                                    activeSessionState.isMarkedForSuspend = false;
+                                    activeSessionState.suspendLogPath = undefined;
+                                    await temporaryLogStorageService.deleteLog(targetSessionId).catch(() => undefined);
+                                }
+                                fail(error instanceof Error ? error.message : String(error), cleanupAttempted);
+                            }
+                            break;
+                        }
+
                         case 'SSH_SUSPEND_LIST_REQUEST': {
                             if (!ws.userId) {
                                 console.error(`[SSH_SUSPEND_LIST_REQUEST] 用户 ID 未定义。`);
