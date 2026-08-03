@@ -130,6 +130,7 @@
                                 <span v-else-if="isCompactMode && !cmd.name && cmd.command"
                                       class="truncate font-mono text-xs text-text-secondary/70 leading-tight"
                                       :style="{ fontSize: `calc(0.65em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` }">{{ cmd.command }}</span>
+                                <span class="quick-command-narrow-command font-mono text-text-secondary" :title="cmd.command">{{ cmd.command }}</span>
                             </div>
                             <!-- Actions -->
                             <div class="quick-command-actions flex items-center flex-shrink-0 transition-opacity duration-150"
@@ -176,6 +177,7 @@
                         <span v-else-if="isCompactMode && !cmd.name && cmd.command"
                               class="truncate font-mono text-xs text-text-secondary/70 leading-tight"
                               :style="{ fontSize: `calc(0.65em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` }">{{ cmd.command }}</span>
+                        <span class="quick-command-narrow-command font-mono text-text-secondary" :title="cmd.command">{{ cmd.command }}</span>
                     </div>
                     <!-- Actions -->
                     <div class="quick-command-actions flex items-center flex-shrink-0 transition-opacity duration-150"
@@ -802,6 +804,9 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
 .quick-command-info {
   min-width: 0;
 }
+.quick-command-narrow-command {
+  display: none;
+}
 @container quick-commands-pane (max-width: 340px) {
   .quick-commands-controls {
     gap: 0.3rem;
@@ -844,17 +849,29 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     width: 100%;
   }
   .quick-command-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    row-gap: 0.15rem;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
   }
   .quick-command-info {
     width: 100%;
     margin-right: 0;
+    flex-direction: row;
   }
   .quick-command-actions {
-    justify-self: end;
+    display: none;
+  }
+  .quick-command-info > :not(.quick-command-narrow-command) {
+    display: none;
+  }
+  .quick-command-narrow-command {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    line-height: 1.35;
   }
 }
 </style>

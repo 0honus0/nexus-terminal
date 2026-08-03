@@ -243,7 +243,17 @@ const baseChartOptions: Omit<ChartOptions<'line'>, 'scales'> = {
   maintainAspectRatio: false,
   animation: false,
   plugins: {
-    legend: { labels: { color: '#9CA3AF' } },
+    legend: {
+      position: 'bottom',
+      align: 'start',
+      labels: {
+        color: '#9CA3AF',
+        boxWidth: 8,
+        boxHeight: 8,
+        padding: 8,
+        font: { size: 10 },
+      },
+    },
     tooltip: { enabled: true, mode: 'index', intersect: false },
   },
   interaction: { mode: 'index', intersect: false },
@@ -483,6 +493,6 @@ onMounted(() => {
 }
 @container status-charts-pane (max-width: 260px) {
   .chart-container { padding: 0.45rem; }
-  .chart-wrapper { height: 5.25rem; }
+  .chart-wrapper { height: 6.25rem; }
 }
 </style>

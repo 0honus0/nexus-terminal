@@ -38,27 +38,12 @@
         </div>
       </div>
 
-      <!-- CPU 型号 -->
-      <div class="status-item grid grid-cols-[auto_1fr] items-center gap-3">
-        <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.cpuModelLabel') }}</label>
-        <span class="cpu-model-value truncate text-left" :title="displayCpuModel">{{ displayCpuModel }}</span>
-      </div>
-
-      <!-- 操作系统名称 -->
-      <div class="status-item grid grid-cols-[auto_1fr] items-center gap-3">
-        <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.osLabel') }}</label>
-        <span class="os-name-value truncate text-left" :title="displayOsName">{{ displayOsName }}</span>
-      </div>
-
       <!-- 资源使用率分组 -->
       <div class="resource-monitor-group grid gap-3 mb-3">
         <!-- CPU 使用率 -->
         <!-- 设置第一列固定宽度为 80px -->
         <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.cpuLabel') }}</label>
-          <span class="resource-compact-summary font-mono" :title="formatPercentageText(displayCpuPercent)">
-            {{ formatPercentageText(displayCpuPercent) }}
-          </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
               :percentage="displayCpuPercent"
@@ -77,8 +62,8 @@
         <!-- 设置第一列固定宽度为 80px -->
         <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.memoryLabel') }}</label>
-          <span class="resource-compact-summary font-mono" :title="`${formatPercentageText(displayMemPercent)} · ${memDisplay}`">
-            {{ formatPercentageText(displayMemPercent) }} · {{ memDisplay }}
+          <span class="resource-compact-summary font-mono" :title="memDisplay">
+            {{ memDisplay }}
           </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
@@ -98,8 +83,8 @@
          <!-- 设置第一列固定宽度为 80px -->
          <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.swapLabel') }}</label>
-          <span class="resource-compact-summary font-mono" :title="`${formatPercentageText(displaySwapPercent)} · ${swapDisplay}`">
-            {{ formatPercentageText(displaySwapPercent) }} · {{ swapDisplay }}
+          <span class="resource-compact-summary font-mono" :title="swapDisplay">
+            {{ swapDisplay }}
           </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
@@ -119,8 +104,8 @@
         <!-- 设置第一列固定宽度为 80px -->
         <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.diskLabel') }}</label>
-          <span class="resource-compact-summary font-mono" :title="`${formatPercentageText(displayDiskPercent)} · ${diskDisplay}`">
-            {{ formatPercentageText(displayDiskPercent) }} · {{ diskDisplay }}
+          <span class="resource-compact-summary font-mono" :title="diskDisplay">
+            {{ diskDisplay }}
           </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
@@ -158,6 +143,20 @@
 <!-- 图表组件 -->
       <!-- 仅当有活动会话且有数据时渲染图表 -->
       <StatusCharts v-if="activeSessionId && currentServerStatus" :server-status="currentServerStatus" :active-session-id="activeSessionId" />
+
+      <div v-if="activeSessionId && currentServerStatus" class="system-info-group grid gap-3 mt-4 pt-3 border-t border-border">
+        <!-- CPU 型号 -->
+        <div class="status-item grid grid-cols-[auto_1fr] items-center gap-3">
+          <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.cpuModelLabel') }}</label>
+          <span class="cpu-model-value truncate text-left" :title="displayCpuModel">{{ displayCpuModel }}</span>
+        </div>
+
+        <!-- 操作系统名称 -->
+        <div class="status-item grid grid-cols-[auto_1fr] items-center gap-3">
+          <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.osLabel') }}</label>
+          <span class="os-name-value truncate text-left" :title="displayOsName">{{ displayOsName }}</span>
+        </div>
+      </div>
   </div>
 </template>
 

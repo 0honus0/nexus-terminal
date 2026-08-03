@@ -333,46 +333,13 @@ const handleQuickCommandExecute = (command: string) => {
 <template>
   <div :class="$attrs.class" class="command-bar-root flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
     <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
-      <div class="command-bar-leading-actions flex items-center gap-1 flex-shrink-0">
-      <!-- Clear Terminal Button -->
-      <button
-        @click="emitWorkspaceEvent('terminal:clear')"
-        class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
-        :title="t('commandInputBar.clearTerminal', '清空终端')"
-      >
-        <i class="fas fa-eraser text-base"></i>
-      </button>
-       <!-- +++ Quick Commands Button (Mobile only) +++ -->
-       <button
-        v-if="props.isMobile"
-        @click="openQuickCommandsModal"
-        class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
-        :title="t('quickCommands.title', '快捷指令')"
-      >
-        <i class="fas fa-bolt text-base"></i>
-      </button>
-      <!-- Focus Switcher Config Button (Hide on mobile) -->
-      <button
-        v-if="!props.isMobile"
-        @click="focusSwitcherStore.toggleConfigurator(true)"
-        class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
-        :title="t('commandInputBar.configureFocusSwitch', '配置焦点切换')"
-      >
-        <i class="fas fa-keyboard text-base"></i> <!-- Removed text-primary -->
-      </button>
-      </div>
       <!-- Command Input (Hide on mobile when searching) -->
       <input
         v-if="!props.isMobile || !isSearching"
         type="text"
         v-model="currentSessionCommandInput"
         :placeholder="t('commandInputBar.placeholder')"
-        class="command-bar-input flex-grow min-w-0 px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
-        :class="{
-          'basis-3/4': !props.isMobile && isSearching,      // Desktop searching: 3/4 width
-          'basis-full': !props.isMobile && !isSearching,   // Desktop non-searching: full width
-          'w-0': props.isMobile  // Mobile non-searching: adjust width to fit
-        }"
+        class="command-bar-input command-bar-command-input px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
         ref="commandInputRef"
         data-focus-id="commandInput"
         @keydown="handleCommandInputKeydown"
@@ -385,8 +352,7 @@ const handleQuickCommandExecute = (command: string) => {
         type="text"
         v-model="searchTerm"
         :placeholder="t('commandInputBar.searchPlaceholder')"
-        class="command-bar-input flex-grow min-w-0 px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
-        :class="{ 'basis-1/4': !props.isMobile, 'w-0': props.isMobile }"
+        class="command-bar-input command-bar-search-input px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
         data-focus-id="terminalSearch"
         @keydown.enter.prevent="findNext"
         @keydown.shift.enter.prevent="findPrevious"
@@ -397,6 +363,32 @@ const handleQuickCommandExecute = (command: string) => {
 
       <!-- Search Controls -->
       <div class="command-bar-controls flex items-center gap-1 flex-shrink-0">
+        <!-- Clear Terminal Button -->
+        <button
+          @click="emitWorkspaceEvent('terminal:clear')"
+          class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+          :title="t('commandInputBar.clearTerminal', '清空终端')"
+        >
+          <i class="fas fa-eraser text-base"></i>
+        </button>
+        <!-- Quick Commands Button (Mobile only) -->
+        <button
+          v-if="props.isMobile"
+          @click="openQuickCommandsModal"
+          class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+          :title="t('quickCommands.title', '快捷指令')"
+        >
+          <i class="fas fa-bolt text-base"></i>
+        </button>
+        <!-- Focus Switcher Config Button (Hide on mobile) -->
+        <button
+          v-if="!props.isMobile"
+          @click="focusSwitcherStore.toggleConfigurator(true)"
+          class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+          :title="t('commandInputBar.configureFocusSwitch', '配置焦点切换')"
+        >
+          <i class="fas fa-keyboard text-base"></i>
+        </button>
         <!-- +++ Toggle Virtual Keyboard Button (Moved here, Mobile only) +++ -->
         <!-- +++ Suspended SSH Sessions Button (Mobile only, new position) +++ -->
         <button
@@ -485,14 +477,28 @@ const handleQuickCommandExecute = (command: string) => {
   container-name: command-bar-pane;
   min-width: 0;
 }
-.command-bar-inner,
-.command-bar-input,
+.command-bar-inner {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.command-bar-input {
+  min-width: 0;
+}
+.command-bar-command-input {
+  flex: 3 1 0 !important;
+  min-width: min(100%, 8rem);
+}
+.command-bar-search-input {
+  flex: 1 1 0 !important;
+  min-width: min(100%, 6rem);
+}
 .command-bar-controls {
   min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 @container command-bar-pane (max-width: 500px) {
   .command-bar-inner,
-  .command-bar-leading-actions,
   .command-bar-controls {
     gap: 0.3rem;
   }
@@ -512,32 +518,12 @@ const handleQuickCommandExecute = (command: string) => {
     padding-right: 0.65rem;
   }
 }
-@container command-bar-pane (max-width: 360px) {
-  .command-bar-inner {
-    flex-wrap: wrap;
-  }
-  .command-bar-input {
-    order: 1;
-    flex: 1 1 100% !important;
-    width: 100% !important;
-  }
-  .command-bar-leading-actions {
-    order: 2;
-  }
-  .command-bar-controls {
-    order: 3;
-    margin-left: auto;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-}
 @container command-bar-pane (max-width: 240px) {
   .command-bar-button {
     width: 1.7rem !important;
     height: 1.7rem !important;
   }
   .command-bar-inner,
-  .command-bar-leading-actions,
   .command-bar-controls {
     gap: 0.2rem;
   }

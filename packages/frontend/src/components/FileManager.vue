@@ -1814,10 +1814,7 @@ const handleOpenEditorClick = () => {
               />
             </div>
             </div> 
-
-            
-
-           
+            <div class="file-manager-path-break" aria-hidden="true"></div>
             <div ref="pathInputWrapperRef" class="file-manager-path-input relative flex items-center bg-background border border-border rounded px-1.5 py-0.5"
                  :class="{ 'flex-grow min-w-0': isEditingPath || showPathHistoryDropdown, 'w-fit max-w-full': !isEditingPath && !showPathHistoryDropdown }">
               <span v-show="!isEditingPath && !showPathHistoryDropdown" @click="startPathEdit" class="text-text-secondary pr-2 cursor-text truncate">
@@ -2160,6 +2157,13 @@ const handleOpenEditorClick = () => {
   min-width: 0;
   max-width: 100%;
 }
+.file-manager-path-row {
+  flex-wrap: wrap;
+}
+.file-manager-path-break {
+  flex-basis: 100%;
+  height: 0;
+}
 .file-manager-path-button {
   flex: 0 0 1.75rem;
 }
@@ -2196,9 +2200,6 @@ const handleOpenEditorClick = () => {
   }
 }
 @container file-manager-pane (max-width: 520px) {
-  .file-manager-path-row {
-    flex-wrap: wrap;
-  }
   .file-manager-path-actions {
     width: 100%;
     flex-wrap: wrap;
@@ -2207,10 +2208,6 @@ const handleOpenEditorClick = () => {
   .file-manager-search-box {
     min-width: 0 !important;
     width: min(100%, 10rem);
-  }
-  .file-manager-path-input {
-    flex: 1 1 100%;
-    width: 100% !important;
   }
   .file-manager-actions {
     gap: 0.35rem;
