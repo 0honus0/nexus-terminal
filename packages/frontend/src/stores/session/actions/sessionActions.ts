@@ -177,7 +177,9 @@ export const openNewSession = (
 
         const terminalSnapshot = captureTerminalSnapshot(sessionToUpdate);
         if (terminalSnapshot) {
-          sessionToUpdate.pendingOutput = [terminalSnapshot, ...(sessionToUpdate.pendingOutput ?? [])];
+          sessionToUpdate.pendingOutput = [{ data: terminalSnapshot }, ...(sessionToUpdate.pendingOutput ?? [])];
+          sessionToUpdate.pendingOutputBytes = new TextEncoder().encode(terminalSnapshot).length
+            + (sessionToUpdate.pendingOutputBytes ?? 0);
         }
         sessionToUpdate.sessionId = backendSID; // 更新会话对象内部的sessionId
 

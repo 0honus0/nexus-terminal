@@ -59,7 +59,7 @@ interface SettingsState {
   showConnectionTags?: string; // 'true' or 'false'
   showQuickCommandTags?: string; // 'true' or 'false'
   layoutLocked?: string; // 'true' or 'false' - NEW: 布局锁定状态
-  terminalScrollbackLimit?: string; //  终端回滚行数上限 (e.g., '5000', '0' for unlimited)
+  terminalScrollbackLimit?: string; // 终端回滚行数上限（0 使用默认 5000，最大 100000）
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
   showStatusMonitorIpAddress?: string; // 'true' or 'false' - 状态监视器显示IP地址
@@ -847,7 +847,7 @@ export const useSettingsStore = defineStore('settings', () => {
       return settings.value.layoutLocked === 'true';
   });
 
-  //  Getter for terminal scrollback limit, returning number (0 means Infinity for xterm)
+  // Getter for terminal scrollback limit, clamped to a safe finite range.
   const terminalScrollbackLimitNumber = computed(() => {
       const valStr = settings.value.terminalScrollbackLimit;
       if (valStr === null || valStr === undefined || valStr.trim() === '') {
@@ -857,7 +857,8 @@ export const useSettingsStore = defineStore('settings', () => {
       if (isNaN(val) || val < 0) {
           return 5000; // Default value if invalid number or negative
       }
-      return val; // Return 0 if it's 0, or the positive number
+      if (val === 0) return 5000;
+      return Math.min(val, 100000);
   });
 
   //  Getter for File Manager delete confirmation, returning boolean

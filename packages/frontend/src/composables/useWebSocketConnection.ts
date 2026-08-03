@@ -2,6 +2,11 @@ import { ref, shallowRef, computed, readonly } from 'vue';
 import { useI18n } from 'vue-i18n'; // +++ Add import for useI18n +++
 // 从 websocket.types.ts 导入并重新导出 ConnectionStatus
 import type { ConnectionStatus as WsConnectionStatusType, MessagePayload, WebSocketMessage, MessageHandler } from '../types/websocket.types';
+import {
+    parseTerminalBinaryFrame,
+    TerminalFrameFlag,
+    TerminalFrameType,
+} from '../utils/terminalBinaryProtocol';
 
 // 导出类型别名，以便其他模块可以使用
 export type WsConnectionStatus = WsConnectionStatusType;
@@ -43,6 +48,7 @@ export function createWebSocketConnectionManager(
     let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null; // 重连定时器 ID
     let lastUrl = ''; // 保存上次连接的 URL
     let intentionalDisconnect = false; // 标记是否为用户主动断开
+    let lastTerminalFrameSequence: number | null = null;
 
 
     /**
@@ -180,9 +186,11 @@ export function createWebSocketConnectionManager(
             }
             // --- 使用调整后的 URL ---
             ws.value = new WebSocket(secureUrl);
+            ws.value.binaryType = 'arraybuffer';
 
             ws.value.onopen = () => {
                 reconnectAttempts = 0; // 连接成功，重置尝试次数
+                lastTerminalFrameSequence = null;
                 statusMessage.value = getStatusText('wsConnected');
                 // 状态保持 'connecting' 直到收到 ssh:connected
                 if (!isResumeFlow) {
@@ -209,7 +217,66 @@ export function createWebSocketConnectionManager(
             ws.value.onmessage = (event: MessageEvent) => {
                 try {
                     const rawData = event.data;
-                    const message: WebSocketMessage = JSON.parse(rawData.toString());
+                    if (rawData instanceof ArrayBuffer) {
+                        let frame;
+                        try {
+                            frame = parseTerminalBinaryFrame(rawData);
+                        } catch (error) {
+                            const message = error instanceof Error ? error.message : String(error);
+                            console.error(`[WebSocket ${instanceSessionId}] 终端二进制协议错误:`, error);
+                            connectionStatus.value = 'error';
+                            statusMessage.value = `终端二进制协议错误: ${message}`;
+                            isSftpReady.value = false;
+                            intentionalDisconnect = true;
+                            ws.value?.close(1003, 'Terminal binary protocol error');
+                            dispatchMessage('internal:error', error, { type: 'internal:error' });
+                            return;
+                        }
+                        if (lastTerminalFrameSequence !== null) {
+                            const expectedSequence = (lastTerminalFrameSequence + 1) >>> 0;
+                            if (frame.sequence !== expectedSequence) {
+                                const message = `终端帧序号不连续，期望 ${expectedSequence}，收到 ${frame.sequence}`;
+                                console.error(`[WebSocket ${instanceSessionId}] ${message}`);
+                                connectionStatus.value = 'error';
+                                statusMessage.value = message;
+                                intentionalDisconnect = true;
+                                ws.value?.close(1003, 'Terminal frame sequence error');
+                                return;
+                            }
+                        }
+                        lastTerminalFrameSequence = frame.sequence;
+                        let acknowledged = false;
+                        const acknowledge = () => {
+                            if (acknowledged) return;
+                            acknowledged = true;
+                            sendMessage({ type: 'ssh:output:ack', payload: { sequence: frame.sequence } });
+                        };
+
+                        if (frame.type === TerminalFrameType.Output) {
+                            dispatchMessage('ssh:output', frame.payload, {
+                                type: 'ssh:output',
+                                encoding: 'binary',
+                                sequence: frame.sequence,
+                                acknowledge,
+                            });
+                        } else {
+                            dispatchMessage('SSH_OUTPUT_CACHED_CHUNK', {
+                                frontendSessionId: instanceSessionId,
+                                data: frame.payload,
+                                isLastChunk: (frame.flags & TerminalFrameFlag.Final) !== 0,
+                            }, {
+                                type: 'SSH_OUTPUT_CACHED_CHUNK',
+                                encoding: 'binary',
+                                sequence: frame.sequence,
+                                acknowledge,
+                            });
+                        }
+                        return;
+                    }
+                    if (typeof rawData !== 'string') {
+                        throw new Error(`不支持的 WebSocket 消息数据类型: ${Object.prototype.toString.call(rawData)}`);
+                    }
+                    const message: WebSocketMessage = JSON.parse(rawData);
 
                     // --- 更新此实例的连接状态 ---
                     if (message.type === 'ssh:connected') {

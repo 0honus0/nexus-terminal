@@ -19,6 +19,11 @@ export type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
 export type SshTerminalInstance = ReturnType<typeof createSshTerminalManager>;
 export type StatusMonitorInstance = ReturnType<typeof createStatusMonitorManager>;
 
+export interface PendingTerminalOutput {
+  data: string | Uint8Array;
+  acknowledge?: () => void;
+}
+
 // 为 DockerManagerInstance 创建一个本地类型别名，并导出它
 export type DockerManagerInstance = OriginalDockerManagerInstance;
 
@@ -43,7 +48,9 @@ export interface SessionState {
   isMarkedForSuspend?: boolean; // +++ 标记会话是否已被用户请求标记为待挂起 +++
   createdAt: number; // 记录会话创建的时间戳，用于排序
   disposables?: (() => void)[]; // 用于存储清理函数，例如取消注册消息处理器
-  pendingOutput?: string[]; // 用于暂存恢复会话时，在终端实例准备好之前收到的输出
+  pendingOutput?: PendingTerminalOutput[]; // 用于暂存恢复会话时，在终端实例准备好之前收到的输出
+  pendingOutputBytes?: number;
+  pendingOutputComplete?: boolean;
 }
 
 // 为标签栏定义包含状态的类型

@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
 import type { Request } from 'express';
+import type { StringDecoder } from 'string_decoder';
 
 export interface WebSocketRequest extends Request {
     clientIpAddress: string;
@@ -59,6 +60,15 @@ export interface ClientState { // 导出以便 Service 可以导入
         executing: boolean;
         timeout: NodeJS.Timeout;
     };
+    terminalOutputSequence?: number;
+    terminalOutputHold?: boolean;
+    resumeSuspendSessionId?: string;
+    sshInputQueue?: Array<{ data: string; sequence?: number; bytes: number }>;
+    sshInputWaitingForDrain?: boolean;
+    shellOutputDecoder?: StringDecoder;
+    shellStderrDecoder?: StringDecoder;
+    terminalCols?: number;
+    terminalRows?: number;
     // suspendLogWritableStream?: NodeJS.WritableStream; // 移除，将直接使用 temporaryLogStorageService.writeToLog
 }
 
@@ -194,15 +204,6 @@ export interface SshSuspendResumedNotification {
   };
 }
 
-export interface SshOutputCachedChunk {
-  type: "SSH_OUTPUT_CACHED_CHUNK";
-  payload: {
-    frontendSessionId: string; // The frontend session ID to send the chunk to
-    data: string;
-    isLastChunk: boolean;
-  };
-}
-
 export interface SshSuspendTerminatedResponse {
   type: "SSH_SUSPEND_TERMINATED";
   payload: {
@@ -273,7 +274,6 @@ export type SshSuspendServerToClientMessages =
   | SshSuspendStartedResponse
   | SshSuspendListResponse
   | SshSuspendResumedNotification
-  | SshOutputCachedChunk
   | SshSuspendTerminatedResponse
   | SshSuspendEntryRemovedResponse
   | SshSuspendNameEditedResponse

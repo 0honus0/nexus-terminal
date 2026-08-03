@@ -171,9 +171,9 @@
          <form @submit.prevent="handleUpdateTerminalScrollbackLimit" class="space-y-4">
            <div>
              <label for="terminalScrollbackLimitInput" class="block text-sm font-medium text-text-secondary mb-1">{{ t('settings.terminalScrollback.limitLabel', '最大行数') }}</label>
-             <input type="number" id="terminalScrollbackLimitInput" v-model.number="terminalScrollbackLimitLocal" min="0" step="1" placeholder="5000"
+             <input type="number" id="terminalScrollbackLimitInput" v-model.number="terminalScrollbackLimitLocal" min="0" max="100000" step="1" placeholder="5000"
                     class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
-             <small class="block mt-1 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint', '设置终端保留的最大输出行数。0 或留空表示无限制 (使用默认值 5000)。此设置将在下次打开终端时生效。') }}</small>
+             <small class="block mt-1 text-xs text-text-secondary">{{ t('settings.terminalScrollback.limitHint', '设置终端保留的最大输出行数，范围 1–100000。0 或留空使用默认值 5000。此设置将在下次打开终端时生效。') }}</small>
            </div>
            <div class="flex items-center justify-between">
               <button type="submit"
@@ -413,4 +413,3 @@ const {
   handleUpdateDockerSettings,
 } = systemSettings;
 </script>
-

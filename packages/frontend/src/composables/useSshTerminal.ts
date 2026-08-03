@@ -29,23 +29,87 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     // Removed search result state refs
     // const searchResultCount = ref(0);
     // const currentSearchResultIndex = ref(-1);
-    const terminalOutputBuffer = ref<(string | Uint8Array)[]>([]); // 缓冲 WebSocket 消息直到终端准备好
+    interface BufferedTerminalOutput {
+        data: string | Uint8Array;
+        acknowledge?: () => void;
+    }
+    const terminalOutputBuffer: BufferedTerminalOutput[] = []; // 非响应式队列，仅在终端未挂载时使用
     const MAX_BUFFERED_OUTPUT_BYTES = 1024 * 1024;
+    const MAX_INPUT_CHUNK_CODE_UNITS = 32 * 1024;
+    const MAX_INPUT_IN_FLIGHT_BYTES = 128 * 1024;
     const outputEncoder = new TextEncoder();
     let bufferedOutputBytes = 0;
+    let terminalOutputBufferHead = 0;
+    let lastSentCols = 0;
+    let lastSentRows = 0;
+    let nextInputSequence = 0;
+    let inputBytesInFlight = 0;
+    const inputQueue: Array<{ data: string; sequence: number; bytes: number }> = [];
+    const pendingInputBytes = new Map<number, number>();
     const isSshConnected = ref(false); // 跟踪 SSH 连接状态
 
     const outputSize = (data: string | Uint8Array): number => (
         typeof data === 'string' ? outputEncoder.encode(data).length : data.byteLength
     );
 
-    const bufferTerminalOutput = (data: string | Uint8Array) => {
-        terminalOutputBuffer.value.push(data);
+    const bufferTerminalOutput = (data: string | Uint8Array, acknowledge?: () => void) => {
+        terminalOutputBuffer.push({ data, acknowledge });
         bufferedOutputBytes += outputSize(data);
-        while (bufferedOutputBytes > MAX_BUFFERED_OUTPUT_BYTES && terminalOutputBuffer.value.length > 1) {
-            const removed = terminalOutputBuffer.value.shift();
-            if (removed) bufferedOutputBytes -= outputSize(removed);
+        while (bufferedOutputBytes > MAX_BUFFERED_OUTPUT_BYTES && terminalOutputBuffer.length - terminalOutputBufferHead > 1) {
+            const removed = terminalOutputBuffer[terminalOutputBufferHead];
+            terminalOutputBufferHead += 1;
+            bufferedOutputBytes -= outputSize(removed.data);
+            removed.acknowledge?.();
         }
+        if (terminalOutputBufferHead > 1024 && terminalOutputBufferHead * 2 > terminalOutputBuffer.length) {
+            terminalOutputBuffer.splice(0, terminalOutputBufferHead);
+            terminalOutputBufferHead = 0;
+        }
+    };
+
+    const drainTerminalOutputBuffer = (): BufferedTerminalOutput[] => {
+        const buffered = terminalOutputBuffer.slice(terminalOutputBufferHead);
+        terminalOutputBuffer.length = 0;
+        terminalOutputBufferHead = 0;
+        bufferedOutputBytes = 0;
+        return buffered;
+    };
+
+    const flushInputQueue = (): void => {
+        while (inputQueue.length > 0) {
+            const next = inputQueue[0];
+            if (inputBytesInFlight > 0 && inputBytesInFlight + next.bytes > MAX_INPUT_IN_FLIGHT_BYTES) break;
+            inputQueue.shift();
+            pendingInputBytes.set(next.sequence, next.bytes);
+            inputBytesInFlight += next.bytes;
+            sendMessage({ type: 'ssh:input', sessionId, payload: next });
+        }
+    };
+
+    const enqueueInputChunk = (data: string): void => {
+        const sequence = nextInputSequence;
+        nextInputSequence = (nextInputSequence + 1) >>> 0;
+        inputQueue.push({ data, sequence, bytes: outputEncoder.encode(data).length });
+    };
+
+    const sendInputData = (data: string): void => {
+        if (data.length <= MAX_INPUT_CHUNK_CODE_UNITS) {
+            enqueueInputChunk(data);
+            flushInputQueue();
+            return;
+        }
+
+        let offset = 0;
+        while (offset < data.length) {
+            let end = Math.min(offset + MAX_INPUT_CHUNK_CODE_UNITS, data.length);
+            if (end < data.length) {
+                const lastCodeUnit = data.charCodeAt(end - 1);
+                if (lastCodeUnit >= 0xD800 && lastCodeUnit <= 0xDBFF) end -= 1;
+            }
+            enqueueInputChunk(data.slice(offset, end));
+            offset = end;
+        }
+        flushInputQueue();
     };
 
     // 辅助函数：获取终端消息文本
@@ -69,28 +133,32 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         // 1. 处理 SessionState.pendingOutput (来自 SSH_OUTPUT_CACHED_CHUNK 的早期数据)
         const currentSessionState = globalSessionsRef.value.get(sessionId);
         if (currentSessionState && currentSessionState.pendingOutput && currentSessionState.pendingOutput.length > 0) {
+            const pendingOutput = currentSessionState.pendingOutput;
+            const completesResume = currentSessionState.pendingOutputComplete === true;
             // console.log(`[会话 ${sessionId}][SSH终端模块] 发现 SessionState.pendingOutput，长度: ${currentSessionState.pendingOutput.length}。正在写入...`);
-            currentSessionState.pendingOutput.forEach(data => {
-                term.write(data);
+            pendingOutput.forEach((entry, index) => {
+                const isLast = index === pendingOutput.length - 1;
+                if (isLast && completesResume && entry.data.length === 0) {
+                    currentSessionState.isResuming = false;
+                    entry.acknowledge?.();
+                    return;
+                }
+                term.write(entry.data, () => {
+                    entry.acknowledge?.();
+                    if (isLast && completesResume) currentSessionState.isResuming = false;
+                });
             });
             currentSessionState.pendingOutput = []; // 清空
+            currentSessionState.pendingOutputBytes = 0;
+            currentSessionState.pendingOutputComplete = false;
             // console.log(`[会话 ${sessionId}][SSH终端模块] SessionState.pendingOutput 处理完毕。`);
-            // 如果之前因为 pendingOutput 而将 isResuming 保持为 true，现在可以考虑更新
-            if (currentSessionState.isResuming) {
-                // 检查 isLastChunk 是否已收到 (这部分逻辑在 handleSshOutputCachedChunk 中，这里仅作标记清除)
-                // 假设所有缓存块都已处理完毕
-                // console.log(`[会话 ${sessionId}][SSH终端模块] 所有 pendingOutput 已写入，清除 isResuming 标记。`);
-                currentSessionState.isResuming = false;
-            }
         }
 
         // 2. 将此管理器内部缓冲的输出 (terminalOutputBuffer, 来自 ssh:output) 写入终端
-        if (terminalOutputBuffer.value.length > 0) {
-            terminalOutputBuffer.value.forEach(data => {
-                 term.write(data);
+        if (terminalOutputBuffer.length > terminalOutputBufferHead) {
+            drainTerminalOutputBuffer().forEach(entry => {
+                 term.write(entry.data, entry.acknowledge);
             });
-            terminalOutputBuffer.value = []; // 清空内部缓冲区
-            bufferedOutputBytes = 0;
         }
         
         // 可以在这里自动聚焦或执行其他初始化操作
@@ -101,23 +169,26 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         if (terminalInstance.value !== payload.terminal) return;
         terminalInstance.value = null;
         searchAddon.value = null;
-        terminalOutputBuffer.value = [];
+        terminalOutputBuffer.length = 0;
+        terminalOutputBufferHead = 0;
         bufferedOutputBytes = 0;
         if (payload.snapshot) bufferTerminalOutput(payload.snapshot);
     };
 
     const handleTerminalData = (data: string) => {
         // console.debug(`[会话 ${sessionId}][SSH终端模块] 接收到终端输入:`, data);
-        sendMessage({ type: 'ssh:input', sessionId, payload: { data } });
+        sendInputData(data);
     };
 
     const handleTerminalResize = (dimensions: { cols: number; rows: number }) => {
-        console.log(`[SSH ${sessionId}] handleTerminalResize called with:`, dimensions);
         // 只有在连接状态下才发送 resize 命令给后端
         if (isConnected.value) {
+            if (!Number.isInteger(dimensions.cols) || !Number.isInteger(dimensions.rows)
+                || dimensions.cols < 2 || dimensions.rows < 1 || dimensions.cols > 1000 || dimensions.rows > 500) return;
+            if (dimensions.cols === lastSentCols && dimensions.rows === lastSentRows) return;
+            lastSentCols = dimensions.cols;
+            lastSentRows = dimensions.rows;
             sendMessage({ type: 'ssh:resize', sessionId, payload: dimensions });
-        } else {
-            console.log(`[SSH ${sessionId}] WebSocket not connected, skipping ssh:resize.`);
         }
     };
 
@@ -130,27 +201,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         }
 
         let outputData = payload;
-        // 检查是否为 Base64 编码 (需要后端配合发送 encoding 字段)
-        if (message?.encoding === 'base64' && typeof outputData === 'string') {
-            try {
-                // 使用更安全的Base64解码方式，保证中文字符正确解码
-                const base64String = outputData;
-                // 先用atob获取二进制字符串
-                const binaryString = atob(base64String);
-                // 创建Uint8Array存储二进制数据
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                // 直接使用原始二进制数据作为 Uint8Array 写入终端，避免编码转换问题
-                outputData = bytes;
-            } catch (e) {
-                console.error(`[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`, e, '原始数据:', message.payload);
-                outputData = `\r\n[解码错误: ${e}]\r\n`; // 在终端显示解码错误
-            }
-        }
-        // 如果不是 base64 或解码失败，确保它是字符串
-        else if (typeof outputData !== 'string') {
+        if (typeof outputData !== 'string' && !(outputData instanceof Uint8Array)) {
              console.warn(`[会话 ${sessionId}][SSH终端模块] 收到非字符串 ssh:output payload:`, outputData);
              try {
                  outputData = JSON.stringify(outputData); // 尝试序列化
@@ -159,21 +210,13 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
              }
         }
 
-        // 由于直接使用原始二进制数据，不再需要过滤 OSC 184 序列
-        // 相关代码已移除
-
-        // --- 添加前端日志 ---
-        // console.log(`[会话 ${sessionId}][SSH前端] 收到 ssh:output 原始 payload (解码前):`, payload);
-        // console.log(`[会话 ${sessionId}][SSH前端] 解码后的数据 (尝试写入):`, outputData);
-        // --------------------
-
         if (terminalInstance.value) {
             // console.log(`[会话 ${sessionId}][SSH前端] 终端实例存在，尝试写入...`);
-            terminalInstance.value.write(outputData);
+            terminalInstance.value.write(outputData, message?.acknowledge);
             // console.log(`[会话 ${sessionId}][SSH前端] 写入完成。`);
         } else {
             // 如果终端还没准备好，先缓冲输出
-            bufferTerminalOutput(outputData);
+            bufferTerminalOutput(outputData, message?.acknowledge);
         }
     };
 
@@ -193,7 +236,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             // 检查尺寸是否有效
             if (currentDimensions.cols > 0 && currentDimensions.rows > 0) {
                 console.log(`[会话 ${sessionId}][SSH终端模块] SSH 连接成功，主动发送初始尺寸:`, currentDimensions);
-                sendMessage({ type: 'ssh:resize', sessionId, payload: currentDimensions });
+                handleTerminalResize(currentDimensions);
             } else {
                 console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接成功，但获取到的初始尺寸无效，跳过发送 resize:`, currentDimensions);
             }
@@ -203,12 +246,20 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
 
         // 清空可能存在的旧缓冲（虽然理论上此时应该已经 ready 了）
-        if (terminalOutputBuffer.value.length > 0 && terminalInstance.value) {
+        if (terminalOutputBuffer.length > terminalOutputBufferHead && terminalInstance.value) {
              console.warn(`[会话 ${sessionId}][SSH终端模块] SSH 连接时仍有缓冲数据，正在写入...`);
-             terminalOutputBuffer.value.forEach(data => terminalInstance.value?.write(data));
-             terminalOutputBuffer.value = [];
-             bufferedOutputBytes = 0;
+             drainTerminalOutputBuffer().forEach(entry => terminalInstance.value?.write(entry.data, entry.acknowledge));
         }
+    };
+
+    const handleSshInputAck = (payload: MessagePayload) => {
+        const sequence = payload?.sequence;
+        if (!Number.isInteger(sequence)) return;
+        const bytes = pendingInputBytes.get(sequence);
+        if (bytes === undefined) return;
+        pendingInputBytes.delete(sequence);
+        inputBytesInFlight = Math.max(0, inputBytesInFlight - bytes);
+        flushInputQueue();
     };
 
     const handleSshDisconnected = (payload: MessagePayload, message?: WebSocketMessage) => {
@@ -220,6 +271,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         const reason = payload || t('workspace.terminal.unknownReason'); // 使用 i18n 获取未知原因文本
         console.log(`[会话 ${sessionId}][SSH终端模块] SSH 会话已断开:`, reason);
         isSshConnected.value = false; // 更新状态
+        lastSentCols = 0;
+        lastSentRows = 0;
+        inputQueue.length = 0;
+        pendingInputBytes.clear();
+        inputBytesInFlight = 0;
         terminalInstance.value?.writeln(`\r\n\x1b[31m${getTerminalText('disconnectMsg', { reason })}\x1b[0m`);
         // 可以在这里添加其他清理逻辑，例如禁用输入
     };
@@ -233,6 +289,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         const errorMsg = payload || t('workspace.terminal.unknownSshError'); // 使用 i18n
         console.error(`[会话 ${sessionId}][SSH终端模块] SSH 错误:`, errorMsg);
         isSshConnected.value = false; // 更新状态
+        lastSentCols = 0;
+        lastSentRows = 0;
+        inputQueue.length = 0;
+        pendingInputBytes.clear();
+        inputBytesInFlight = 0;
         terminalInstance.value?.writeln(`\r\n\x1b[31m${getTerminalText('genericErrorMsg', { message: errorMsg })}\x1b[0m`);
     };
 
@@ -279,6 +340,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const registerSshHandlers = () => {
         unregisterHandlers.push(onMessage('ssh:output', handleSshOutput));
+        unregisterHandlers.push(onMessage('ssh:input:ack', handleSshInputAck));
         unregisterHandlers.push(onMessage('ssh:connected', handleSshConnected));
         unregisterHandlers.push(onMessage('ssh:disconnected', handleSshDisconnected));
         unregisterHandlers.push(onMessage('ssh:error', handleSshError));
@@ -311,7 +373,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
      */
     const sendData = (data: string) => {
         // console.debug(`[会话 ${sessionId}][SSH终端模块] 直接发送数据:`, data);
-        sendMessage({ type: 'ssh:input', sessionId, payload: { data } });
+        sendInputData(data);
     };
 
     // --- 搜索相关方法 (移除计数逻辑) ---

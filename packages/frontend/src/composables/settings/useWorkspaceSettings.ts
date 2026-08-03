@@ -199,8 +199,8 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitSuccess.value = false;
     try {
       const limitValue = terminalScrollbackLimitLocal.value;
-      if (limitValue !== null && limitValue !== undefined && (isNaN(limitValue) || !Number.isInteger(limitValue) || limitValue < 0)) {
-        throw new Error(t('settings.terminalScrollback.error.invalidInput', '请输入一个有效的非负整数。'));
+      if (limitValue !== null && limitValue !== undefined && (isNaN(limitValue) || !Number.isInteger(limitValue) || limitValue < 0 || limitValue > 100000)) {
+        throw new Error(t('settings.terminalScrollback.error.invalidInput', '请输入 0–100000 之间的整数。'));
       }
       const valueToSave = (limitValue === null || limitValue === undefined) ? '5000' : String(limitValue);
       await settingsStore.updateSetting('terminalScrollbackLimit', valueToSave);

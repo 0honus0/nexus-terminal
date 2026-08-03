@@ -948,14 +948,14 @@
     "terminalScrollback": {
       "title": "Terminal Scrollback Limit",
       "limitLabel": "Maximum Lines",
-      "limitHint": "Set the maximum number of output lines the terminal keeps. 0 means unlimited (uses default 5000). This setting takes effect the next time a terminal is opened.",
+      "limitHint": "Set the maximum output history from 1 to 100000 lines. 0 or blank uses the default 5000. This takes effect when the next terminal is opened.",
       "saveButton": "Save",
       "success": {
         "saved": "Terminal scrollback limit setting saved successfully."
       },
       "error": {
         "saveFailed": "Failed to save terminal scrollback limit setting.",
-        "invalidInput": "Please enter a valid non-negative integer."
+        "invalidInput": "Please enter an integer from 0 to 100000."
       }
     },
     "ipBlacklist": {

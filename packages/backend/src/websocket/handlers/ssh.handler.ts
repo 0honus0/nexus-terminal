@@ -5,6 +5,8 @@ import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
 import WebSocket from 'ws';
+import { StringDecoder } from 'string_decoder';
+import { flushTerminalOutput, queueTerminalOutput } from '../terminal-binary-protocol';
 
 const encodeForPosixPrintf = (value: string): string =>
     Array.from(value)
@@ -12,6 +14,8 @@ const encodeForPosixPrintf = (value: string): string =>
         .join('');
 
 const SHELL_PROMPT_MARKER = '\x1b]777;NEXUS_PROMPT\x07';
+const MAX_SSH_INPUT_BYTES = 256 * 1024;
+const MAX_QUEUED_SSH_INPUT_BYTES = 1024 * 1024;
 
 const quotePosixShellArg = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
@@ -294,6 +298,36 @@ export const filterSshShellOutput = (state: ClientState, chunk: string): string 
     return consumePromptMarkers(state, setupFiltered);
 };
 
+export const forwardSshShellOutput = (state: ClientState, data: Buffer, stderr = false): void => {
+    const decoderKey = stderr ? 'shellStderrDecoder' : 'shellOutputDecoder';
+    const decoder = state[decoderKey] ?? new StringDecoder('utf8');
+    state[decoderKey] = decoder;
+
+    const decoded = decoder.write(data);
+    const visibleOutput = stderr ? decoded : filterSshShellOutput(state, decoded);
+    if (visibleOutput) {
+        queueTerminalOutput(state, Buffer.from(visibleOutput, 'utf8'));
+    }
+};
+
+export const flushSshShellOutput = (state: ClientState): void => {
+    const stdoutTail = state.shellOutputDecoder?.end() ?? '';
+    state.shellOutputDecoder = undefined;
+    if (stdoutTail) {
+        const visibleOutput = filterSshShellOutput(state, stdoutTail);
+        if (visibleOutput) {
+            queueTerminalOutput(state, Buffer.from(visibleOutput, 'utf8'));
+        }
+    }
+
+    const stderrTail = state.shellStderrDecoder?.end() ?? '';
+    state.shellStderrDecoder = undefined;
+    if (stderrTail) {
+        queueTerminalOutput(state, Buffer.from(stderrTail, 'utf8'));
+    }
+    flushTerminalOutput(state);
+};
+
 const buildShellProbeCommand = (startMarker: string, endMarker: string): string => {
     const encodedStart = encodeForPosixPrintf(startMarker);
     const encodedEnd = encodeForPosixPrintf(endMarker);
@@ -407,6 +441,8 @@ export async function handleSshConnect(
             connectionName: connInfo!.name,
             ipAddress: clientIp,
             isShellReady: false,
+            terminalCols: payload?.cols || 80,
+            terminalRows: payload?.rows || 24,
         };
         clientStates.set(newSessionId, newState);
         console.log(`WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`);
@@ -451,36 +487,31 @@ export async function handleSshConnect(
                 // read the terminal cwd or to synchronize the terminal directory.
 
                 stream.on('data', (data: Buffer) => {
-                    const visibleOutput = filterSshShellOutput(newState, data.toString('utf8'));
-                    if (visibleOutput && ws.readyState === WebSocket.OPEN) {
-                        // 确保数据以 UTF-8 编码转换为 Base64
-                        ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(visibleOutput, 'utf8').toString('base64'), encoding: 'base64' }));
-                    }
+                    forwardSshShellOutput(newState, data);
                     // 如果会话被标记为待挂起，则将输出写入日志
                     const currentState = clientStates.get(newSessionId); // 获取最新的状态
                     if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
-                        temporaryLogStorageService.writeToLog(currentState.suspendLogPath, data.toString('utf-8')).catch(err => {
+                        temporaryLogStorageService.writeToLog(currentState.suspendLogPath, data).catch(err => {
                             console.error(`[SSH Handler] 写入标记会话 ${newSessionId} 的日志失败 (路径: ${currentState.suspendLogPath}):`, err);
                         });
                     }
                 });
                 stream.stderr.on('data', (data: Buffer) => {
-                    console.error(`SSH Stderr (会话: ${newSessionId}): ${data.toString('utf8').substring(0, 100)}...`);
-                    if (ws.readyState === WebSocket.OPEN) {
-                        // 确保数据以 UTF-8 编码转换为 Base64
-                        const utf8ErrData = data.toString('utf8');
-                        ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(utf8ErrData, 'utf8').toString('base64'), encoding: 'base64' }));
-                    }
+                    forwardSshShellOutput(newState, data, true);
                     // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
                     const currentState = clientStates.get(newSessionId);
                     if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
-                        temporaryLogStorageService.writeToLog(currentState.suspendLogPath, `[STDERR] ${data.toString('utf-8')}`).catch(err => {
+                        temporaryLogStorageService.writeToLog(
+                            currentState.suspendLogPath,
+                            Buffer.concat([Buffer.from('[STDERR] ', 'utf8'), data]),
+                        ).catch(err => {
                             console.error(`[SSH Handler] 写入标记会话 ${newSessionId} 的 STDERR 日志失败 (路径: ${currentState.suspendLogPath}):`, err);
                         });
                     }
                 });
                 stream.on('close', () => {
                     console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
+                    flushSshShellOutput(newState);
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
                     }
@@ -565,6 +596,30 @@ export async function handleSshConnect(
     }
 }
 
+const sendSshInputAck = (state: ClientState, sequence: number | undefined, bytes: number): void => {
+    if (sequence === undefined || state.ws.readyState !== WebSocket.OPEN) return;
+    state.ws.send(JSON.stringify({ type: 'ssh:input:ack', payload: { sequence, bytes } }));
+};
+
+const drainSshInputQueue = (state: ClientState): void => {
+    if (state.sshInputWaitingForDrain || !state.sshShellStream) return;
+    const queue = state.sshInputQueue ?? [];
+    state.sshInputQueue = queue;
+    while (queue.length > 0 && state.sshShellStream) {
+        const item = queue.shift()!;
+        const accepted = state.sshShellStream.write(item.data);
+        sendSshInputAck(state, item.sequence, item.bytes);
+        if (!accepted) {
+            state.sshInputWaitingForDrain = true;
+            state.sshShellStream.once('drain', () => {
+                state.sshInputWaitingForDrain = false;
+                drainSshInputQueue(state);
+            });
+            return;
+        }
+    }
+};
+
 export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
     const sessionId = ws.sessionId;
     const state = sessionId ? clientStates.get(sessionId) : undefined;
@@ -575,10 +630,27 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
     }
     const data = payload?.data;
     if (typeof data === 'string' && state.isShellReady) { // Check isShellReady
+        const bytes = Buffer.byteLength(data, 'utf8');
+        if (bytes > MAX_SSH_INPUT_BYTES) {
+            console.warn(`WebSocket: 会话 ${sessionId} 的单次 SSH 输入超过 ${MAX_SSH_INPUT_BYTES} 字节，已拒绝。`);
+            return;
+        }
+        const sequence = payload?.sequence;
+        if (sequence !== undefined && (!Number.isInteger(sequence) || sequence < 0 || sequence > 0xFFFFFFFF)) {
+            console.warn(`WebSocket: 会话 ${sessionId} 的 SSH 输入序号无效。`);
+            return;
+        }
+        const queuedBytes = (state.sshInputQueue ?? []).reduce((total, item) => total + item.bytes, 0);
+        if (queuedBytes + bytes > MAX_QUEUED_SSH_INPUT_BYTES) {
+            console.warn(`WebSocket: 会话 ${sessionId} 的 SSH 输入队列超过限制，关闭连接以防止内存耗尽。`);
+            ws.close(1009, 'SSH input queue limit exceeded');
+            return;
+        }
         // Any user input may be a partial command or belong to a foreground program.
         // Wait for the next explicit prompt marker before injecting a queued cd.
         state.shellAtPrompt = false;
-        state.sshShellStream.write(data);
+        (state.sshInputQueue ??= []).push({ data, sequence, bytes });
+        drainSshInputQueue(state);
     } else if (!state.isShellReady) {
         console.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
     }
@@ -690,14 +762,16 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
     }
 
     const { cols, rows } = payload || {};
-    if (typeof cols !== 'number' || typeof rows !== 'number' || cols <= 0 || rows <= 0) {
+    if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 2 || rows < 1 || cols > 1000 || rows > 500) {
         console.warn(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的无效调整大小请求:`, payload);
         return;
     }
 
     if (state.isShellReady && state.sshShellStream) {
-        console.log(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
+        if (state.terminalCols === cols && state.terminalRows === rows) return;
         state.sshShellStream.setWindow(rows, cols, 0, 0);
+        state.terminalCols = cols;
+        state.terminalRows = rows;
     } else {
         // Store intended size if shell not ready, apply when shell is ready.
         // This part is a bit more complex as it requires modifying the shell opening logic.

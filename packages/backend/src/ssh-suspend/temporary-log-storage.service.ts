@@ -1,4 +1,6 @@
 import * as fs from 'fs/promises';
+import { createReadStream } from 'fs';
+import { Readable } from 'stream';
 import * as path from 'path';
 
 const MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
@@ -9,8 +11,15 @@ const SAFE_LOG_IDENTIFIER = /^[A-Za-z0-9_-]{1,128}$/;
  * TemporaryLogStorageService负责管理临时日志文件的原子化读、写、删除及轮替操作。
  */
 export class TemporaryLogStorageService {
+  private readonly writers = new Map<string, {
+    tail: Promise<void>;
+    size?: number;
+    revision: number;
+    error?: unknown;
+  }>();
+
   constructor() {
-    this.ensureLogDirectoryExists();
+    void this.ensureLogDirectoryExists();
   }
 
   /**
@@ -33,57 +42,91 @@ export class TemporaryLogStorageService {
     return path.join(LOG_DIRECTORY, `${suspendSessionId}.log`);
   }
 
+  private getWriter(suspendSessionId: string): {
+    tail: Promise<void>;
+    size?: number;
+    revision: number;
+    error?: unknown;
+  } {
+    let writer = this.writers.get(suspendSessionId);
+    if (!writer) {
+      writer = { tail: Promise.resolve(), revision: 0 };
+      this.writers.set(suspendSessionId, writer);
+    }
+    return writer;
+  }
+
+  private enqueue(suspendSessionId: string, operation: (writer: { size?: number }) => Promise<void>): Promise<void> {
+    const writer = this.getWriter(suspendSessionId);
+    writer.revision += 1;
+    const result = writer.tail.then(() => operation(writer)).catch(error => {
+      writer.error = error;
+      throw error;
+    });
+    writer.tail = result.catch(() => undefined);
+    return result;
+  }
+
   /**
    * 将数据写入指定挂起会话的日志文件。
    * 如果文件大小超过MAX_LOG_SIZE_BYTES，将采取轮替策略（清空并从头开始写）。
    * @param suspendSessionId - 挂起会话的ID。
-   * @param data - 要写入的数据。
+   * @param data - 要写入的原始终端字节或文本。
    */
-  async writeToLog(suspendSessionId: string, data: string): Promise<void> {
+  async writeToLog(suspendSessionId: string, data: string | Uint8Array): Promise<void> {
     const filePath = this.getLogFilePath(suspendSessionId);
-    try {
-      await this.ensureLogDirectoryExists(); // 确保目录存在
-      let stat;
+    const chunk = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+    if (chunk.length === 0) return;
+    return this.enqueue(suspendSessionId, async writer => {
       try {
-        stat = await fs.stat(filePath);
-      } catch (e: any) {
-        if (e.code !== 'ENOENT') {
-          throw e;
+        await this.ensureLogDirectoryExists();
+        if (writer.size === undefined) {
+          try {
+            writer.size = (await fs.stat(filePath)).size;
+          } catch (error: any) {
+            if (error.code !== 'ENOENT') throw error;
+            writer.size = 0;
+          }
         }
-        // 文件不存在，是正常情况，后续会创建
-      }
 
-      if (stat && stat.size >= MAX_LOG_SIZE_BYTES) {
-        // 文件过大，执行轮替策略：清空文件
-        console.log(`日志文件 '${filePath}' 大小达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行轮替（清空）。`);
-        await fs.writeFile(filePath, data, { encoding: 'utf8', mode: 0o600 }); // 清空并写入新数据
-      } else {
-        await fs.appendFile(filePath, data, { encoding: 'utf8', mode: 0o600 });
+        const retainedChunk = chunk.length > MAX_LOG_SIZE_BYTES
+          ? chunk.subarray(chunk.length - MAX_LOG_SIZE_BYTES)
+          : chunk;
+        if (writer.size + retainedChunk.length > MAX_LOG_SIZE_BYTES) {
+          console.log(`日志文件 '${filePath}' 达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行轮替。`);
+          await fs.writeFile(filePath, retainedChunk, { mode: 0o600 });
+          writer.size = retainedChunk.length;
+        } else {
+          await fs.appendFile(filePath, retainedChunk, { mode: 0o600 });
+          writer.size += retainedChunk.length;
+        }
+      } catch (error) {
+        console.error(`写入日志文件 '${filePath}' 失败:`, error);
+        throw error;
       }
-    } catch (error) {
-      console.error(`写入日志文件 '${filePath}' 失败:`, error);
-      throw error; // 重新抛出错误，让调用者处理
+    });
+  }
+
+  async flush(suspendSessionId: string): Promise<void> {
+    const writer = this.getWriter(suspendSessionId);
+    await writer.tail;
+    if (writer.error !== undefined) {
+      const error = writer.error;
+      writer.error = undefined;
+      throw error;
     }
   }
 
-  /**
-   * 读取指定挂起会话的日志文件内容。
-   * @param suspendSessionId - 挂起会话的ID。
-   * @returns 返回日志文件的内容。如果文件不存在，则返回空字符串。
-   */
-  async readLog(suspendSessionId: string): Promise<string> {
+  async createLogReadStream(suspendSessionId: string): Promise<Readable> {
     const filePath = this.getLogFilePath(suspendSessionId);
+    await this.flush(suspendSessionId);
     try {
-      const data = await fs.readFile(filePath, 'utf8');
-      return data;
+      await fs.access(filePath);
     } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        // console.log(`日志文件 '${filePath}' 不存在，返回空内容。`);
-        return ''; // 文件不存在，通常意味着没有日志
-      }
-      console.error(`读取日志文件 '${filePath}' 失败:`, error);
+      if (error.code === 'ENOENT') return Readable.from([]);
       throw error;
     }
+    return createReadStream(filePath, { highWaterMark: 64 * 1024 });
   }
 
   /**
@@ -92,16 +135,21 @@ export class TemporaryLogStorageService {
    */
   async deleteLog(suspendSessionId: string): Promise<void> {
     const filePath = this.getLogFilePath(suspendSessionId);
-    try {
-      await fs.unlink(filePath);
-      // console.log(`日志文件 '${filePath}' 已成功删除。`);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        // console.warn(`尝试删除日志文件 '${filePath}' 时发现文件已不存在，操作忽略。`);
-        return; // 文件不存在，无需操作
+    const writer = this.getWriter(suspendSessionId);
+    const deletion = this.enqueue(suspendSessionId, async currentWriter => {
+      try {
+        await fs.unlink(filePath);
+        currentWriter.size = 0;
+      } catch (error: any) {
+        if (error.code === 'ENOENT') return;
+        console.error(`删除日志文件 '${filePath}' 失败:`, error);
+        throw error;
       }
-      console.error(`删除日志文件 '${filePath}' 失败:`, error);
-      throw error;
+    });
+    const deletionRevision = writer.revision;
+    await deletion;
+    if (this.writers.get(suspendSessionId) === writer && writer.revision === deletionRevision) {
+      this.writers.delete(suspendSessionId);
     }
   }
 

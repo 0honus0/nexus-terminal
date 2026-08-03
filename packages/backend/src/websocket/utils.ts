@@ -3,6 +3,7 @@ import { SftpService } from '../sftp/sftp.service';
 import { StatusMonitorService } from '../services/status-monitor.service';
 import { clientStates, sftpService, statusMonitorService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
+import { disposeTerminalTransport } from './terminal-binary-protocol';
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -82,11 +83,26 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
             clearTimeout(state.pendingDirectoryChange.timeout);
             state.pendingDirectoryChange = undefined;
         }
+        disposeTerminalTransport(state);
         // 1. 停止状态轮询 (如果存在)
         if (statusMonitorService) statusMonitorService.clearSession(sessionId);
 
         // 2. 清理 SFTP 会话 (如果存在)
         if (sftpService) sftpService.cleanupSftpSession(sessionId);
+
+        // 恢复事务尚未提交时，连接归还挂起服务，保留日志以便重试。
+        if (state.resumeSuspendSessionId && state.ws.userId !== undefined) {
+            const rolledBack = await sshSuspendService.rollbackResumeSession(
+                state.ws.userId,
+                state.resumeSuspendSessionId,
+            );
+            if (rolledBack) {
+                state.isSuspendedByService = true;
+                state.sshClient = undefined as any;
+                state.sshShellStream = undefined;
+                state.resumeSuspendSessionId = undefined;
+            }
+        }
 
         // 3. 处理 SSH 连接 (核心修改点)
         if (state.isMarkedForSuspend && state.sshClient && state.sshShellStream && state.suspendLogPath && state.ws.userId !== undefined) {

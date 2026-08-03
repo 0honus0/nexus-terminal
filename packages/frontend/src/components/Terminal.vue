@@ -38,6 +38,8 @@ let debounceTimer: number | null = null; // 用于防抖的计时器 ID
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
 let lastResizeObserverWidth = 0;
 let lastResizeObserverHeight = 0;
+let lastEmittedCols = 0;
+let lastEmittedRows = 0;
 const RESIZE_THRESHOLD = 0.5; // px
 
 
@@ -89,18 +91,22 @@ const debounce = (func: Function, delay: number) => {
   };
 };
 
+const emitResizeIfChanged = (term: Terminal): boolean => {
+    if (term.cols <= 0 || term.rows <= 0) return false;
+    if (term.cols === lastEmittedCols && term.rows === lastEmittedRows) return false;
+    lastEmittedCols = term.cols;
+    lastEmittedRows = term.rows;
+    emitWorkspaceEvent('terminal:resize', {
+      sessionId: props.sessionId,
+      dims: { cols: term.cols, rows: term.rows },
+    });
+    return true;
+};
+
 // 防抖处理由 ResizeObserver 触发的 resize 事件
 const debouncedEmitResize = debounce((term: Terminal) => {
     if (term && props.isActive) { // 仅当标签仍处于活动状态时才发送防抖后的 resize
-        const dimensions = { cols: term.cols, rows: term.rows };
-        console.log(`[Terminal ${props.sessionId}] Debounced resize emit (from ResizeObserver):`, dimensions);
-        emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: dimensions });
-        // *** 尝试在发送 resize 后强制刷新终端显示 ***
-        try {
-            term.refresh(0, term.rows - 1); // Refresh entire viewport
-        } catch (e) {
-            console.warn(`[Terminal ${props.sessionId}] Terminal refresh failed:`, e);
-        }
+        emitResizeIfChanged(term);
     }
 }, 150); // 150ms 防抖延迟
 
@@ -112,8 +118,7 @@ const fitAndEmitResizeNow = (term: Terminal) => {
         // 确保容器可见且有尺寸
         if (terminalRef.value.offsetHeight > 0 && terminalRef.value.offsetWidth > 0) {
             fitAddon?.fit();
-            const dimensions = { cols: term.cols, rows: term.rows };
-            emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: dimensions });
+            emitResizeIfChanged(term);
             // 发出稳定尺寸事件
             if (terminalRef.value) {
               const stableWidth = terminalRef.value.offsetWidth;
@@ -122,15 +127,6 @@ const fitAndEmitResizeNow = (term: Terminal) => {
             }
 
             
-            // 使用 nextTick 确保 fit() 的效果已反映，再触发 resize
-            nextTick(() => {
-                // 再次检查终端实例是否仍然存在
-                // terminalRef 现在指向内部容器
-                if (terminal && terminalRef.value) {
-                    console.log(`[Terminal ${props.sessionId}] Triggering window resize event after immediate fit.`);
-                    window.dispatchEvent(new Event('resize'));
-                }
-            });
         } else {
              console.log(`[Terminal ${props.sessionId}] Immediate fit skipped (container not visible or has no dimensions).`);
         }
@@ -157,10 +153,10 @@ const debouncedSaveFontSize = debounce(async (size: number) => {
 
 //  Helper function to convert setting value to xterm scrollback value
 const getScrollbackValue = (limit: number): number => {
-  if (limit === 0) {
-    return Infinity; // 0 means unlimited for xterm
-  }
-  return Math.max(0, limit); // Ensure non-negative, return the number otherwise
+  const DEFAULT_SCROLLBACK_LINES = 5000;
+  const MAX_SCROLLBACK_LINES = 100000;
+  if (!Number.isFinite(limit) || limit <= 0) return DEFAULT_SCROLLBACK_LINES;
+  return Math.min(Math.floor(limit), MAX_SCROLLBACK_LINES);
 };
 
 const captureTerminalSnapshot = (term: Terminal): string | undefined => {
@@ -298,7 +294,7 @@ onMounted(() => {
  
     // 适应容器大小
     fitAddon.fit();
-    emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: { cols: terminal.cols, rows: terminal.rows } }); // 触发初始 resize 事件
+    emitResizeIfChanged(terminal); // 触发初始 resize 事件
 
     // 监听用户输入
     terminal.onData((data) => {
@@ -314,19 +310,14 @@ onMounted(() => {
 
             const entry = entries[0];
             const { height: rectHeight, width: rectWidth } = entry.contentRect;
-            const offsetW = terminalRef.value.offsetWidth;
-            const offsetH = terminalRef.value.offsetHeight;
 
             // --- 阈值判断逻辑 ---
             const widthChangedSignificantly = Math.abs(rectWidth - lastResizeObserverWidth) >= RESIZE_THRESHOLD;
             const heightChangedSignificantly = Math.abs(rectHeight - lastResizeObserverHeight) >= RESIZE_THRESHOLD;
 
             if (!widthChangedSignificantly && !heightChangedSignificantly) {
-              console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] Size change below threshold (${RESIZE_THRESHOLD}px). rectWidth: ${rectWidth.toFixed(2)}, rectHeight: ${rectHeight.toFixed(2)}, lastWidth: ${lastResizeObserverWidth.toFixed(2)}, lastHeight: ${lastResizeObserverHeight.toFixed(2)}. Skipping fit.`);
               return;
             }
-            
-            console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] Size change AT or ABOVE threshold (${RESIZE_THRESHOLD}px). rectWidth: ${rectWidth.toFixed(2)}, rectHeight: ${rectHeight.toFixed(2)}, lastWidth: ${lastResizeObserverWidth.toFixed(2)}, lastHeight: ${lastResizeObserverHeight.toFixed(2)}. Proceeding with fit.`);
             
             const roundedWidth = Math.round(rectWidth);
             const roundedHeight = Math.round(rectHeight);
@@ -335,14 +326,6 @@ onMounted(() => {
             lastResizeObserverWidth = roundedWidth;
             lastResizeObserverHeight = roundedHeight;
             // --- 阈值判断逻辑结束 ---
-
-            console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] Triggered. Observed contentRect: ${rectWidth.toFixed(2)}w x ${rectHeight.toFixed(2)}h (rounded to ${roundedWidth}x${roundedHeight}). terminalRef offset: ${offsetW}w x ${offsetH}h.`);
-            if (entry.target && terminalRef.value) {
-              const targetBoundingClientRect = entry.target.getBoundingClientRect();
-              const terminalRefBoundingClientRect = terminalRef.value.getBoundingClientRect();
-              console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] target.getBoundingClientRect(): ${targetBoundingClientRect.width.toFixed(2)}w x ${targetBoundingClientRect.height.toFixed(2)}h, top: ${targetBoundingClientRect.top.toFixed(2)}, left: ${targetBoundingClientRect.left.toFixed(2)}`);
-              console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] terminalRef.getBoundingClientRect(): ${terminalRefBoundingClientRect.width.toFixed(2)}w x ${terminalRefBoundingClientRect.height.toFixed(2)}h, top: ${terminalRefBoundingClientRect.top.toFixed(2)}, left: ${terminalRefBoundingClientRect.left.toFixed(2)}`);
-            }
 
             if (rectHeight > 0 && rectWidth > 0) {
                 try {

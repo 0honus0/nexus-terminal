@@ -38,6 +38,8 @@ export interface SuspendSessionDetails {
   shellKind?: 'bash' | 'zsh' | 'other';
   shellIntegrationReady?: boolean;
   shellAtPrompt?: boolean;
+  /** 恢复事务正在进行；提交或回滚前仍属于挂起会话。 */
+  resumeInProgress?: boolean;
 }
 
 /**

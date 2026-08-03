@@ -98,7 +98,7 @@ export interface SshSuspendResumedNotifPayload {
 
 export interface SshOutputCachedChunkPayload {
   frontendSessionId: string;
-  data: string;
+  data: string | Uint8Array;
   isLastChunk: boolean;
 }
 

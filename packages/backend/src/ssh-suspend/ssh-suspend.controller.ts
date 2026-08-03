@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pipeline } from 'stream/promises';
 import { sshSuspendService } from './ssh-suspend.service';
 import { SuspendedSessionInfo } from '../types/ssh-suspend.types';
 
@@ -158,19 +159,22 @@ export class SshSuspendController {
 
       console.log(`[SshSuspendController] exportSessionLog called for user ID: ${userId}, suspendSessionId: ${suspendSessionId}`);
 
-      const logData = await sshSuspendService.getSessionLogContent(userId, suspendSessionId);
+      const logData = await sshSuspendService.getSessionLogStream(userId, suspendSessionId);
 
       if (logData) {
         res.setHeader('Content-Disposition', `attachment; filename="${logData.filename}"`);
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.send(logData.content);
+        await pipeline(logData.stream, res);
       } else {
-        // sshSuspendService.getSessionLogContent 会记录详细的警告/错误
         // 如果会话不存在，或者状态不符合导出条件，或者读取日志失败
         res.status(404).json({ message: `Failed to export log for session ${suspendSessionId}. It might not exist, not be in a valid state for export, or log reading failed.` });
       }
     } catch (error) {
       console.error(`[SshSuspendController] Error exporting session log for user ID: ${req.session.userId}, suspendSessionId: ${req.params.suspendSessionId}:`, error);
+      if (res.headersSent) {
+        res.destroy(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       if (error instanceof Error) {
         res.status(500).json({ message: 'Failed to export suspended session log', error: error.message });
       } else {

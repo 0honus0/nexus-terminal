@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { sessions, suspendedSshSessions, isLoadingSuspendedSessions, activeSessionId } from '../state';
 import type {
   MessagePayload,
+  WebSocketMessage,
   SshMarkForSuspendReqMessage,
   SshUnmarkForSuspendReqMessage, 
   SshSuspendResumeReqMessage,
@@ -31,6 +32,8 @@ import apiClient from '../../../utils/apiClient';
 import { isAxiosError } from 'axios';
 
 const t: ComposerTranslation = i18n.global.t; 
+const MAX_PENDING_RESUME_OUTPUT_BYTES = 1024 * 1024;
+const terminalOutputEncoder = new TextEncoder();
 
 // 辅助函数：获取一个可用的 WebSocket 管理器
 // 优先使用当前激活的会话，或者任意一个已连接的 SSH 会话
@@ -614,34 +617,42 @@ const handleSshSuspendResumedNotif = async (payload: SshSuspendResumedNotifPaylo
   }
 };
 
-const handleSshOutputCachedChunk = (payload: SshOutputCachedChunkPayload): void => {
+const handleSshOutputCachedChunk = (payload: SshOutputCachedChunkPayload, message?: WebSocketMessage): void => {
   const session = sessions.value.get(payload.frontendSessionId) as SessionState | undefined;
   if (session && session.terminalManager) {
     if (session.terminalManager.terminalInstance.value) {
       // 终端实例已就绪，直接写入
-      console.log('[SSH Suspend Frontend] Received cached chunk data (writing to terminal):', payload.data);
-      session.terminalManager.terminalInstance.value.write(payload.data);
+      if (payload.isLastChunk && payload.data.length === 0) {
+        session.isResuming = false;
+        message?.acknowledge?.();
+      } else {
+        session.terminalManager.terminalInstance.value.write(payload.data, () => {
+          message?.acknowledge?.();
+          if (payload.isLastChunk) session.isResuming = false;
+        });
+      }
     } else {
       // 终端实例尚未就绪，暂存输出
       if (!session.pendingOutput) {
         session.pendingOutput = [];
       }
-      console.log('[SSH Suspend Frontend] Received cached chunk data (buffering):', payload.data);
-      session.pendingOutput.push(payload.data);
+      const chunkBytes = typeof payload.data === 'string'
+        ? terminalOutputEncoder.encode(payload.data).length
+        : payload.data.byteLength;
+      const nextBytes = (session.pendingOutputBytes ?? 0) + chunkBytes;
+      if (nextBytes > MAX_PENDING_RESUME_OUTPUT_BYTES) {
+        console.error(`[${t('term.sshSuspend')}] 恢复缓存超过 ${MAX_PENDING_RESUME_OUTPUT_BYTES} 字节，断开连接以触发后端事务回滚。`);
+        session.pendingOutput = [];
+        session.pendingOutputBytes = 0;
+        closeSession(payload.frontendSessionId);
+        return;
+      }
+      session.pendingOutput.push({ data: payload.data, acknowledge: message?.acknowledge });
+      session.pendingOutputBytes = nextBytes;
+      if (payload.isLastChunk) session.pendingOutputComplete = true;
       // console.log(`[${t('term.sshSuspend')}] (会话: ${payload.frontendSessionId}) 终端实例未就绪，已暂存数据块 (长度: ${payload.data.length})。当前暂存块数: ${session.pendingOutput.length}`);
     }
 
-    // isLastChunk 逻辑应该在数据被处理（写入或暂存）后执行
-    if (payload.isLastChunk) {
-      console.log(`[${t('term.sshSuspend')}] (会话: ${payload.frontendSessionId}) 已接收所有缓存输出的最后一个数据块标记。`);
-      if (session.isResuming === true) {
-        // 如果终端实例还未就绪，isResuming 状态的解除可能需要等到 pendingOutput 被清空时
-        // 但如果 isLastChunk 到了，至少可以认为后端数据发送完毕
-        // 实际的 isResuming = false 最好在 pendingOutput 被写入终端后处理
-        // 这里只记录日志，具体状态变更由 Terminal.vue 或相关 manager 负责
-        console.log(`[${t('term.sshSuspend')}] (会话: ${payload.frontendSessionId}) isResuming 标记仍为 true，等待终端处理暂存数据（如有）。`);
-      }
-    }
   } else {
     console.warn(`[${t('term.sshSuspend')}] 收到缓存数据块，但找不到对应会话或其终端管理器 (ID: ${payload.frontendSessionId})`);
   }
@@ -727,7 +738,7 @@ export const registerSshSuspendHandlers = (wsManager: WsManagerInstance): void =
   wsManager.onMessage('SSH_UNMARKED_FOR_SUSPEND_ACK', (p: MessagePayload) => handleSshUnmarkedForSuspendAck(p as SshUnmarkedForSuspendAckPayload)); 
   wsManager.onMessage('SSH_SUSPEND_LIST_RESPONSE', (p: MessagePayload) => handleSshSuspendListResponse(p as SshSuspendListResponsePayload));
   wsManager.onMessage('SSH_SUSPEND_RESUMED_NOTIF', (p: MessagePayload) => handleSshSuspendResumedNotif(p as SshSuspendResumedNotifPayload));
-  wsManager.onMessage('SSH_OUTPUT_CACHED_CHUNK', (p: MessagePayload) => handleSshOutputCachedChunk(p as SshOutputCachedChunkPayload));
+  wsManager.onMessage('SSH_OUTPUT_CACHED_CHUNK', (p: MessagePayload, message: WebSocketMessage) => handleSshOutputCachedChunk(p as SshOutputCachedChunkPayload, message));
   wsManager.onMessage('SSH_SUSPEND_TERMINATED_RESP', (p: MessagePayload) => handleSshSuspendTerminatedResp(p as SshSuspendTerminatedRespPayload));
   wsManager.onMessage('SSH_SUSPEND_ENTRY_REMOVED_RESP', (p: MessagePayload) => handleSshSuspendEntryRemovedResp(p as SshSuspendEntryRemovedRespPayload));
   // SSH_SUSPEND_NAME_EDITED_RESP handler removed
