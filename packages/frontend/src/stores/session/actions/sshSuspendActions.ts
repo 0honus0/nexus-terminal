@@ -30,6 +30,7 @@ import i18n from '../../../i18n';
 import type { ComposerTranslation } from 'vue-i18n'; 
 import apiClient from '../../../utils/apiClient'; 
 import { isAxiosError } from 'axios';
+import { serializeTerminalSnapshot } from '../../../utils/terminalSnapshot';
 
 const t: ComposerTranslation = i18n.global.t; 
 const MAX_PENDING_RESUME_OUTPUT_BYTES = 1024 * 1024;
@@ -101,37 +102,7 @@ export const requestStartSshSuspend = (sessionId: string): void => {
     let initialBuffer = '';
     if (session.terminalManager && session.terminalManager.terminalInstance && session.terminalManager.terminalInstance.value) {
       const term = session.terminalManager.terminalInstance.value;
-      const buffer = term.buffer.active;
-      
-      let lastNonEmptyLineIndex = -1;
-      // 从下往上找到最后一个非空行
-      for (let i = buffer.length - 1; i >= 0; i--) {
-        const line = buffer.getLine(i);
-        // translateToString(true) 会移除行尾空白，再 trim() 判断是否整行都是空白
-        if (line && line.translateToString(true).trim() !== '') {
-          lastNonEmptyLineIndex = i;
-          break;
-        }
-      }
-
-      if (lastNonEmptyLineIndex !== -1) {
-        const maxBufferBytes = 1048576 - 1024;
-        const encoder = new TextEncoder();
-        const lines: string[] = [];
-        let totalBytes = 0;
-
-        // 优先保留最新的终端内容，避免超过后端 1MB 消息校验限制。
-        for (let i = lastNonEmptyLineIndex; i >= 0; i--) {
-          const line = buffer.getLine(i)?.translateToString(true) || '';
-          const lineBytes = encoder.encode(line).length + 1;
-          if (totalBytes + lineBytes > maxBufferBytes && lines.length > 0) break;
-          lines.push(line);
-          totalBytes += lineBytes;
-        }
-        initialBuffer = lines.reverse().join('\n');
-      }
-      // join('\n') 会在行间添加换行符，如果最后一行是空字符串，末尾不会有多余的 \n
-      // 如果最后一行非空，则自然以该行结束。
+      initialBuffer = serializeTerminalSnapshot(term) || '';
 
     } else {
       console.warn(`[${t('term.sshSuspend')}] 未能获取会话 ${sessionId} 的终端实例以提取初始缓冲区。`);

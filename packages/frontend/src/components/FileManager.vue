@@ -1728,10 +1728,9 @@ const handleOpenEditorClick = () => {
 <template>
   <div class="file-manager-root flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
     <div class="file-manager-toolbar flex items-center justify-between flex-wrap gap-1 p-2 bg-header flex-shrink-0">
-        <!-- Wrapper for Path Actions and Path Bar -->
-        <div class="file-manager-path-row flex items-center gap-1 flex-grow min-w-0">
-            <!-- Path Actions -->
-            <div class="file-manager-path-actions flex items-center flex-shrink-0"> <!-- Removed mr-auto -->
+        <!-- All file manager actions share one adaptive toolbar. -->
+        <div class="file-manager-actions flex items-center gap-1 min-w-0">
+              <input type="file" ref="fileInputRef" @change="handleFileSelected" multiple class="hidden" />
               <!-- CD 到终端按钮 -->
               <button
                 class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
@@ -1813,11 +1812,6 @@ const handleOpenEditorClick = () => {
                 @navigate-to-path="handleNavigateToPathFromFavorites"
               />
             </div>
-            </div> 
-        </div> <!-- End Wrapper -->
-       <!-- Main Actions Bar -->
-       <div class="file-manager-actions flex items-center gap-1 flex-shrink-0">
-            <input type="file" ref="fileInputRef" @change="handleFileSelected" multiple class="hidden" />
             <!-- 打开编辑器按钮 -->
             <button
               v-if="showPopupFileEditorBoolean"
@@ -2148,7 +2142,6 @@ const handleOpenEditorClick = () => {
   container-name: file-manager-pane;
 }
 .file-manager-toolbar,
-.file-manager-path-row,
 .file-manager-actions {
   min-width: 0;
 }
@@ -2156,14 +2149,6 @@ const handleOpenEditorClick = () => {
   justify-content: flex-start !important;
   column-gap: 0.35rem;
   row-gap: 0.3rem;
-}
-.file-manager-path-actions {
-  min-width: 0;
-  max-width: 100%;
-}
-.file-manager-path-row {
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
 }
 .file-manager-path-button {
   flex: 0 0 1.75rem;
@@ -2178,7 +2163,7 @@ const handleOpenEditorClick = () => {
   order: 3;
 }
 .file-manager-actions {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   max-width: 100%;
   flex-wrap: wrap;
   justify-content: flex-start;
@@ -2194,10 +2179,6 @@ const handleOpenEditorClick = () => {
   min-width: 0;
 }
 @container file-manager-pane (max-width: 520px) {
-  .file-manager-path-actions {
-    flex-wrap: wrap;
-    row-gap: 0.15rem;
-  }
   .file-manager-search-box {
     min-width: 0 !important;
     width: min(100%, 10rem);
@@ -2211,36 +2192,31 @@ const handleOpenEditorClick = () => {
   }
 }
 @container file-manager-pane (max-width: 420px) {
-  .file-manager-path-row {
+  .file-manager-actions {
     flex: 1 1 100%;
     width: 100%;
-  }
-  .file-manager-path-actions {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.25rem;
-    width: 100%;
   }
-  .file-manager-path-actions > * {
-    min-width: 0;
+  .file-manager-actions > .file-manager-action-button,
+  .file-manager-search-slot,
+  .file-manager-favorite-slot {
+    flex: 1 1 1.85rem;
+    min-width: 1.75rem;
   }
-  .file-manager-path-button {
-    width: 100% !important;
+  .file-manager-action-button {
+    width: auto !important;
     height: 1.85rem !important;
-    min-width: 0;
-    padding-left: 0.25rem !important;
-    padding-right: 0.25rem !important;
-    flex-basis: auto;
   }
   .file-manager-search-slot,
   .file-manager-favorite-slot {
-    width: 100%;
+    width: auto;
   }
-  .file-manager-favorite-slot {
-    grid-column: 6;
+  .file-manager-search-slot .file-manager-action-button,
+  .file-manager-favorite-slot .file-manager-action-button {
+    width: 100% !important;
   }
   .file-manager-search-slot.is-active {
-    grid-column: 1 / -1;
+    flex: 1 0 100%;
   }
   .file-manager-search-slot.is-active .file-manager-search-box {
     width: 100%;
@@ -2249,7 +2225,6 @@ const handleOpenEditorClick = () => {
     display: none;
   }
   .file-manager-action-button {
-    width: 1.85rem;
     padding-left: 0.35rem !important;
     padding-right: 0.35rem !important;
   }
@@ -2262,15 +2237,11 @@ const handleOpenEditorClick = () => {
   .file-manager-actions {
     gap: 0.25rem;
   }
-  .file-manager-path-row {
-    gap: 0.3rem;
-  }
-  .file-manager-path-button {
-    width: 100% !important;
+  .file-manager-action-button {
+    width: auto !important;
     height: 1.75rem !important;
-    flex-basis: auto;
   }
-  .file-manager-path-button i {
+  .file-manager-action-button i {
     font-size: 0.8rem !important;
   }
 }

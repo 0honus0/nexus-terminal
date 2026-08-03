@@ -14,6 +14,7 @@ import { createSshTerminalManager, type SshTerminalDependencies } from '../../..
 import { createStatusMonitorManager, type StatusMonitorDependencies } from '../../../composables/useStatusMonitor';
 import { createDockerManager, type DockerManagerDependencies } from '../../../composables/useDockerManager';
 import { registerSshSuspendHandlers } from './sshSuspendActions'; 
+import { serializeTerminalSnapshot } from '../../../utils/terminalSnapshot';
 
 
 // --- 辅助函数 (特定于此模块的 actions) ---
@@ -23,29 +24,7 @@ const findConnectionInfo = (connectionId: number | string, connectionsStore: Ret
 
 const captureTerminalSnapshot = (session: SessionState): string | undefined => {
   const terminal = session.terminalManager?.terminalInstance?.value;
-  const activeBuffer = terminal?.buffer.active;
-  if (!terminal || !activeBuffer) return undefined;
-
-  const encoder = new TextEncoder();
-  const maxBytes = 1024 * 1024;
-  const maxLines = 1000;
-  const lines: string[] = [];
-  let totalBytes = 0;
-
-  for (let i = activeBuffer.length - 1; i >= 0 && lines.length < maxLines; i--) {
-    const line = activeBuffer.getLine(i)?.translateToString(true) ?? '';
-    const lineBytes = encoder.encode(line).length + 2;
-    if (totalBytes + lineBytes > maxBytes && lines.length > 0) break;
-    lines.push(line);
-    totalBytes += lineBytes;
-  }
-
-  while (lines.length > 0 && lines[0].trim() === '') {
-    lines.shift();
-  }
-
-  if (lines.length === 0) return undefined;
-  return `${lines.reverse().join('\r\n')}\r\n`;
+  return terminal ? serializeTerminalSnapshot(terminal) : undefined;
 };
 
 // --- Actions ---

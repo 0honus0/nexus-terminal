@@ -455,9 +455,8 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
                                 // +++ 如果有 initialBuffer，先写入它 +++
                                 if (initialBuffer) {
-                                    // 确保 initialBuffer 后有一个换行符，以便后续日志在新行开始
-                                    const formattedInitialBuffer = initialBuffer.endsWith('\n') ? initialBuffer : `${initialBuffer}\n`;
-                                    await temporaryLogStorageService.writeToLog(logPathSuffix, formattedInitialBuffer);
+                                    // xterm 序列化快照包含颜色、样式和光标位置，必须原样保存。
+                                    await temporaryLogStorageService.writeToLog(logPathSuffix, initialBuffer);
                                     console.log(`[SSH_MARK_FOR_SUSPEND] 已将初始缓冲区写入日志 (会话: ${sessionToMarkId})。`);
                                 }
                                 // --- 移除自动添加的日志标记行 ---

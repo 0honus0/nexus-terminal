@@ -9,6 +9,7 @@ import { storeToRefs } from 'pinia';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
+import { serializeTerminalSnapshot } from '../utils/terminalSnapshot';
 import '@xterm/xterm/css/xterm.css';
 import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // +++ Import subscriber and off
 
@@ -160,19 +161,7 @@ const getScrollbackValue = (limit: number): number => {
 };
 
 const captureTerminalSnapshot = (term: Terminal): string | undefined => {
-  const buffer = term.buffer.active;
-  const encoder = new TextEncoder();
-  const lines: string[] = [];
-  let bytes = 0;
-  for (let index = buffer.length - 1; index >= 0 && lines.length < 1000; index -= 1) {
-    const line = buffer.getLine(index)?.translateToString(true) ?? '';
-    const lineBytes = encoder.encode(line).length + 2;
-    if (bytes + lineBytes > 1024 * 1024 && lines.length > 0) break;
-    lines.push(line);
-    bytes += lineBytes;
-  }
-  while (lines.length > 0 && lines[0].trim() === '') lines.shift();
-  return lines.length > 0 ? `${lines.reverse().join('\r\n')}\r\n` : undefined;
+  return serializeTerminalSnapshot(term);
 };
 
 // --- 右键复制 / 粘贴功能 ---
