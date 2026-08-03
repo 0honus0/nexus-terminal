@@ -38,6 +38,7 @@ let resizeObserver: ResizeObserver | null = null;
 let observedElement: HTMLElement | null = null; // +++ Store the observed element +++
 let debounceTimer: number | null = null; // 用于防抖的计时器 ID
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
+let scrollListenerDisposable: IDisposable | null = null;
 let lastResizeObserverWidth = 0;
 let lastResizeObserverHeight = 0;
 let lastEmittedCols = 0;
@@ -56,10 +57,23 @@ let mobileLongPressTriggered = false;
 let mobileTouchSelectionActive = false;
 let mobileSelectionBaseRange: { startColumn: number; startRow: number; endColumn: number; endRow: number } | null = null;
 let mobileSelectionLastPoint: { x: number; y: number } | null = null;
+let mobileSelectionHandleDrag: {
+  pointerId: number;
+  anchorBoundary: number;
+  lastClientX: number;
+  lastClientY: number;
+} | null = null;
 let suppressMobileContextMenuUntil = 0;
 const MOBILE_LONG_PRESS_DELAY = 520;
 const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
 const mobileClipboardMenu = ref({ visible: false, x: 0, y: 0, hasSelection: false });
+const mobileSelectionHandles = ref({
+  visible: false,
+  startVisible: false,
+  endVisible: false,
+  start: { x: 0, y: 0 },
+  end: { x: 0, y: 0 },
+});
 
 // --- Appearance Store ---
 const appearanceStore = useAppearanceStore();
@@ -232,13 +246,26 @@ const clearMobileLongPressTimer = () => {
   }
 };
 
+const hideMobileSelectionHandles = () => {
+  mobileSelectionHandles.value.visible = false;
+  mobileSelectionHandles.value.startVisible = false;
+  mobileSelectionHandles.value.endVisible = false;
+  mobileSelectionHandleDrag = null;
+};
+
 const closeMobileClipboardMenu = (clearSelection = false) => {
   mobileClipboardMenu.value.visible = false;
   if (clearSelection) {
     terminal?.clearSelection();
     mobileSelectionBaseRange = null;
     mobileTouchSelectionActive = false;
+    hideMobileSelectionHandles();
   }
+};
+
+const blurMobileTerminalInput = () => {
+  terminal?.blur();
+  terminal?.textarea?.blur();
 };
 
 const getTerminalCellAtPoint = (clientX: number, clientY: number) => {
@@ -299,6 +326,57 @@ const captureMobileSelectionBaseRange = () => {
   } : null;
 };
 
+const syncMobileSelectionHandles = () => {
+  if (!terminal || !terminalOuterWrapperRef.value || !mobileTouchSelectionActive || !terminal.hasSelection()) {
+    hideMobileSelectionHandles();
+    return;
+  }
+
+  const range = terminal.getSelectionPosition();
+  const screenElement = terminal.element?.querySelector<HTMLElement>('.xterm-screen');
+  if (!range || !screenElement) {
+    hideMobileSelectionHandles();
+    return;
+  }
+
+  const screenRect = screenElement.getBoundingClientRect();
+  const wrapperRect = terminalOuterWrapperRef.value.getBoundingClientRect();
+  if (screenRect.width <= 0 || screenRect.height <= 0 || terminal.cols <= 0 || terminal.rows <= 0) {
+    hideMobileSelectionHandles();
+    return;
+  }
+
+  const cellWidth = screenRect.width / terminal.cols;
+  const cellHeight = screenRect.height / terminal.rows;
+  const viewportY = terminal.buffer.active.viewportY;
+  const startViewportRow = range.start.y - viewportY;
+  const endViewportRow = range.end.y - viewportY;
+  const handleRadius = 15;
+  const toWrapperPoint = (column: number, viewportRow: number) => ({
+    x: Math.max(handleRadius, Math.min(wrapperRect.width - handleRadius, screenRect.left - wrapperRect.left + column * cellWidth)),
+    y: Math.max(handleRadius, Math.min(wrapperRect.height - handleRadius, screenRect.top - wrapperRect.top + (viewportRow + 1) * cellHeight)),
+  });
+
+  mobileSelectionHandles.value = {
+    visible: true,
+    startVisible: startViewportRow >= 0 && startViewportRow < terminal.rows,
+    endVisible: endViewportRow >= 0 && endViewportRow < terminal.rows,
+    start: toWrapperPoint(range.start.x, startViewportRow),
+    end: toWrapperPoint(range.end.x, endViewportRow),
+  };
+};
+
+const selectMobileRangeByFlatBoundaries = (startBoundary: number, endBoundary: number) => {
+  if (!terminal) return;
+  const columns = terminal.cols;
+  const startRow = Math.floor(startBoundary / columns);
+  const startColumn = startBoundary % columns;
+  terminal.select(startColumn, startRow, Math.max(1, endBoundary - startBoundary));
+  captureMobileSelectionBaseRange();
+  mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+  syncMobileSelectionHandles();
+};
+
 const updateMobileSelectionToPoint = (clientX: number, clientY: number) => {
   if (!terminal || !mobileSelectionBaseRange) return;
   const position = getTerminalCellAtPoint(clientX, clientY);
@@ -320,9 +398,72 @@ const updateMobileSelectionToPoint = (clientX: number, clientY: number) => {
   const startColumn = selectionStart % columns;
   terminal.select(startColumn, startRow, Math.max(1, selectionEnd - selectionStart));
   mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+  syncMobileSelectionHandles();
 };
 
-const openMobileClipboardMenu = (clientX: number, clientY: number) => {
+const handleMobileSelectionHandlePointerDown = (handle: 'start' | 'end', event: PointerEvent) => {
+  if (!terminal || !terminal.hasSelection()) return;
+  const range = terminal.getSelectionPosition();
+  if (!range) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  blurMobileTerminalInput();
+  suppressMobileContextMenuUntil = Date.now() + 1200;
+  mobileClipboardMenu.value.visible = false;
+
+  const columns = terminal.cols;
+  mobileSelectionHandleDrag = {
+    pointerId: event.pointerId,
+    anchorBoundary: handle === 'start'
+      ? range.end.y * columns + range.end.x
+      : range.start.y * columns + range.start.x,
+    lastClientX: event.clientX,
+    lastClientY: event.clientY,
+  };
+  (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+};
+
+const handleMobileSelectionHandlePointerMove = (event: PointerEvent) => {
+  if (!terminal || !mobileSelectionHandleDrag || mobileSelectionHandleDrag.pointerId !== event.pointerId) return;
+  const position = getTerminalCellAtPoint(event.clientX, event.clientY);
+  if (!position) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  let targetColumn = position.column;
+  const targetLine = terminal.buffer.active.getLine(position.bufferRow);
+  while (targetColumn > 0 && targetLine?.getCell(targetColumn)?.getWidth() === 0) targetColumn -= 1;
+  const targetCell = position.bufferRow * terminal.cols + targetColumn;
+  const anchor = mobileSelectionHandleDrag.anchorBoundary;
+  mobileSelectionHandleDrag.lastClientX = event.clientX;
+  mobileSelectionHandleDrag.lastClientY = event.clientY;
+  if (targetCell < anchor) {
+    selectMobileRangeByFlatBoundaries(targetCell, anchor);
+  } else {
+    selectMobileRangeByFlatBoundaries(anchor, targetCell + 1);
+  }
+};
+
+const finishMobileSelectionHandleDrag = (event: PointerEvent) => {
+  if (!mobileSelectionHandleDrag || mobileSelectionHandleDrag.pointerId !== event.pointerId) return;
+  const menuPoint = event.type === 'pointerup'
+    ? { x: event.clientX, y: event.clientY }
+    : { x: mobileSelectionHandleDrag.lastClientX, y: mobileSelectionHandleDrag.lastClientY };
+  event.preventDefault();
+  event.stopPropagation();
+  const handleElement = event.currentTarget as HTMLElement | null;
+  if (handleElement?.hasPointerCapture?.(event.pointerId)) {
+    handleElement.releasePointerCapture(event.pointerId);
+  }
+  mobileSelectionHandleDrag = null;
+  suppressMobileContextMenuUntil = Date.now() + 800;
+  blurMobileTerminalInput();
+  syncMobileSelectionHandles();
+  openMobileClipboardMenu(menuPoint.x, menuPoint.y);
+};
+
+function openMobileClipboardMenu(clientX: number, clientY: number) {
   if (!terminalOuterWrapperRef.value || !terminal) return;
   const wrapperRect = terminalOuterWrapperRef.value.getBoundingClientRect();
   const estimatedMenuWidth = 190;
@@ -334,15 +475,17 @@ const openMobileClipboardMenu = (clientX: number, clientY: number) => {
     y: relativeY,
     hasSelection: terminal.hasSelection(),
   };
-};
+}
 
 const triggerMobileLongPress = (clientX: number, clientY: number) => {
   if (!terminal || !props.isActive) return;
   mobileLongPressTriggered = true;
   mobileTouchSelectionActive = true;
   suppressMobileContextMenuUntil = Date.now() + 1200;
+  blurMobileTerminalInput();
   selectTerminalWordAtPoint(clientX, clientY);
   captureMobileSelectionBaseRange();
+  syncMobileSelectionHandles();
   mobileSelectionLastPoint = { x: clientX, y: clientY };
   // 手指松开后再显示菜单，按住拖动期间专注调整选区。
   mobileClipboardMenu.value.visible = false;
@@ -355,8 +498,19 @@ const handleMobileContextMenu = (event: MouseEvent) => {
   event.stopPropagation();
   if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
   mobileTouchSelectionActive = true;
+  blurMobileTerminalInput();
   selectTerminalWordAtPoint(event.clientX, event.clientY);
+  captureMobileSelectionBaseRange();
+  syncMobileSelectionHandles();
   openMobileClipboardMenu(event.clientX, event.clientY);
+};
+
+const handleMobileSyntheticMouse = (event: MouseEvent) => {
+  if (!isMobile.value) return;
+  if (Date.now() >= suppressMobileContextMenuUntil && !mobileSelectionHandleDrag) return;
+  event.preventDefault();
+  event.stopPropagation();
+  blurMobileTerminalInput();
 };
 
 const copyMobileTerminalSelection = async () => {
@@ -365,6 +519,7 @@ const copyMobileTerminalSelection = async () => {
   try {
     await navigator.clipboard.writeText(selectedText);
     mobileTouchSelectionActive = false;
+    hideMobileSelectionHandles();
     closeMobileClipboardMenu();
   } catch (error) {
     console.error('[Terminal] 手机端复制终端内容失败:', error);
@@ -378,6 +533,7 @@ const pasteMobileTerminalClipboard = async () => {
     if (text) terminal.paste(text.replace(/\r\n?/g, '\n'));
     terminal.clearSelection();
     mobileTouchSelectionActive = false;
+    hideMobileSelectionHandles();
     closeMobileClipboardMenu();
     terminal.focus();
   } catch (error) {
@@ -389,12 +545,14 @@ const selectAllMobileTerminalContent = () => {
   if (!terminal) return;
   terminal.selectAll();
   mobileClipboardMenu.value.hasSelection = terminal.hasSelection();
+  captureMobileSelectionBaseRange();
+  syncMobileSelectionHandles();
 };
 
 const handleDocumentPointerDown = (event: PointerEvent) => {
   if (!mobileClipboardMenu.value.visible) return;
   const target = event.target;
-  if (target instanceof Element && target.closest('.mobile-terminal-clipboard-menu')) return;
+  if (target instanceof Element && target.closest('.mobile-terminal-clipboard-menu, .mobile-terminal-selection-handle')) return;
   closeMobileClipboardMenu(true);
 };
 
@@ -479,6 +637,7 @@ const handleTouchEnd = (event: TouchEvent) => {
         ? { x: changedTouch.clientX, y: changedTouch.clientY }
         : mobileSelectionLastPoint;
       if (menuPoint) openMobileClipboardMenu(menuPoint.x, menuPoint.y);
+      syncMobileSelectionHandles();
     }
     mobileLongPressTriggered = false;
   }
@@ -562,6 +721,7 @@ onMounted(() => {
                   fitAddon?.fit();
                   debouncedEmitResize(terminal); // This will log the cols/rows after debouncing
                   emitWorkspaceEvent('terminal:stabilizedResize', { sessionId: props.sessionId, width: roundedWidth, height: roundedHeight });
+                  syncMobileSelectionHandles();
                  } catch (e) {
                     console.warn(`[TerminalResizeObserver sessionId=${props.sessionId}] Fit addon or debouncedEmitResize failed:`, e);
                  }
@@ -604,6 +764,7 @@ onMounted(() => {
             } else {
                 // --- Become Inactive ---
                 console.log(`[Terminal ${props.sessionId}] Becoming inactive. Unobserving element.`);
+                closeMobileClipboardMenu(true);
                 // Stop observing
                 try {
                     resizeObserver.unobserve(observedElement);
@@ -813,6 +974,11 @@ onMounted(() => {
       terminalRef.value.addEventListener('touchend', handleTouchEnd, { passive: false });
       terminalRef.value.addEventListener('touchcancel', handleTouchEnd, { passive: false }); // Also handle cancel
       terminalRef.value.addEventListener('contextmenu', handleMobileContextMenu);
+      terminalRef.value.addEventListener('mousedown', handleMobileSyntheticMouse, true);
+      terminalRef.value.addEventListener('click', handleMobileSyntheticMouse, true);
+      scrollListenerDisposable = terminal.onScroll(() => {
+        window.requestAnimationFrame(syncMobileSelectionHandles);
+      });
       document.addEventListener('pointerdown', handleDocumentPointerDown);
     }
 
@@ -851,6 +1017,10 @@ onBeforeUnmount(() => {
   if (selectionListenerDisposable) {
       selectionListenerDisposable.dispose();
   }
+  if (scrollListenerDisposable) {
+      scrollListenerDisposable.dispose();
+      scrollListenerDisposable = null;
+  }
 
   
     // 确保在卸载时移除右键监听器
@@ -864,9 +1034,12 @@ onBeforeUnmount(() => {
         terminalRef.value.removeEventListener('touchend', handleTouchEnd);
         terminalRef.value.removeEventListener('touchcancel', handleTouchEnd);
         terminalRef.value.removeEventListener('contextmenu', handleMobileContextMenu);
+        terminalRef.value.removeEventListener('mousedown', handleMobileSyntheticMouse, true);
+        terminalRef.value.removeEventListener('click', handleMobileSyntheticMouse, true);
         document.removeEventListener('pointerdown', handleDocumentPointerDown);
     }
     clearMobileLongPressTimer();
+    hideMobileSelectionHandles();
 
 
 
@@ -974,6 +1147,32 @@ watchEffect(() => {
   <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper">
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
+    <template v-if="isMobile && mobileSelectionHandles.visible">
+      <button
+        v-show="mobileSelectionHandles.startVisible"
+        type="button"
+        class="mobile-terminal-selection-handle mobile-terminal-selection-handle--start"
+        :style="{ left: `${mobileSelectionHandles.start.x}px`, top: `${mobileSelectionHandles.start.y}px` }"
+        :aria-label="t('workspace.terminal.mobileAdjustSelectionStart')"
+        @pointerdown="handleMobileSelectionHandlePointerDown('start', $event)"
+        @pointermove="handleMobileSelectionHandlePointerMove"
+        @pointerup="finishMobileSelectionHandleDrag"
+        @pointercancel="finishMobileSelectionHandleDrag"
+        @contextmenu.prevent
+      ></button>
+      <button
+        v-show="mobileSelectionHandles.endVisible"
+        type="button"
+        class="mobile-terminal-selection-handle mobile-terminal-selection-handle--end"
+        :style="{ left: `${mobileSelectionHandles.end.x}px`, top: `${mobileSelectionHandles.end.y}px` }"
+        :aria-label="t('workspace.terminal.mobileAdjustSelectionEnd')"
+        @pointerdown="handleMobileSelectionHandlePointerDown('end', $event)"
+        @pointermove="handleMobileSelectionHandlePointerMove"
+        @pointerup="finishMobileSelectionHandleDrag"
+        @pointercancel="finishMobileSelectionHandleDrag"
+        @contextmenu.prevent
+      ></button>
+    </template>
     <div
       v-if="isMobile && mobileClipboardMenu.visible"
       class="mobile-terminal-clipboard-menu"
@@ -1009,6 +1208,51 @@ watchEffect(() => {
   height: 100%;
   /* position: relative;  移除了 position relative */
   /* z-index 调整或移除，因为背景层不再在此组件内 */
+}
+
+.mobile-terminal-selection-handle {
+  position: absolute;
+  z-index: 31;
+  width: 34px;
+  height: 38px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  transform: translate(-50%, -7px);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-terminal-selection-handle::before {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--link-active-color);
+  content: '';
+  transform: translateX(-50%);
+}
+
+.mobile-terminal-selection-handle::after {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  border: 2px solid color-mix(in srgb, var(--app-bg-color) 78%, transparent);
+  border-radius: 50%;
+  background: var(--link-active-color);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.35);
+  content: '';
+  transform: translateX(-50%);
+}
+
+.mobile-terminal-selection-handle:active::after {
+  transform: translateX(-50%) scale(1.18);
 }
 
 .mobile-terminal-clipboard-menu {

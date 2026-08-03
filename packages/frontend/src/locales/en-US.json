@@ -410,7 +410,9 @@
       "reconnectingMsg": "Attempting to reconnect...",
       "mobileCopy": "Copy",
       "mobilePaste": "Paste",
-      "mobileSelectAll": "Select All"
+      "mobileSelectAll": "Select All",
+      "mobileAdjustSelectionStart": "Adjust selection start",
+      "mobileAdjustSelectionEnd": "Adjust selection end"
     }
   },
 "fileEditor": {

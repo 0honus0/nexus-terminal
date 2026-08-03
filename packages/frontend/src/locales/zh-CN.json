@@ -410,7 +410,9 @@
       "reconnectingMsg": "正在尝试重新连接...",
       "mobileCopy": "复制",
       "mobilePaste": "粘贴",
-      "mobileSelectAll": "全选"
+      "mobileSelectAll": "全选",
+      "mobileAdjustSelectionStart": "调整选区起点",
+      "mobileAdjustSelectionEnd": "调整选区终点"
     }
   },
 "fileEditor": {

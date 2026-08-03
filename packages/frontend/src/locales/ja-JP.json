@@ -356,7 +356,9 @@
     "terminal": {
         "mobileCopy": "コピー",
         "mobilePaste": "貼り付け",
-        "mobileSelectAll": "すべて選択"
+        "mobileSelectAll": "すべて選択",
+        "mobileAdjustSelectionStart": "選択範囲の開始位置を調整",
+        "mobileAdjustSelectionEnd": "選択範囲の終了位置を調整"
     }
 },
 "fileEditor": {
