@@ -128,8 +128,8 @@
                                 <span
                                   class="quick-command-display-text truncate"
                                   :class="commandDisplayMode === 'name'
-                                    ? 'quick-command-display-name font-normal text-text-secondary/80'
-                                    : 'quick-command-display-code font-mono font-normal text-text-secondary/70'"
+                                    ? 'quick-command-display-name'
+                                    : 'quick-command-display-code'"
                                   :title="getCommandDisplayText(cmd)"
                                 >{{ getCommandDisplayText(cmd) }}</span>
                             </div>
@@ -170,8 +170,8 @@
                         <span
                           class="quick-command-display-text truncate"
                           :class="commandDisplayMode === 'name'
-                            ? 'quick-command-display-name font-normal text-text-secondary/80'
-                            : 'quick-command-display-code font-mono font-normal text-text-secondary/70'"
+                            ? 'quick-command-display-name'
+                            : 'quick-command-display-code'"
                           :title="getCommandDisplayText(cmd)"
                         >{{ getCommandDisplayText(cmd) }}</span>
                     </div>
@@ -854,28 +854,38 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   font-size: inherit;
 }
 .quick-command-display-text {
-  font-weight: 400;
-  line-height: 1.3;
+  color: var(--text-color);
+  font-weight: 560;
+  line-height: 1.34;
+  letter-spacing: 0.008em;
+  font-optical-sizing: auto;
+  font-synthesis: weight;
+  text-rendering: optimizeLegibility;
 }
 .quick-command-display-name {
-  /* 与原项目一致：名称跟随界面字体。 */
+  /* 中大尺寸保持界面字体风格，并提高字面饱满度。 */
   font-family: inherit;
+  font-weight: 600;
   font-size: calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
 }
 .quick-command-display-code {
   /* 与原项目一致：指令使用等宽字体。 */
+  font-family: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-weight: 550;
   font-size: calc(0.75em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
 }
 .quick-command-list-small-type .quick-command-display-text {
   font-size: calc(0.7rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
-  font-weight: 450;
-  letter-spacing: 0.005em;
+  font-weight: 650;
+  letter-spacing: 0.012em;
 }
 .quick-command-list-small-type .quick-command-display-name {
-  font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-family: ui-rounded, "SF Pro Rounded", "Avenir Next Rounded", "Segoe UI Rounded", "Arial Rounded MT Bold", "Microsoft YaHei UI", system-ui, sans-serif;
+  font-weight: 650;
 }
 .quick-command-list-small-type .quick-command-display-code {
   font-family: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-weight: 600;
 }
 @container quick-commands-pane (max-width: 340px) {
   .quick-commands-controls {
@@ -916,14 +926,16 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   }
   .quick-command-display-text {
     font-size: calc(0.7rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
-    font-weight: 450;
-    letter-spacing: 0.005em;
+    font-weight: 650;
+    letter-spacing: 0.012em;
   }
   .quick-command-display-name {
-    font-family: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+    font-family: ui-rounded, "SF Pro Rounded", "Avenir Next Rounded", "Segoe UI Rounded", "Arial Rounded MT Bold", "Microsoft YaHei UI", system-ui, sans-serif;
+    font-weight: 650;
   }
   .quick-command-display-code {
     font-family: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+    font-weight: 600;
   }
 }
 @container quick-commands-pane (max-width: 240px) {
@@ -953,6 +965,7 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.68rem;
+    font-weight: 650;
     line-height: 1.35;
   }
 }
