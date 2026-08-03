@@ -1727,9 +1727,9 @@ const handleOpenEditorClick = () => {
 
 <template>
   <div class="file-manager-root flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
-    <div class="file-manager-toolbar flex items-center justify-between flex-wrap gap-2 p-2 bg-header flex-shrink-0">
+    <div class="file-manager-toolbar bg-header flex-shrink-0">
         <!-- Wrapper for Path Actions and Path Bar -->
-        <div class="file-manager-path-row flex items-center gap-2 flex-grow min-w-0"> <!-- Added gap-2, flex-grow, min-w-0 -->
+        <div class="file-manager-path-row min-w-0">
             <!-- Path Actions -->
             <div class="file-manager-path-actions flex items-center flex-shrink-0"> <!-- Removed mr-auto -->
               <!-- CD 到终端按钮 -->
@@ -1851,7 +1851,7 @@ const handleOpenEditorClick = () => {
             </div>
         </div> <!-- End Wrapper -->
        <!-- Main Actions Bar -->
-       <div class="file-manager-actions flex items-center gap-2 flex-shrink-0">
+       <div class="file-manager-actions flex items-center flex-shrink-0">
             <input type="file" ref="fileInputRef" @change="handleFileSelected" multiple class="hidden" />
             <!-- 打开编辑器按钮 -->
             <button
@@ -2148,6 +2148,16 @@ const handleOpenEditorClick = () => {
   container-type: inline-size;
   container-name: file-manager-pane;
 }
+.file-manager-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-content: start;
+  column-gap: 0.35rem;
+  row-gap: 0.25rem;
+  padding: 0.4rem 0.5rem;
+}
 .file-manager-toolbar,
 .file-manager-path-row,
 .file-manager-actions {
@@ -2158,11 +2168,19 @@ const handleOpenEditorClick = () => {
   max-width: 100%;
 }
 .file-manager-path-row {
-  flex-wrap: wrap;
+  display: contents;
 }
 .file-manager-path-break {
-  flex-basis: 100%;
-  height: 0;
+  display: none;
+}
+.file-manager-path-actions {
+  grid-column: 1;
+  grid-row: 1;
+}
+.file-manager-path-input {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: start;
 }
 .file-manager-path-button {
   flex: 0 0 1.75rem;
@@ -2172,9 +2190,12 @@ const handleOpenEditorClick = () => {
   max-width: 100%;
 }
 .file-manager-actions {
+  grid-column: 2;
+  grid-row: 1;
   max-width: 100%;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 0.3rem;
 }
 .file-manager-action-button {
   min-height: 1.75rem;
@@ -2187,16 +2208,11 @@ const handleOpenEditorClick = () => {
 }
 @container file-manager-pane (max-width: 760px) {
   .file-manager-toolbar {
-    align-items: stretch;
-  }
-  .file-manager-path-row {
-    flex: 1 1 100%;
-    order: 1;
+    column-gap: 0.3rem;
+    padding: 0.35rem 0.45rem;
   }
   .file-manager-actions {
-    flex: 1 1 100%;
     justify-content: flex-start;
-    order: 2;
   }
 }
 @container file-manager-pane (max-width: 520px) {
@@ -2230,7 +2246,8 @@ const handleOpenEditorClick = () => {
 @container file-manager-pane (max-width: 320px) {
   .file-manager-toolbar {
     padding: 0.35rem;
-    gap: 0.35rem;
+    column-gap: 0.25rem;
+    row-gap: 0.2rem;
   }
   .file-manager-actions {
     gap: 0.25rem;

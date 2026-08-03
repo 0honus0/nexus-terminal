@@ -68,6 +68,18 @@ const currentSessionCommandInput = computed({
   }
 });
 
+// 命令和终端搜索共用同一个可见输入框，但分别保留各自内容。
+const activeInputValue = computed({
+  get: () => isSearching.value ? searchTerm.value : currentSessionCommandInput.value,
+  set: (newValue: string) => {
+    if (isSearching.value) {
+      searchTerm.value = newValue;
+    } else {
+      currentSessionCommandInput.value = newValue;
+    }
+  }
+});
+
 const sendCommand = () => {
   const command = currentSessionCommandInput.value; // 使用计算属性获取值
   console.log(`[CommandInputBar] Sending command: ${command || '<Enter>'} `);
@@ -90,10 +102,8 @@ const toggleSearch = () => {
   if (!isSearching.value) {
     searchTerm.value = ''; // 关闭搜索时清空
     emitWorkspaceEvent('search:close'); // 通知父组件关闭搜索
-  } else {
-    // 可以在这里聚焦搜索输入框
-    // nextTick(() => searchInputRef.value?.focus());
   }
+  nextTick(() => commandInputRef.value?.focus());
 };
 
 const performSearch = () => {
@@ -127,8 +137,6 @@ watch(currentSessionCommandInput, (newValue) => { // 监听计算属性
   // If target is 'none', do nothing
 });
 
-// 可以在这里添加一个 ref 用于聚焦搜索框
-const searchInputRef = ref<HTMLInputElement | null>(null);
 const commandInputRef = ref<HTMLInputElement | null>(null); // Ref for command input
 
 // Removed debug computed property
@@ -170,10 +178,7 @@ const handleCommandInputKeydown = (event: KeyboardEvent) => {
 
   if (event.ctrlKey && event.key === 'f') {
     event.preventDefault(); // 阻止浏览器默认的查找行为
-    isSearching.value = true;
-    nextTick(() => {
-      searchInputRef.value?.focus();
-    });
+    if (!isSearching.value) toggleSearch();
   } else if (event.key === 'ArrowUp') {
     const target = commandInputSyncTarget.value;
     if (target === 'quickCommands') {
@@ -215,6 +220,31 @@ const handleCommandInputKeydown = (event: KeyboardEvent) => {
  }
 };
 
+const handleSharedInputKeydown = (event: KeyboardEvent) => {
+  if (!isSearching.value) {
+    handleCommandInputKeydown(event);
+    return;
+  }
+
+  if (event.ctrlKey && event.key.toLowerCase() === 'f') {
+    event.preventDefault();
+    commandInputRef.value?.focus();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    toggleSearch();
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    if (event.shiftKey) findPrevious();
+    else findNext();
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    findPrevious();
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    findNext();
+  }
+};
+
 //  Handle blur event on command input
 const handleCommandInputBlur = () => {
     // Reset selection in the target store when input loses focus
@@ -224,6 +254,10 @@ const handleCommandInputBlur = () => {
     } else if (target === 'commandHistory') {
         resetHistorySelection();
     }
+};
+
+const handleSharedInputBlur = () => {
+  if (!isSearching.value) handleCommandInputBlur();
 };
 
 // +++ 监听 Store 中的触发器以激活终端搜索 +++
@@ -236,6 +270,10 @@ watch(() => focusSwitcherStore.activateTerminalSearchTrigger, () => {
 
 // --- Focus Actions ---
 const focusCommandInput = (): boolean => {
+  if (isSearching.value) {
+    toggleSearch();
+    return true;
+  }
   if (commandInputRef.value) {
     commandInputRef.value.focus();
     return true;
@@ -245,18 +283,10 @@ const focusCommandInput = (): boolean => {
 
 const focusSearchInput = (): boolean => {
   if (!isSearching.value) {
-    // If search is not active, activate it first
-    toggleSearch(); // This might need nextTick if toggleSearch is async
-    nextTick(() => { // Ensure DOM is updated after toggleSearch
-        if (searchInputRef.value) {
-            searchInputRef.value.focus();
-        }
-    });
-    // Since focusing might be async after toggle, we optimistically return true
-    // or adjust based on toggleSearch's behavior. For simplicity, assume it works.
+    toggleSearch();
     return true;
-  } else if (searchInputRef.value) {
-    searchInputRef.value.focus();
+  } else if (commandInputRef.value) {
+    commandInputRef.value.focus();
     return true;
   }
   return false;
@@ -333,32 +363,17 @@ const handleQuickCommandExecute = (command: string) => {
 <template>
   <div :class="$attrs.class" class="command-bar-root flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
     <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
-      <!-- Command Input (Hide on mobile when searching) -->
+      <!-- 命令输入与终端搜索共用同一个输入框 -->
       <input
-        v-if="!props.isMobile || !isSearching"
         type="text"
-        v-model="currentSessionCommandInput"
-        :placeholder="t('commandInputBar.placeholder')"
+        v-model="activeInputValue"
+        :placeholder="isSearching ? t('commandInputBar.searchPlaceholder') : t('commandInputBar.placeholder')"
         class="command-bar-input command-bar-command-input px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
+        :class="{ 'command-bar-search-mode': isSearching }"
         ref="commandInputRef"
-        data-focus-id="commandInput"
-        @keydown="handleCommandInputKeydown"
-        @blur="handleCommandInputBlur"
-      />
-
-      <!-- Search Input (Show when searching, adjust width on mobile) -->
-      <input
-        v-if="isSearching"
-        type="text"
-        v-model="searchTerm"
-        :placeholder="t('commandInputBar.searchPlaceholder')"
-        class="command-bar-input command-bar-search-input px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
-        data-focus-id="terminalSearch"
-        @keydown.enter.prevent="findNext"
-        @keydown.shift.enter.prevent="findPrevious"
-        @keydown.up.prevent="findPrevious"
-        @keydown.down.prevent="findNext"
-        ref="searchInputRef"
+        :data-focus-id="isSearching ? 'terminalSearch' : 'commandInput'"
+        @keydown="handleSharedInputKeydown"
+        @blur="handleSharedInputBlur"
       />
 
       <!-- Search Controls -->
@@ -487,10 +502,6 @@ const handleQuickCommandExecute = (command: string) => {
 .command-bar-command-input {
   flex: 3 1 0 !important;
   min-width: min(100%, 8rem);
-}
-.command-bar-search-input {
-  flex: 1 1 0 !important;
-  min-width: min(100%, 6rem);
 }
 .command-bar-controls {
   min-width: 0;

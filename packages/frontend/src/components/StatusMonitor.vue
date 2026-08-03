@@ -54,6 +54,7 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
+            <span class="resource-small-percent font-mono">{{ formatPercentageText(displayCpuPercent) }}</span>
             <!-- 移除 w-12 和 text-right 以实现左对齐 -->
           </div>
         </div>
@@ -75,6 +76,7 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
+            <span class="resource-small-percent font-mono">{{ formatPercentageText(displayMemPercent) }}</span>
             <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ memDisplay }}</span>
           </div>
         </div>
@@ -96,6 +98,7 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
+            <span class="resource-small-percent font-mono">{{ formatPercentageText(displaySwapPercent) }}</span>
             <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ swapDisplay }}</span>
           </div>
         </div>
@@ -117,6 +120,7 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
+            <span class="resource-small-percent font-mono">{{ formatPercentageText(displayDiskPercent) }}</span>
             <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ diskDisplay }}</span>
           </div>
         </div>
@@ -416,6 +420,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   min-width: 0;
   text-align: right;
 }
+.resource-small-percent {
+  display: none;
+}
 .network-values {
   min-width: 0;
   flex-wrap: wrap;
@@ -458,20 +465,29 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     gap: 0.25rem;
   }
   .resource-monitor-group .resource-status-item {
-    grid-template-columns: auto minmax(0, 1fr) !important;
+    grid-template-columns: 36px minmax(72px, 9rem) !important;
     align-items: center;
+    justify-content: start;
     column-gap: 0.5rem !important;
-    row-gap: 0.3rem !important;
+    row-gap: 0 !important;
   }
   .resource-status-item .resource-compact-summary {
-    display: block;
-    overflow-wrap: anywhere;
-    font-size: 0.66rem;
-    line-height: 1.2;
+    display: none;
   }
   .resource-status-item .value-wrapper {
-    grid-column: 1 / -1;
+    grid-column: 2;
     flex-direction: row;
+    align-items: center;
+    width: min(100%, 9rem);
+    gap: 0.25rem !important;
+  }
+  .resource-small-percent {
+    display: inline-block;
+    flex: 0 0 2rem;
+    font-size: 0.66rem;
+    line-height: 1;
+    text-align: right;
+    white-space: nowrap;
   }
   .resource-status-item .resource-inline-details {
     display: none;
@@ -485,10 +501,31 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     flex-direction: column;
     gap: 0.2rem !important;
   }
+  .resource-monitor-group {
+    gap: 0.4rem;
+    margin-bottom: 0.45rem !important;
+  }
+  ::v-deep(.themed-progress .el-progress-bar__outer) {
+    height: 12px !important;
+  }
+  ::v-deep(.themed-progress .el-progress-bar__innerText) {
+    display: none !important;
+  }
 }
 @container status-monitor-pane (max-width: 260px) {
-  .resource-status-item .resource-compact-summary {
+  .resource-monitor-group .resource-status-item {
+    grid-template-columns: 32px minmax(64px, 7.5rem) !important;
+    column-gap: 0.35rem !important;
+  }
+  .resource-status-item .value-wrapper {
+    width: min(100%, 7.5rem);
+  }
+  .resource-small-percent {
+    flex-basis: 1.75rem;
     font-size: 0.62rem;
+  }
+  ::v-deep(.themed-progress .el-progress-bar__outer) {
+    height: 11px !important;
   }
 }
 
