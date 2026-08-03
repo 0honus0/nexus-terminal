@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from '../database/connection';
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection'; 
 import { TerminalTheme, CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/terminal-theme.types';
 

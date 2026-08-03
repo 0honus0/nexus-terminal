@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from '../database/connection';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { AuditLogEntry, AuditLogActionType } from '../types/audit.types';
 
@@ -138,5 +138,4 @@ export class AuditLogRepository {
         }
     }
 }
-
 

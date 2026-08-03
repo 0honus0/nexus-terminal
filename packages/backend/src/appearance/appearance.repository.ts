@@ -2,7 +2,7 @@ import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { defaultUiTheme } from '../config/default-themes';
 import { findThemeById as findTerminalThemeById } from '../terminal-themes/terminal-theme.repository';
-import * as sqlite3 from 'sqlite3'; 
+import type { Database } from '../database/connection';
 
 const TABLE_NAME = 'appearance_settings';
 
@@ -205,7 +205,7 @@ const getDefaultAppearanceSettings = (): Omit<AppearanceSettings, '_id'> => {
  * 此函数在数据库初始化期间调用。
  * @param db - 活动的数据库实例
  */
-export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<void> => {
+export const ensureDefaultSettingsExist = async (db: Database): Promise<void> => {
     const defaults = getDefaultAppearanceSettings();
     const nowSeconds = Math.floor(Date.now() / 1000);
     const sqlInsertOrIgnore = `INSERT OR IGNORE INTO ${TABLE_NAME} (key, value, created_at, updated_at) VALUES (?, ?, ?, ?)`;
@@ -271,7 +271,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
  * 查找默认终端主题 ID，并在 'activeTerminalThemeId' 设置当前为 null 时更新它。
  * @param db - 活动的数据库实例
  */
-const findAndSetDefaultThemeIdIfNull = async (db: sqlite3.Database): Promise<void> => {
+const findAndSetDefaultThemeIdIfNull = async (db: Database): Promise<void> => {
     try {
         // 检查 activeTerminalThemeId 的当前值
         const currentSetting = await getDb<{ value: string }>(db, `SELECT value FROM ${TABLE_NAME} WHERE key = ?`, ['activeTerminalThemeId']);
@@ -350,13 +350,13 @@ export const updateAppearanceSettings = async (settingsDto: UpdateAppearanceDto)
 /**
  * 内部更新外观设置函数 (供内部调用，例如在初始化或公共 API 中)。
  * 此函数直接与数据库交互，使用 INSERT OR REPLACE 来更新或插入键值对。
- * @param {sqlite3.Database} db - 活动的数据库实例。
+ * @param db 活动的数据库实例。
  * @param {UpdateAppearanceDto} settingsDto - 包含要更新设置的对象。
  * @returns {Promise<boolean>} 如果至少有一个设置被成功更新或插入，则返回 true，否则返回 false。
  * @throws {Error} 如果在数据库操作期间发生错误。
  */
 // 在键值表中更新设置的内部函数
-const updateAppearanceSettingsInternal = async (db: sqlite3.Database, settingsDto: UpdateAppearanceDto): Promise<boolean> => {
+const updateAppearanceSettingsInternal = async (db: Database, settingsDto: UpdateAppearanceDto): Promise<boolean> => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const sqlReplace = `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value, updated_at) VALUES (?, ?, ?)`;
   let changesMade = false;

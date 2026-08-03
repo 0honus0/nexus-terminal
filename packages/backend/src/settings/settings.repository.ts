@@ -1,7 +1,7 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { SidebarConfig, LayoutNode, PaneName } from '../types/settings.types';
 import { CaptchaSettings } from '../types/settings.types';
-import * as sqlite3 from 'sqlite3';
+import type { Database } from '../database/connection';
 
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
@@ -191,7 +191,7 @@ export const setCaptchaConfig = async (config: CaptchaSettings): Promise<void> =
  * 确保设置表中存在默认设置。
  * 此函数应在数据库初始化期间调用。
  */
-export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<void> => {
+export const ensureDefaultSettingsExist = async (db: Database): Promise<void> => {
     type OmitIdRecursive<T> = T extends object
       ? { [K in keyof Omit<T, 'id'>]: OmitIdRecursive<T[K]> }
       : T;

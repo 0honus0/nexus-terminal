@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from './connection';
 import * as schemaSql from './schema';
 import * as appearanceRepository from '../appearance/appearance.repository';
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';

@@ -3,6 +3,9 @@
    "version": "1.5.8",
    "private": true,
    "type": "module",
+   "allowScripts": {
+      "esbuild@0.28.1": true
+   },
    "scripts": {
       "dev": "vite --host",
       "build": "vue-tsc --noEmit && vite build",

@@ -2,6 +2,14 @@
    "name": "@nexus-terminal/backend",
    "version": "1.5.8",
    "private": true,
+   "engines": {
+      "node": ">=24"
+   },
+   "allowScripts": {
+      "esbuild@0.28.1": true,
+      "bcrypt": true,
+      "ssh2": true
+   },
    "main": "dist/index.js",
    "scripts": {
       "build": "tsc && node -e \"require('node:fs').cpSync('src/locales', 'dist/locales', { recursive: true })\"",
@@ -32,7 +40,6 @@
       "session-file-store": "^1.5.0",
       "socks": "^2.8.9",
       "speakeasy": "^2.0.0",
-      "sqlite3": "^6.0.1",
       "ssh2": "^1.17.0",
       "uuid": "^14.0.1",
       "ws": "^8.21.1"

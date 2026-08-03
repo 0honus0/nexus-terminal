@@ -13,6 +13,11 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; // +++ Import appearance store +++
 import { useSidebarResize } from '../composables/useSidebarResize';
 import { storeToRefs } from 'pinia';
+import CommandInputBar from './CommandInputBar.vue';
+import FileManager from './FileManager.vue';
+import WorkspaceConnectionList from './WorkspaceConnectionList.vue';
+import QuickCommandsView from '../views/QuickCommandsView.vue';
+import SuspendedSshSessionsView from '../views/SuspendedSshSessionsView.vue';
 
 
 // --- Props ---
@@ -84,16 +89,18 @@ const customHtmlLayerRef = ref<HTMLElement | null>(null); // +++ Ref for custom 
 // --- Component Mapping ---
 // 使用 defineAsyncComponent 优化加载，并映射 PaneName 到实际组件
 const componentMap: Record<PaneName, Component> = {
-  connections: defineAsyncComponent(() => import('./WorkspaceConnectionList.vue')),
+  // These components are also used directly by WorkspaceView/TerminalTabBar,
+  // so keeping them async here would create an ineffective dynamic import.
+  connections: WorkspaceConnectionList,
   terminal: defineAsyncComponent(() => import('./Terminal.vue')),
-  commandBar: defineAsyncComponent(() => import('./CommandInputBar.vue')),
-  fileManager: defineAsyncComponent(() => import('./FileManager.vue')),
+  commandBar: CommandInputBar,
+  fileManager: FileManager,
   editor: defineAsyncComponent(() => import('./FileEditorContainer.vue')),
   statusMonitor: defineAsyncComponent(() => import('./StatusMonitor.vue')),
   commandHistory: defineAsyncComponent(() => import('../views/CommandHistoryView.vue')),
-  quickCommands: defineAsyncComponent(() => import('../views/QuickCommandsView.vue')),
+  quickCommands: QuickCommandsView,
   dockerManager: defineAsyncComponent(() => import('./DockerManager.vue')), // <--- 添加 dockerManager 映射
-  suspendedSshSessions: defineAsyncComponent(() => import('../views/SuspendedSshSessionsView.vue')),
+  suspendedSshSessions: SuspendedSshSessionsView,
 };
 
 // --- Computed ---

@@ -1,4 +1,3 @@
-import { Database, Statement } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 
 

@@ -2,6 +2,9 @@
   "name": "@nexus-terminal/remote-gateway",
   "version": "1.5.8",
   "main": "index.js",
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",

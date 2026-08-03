@@ -25,6 +25,12 @@ export default defineConfig({
       languageWorkers: ['editorWorkerService'],
     })
   ],
+  build: {
+    // Monaco and its language workers are intentionally emitted as large,
+    // independently cached chunks. The default 500 kB threshold reports these
+    // expected editor assets as warnings even though they are already split.
+    chunkSizeWarningLimit: 3000,
+  },
   server: {
     proxy: {
       // 将所有 /api 开头的请求代理到后端服务器

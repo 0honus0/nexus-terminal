@@ -1,4 +1,3 @@
-import { Database } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 
 // 定义 Quick Command Tag 类型
@@ -113,16 +112,15 @@ export const setCommandTagAssociations = async (commandId: number, tagIds: numbe
 
         // 2. 插入新关联 (如果 tagIds 不为空)
         if (tagIds && tagIds.length > 0) {
-            const stmt = await db.prepare(insertSql);
+            const stmt = db.prepare(insertSql);
             for (const tagId of tagIds) {
                  // 验证 tagId 是否为有效数字
                  if (typeof tagId !== 'number' || isNaN(tagId)) {
                      console.warn(`[Repo] setCommandTagAssociations: 无效的 tagId (${tagId})，跳过关联到指令 ${commandId}。`);
                      continue;
                  }
-                await stmt.run(commandId, tagId);
+                stmt.run(commandId, tagId);
             }
-            await stmt.finalize();
         }
         await runDb(db, 'COMMIT');
     } catch (err: any) {
@@ -148,16 +146,15 @@ export const addTagToCommands = async (commandIds: number[], tagId: number): Pro
     try {
         await runDb(db, 'BEGIN TRANSACTION');
         // 准备批量插入语句
-        const stmt = await db.prepare(insertSql);
+        const stmt = db.prepare(insertSql);
         for (const commandId of commandIds) {
             // 验证 commandId 和 tagId 是否为有效数字（可选，但推荐）
             if (typeof commandId !== 'number' || isNaN(commandId) || typeof tagId !== 'number' || isNaN(tagId)) {
                  console.warn(`[Repo] addTagToCommands: 无效的 commandId (${commandId}) 或 tagId (${tagId})，跳过关联。`);
                  continue;
             }
-            await stmt.run(commandId, tagId);
+            stmt.run(commandId, tagId);
         }
-        await stmt.finalize(); // 完成批量插入
         await runDb(db, 'COMMIT');
         console.log(`[Repo] addTagToCommands: 成功将标签 ${tagId} 关联到 ${commandIds.length} 个指令。`);
     } catch (err: any) {

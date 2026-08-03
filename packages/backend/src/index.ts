@@ -37,7 +37,7 @@ import crypto from 'crypto';
 
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
-import { getDbInstance } from './database/connection';
+import { getDb, getDbInstance } from './database/connection';
 import authRouter from './auth/auth.routes';
 import connectionsRouter from './connections/connections.routes';
 import sftpRouter from './sftp/sftp.routes';
@@ -222,15 +222,8 @@ const initializeDatabase = async () => {
   try {
     const db = await getDbInstance();
     console.log('[Index] 正在检查用户数量...');
-    const userCount = await new Promise<number>((resolve, reject) => {
-      db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: { count: number }) => {
-        if (err) {
-          console.error('检查 users 表时出错:', err.message);
-          return reject(err);
-        }
-        resolve(row.count);
-      });
-    });
+    const row = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');
+    const userCount = row?.count ?? 0;
     console.log(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
   } catch (error) {
     console.error('数据库初始化或检查失败:', error);

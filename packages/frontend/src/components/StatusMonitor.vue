@@ -54,8 +54,11 @@
       <div class="resource-monitor-group grid gap-3 mb-3">
         <!-- CPU 使用率 -->
         <!-- 设置第一列固定宽度为 80px -->
-        <div class="status-item grid grid-cols-[40px_1fr] items-center gap-3">
+        <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.cpuLabel') }}</label>
+          <span class="resource-compact-summary font-mono" :title="formatPercentageText(displayCpuPercent)">
+            {{ formatPercentageText(displayCpuPercent) }}
+          </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
               :percentage="displayCpuPercent"
@@ -72,8 +75,11 @@
 
         <!-- 内存使用率 -->
         <!-- 设置第一列固定宽度为 80px -->
-        <div class="status-item grid grid-cols-[40px_1fr] items-center gap-3">
+        <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.memoryLabel') }}</label>
+          <span class="resource-compact-summary font-mono" :title="`${formatPercentageText(displayMemPercent)} · ${memDisplay}`">
+            {{ formatPercentageText(displayMemPercent) }} · {{ memDisplay }}
+          </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
               :percentage="displayMemPercent"
@@ -84,14 +90,17 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
-            <span class="mem-disk-details font-mono text-xs whitespace-nowrap text-left">{{ memDisplay }}</span>
+            <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ memDisplay }}</span>
           </div>
         </div>
 
          <!-- swap -->
          <!-- 设置第一列固定宽度为 80px -->
-         <div class="status-item grid grid-cols-[40px_1fr] items-center gap-3">
+         <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.swapLabel') }}</label>
+          <span class="resource-compact-summary font-mono" :title="`${formatPercentageText(displaySwapPercent)} · ${swapDisplay}`">
+            {{ formatPercentageText(displaySwapPercent) }} · {{ swapDisplay }}
+          </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
               :percentage="displaySwapPercent"
@@ -102,14 +111,17 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
-            <span class="mem-disk-details font-mono text-xs whitespace-nowrap text-left">{{ swapDisplay }}</span>
+            <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ swapDisplay }}</span>
           </div>
         </div>
 
         <!-- 磁盘使用率 -->
         <!-- 设置第一列固定宽度为 80px -->
-        <div class="status-item grid grid-cols-[40px_1fr] items-center gap-3">
+        <div class="status-item resource-status-item grid grid-cols-[40px_1fr] items-center gap-3">
           <label class="font-semibold text-text-secondary text-left whitespace-nowrap">{{ t('statusMonitor.diskLabel') }}</label>
+          <span class="resource-compact-summary font-mono" :title="`${formatPercentageText(displayDiskPercent)} · ${diskDisplay}`">
+            {{ formatPercentageText(displayDiskPercent) }} · {{ diskDisplay }}
+          </span>
           <div class="value-wrapper flex items-center gap-2">
             <el-progress
               :percentage="displayDiskPercent"
@@ -120,7 +132,7 @@
               :format="formatPercentageText"
               class="themed-progress flex-grow" :class="{ 'no-transition': isSwitchingSession }"
             />
-            <span class="mem-disk-details font-mono text-xs whitespace-nowrap text-left">{{ diskDisplay }}</span>
+            <span class="mem-disk-details resource-inline-details font-mono text-xs whitespace-nowrap text-left">{{ diskDisplay }}</span>
           </div>
         </div>
       </div>
@@ -400,6 +412,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .resource-monitor-group {
   grid-template-columns: minmax(0, 1fr);
 }
+.resource-compact-summary {
+  display: none;
+  min-width: 0;
+  text-align: right;
+}
 .network-values {
   min-width: 0;
   flex-wrap: wrap;
@@ -441,6 +458,25 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     flex-direction: column;
     gap: 0.25rem;
   }
+  .resource-monitor-group .resource-status-item {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: center;
+    column-gap: 0.5rem !important;
+    row-gap: 0.3rem !important;
+  }
+  .resource-status-item .resource-compact-summary {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 0.66rem;
+    line-height: 1.2;
+  }
+  .resource-status-item .value-wrapper {
+    grid-column: 1 / -1;
+    flex-direction: row;
+  }
+  .resource-status-item .resource-inline-details {
+    display: none;
+  }
   .mem-disk-details {
     overflow-wrap: anywhere;
     white-space: normal;
@@ -452,11 +488,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
 }
 @container status-monitor-pane (max-width: 260px) {
-  .status-monitor {
-    padding: 0.45rem !important;
-  }
-  .mem-disk-details {
-    display: none;
+  .resource-status-item .resource-compact-summary {
+    font-size: 0.62rem;
   }
 }
 

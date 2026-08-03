@@ -1,5 +1,4 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
-import { Database, RunResult } from 'sqlite3'; // Import Database type if needed by helpers
 
 // 定义数据库行的接口
 export interface SshKeyDbRow {
