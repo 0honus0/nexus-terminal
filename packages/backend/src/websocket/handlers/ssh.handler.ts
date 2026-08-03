@@ -229,7 +229,7 @@ const installPromptHook = (state: ClientState): Promise<void> => {
     });
     state.shellHookPromise = hookPromise;
 
-    const token = `${Date.now()}${Math.random().toString(36).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '');
+    const token = uuidv4().replace(/-/g, '');
     const startMarker = `__NEXUS_HOOK_BEGIN_${token}__`;
     const endMarker = `__NEXUS_HOOK_END_${token}__`;
     const timeout = setTimeout(() => {
@@ -317,7 +317,7 @@ const ensureShellProbe = (state: ClientState): Promise<void> => {
     });
     state.shellProbePromise = probePromise;
 
-    const token = `${Date.now()}${Math.random().toString(36).slice(2)}`.replace(/[^a-zA-Z0-9]/g, '');
+    const token = uuidv4().replace(/-/g, '');
     const startMarker = `__NEXUS_SHELL_BEGIN_${token}__`;
     const endMarker = `__NEXUS_SHELL_END_${token}__`;
     const timeout = setTimeout(() => {

@@ -62,9 +62,10 @@ services:
       GUACD_HOST: ${GUACD_HOST:-guacd}
       GUACD_PORT: ${GUACD_PORT:-4822}
       REMOTE_GATEWAY_API_PORT: ${REMOTE_GATEWAY_API_PORT:-9090}
+      REMOTE_GATEWAY_API_HOST: 0.0.0.0
       REMOTE_GATEWAY_WS_PORT: ${REMOTE_GATEWAY_WS_PORT:-8080}
-      FRONTEND_URL: ${FRONTEND_URL:-http://frontend}
-      MAIN_BACKEND_URL: ${MAIN_BACKEND_URL:-http://backend:3001}
+    volumes:
+      - ./data:/app/data:ro
     depends_on:
       guacd:
         condition: service_started

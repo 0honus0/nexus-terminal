@@ -2,7 +2,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 const MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
-const LOG_DIRECTORY = './data/temp_suspended_ssh_logs/';
+const LOG_DIRECTORY = path.resolve('./data/temp_suspended_ssh_logs/');
+const SAFE_LOG_IDENTIFIER = /^[A-Za-z0-9_-]{1,128}$/;
 
 /**
  * TemporaryLogStorageService负责管理临时日志文件的原子化读、写、删除及轮替操作。
@@ -17,7 +18,7 @@ export class TemporaryLogStorageService {
    */
   async ensureLogDirectoryExists(): Promise<void> {
     try {
-      await fs.mkdir(LOG_DIRECTORY, { recursive: true });
+      await fs.mkdir(LOG_DIRECTORY, { recursive: true, mode: 0o700 });
       // console.log(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
     } catch (error) {
       console.error(`创建日志目录 '${LOG_DIRECTORY}' 失败:`, error);
@@ -26,6 +27,9 @@ export class TemporaryLogStorageService {
   }
 
   private getLogFilePath(suspendSessionId: string): string {
+    if (!SAFE_LOG_IDENTIFIER.test(suspendSessionId)) {
+      throw new Error('Invalid suspended SSH log identifier.');
+    }
     return path.join(LOG_DIRECTORY, `${suspendSessionId}.log`);
   }
 
@@ -52,9 +56,9 @@ export class TemporaryLogStorageService {
       if (stat && stat.size >= MAX_LOG_SIZE_BYTES) {
         // 文件过大，执行轮替策略：清空文件
         console.log(`日志文件 '${filePath}' 大小达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行轮替（清空）。`);
-        await fs.writeFile(filePath, data, 'utf8'); // 清空并写入新数据
+        await fs.writeFile(filePath, data, { encoding: 'utf8', mode: 0o600 }); // 清空并写入新数据
       } else {
-        await fs.appendFile(filePath, data, 'utf8');
+        await fs.appendFile(filePath, data, { encoding: 'utf8', mode: 0o600 });
       }
     } catch (error) {
       console.error(`写入日志文件 '${filePath}' 失败:`, error);
@@ -111,7 +115,7 @@ export class TemporaryLogStorageService {
       await this.ensureLogDirectoryExists();
       const files = await fs.readdir(LOG_DIRECTORY);
       return files
-        .filter(file => file.endsWith('.log'))
+        .filter(file => file.endsWith('.log') && SAFE_LOG_IDENTIFIER.test(file.replace(/\.log$/, '')))
         .map(file => file.replace(/\.log$/, ''));
     } catch (error) {
       console.error(`列出日志目录 '${LOG_DIRECTORY}' 中的文件失败:`, error);

@@ -361,25 +361,24 @@ export class SshSuspendService extends EventEmitter {
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
+    if (!session) {
+      console.warn(`[用户: ${userId}] 尝试移除不存在或不属于该用户的会话 ${suspendSessionId}。`);
+      return false;
+    }
+
     if (session && session.backendSshStatus === 'hanging') {
       console.warn(`[用户: ${userId}] 尝试移除的会话 ${suspendSessionId} 仍处于活跃状态，请先终止。`);
       return false; // 不允许直接移除活跃会话，应先终止
     }
 
     // 如果会话在内存中（不论状态），则删除
-    if (session) {
-      userSessions.delete(suspendSessionId);
-    }
+    userSessions.delete(suspendSessionId);
     
     // 总是尝试删除日志文件，因为它可能对应一个已不在内存中的断开会话
     try {
-      // suspendSessionId 在这里是用户从UI上选择的，可能在内存中，也可能不在 (只剩日志文件)
-      // 如果在内存中，session.tempLogPath 是正确的日志标识符
-      // 如果不在内存中，suspendSessionId 本身可能就是日志文件名 (如果之前设计是这样的话，但现在统一用 originalSessionId 作为日志名基础)
-      // 假设 remove 请求中的 suspendSessionId 就是我们存储的那个挂起ID
-      const logPathToRemove = session ? session.tempLogPath : suspendSessionId; // 如果 session 不在内存，尝试直接用 suspendSessionId 作为日志文件名部分
+      const logPathToRemove = session.tempLogPath;
       await this.logStorageService.deleteLog(logPathToRemove);
-      console.log(`[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} 的日志 (标识: ${logPathToRemove}) 已删除 (内存中状态: ${session ? session.backendSshStatus : '不在内存'})。`);
+      console.log(`[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} 的日志 (标识: ${logPathToRemove}) 已删除。`);
       return true;
     } catch (error) {
       console.error(`[用户: ${userId}] 删除会话 ${suspendSessionId} 的日志文件失败:`, error);

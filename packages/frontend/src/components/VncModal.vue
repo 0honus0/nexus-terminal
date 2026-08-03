@@ -99,18 +99,9 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let hasDragged = false;
 
-let remoteDesktopWsBaseUrl: string; // Renamed for clarity
-const LOCAL_BACKEND_URL_FOR_PROXY = 'ws://localhost:3001'; // Main backend's WebSocket for proxying
-
-if (window.location.hostname === 'localhost') {
-  // For local development, VNC will also go through the main backend's proxy
-  remoteDesktopWsBaseUrl = `${LOCAL_BACKEND_URL_FOR_PROXY}/ws/rdp-proxy`; // Use the same RDP proxy path
-} else {
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHostAndPort = window.location.host;
-  // For deployed environments, assume the proxy is at /ws/rdp-proxy relative to the main backend
-  remoteDesktopWsBaseUrl = `${wsProtocol}//${wsHostAndPort}/ws/rdp-proxy`;
-}
+// 开发环境由 Vite、部署环境由 Nginx 统一代理 /ws。
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const remoteDesktopWsBaseUrl = `${wsProtocol}//${window.location.host}/ws/rdp-proxy`;
 
 const handleConnection = async () => {
   if (!props.connection || !vncDisplayRef.value) {

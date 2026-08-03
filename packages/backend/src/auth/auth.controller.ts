@@ -15,6 +15,18 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
+const REMEMBER_ME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+const regenerateSession = (req: Request): Promise<void> => new Promise((resolve, reject) => {
+    req.session.regenerate((error) => {
+        if (error) reject(error);
+        else resolve();
+    });
+});
+
+const configureSessionLifetime = (req: Request, rememberMe: boolean): void => {
+    req.session.cookie.maxAge = rememberMe ? REMEMBER_ME_MAX_AGE_MS : undefined;
+};
 
 export interface User { 
     id: number;
@@ -195,16 +207,12 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request<Record<str
             auditLogService.logAction('PASSKEY_AUTH_SUCCESS', { userId: user.id, username: user.username, credentialId: verification.passkey.credential_id, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, method: 'Passkey' });
 
-            // Setup session similar to password login
+            // Rotate the session identifier before granting authenticated access.
+            await regenerateSession(req);
             req.session.userId = user.id;
             req.session.username = user.username;
             req.session.requiresTwoFactor = false; // Passkey implies 2FA characteristics
-
-            if (rememberMe) {
-                req.session.cookie.maxAge = 315360000000; // 10 years
-            } else {
-                req.session.cookie.maxAge = undefined; // Session cookie
-            }
+            configureSessionLifetime(req, Boolean(rememberMe));
             
             delete req.session.currentChallenge;
             delete req.session.passkeyUserHandle;
@@ -427,9 +435,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         // 检查是否启用了 2FA
         if (user.two_factor_secret) {
             console.log(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
+            await regenerateSession(req);
             req.session.userId = user.id; 
             req.session.requiresTwoFactor = true;
-            req.session.rememberMe = rememberMe; 
+            req.session.rememberMe = Boolean(rememberMe);
             res.status(200).json({ message: '需要进行两步验证。', requiresTwoFactor: true });
         } else {
             console.log(`登录成功 (无 2FA): ${username}`);
@@ -437,15 +446,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp }); 
+            await regenerateSession(req);
             req.session.userId = user.id;
             req.session.username = user.username;
             req.session.requiresTwoFactor = false; 
-
-            if (rememberMe) {
-                req.session.cookie.maxAge = 315360000000;
-            } else {
-                req.session.cookie.maxAge = undefined;
-            }
+            configureSessionLifetime(req, Boolean(rememberMe));
 
             res.status(200).json({
                 message: '登录成功。',
@@ -536,15 +541,12 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true }); 
+            const rememberMe = Boolean(req.session.rememberMe);
+            await regenerateSession(req);
+            req.session.userId = user.id;
             req.session.username = user.username;
             req.session.requiresTwoFactor = false; 
-
-            if (req.session.rememberMe) {
-                req.session.cookie.maxAge = 315360000000; 
-            } else {
-                req.session.cookie.maxAge = undefined; 
-            }
-            delete req.session.rememberMe;
+            configureSessionLifetime(req, rememberMe);
 
             res.status(200).json({
                 message: '登录成功。',
@@ -901,7 +903,11 @@ export const logout = (req: Request, res: Response): void => {
             res.status(500).json({ message: '登出时发生服务器内部错误。' });
         } else {
             console.log(`用户 ${userId} (${username}) 已成功登出。`);
-            res.clearCookie('connect.sid'); 
+            res.clearCookie(process.env.SESSION_COOKIE_NAME || 'nexus.sid', {
+                httpOnly: true,
+                sameSite: 'lax',
+                secure: req.secure,
+            });
             if (userId) { 
                  const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
                  auditLogService.logAction('LOGOUT', { userId, username, ip: clientIp });

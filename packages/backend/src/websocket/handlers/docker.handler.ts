@@ -2,6 +2,7 @@ import { AuthenticatedWebSocket, ClientState, DockerContainer, DockerStats } fro
 import { parsePortsString } from '../utils';
 import { clientStates } from '../state';
 import WebSocket from 'ws';
+import { isSafeDockerIdentifier } from '../../utils/shell';
 
 
 export async function fetchRemoteDockerStatus(state: ClientState): Promise<{ available: boolean; containers: DockerContainer[] }> {
@@ -104,7 +105,9 @@ export async function fetchRemoteDockerStatus(state: ClientState): Promise<{ ava
         return { available: false, containers: [] };
     }
 
-    const runningContainerIds = allContainers.filter(c => c.State === 'running').map(c => c.id);
+    const runningContainerIds = allContainers
+        .filter(c => c.State === 'running' && isSafeDockerIdentifier(c.id))
+        .map(c => c.id);
 
     if (runningContainerIds.length > 0) {
         try {
@@ -200,8 +203,8 @@ export async function handleDockerCommand(ws: AuthenticatedWebSocket, sessionId:
 
     console.log(`WebSocket: Processing command '${command}' for container '${containerId}' on session ${sessionId}...`);
     try {
-        const cleanContainerId = containerId.replace(/[^a-zA-Z0-9_-]/g, '');
-        if (!cleanContainerId) throw new Error('Invalid container ID format after sanitization.');
+        if (!isSafeDockerIdentifier(containerId)) throw new Error('Invalid container ID format.');
+        const cleanContainerId = containerId;
 
         let dockerCliCommand: string;
         switch (command) {
@@ -254,13 +257,13 @@ export async function handleDockerGetStats(ws: AuthenticatedWebSocket, sessionId
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'docker:stats:error', payload: { containerId: payload?.containerId, message: 'SSH connection not active.' } }));
         return;
     }
-    if (!payload || !payload.containerId) {
+    if (!payload || typeof payload.containerId !== 'string' || !isSafeDockerIdentifier(payload.containerId)) {
         console.warn(`WebSocket: Invalid payload for docker:get_stats in session ${sessionId}:`, payload);
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'docker:stats:error', payload: { containerId: payload?.containerId, message: 'Missing containerId.' } }));
         return;
     }
 
-    const containerId = payload.containerId;
+    const containerId = payload.containerId as string;
     console.log(`WebSocket: Handling docker:get_stats for container ${containerId} in session ${sessionId}`);
     const command = `docker stats ${containerId} --no-stream --format '{{json .}}'`;
 

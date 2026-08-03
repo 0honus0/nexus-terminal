@@ -1,7 +1,8 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { isSafeDockerIdentifier } from '../utils/shell';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // --- Interfaces (与前端 DockerManager.vue 中的定义保持一致) ---
 // 理想情况下，这些类型应该放在共享的 types 包中
@@ -57,7 +58,7 @@ export class DockerService {
 
     try {
       // 尝试执行一个简单的 docker 命令，如 docker version
-      await execAsync('docker version', { timeout: 2000 }); // 5秒超时
+      await execFileAsync('docker', ['version'], { timeout: 2000 });
       this.isDockerAvailableCache = true;
       return true;
     } catch (error: any) {
@@ -81,7 +82,7 @@ export class DockerService {
 
       // 1. 获取所有容器的基本信息
       try {
-          const { stdout: psStdout } = await execAsync("docker ps -a --no-trunc --format '{{json .}}'", { timeout: this.commandTimeout });
+          const { stdout: psStdout } = await execFileAsync('docker', ['ps', '-a', '--no-trunc', '--format', '{{json .}}'], { timeout: this.commandTimeout });
           const lines = psStdout.trim().split('\n');
           allContainers = lines
               .map(line => {
@@ -111,7 +112,7 @@ export class DockerService {
       // 2. 获取正在运行容器的统计信息
       try {
           // --no-stream 获取一次性快照
-          const { stdout: statsStdout } = await execAsync("docker stats --no-stream --format '{{json .}}'", { timeout: this.commandTimeout });
+          const { stdout: statsStdout } = await execFileAsync('docker', ['stats', '--no-stream', '--format', '{{json .}}'], { timeout: this.commandTimeout });
           const statsLines = statsStdout.trim().split('\n');
           statsLines.forEach(line => {
               try {
@@ -163,25 +164,24 @@ export class DockerService {
     }
 
     // 参数校验和清理，防止命令注入
-    const cleanContainerId = containerId.replace(/[^a-zA-Z0-9_-]/g, '');
-     if (!cleanContainerId) {
+    if (!isSafeDockerIdentifier(containerId)) {
          throw new Error('Invalid container ID format.');
-     }
+    }
 
-    let dockerCliCommand: string;
+    let dockerArgs: string[];
     switch (command) {
       case 'start':
-        dockerCliCommand = `docker start ${cleanContainerId}`;
+        dockerArgs = ['start', containerId];
         break;
       case 'stop':
-        dockerCliCommand = `docker stop ${cleanContainerId}`;
+        dockerArgs = ['stop', containerId];
         break;
       case 'restart':
-        dockerCliCommand = `docker restart ${cleanContainerId}`;
+        dockerArgs = ['restart', containerId];
         break;
       case 'remove':
         // 使用 -f 强制删除正在运行的容器，对应前端的 'down' 意图
-        dockerCliCommand = `docker rm -f ${cleanContainerId}`;
+        dockerArgs = ['rm', '-f', containerId];
         break;
       default:
         // 防止未知的命令类型
@@ -189,21 +189,21 @@ export class DockerService {
         throw new Error(`Unsupported Docker command: ${command}`);
     }
 
-    console.log(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log
+    console.log(`[DockerService] Executing docker command: ${command}`);
     try {
-      const { stdout, stderr } = await execAsync(dockerCliCommand, { timeout: this.commandTimeout });
+      const { stdout, stderr } = await execFileAsync('docker', dockerArgs, { timeout: this.commandTimeout });
       if (stderr) {
         // Docker 命令有时会将正常信息输出到 stderr (例如 rm 返回容器 ID)
         // 但也可能包含错误信息
-        console.warn(`[DockerService] Command "${dockerCliCommand}" produced stderr:`, { stderr }); // Use console.warn
+        console.warn(`[DockerService] Docker command "${command}" produced stderr:`, { stderr });
         // 可以根据 stderr 内容判断是否真的是错误
         if (stderr.toLowerCase().includes('error') || stderr.toLowerCase().includes('failed')) {
              throw new Error(`Docker command failed: ${stderr}`);
         }
       }
-      console.log(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, { stdout }); // Use console.log
+      console.log(`[DockerService] Docker command "${command}" executed successfully.`, { stdout });
     } catch (error: any) {
-      console.error(`[DockerService] Failed to execute command "${dockerCliCommand}"`, { error: error.message, stderr: error.stderr }); // Use console.error
+      console.error(`[DockerService] Failed to execute docker command "${command}"`, { error: error.message, stderr: error.stderr });
       // 抛出错误，让 Controller 层处理并返回给前端
       throw new Error(`Failed to execute Docker command "${command}": ${error.stderr || error.message}`);
     }

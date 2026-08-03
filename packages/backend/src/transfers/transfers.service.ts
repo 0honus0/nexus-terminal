@@ -5,6 +5,7 @@ import { Client, ClientChannel, ConnectConfig, SFTPWrapper } from 'ssh2';
 import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transfers.types';
 import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
+import { quotePosixShellArg } from '../utils/shell';
 
 
 export class TransfersService {
@@ -505,8 +506,7 @@ export class TransfersService {
   }
   
   private escapeShellArg(arg: string): string {
-    // Basic escaping for paths and arguments. More robust escaping might be needed.
-    return `'${arg.replace(/'/g, "'\\''")}'`;
+    return quotePosixShellArg(arg);
   }
 
   private buildTransferCommandString(
@@ -524,7 +524,7 @@ export class TransfersService {
     }
   ): string {
     const remoteBase = targetPathOnB.endsWith('/') ? targetPathOnB : `${targetPathOnB}/`;
-    const remoteFullDest = `${options.targetUserAndHost}:${this.escapeShellArg(remoteBase)}`;
+    const remoteFullDest = this.escapeShellArg(`${options.targetUserAndHost}:${remoteBase}`);
  
     let commandParts: string[] = [];
     if (options.sshPassCommand) {
@@ -532,7 +532,7 @@ export class TransfersService {
     }
  
 
-    commandParts.push(executableCommand);
+    commandParts.push(this.escapeShellArg(executableCommand));
  
     if (commandType === 'rsync') {
       commandParts.push('-avz --progress'); // rsync specific options
@@ -639,6 +639,11 @@ private async executeRemoteTransferOnSource(
       this.updateSubTaskStatus(taskId, subTaskId, 'transferring', 5, `Using ${commandTypeForLogic}.`);
       
       // +++ Declare and initialize cmdOptions here +++
+      const targetPort = Number(targetConnection.port);
+      if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) {
+        throw new Error(`Invalid target SSH port: ${targetConnection.port}`);
+      }
+
       const cmdOptions: {
         targetUserAndHost: string;
         sshPortOption?: string;
@@ -646,7 +651,7 @@ private async executeRemoteTransferOnSource(
         sshPassCommand?: string;
       } = {
         targetUserAndHost: `${targetConnection.username}@${targetConnection.host}`,
-        sshPortOption: targetConnection.port ? (commandTypeForLogic === 'scp' ? `-P ${targetConnection.port}` : (commandTypeForLogic === 'rsync' ? `-p ${targetConnection.port}` : undefined)) : undefined,
+        sshPortOption: commandTypeForLogic === 'scp' ? `-P ${targetPort}` : `-p ${targetPort}`,
       };
       const subTaskToUpdate = this.transferTasks.get(taskId)?.subTasks.find(st => st.subTaskId === subTaskId);
       if (subTaskToUpdate) subTaskToUpdate.transferMethodUsed = commandTypeForLogic;

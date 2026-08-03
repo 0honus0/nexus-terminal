@@ -70,11 +70,18 @@ export const getRemoteDesktopToken = async (
     };
 
     const tokenUrl = `${REMOTE_GATEWAY_API_BASE}/api/remote-desktop/token`;
+    const gatewaySecret = process.env.REMOTE_GATEWAY_SHARED_SECRET;
+    if (!gatewaySecret) {
+        throw new Error('远程桌面网关共享密钥未配置。');
+    }
     console.log(`[GuacamoleService:getRemoteDesktopToken] Calling Remote Gateway API: ${tokenUrl} for protocol ${protocol}, connection ${connection.id}`);
 
     try {
         const response = await axios.post<TokenResponse>(tokenUrl, requestBody, {
-            timeout: 10000 // 10 秒超时
+            timeout: 10000,
+            headers: {
+                'X-Nexus-Gateway-Secret': gatewaySecret,
+            },
         });
 
         if (response.status !== 200 || !response.data?.token) {

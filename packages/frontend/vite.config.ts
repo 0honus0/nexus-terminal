@@ -49,7 +49,8 @@ export default defineConfig({
       '/ws': {
         target: 'ws://localhost:3001', // 后端 WebSocket 服务器地址
         ws: true,
-        changeOrigin: true,
+        // 保留浏览器访问前端时的 Host，供后端进行同源 WebSocket 校验。
+        changeOrigin: false,
       }
     }
   }

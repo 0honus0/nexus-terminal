@@ -7,6 +7,7 @@ import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import { SftpCompressRequestPayload, SftpDecompressRequestPayload, SftpCompressSuccessPayload, SftpCompressErrorPayload, SftpDecompressSuccessPayload, SftpDecompressErrorPayload } from '../websocket/types'; // Import payload types
+import { quotePosixShellArg } from '../utils/shell';
 
 const pendingSftpInitializations = new Map<string, Promise<void>>();
 
@@ -451,10 +452,13 @@ export const handleCompressRequest = async (ws: AuthenticatedWebSocket, payload:
     let command: string;
     // 确保源路径被正确引用，特别是包含空格或特殊字符时
     // 注意：源路径是相对于 targetDirectory 的
-    const quotedSources = sources.map((s: string) => `"${s.replace(/"/g, '\\"')}"`).join(' ');
+    const quotedSources = sources
+        .map(source => source.startsWith('-') ? `./${source}` : source)
+        .map(quotePosixShellArg)
+        .join(' ');
     // 确保目标目录和压缩包名称被正确引用
-    const quotedTargetDir = `"${targetDirectory.replace(/"/g, '\\"')}"`;
-    const quotedDestName = `"${destinationArchiveName.replace(/"/g, '\\"')}"`;
+    const quotedTargetDir = quotePosixShellArg(targetDirectory);
+    const quotedDestName = quotePosixShellArg(destinationArchiveName.startsWith('-') ? `./${destinationArchiveName}` : destinationArchiveName);
 
     const cdCommand = `cd ${quotedTargetDir}`;
 
@@ -565,12 +569,13 @@ export const handleDecompressRequest = async (ws: AuthenticatedWebSocket, payloa
 
     const extractDir = path.posix.dirname(archivePath);
     const archiveBasename = path.posix.basename(archivePath);
+    const safeArchiveArgument = archiveBasename.startsWith('-') ? `./${archiveBasename}` : archiveBasename;
 
     // --- 构建 Shell 命令 ---
     let command: string;
     // 确保路径被正确引用
-    const quotedExtractDir = `"${extractDir.replace(/"/g, '\\"')}"`;
-    const quotedArchiveBasename = `"${archiveBasename.replace(/"/g, '\\"')}"`;
+    const quotedExtractDir = quotePosixShellArg(extractDir);
+    const quotedArchiveBasename = quotePosixShellArg(safeArchiveArgument);
 
     const cdCommand = `cd ${quotedExtractDir}`;
 

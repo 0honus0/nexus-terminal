@@ -4,6 +4,7 @@ import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import * as pathModule from 'path'; 
 import * as jschardet from 'jschardet'; 
 import * as iconv from 'iconv-lite';
+import { quotePosixShellArg } from '../utils/shell';
 // +++ 导入新类型 +++
 import {
     SftpCompressRequestPayload,
@@ -536,12 +537,17 @@ export class SftpService {
             state?.ws.send(JSON.stringify({ type: 'sftp:rmdir:error', path: path, payload: 'SSH 会话未就绪', requestId: requestId }));
             return;
         }
+        const normalizedPath = pathModule.posix.normalize(path);
+        if (!normalizedPath || normalizedPath === '/' || normalizedPath === '.') {
+            state.ws.send(JSON.stringify({ type: 'sftp:rmdir:error', path, payload: '拒绝删除根目录或无效目录。', requestId }));
+            return;
+        }
         console.debug(`[SSH Exec ${sessionId}] Received rmdir request for ${path} (ID: ${requestId})`);
 
         // 第一种方案：尝试 rm -rf 命令
         const tryRmRfCommand = async (isSudo: boolean) => {
             const commandPrefix = isSudo ? 'sudo ' : '';
-            const command = `${commandPrefix}rm -rf "${path.replace(/"/g, '\\"')}"`;
+            const command = `${commandPrefix}rm -rf -- ${quotePosixShellArg(path)}`;
             const attemptDescription = isSudo ? 'sudo rm -rf' : 'rm -rf';
 
             console.log(`[SSH Exec ${sessionId}] 尝试使用 ${attemptDescription} 命令删除 ${path} (ID: ${requestId})`);
@@ -1184,7 +1190,6 @@ export class SftpService {
         const safeRequestId = requestId.replace(/[^A-Za-z0-9_-]/g, '_');
         const workspaceName = `.nexus-archive-${safeRequestId}.work`;
         const workspacePath = pathModule.posix.join(targetDirectory, workspaceName);
-        const shellQuote = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
         const relativeSources: string[] = [];
         for (const source of sources) {
             const relativePath = pathModule.posix.relative(targetDirectory, source);
@@ -1201,11 +1206,11 @@ export class SftpService {
         const workspaceRelativePath = `./${workspaceName}`;
         const temporaryArchiveRelativePath = `${workspaceRelativePath}/archive${extension}`;
         const destinationArchiveRelativePath = `./${destinationArchiveName}`;
-        const quotedSources = relativeSources.map(shellQuote).join(' ');
-        const quotedTargetDir = shellQuote(targetDirectory);
-        const quotedWorkspace = shellQuote(workspaceRelativePath);
-        const quotedTemporaryArchive = shellQuote(temporaryArchiveRelativePath);
-        const quotedDestinationName = shellQuote(destinationArchiveRelativePath);
+        const quotedSources = relativeSources.map(quotePosixShellArg).join(' ');
+        const quotedTargetDir = quotePosixShellArg(targetDirectory);
+        const quotedWorkspace = quotePosixShellArg(workspaceRelativePath);
+        const quotedTemporaryArchive = quotePosixShellArg(temporaryArchiveRelativePath);
+        const quotedDestinationName = quotePosixShellArg(destinationArchiveRelativePath);
         const countCommand = `total=$(find ${quotedSources} -print 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
         const archiveCommand = format === 'zip'
             ? `zip -b ${quotedWorkspace} -r ${quotedTemporaryArchive} ${quotedSources}`
@@ -1472,12 +1477,13 @@ export class SftpService {
 
         const extractDir = pathModule.posix.dirname(archivePath);
         const archiveBasename = pathModule.posix.basename(archivePath);
+        const safeArchiveArgument = archiveBasename.startsWith('-') ? `./${archiveBasename}` : archiveBasename;
 
         // --- 构建 Shell 命令 ---
         let command: string;
         // 确保路径被正确引用
-        const quotedExtractDir = `"${extractDir.replace(/"/g, '\\"')}"`;
-        const quotedArchiveBasename = `"${archiveBasename.replace(/"/g, '\\"')}"`;
+        const quotedExtractDir = quotePosixShellArg(extractDir);
+        const quotedArchiveBasename = quotePosixShellArg(safeArchiveArgument);
 
         const cdCommand = `cd ${quotedExtractDir}`;
 

@@ -5,6 +5,19 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs'; // Keep fs for sync operations if needed, add promises for async
 import fsp from 'fs/promises'; // Use fs.promises for async file operations
+import crypto from 'crypto';
+
+const BACKGROUND_EXTENSIONS_BY_MIME: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/svg+xml': '.svg',
+};
+const ALLOWED_BACKGROUND_EXTENSIONS = new Set(Object.values(BACKGROUND_EXTENSIONS_BY_MIME));
+// 兼容安全改造前已经上传并写入设置的常见 JPEG 文件扩展名。
+ALLOWED_BACKGROUND_EXTENSIONS.add('.jpeg');
+ALLOWED_BACKGROUND_EXTENSIONS.add('.jfif');
 
 // --- 背景图片上传配置 (保持不变) ---
 const backgroundStorage = multer.diskStorage({
@@ -15,17 +28,19 @@ const backgroundStorage = multer.diskStorage({
         cb(null, uploadPath);
     },
     filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const safeOriginalName = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
-        cb(null, uniqueSuffix + '-' + safeOriginalName);
+        const extension = BACKGROUND_EXTENSIONS_BY_MIME[file.mimetype];
+        if (!extension) {
+            cb(new Error('不支持的背景图片类型。'), '');
+            return;
+        }
+        cb(null, `${crypto.randomUUID()}${extension}`);
     }
 });
 
 const backgroundUpload = multer({
     storage: backgroundStorage,
     fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-        if (allowedTypes.includes(file.mimetype)) {
+        if (BACKGROUND_EXTENSIONS_BY_MIME[file.mimetype]) {
             cb(null, true);
         } else {
             cb(new Error('只允许上传图片文件 (JPEG, PNG, GIF, WebP, SVG)！'));
@@ -127,7 +142,8 @@ export const getBackgroundFileController = async (req: Request<{ filename: strin
     const filename = req.params.filename;
 
     // 基本安全检查，防止路径遍历等
-    if (!filename || typeof filename !== 'string' || filename.includes('..') || filename.includes('/')) {
+    const extension = path.extname(filename).toLowerCase();
+    if (!filename || typeof filename !== 'string' || path.basename(filename) !== filename || filename.includes('\\') || !ALLOWED_BACKGROUND_EXTENSIONS.has(extension)) {
         res.status(400).json({ message: '无效的文件名' });
         return;
     }
@@ -138,6 +154,10 @@ export const getBackgroundFileController = async (req: Request<{ filename: strin
 
         // 检查文件是否存在且可读
         await fsp.access(absolutePath, fs.constants.R_OK);
+
+        res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:");
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
 
         // 发送文件
         res.sendFile(absolutePath, (err) => {

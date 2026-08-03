@@ -90,7 +90,7 @@ Frontend、Backend 和 Remote Gateway 现在共用同一个镜像 `ghcr.io/0honu
 
 * 项目根目录 `.env` 由 Docker Compose 自动用于 `${变量}` 插值，并通过 `env_file` 传入 Backend 与 Remote Gateway。
 * `docker-compose.yml` 中 `environment` 明确声明的值优先于 `env_file`；启动命令前设置的同名 Shell 环境变量会优先用于这些 `${变量}` 插值。未在 Compose 中列出的自定义变量仍可通过 `.env` 的 `env_file` 透传给 Node 服务。
-* Backend 首次启动会自动生成 `ENCRYPTION_KEY` 和 `SESSION_SECRET`，保存到持久化目录 `./data/.env`。升级统一镜像不需要迁移该文件，但必须与整个 `data` 目录一起备份。
+* Backend 首次启动会自动生成 `ENCRYPTION_KEY`、`SESSION_SECRET` 和内部远程桌面网关共享密钥，保存到权限受限的持久化文件 `./data/.env`。升级统一镜像不需要迁移该文件，但必须与整个 `data` 目录一起备份。
 * `VITE_*` 属于前端构建时变量，只能在构建统一镜像时注入；运行时修改 `.env` 不会改写已经生成的前端静态文件。当前默认使用同源 API，不需要设置 `VITE_API_BASE_URL`。自构建时可执行 `VITE_API_BASE_URL=https://api.example.com ./build.sh docker`。
 * 修改运行时 `.env` 后需要执行 `docker compose up -d --force-recreate`，仅重启容器不一定会重新读取全部 Compose 配置。
 

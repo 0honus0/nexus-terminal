@@ -3,55 +3,90 @@ import url from 'url';
 import express, { RequestHandler, Response } from 'express';
 import { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket, WebSocketRequest } from './types';
+import ipaddr from 'ipaddr.js';
+import { config } from '../config/app.config';
+import { checkIpWhitelist } from '../auth/ipWhitelist.middleware';
+
+const firstHeaderValue = (value: string | string[] | undefined): string | undefined => {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    return rawValue?.split(',').map(item => item.trim()).find(Boolean);
+};
+
+const isTrustedProxyAddress = (address: string | undefined): boolean => {
+    if (!address) return false;
+    try {
+        const range = ipaddr.process(address).range();
+        return ['loopback', 'private', 'linkLocal', 'uniqueLocal'].includes(range);
+    } catch {
+        return false;
+    }
+};
+
+const resolveClientIp = (request: WebSocketRequest): string => {
+    const remoteAddress = request.socket.remoteAddress;
+    if (!isTrustedProxyAddress(remoteAddress)) return remoteAddress || 'unknown';
+    return firstHeaderValue(request.headers['x-real-ip'])
+        || firstHeaderValue(request.headers['x-forwarded-for'])
+        || remoteAddress
+        || 'unknown';
+};
+
+const isAllowedWebSocketOrigin = (request: WebSocketRequest): boolean => {
+    const origin = firstHeaderValue(request.headers.origin);
+    if (!origin) {
+        return process.env.NODE_ENV !== 'production' || process.env.ALLOW_ORIGINLESS_WEBSOCKETS === 'true';
+    }
+
+    try {
+        const normalizedOrigin = new URL(origin).origin;
+        const configuredOrigins = new Set(config.passkeyRpConfigs.map(item => new URL(item.rpOrigin).origin));
+        const host = firstHeaderValue(request.headers['x-forwarded-host']) || firstHeaderValue(request.headers.host);
+        const protocol = firstHeaderValue(request.headers['x-forwarded-proto'])
+            || ((request.socket as typeof request.socket & { encrypted?: boolean }).encrypted ? 'https' : 'http');
+        if (host) configuredOrigins.add(new URL(`${protocol}://${host}`).origin);
+        return configuredOrigins.has(normalizedOrigin);
+    } catch {
+        return false;
+    }
+};
 
 export function initializeUpgradeHandler(
     server: http.Server,
     wss: WebSocketServer,
     sessionParser: RequestHandler
 ): void {
-    server.on('upgrade', (request: WebSocketRequest, socket, head) => {
-        // --- 添加详细日志：检查传入的请求头和 request.ip ---
-        console.log('[WebSocket Upgrade] Received upgrade request.');
-        console.log('[WebSocket Upgrade] Request Headers:', JSON.stringify(request.headers, null, 2));
-        console.log(`[WebSocket Upgrade] Initial request.ip value: ${request.ip}`); // Express 尝试解析的 IP
-        console.log(`[WebSocket Upgrade] X-Real-IP Header: ${request.headers['x-real-ip']}`);
-        console.log(`[WebSocket Upgrade] X-Forwarded-For Header: ${request.headers['x-forwarded-for']}`);
-        // --- 结束添加日志 ---
-
+    server.on('upgrade', async (request: WebSocketRequest, socket, head) => {
         const parsedUrl = url.parse(request.url || '', true); // Parse URL and query string
         const pathname = parsedUrl.pathname;
-
-        // --- 修改：尝试从头部获取 IP，并处理 X-Forwarded-For 列表 ---
-        let ipAddress: string | undefined;
-        const xForwardedFor = request.headers['x-forwarded-for'];
-        const xRealIp = request.headers['x-real-ip'];
-
-        if (xForwardedFor) {
-            // 如果 X-Forwarded-For 存在，取列表中的第一个 IP
-            const ips = Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor.split(',')[0];
-            ipAddress = ips?.trim();
-            console.log(`[WebSocket Upgrade] Using first IP from X-Forwarded-For: ${ipAddress}`);
-        } else if (xRealIp) {
-            // 否则，尝试 X-Real-IP
-            ipAddress = Array.isArray(xRealIp) ? xRealIp[0] : xRealIp.trim();
-            console.log(`[WebSocket Upgrade] Using IP from X-Real-IP: ${ipAddress}`);
-        } else {
-            // 最后回退到 socket.remoteAddress 或 request.ip
-            ipAddress = request.socket.remoteAddress || request.ip;
-            console.log(`[WebSocket Upgrade] Using fallback IP: ${ipAddress}`);
+        const allowedPaths = new Set(['/ws', '/ws/', '/rdp-proxy', '/ws/rdp-proxy']);
+        if (!pathname || !allowedPaths.has(pathname)) {
+            socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+            socket.destroy();
+            return;
         }
 
-        // 确保 ipAddress 不是 undefined 或空字符串，否则设为 'unknown'
-        ipAddress = ipAddress || 'unknown';
-        console.log(`[WebSocket Upgrade] Determined IP Address: ${ipAddress}`);
-        
+        if (!isAllowedWebSocketOrigin(request)) {
+            console.warn(`WebSocket: 已拒绝来源不匹配的升级请求 (Path: ${pathname})。`);
+            socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+            socket.destroy();
+            return;
+        }
 
-        console.log(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
+        const ipAddress = resolveClientIp(request);
+        const ipDecision = await checkIpWhitelist(ipAddress);
+        if (!ipDecision.allowed) {
+            console.warn(`WebSocket: 已拒绝来自 IP ${ipAddress} 的升级请求。`);
+            socket.write(`HTTP/1.1 ${ipDecision.statusCode} Forbidden\r\n\r\n`);
+            socket.destroy();
+            return;
+        }
+
+        console.log(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`);
 
         const sessionResponse: Response = Object.setPrototypeOf(new http.ServerResponse(request), express.response);
         sessionParser(request, sessionResponse, () => {
             // --- 认证检查 ---
-            if (!request.session || !request.session.userId) {
+            if (!request.session?.userId || !request.session.username || request.session.requiresTwoFactor === true) {
                 console.log(`WebSocket 认证失败 (Path: ${pathname})：未找到会话或用户未登录。`);
                 socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                 socket.destroy();

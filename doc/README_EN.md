@@ -92,7 +92,7 @@ The frontend, backend, and remote gateway now share the single `ghcr.io/0honus0/
 
 * The root `.env` file is automatically used by Docker Compose for `${VARIABLE}` interpolation and is passed to the backend and remote gateway through `env_file`.
 * Values explicitly declared under `environment` in `docker-compose.yml` override `env_file`; same-name shell variables used when invoking Compose take precedence for those `${VARIABLE}` substitutions. Custom variables not listed in Compose are still passed to the Node services through `.env` and `env_file`.
-* On first startup, the backend generates `ENCRYPTION_KEY` and `SESSION_SECRET` in the persistent `./data/.env` file. No migration is needed when upgrading to the unified image, but the whole `data` directory must be backed up.
+* On first startup, the backend generates `ENCRYPTION_KEY`, `SESSION_SECRET`, and the internal remote-desktop gateway shared secret in the permission-restricted persistent `./data/.env` file. No migration is needed when upgrading to the unified image, but the whole `data` directory must be backed up.
 * `VITE_*` variables are frontend build-time settings. Changing them in the runtime `.env` file cannot rewrite the already generated static assets. The default same-origin API setup does not require `VITE_API_BASE_URL`. For a custom source build, run `VITE_API_BASE_URL=https://api.example.com ./build.sh docker`.
 * After changing runtime `.env`, run `docker compose up -d --force-recreate` so the containers are recreated with the new configuration.
 

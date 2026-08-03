@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ConnectionInfo } from '../stores/connections.store';
 import type { SessionState } from '../stores/session/types';
-import { computed, defineAsyncComponent, type PropType, type Component, ref, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'; // Added onBeforeUnmount, nextTick and CSSProperties
+import { computed, defineAsyncComponent, type PropType, type Component, ref, watch, onMounted, onBeforeUnmount, type CSSProperties } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
 import '@fortawesome/fontawesome-free/css/all.min.css';
@@ -84,7 +84,7 @@ const leftSidebarPanelRef = ref<HTMLElement | null>(null); // +++ Ref for left p
 const rightSidebarPanelRef = ref<HTMLElement | null>(null); // +++ Ref for right panel +++
 const leftResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for left handle +++
 const rightResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for right handle +++
-const customHtmlLayerRef = ref<HTMLElement | null>(null); // +++ Ref for custom HTML layer +++
+const customHtmlLayerRef = ref<HTMLIFrameElement | null>(null);
 
 // --- Component Mapping ---
 // 使用 defineAsyncComponent 优化加载，并映射 PaneName 到实际组件
@@ -474,42 +474,9 @@ const terminalBackgroundImageStyle = computed((): CSSProperties => {
   };
 });
 
-// +++ Function to execute scripts (migrated from Terminal.vue) +++
-const executeScriptsInElement = (container: HTMLElement) => {
-  if (!container) return;
-  const scripts = Array.from(container.getElementsByTagName('script'));
-  scripts.forEach((oldScript) => {
-    const newScript = document.createElement('script');
-    Array.from(oldScript.attributes).forEach(attr => {
-      newScript.setAttribute(attr.name, attr.value);
-    });
-    if (oldScript.textContent) {
-      newScript.textContent = oldScript.textContent;
-    }
-    if (oldScript.parentNode) {
-      oldScript.parentNode.replaceChild(newScript, oldScript);
-    } else {
-       container.appendChild(newScript); // Fallback, though less likely if script was in container
-    }
-  });
-};
-
-// +++ Watch for changes in terminalCustomHTML and execute scripts (migrated) +++
-watch(terminalCustomHTML, (newHtmlContent, oldHtmlContent) => {
-  if (props.layoutNode.component !== 'terminal') return; // Only for terminal panes
-
-  if (newHtmlContent === oldHtmlContent && oldHtmlContent !== undefined) {
-    return;
-  }
-  nextTick(() => {
-    const container = customHtmlLayerRef.value;
-    if (container) {
-      if (newHtmlContent) {
-        executeScriptsInElement(container);
-      }
-    }
-  });
-}, { immediate: true });
+const sandboxedTerminalCustomHtml = computed(() => terminalCustomHTML.value
+  ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; media-src data: blob:"><style>html,body{width:100%;height:100%;margin:0;overflow:hidden}</style>${terminalCustomHTML.value}`
+  : '');
 
 
 onBeforeUnmount(() => {
@@ -602,13 +569,16 @@ onBeforeUnmount(() => {
                                }"
                            ></div>
                            <!-- Custom HTML -->
-                           <div
+                           <iframe
                                ref="customHtmlLayerRef"
                                v-if="terminalCustomHTML"
                                class="terminal-custom-html-layer"
-                               style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"
-                               v-html="terminalCustomHTML"
-                           ></div>
+                               style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; pointer-events: none; z-index: 2;"
+                               sandbox="allow-scripts"
+                               :srcdoc="sandboxedTerminalCustomHtml"
+                               tabindex="-1"
+                               aria-hidden="true"
+                           ></iframe>
                        </div>
 
                        <!-- Terminal Instances: v-show must live on a real DOM node. -->

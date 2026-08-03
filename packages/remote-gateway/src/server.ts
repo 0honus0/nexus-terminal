@@ -2,15 +2,34 @@ import GuacamoleLite from 'guacamole-lite';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import crypto from 'crypto';
-import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
+import dotenv from 'dotenv';
+
+const envCandidates = [
+    process.env.NEXUS_DATA_ENV_PATH,
+    path.resolve(__dirname, '../../../.env'),
+    path.resolve(__dirname, '../../data/.env'),
+    path.resolve(__dirname, '../../backend/data/.env'),
+].filter((candidate): candidate is string => Boolean(candidate));
+
+for (const envPath of envCandidates) {
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath, override: false, quiet: true });
+    }
+}
 
 // --- 配置 ---
 const REMOTE_GATEWAY_WS_PORT = Number.parseInt(process.env.REMOTE_GATEWAY_WS_PORT || '8080', 10);
 const REMOTE_GATEWAY_API_PORT = Number.parseInt(process.env.REMOTE_GATEWAY_API_PORT || '9090', 10);
+const REMOTE_GATEWAY_API_HOST = process.env.REMOTE_GATEWAY_API_HOST || '127.0.0.1';
 const GUACD_HOST = process.env.GUACD_HOST || 'localhost';
 const GUACD_PORT = parseInt(process.env.GUACD_PORT || '4822', 10);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const MAIN_BACKEND_URL = process.env.MAIN_BACKEND_URL || 'http://localhost:3000';
+const REMOTE_GATEWAY_SHARED_SECRET = process.env.REMOTE_GATEWAY_SHARED_SECRET;
+
+if (!REMOTE_GATEWAY_SHARED_SECRET || REMOTE_GATEWAY_SHARED_SECRET.length < 32) {
+    throw new Error('REMOTE_GATEWAY_SHARED_SECRET 必须设置且至少包含 32 个字符。');
+}
 
 for (const [name, port] of [
     ['REMOTE_GATEWAY_WS_PORT', REMOTE_GATEWAY_WS_PORT],
@@ -30,15 +49,34 @@ console.log("[Remote Gateway] 内存加密密钥已生成。");
 
 // --- Express 应用设置 ---
 const app = express();
-app.use(express.json()); // 用于解析请求体中的 JSON
+app.disable('x-powered-by');
+app.use(express.json({ limit: '16kb' }));
+app.use((_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+});
 const apiServer = http.createServer(app);
+apiServer.requestTimeout = 30_000;
+apiServer.headersTimeout = 15_000;
+apiServer.keepAliveTimeout = 5_000;
+apiServer.maxHeadersCount = 100;
 
-const allowedOrigins = [
-    FRONTEND_URL,
-    MAIN_BACKEND_URL
-];
-console.log(`[Remote Gateway] CORS 允许的来源: ${allowedOrigins.join(', ')}`);
-app.use(cors({ origin: allowedOrigins }));
+const secretsMatch = (providedSecret: string | undefined): boolean => {
+    if (!providedSecret) return false;
+    const expected = Buffer.from(REMOTE_GATEWAY_SHARED_SECRET, 'utf8');
+    const provided = Buffer.from(providedSecret, 'utf8');
+    return expected.length === provided.length && crypto.timingSafeEqual(expected, provided);
+};
+
+app.use('/api/remote-desktop', (req, res, next) => {
+    if (!secretsMatch(req.get('x-nexus-gateway-secret'))) {
+        res.status(401).json({ error: '未授权的网关请求。' });
+        return;
+    }
+    next();
+});
 
 
 const guacdOptions = {
@@ -104,7 +142,7 @@ const encryptToken = (data: string, keyBuffer: Buffer): string => {
 app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
     const { protocol, connectionConfig } = req.body;
 
-    if (!protocol || !connectionConfig) {
+    if (!protocol || !connectionConfig || typeof connectionConfig !== 'object' || Array.isArray(connectionConfig)) {
         res.status(400).json({ error: '缺少必需的参数 (protocol, connectionConfig)' });
         return;
     }
@@ -116,16 +154,34 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
 
     const { hostname, port, username, password, width, height, dpi, security, ignoreCert } = connectionConfig;
 
-    if (!hostname || !port) {
+    const normalizedHostname = typeof hostname === 'string' ? hostname.trim() : '';
+    const normalizedPort = Number(port);
+    const normalizedWidth = Number(width || 1024);
+    const normalizedHeight = Number(height || 768);
+    const normalizedDpi = Number(dpi || 96);
+
+    if (!normalizedHostname || normalizedHostname.length > 253 || /[\0\r\n]/.test(normalizedHostname)
+        || !Number.isInteger(normalizedPort) || normalizedPort < 1 || normalizedPort > 65535) {
         res.status(400).json({ error: '缺少必需的连接参数 (hostname, port)' });
+        return;
+    }
+    if (!Number.isInteger(normalizedWidth) || normalizedWidth < 200 || normalizedWidth > 8192
+        || !Number.isInteger(normalizedHeight) || normalizedHeight < 200 || normalizedHeight > 8192
+        || !Number.isInteger(normalizedDpi) || normalizedDpi < 48 || normalizedDpi > 480) {
+        res.status(400).json({ error: '无效的远程桌面尺寸或 DPI。' });
+        return;
+    }
+    if ((username !== undefined && (typeof username !== 'string' || username.length > 512))
+        || (password !== undefined && (typeof password !== 'string' || password.length > 8192))) {
+        res.status(400).json({ error: '无效的远程桌面凭据格式。' });
         return;
     }
 
     const settings: Record<string, string> = {
-        hostname: String(hostname),
-        port: String(port),
-        width: String(width || '1024'),
-        height: String(height || '768'),
+        hostname: normalizedHostname,
+        port: String(normalizedPort),
+        width: String(normalizedWidth),
+        height: String(normalizedHeight),
     };
 
     if (protocol === 'rdp') {
@@ -135,7 +191,12 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         }
         settings.username = String(username);
         settings.password = String(password);
-        settings.security = String(security || 'any'); // RDP 特有，使用默认值 'any'
+        const normalizedSecurity = String(security || 'any').toLowerCase();
+        if (!['any', 'nla', 'tls', 'rdp', 'vmconnect'].includes(normalizedSecurity)) {
+            res.status(400).json({ error: '无效的 RDP security 参数。' });
+            return;
+        }
+        settings.security = normalizedSecurity;
         settings['ignore-cert'] = String(ignoreCert ?? true); // RDP 特有
         settings.dpi = String(dpi || '96'); // RDP 特有
     } else if (protocol === 'vnc') {
@@ -168,8 +229,8 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
     }
 });
 
-apiServer.listen(REMOTE_GATEWAY_API_PORT, () => {
-    console.log(`[Remote Gateway] API 服务器正在监听端口 ${REMOTE_GATEWAY_API_PORT}`);
+apiServer.listen(REMOTE_GATEWAY_API_PORT, REMOTE_GATEWAY_API_HOST, () => {
+    console.log(`[Remote Gateway] API 服务器正在监听 ${REMOTE_GATEWAY_API_HOST}:${REMOTE_GATEWAY_API_PORT}`);
     console.log(`[Remote Gateway] Guacamole WebSocket 服务器应在端口 ${REMOTE_GATEWAY_WS_PORT} 上运行 (由 GuacamoleLite 管理)`);
 });
 

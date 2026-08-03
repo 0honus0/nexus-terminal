@@ -57,18 +57,9 @@ let hasDragged = false;
 const MIN_MODAL_WIDTH = 1024;
 const MIN_MODAL_HEIGHT = 768;
 
-// Dynamically construct WebSocket URL based on environment
-let backendBaseUrl: string;
-const LOCAL_BACKEND_URL = 'ws://localhost:3001'; // For RDP proxy via main backend
-
-// Determine WebSocket URL based on hostname for RDP
-if (window.location.hostname === 'localhost') {
-  backendBaseUrl = LOCAL_BACKEND_URL;
-} else {
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHostAndPort = window.location.host;
-  backendBaseUrl = `${wsProtocol}//${wsHostAndPort}/ws`; // Assuming RDP proxy is at /ws path
-}
+// 开发环境由 Vite、部署环境由 Nginx 统一代理 /ws，避免 localhost 部署时误连未暴露的后端端口。
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const backendBaseUrl = `${wsProtocol}//${window.location.host}/ws`;
 
 const handleConnection = async () => {
   if (!props.connection || !rdpDisplayRef.value) {

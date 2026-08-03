@@ -106,6 +106,14 @@ const initializeEnvironment = async () => {
         keysGenerated = true;
     }
 
+    if (!process.env.REMOTE_GATEWAY_SHARED_SECRET) {
+        console.log('[ENV Init] REMOTE_GATEWAY_SHARED_SECRET 未设置，正在生成...');
+        const newGatewaySecret = crypto.randomBytes(48).toString('hex');
+        process.env.REMOTE_GATEWAY_SHARED_SECRET = newGatewaySecret;
+        keysToAppend += `\nREMOTE_GATEWAY_SHARED_SECRET=${newGatewaySecret}`;
+        keysGenerated = true;
+    }
+
     // 4. 检查 GUACD_HOST 和 GUACD_PORT
     if (!process.env.GUACD_HOST) {
         console.warn('[ENV Init] GUACD_HOST 未设置，将使用默认值 "localhost"');
@@ -120,6 +128,7 @@ const initializeEnvironment = async () => {
     // 5. 如果生成了新密钥或添加了默认值，则追加到 .env 文件
     if (keysGenerated) {
         try {
+            fs.mkdirSync(path.dirname(dataEnvPath), { recursive: true, mode: 0o700 });
             // 确保追加前有换行符 (如果文件非空) - Use dataEnvPath here
             let prefix = '';
             if (fs.existsSync(dataEnvPath)) { // Use dataEnvPath
@@ -128,7 +137,8 @@ const initializeEnvironment = async () => {
                     prefix = '\n';
                 }
             }
-            fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim()); // Use dataEnvPath, trim() 移除开头的换行符
+            fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim(), { mode: 0o600 }); // Use dataEnvPath, trim() 移除开头的换行符
+            fs.chmodSync(dataEnvPath, 0o600);
             console.warn(`[ENV Init] 已自动生成密钥并保存到 ${dataEnvPath}`); // Use dataEnvPath
             console.warn('[ENV Init] !!! 重要：请务必备份此 data/.env 文件，并在生产环境中妥善保管 !!!');
         } catch (error) {
@@ -146,6 +156,10 @@ const initializeEnvironment = async () => {
         }
         if (!process.env.SESSION_SECRET) {
             console.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
+            process.exit(1);
+        }
+        if (!process.env.REMOTE_GATEWAY_SHARED_SECRET) {
+            console.error('错误：生产环境中 REMOTE_GATEWAY_SHARED_SECRET 最终未能设置！');
             process.exit(1);
         }
     }
@@ -170,13 +184,25 @@ const initializeEnvironment = async () => {
 // 基础 Express 应用设置
 const app = express();
 const server = http.createServer(app);
+server.requestTimeout = 30_000;
+server.headersTimeout = 15_000;
+server.keepAliveTimeout = 5_000;
+server.maxHeadersCount = 100;
 
-// --- 信任代理设置 ---
-app.set('trust proxy', true);
+// 仅信任本机和私有网络中的反向代理；可通过 TRUST_PROXY 显式覆盖。
+app.set('trust proxy', process.env.TRUST_PROXY || 'loopback, linklocal, uniquelocal');
+app.disable('x-powered-by');
 
 // --- 中间件 ---
 app.use(ipWhitelistMiddleware as RequestHandler);
-app.use(express.json());
+app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
+    next();
+});
+app.use(express.json({ limit: '1mb' }));
 
 // --- 静态文件服务 ---
 const uploadsPath = path.join(__dirname, '../uploads');
@@ -243,16 +269,19 @@ const startServer = () => {
     const sessionMiddleware = session({
         store: new FileStore({
             path: sessionsPath,
-            ttl: 31536000, // 1 year
+            ttl: 30 * 24 * 60 * 60,
             // logFn: console.log // 可选：启用详细日志
         }),
         // 直接从 process.env 读取，initializeEnvironment 已确保其存在
+        name: process.env.SESSION_COOKIE_NAME || 'nexus.sid',
         secret: process.env.SESSION_SECRET as string,
         resave: false,
         saveUninitialized: false,
         proxy: true, // 信任反向代理设置的 X-Forwarded-Proto 头
         cookie: {
             httpOnly: true,
+            sameSite: 'lax',
+            secure: 'auto',
         }
     });
     app.use(sessionMiddleware);

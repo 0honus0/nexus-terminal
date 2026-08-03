@@ -179,14 +179,14 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
       if (url.trim() === '') {
         settingsDto.remoteHtmlPresetsUrl = null; // 空字符串也视为空
       } else {
-        // 可选：添加更严格的 URL 格式验证
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-          // 暂时只做简单检查，允许非 GitHub URL，因为前端可能有其他用途
-          // throw new Error('无效的远程 HTML 主题仓库链接格式，应以 http:// 或 https:// 开头。');
-        }
         if (url.length > 1024) { // 限制 URL 长度
           throw new Error('远程 HTML 主题仓库链接过长，最多允许 1024 个字符。');
         }
+        const normalizedUrl = url.trim();
+        if (!parseGitHubRepoUrl(normalizedUrl)) {
+          throw new Error('无效的 GitHub 仓库链接。仅允许 HTTPS GitHub 仓库地址。');
+        }
+        settingsDto.remoteHtmlPresetsUrl = normalizedUrl;
       }
     } else {
       throw new Error('无效的远程 HTML 主题仓库链接类型，应为字符串或 null。');
@@ -534,12 +534,10 @@ export const getRemoteHtmlPresetsRepositoryUrl = async (): Promise<string | null
  */
 export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null): Promise<void> => {
     try {
-        // 验证 URL 格式 (可选, 但推荐)
         if (url && typeof url === 'string' && url.trim() !== '') {
-            // 简单的 URL 验证，可以根据需要增强
-             if (!url.startsWith('https://github.com/') && !url.startsWith('http://github.com/')) {
-                // 允许其他 git 仓库源？目前按计划仅 GitHub
-                // throw new Error('无效的 GitHub 仓库链接格式。应形如 https://github.com/user/repo/tree/branch/path');
+            url = url.trim();
+            if (!parseGitHubRepoUrl(url)) {
+                throw new Error('无效的 GitHub 仓库链接。仅允许 HTTPS GitHub 仓库地址。');
             }
         } else if (url === '') {
             // 如果是空字符串，则视为 null，表示清除
@@ -562,33 +560,32 @@ export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null): 
  * @param repoUrl 例如: https://github.com/user/repo/tree/main/path/to/themes
  * @returns { user: string, repo: string, path: string, ref: string } 或 null
  */
-const parseGitHubRepoUrl = (repoUrl: string): { user: string; repo: string; repoPath: string; ref: string } | null => {
-    // 改进的正则表达式以更好地处理不同的 GitHub URL 格式
-    const githubUrlRegex = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+)\/?(.*?)|\/?(.*))?$/;
-    const match = repoUrl.match(githubUrlRegex);
-
-    if (match) {
-        const user = match[1];
-        const repo = match[2];
-        let ref = match[3]; // 分支/tag 从 /tree/部分提取
-        let repoPath = match[4]; // 路径在 /tree/之后
-
-        if (ref === undefined && repoPath === undefined) {
-            // 处理 https://github.com/user/repo 这种形式, ref 和 path 从第五个捕获组获取
-             ref = 'HEAD'; // 默认为 HEAD (通常是默认分支)
-             repoPath = match[5] || ''; // 如果路径为空，则为空字符串
-        } else {
-            // 如果 /tree/ 部分存在
-            ref = ref || 'HEAD'; // 如果 ref 未定义（例如 URL 以 /tree/ 结尾），默认为 HEAD
-            repoPath = repoPath || ''; // 如果路径为空，则为空字符串
+function parseGitHubRepoUrl(repoUrl: string): { user: string; repo: string; repoPath: string; ref: string } | null {
+    try {
+        const parsedUrl = new URL(repoUrl);
+        if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'github.com' || parsedUrl.port || parsedUrl.username || parsedUrl.password) {
+            return null;
         }
-        // 移除路径末尾的斜杠
-        repoPath = repoPath.replace(/\/$/, '');
 
+        const segments = parsedUrl.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+        if (segments.length < 2) return null;
+
+        const user = segments[0];
+        const repo = segments[1].replace(/\.git$/i, '');
+        if (!/^[A-Za-z0-9_.-]+$/.test(user) || !/^[A-Za-z0-9_.-]+$/.test(repo)) return null;
+
+        if (segments.length === 2) {
+            return { user, repo, ref: 'HEAD', repoPath: '' };
+        }
+        if (segments[2] !== 'tree' || !segments[3]) return null;
+
+        const ref = segments[3];
+        const repoPath = segments.slice(4).join('/');
         return { user, repo, ref, repoPath };
+    } catch {
+        return null;
     }
-    return null;
-};
+}
 
 
 /**
@@ -613,12 +610,15 @@ export const listRemoteHtmlPresets = async (repoUrl?: string): Promise<Array<{ n
 
     const { user, repo, ref, repoPath } = parsed;
     // GitHub API 端点获取目录内容
-    const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${repoPath}?ref=${ref}`;
+    const encodedRepoPath = repoPath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    const apiUrl = `https://api.github.com/repos/${encodeURIComponent(user)}/${encodeURIComponent(repo)}/contents/${encodedRepoPath}?ref=${encodeURIComponent(ref)}`;
 
     try {
         console.log(`[AppearanceService] 正在从 GitHub API 获取远程主题列表: ${apiUrl}`);
         const response = await axios.get(apiUrl, {
-            headers: { 'Accept': 'application/vnd.github.v3+json' }
+            headers: { 'Accept': 'application/vnd.github.v3+json' },
+            timeout: 10000,
+            maxContentLength: 1024 * 1024,
             // 对于公共仓库，通常不需要 token
         });
 
@@ -653,15 +653,23 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
     if (!fileUrl || typeof fileUrl !== 'string') {
         throw new Error('无效的远程文件 URL。');
     }
-    // 基本的 URL 校验，确保它看起来像一个可下载的链接
-    if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
-        throw new Error('文件 URL 必须是有效的 HTTP/HTTPS 链接。');
+    let parsedUrl: URL;
+    try {
+        parsedUrl = new URL(fileUrl);
+    } catch {
+        throw new Error('文件 URL 格式无效。');
+    }
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'raw.githubusercontent.com' || parsedUrl.port || !parsedUrl.pathname.toLowerCase().endsWith('.html')) {
+        throw new Error('仅允许从 raw.githubusercontent.com 获取 HTTPS HTML 主题。');
     }
 
     try {
         console.log(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
         const response = await axios.get(fileUrl, {
             responseType: 'text', // 确保获取的是文本内容
+            timeout: 10000,
+            maxRedirects: 0,
+            maxContentLength: 1024 * 1024,
         });
 
         if (response.status === 200 && typeof response.data === 'string') {
@@ -676,5 +684,3 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
         throw new Error(`请求远程文件内容时出错: ${error.message}`);
     }
 };
-
-

@@ -24,7 +24,7 @@ export {
 export const initializeWebSocket = async (server: http.Server, sessionParser: RequestHandler): Promise<WebSocketServer> => {
     // Environment variables are expected to be loaded by index.ts
 
-    const wss = new WebSocketServer({ noServer: true });
+    const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
     // const db = await getDbInstance(); // db instance might not be directly needed here anymore if all DB interactions are in services/handlers
 
     // 1. Initialize Heartbeat
