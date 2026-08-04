@@ -1206,6 +1206,8 @@ watchEffect(() => {
 .terminal-inner-container {
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
+  padding: 4px 5px 3px;
   /* position: relative;  移除了 position relative */
   /* z-index 调整或移除，因为背景层不再在此组件内 */
 }

@@ -10,12 +10,14 @@ export interface StatusMonitorDependencies {
 
 export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMonitorDependencies) {
     const { sendMessage, onMessage, isConnected } = wsDeps;
-    const MAX_HISTORY_POINTS = 60;
+    const MAX_HISTORY_POINTS = 1800; // 最长保留约 30 分钟（1 秒采样时）
 
     const serverStatus = ref<ServerStatus | null>(null);
     const statusError = ref<string | null>(null);
     const cpuHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const memUsedHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
+    const swapPercentHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
+    const diskPercentHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const netRxHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const netTxHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
 
@@ -38,6 +40,8 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
         statusError.value = null;
         updateHistory(cpuHistory, status.cpuPercent);
         updateHistory(memUsedHistory, status.memUsed);
+        updateHistory(swapPercentHistory, status.swapPercent);
+        updateHistory(diskPercentHistory, status.diskPercent);
         updateHistory(netRxHistory, status.netRxRate);
         updateHistory(netTxHistory, status.netTxRate);
     };
@@ -102,6 +106,15 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
         if (consumerCount === 0) unsubscribe();
     };
 
+    const refreshInterval = () => {
+        if (consumerCount === 0 || !isConnected.value) return;
+        if (subscribed) {
+            sendMessage({ type: 'status:unsubscribe', sessionId, payload: {} });
+            subscribed = false;
+        }
+        subscribe();
+    };
+
     const stopConnectionWatch = watch(isConnected, connected => {
         if (connected) {
             subscribe();
@@ -122,10 +135,13 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
         statusError: readonly(statusError),
         cpuHistory: readonly(cpuHistory),
         memUsedHistory: readonly(memUsedHistory),
+        swapPercentHistory: readonly(swapPercentHistory),
+        diskPercentHistory: readonly(diskPercentHistory),
         netRxHistory: readonly(netRxHistory),
         netTxHistory: readonly(netTxHistory),
         activate,
         deactivate,
+        refreshInterval,
         registerStatusHandlers: activate,
         unregisterAllStatusHandlers: deactivate,
         cleanup,

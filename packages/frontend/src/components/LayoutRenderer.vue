@@ -21,6 +21,10 @@ import SuspendedSshSessionsView from '../views/SuspendedSshSessionsView.vue';
 
 
 // --- Props ---
+const emit = defineEmits<{
+  (event: 'pane-auto-resize', payload: { nodeId: string; collapsed: boolean; preferredHeight: number }): void;
+}>();
+
 const props = defineProps({
   layoutNode: {
     type: Object as PropType<LayoutNode>,
@@ -85,6 +89,7 @@ const rightSidebarPanelRef = ref<HTMLElement | null>(null); // +++ Ref for right
 const leftResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for left handle +++
 const rightResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for right handle +++
 const customHtmlLayerRef = ref<HTMLIFrameElement | null>(null);
+const splitpanesRef = ref<any>(null);
 
 // --- Component Mapping ---
 // 使用 defineAsyncComponent 优化加载，并映射 PaneName 到实际组件
@@ -351,6 +356,48 @@ const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string
   }
 };
 
+const handleStatusMonitorResize = (payload: { collapsed: boolean; preferredHeight: number }) => {
+  emit('pane-auto-resize', {
+    nodeId: props.layoutNode.id,
+    ...payload,
+  });
+};
+
+const handlePaneAutoResize = (payload: { nodeId: string; collapsed: boolean; preferredHeight: number }) => {
+  const children = props.layoutNode.type === 'container' ? props.layoutNode.children : undefined;
+  const targetIndex = children?.findIndex(child => child.id === payload.nodeId) ?? -1;
+
+  if (!children || targetIndex < 0 || props.layoutNode.direction !== 'vertical') {
+    emit('pane-auto-resize', payload);
+    return;
+  }
+
+  const splitpanesElement = (splitpanesRef.value?.$el ?? splitpanesRef.value) as HTMLElement | null;
+  const containerHeight = splitpanesElement?.getBoundingClientRect().height || window.innerHeight;
+  const siblingCount = Math.max(0, children.length - 1);
+  const minimumSiblingSize = 5;
+  const minimumTargetSize = payload.collapsed ? 12 : 16;
+  const maximumTargetSize = payload.collapsed ? 24 : 48;
+  const maximumAllowedSize = 100 - siblingCount * minimumSiblingSize;
+  const requestedSize = containerHeight > 0 ? payload.preferredHeight / containerHeight * 100 : minimumTargetSize;
+  const targetSize = Math.min(maximumAllowedSize, Math.max(minimumTargetSize, Math.min(maximumTargetSize, requestedSize)));
+
+  const currentSizes = children.map(child => child.size ?? 100 / children.length);
+  const otherWeight = currentSizes.reduce((sum, size, index) => index === targetIndex ? sum : sum + Math.max(0.1, size), 0);
+  const distributableSize = Math.max(0, 100 - targetSize - siblingCount * minimumSiblingSize);
+
+  const nextSizes = currentSizes.map((size, index) => {
+    if (index === targetIndex) return targetSize;
+    const weight = otherWeight > 0 ? Math.max(0.1, size) / otherWeight : 1 / Math.max(1, siblingCount);
+    return minimumSiblingSize + distributableSize * weight;
+  });
+
+  layoutStore.updateNodeSizes(
+    props.layoutNode.id,
+    nextSizes.map((size, index) => ({ index, size })),
+  );
+};
+
 // 打开/切换侧栏面板
 const toggleSidebarPane = (side: 'left' | 'right', paneName: PaneName) => {
   if (side === 'left') {
@@ -515,6 +562,7 @@ onBeforeUnmount(() => {
             <!-- Container Node -->
             <template v-if="layoutNode.type === 'container' && layoutNode.children && layoutNode.children.length > 0">
               <splitpanes
+                  ref="splitpanesRef"
                   :horizontal="layoutNode.direction === 'vertical'"
                   :class="['default-theme flex-grow', { 'layout-locked': props.layoutLocked }]"
                   @resized="handlePaneResize"
@@ -535,6 +583,7 @@ onBeforeUnmount(() => {
                         :editor-tabs="editorTabs"
                         :active-editor-tab-id="activeEditorTabId"
                         class="flex-grow overflow-auto"
+                        @pane-auto-resize="handlePaneAutoResize"
                     />
                   </pane>
               </splitpanes>
@@ -639,6 +688,7 @@ onBeforeUnmount(() => {
                           :is="currentMainComponent"
                           v-bind="componentProps"
                           class="flex-grow overflow-auto"
+                          @panel-resize-request="handleStatusMonitorResize"
                         />
                      </keep-alive>
                      <div v-else class="flex-grow flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4">
