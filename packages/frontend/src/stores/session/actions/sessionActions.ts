@@ -302,9 +302,9 @@ export const handleConnectRequest = (
       if (currentActiveSession && currentActiveSession.connectionId === connIdStr) {
         const currentStatus = currentActiveSession.wsManager.connectionStatus.value;
         console.log(`[SessionActions] 点击的是当前活动会话 ${activeSessionId.value}，状态: ${currentStatus}`);
-        if (currentStatus === 'disconnected' || currentStatus === 'error') {
+        if (currentStatus === 'disconnected' || currentStatus === 'error' || currentStatus === 'connecting') {
           activeAndDisconnected = true;
-          console.log(`[SessionActions] 活动会话 ${activeSessionId.value} 已断开或出错，尝试重连...`);
+          console.log(`[SessionActions] 活动会话 ${activeSessionId.value} 未连接，立即尝试重连...`);
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           const wsHostAndPort = window.location.host;
           const wsUrl = `${protocol}//${wsHostAndPort}/ws/`;

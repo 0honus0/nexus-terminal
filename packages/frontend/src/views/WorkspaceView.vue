@@ -340,23 +340,26 @@ onBeforeUnmount(() => {
      console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`);
      return;
    }
-   if (data === '\r' && manager.isSshConnected && !manager.isSshConnected.value) {
-     console.log(`[WorkspaceView] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
+   const wsStatus = session.wsManager.connectionStatus.value;
+   // 任意键应立即打断自动重连退避；connecting 也可能只是等待下一次尝试。
+   const shouldReconnect = data.length > 0 && wsStatus !== 'connected';
+   if (shouldReconnect) {
+     console.log(`[WorkspaceView] 检测到断开的会话 ${sessionId} 收到键盘输入，尝试重连...`);
      if (manager.terminalInstance?.value) {
-         manager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
+       manager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
      } else {
-         console.warn(`[WorkspaceView] 无法写入重连提示，terminalInstance 不可用。`);
+       console.warn(`[WorkspaceView] 无法写入重连提示，terminalInstance 不可用。`);
      }
-     // +++ 修复：传递 ConnectionInfo 而不是 ID +++
      const connectionInfo = connectionsStore.connections.find(c => c.id === Number(session.connectionId));
      if (connectionInfo) {
        sessionStore.handleConnectRequest(connectionInfo);
      } else {
        console.error(`[WorkspaceView] handleTerminalInput: 未找到 ID 为 ${session.connectionId} 的连接信息。`);
      }
-   } else {
-     manager.handleTerminalData(data);
+     return;
    }
+
+   manager.handleTerminalData(data);
  };
 
  // 处理终端大小调整 (用于 Terminal)

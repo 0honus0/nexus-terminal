@@ -3,46 +3,112 @@
     <h2 class="text-lg font-semibold text-foreground px-6 py-4 border-b border-border bg-header/50">
       {{ t('settings.category.dataManagement', '数据管理') }}
     </h2>
-    <div class="p-6 space-y-6">
-      <!-- Export Connections Section -->
-      <div class="settings-section-content">
-         <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.exportConnections.title', '导出连接数据') }}</h3>
-         <p class="text-sm text-text-secondary mb-4">
-           <span class="font-semibold text-warning">{{ t('settings.exportConnections.decryptKeyInfo', '解压密码为您的 data/.env 文件中的 ENCRYPTION_KEY。请妥善保管此文件。') }}</span>
-         </p>
-         <form @submit.prevent="handleExportConnections" class="space-y-4">
-           <div class="flex items-center justify-between">
-              <button type="submit" :disabled="exportConnectionsLoading"
-                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium inline-flex items-center">
-                <svg v-if="exportConnectionsLoading" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ exportConnectionsLoading ? t('common.loading') : t('settings.exportConnections.buttonText', '开始导出') }}
-              </button>
-              <p v-if="exportConnectionsMessage" :class="['text-sm', exportConnectionsSuccess ? 'text-success' : 'text-error']">{{ exportConnectionsMessage }}</p>
-           </div>
-         </form>
-      </div>
+
+    <div class="p-6 space-y-8">
+      <section class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-2">完整备份</h3>
+        <p class="text-sm text-text-secondary mb-4">
+          导出连接、代理、SSH 密钥、标签、快捷指令、主题、外观与工作区设置、背景文件及自定义 HTML 主题。
+          账户、Passkey、审计日志和 IP 封禁记录不会写入备份。
+        </p>
+        <form class="space-y-3" @submit.prevent="handleExportBackup">
+          <label class="block max-w-md">
+            <span class="block text-sm font-medium text-foreground mb-1">当前登录密码</span>
+            <input
+              v-model="exportPassword"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="用于验证身份并加密备份包"
+            >
+          </label>
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              :disabled="exportLoading || !exportPassword"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium inline-flex items-center"
+            >
+              <i v-if="exportLoading" class="fas fa-spinner fa-spin mr-2"></i>
+              <i v-else class="fas fa-download mr-2"></i>
+              {{ exportLoading ? t('common.loading') : '导出完整备份' }}
+            </button>
+            <p v-if="exportMessage" :class="['text-sm', exportSuccess ? 'text-success' : 'text-error']">
+              {{ exportMessage }}
+            </p>
+          </div>
+        </form>
+      </section>
+
+      <section class="settings-section-content border-t border-border pt-6">
+        <h3 class="text-base font-semibold text-foreground mb-2">导入备份</h3>
+        <p class="text-sm text-text-secondary mb-4">
+          同一实例导出的备份可在登录后直接导入；来自其他实例的备份需要输入导出时使用的登录密码。
+          导入会替换当前实例中的业务数据和自定义主题文件。
+        </p>
+        <form class="space-y-3" @submit.prevent="handleImportBackup">
+          <label class="block max-w-xl">
+            <span class="block text-sm font-medium text-foreground mb-1">备份文件</span>
+            <input
+              type="file"
+              accept=".nexus-backup,application/octet-stream"
+              required
+              class="block w-full text-sm text-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-button file:text-button-text hover:file:bg-button-hover"
+              @change="handleBackupFileChange"
+            >
+          </label>
+          <label class="block max-w-md">
+            <span class="block text-sm font-medium text-foreground mb-1">备份密码（跨实例时填写）</span>
+            <input
+              v-model="importPassword"
+              type="password"
+              autocomplete="off"
+              class="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="同一实例导入可留空"
+            >
+          </label>
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              :disabled="importLoading || !selectedBackupFile"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium inline-flex items-center"
+            >
+              <i v-if="importLoading" class="fas fa-spinner fa-spin mr-2"></i>
+              <i v-else class="fas fa-upload mr-2"></i>
+              {{ importLoading ? t('common.loading') : '导入完整备份' }}
+            </button>
+            <p v-if="importMessage" :class="['text-sm', importSuccess ? 'text-success' : 'text-error']">
+              {{ importMessage }}
+            </p>
+          </div>
+        </form>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useSettingsStore } from '../../stores/settings.store';
-import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
-import { useExportConnections } from '../../composables/settings/useExportConnections';
+import { useI18n } from 'vue-i18n';
+import { useSettingsStore } from '../../stores/settings.store';
+import { useDataBackup } from '../../composables/settings/useDataBackup';
 
 const settingsStore = useSettingsStore();
 const { settings } = storeToRefs(settingsStore);
 const { t } = useI18n();
 
 const {
-  exportConnectionsLoading,
-  exportConnectionsMessage,
-  exportConnectionsSuccess,
-  handleExportConnections,
-} = useExportConnections();
+  exportPassword,
+  exportLoading,
+  exportMessage,
+  exportSuccess,
+  importPassword,
+  selectedBackupFile,
+  importLoading,
+  importMessage,
+  importSuccess,
+  handleExportBackup,
+  handleBackupFileChange,
+  handleImportBackup,
+} = useDataBackup();
 </script>
-

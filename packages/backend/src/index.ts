@@ -261,8 +261,9 @@ const initializeDatabase = async () => {
 const startServer = () => {
     // --- 会话中间件配置 ---
     const FileStore = sessionFileStore(session);
-    // 修改路径以匹配 Docker volume 挂载点 /app/data
-    const sessionsPath = path.join('/app/data', 'sessions');
+    // dist/index.js 在容器中位于 /app/dist，本地位于 packages/backend/dist。
+    // 使用相对运行目录可同时解析到 /app/data 和 packages/backend/data。
+    const sessionsPath = path.resolve(__dirname, '../data/sessions');
     if (!fs.existsSync(sessionsPath)) {
         fs.mkdirSync(sessionsPath, { recursive: true });
     }

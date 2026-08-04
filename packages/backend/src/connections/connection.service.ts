@@ -79,7 +79,13 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
     // +++ Define a local type alias for clarity, including ssh_key_id +++
     type ConnectionDataForRepo = Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'> & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
 
-    console.log('[Service:createConnection] Received input:', JSON.stringify(input, null, 2)); // Log input
+    const safeInputForLog = {
+        ...input,
+        password: input.password ? '[REDACTED]' : input.password,
+        private_key: input.private_key ? '[REDACTED]' : input.private_key,
+        passphrase: input.passphrase ? '[REDACTED]' : input.passphrase,
+    };
+    console.log('[Service:createConnection] Received input:', JSON.stringify(safeInputForLog, null, 2));
 
     // 0. 处理和验证 jump_chain
     const processedJumpChain = await _validateAndProcessJumpChain(input.jump_chain, input.proxy_id);

@@ -1,8 +1,13 @@
 import express from 'express';
 import { settingsController } from './settings.controller';
 import { isAuthenticated } from '../auth/auth.middleware';
+import multer from 'multer';
 
 const router = express.Router();
+const backupUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 512 * 1024 * 1024 },
+});
 
 
 // GET /api/v1/settings/captcha - 获取公共 CAPTCHA 配置 (不含密钥)
@@ -73,6 +78,10 @@ router.put('/show-quick-command-tags', settingsController.setShowQuickCommandTag
 // +++ 导出所有连接路由 +++
 // GET /api/v1/settings/export-connections - 导出所有连接为加密的 ZIP 文件
 router.get('/export-connections', settingsController.exportAllConnections);
+
+// 完整备份：导出时验证当前密码；导入时同实例自动解密，跨实例使用导出密码。
+router.post('/backup/export', settingsController.exportFullBackup);
+router.post('/backup/import', backupUpload.single('backupFile'), settingsController.importFullBackup);
  
 // +++ 显示状态监视器IP地址路由 +++
 // GET /api/v1/settings/show-status-monitor-ip-address - 获取设置

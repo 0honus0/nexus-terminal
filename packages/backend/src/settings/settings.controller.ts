@@ -3,7 +3,15 @@ import { settingsService } from './settings.service';
 import { AuditLogService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service'; 
 import { ipBlacklistService } from '../auth/ip-blacklist.service';
-import { exportConnectionsAsEncryptedZip } from '../services/import-export.service'; 
+import { exportConnectionsAsEncryptedZip } from '../services/import-export.service';
+import bcrypt from 'bcrypt';
+import { getDb, getDbInstance } from '../database/connection';
+import {
+  BackupPasswordRequiredError,
+  InvalidBackupPasswordError,
+  createFullBackup,
+  importFullBackup,
+} from '../services/full-backup.service';
 import { UpdateSidebarConfigDto, UpdateCaptchaSettingsDto, CaptchaSettings } from '../types/settings.types'; 
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { getAppearanceSettings, updateAppearanceSettings as updateAppearanceSettingsInRepo } from '../appearance/appearance.repository';
@@ -575,19 +583,75 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
      res.setHeader('Content-Type', 'application/zip');
      res.setHeader('Content-Disposition', 'attachment; filename="nexus_connections_export.zip"');
      res.send(encryptedZipBuffer);
-     
-     // auditLogService.logAction('CONNECTIONS_EXPORTED', { userId: (req.user as any)?.id || 'unknown' }); // 移除审计日志
-     
-
    } catch (error: any) {
      console.error('[控制器] 导出所有连接时出错:', error);
-     // 检查是否是因为 ENCRYPTION_KEY 未设置导致的错误
      if (error.message && (error.message.includes('ENCRYPTION_KEY is not set') || error.message.includes('Failed to decode ENCRYPTION_KEY') || error.message.includes('Invalid ENCRYPTION_KEY length'))) {
          res.status(500).json({ message: i18next.t('error.exportFailedEncryptionKey'), error: error.message });
      } else {
          res.status(500).json({ message: i18next.t('error.exportFailedGeneric'), error: error.message });
      }
    }
- } // <-- No comma after the last method if it's truly the last one
+ },
+
+ /**
+  * 导出完整、可迁移的加密备份。当前登录密码只用于验证身份和加密备份包。
+  */
+ async exportFullBackup(req: Request, res: Response): Promise<void> {
+   try {
+     const userId = req.session.userId;
+     const password = typeof req.body?.password === 'string' ? req.body.password : '';
+     if (!userId || !password) {
+       res.status(400).json({ message: '请输入当前登录密码后再导出备份。' });
+       return;
+     }
+
+     const db = await getDbInstance();
+     const user = await getDb<{ hashed_password: string }>(db, 'SELECT hashed_password FROM users WHERE id = ?', [userId]);
+     if (!user || !await bcrypt.compare(password, user.hashed_password)) {
+       res.status(400).json({ message: '当前登录密码不正确。' });
+       return;
+     }
+
+     const backup = await createFullBackup(password);
+     const dateStamp = new Date().toISOString().replace(/[:.]/g, '-');
+     res.setHeader('Content-Type', 'application/octet-stream');
+     res.setHeader('Content-Disposition', `attachment; filename="nexus-terminal-backup-${dateStamp}.nexus-backup"`);
+     res.send(backup);
+   } catch (error: any) {
+     console.error('[控制器] 导出完整备份时出错:', error);
+     res.status(500).json({ message: '导出完整备份失败。', error: error.message });
+   }
+ },
+
+ /**
+  * 导入完整备份。同一实例可直接解密；跨实例时使用导出时的登录密码解密。
+  */
+ async importFullBackup(req: Request, res: Response): Promise<void> {
+   try {
+     if (!req.file?.buffer) {
+       res.status(400).json({ message: '请选择 Nexus Terminal 备份文件。' });
+       return;
+     }
+     const password = typeof req.body?.password === 'string' && req.body.password.length > 0
+       ? req.body.password
+       : undefined;
+     const result = await importFullBackup(req.file.buffer, password);
+     res.status(200).json({
+       message: '备份导入成功。',
+       ...result,
+     });
+   } catch (error: any) {
+     console.error('[控制器] 导入完整备份时出错:', error);
+     if (error instanceof BackupPasswordRequiredError || error?.code === 'BACKUP_PASSWORD_REQUIRED') {
+       res.status(400).json({ code: 'BACKUP_PASSWORD_REQUIRED', message: error.message });
+       return;
+     }
+     if (error instanceof InvalidBackupPasswordError || error?.code === 'INVALID_BACKUP_PASSWORD') {
+       res.status(400).json({ code: 'INVALID_BACKUP_PASSWORD', message: error.message });
+       return;
+     }
+     res.status(400).json({ message: error.message || '导入完整备份失败。' });
+   }
+ }
 
 };
