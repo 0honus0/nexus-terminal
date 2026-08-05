@@ -1,4 +1,4 @@
-import { reactive, onUnmounted, type Ref, watchEffect } from 'vue';
+import { reactive, onUnmounted, type Ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../types/sftp.types'; 
 import type { UploadItem } from '../types/upload.types'; 
@@ -10,8 +10,9 @@ import type { WebSocketDependencies } from './useSftpActions';
 
 // Keep a bounded pipeline so network latency does not leave the SFTP write stream idle.
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
-const UPLOAD_CHUNK_SIZE = 1024 * 1024;
-const UPLOAD_MAX_IN_FLIGHT = 4;
+const UPLOAD_CHUNK_SIZE = 512 * 1024;
+const UPLOAD_MAX_IN_FLIGHT = 2;
+const UPLOAD_RECONNECT_RESTART_DELAY_MS = 750;
 const UPLOAD_FRAME_MAGIC = [0x4e, 0x58, 0x55, 0x50] as const; // NXUP
 const UPLOAD_FRAME_VERSION = 1;
 const UPLOAD_FRAME_FIXED_HEADER_SIZE = 12;
@@ -19,10 +20,13 @@ const MAX_UPLOAD_ID_BYTES = 512;
 
 interface UploadTransferState {
     file: File;
+    remotePath: string;
+    relativePath?: string;
     offset: number;
     nextChunkIndex: number;
     inFlight: number;
     pumping: boolean;
+    startRequestSent: boolean;
 }
 
 const textEncoder = new TextEncoder();
@@ -78,6 +82,40 @@ export function useFileUploader(
     const uploadTransferStates = new Map<string, UploadTransferState>();
 
     // --- 上传逻辑 ---
+    let reconnectRestartTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const resetTransferForRestart = (transfer: UploadTransferState) => {
+        transfer.offset = 0;
+        transfer.nextChunkIndex = 0;
+        transfer.inFlight = 0;
+        transfer.pumping = false;
+        transfer.startRequestSent = false;
+    };
+
+    const requestUploadStart = (uploadId: string, restart = false) => {
+        const transfer = uploadTransferStates.get(uploadId);
+        const upload = uploads[uploadId];
+        if (!transfer || !upload || upload.status === 'cancelled' || upload.status === 'success') return;
+        if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value || transfer.startRequestSent) return;
+
+        if (restart) {
+            resetTransferForRestart(transfer);
+            upload.progress = 0;
+        }
+        transfer.startRequestSent = true;
+        upload.status = 'pending';
+        upload.error = undefined;
+        console.log(`[FileUploader ${sessionIdForLog.value}] Starting upload ${uploadId} to ${transfer.remotePath}${restart ? ' after reconnect' : ''}`);
+        wsDeps.value.sendMessage({
+            type: 'sftp:upload:start',
+            payload: {
+                uploadId,
+                remotePath: transfer.remotePath,
+                size: transfer.file.size,
+                relativePath: transfer.relativePath,
+            },
+        });
+    };
 
     const pumpUpload = async (uploadId: string): Promise<void> => {
         const transfer = uploadTransferStates.get(uploadId);
@@ -87,11 +125,11 @@ export function useFileUploader(
         transfer.pumping = true;
         try {
             if (transfer.file.size === 0 && transfer.offset === 0 && transfer.inFlight === 0) {
-                transfer.inFlight = 1;
-                transfer.offset = 1;
-                wsDeps.value.sendBinaryMessage(
+                await wsDeps.value.sendBinaryMessage(
                     encodeUploadChunkFrame(uploadId, 0, true, new ArrayBuffer(0)),
                 );
+                transfer.inFlight = 1;
+                transfer.offset = 1;
                 return;
             }
 
@@ -105,49 +143,46 @@ export function useFileUploader(
                 const chunk = await slice.arrayBuffer();
                 if (!wsDeps.value.isConnected.value || uploads[uploadId]?.status !== 'uploading') return;
 
-                transfer.offset += slice.size;
-                const chunkIndex = transfer.nextChunkIndex++;
-                const isLast = transfer.offset >= transfer.file.size;
-                transfer.inFlight += 1;
-                wsDeps.value.sendBinaryMessage(
+                const chunkIndex = transfer.nextChunkIndex;
+                const nextOffset = transfer.offset + slice.size;
+                const isLast = nextOffset >= transfer.file.size;
+                await wsDeps.value.sendBinaryMessage(
                     encodeUploadChunkFrame(uploadId, chunkIndex, isLast, chunk),
                 );
+                transfer.offset = nextOffset;
+                transfer.nextChunkIndex += 1;
+                transfer.inFlight += 1;
             }
         } catch (error) {
-            console.error(`[FileUploader ${sessionIdForLog.value}] Failed to read upload chunk for ${uploadId}:`, error);
             const failedUpload = uploads[uploadId];
-            if (failedUpload) {
-                failedUpload.status = 'error';
-                failedUpload.error = t('fileManager.errors.readFileError');
+            if (!failedUpload) return;
+
+            if (!wsDeps.value.isConnected.value) {
+                console.warn(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused because the WebSocket disconnected.`);
+                failedUpload.status = 'paused';
+                resetTransferForRestart(transfer);
+                return;
             }
+
+            console.error(`[FileUploader ${sessionIdForLog.value}] Failed to send upload chunk for ${uploadId}:`, error);
+            failedUpload.status = 'error';
+            failedUpload.error = error instanceof Error && error.message
+                ? error.message
+                : t('fileManager.errors.readFileError');
             uploadTransferStates.delete(uploadId);
-            if (wsDeps.value.isConnected.value) {
-                wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
-            }
+            wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
         } finally {
             const current = uploadTransferStates.get(uploadId);
             if (current) {
                 current.pumping = false;
                 if (
-                    uploads[uploadId]?.status === 'uploading'
+                    wsDeps.value.isConnected.value
+                    && uploads[uploadId]?.status === 'uploading'
                     && current.inFlight < UPLOAD_MAX_IN_FLIGHT
                     && current.offset < current.file.size
                 ) queueMicrotask(() => void pumpUpload(uploadId));
             }
         }
-    };
-
-    const sendFileChunks = (uploadId: string, file: File, startByte = 0) => {
-        if (!uploadTransferStates.has(uploadId)) {
-            uploadTransferStates.set(uploadId, {
-                file,
-                offset: startByte,
-                nextChunkIndex: Math.floor(startByte / UPLOAD_CHUNK_SIZE),
-                inFlight: 0,
-                pumping: false,
-            });
-        }
-        void pumpUpload(uploadId);
     };
 
     const startFileUpload = (file: File, relativePath?: string) => {
@@ -193,12 +228,18 @@ export function useFileUploader(
             status: 'pending' // 初始状态
         };
 
-        console.log(`[FileUploader ${sessionIdForLog.value}] Starting upload ${uploadId} to ${finalRemotePath}`);
-        wsDeps.value.sendMessage({ 
-            type: 'sftp:upload:start',
-            payload: { uploadId, remotePath: finalRemotePath, size: file.size, relativePath: relativePath || undefined }
+        uploadTransferStates.set(uploadId, {
+            file,
+            remotePath: finalRemotePath,
+            relativePath: relativePath || undefined,
+            offset: 0,
+            nextChunkIndex: 0,
+            inFlight: 0,
+            pumping: false,
+            startRequestSent: false,
         });
-        // 后端应该响应 sftp:upload:ready
+        requestUploadStart(uploadId);
+        // 后端应该响应 sftp:upload:ready；若 SFTP 尚未就绪，会在就绪后自动开始。
     };
 
     const cancelUpload = (uploadId: string, notifyBackend = true) => {
@@ -235,10 +276,11 @@ export function useFileUploader(
         if (!uploadId) return;
 
         const upload = uploads[uploadId];
-        if (upload && upload.status === 'pending') {
+        const transfer = uploadTransferStates.get(uploadId);
+        if (upload && transfer && upload.status === 'pending') {
             console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} ready, starting chunk sending.`);
             upload.status = 'uploading';
-            sendFileChunks(uploadId, upload.file); // 开始发送块
+            void pumpUpload(uploadId);
         } else {
              console.warn(`[FileUploader ${sessionIdForLog.value}] Received upload:ready for unknown or non-pending upload ID: ${uploadId}`);
         }
@@ -367,6 +409,43 @@ export function useFileUploader(
         transfer.inFlight = Math.max(0, transfer.inFlight - 1);
         if (uploads[uploadId]?.status === 'uploading') void pumpUpload(uploadId);
     };
+
+    // A reconnect invalidates all in-flight ACKs and the backend's temporary stream.
+    // Pause without spinning, then restart the affected files from byte 0 once both SSH
+    // and SFTP are ready again. The original File object remains available in memory.
+    watch(
+        () => [wsDeps.value.isConnected.value, wsDeps.value.isSftpReady.value] as const,
+        ([connected, sftpReady]) => {
+            if (!connected || !sftpReady) {
+                if (reconnectRestartTimer) {
+                    clearTimeout(reconnectRestartTimer);
+                    reconnectRestartTimer = null;
+                }
+                uploadTransferStates.forEach((transfer, uploadId) => {
+                    const upload = uploads[uploadId];
+                    if (!upload || !['pending', 'uploading', 'paused'].includes(upload.status)) return;
+                    upload.status = 'paused';
+                    resetTransferForRestart(transfer);
+                });
+                return;
+            }
+
+            if (reconnectRestartTimer) clearTimeout(reconnectRestartTimer);
+            reconnectRestartTimer = setTimeout(() => {
+                reconnectRestartTimer = null;
+                uploadTransferStates.forEach((transfer, uploadId) => {
+                    const upload = uploads[uploadId];
+                    if (!upload) return;
+                    if (upload.status === 'paused') {
+                        requestUploadStart(uploadId, true);
+                    } else if (upload.status === 'pending' && !transfer.startRequestSent) {
+                        requestUploadStart(uploadId, false);
+                    }
+                });
+            }, UPLOAD_RECONNECT_RESTART_DELAY_MS);
+        },
+        { immediate: true },
+    );
     
 
     // --- 动态注册和注销处理器 ---
@@ -402,6 +481,11 @@ export function useFileUploader(
     onUnmounted(() => {
         // 注意：消息监听器的注销现在主要由 watchEffect 的 onCleanup 处理。
         // onUnmounted 仍然负责取消正在进行的上传。
+
+        if (reconnectRestartTimer) {
+            clearTimeout(reconnectRestartTimer);
+            reconnectRestartTimer = null;
+        }
 
         // 当使用此 composable 的组件卸载时，取消任何正在进行的上传
         Object.keys(uploads).forEach(uploadId => {

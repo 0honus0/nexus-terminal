@@ -135,53 +135,103 @@
             <span class="rate-up"><i></i>上传</span>
           </div>
 
-          <svg class="history-chart" viewBox="0 0 248 126" preserveAspectRatio="none" role="img" :aria-label="`${selectedMetricTitle}图表`">
-            <defs>
-              <linearGradient id="historyAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="var(--history-accent)" stop-opacity=".34" />
-                <stop offset="1" stop-color="var(--history-accent)" stop-opacity="0" />
-              </linearGradient>
-            </defs>
+          <div
+            class="history-chart-wrap"
+            @pointermove="handleHistoryPointerMove"
+            @pointerleave="clearHistoryHover"
+          >
+            <svg class="history-chart" viewBox="0 0 248 126" preserveAspectRatio="none" role="img" :aria-label="`${selectedMetricTitle}图表`">
+              <defs>
+                <linearGradient id="historyAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="var(--history-accent)" stop-opacity=".34" />
+                  <stop offset="1" stop-color="var(--history-accent)" stop-opacity="0" />
+                </linearGradient>
+              </defs>
 
-            <g class="chart-grid">
-              <line x1="34" y1="10" x2="240" y2="10" />
-              <line x1="34" y1="52" x2="240" y2="52" />
-              <line x1="34" y1="94" x2="240" y2="94" />
-              <line x1="34" y1="10" x2="34" y2="94" />
-              <line x1="137" y1="10" x2="137" y2="94" />
-              <line x1="240" y1="10" x2="240" y2="94" />
-            </g>
+              <g class="chart-grid">
+                <line x1="12" y1="10" x2="240" y2="10" />
+                <line x1="12" y1="52" x2="240" y2="52" />
+                <line x1="12" y1="94" x2="240" y2="94" />
+                <line x1="12" y1="10" x2="12" y2="94" />
+                <line x1="126" y1="10" x2="126" y2="94" />
+                <line x1="240" y1="10" x2="240" y2="94" />
+              </g>
 
-            <g class="axis-labels">
-              <text x="28" y="13" text-anchor="end">{{ yAxisLabels[0] }}</text>
-              <text x="28" y="55" text-anchor="end">{{ yAxisLabels[1] }}</text>
-              <text x="28" y="97" text-anchor="end">{{ yAxisLabels[2] }}</text>
-              <text x="34" y="116" text-anchor="middle">-{{ historyRange }}m</text>
-              <text x="137" y="116" text-anchor="middle">-{{ historyRange / 2 }}m</text>
-              <text x="240" y="116" text-anchor="end">当前</text>
-            </g>
+              <g class="axis-labels">
+                <text class="axis-y-label" x="18" y="13" text-anchor="start">{{ yAxisLabels[0] }}</text>
+                <text class="axis-y-label" x="18" y="55" text-anchor="start">{{ yAxisLabels[1] }}</text>
+                <text class="axis-y-label" x="18" y="97" text-anchor="start">{{ yAxisLabels[2] }}</text>
+                <text class="axis-x-label axis-x-start" x="12" y="116" text-anchor="start">-{{ historyRange }}m</text>
+                <text class="axis-x-label axis-x-middle" x="126" y="116" text-anchor="middle">-{{ historyRange / 2 }}m</text>
+                <text class="axis-x-label axis-x-end" x="240" y="116" text-anchor="end">当前</text>
+              </g>
 
-            <path
-              v-if="selectedMetric !== 'network'"
-              class="history-area"
-              :d="singleAreaPath"
-            />
-            <polyline
-              v-if="selectedMetric !== 'network'"
-              class="history-line"
-              :points="singleLinePoints"
-            />
-            <polyline
-              v-if="selectedMetric === 'network'"
-              class="history-line network-download-line"
-              :points="networkDownloadPoints"
-            />
-            <polyline
-              v-if="selectedMetric === 'network'"
-              class="history-line network-upload-line"
-              :points="networkUploadPoints"
-            />
-          </svg>
+              <path
+                v-if="selectedMetric !== 'network'"
+                class="history-area"
+                :d="singleAreaPath"
+              />
+              <polyline
+                v-if="selectedMetric !== 'network'"
+                class="history-line"
+                :points="singleLinePoints"
+              />
+              <polyline
+                v-if="selectedMetric === 'network'"
+                class="history-line network-download-line"
+                :points="networkDownloadPoints"
+              />
+              <polyline
+                v-if="selectedMetric === 'network'"
+                class="history-line network-upload-line"
+                :points="networkUploadPoints"
+              />
+
+              <g v-if="historyHoverData" class="history-hover-marker" aria-hidden="true">
+                <line :x1="historyHoverData.x" y1="10" :x2="historyHoverData.x" y2="94" />
+                <circle
+                  v-if="selectedMetric !== 'network'"
+                  :cx="historyHoverData.x"
+                  :cy="historyHoverData.primaryY"
+                  r="3.2"
+                />
+                <circle
+                  v-if="selectedMetric === 'network'"
+                  class="history-hover-download"
+                  :cx="historyHoverData.x"
+                  :cy="historyHoverData.downloadY"
+                  r="3.2"
+                />
+                <circle
+                  v-if="selectedMetric === 'network'"
+                  class="history-hover-upload"
+                  :cx="historyHoverData.x"
+                  :cy="historyHoverData.uploadY"
+                  r="3.2"
+                />
+              </g>
+            </svg>
+
+            <div
+              v-if="historyHoverData"
+              class="history-tooltip"
+              :style="{ '--history-hover-left': `${historyHoverData.leftPercent}%` }"
+              aria-hidden="true"
+            >
+              <strong>{{ historyHoverData.timeLabel }}</strong>
+              <template v-if="selectedMetric === 'network'">
+                <span class="history-tooltip-row rate-down">
+                  <i></i><span>下载</span><b>{{ formatBytesPerSecond(historyHoverData.downloadValue) }}</b>
+                </span>
+                <span class="history-tooltip-row rate-up">
+                  <i></i><span>上传</span><b>{{ formatBytesPerSecond(historyHoverData.uploadValue) }}</b>
+                </span>
+              </template>
+              <span v-else class="history-tooltip-row">
+                <i></i><span>{{ selectedMetricLabel }}</span><b>{{ formatHistoryPercentage(historyHoverData.primaryValue) }}</b>
+              </span>
+            </div>
+          </div>
         </section>
       </div>
     </section>
@@ -375,6 +425,13 @@ const selectedMetricTitle = computed(() => ({
   disk: '磁盘趋势',
   network: '网络趋势',
 }[selectedMetric.value || 'cpu']));
+const selectedMetricLabel = computed(() => ({
+  cpu: 'CPU',
+  memory: '内存',
+  swap: 'Swap',
+  disk: '磁盘',
+  network: '网络',
+}[selectedMetric.value || 'cpu']));
 const selectedMetricColor = computed(() => ({
   cpu: '#42a5ff', memory: '#36d982', swap: '#a66cff', disk: '#ff814a', network: '#36d982',
 }[selectedMetric.value || 'cpu']));
@@ -413,6 +470,19 @@ const downsample = (values: number[], maxPoints = 110) => {
   });
 };
 
+const HISTORY_VIEWBOX_WIDTH = 248;
+const HISTORY_PLOT_LEFT = 12;
+const HISTORY_PLOT_RIGHT = 240;
+const HISTORY_PLOT_TOP = 10;
+const HISTORY_PLOT_BOTTOM = 94;
+const HISTORY_PLOT_WIDTH = HISTORY_PLOT_RIGHT - HISTORY_PLOT_LEFT;
+const HISTORY_PLOT_HEIGHT = HISTORY_PLOT_BOTTOM - HISTORY_PLOT_TOP;
+
+const sampledPercentHistory = computed(() => downsample(percentHistory.value));
+const sampledNetworkRxHistory = computed(() => downsample(networkRxHistory.value));
+const sampledNetworkTxHistory = computed(() => downsample(networkTxHistory.value));
+const historyHoverRatio = ref<number | null>(null);
+
 const networkHistoryMax = computed(() => Math.max(
   ...networkRxHistory.value,
   ...networkTxHistory.value,
@@ -422,23 +492,97 @@ const networkHistoryMax = computed(() => Math.max(
 ));
 
 const pointString = (values: number[], maxValue: number) => {
-  const sampled = downsample(values);
-  const width = 206;
-  const left = 34;
-  const top = 10;
-  const height = 84;
-  if (!sampled.length) return `${left},${top + height}`;
-  return sampled.map((value, index) => {
-    const x = left + (sampled.length === 1 ? width : index / (sampled.length - 1) * width);
-    const y = top + height - Math.min(1, Math.max(0, value / Math.max(1, maxValue))) * height;
+  if (!values.length) return `${HISTORY_PLOT_LEFT},${HISTORY_PLOT_BOTTOM}`;
+  return values.map((value, index) => {
+    const x = HISTORY_PLOT_LEFT + (values.length === 1 ? HISTORY_PLOT_WIDTH : index / (values.length - 1) * HISTORY_PLOT_WIDTH);
+    const y = HISTORY_PLOT_BOTTOM - Math.min(1, Math.max(0, value / Math.max(1, maxValue))) * HISTORY_PLOT_HEIGHT;
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(' ');
 };
 
-const singleLinePoints = computed(() => pointString(percentHistory.value, 100));
-const singleAreaPath = computed(() => `M34,94 L${singleLinePoints.value.replaceAll(' ', ' L')} L240,94 Z`);
-const networkDownloadPoints = computed(() => pointString(networkRxHistory.value, networkHistoryMax.value));
-const networkUploadPoints = computed(() => pointString(networkTxHistory.value, networkHistoryMax.value));
+const singleLinePoints = computed(() => pointString(sampledPercentHistory.value, 100));
+const singleAreaPath = computed(() => `M${HISTORY_PLOT_LEFT},${HISTORY_PLOT_BOTTOM} L${singleLinePoints.value.replaceAll(' ', ' L')} L${HISTORY_PLOT_RIGHT},${HISTORY_PLOT_BOTTOM} Z`);
+const networkDownloadPoints = computed(() => pointString(sampledNetworkRxHistory.value, networkHistoryMax.value));
+const networkUploadPoints = computed(() => pointString(sampledNetworkTxHistory.value, networkHistoryMax.value));
+
+const valueAtRatio = (values: number[], ratio: number) => {
+  if (!values.length) return 0;
+  if (values.length === 1) return values[0];
+  return values[Math.round(Math.max(0, Math.min(1, ratio)) * (values.length - 1))] ?? 0;
+};
+
+const historyValueY = (value: number, maxValue: number) => (
+  HISTORY_PLOT_BOTTOM
+  - Math.min(1, Math.max(0, value / Math.max(1, maxValue))) * HISTORY_PLOT_HEIGHT
+);
+
+const formatHistoryPercentage = (value: number) => {
+  const normalized = Math.max(0, Math.min(100, value));
+  return `${Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toFixed(1)}%`;
+};
+
+const formatHistoryTimeAgo = (secondsAgo: number) => {
+  const roundedSeconds = Math.max(0, Math.round(secondsAgo));
+  if (roundedSeconds <= Math.max(1, Math.round((statusMonitorIntervalSecondsNumber.value || 3) / 2))) return '当前';
+  if (roundedSeconds < 60) return `${roundedSeconds} 秒前`;
+  const minutes = Math.floor(roundedSeconds / 60);
+  const seconds = roundedSeconds % 60;
+  return seconds >= 10 ? `${minutes} 分 ${seconds} 秒前` : `${minutes} 分前`;
+};
+
+const historyHoverData = computed(() => {
+  const ratio = historyHoverRatio.value;
+  if (ratio === null || !selectedMetric.value) return null;
+
+  const primaryValues = sampledPercentHistory.value;
+  const downloadValues = sampledNetworkRxHistory.value;
+  const uploadValues = sampledNetworkTxHistory.value;
+  const sourceLength = selectedMetric.value === 'network'
+    ? Math.max(networkRxHistory.value.length, networkTxHistory.value.length)
+    : percentHistory.value.length;
+  if (!sourceLength) return null;
+
+  const primaryValue = valueAtRatio(primaryValues, ratio);
+  const downloadValue = valueAtRatio(downloadValues, ratio);
+  const uploadValue = valueAtRatio(uploadValues, ratio);
+  const x = HISTORY_PLOT_LEFT + ratio * HISTORY_PLOT_WIDTH;
+  const secondsPerSample = Math.max(1, statusMonitorIntervalSecondsNumber.value || 3);
+  const secondsAgo = (1 - ratio) * Math.max(0, sourceLength - 1) * secondsPerSample;
+
+  return {
+    x,
+    leftPercent: x / HISTORY_VIEWBOX_WIDTH * 100,
+    timeLabel: formatHistoryTimeAgo(secondsAgo),
+    primaryValue,
+    primaryY: historyValueY(primaryValue, 100),
+    downloadValue,
+    downloadY: historyValueY(downloadValue, networkHistoryMax.value),
+    uploadValue,
+    uploadY: historyValueY(uploadValue, networkHistoryMax.value),
+  };
+});
+
+const handleHistoryPointerMove = (event: PointerEvent) => {
+  const target = event.currentTarget as HTMLElement | null;
+  if (!target) return;
+  const sourceLength = selectedMetric.value === 'network'
+    ? Math.max(sampledNetworkRxHistory.value.length, sampledNetworkTxHistory.value.length)
+    : sampledPercentHistory.value.length;
+  if (!sourceLength) {
+    historyHoverRatio.value = null;
+    return;
+  }
+  const rect = target.getBoundingClientRect();
+  if (!rect.width) return;
+  const svgX = (event.clientX - rect.left) / rect.width * HISTORY_VIEWBOX_WIDTH;
+  const rawRatio = Math.max(0, Math.min(1, (svgX - HISTORY_PLOT_LEFT) / HISTORY_PLOT_WIDTH));
+  const nearestIndex = Math.round(rawRatio * Math.max(0, sourceLength - 1));
+  historyHoverRatio.value = sourceLength === 1 ? 1 : nearestIndex / (sourceLength - 1);
+};
+
+const clearHistoryHover = () => {
+  historyHoverRatio.value = null;
+};
 
 const formatAxisRate = (bytes: number) => {
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(bytes >= 10 * 1024 ** 2 ? 0 : 1)}M`;
@@ -452,6 +596,7 @@ const yAxisLabels = computed(() => selectedMetric.value === 'network'
 watch(() => props.activeSessionId, () => {
   selectedMetric.value = null;
 });
+watch([selectedMetric, historyRange], clearHistoryHover);
 
 let attachedStatusManager: { activate: () => void; deactivate: () => void; refreshInterval?: () => void } | null = null;
 let componentActive = false;
@@ -530,7 +675,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   justify-content: stretch;
   overflow: hidden;
   padding: 0.42rem;
-  font-size: 0.78rem;
+  font-size: 0.84rem;
 }
 .empty-state {
   height: 100%;
@@ -580,7 +725,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 .header-main > strong {
   min-width: 0;
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -597,7 +742,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   color: #34df7d;
   background: rgba(52, 223, 125, 0.08);
   border: 1px solid rgba(52, 223, 125, 0.22);
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -704,13 +849,13 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   white-space: nowrap;
   color: #e7edf6;
   font-weight: 700;
-  font-size: 0.76rem;
+  font-size: 0.84rem;
 }
 .metric-percent {
   flex: none;
   margin-left: auto;
   color: #ffffff;
-  font-size: 1.02rem;
+  font-size: 1.12rem;
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -726,7 +871,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #b9c6d8;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 600;
   text-align: right;
   line-height: 1.2;
@@ -773,23 +918,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   height: clamp(0%, var(--metric-value), 100%);
   max-height: 100%;
   min-height: 0;
-  border-top: 1px solid color-mix(in srgb, var(--metric-accent) 66%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--metric-accent) 46%, transparent), var(--cpu-water-color));
-  box-shadow:
-    0 -3px 14px color-mix(in srgb, var(--metric-accent) 28%, transparent),
-    inset 0 1px 0 rgba(255,255,255,.08);
+  background: var(--cpu-water-color);
   transition: height .75s cubic-bezier(.2,.8,.2,1);
   will-change: height;
-}
-.cpu-water-fill::after {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.06), transparent 26%),
-    linear-gradient(90deg, transparent, color-mix(in srgb, var(--metric-accent) 12%, transparent), transparent);
 }
 .cpu-wave {
   position: absolute;
@@ -900,7 +1031,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   align-items: center;
   gap: 0.34rem;
   font-weight: 700;
-  font-size: 0.74rem;
+  font-size: 0.82rem;
   white-space: nowrap;
 }
 .network-title small {
@@ -911,7 +1042,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   border: 1px solid rgba(148,163,184,.14);
   border-radius: 999px;
   color: #95a2b4;
-  font-size: 0.56rem;
+  font-size: 0.62rem;
   font-weight: 600;
   background: rgba(148,163,184,.05);
 }
@@ -921,7 +1052,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   align-items: center;
   gap: 0.24rem;
   white-space: nowrap;
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -953,7 +1084,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
 }
 .range-tabs {
   flex: none;
@@ -970,7 +1101,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   border-radius: 0.38rem;
   color: #8491a4;
   background: transparent;
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -986,26 +1117,39 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   justify-content: flex-end;
   gap: 0.6rem;
   padding: 0 0.1rem 0.1rem;
-  font-size: 0.56rem;
+  font-size: 0.62rem;
 }
 .chart-legend span { display: inline-flex; align-items: center; gap: 0.2rem; }
 .chart-legend i { width: 0.6rem; height: 2px; border-radius: 999px; background: currentColor; }
+.history-chart-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
 .history-chart {
   width: 100%;
   height: 100%;
   min-height: 0;
-  flex: 1 1 auto;
   display: block;
   overflow: visible;
 }
 .chart-grid line { stroke: rgba(148,163,184,.1); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .axis-labels text {
-  fill: #7890ae;
-  font-size: 7px;
+  fill: #9aadc6;
+  stroke: rgba(8, 13, 22, .78);
+  stroke-width: .75px;
+  paint-order: stroke fill;
+  font-size: 9.5px;
+  font-weight: 650;
   font-family: ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  vector-effect: non-scaling-text;
+  text-rendering: geometricPrecision;
 }
+.axis-x-label { fill: #879bb6; font-size: 8.8px; }
 .history-area { fill: url(#historyAreaGradient); }
 .history-line {
   fill: none;
@@ -1016,6 +1160,71 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 .network-download-line { stroke: #35db81; }
 .network-upload-line { stroke: #ff814a; }
+.history-hover-marker { pointer-events: none; }
+.history-hover-marker line {
+  stroke: rgba(226,232,240,.52);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.history-hover-marker circle {
+  fill: #101827;
+  stroke: var(--history-accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--history-accent) 55%, transparent));
+}
+.history-hover-marker .history-hover-download { stroke: #35db81; }
+.history-hover-marker .history-hover-upload { stroke: #ff814a; }
+.history-tooltip {
+  --history-hover-left: 50%;
+  position: absolute;
+  z-index: 4;
+  top: 0.35rem;
+  left: clamp(4.5rem, var(--history-hover-left), calc(100% - 4.5rem));
+  min-width: 7.8rem;
+  max-width: calc(100% - 0.5rem);
+  display: grid;
+  gap: 0.24rem;
+  padding: 0.42rem 0.5rem;
+  border: 1px solid rgba(148,163,184,.24);
+  border-radius: 0.5rem;
+  color: #dce6f3;
+  background: rgba(8,13,22,.92);
+  box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+  backdrop-filter: blur(8px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-size: 0.68rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.history-tooltip > strong {
+  color: #9fb0c5;
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+.history-tooltip-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 0.45rem minmax(0,1fr) auto;
+  align-items: center;
+  gap: 0.3rem;
+}
+.history-tooltip-row i {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 5px currentColor;
+}
+.history-tooltip-row:not(.rate-down):not(.rate-up) { color: var(--history-accent); }
+.history-tooltip-row span { color: #b9c6d8; }
+.history-tooltip-row b {
+  color: #f2f6fb;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------- 有历史时紧凑模式 ---------- */
 .status-monitor:not(.has-history) .metric-grid {
@@ -1050,7 +1259,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .has-history .metric-progress,
 .has-history .cpu-water { display: none; }
 .has-history .metric-name,
-.has-history .metric-percent { font-size: 0.62rem; }
+.has-history .metric-percent { font-size: 0.68rem; }
 .has-history .network-card {
   margin-top: 0;
   padding: 0.28rem 0.4rem;
@@ -1072,10 +1281,10 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .monitor-header { padding: 0.58rem 0.74rem; }
   .monitor-content { padding: 0.6rem; gap: 0.56rem; }
   .metric-card { padding: 0.58rem 0.62rem; gap: 0.36rem; }
-  .metric-percent { font-size: 1.15rem; }
+  .metric-percent { font-size: 1.26rem; }
   .small-icon { width: 1.8rem; height: 1.8rem; flex-basis: 1.8rem; }
   .small-icon svg { width: 1.02rem; height: 1.02rem; }
-  .metric-name { font-size: 0.82rem; }
+  .metric-name { font-size: 0.9rem; }
   .metric-progress { height: 0.3rem; }
   .network-card { padding: 0.6rem 0.68rem; }
   .history-card { padding: 0.6rem 0.58rem 0.4rem; }
@@ -1085,24 +1294,26 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 @container status-pane (max-width: 300px) {
   .status-monitor { padding: 0.28rem; }
   .monitor-header { padding: 0.4rem 0.5rem; }
-  .header-main > strong { font-size: 0.8rem; }
-  .live-state { font-size: 0.6rem; padding: 0.1rem 0.36rem; }
+  .header-main > strong { font-size: 0.86rem; }
+  .live-state { font-size: 0.66rem; padding: 0.1rem 0.36rem; }
   .monitor-content { padding: 0.36rem; gap: 0.34rem; }
   .metric-grid { gap: 0.34rem; }
   .metric-card { padding: 0.4rem 0.44rem; gap: 0.22rem; }
   .small-icon { width: 1.42rem; height: 1.42rem; flex-basis: 1.42rem; border-radius: 0.44rem; }
   .small-icon svg { width: 0.82rem; height: 0.82rem; }
-  .metric-name { font-size: 0.68rem; }
-  .metric-percent { font-size: 0.86rem; }
+  .metric-name { font-size: 0.74rem; }
+  .metric-percent { font-size: 0.94rem; }
   .metric-detail-full { display: none; }
-  .metric-detail-compact { display: block; font-size: 0.56rem; }
+  .metric-detail-compact { display: block; font-size: 0.62rem; }
   .network-card { grid-template-columns: minmax(0,1fr) 1fr; gap: 0.26rem; padding: 0.44rem 0.48rem; }
   .network-title { grid-column: 1 / -1; }
-  .network-rate { font-size: 0.58rem; }
+  .network-rate { font-size: 0.64rem; }
   .network-rate.rate-up { justify-self: end; }
   .history-header { display: grid; grid-template-columns: 1fr; align-items: center; }
   .range-tabs { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); }
   .range-tabs button { min-width: 0; }
+  .history-card .axis-y-label { font-size: 11px; }
+  .history-card .axis-x-label { font-size: 9.8px; }
 }
 
 /* 极窄 (<= 250px) - 单列, 避免 2 列名称截断 */
@@ -1127,8 +1338,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     gap: 0.5rem;
   }
   .status-monitor:not(.has-history) .metric-identity { gap: 0.46rem; }
-  .status-monitor:not(.has-history) .metric-name { font-size: 0.82rem; }
-  .status-monitor:not(.has-history) .metric-percent { font-size: 1.1rem; }
+  .status-monitor:not(.has-history) .metric-name { font-size: 0.9rem; }
+  .status-monitor:not(.has-history) .metric-percent { font-size: 1.2rem; }
   .status-monitor:not(.has-history) .metric-detail-full,
   .status-monitor:not(.has-history) .metric-detail-compact { text-align: right; }
 }
@@ -1154,7 +1365,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-progress { display: none; }
   .status-monitor:not(.has-history) .metric-name {
     color: var(--metric-accent);
-    font-size: 0.7rem;
+    font-size: 0.76rem;
   }
   .status-monitor:not(.has-history) .metric-percent {
     display: block;
@@ -1163,21 +1374,23 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     justify-self: end;
     text-align: right;
     color: #d7dee9;
-    font-size: 0.72rem;
+    font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
   }
   .network-card { grid-template-columns: 1fr; gap: 0.14rem; }
   .network-title { grid-column: 1 / -1; }
   .network-title small { display: none; }
-  .network-rate { font-size: 0.56rem; justify-self: start; }
+  .network-rate { font-size: 0.62rem; justify-self: start; }
   .network-rate.rate-up { justify-self: start; }
   .has-history .metric-card { padding-inline: 0.2rem; gap: 0.18rem; }
   .has-history .metric-name,
-  .has-history .metric-percent { font-size: 0.56rem; }
+  .has-history .metric-percent { font-size: 0.62rem; }
   .chart-legend { display: none; }
   .history-card .axis-labels { display: block; }
   .history-card .chart-grid { display: block; }
-  .history-card .axis-labels text { font-size: 6px; }
+  .history-card .axis-y-label { font-size: 12px; }
+  .history-card .axis-x-label { font-size: 10.5px; }
+  .history-card .axis-x-middle { display: none; }
   .history-card .chart-grid line { stroke-opacity: .8; }
   .history-chart { min-height: 2.2rem; }
 }
@@ -1216,7 +1429,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-detail-full { display: none; }
   .status-monitor:not(.has-history) .metric-detail-compact {
     display: block;
-    font-size: 0.51rem;
+    font-size: 0.57rem;
     line-height: 1.05;
     text-align: right;
   }
@@ -1226,7 +1439,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
   .status-monitor:not(.has-history) .metric-name {
     color: var(--metric-accent);
-    font-size: clamp(0.68rem, 4.2cqh, 0.8rem);
+    font-size: clamp(0.74rem, 4.4cqh, 0.86rem);
   }
   .status-monitor:not(.has-history) .metric-percent {
     display: block;
@@ -1235,7 +1448,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     justify-self: end;
     text-align: right;
     color: #d7dee9;
-    font-size: clamp(0.7rem, 4.4cqh, 0.86rem);
+    font-size: clamp(0.78rem, 4.7cqh, 0.94rem);
     font-variant-numeric: tabular-nums;
   }
   .network-card { min-height: 0; padding-block: 0.32rem; }
@@ -1271,7 +1484,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     min-height: 1.9rem;
     align-items: center;
     white-space: nowrap;
-    font-size: clamp(.72rem, 5.9cqw, .86rem);
+    font-size: clamp(.78rem, 6.2cqw, .94rem);
     line-height: 1.35;
   }
   .summary-row > span {
@@ -1340,7 +1553,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     justify-content: flex-start;
   }
   .header-main { flex: 0 0 auto; }
-  .header-main > strong { font-size: .62rem; }
+  .header-main > strong { font-size: .68rem; }
   .live-state {
     max-width: none;
     padding: .13rem .28rem;
@@ -1358,7 +1571,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     color: #a7b3c4;
   }
   .monitor-content { display: none; }
-  .summary-row { min-height: 0; font-size: clamp(.54rem, 6cqw, .62rem); }
+  .summary-row { min-height: 0; font-size: clamp(.59rem, 6.4cqw, .68rem); }
   .summary-resources {
     width: min(100%, 5.2rem);
     justify-self: center;
@@ -1415,11 +1628,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 @container status-pane (max-height: 130px) {
   .status-monitor { padding: .16rem; }
   .header-main { min-height: 1.9rem; padding: .2rem .38rem; }
-  .header-main > strong { font-size: .72rem; }
-  .live-state { font-size: .58rem; gap: .22rem; }
+  .header-main > strong { font-size: .76rem; }
+  .live-state { font-size: .62rem; gap: .22rem; }
   .live-state i { width: .36rem; height: .36rem; }
   .auto-summary { gap: .06rem; padding: .12rem .34rem .2rem; }
-  .summary-row { font-size: clamp(.56rem, 5.2cqw, .68rem); line-height: 1.1; }
+  .summary-row { font-size: clamp(.6rem, 5.5cqw, .72rem); line-height: 1.1; }
   .summary-resources { column-gap: .18rem; }
   .summary-separator { display: none; }
   .summary-row > span { gap: .12rem; overflow: hidden; }

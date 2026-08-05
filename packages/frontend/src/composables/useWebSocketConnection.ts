@@ -317,15 +317,11 @@ export function createWebSocketConnectionManager(
                 if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') { // Don't override if already explicitly disconnected
                     connectionStatus.value = 'error';
                     statusMessage.value = getStatusText('wsError');
-                } else {
                 }
                 dispatchMessage('internal:error', event, { type: 'internal:error' });
                 isSftpReady.value = false;
-                ws.value = null; // 清理实例
-                // 如果不是主动断开，尝试重连
-                if (!intentionalDisconnect) {
-                    scheduleReconnect();
-                }
+                // onerror is normally followed by onclose. Let onclose clear the socket and
+                // schedule exactly one reconnect; doing both here used to double-count attempts.
             };
 
             ws.value.onclose = (event) => {
@@ -395,17 +391,36 @@ export function createWebSocketConnectionManager(
         }
     };
 
-    /** Send an already encoded binary protocol frame without JSON/base64 wrapping. */
-    const sendBinaryMessage = (frame: ArrayBuffer) => {
-        if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-            try {
-                ws.value.send(frame);
-            } catch (error) {
-                console.error(`[WebSocket ${instanceSessionId}] 发送二进制消息失败:`, error);
-                throw error;
-            }
-        } else {
+    /**
+     * Send an already encoded binary protocol frame without JSON/base64 wrapping.
+     * Wait for the browser send queue to drain before adding more upload data. Without
+     * this guard, several concurrent uploads can grow bufferedAmount until the proxy or
+     * browser closes the socket and triggers a reconnect.
+     */
+    const sendBinaryMessage = async (frame: ArrayBuffer): Promise<void> => {
+        const socket = ws.value;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
             throw new Error(`WebSocket 未连接，无法发送二进制消息（状态: ${connectionStatus.value}）`);
+        }
+
+        const highWaterMark = 2 * 1024 * 1024;
+        while (
+            socket === ws.value
+            && socket.readyState === WebSocket.OPEN
+            && socket.bufferedAmount + frame.byteLength > highWaterMark
+        ) {
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 16));
+        }
+
+        if (socket !== ws.value || socket.readyState !== WebSocket.OPEN) {
+            throw new Error('WebSocket 在等待发送缓冲区时已断开');
+        }
+
+        try {
+            socket.send(frame);
+        } catch (error) {
+            console.error(`[WebSocket ${instanceSessionId}] 发送二进制消息失败:`, error);
+            throw error;
         }
     };
 

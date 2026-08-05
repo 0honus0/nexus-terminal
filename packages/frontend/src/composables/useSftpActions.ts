@@ -10,7 +10,7 @@ import { useUiNotificationsStore } from '../stores/uiNotifications.store';
  */
 export interface WebSocketDependencies {
     sendMessage: (message: WebSocketMessage) => void;
-    sendBinaryMessage: (frame: ArrayBuffer) => void;
+    sendBinaryMessage: (frame: ArrayBuffer) => Promise<void>;
     onMessage: (type: string, handler: MessageHandler) => () => void;
     isConnected: ComputedRef<boolean>;
     isSftpReady: Readonly<Ref<boolean>>;

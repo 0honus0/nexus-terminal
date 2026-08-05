@@ -85,6 +85,30 @@ const leftResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for left h
 const rightResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for right handle +++
 const customHtmlLayerRef = ref<HTMLIFrameElement | null>(null);
 const splitpanesRef = ref<any>(null);
+let customHtmlResizeFrame: number | null = null;
+let pendingCustomHtmlSize: { width: number; height: number } | null = null;
+
+const handleStabilizedTerminalResize = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
+  if (props.layoutNode.component !== 'terminal' || sessionId !== props.activeSessionId || !customHtmlLayerRef.value) {
+    return;
+  }
+
+  pendingCustomHtmlSize = { width, height };
+  if (customHtmlResizeFrame !== null) return;
+
+  customHtmlResizeFrame = window.requestAnimationFrame(() => {
+    customHtmlResizeFrame = null;
+    const layer = customHtmlLayerRef.value;
+    const size = pendingCustomHtmlSize;
+    pendingCustomHtmlSize = null;
+    if (!layer || !size) return;
+
+    const nextWidth = `${size.width}px`;
+    const nextHeight = `${size.height}px`;
+    if (layer.style.width !== nextWidth) layer.style.width = nextWidth;
+    if (layer.style.height !== nextHeight) layer.style.height = nextHeight;
+  });
+};
 
 // --- Component Mapping ---
 // 使用 defineAsyncComponent 优化加载，并映射 PaneName 到实际组件
@@ -405,13 +429,9 @@ const getIconClasses = (paneName: PaneName): string[] => {
 
 // --- Sidebar Resize Logic ---
 onMounted(() => {
-  const handleStabilizedTerminalResize = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
-    if (props.layoutNode.component === 'terminal' && sessionId === props.activeSessionId && customHtmlLayerRef.value) {
-      customHtmlLayerRef.value.style.width = `${width}px`;
-      customHtmlLayerRef.value.style.height = `${height}px`;
-    }
-  };
-  subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  if (props.layoutNode.component === 'terminal') {
+    subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  }
 
 
 
@@ -452,26 +472,9 @@ const terminalBackgroundImageStyle = computed((): CSSProperties => {
     const fullImageUrl = `${backendUrl}${imagePath}`;
     return {
       backgroundImage: `url(${fullImageUrl})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-      position: 'absolute',
-      top: '0',
-      left: '0',
-      width: '100%',
-      height: '100%',
-      zIndex: 0, // Base layer for background
     };
   }
-  return {
-    backgroundImage: 'none',
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    width: '100%',
-    height: '100%',
-    zIndex: 0,
-  };
+  return { backgroundImage: 'none' };
 });
 
 const sandboxedTerminalCustomHtml = computed(() => terminalCustomHTML.value
@@ -480,13 +483,14 @@ const sandboxedTerminalCustomHtml = computed(() => terminalCustomHTML.value
 
 
 onBeforeUnmount(() => {
-  const handleStabilizedTerminalResizeHandler = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
-    if (props.layoutNode.component === 'terminal' && sessionId === props.activeSessionId && customHtmlLayerRef.value) {
-      customHtmlLayerRef.value.style.width = `${width}px`;
-      customHtmlLayerRef.value.style.height = `${height}px`;
-    }
-  };
-  unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResizeHandler); // Use the same handler reference if possible
+  if (props.layoutNode.component === 'terminal') {
+    unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  }
+  if (customHtmlResizeFrame !== null) {
+    window.cancelAnimationFrame(customHtmlResizeFrame);
+    customHtmlResizeFrame = null;
+  }
+  pendingCustomHtmlSize = null;
 });
 
 
@@ -553,7 +557,6 @@ onBeforeUnmount(() => {
                        <div
                            v-if="isTerminalBackgroundEnabled"
                            class="shared-terminal-background-layers"
-                           style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;"
                        >
                            <!-- Background Image -->
                            <div
@@ -565,9 +568,7 @@ onBeforeUnmount(() => {
                                v-if="terminalBackgroundImage"
                                class="terminal-background-overlay-layer"
                                :style="{
-                                   position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
-                                   backgroundColor: `rgba(0, 0, 0, ${currentTerminalBackgroundOverlayOpacity})`,
-                                   zIndex: 1, pointerEvents: 'none'
+                                   backgroundColor: `rgba(0, 0, 0, ${currentTerminalBackgroundOverlayOpacity})`
                                }"
                            ></div>
                            <!-- Custom HTML -->
@@ -575,7 +576,6 @@ onBeforeUnmount(() => {
                                ref="customHtmlLayerRef"
                                v-if="terminalCustomHTML"
                                class="terminal-custom-html-layer"
-                               style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; pointer-events: none; z-index: 2;"
                                sandbox="allow-scripts"
                                :srcdoc="sandboxedTerminalCustomHtml"
                                tabindex="-1"
@@ -817,6 +817,52 @@ onBeforeUnmount(() => {
 
 .splitpanes.layout-locked .splitpanes__splitter:hover {
   background-color: var(--border-color) !important; /* Override hover effect */
+}
+
+.terminal-pane-container {
+  isolation: isolate;
+  contain: layout paint style;
+}
+
+.shared-terminal-background-layers {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.terminal-background-image-layer,
+.terminal-background-overlay-layer,
+.terminal-custom-html-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.terminal-background-image-layer {
+  z-index: 0;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.terminal-background-overlay-layer {
+  z-index: 1;
+  contain: paint;
+}
+
+.terminal-custom-html-layer {
+  z-index: 2;
+  border: 0;
+  contain: strict;
 }
 
 .terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-outer-wrapper {
