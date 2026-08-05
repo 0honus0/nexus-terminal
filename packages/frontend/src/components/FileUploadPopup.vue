@@ -19,8 +19,10 @@ const { t } = useI18n();
 const popupRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
+const positionReady = ref(false);
 let dragOffsetX = 0;
 let dragOffsetY = 0;
+let positionRestored = false;
 
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused'].includes(upload.status)
@@ -102,6 +104,7 @@ const startDragging = (event: PointerEvent) => {
   if ((event.target as HTMLElement).closest('button')) return;
   const rect = popupRef.value?.getBoundingClientRect();
   if (!rect) return;
+  event.preventDefault();
   dragging.value = true;
   dragOffsetX = event.clientX - rect.left;
   dragOffsetY = event.clientY - rect.top;
@@ -119,8 +122,25 @@ const handleCancelAll = () => {
 };
 
 watch(() => uploadList.value.length, async (count) => {
-  if (count <= 0) return;
-  await restorePosition();
+  if (count <= 0) {
+    stopDragging();
+    return;
+  }
+
+  await nextTick();
+  if (dragging.value) return;
+
+  if (!positionRestored) {
+    positionRestored = true;
+    await restorePosition();
+    positionReady.value = true;
+    return;
+  }
+
+  // Upload items frequently enter and leave the list. Only keep the popup inside
+  // the viewport; never restore the saved coordinates again during the same mount.
+  clampPosition();
+  positionReady.value = true;
 }, { immediate: true });
 
 onMounted(() => window.addEventListener('resize', clampPosition));
@@ -137,7 +157,7 @@ onBeforeUnmount(() => {
     ref="popupRef"
     class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-48 overflow-hidden z-[1001] text-sm"
     :class="{ dragging }"
-    :style="popupStyle"
+    :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
     <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
       <h4 class="m-0 min-w-0 truncate text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
