@@ -396,7 +396,7 @@ const handleQuickCommandExecute = (command: string) => {
 </script>
 
 <template>
-  <div :class="$attrs.class" class="command-bar-root flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
+  <div :class="$attrs.class" class="command-bar-root flex items-center bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
     <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
       <!-- 命令输入与终端搜索共用同一个输入框 -->
       <input
@@ -524,62 +524,88 @@ const handleQuickCommandExecute = (command: string) => {
 
 <style scoped>
 .command-bar-root {
-  container-type: inline-size;
+  container-type: size;
   container-name: command-bar-pane;
+  width: 100%;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-block: 0;
 }
 .command-bar-inner {
   min-width: 0;
+  min-height: 100%;
   flex-wrap: wrap;
+  align-content: space-evenly;
+  align-self: center;
+  flex-grow: 1;
+  row-gap: 0.18rem;
+  column-gap: 0.3rem;
+  padding: 0.04rem 0.5rem;
 }
 .command-bar-input {
   min-width: 0;
+  height: 1.85rem;
+  min-height: 1.85rem;
+  max-height: 1.85rem;
+  padding-top: 0.24rem;
+  padding-bottom: 0.24rem;
 }
 .command-bar-command-input {
-  flex: 3 1 0 !important;
-  min-width: min(100%, 8rem);
+  flex: 1 1 7.5rem !important;
+  min-width: min(100%, 7.5rem);
 }
 .command-bar-controls {
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+  min-width: min(100%, max-content);
+  max-width: 100%;
+  flex: 0 1 max-content;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  justify-content: center;
+  gap: 0.3rem;
+  overflow: visible;
 }
-@container command-bar-pane (max-width: 500px) {
-  .command-bar-inner,
-  .command-bar-controls {
-    gap: 0.3rem;
-  }
+.command-bar-button {
+  position: relative;
+  width: 1.85rem !important;
+  height: 1.85rem !important;
+  min-width: 1.85rem;
+  min-height: 1.85rem;
+  flex: 0 0 1.85rem;
+  transition: transform .12s ease, background-color .2s ease, color .2s ease, border-color .2s ease;
+}
+.command-bar-button:active {
+  transform: scale(0.92);
+}
+.command-bar-button i {
+  font-size: 0.85rem !important;
+  line-height: 1;
+  pointer-events: none;
+}
+.command-bar-command-input:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #3b82f6) 18%, transparent);
+}
+
+/* 宽度不够时由 flex 自动从一行变两行；高度不够时滚动，不缩小、不遮挡。 */
+@container command-bar-pane (max-height: 52px) {
   .command-bar-inner {
-    padding-left: 0.4rem;
-    padding-right: 0.4rem;
-  }
-  .command-bar-button {
-    width: 1.85rem !important;
-    height: 1.85rem !important;
-  }
-  .command-bar-button i {
-    font-size: 0.85rem !important;
-  }
-  .command-bar-input {
-    padding-left: 0.65rem;
-    padding-right: 0.65rem;
+    min-height: max-content;
+    align-content: start;
+    padding-block: 0.04rem;
   }
 }
+
 @container command-bar-pane (max-width: 280px) {
+  .command-bar-command-input,
   .command-bar-controls {
-    flex: 1 0 100%;
+    flex-basis: 100% !important;
     width: 100%;
-    justify-content: space-evenly;
   }
-}
-@container command-bar-pane (max-width: 240px) {
-  .command-bar-button {
-    width: 1.7rem !important;
-    height: 1.7rem !important;
-  }
-  .command-bar-inner,
   .command-bar-controls {
-    gap: 0.2rem;
+    min-width: 0;
   }
 }
 </style>
