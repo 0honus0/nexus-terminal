@@ -59,6 +59,7 @@ const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: nu
 const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
 const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
 const UPLOAD_WRITE_HIGH_WATER_MARK = 1024 * 1024;
+const UPLOAD_DIRECTORY_PREPARE_CONCURRENCY = 8;
 
 // Interface for tracking active uploads
 interface ActiveUpload {
@@ -1867,8 +1868,9 @@ export class SftpService {
             const depthDiff = left.split('/').length - right.split('/').length;
             return depthDiff || left.localeCompare(right);
         });
-        for (const directory of orderedDirectories) {
-            await this.ensureDirectoryExists(state.sftp, directory);
+        for (let index = 0; index < orderedDirectories.length; index += UPLOAD_DIRECTORY_PREPARE_CONCURRENCY) {
+            const batch = orderedDirectories.slice(index, index + UPLOAD_DIRECTORY_PREPARE_CONCURRENCY);
+            await Promise.all(batch.map((directory) => this.ensureDirectoryExists(state.sftp!, directory)));
         }
 
         this.preparedUploadBatches.set(prepareId, {
@@ -1938,20 +1940,8 @@ export class SftpService {
             if (!directoryWasPrepared) await this.ensureDirectoryExists(state.sftp, targetDirectory);
             if (await stopIfCancelled()) return;
 
-            // Probe the temporary path, never the final target. The previous implementation
-            // opened the destination with "w" here and therefore truncated it before any
-            // bytes were uploaded.
-            await new Promise<void>((resolve, reject) => {
-                state.sftp!.open(temporaryPath, 'w', (openErr, handle) => {
-                    if (openErr) return reject(openErr);
-                    state.sftp!.close(handle, (closeErr) => {
-                        if (closeErr) return reject(closeErr);
-                        resolve();
-                    });
-                });
-            });
-            if (await stopIfCancelled()) return;
-
+            // createWriteStream already creates/truncates the temporary file. Avoiding a
+            // separate open+close probe removes two SFTP round trips for every small file.
             const stream = state.sftp.createWriteStream(temporaryPath, {
                 highWaterMark: UPLOAD_WRITE_HIGH_WATER_MARK,
             });
@@ -2107,20 +2097,18 @@ export class SftpService {
                     const progressPercent = uploadState.totalSize === 0
                         ? 100
                         : Math.round((uploadState.bytesWritten / uploadState.totalSize) * 100);
+                    // ACK and progress share one frame to reduce JSON/WebSocket overhead,
+                    // which is especially noticeable when uploading many small files.
                     state.ws.send(JSON.stringify({
-                        type: 'sftp:upload:progress',
+                        type: 'sftp:upload:chunk:ack',
                         uploadId,
                         payload: {
                             uploadId,
+                            chunkIndex,
                             bytesWritten: uploadState.bytesWritten,
                             totalSize: uploadState.totalSize,
                             progress: Math.min(100, progressPercent),
                         },
-                    }));
-                    state.ws.send(JSON.stringify({
-                        type: 'sftp:upload:chunk:ack',
-                        uploadId,
-                        payload: { uploadId, chunkIndex, bytesWritten: uploadState.bytesWritten },
                     }));
                 }
 

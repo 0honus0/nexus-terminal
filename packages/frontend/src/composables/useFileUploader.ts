@@ -12,7 +12,10 @@ import type { WebSocketDependencies } from './useSftpActions';
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
 const UPLOAD_CHUNK_SIZE = 512 * 1024;
 const UPLOAD_MAX_IN_FLIGHT = 2;
-const UPLOAD_MAX_ACTIVE_FILES = 3;
+const UPLOAD_ACTIVE_WEIGHT_BUDGET = 12;
+const UPLOAD_MAX_ACTIVE_FILES = 12;
+const UPLOAD_SMALL_FILE_THRESHOLD = 256 * 1024;
+const UPLOAD_MEDIUM_FILE_THRESHOLD = 2 * 1024 * 1024;
 const UPLOAD_RECONNECT_RESTART_DELAY_MS = 750;
 const UPLOAD_FRAME_MAGIC = [0x4e, 0x58, 0x55, 0x50] as const; // NXUP
 const UPLOAD_FRAME_VERSION = 1;
@@ -107,6 +110,12 @@ const normalizeRemoteBasePath = (basePath: string): string => {
     return parts.length ? `/${parts.join('/')}` : '/';
 };
 
+const getUploadActiveWeight = (fileSize: number): number => {
+    if (fileSize <= UPLOAD_SMALL_FILE_THRESHOLD) return 1;
+    if (fileSize <= UPLOAD_MEDIUM_FILE_THRESHOLD) return 2;
+    return 4;
+};
+
 export function useFileUploader(
     sessionIdForLog: Ref<string>,
     currentPathRef: Ref<string>,
@@ -120,6 +129,7 @@ export function useFileUploader(
     const uploadTransferStates = new Map<string, UploadTransferState>();
     const uploadBatches = new Map<string, UploadBatchState>();
     const activeUploadIds = new Set<string>();
+    const activeUploadWeights = new Map<string, number>();
     const queuedUploadStarts = new Map<string, boolean>();
 
     // --- 上传逻辑 ---
@@ -135,7 +145,14 @@ export function useFileUploader(
 
     const releaseUploadSlot = (uploadId: string) => {
         activeUploadIds.delete(uploadId);
+        activeUploadWeights.delete(uploadId);
         queuedUploadStarts.delete(uploadId);
+    };
+
+    const getActiveUploadWeightTotal = (): number => {
+        let total = 0;
+        for (const weight of activeUploadWeights.values()) total += weight;
+        return total;
     };
 
     const removeUploadFromBatch = (uploadId: string) => {
@@ -163,12 +180,12 @@ export function useFileUploader(
         });
     };
 
-    const requestUploadStartNow = (uploadId: string, restart = false) => {
+    const requestUploadStartNow = (uploadId: string, restart = false): boolean => {
         const transfer = uploadTransferStates.get(uploadId);
         const upload = uploads[uploadId];
         const batch = transfer ? uploadBatches.get(transfer.prepareId) : undefined;
-        if (!transfer || !batch?.prepared || !upload || upload.status === 'cancelled' || upload.status === 'success' || upload.status === 'error') return;
-        if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value || transfer.startRequestSent) return;
+        if (!transfer || !batch?.prepared || !upload || upload.status === 'cancelled' || upload.status === 'success' || upload.status === 'error') return false;
+        if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value || transfer.startRequestSent) return false;
 
         if (restart) {
             resetTransferForRestart(transfer);
@@ -188,11 +205,13 @@ export function useFileUploader(
                 prepareId: transfer.prepareId,
             },
         });
+        return true;
     };
 
     const drainUploadStartQueue = () => {
         if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value) return;
 
+        let activeWeight = getActiveUploadWeightTotal();
         for (const [uploadId, restart] of queuedUploadStarts) {
             if (activeUploadIds.size >= UPLOAD_MAX_ACTIVE_FILES) break;
 
@@ -205,9 +224,18 @@ export function useFileUploader(
             }
             if (!batch?.prepared) continue;
 
+            const uploadWeight = getUploadActiveWeight(transfer.file.size);
+            if (activeWeight + uploadWeight > UPLOAD_ACTIVE_WEIGHT_BUDGET) {
+                // Avoid head-of-line blocking: later small files may still fit the budget.
+                continue;
+            }
+
             queuedUploadStarts.delete(uploadId);
-            activeUploadIds.add(uploadId);
-            requestUploadStartNow(uploadId, restart);
+            if (requestUploadStartNow(uploadId, restart)) {
+                activeUploadIds.add(uploadId);
+                activeUploadWeights.set(uploadId, uploadWeight);
+                activeWeight += uploadWeight;
+            }
         }
     };
 
@@ -594,8 +622,16 @@ export function useFileUploader(
         if (!uploadId) return;
         const transfer = uploadTransferStates.get(uploadId);
         if (!transfer) return;
+
+        const upload = uploads[uploadId];
+        if (upload && typeof payload?.progress === 'number') {
+            upload.progress = Math.min(100, Math.max(upload.progress, Math.round(payload.progress)));
+        } else if (upload && typeof payload?.bytesWritten === 'number' && transfer.file.size > 0) {
+            upload.progress = Math.min(100, Math.round((payload.bytesWritten / transfer.file.size) * 100));
+        }
+
         transfer.inFlight = Math.max(0, transfer.inFlight - 1);
-        if (uploads[uploadId]?.status === 'uploading') void pumpUpload(uploadId);
+        if (upload?.status === 'uploading') void pumpUpload(uploadId);
     };
 
     // A reconnect invalidates both the prepared directory token and all in-flight ACKs.
@@ -610,6 +646,7 @@ export function useFileUploader(
                     reconnectRestartTimer = null;
                 }
                 activeUploadIds.clear();
+                activeUploadWeights.clear();
                 queuedUploadStarts.clear();
                 uploadBatches.forEach((batch) => {
                     batch.prepared = false;
@@ -684,6 +721,7 @@ export function useFileUploader(
         uploadTransferStates.clear();
         uploadBatches.clear();
         activeUploadIds.clear();
+        activeUploadWeights.clear();
         queuedUploadStarts.clear();
     });
 
