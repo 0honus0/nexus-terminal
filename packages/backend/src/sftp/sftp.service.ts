@@ -1864,22 +1864,46 @@ export class SftpService {
             fullDirectories.add(this.resolvePreparedUploadDirectory(normalizedBasePath, normalizedRelative));
         }
 
-        const orderedDirectories = [...fullDirectories].sort((left, right) => {
-            const depthDiff = left.split('/').length - right.split('/').length;
-            return depthDiff || left.localeCompare(right);
-        });
-        for (let index = 0; index < orderedDirectories.length; index += UPLOAD_DIRECTORY_PREPARE_CONCURRENCY) {
-            const batch = orderedDirectories.slice(index, index + UPLOAD_DIRECTORY_PREPARE_CONCURRENCY);
-            await Promise.all(batch.map((directory) => this.ensureDirectoryExists(state.sftp!, directory)));
+        // Create the base path once, then parallelize by independent first-level branches.
+        // Directories inside the same branch are created sequentially so concurrent mkdir
+        // requests never race on one shared branch root.
+        await this.ensureDirectoryExists(state.sftp, normalizedBasePath);
+
+        const branchDirectories = new Map<string, string[]>();
+        for (const directory of fullDirectories) {
+            if (directory === normalizedBasePath) continue;
+            const relativeDirectory = pathModule.posix.relative(normalizedBasePath, directory);
+            const branchRoot = relativeDirectory.split('/')[0];
+            const branch = branchDirectories.get(branchRoot) ?? [];
+            branch.push(directory);
+            branchDirectories.set(branchRoot, branch);
         }
+
+        const branches = [...branchDirectories.values()]
+            .map((branch) => branch.sort((left, right) => {
+                const depthDiff = left.split('/').length - right.split('/').length;
+                return depthDiff || left.localeCompare(right);
+            }))
+            .sort((left, right) => right.length - left.length);
+
+        let nextBranchIndex = 0;
+        const workerCount = Math.min(UPLOAD_DIRECTORY_PREPARE_CONCURRENCY, branches.length);
+        await Promise.all(Array.from({ length: workerCount }, async () => {
+            while (nextBranchIndex < branches.length) {
+                const branch = branches[nextBranchIndex++];
+                for (const directory of branch) {
+                    await this.ensureDirectoryExists(state.sftp!, directory);
+                }
+            }
+        }));
 
         this.preparedUploadBatches.set(prepareId, {
             sessionId,
             basePath: normalizedBasePath,
             directories: fullDirectories,
         });
-        console.log(`[SFTP Upload Prepare ${prepareId}] Prepared ${orderedDirectories.length} directories under ${normalizedBasePath}.`);
-        return { preparedDirectories: orderedDirectories.length };
+        console.log(`[SFTP Upload Prepare ${prepareId}] Prepared ${fullDirectories.size} directories in ${branches.length} independent branches under ${normalizedBasePath}.`);
+        return { preparedDirectories: fullDirectories.size };
     }
 
     /** Start a new file upload */
