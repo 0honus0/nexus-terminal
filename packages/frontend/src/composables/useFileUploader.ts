@@ -12,6 +12,7 @@ import type { WebSocketDependencies } from './useSftpActions';
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
 const UPLOAD_CHUNK_SIZE = 512 * 1024;
 const UPLOAD_MAX_IN_FLIGHT = 2;
+const UPLOAD_MAX_ACTIVE_FILES = 3;
 const UPLOAD_RECONNECT_RESTART_DELAY_MS = 750;
 const UPLOAD_FRAME_MAGIC = [0x4e, 0x58, 0x55, 0x50] as const; // NXUP
 const UPLOAD_FRAME_VERSION = 1;
@@ -22,11 +23,26 @@ interface UploadTransferState {
     file: File;
     remotePath: string;
     relativePath?: string;
+    prepareId: string;
     offset: number;
     nextChunkIndex: number;
     inFlight: number;
     pumping: boolean;
     startRequestSent: boolean;
+}
+
+export interface UploadBatchFile {
+    file: File;
+    relativePath?: string;
+}
+
+interface UploadBatchState {
+    prepareId: string;
+    basePath: string;
+    directories: string[];
+    uploadIds: Set<string>;
+    prepared: boolean;
+    prepareRequestSent: boolean;
 }
 
 const textEncoder = new TextEncoder();
@@ -62,11 +78,33 @@ const generateUploadId = (): string => {
     return `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
+const generatePrepareId = (): string => {
+    return `prepare-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 const joinPath = (base: string, name: string): string => {
     if (base === '/') return `/${name}`;
     if (base.endsWith('/')) return `${base}${name}`;
     return `${base}/${name}`;
+};
+
+const normalizeRelativeDirectory = (relativePath?: string): string => {
+    if (!relativePath) return '';
+    const normalized = relativePath
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .replace(/^\/+/, '')
+        .replace(/\/+$/, '');
+    const parts = normalized.split('/').filter(Boolean);
+    if (parts.some(part => part === '.' || part === '..')) {
+        throw new Error(`上传目录包含非法路径: ${relativePath}`);
+    }
+    return parts.join('/');
+};
+
+const normalizeRemoteBasePath = (basePath: string): string => {
+    const parts = basePath.replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts.length ? `/${parts.join('/')}` : '/';
 };
 
 export function useFileUploader(
@@ -80,6 +118,9 @@ export function useFileUploader(
     // 对 uploads 字典使用 reactive 以获得更好的深度响应性
     const uploads = reactive<Record<string, UploadItem>>({});
     const uploadTransferStates = new Map<string, UploadTransferState>();
+    const uploadBatches = new Map<string, UploadBatchState>();
+    const activeUploadIds = new Set<string>();
+    const queuedUploadStarts = new Map<string, boolean>();
 
     // --- 上传逻辑 ---
     let reconnectRestartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -92,10 +133,41 @@ export function useFileUploader(
         transfer.startRequestSent = false;
     };
 
-    const requestUploadStart = (uploadId: string, restart = false) => {
+    const releaseUploadSlot = (uploadId: string) => {
+        activeUploadIds.delete(uploadId);
+        queuedUploadStarts.delete(uploadId);
+    };
+
+    const removeUploadFromBatch = (uploadId: string) => {
+        const transfer = uploadTransferStates.get(uploadId);
+        if (!transfer) return;
+        const batch = uploadBatches.get(transfer.prepareId);
+        batch?.uploadIds.delete(uploadId);
+        if (batch && batch.uploadIds.size === 0) uploadBatches.delete(batch.prepareId);
+    };
+
+    const requestUploadBatchPrepare = (prepareId: string) => {
+        const batch = uploadBatches.get(prepareId);
+        if (!batch || batch.prepared || batch.prepareRequestSent) return;
+        if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value) return;
+
+        batch.prepareRequestSent = true;
+        console.log(`[FileUploader ${sessionIdForLog.value}] Preparing ${batch.directories.length} remote directories for ${prepareId}.`);
+        wsDeps.value.sendMessage({
+            type: 'sftp:upload:prepare',
+            payload: {
+                prepareId,
+                basePath: batch.basePath,
+                directories: batch.directories,
+            },
+        });
+    };
+
+    const requestUploadStartNow = (uploadId: string, restart = false) => {
         const transfer = uploadTransferStates.get(uploadId);
         const upload = uploads[uploadId];
-        if (!transfer || !upload || upload.status === 'cancelled' || upload.status === 'success') return;
+        const batch = transfer ? uploadBatches.get(transfer.prepareId) : undefined;
+        if (!transfer || !batch?.prepared || !upload || upload.status === 'cancelled' || upload.status === 'success' || upload.status === 'error') return;
         if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value || transfer.startRequestSent) return;
 
         if (restart) {
@@ -113,8 +185,39 @@ export function useFileUploader(
                 remotePath: transfer.remotePath,
                 size: transfer.file.size,
                 relativePath: transfer.relativePath,
+                prepareId: transfer.prepareId,
             },
         });
+    };
+
+    const drainUploadStartQueue = () => {
+        if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value) return;
+
+        for (const [uploadId, restart] of queuedUploadStarts) {
+            if (activeUploadIds.size >= UPLOAD_MAX_ACTIVE_FILES) break;
+
+            const upload = uploads[uploadId];
+            const transfer = uploadTransferStates.get(uploadId);
+            const batch = transfer ? uploadBatches.get(transfer.prepareId) : undefined;
+            if (!upload || !transfer || upload.status === 'cancelled' || upload.status === 'success' || upload.status === 'error') {
+                queuedUploadStarts.delete(uploadId);
+                continue;
+            }
+            if (!batch?.prepared) continue;
+
+            queuedUploadStarts.delete(uploadId);
+            activeUploadIds.add(uploadId);
+            requestUploadStartNow(uploadId, restart);
+        }
+    };
+
+    const requestUploadStart = (uploadId: string, restart = false) => {
+        const upload = uploads[uploadId];
+        if (!upload || upload.status === 'cancelled' || upload.status === 'success' || upload.status === 'error') return;
+
+        const queuedRestart = queuedUploadStarts.get(uploadId) ?? false;
+        queuedUploadStarts.set(uploadId, queuedRestart || restart);
+        drainUploadStartQueue();
     };
 
     const pumpUpload = async (uploadId: string): Promise<void> => {
@@ -169,7 +272,10 @@ export function useFileUploader(
             failedUpload.error = error instanceof Error && error.message
                 ? error.message
                 : t('fileManager.errors.readFileError');
+            removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
+            releaseUploadSlot(uploadId);
+            drainUploadStartQueue();
             wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
         } finally {
             const current = uploadTransferStates.get(uploadId);
@@ -185,61 +291,84 @@ export function useFileUploader(
         }
     };
 
-    const startFileUpload = (file: File, relativePath?: string) => {
-        // Roo: 使用 .value 访问响应式的 sessionIdForLog
-        if (!wsDeps.value.isConnected.value) { 
-            console.warn(`[FileUploader ${sessionIdForLog.value}] Cannot start upload: WebSocket not connected.`);
-            
+    const startFileUploadBatch = (files: UploadBatchFile[], directories: string[] = []) => {
+        if (!files.length && !directories.length) return;
+        if (!wsDeps.value.isConnected.value) {
+            console.warn(`[FileUploader ${sessionIdForLog.value}] Cannot start upload batch: WebSocket not connected.`);
             return;
         }
 
-        const uploadId = generateUploadId();
-        
-        let finalRemotePath: string;
-        if (relativePath) {
-            
-            const basePath = currentPathRef.value.endsWith('/') ? currentPathRef.value : `${currentPathRef.value}/`;
-            // 确保 relativePath 开头没有斜杠，末尾有斜杠 (如果非空)
-            let cleanRelativePath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
-            // 移除末尾斜杠（如果有），因为文件名会加上
-            cleanRelativePath = cleanRelativePath.endsWith('/') ? cleanRelativePath.slice(0, -1) : cleanRelativePath;
-            // webkitRelativePath 已包含文件名（如 folder/sub/file.txt），只取目录部分。
-            const relativeParts = cleanRelativePath.split('/');
-            if (relativeParts.length > 1 && relativeParts[relativeParts.length - 1] === file.name) {
-                cleanRelativePath = relativeParts.slice(0, -1).join('/');
+        const basePath = normalizeRemoteBasePath(currentPathRef.value);
+        const prepareId = generatePrepareId();
+        const directorySet = new Set<string>();
+
+        let preparedFiles: Array<{ file: File; relativeDirectory: string; remotePath: string }>;
+        try {
+            for (const directory of directories) {
+                directorySet.add(normalizeRelativeDirectory(directory));
             }
-            // 拼接路径，确保 cleanRelativePath 和 file.name 之间只有一个斜杠
-            finalRemotePath = `${basePath}${cleanRelativePath ? cleanRelativePath + '/' : ''}${file.name}`;
-        } else {
-            finalRemotePath = joinPath(currentPathRef.value, file.name); // 对于非文件夹上传，保持原样
+            preparedFiles = files.map(({ file, relativePath }) => {
+                const sourcePath = relativePath || file.webkitRelativePath || '';
+                let relativeDirectory = normalizeRelativeDirectory(sourcePath);
+                const relativeParts = relativeDirectory.split('/').filter(Boolean);
+                if (relativeParts[relativeParts.length - 1] === file.name) {
+                    relativeParts.pop();
+                    relativeDirectory = relativeParts.join('/');
+                }
+                directorySet.add(relativeDirectory);
+                const targetDirectory = relativeDirectory ? joinPath(basePath, relativeDirectory) : basePath;
+                return {
+                    file,
+                    relativeDirectory,
+                    remotePath: joinPath(targetDirectory, file.name).replace(/\/+/g, '/'),
+                };
+            });
+        } catch (error) {
+            console.error(`[FileUploader ${sessionIdForLog.value}] Invalid upload path:`, error);
+            return;
         }
-        // 规范化路径，移除多余的斜杠 e.g. /root//dir -> /root/dir
-        finalRemotePath = finalRemotePath.replace(/\/+/g, '/');
-        console.log(`[FileUploader ${sessionIdForLog.value}] Calculated finalRemotePath: ${finalRemotePath} (current: ${currentPathRef.value}, relative: ${relativePath}, filename: ${file.name}) // wsDeps.isSftpReady: ${wsDeps.value.isSftpReady.value}`); 
-        // --- 结束修正 ---
 
-
-        // 添加到响应式 uploads 字典
-        uploads[uploadId] = {
-            id: uploadId,
-            file,
-            filename: file.name,
-            progress: 0,
-            status: 'pending' // 初始状态
-        };
-
-        uploadTransferStates.set(uploadId, {
-            file,
-            remotePath: finalRemotePath,
-            relativePath: relativePath || undefined,
-            offset: 0,
-            nextChunkIndex: 0,
-            inFlight: 0,
-            pumping: false,
-            startRequestSent: false,
+        const uploadIds = new Set<string>();
+        uploadBatches.set(prepareId, {
+            prepareId,
+            basePath,
+            directories: [...directorySet].sort((left, right) => {
+                const depthDiff = left.split('/').filter(Boolean).length - right.split('/').filter(Boolean).length;
+                return depthDiff || left.localeCompare(right);
+            }),
+            uploadIds,
+            prepared: false,
+            prepareRequestSent: false,
         });
-        requestUploadStart(uploadId);
-        // 后端应该响应 sftp:upload:ready；若 SFTP 尚未就绪，会在就绪后自动开始。
+
+        for (const preparedFile of preparedFiles) {
+            const uploadId = generateUploadId();
+            uploadIds.add(uploadId);
+            uploads[uploadId] = {
+                id: uploadId,
+                file: preparedFile.file,
+                filename: preparedFile.file.name,
+                progress: 0,
+                status: 'pending',
+            };
+            uploadTransferStates.set(uploadId, {
+                file: preparedFile.file,
+                remotePath: preparedFile.remotePath,
+                relativePath: preparedFile.relativeDirectory || undefined,
+                prepareId,
+                offset: 0,
+                nextChunkIndex: 0,
+                inFlight: 0,
+                pumping: false,
+                startRequestSent: false,
+            });
+        }
+
+        requestUploadBatchPrepare(prepareId);
+    };
+
+    const startFileUpload = (file: File, relativePath?: string) => {
+        startFileUploadBatch([{ file, relativePath }]);
     };
 
     const cancelUpload = (uploadId: string, notifyBackend = true) => {
@@ -247,7 +376,10 @@ export function useFileUploader(
         if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
             console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
             upload.status = 'cancelled'; // 立即更新状态
+            removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
+            releaseUploadSlot(uploadId);
+            drainUploadStartQueue();
 
             if (notifyBackend && wsDeps.value.isConnected.value) { 
                 wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } }); 
@@ -270,6 +402,53 @@ export function useFileUploader(
     };
 
     // --- 消息处理器 ---
+
+    const onUploadPrepareReady = (payload: MessagePayload) => {
+        const prepareId = payload?.prepareId;
+        if (!prepareId) return;
+        const batch = uploadBatches.get(prepareId);
+        if (!batch) return;
+
+        batch.prepared = true;
+        batch.prepareRequestSent = true;
+        console.log(`[FileUploader ${sessionIdForLog.value}] Remote directories prepared for ${prepareId}.`);
+        if (batch.uploadIds.size === 0) {
+            uploadBatches.delete(prepareId);
+            return;
+        }
+        for (const uploadId of batch.uploadIds) {
+            const upload = uploads[uploadId];
+            if (!upload) continue;
+            requestUploadStart(uploadId, upload.status === 'paused');
+        }
+        drainUploadStartQueue();
+    };
+
+    const onUploadPrepareError = (payload: MessagePayload) => {
+        const prepareId = payload?.prepareId;
+        if (!prepareId) return;
+        const batch = uploadBatches.get(prepareId);
+        if (!batch) return;
+        const errorMessage = typeof payload?.message === 'string' && payload.message.trim()
+            ? payload.message
+            : t('fileManager.errors.uploadFailed');
+
+        console.error(`[FileUploader ${sessionIdForLog.value}] Remote directory preparation failed for ${prepareId}: ${errorMessage}`);
+        for (const uploadId of [...batch.uploadIds]) {
+            const upload = uploads[uploadId];
+            if (upload) {
+                upload.status = 'error';
+                upload.error = errorMessage;
+                setTimeout(() => {
+                    if (uploads[uploadId]?.status === 'error') delete uploads[uploadId];
+                }, 5000);
+            }
+            releaseUploadSlot(uploadId);
+            uploadTransferStates.delete(uploadId);
+        }
+        uploadBatches.delete(prepareId);
+        drainUploadStartQueue();
+    };
 
     const onUploadReady = (payload: MessagePayload, message: WebSocketMessage) => {
         const uploadId = message.uploadId || payload?.uploadId;
@@ -295,7 +474,10 @@ export function useFileUploader(
             console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
             upload.status = 'success';
             upload.progress = 100;
+            removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
+            releaseUploadSlot(uploadId);
+            drainUploadStartQueue();
 
             // 立即删除记录
             if (uploads[uploadId]) { // 确保记录仍然存在
@@ -325,7 +507,10 @@ export function useFileUploader(
             console.error(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`, errorMessage);
             upload.status = 'error';
             upload.error = errorMessage; // 使用 payload 作为错误消息
+            removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
+            releaseUploadSlot(uploadId);
+            drainUploadStartQueue();
 
             // 让错误消息可见时间长一些
             setTimeout(() => {
@@ -364,7 +549,10 @@ export function useFileUploader(
         if (!uploadId) return;
         const upload = uploads[uploadId];
         if (upload) {
+            removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
+            releaseUploadSlot(uploadId);
+            drainUploadStartQueue();
             // 状态可能已经由用户操作设置为 'cancelled'
             if (upload.status !== 'cancelled') {
                  upload.status = 'cancelled';
@@ -410,9 +598,9 @@ export function useFileUploader(
         if (uploads[uploadId]?.status === 'uploading') void pumpUpload(uploadId);
     };
 
-    // A reconnect invalidates all in-flight ACKs and the backend's temporary stream.
-    // Pause without spinning, then restart the affected files from byte 0 once both SSH
-    // and SFTP are ready again. The original File object remains available in memory.
+    // A reconnect invalidates both the prepared directory token and all in-flight ACKs.
+    // Re-submit the complete local path tree first; only after the backend confirms that
+    // every remote directory exists do file streams restart from byte 0.
     watch(
         () => [wsDeps.value.isConnected.value, wsDeps.value.isSftpReady.value] as const,
         ([connected, sftpReady]) => {
@@ -421,6 +609,12 @@ export function useFileUploader(
                     clearTimeout(reconnectRestartTimer);
                     reconnectRestartTimer = null;
                 }
+                activeUploadIds.clear();
+                queuedUploadStarts.clear();
+                uploadBatches.forEach((batch) => {
+                    batch.prepared = false;
+                    batch.prepareRequestSent = false;
+                });
                 uploadTransferStates.forEach((transfer, uploadId) => {
                     const upload = uploads[uploadId];
                     if (!upload || !['pending', 'uploading', 'paused'].includes(upload.status)) return;
@@ -433,15 +627,7 @@ export function useFileUploader(
             if (reconnectRestartTimer) clearTimeout(reconnectRestartTimer);
             reconnectRestartTimer = setTimeout(() => {
                 reconnectRestartTimer = null;
-                uploadTransferStates.forEach((transfer, uploadId) => {
-                    const upload = uploads[uploadId];
-                    if (!upload) return;
-                    if (upload.status === 'paused') {
-                        requestUploadStart(uploadId, true);
-                    } else if (upload.status === 'pending' && !transfer.startRequestSent) {
-                        requestUploadStart(uploadId, false);
-                    }
-                });
+                uploadBatches.forEach((batch) => requestUploadBatchPrepare(batch.prepareId));
             }, UPLOAD_RECONNECT_RESTART_DELAY_MS);
         },
         { immediate: true },
@@ -456,6 +642,8 @@ export function useFileUploader(
             return;
         }
 
+        const unregisterUploadPrepareReady = wsDeps.value.onMessage('sftp:upload:prepare:ready', onUploadPrepareReady);
+        const unregisterUploadPrepareError = wsDeps.value.onMessage('sftp:upload:prepare:error', onUploadPrepareError);
         const unregisterUploadReady = wsDeps.value.onMessage('sftp:upload:ready', onUploadReady);
         const unregisterUploadSuccess = wsDeps.value.onMessage('sftp:upload:success', onUploadSuccess);
         const unregisterUploadError = wsDeps.value.onMessage('sftp:upload:error', onUploadError);
@@ -466,6 +654,8 @@ export function useFileUploader(
         const unregisterUploadChunkAck = wsDeps.value.onMessage('sftp:upload:chunk:ack', onUploadChunkAck);
 
         onCleanup(() => {
+            unregisterUploadPrepareReady?.();
+            unregisterUploadPrepareError?.();
             unregisterUploadReady?.();
             unregisterUploadSuccess?.();
             unregisterUploadError?.();
@@ -492,11 +682,15 @@ export function useFileUploader(
             cancelUpload(uploadId, true); // 卸载时通知后端
         });
         uploadTransferStates.clear();
+        uploadBatches.clear();
+        activeUploadIds.clear();
+        queuedUploadStarts.clear();
     });
 
     return {
         uploads, 
         startFileUpload,
+        startFileUploadBatch,
         cancelUpload,
         cancelAllUploads,
     };

@@ -48,6 +48,7 @@ import {
 } from './handlers/docker.handler';
 import {
     handleSftpOperation,
+    handleSftpUploadPrepare,
     handleSftpUploadStart,
     handleSftpUploadChunk,
     handleSftpUploadCancel
@@ -247,6 +248,9 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                             break;
 
                         // SFTP Upload Cases
+                        case 'sftp:upload:prepare':
+                            await handleSftpUploadPrepare(ws, payload);
+                            break;
                         case 'sftp:upload:start':
                             await handleSftpUploadStart(ws, payload);
                             break;

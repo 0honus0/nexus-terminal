@@ -146,8 +146,49 @@ export async function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload:
         return;
     }
     const relativePath = payload?.relativePath;
-    console.log(`WebSocket: SFTP Upload Start - Session: ${sessionId}, UploadID: ${payload.uploadId}, RemotePath: ${payload.remotePath}, Size: ${payload.size}, RelativePath: ${relativePath}`);
-    await sftpService.startUpload(sessionId, payload.uploadId, payload.remotePath, payload.size, relativePath);
+    const prepareId = payload?.prepareId;
+    console.log(`WebSocket: SFTP Upload Start - Session: ${sessionId}, UploadID: ${payload.uploadId}, RemotePath: ${payload.remotePath}, Size: ${payload.size}, RelativePath: ${relativePath}, PrepareID: ${prepareId}`);
+    await sftpService.startUpload(sessionId, payload.uploadId, payload.remotePath, payload.size, relativePath, prepareId);
+}
+
+export async function handleSftpUploadPrepare(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
+    const sessionId = ws.sessionId;
+    const state = sessionId ? clientStates.get(sessionId) : undefined;
+    const prepareId = payload?.prepareId;
+
+    if (!sessionId || !state) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'sftp:upload:prepare:error', payload: { prepareId, message: '无效的会话' } }));
+        }
+        return;
+    }
+    if (!prepareId || typeof payload?.basePath !== 'string' || !Array.isArray(payload?.directories)) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'sftp:upload:prepare:error', payload: { prepareId, message: '上传路径准备参数无效' } }));
+        }
+        return;
+    }
+
+    try {
+        const result = await sftpService.prepareUploadDirectories(
+            sessionId,
+            prepareId,
+            payload.basePath,
+            payload.directories,
+        );
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'sftp:upload:prepare:ready',
+                payload: { prepareId, ...result },
+            }));
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`WebSocket: SFTP upload prepare failed for ${prepareId}:`, error);
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'sftp:upload:prepare:error', payload: { prepareId, message } }));
+        }
+    }
 }
 
 export interface BinaryUploadChunkPayload {

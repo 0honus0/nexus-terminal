@@ -2,17 +2,27 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket } from './types';
 import { cleanupClientConnection } from './utils';
 
-const HEARTBEAT_INTERVAL_MS = 5000; // 保持原始的心跳间隔
+const HEARTBEAT_INTERVAL_MS = 15000;
+const MAX_MISSED_HEARTBEATS = 2;
 
 export function initializeHeartbeat(wss: WebSocketServer): NodeJS.Timeout {
+    const missedHeartbeats = new WeakMap<WebSocket, number>();
+
     const heartbeatInterval = setInterval(() => {
         wss.clients.forEach((ws: WebSocket) => {
             const extWs = ws as AuthenticatedWebSocket;
             if (extWs.isAlive === false) {
-                console.log(`WebSocket 心跳检测：用户 ${extWs.username} (会话: ${extWs.sessionId}) 连接无响应，正在终止...`);
-                cleanupClientConnection(extWs.sessionId); // 使用会话 ID 清理
-                return extWs.terminate();
+                const missed = (missedHeartbeats.get(ws) ?? 0) + 1;
+                missedHeartbeats.set(ws, missed);
+                if (missed >= MAX_MISSED_HEARTBEATS) {
+                    console.log(`WebSocket 心跳检测：用户 ${extWs.username} (会话: ${extWs.sessionId}) 连续 ${missed} 次无响应，正在终止...`);
+                    cleanupClientConnection(extWs.sessionId);
+                    return extWs.terminate();
+                }
+            } else {
+                missedHeartbeats.set(ws, 0);
             }
+
             extWs.isAlive = false;
             extWs.ping(() => {});
         });

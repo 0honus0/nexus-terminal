@@ -81,6 +81,12 @@ interface PendingUpload {
     temporaryPath: string;
 }
 
+interface PreparedUploadBatch {
+    sessionId: string;
+    basePath: string;
+    directories: Set<string>;
+}
+
 interface ActiveArchiveOperation {
     sessionId: string;
     requestId: string;
@@ -97,6 +103,8 @@ export class SftpService {
     private cancelledUploadIds: Set<string>;
     private activeArchives: Map<string, ActiveArchiveOperation>;
     private cancelledArchiveIds: Set<string>;
+    private directoryEnsurePromises = new WeakMap<SFTPWrapper, Map<string, Promise<void>>>();
+    private preparedUploadBatches: Map<string, PreparedUploadBatch>;
 
     constructor(clientStates: Map<string, ClientState>) {
         this.clientStates = clientStates;
@@ -105,6 +113,7 @@ export class SftpService {
         this.cancelledUploadIds = new Set();
         this.activeArchives = new Map();
         this.cancelledArchiveIds = new Set();
+        this.preparedUploadBatches = new Map();
     }
 
     /**
@@ -171,6 +180,9 @@ export class SftpService {
         });
         this.activeArchives.forEach((archive) => {
             if (archive.sessionId === sessionId) cleanupTasks.push(this.cancelArchive(sessionId, archive.requestId, false));
+        });
+        this.preparedUploadBatches.forEach((batch, prepareId) => {
+            if (batch.sessionId === sessionId) this.preparedUploadBatches.delete(prepareId);
         });
 
         void Promise.allSettled(cleanupTasks).finally(() => {
@@ -1069,51 +1081,69 @@ export class SftpService {
 
     // +++ 修改：辅助方法 - 确保目录存在 (递归创建) +++
     private async ensureDirectoryExists(sftp: SFTPWrapper, dirPath: string): Promise<void> {
-        // 规范化路径，移除尾部斜杠（如果存在）
         const normalizedPath = dirPath.replace(/\/$/, '');
-        if (!normalizedPath || normalizedPath === '/') {
-            return; // 根目录不需要创建
+        if (!normalizedPath || normalizedPath === '/') return;
+
+        let sessionPromises = this.directoryEnsurePromises.get(sftp);
+        if (!sessionPromises) {
+            sessionPromises = new Map<string, Promise<void>>();
+            this.directoryEnsurePromises.set(sftp, sessionPromises);
+        }
+
+        const existingPromise = sessionPromises.get(normalizedPath);
+        if (existingPromise) {
+            await existingPromise;
+            return;
+        }
+
+        const ensurePromise = this.ensureDirectoryExistsInternal(sftp, normalizedPath)
+            .finally(() => {
+                sessionPromises?.delete(normalizedPath);
+            });
+        sessionPromises.set(normalizedPath, ensurePromise);
+        await ensurePromise;
+    }
+
+    private async ensureDirectoryExistsInternal(sftp: SFTPWrapper, normalizedPath: string): Promise<void> {
+        try {
+            const stats = await this.getStats(sftp, normalizedPath);
+            if (!stats.isDirectory()) {
+                throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
+            }
+            return;
+        } catch (statError: any) {
+            const isMissing = statError.code === 'ENOENT'
+                || (typeof statError.message === 'string' && statError.message.includes('No such file'));
+            if (!isMissing) {
+                throw new Error(`检查目录失败 ${normalizedPath}: ${statError.message}`);
+            }
+        }
+
+        const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
+        if (parentDir && parentDir !== '/' && parentDir !== '.') {
+            await this.ensureDirectoryExists(sftp, parentDir);
         }
 
         try {
-            // 1. 尝试直接 stat 目录
-            await this.getStats(sftp, normalizedPath);
-            // console.log(`[SFTP Util] Directory already exists: ${normalizedPath}`);
-            return; // 目录已存在
-        } catch (statError: any) {
-            // 2. 如果 stat 失败，检查是否是 "No such file" 错误
-            if (statError.code === 'ENOENT' || (statError.message && statError.message.includes('No such file'))) {
-                const parentDir = pathModule.dirname(normalizedPath).replace(/\\/g, '/');
-                if (parentDir && parentDir !== '/' && parentDir !== '.') {
-                    await this.ensureDirectoryExists(sftp, parentDir);
-                }
-                try {
-                    await new Promise<void>((resolveMkdir, rejectMkdir) => {
-                        sftp.mkdir(normalizedPath, (mkdirErr) => {
-                            if (mkdirErr) {
-                                rejectMkdir(new Error(`创建目录失败 ${normalizedPath}: ${mkdirErr.message}`));
-                            } else {
-                                console.log(`[SFTP Util] Created directory: ${normalizedPath}`);
-                                resolveMkdir();
-                            }
-                        });
-                    });
-                } catch (mkdirError: unknown) {
-                    console.error(`[SFTP Util] mkdir failed for ${normalizedPath}:`, mkdirError);
-                    try {
-                        const finalStats = await this.getStats(sftp, normalizedPath);
-                        if (!finalStats.isDirectory()) {
-                            throw new Error(`路径 ${normalizedPath} 已存在但不是目录`);
-                        }
-                        console.log(`[SFTP Util] Directory ${normalizedPath} exists after mkdir failure, likely created concurrently.`);
-                    } catch {
-                        throw mkdirError;
+            await new Promise<void>((resolveMkdir, rejectMkdir) => {
+                sftp.mkdir(normalizedPath, (mkdirErr) => {
+                    if (mkdirErr) {
+                        rejectMkdir(new Error(`创建目录失败 ${normalizedPath}: ${mkdirErr.message}`));
+                    } else {
+                        console.log(`[SFTP Util] Created directory: ${normalizedPath}`);
+                        resolveMkdir();
                     }
-                }
-            } else {
-                // 其他 stat 错误
-                throw new Error(`检查目录失败 ${normalizedPath}: ${statError.message}`);
+                });
+            });
+        } catch (mkdirError: unknown) {
+            // Some SFTP servers return a generic "Failure" when another request creates the
+            // same directory first. Verify the final state and treat that race as success.
+            const finalStats = await this.getStats(sftp, normalizedPath).catch(() => null);
+            if (finalStats?.isDirectory()) {
+                console.debug(`[SFTP Util] Directory already exists after concurrent mkdir: ${normalizedPath}`);
+                return;
             }
+            throw mkdirError;
         }
     }
 
@@ -1782,8 +1812,83 @@ export class SftpService {
 
     // --- File Upload Methods ---
 
+    private normalizeUploadBasePath(basePath: string): string {
+        const normalized = pathModule.posix.normalize(basePath.replace(/\\/g, '/'));
+        if (!pathModule.posix.isAbsolute(normalized)) {
+            throw new Error(`上传目标基础路径必须是绝对路径: ${basePath}`);
+        }
+        return normalized;
+    }
+
+    private normalizeUploadRelativeDirectory(relativePath: string): string {
+        const slashNormalized = relativePath.replace(/\\/g, '/').replace(/^\.\//, '');
+        const normalized = pathModule.posix.normalize(slashNormalized).replace(/\/$/, '');
+        if (!normalized || normalized === '.') return '';
+        if (pathModule.posix.isAbsolute(normalized) || normalized === '..' || normalized.startsWith('../')) {
+            throw new Error(`上传目录包含非法路径: ${relativePath}`);
+        }
+        return normalized;
+    }
+
+    private resolvePreparedUploadDirectory(basePath: string, relativePath: string): string {
+        const fullPath = pathModule.posix.normalize(pathModule.posix.join(basePath, relativePath));
+        const isInsideBase = basePath === '/'
+            ? fullPath.startsWith('/')
+            : fullPath === basePath || fullPath.startsWith(`${basePath}/`);
+        if (!isInsideBase) {
+            throw new Error(`上传目录超出目标基础路径: ${relativePath}`);
+        }
+        return fullPath;
+    }
+
+    /** Create the complete remote directory tree before any file stream is opened. */
+    async prepareUploadDirectories(
+        sessionId: string,
+        prepareId: string,
+        basePath: string,
+        directories: string[],
+    ): Promise<{ preparedDirectories: number }> {
+        const state = this.clientStates.get(sessionId);
+        if (!state?.sftp) throw new Error('SFTP 会话未就绪');
+        if (!prepareId || prepareId.length > 512) throw new Error('上传准备任务 ID 无效');
+        if (!Array.isArray(directories) || directories.length > 20000) {
+            throw new Error('上传目录列表无效或数量过多');
+        }
+
+        const normalizedBasePath = this.normalizeUploadBasePath(basePath);
+        const fullDirectories = new Set<string>([normalizedBasePath]);
+        for (const directory of directories) {
+            if (typeof directory !== 'string') throw new Error('上传目录必须是字符串');
+            const normalizedRelative = this.normalizeUploadRelativeDirectory(directory);
+            fullDirectories.add(this.resolvePreparedUploadDirectory(normalizedBasePath, normalizedRelative));
+        }
+
+        const orderedDirectories = [...fullDirectories].sort((left, right) => {
+            const depthDiff = left.split('/').length - right.split('/').length;
+            return depthDiff || left.localeCompare(right);
+        });
+        for (const directory of orderedDirectories) {
+            await this.ensureDirectoryExists(state.sftp, directory);
+        }
+
+        this.preparedUploadBatches.set(prepareId, {
+            sessionId,
+            basePath: normalizedBasePath,
+            directories: fullDirectories,
+        });
+        console.log(`[SFTP Upload Prepare ${prepareId}] Prepared ${orderedDirectories.length} directories under ${normalizedBasePath}.`);
+        return { preparedDirectories: orderedDirectories.length };
+    }
+
     /** Start a new file upload */
-    async startUpload(sessionId: string, uploadId: string, remotePath: string, totalSize: number, relativePath?: string): Promise<void> {
+    async startUpload(
+        sessionId: string,
+        uploadId: string,
+        remotePath: string,
+        totalSize: number,
+        relativePath?: string,
+        prepareId?: string,
+    ): Promise<void> {
         const state = this.clientStates.get(sessionId);
         if (!state || !state.sftp) {
             console.warn(`[SFTP Upload ${uploadId}] SFTP not ready for session ${sessionId}.`);
@@ -1796,9 +1901,30 @@ export class SftpService {
             return;
         }
 
-        const targetDirectory = pathModule.posix.dirname(remotePath);
+        const normalizedRemotePath = pathModule.posix.normalize(remotePath.replace(/\\/g, '/'));
+        const targetDirectory = pathModule.posix.dirname(normalizedRemotePath);
+        let directoryWasPrepared = false;
+        if (prepareId) {
+            const preparedBatch = this.preparedUploadBatches.get(prepareId);
+            if (!preparedBatch || preparedBatch.sessionId !== sessionId) {
+                state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: '上传目录尚未准备完成' } }));
+                return;
+            }
+            const isInsidePreparedBase = preparedBatch.basePath === '/'
+                ? targetDirectory.startsWith('/')
+                : targetDirectory === preparedBatch.basePath || targetDirectory.startsWith(`${preparedBatch.basePath}/`);
+            if (!isInsidePreparedBase) {
+                state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: '上传文件路径超出已准备目录' } }));
+                return;
+            }
+            if (!preparedBatch.directories.has(targetDirectory)) {
+                state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `上传目录未在准备阶段创建: ${targetDirectory}` } }));
+                return;
+            }
+            directoryWasPrepared = true;
+        }
         const temporaryPath = pathModule.posix.join(targetDirectory, `.nexus-upload-${uploadId}.part`);
-        this.pendingUploads.set(uploadId, { sessionId, remotePath, temporaryPath });
+        this.pendingUploads.set(uploadId, { sessionId, remotePath: normalizedRemotePath, temporaryPath });
 
         const stopIfCancelled = async (): Promise<boolean> => {
             if (!this.cancelledUploadIds.has(uploadId)) return false;
@@ -1807,9 +1933,9 @@ export class SftpService {
         };
 
         try {
-            // Folder uploads may introduce nested directories. Single-file uploads already
-            // point at an existing directory, but running the same safe check is harmless.
-            await this.ensureDirectoryExists(state.sftp, targetDirectory);
+            // Prepared batches create their complete directory tree before uploads start.
+            // Keep the legacy fallback for older clients that do not send a prepareId.
+            if (!directoryWasPrepared) await this.ensureDirectoryExists(state.sftp, targetDirectory);
             if (await stopIfCancelled()) return;
 
             // Probe the temporary path, never the final target. The previous implementation
@@ -1830,7 +1956,7 @@ export class SftpService {
                 highWaterMark: UPLOAD_WRITE_HIGH_WATER_MARK,
             });
             const uploadState: ActiveUpload = {
-                remotePath,
+                remotePath: normalizedRemotePath,
                 temporaryPath,
                 totalSize,
                 bytesAccepted: 0,

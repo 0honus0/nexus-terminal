@@ -12,7 +12,7 @@ export interface UseFileManagerDragAndDropOptions {
 
   // 函数依赖
   joinPath: (base: string, target: string) => string; // 路径拼接函数
-  onFileUpload: (file: File, relativePath?: string) => void; // 修改：触发文件上传的回调，增加相对路径
+  onFileUploadBatch: (files: Array<{ file: File; relativePath?: string }>, directories: string[]) => void;
   onItemMove: (sourceItem: FileListItem, newFullPath: string) => void; // 触发文件/文件夹移动的回调
 }
 
@@ -22,7 +22,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     currentPath,
     fileListContainerRef,
     joinPath,
-    onFileUpload,
+    onFileUploadBatch,
     onItemMove,
     selectedItems, // 获取传入的 selectedItems
     fileList,      // 获取传入的 fileList
@@ -163,36 +163,46 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
      }
   };
 
-  // --- 递归遍历文件树的辅助函数 ---
-  const traverseFileTree = (item: FileSystemEntry, path = '') => {
-    path = path || '';
+  // --- 先完整收集本地路径，再让后端创建目录树 ---
+  const readFileEntry = (entry: FileSystemFileEntry): Promise<File> => new Promise((resolve, reject) => {
+    entry.file(resolve, reject);
+  });
+
+  const readAllDirectoryEntries = async (reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> => {
+    const entries: FileSystemEntry[] = [];
+    while (true) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      });
+      if (batch.length === 0) return entries;
+      entries.push(...batch);
+    }
+  };
+
+  const collectFileTree = async (
+    item: FileSystemEntry,
+    parentPath: string,
+    files: Array<{ file: File; relativePath?: string }>,
+    directories: string[],
+  ): Promise<void> => {
     if (item.isFile) {
-      // 文件处理
-      (item as FileSystemFileEntry).file((file) => {
-        // 调用上传函数，传递文件和相对路径
-        console.log(`[DragDrop] Uploading file: ${path}${file.name}`);
-        onFileUpload(file, path); // 传递相对路径
-      }, (err) => {
-        console.error(`[DragDrop] Error getting file from entry: ${path}${item.name}`, err);
-      });
-    } else if (item.isDirectory) {
-      // 目录处理
-      const dirReader = (item as FileSystemDirectoryEntry).createReader();
-      dirReader.readEntries((entries) => {
-        console.log(`[DragDrop] Traversing directory: ${path}${item.name}, found ${entries.length} entries.`);
-        // 递归遍历目录中的每个条目
-        entries.forEach((entry) => {
-          traverseFileTree(entry, path + item.name + '/'); // 更新相对路径
-        });
-      }, (err) => {
-         console.error(`[DragDrop] Error reading directory entries: ${path}${item.name}`, err);
-      });
+      const file = await readFileEntry(item as FileSystemFileEntry);
+      files.push({ file, relativePath: parentPath || undefined });
+      return;
+    }
+    if (!item.isDirectory) return;
+
+    const directoryPath = `${parentPath}${item.name}/`;
+    directories.push(directoryPath);
+    const entries = await readAllDirectoryEntries((item as FileSystemDirectoryEntry).createReader());
+    for (const entry of entries) {
+      await collectFileTree(entry, directoryPath, files, directories);
     }
   };
   
 
   // 处理蒙版上的 Drop 事件
-  const handleOverlayDrop = (event: DragEvent) => {
+  const handleOverlayDrop = async (event: DragEvent) => {
     event.preventDefault(); // 必须阻止，以防浏览器打开文件
     showExternalDropOverlay.value = false; // 隐藏蒙版
     stopAutoScroll(); // 停止滚动
@@ -203,18 +213,31 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
         return;
     }
 
-    console.log(`[DragDrop] Processing ${items.length} items from overlay drop.`);
-    for (let i = 0; i < items.length; i++) {
+    const files: Array<{ file: File; relativePath?: string }> = [];
+    const directories: string[] = [];
+    console.log(`[DragDrop] Collecting ${items.length} dropped items before upload.`);
+    try {
+      for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (item.kind === 'file') {
-            const entry = item.webkitGetAsEntry();
-            if (entry) {
-                traverseFileTree(entry); // 处理文件/文件夹
-            } else {
-                 console.warn(`[DragDrop] Could not get entry for item ${i} from overlay.`);
-            }
+        if (item.kind !== 'file') continue;
+        const entry = item.webkitGetAsEntry();
+        if (!entry) {
+          console.warn(`[DragDrop] Could not get entry for item ${i} from overlay.`);
+          continue;
         }
+        await collectFileTree(entry, '', files, directories);
+      }
+    } catch (error) {
+      console.error('[DragDrop] Failed to collect dropped file tree:', error);
+      return;
     }
+
+    if (files.length === 0 && directories.length === 0) {
+      console.log('[DragDrop] No files or directories found in dropped items.');
+      return;
+    }
+    console.log(`[DragDrop] Submitting ${directories.length} directories before uploading ${files.length} files.`);
+    onFileUploadBatch(files, directories);
   };
 
   // 原有的 handleDrop (容器的 drop) 现在基本不需要了，

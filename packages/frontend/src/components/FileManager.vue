@@ -103,7 +103,7 @@ const archiveProgress = computed(() => currentSftpManager.value?.archiveProgress
 // 修改：依赖 currentSftpManager 的状态
 const {
     uploads,
-    startFileUpload,
+    startFileUploadBatch,
     cancelUpload,
     cancelAllUploads,
 } = useFileUploader(
@@ -989,7 +989,7 @@ const {
   joinPath: (base: string, target: string): string => {
       return currentSftpManager.value?.joinPath(base, target) ?? `${base}/${target}`.replace(/\/+/g, '/'); // 提供简单的默认实现
   },
-  onFileUpload: startFileUpload,
+  onFileUploadBatch: startFileUploadBatch,
   // 修改：确保在调用前检查 currentSftpManager.value
   onItemMove: (item, newName) => {
       currentSftpManager.value?.renameItem(item, newName);
@@ -1005,9 +1005,7 @@ const handleFileSelected = (event: Event) => {
     const input = event.target as HTMLInputElement;
     // 恢复使用 props.wsDeps.isConnected
     if (!input.files || !props.wsDeps.isConnected.value) return;
-    // --- 修正：使用匿名函数包装 startFileUpload 调用 ---
-    Array.from(input.files).forEach(file => startFileUpload(file)); // 只传递 file 参数
-    // --- 结束修正 ---
+    startFileUploadBatch(Array.from(input.files).map(file => ({ file })));
     input.value = '';
 };
 
