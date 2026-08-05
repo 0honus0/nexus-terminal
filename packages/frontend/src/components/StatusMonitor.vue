@@ -1,7 +1,10 @@
 <template>
   <div
-    class="status-monitor h-full overflow-y-auto bg-background text-foreground"
-    :class="{ 'is-collapsed': panelCollapsed, 'bg-header': !activeSessionId }"
+    class="status-monitor h-full bg-background text-foreground"
+    :class="{
+      'has-history': Boolean(selectedMetric),
+      'bg-header': !activeSessionId,
+    }"
   >
     <div v-if="!activeSessionId" class="empty-state">
       <i class="fas fa-plug"></i>
@@ -18,30 +21,20 @@
       <span>{{ t('statusMonitor.loading') }}</span>
     </div>
 
-    <section v-else ref="monitorPanelRef" class="monitor-panel">
-      <button
-        class="monitor-header"
-        type="button"
-        :aria-expanded="!panelCollapsed"
-        @click="togglePanel"
-      >
+    <section v-else class="monitor-panel">
+      <header class="monitor-header">
         <span class="header-main">
           <strong>{{ t('statusMonitor.title') }}</strong>
           <span class="live-state"><i></i>在线</span>
-          <span class="collapse-control" aria-hidden="true">
-            <svg viewBox="0 0 20 20" fill="none">
-              <path d="m6.8 11.6 3.2-3.2 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
         </span>
 
-        <span class="collapsed-summary" aria-hidden="true">
+        <span class="auto-summary" aria-hidden="true">
           <span class="summary-row summary-resources">
-            <span class="summary-metric summary-cpu"><b>CPU</b> {{ formatPercentageText(displayCpuPercent) }}</span>
+            <span class="summary-metric summary-cpu"><b>CPU</b><span class="summary-percent">{{ formatPercentageText(displayCpuPercent) }}</span></span>
             <i class="summary-separator">·</i>
-            <span class="summary-metric summary-memory"><b>内存</b> {{ formatPercentageText(displayMemPercent) }}</span>
+            <span class="summary-metric summary-memory"><b>内存</b><span class="summary-percent">{{ formatPercentageText(displayMemPercent) }}</span></span>
             <i class="summary-separator">·</i>
-            <span class="summary-metric summary-disk"><b>磁盘</b> {{ formatPercentageText(displayDiskPercent) }}</span>
+            <span class="summary-metric summary-disk"><b>磁盘</b><span class="summary-percent">{{ formatPercentageText(displayDiskPercent) }}</span></span>
           </span>
           <span class="summary-row summary-network">
             <span class="rate-up">
@@ -56,9 +49,9 @@
             </span>
           </span>
         </span>
-      </button>
+      </header>
 
-      <div ref="monitorContentRef" class="monitor-content">
+      <div class="monitor-content">
         <div
           v-if="statusMonitorShowIpBoolean && sessionIpAddress"
           class="ip-row"
@@ -82,6 +75,7 @@
             class="metric-card"
             :class="[{ selected: selectedMetric === metric.key }, `metric-${metric.key}`]"
             :style="{ '--metric-accent': metric.color, '--metric-value': `${metric.percent}%` }"
+            :aria-label="`${metric.name} ${formatPercentageText(metric.percent)}`"
             @click="selectMetric(metric.key)"
           >
             <span v-if="metric.key === 'cpu'" class="cpu-water" aria-hidden="true">
@@ -104,8 +98,17 @@
                 <span v-if="metric.detail" class="metric-detail metric-detail-full">{{ metric.detail }}</span>
                 <span v-if="metric.compactDetail" class="metric-detail metric-detail-compact">{{ metric.compactDetail }}</span>
               </span>
+              <span class="metric-ring" aria-hidden="true">
+                <strong>{{ formatPercentageNumber(metric.percent) }}</strong>
+              </span>
             </span>
-            <span v-if="metric.key !== 'cpu'" class="metric-progress" aria-hidden="true"><i></i></span>
+            <span
+              class="metric-progress"
+              :class="{ 'metric-progress-spacer': metric.key === 'cpu' }"
+              aria-hidden="true"
+            >
+              <i v-if="metric.key !== 'cpu'"></i>
+            </span>
           </button>
         </div>
 
@@ -196,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, nextTick, ref, watch, type Component, type PropType } from 'vue';
+import { computed, defineComponent, h, ref, watch, type Component, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '../stores/session.store';
@@ -231,10 +234,6 @@ const props = defineProps({
     default: null,
   },
 });
-
-const emit = defineEmits<{
-  (event: 'panel-resize-request', payload: { collapsed: boolean; preferredHeight: number }): void;
-}>();
 
 const { t } = useI18n();
 const sessionStore = useSessionStore();
@@ -284,9 +283,6 @@ const UploadIcon = icon([
   h('path', { d: 'M12 16V5M7.5 9.5 12 5l4.5 4.5M5 20h14', ...stroke }),
 ]);
 
-const panelCollapsed = ref(false);
-const monitorPanelRef = ref<HTMLElement | null>(null);
-const monitorContentRef = ref<HTMLElement | null>(null);
 const selectedMetric = ref<SelectedMetric | null>(null);
 const historyRange = ref<5 | 10 | 30>(5);
 const ranges = [5, 10, 30] as const;
@@ -300,7 +296,9 @@ const displayMemPercent = computed(() => currentServerStatus.value?.memPercent ?
 const displaySwapPercent = computed(() => currentServerStatus.value?.swapPercent ?? 0);
 const displayDiskPercent = computed(() => currentServerStatus.value?.diskPercent ?? 0);
 
-const formatPercentageText = (percentage: number) => `${Math.round(Math.max(0, Math.min(100, percentage)))}%`;
+const normalizePercentage = (percentage: number) => Math.round(Math.max(0, Math.min(100, percentage)));
+const formatPercentageText = (percentage: number) => `${normalizePercentage(percentage)}%`;
+const formatPercentageNumber = (percentage: number) => `${normalizePercentage(percentage)}`;
 
 const formatBytesPerSecond = (bytes?: number): string => {
   if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return '0 B/s';
@@ -381,32 +379,8 @@ const sessionIpAddress = computed(() => {
   return connectionsStore.connections.find(connection => connection.id === id)?.host || null;
 });
 
-const requestPanelResize = async () => {
-  await nextTick();
-  const panel = monitorPanelRef.value;
-  if (!panel) return;
-
-  const headerHeight = panel.querySelector<HTMLElement>('.monitor-header')?.offsetHeight ?? 0;
-  const contentHeight = monitorContentRef.value?.scrollHeight ?? 0;
-  const expandedHeightCap = selectedMetric.value ? 430 : 340;
-  const preferredHeight = panelCollapsed.value
-    ? Math.max(118, Math.ceil(headerHeight + 12))
-    : Math.min(expandedHeightCap, Math.ceil(headerHeight + contentHeight + 8));
-
-  emit('panel-resize-request', {
-    collapsed: panelCollapsed.value,
-    preferredHeight,
-  });
-};
-
-const togglePanel = () => {
-  panelCollapsed.value = !panelCollapsed.value;
-  void requestPanelResize();
-};
-
 const selectMetric = (metric: SelectedMetric) => {
   selectedMetric.value = selectedMetric.value === metric ? null : metric;
-  void requestPanelResize();
 };
 
 const selectedMetricTitle = computed(() => ({
@@ -454,12 +428,13 @@ const downsample = (values: number[], maxPoints = 110) => {
   });
 };
 
-const niceNetworkMax = computed(() => {
-  const max = Math.max(...networkRxHistory.value, ...networkTxHistory.value, 0);
-  if (max <= 0) return 1024;
-  const magnitude = 10 ** Math.floor(Math.log10(max));
-  return Math.ceil(max / magnitude) * magnitude;
-});
+const networkHistoryMax = computed(() => Math.max(
+  ...networkRxHistory.value,
+  ...networkTxHistory.value,
+  currentServerStatus.value?.netRxRate ?? 0,
+  currentServerStatus.value?.netTxRate ?? 0,
+  1,
+));
 
 const pointString = (values: number[], maxValue: number) => {
   const sampled = downsample(values);
@@ -477,8 +452,8 @@ const pointString = (values: number[], maxValue: number) => {
 
 const singleLinePoints = computed(() => pointString(percentHistory.value, 100));
 const singleAreaPath = computed(() => `M34,94 L${singleLinePoints.value.replaceAll(' ', ' L')} L240,94 Z`);
-const networkDownloadPoints = computed(() => pointString(networkRxHistory.value, niceNetworkMax.value));
-const networkUploadPoints = computed(() => pointString(networkTxHistory.value, niceNetworkMax.value));
+const networkDownloadPoints = computed(() => pointString(networkRxHistory.value, networkHistoryMax.value));
+const networkUploadPoints = computed(() => pointString(networkTxHistory.value, networkHistoryMax.value));
 
 const formatAxisRate = (bytes: number) => {
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(bytes >= 10 * 1024 ** 2 ? 0 : 1)}M`;
@@ -486,22 +461,12 @@ const formatAxisRate = (bytes: number) => {
   return `${Math.round(bytes)}`;
 };
 const yAxisLabels = computed(() => selectedMetric.value === 'network'
-  ? [formatAxisRate(niceNetworkMax.value), formatAxisRate(niceNetworkMax.value / 2), '0']
+  ? [formatAxisRate(networkHistoryMax.value), formatAxisRate(networkHistoryMax.value / 2), '0']
   : ['100%', '50%', '0']);
 
 watch(() => props.activeSessionId, () => {
   selectedMetric.value = null;
-  panelCollapsed.value = false;
-  void requestPanelResize();
 });
-
-watch(
-  () => Boolean(currentServerStatus.value),
-  (ready, wasReady) => {
-    if (ready && !wasReady) void requestPanelResize();
-  },
-  { immediate: true },
-);
 
 let attachedStatusManager: { activate: () => void; deactivate: () => void; refreshInterval?: () => void } | null = null;
 let componentActive = false;
@@ -554,7 +519,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: stretch;
   overflow: hidden;
   padding: 0.42rem;
   font-size: 0.78rem;
@@ -573,11 +538,12 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .error-state { color: #ef4444; }
 .monitor-panel {
   width: 100%;
-  max-height: 100%;
+  height: 100%;
+  max-height: none;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin-top: auto;
+  margin: 0;
   border: 1px solid rgba(148, 163, 184, 0.19);
   border-radius: 0.86rem;
   overflow: hidden;
@@ -593,12 +559,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   color: inherit;
   background: transparent;
   text-align: left;
-  cursor: pointer;
 }
 .header-main {
   min-height: 2.86rem;
   display: grid;
-  grid-template-columns: minmax(0,1fr) auto auto;
+  grid-template-columns: minmax(0,1fr) auto;
   align-items: center;
   gap: 0.42rem;
   padding: 0.48rem 0.62rem;
@@ -613,53 +578,17 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 .live-state { display: inline-flex; align-items: center; gap: .34rem; color: #34df7d; white-space: nowrap; font-size: .76rem; }
 .live-state i { width: .48rem; height: .48rem; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px currentColor; }
-.collapse-control {
-  width: clamp(1.78rem, 9cqh, 2.05rem);
-  height: clamp(1.78rem, 9cqh, 2.05rem);
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(148,163,184,.18);
-  border-radius: clamp(.54rem, 3cqh, .65rem);
-  background: rgba(148,163,184,.065);
-  color: #9da9bb;
-  transition: width .2s ease, height .2s ease, border-radius .2s ease, background .2s ease;
-}
-.collapse-control svg {
-  width: clamp(.88rem, 4.7cqh, 1rem);
-  height: clamp(.88rem, 4.7cqh, 1rem);
-  transition: transform .22s ease;
-}
-.is-collapsed .collapse-control {
-  width: clamp(1.95rem, 11cqh, 2.22rem);
-  height: clamp(1.95rem, 11cqh, 2.22rem);
-  background: rgba(148,163,184,.08);
-}
-.is-collapsed .collapse-control svg { transform: rotate(180deg); }
-.collapsed-summary { display: none; }
+.auto-summary { display: none; }
 .monitor-content {
+  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   padding: .54rem;
   opacity: 1;
-  scrollbar-width: thin;
   transition: opacity .18s ease;
-}
-.is-collapsed .monitor-content { display: none; }
-.is-collapsed .header-main {
-  min-height: clamp(3.05rem, 16cqh, 3.48rem);
-  padding-block: clamp(.54rem, 3.3cqh, .72rem);
-  border-bottom: 0;
-}
-.is-collapsed .collapsed-summary {
-  display: grid;
-  grid-template-rows: repeat(2,minmax(1.9rem,1fr));
-  gap: clamp(.76rem, 5cqh, 1.06rem);
-  height: clamp(5.75rem, 26cqh, 7.15rem);
-  align-content: stretch;
-  justify-items: stretch;
-  padding: clamp(.34rem, 2.2cqh, .52rem) clamp(.7rem, 4.8cqw, .9rem) clamp(.76rem, 4cqh, 1rem);
-  color: #a7b3c4;
 }
 .summary-row {
   min-width: 0;
@@ -677,6 +606,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   justify-content: center;
   gap: .22rem;
 }
+.summary-percent { color: #c8d1dd; }
 .summary-row b { font-weight: 760; }
 .summary-cpu b { color: #42a5ff; }
 .summary-memory b { color: #36d982; }
@@ -752,7 +682,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 .copy-button:hover { color: #fff; border-color: rgba(66,165,255,.5); background: rgba(66,165,255,.11); transform: translateY(-1px); }
 .copy-button svg { width: 1rem; height: 1rem; }
-.metric-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .5rem; }
+.metric-grid { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .5rem; }
 .metric-card {
   position: relative;
   min-width: 0;
@@ -817,6 +747,64 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   font-weight: 780;
   line-height: 1.05;
 }
+.metric-ring {
+  --ring-size: clamp(2.05rem, 11cqh, 2.55rem);
+  --ring-inset: 4px;
+  position: relative;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  flex: 0 0 var(--ring-size);
+  display: none;
+  place-items: center;
+  justify-self: end;
+  overflow: hidden;
+  border-radius: 50%;
+  color: var(--metric-accent);
+  background:
+    conic-gradient(
+      from -90deg,
+      var(--metric-accent) 0 var(--metric-value),
+      color-mix(in srgb, var(--metric-accent) 12%, rgba(148,163,184,.14)) var(--metric-value) 100%
+    );
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--metric-accent) 22%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--metric-accent) 28%, transparent);
+}
+.metric-ring::before {
+  content: "";
+  position: absolute;
+  inset: var(--ring-inset);
+  border: 1px solid color-mix(in srgb, var(--metric-accent) 24%, transparent);
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 34% 26%, color-mix(in srgb, var(--metric-accent) 24%, transparent), transparent 52%),
+    color-mix(in srgb, var(--metric-accent) 11%, #0b111b);
+  box-shadow: inset 0 1px 3px rgba(255,255,255,.08);
+}
+.metric-ring::after {
+  content: "";
+  position: absolute;
+  inset: 2px 22% auto;
+  height: 20%;
+  border-radius: 999px;
+  background: rgba(255,255,255,.22);
+  filter: blur(1px);
+  opacity: .55;
+}
+.metric-ring strong {
+  position: relative;
+  z-index: 2;
+  color: currentColor;
+  font-size: clamp(.68rem, 4.4cqh, .86rem);
+  font-weight: 820;
+  line-height: 1;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--metric-accent) 42%, transparent);
+}
+.has-history .metric-ring {
+  --ring-size: 1.58rem;
+  --ring-inset: 3px;
+}
+.has-history .metric-ring strong { font-size: .58rem; }
 .metric-detail {
   position: relative;
   z-index: 2;
@@ -848,36 +836,36 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .small-icon svg { width: 1.08rem; height: 1.08rem; }
 .ip-icon { --metric-accent: #42a5ff; }
 .metric-progress { position: relative; z-index: 2; height: .29rem; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.14); }
+.metric-progress-spacer { visibility: hidden; }
 .metric-progress i { display: block; width: var(--metric-value); height: 100%; border-radius: inherit; background: var(--metric-accent); box-shadow: 0 0 10px color-mix(in srgb, var(--metric-accent) 52%, transparent); transition: width .5s ease; }
 .cpu-water {
   position: absolute;
   z-index: 0;
-  left: 0;
-  right: 0;
-  top: 2.3rem;
-  bottom: 0;
+  inset: 0;
   overflow: hidden;
-  border-radius: 0 0 .78rem .78rem;
+  border-radius: inherit;
   pointer-events: none;
 }
 .cpu-water-fill {
-  --cpu-water-color: color-mix(in srgb, var(--metric-accent) 31%, transparent);
+  --cpu-water-color: color-mix(in srgb, var(--metric-accent) 29%, transparent);
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   height: var(--metric-value);
-  min-height: 8px;
-  background: transparent;
+  min-height: 0;
+  background: var(--cpu-water-color);
+  box-shadow: 0 -4px 14px color-mix(in srgb, var(--metric-accent) 16%, transparent);
   transition: height .75s cubic-bezier(.2,.8,.2,1);
 }
 .cpu-water-fill::after {
   content: "";
   position: absolute;
   z-index: 0;
-  inset: 4px 0 0;
-  background: var(--cpu-water-color);
-  box-shadow: 0 -3px 10px color-mix(in srgb, var(--metric-accent) 12%, transparent);
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.055), transparent 24%),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--metric-accent) 14%, transparent), transparent);
 }
 .cpu-wave {
   position: absolute;
@@ -933,6 +921,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .network-card {
   width: 100%;
   min-width: 0;
+  flex: 0 0 auto;
   margin-top: .52rem;
   display: grid;
   grid-template-columns: minmax(0,1fr) auto auto;
@@ -954,6 +943,10 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .rate-down { color: #35db81; }
 .rate-up { color: #ff814a; }
 .history-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   margin-top: .62rem;
   padding: .64rem .56rem .38rem;
   border: 1px solid rgba(148,163,184,.16);
@@ -968,200 +961,388 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .chart-legend { display: flex; justify-content: flex-end; gap: .64rem; padding: 0 .2rem .12rem; font-size: .57rem; }
 .chart-legend span { display: inline-flex; align-items: center; gap: .22rem; }
 .chart-legend i { width: .58rem; height: 2px; border-radius: 999px; background: currentColor; }
-.history-chart { width: 100%; height: auto; min-height: 7.3rem; display: block; overflow: visible; }
+.history-chart { width: 100%; height: 100%; min-height: 0; flex: 1 1 auto; display: block; overflow: visible; }
 .chart-grid line { stroke: rgba(148,163,184,.11); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .axis-labels text { fill: #7890ae; font-size: 7px; font-family: ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 .history-area { fill: url(#historyAreaGradient); }
 .history-line { fill: none; stroke: var(--history-accent); stroke-width: 2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--history-accent) 55%, transparent)); }
 .network-download-line { stroke: #35db81; }
 .network-upload-line { stroke: #ff814a; }
-@container status-pane (max-width: 210px) {
+
+.status-monitor:not(.has-history) .metric-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-auto-rows: minmax(0,1fr);
+}
+.status-monitor:not(.has-history) .metric-card { min-height: 0; }
+
+.has-history .ip-row { display: none; }
+.has-history .metric-grid {
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-auto-rows: auto;
+  gap: .24rem;
+}
+.has-history .metric-card {
+  min-height: 1.9rem;
+  grid-template-rows: minmax(0,1fr);
+  padding: .16rem .26rem;
+  gap: 0;
+  border-radius: .54rem;
+}
+.has-history .metric-layout {
+  grid-template-columns: minmax(0,1fr) 3rem;
+  align-items: center;
+  gap: .2rem;
+}
+.has-history .metric-identity { height: auto; }
+.has-history .metric-identity .small-icon,
+.has-history .metric-detail,
+.has-history .metric-progress,
+.has-history .cpu-water { display: none; }
+.has-history .metric-values {
+  display: grid;
+  height: auto;
+  justify-items: start;
+  text-align: left;
+  padding-left: .28rem;
+}
+.has-history .metric-name,
+.has-history .metric-percent { font-size: .62rem; }
+.has-history .network-card {
+  margin-top: .26rem;
+  padding: .32rem .42rem;
+  gap: .28rem;
+}
+.has-history .network-title small { display: none; }
+.has-history .history-card {
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: .28rem;
+}
+
+@container status-pane (min-width: 241px) and (min-height: 380px) {
+  .status-monitor:not(.has-history) .metric-card {
+    padding: .7rem .68rem .54rem;
+    gap: .56rem;
+  }
+  .status-monitor:not(.has-history) .metric-layout {
+    height: 100%;
+    grid-template-columns: minmax(0,1.05fr) minmax(0,.95fr);
+    align-items: center;
+    gap: .44rem;
+  }
+  .status-monitor:not(.has-history) .metric-identity { gap: .4rem; }
+  .status-monitor:not(.has-history) .metric-values {
+    align-content: space-evenly;
+    gap: 0;
+    padding-block: .16rem;
+  }
+  .status-monitor:not(.has-history) .small-icon {
+    width: 1.95rem;
+    height: 1.95rem;
+    flex-basis: 1.95rem;
+    border-radius: .62rem;
+  }
+  .status-monitor:not(.has-history) .small-icon svg { width: 1.18rem; height: 1.18rem; }
+  .status-monitor:not(.has-history) .metric-name { font-size: .88rem; }
+  .status-monitor:not(.has-history) .metric-percent { font-size: 1.04rem; }
+  .status-monitor:not(.has-history) .metric-detail { font-size: .68rem; }
+  .status-monitor:not(.has-history) .metric-progress {
+    height: clamp(.48rem, 1.25cqh, .62rem);
+    background: rgba(148,163,184,.17);
+    box-shadow: inset 0 1px 2px rgba(2,6,23,.38);
+  }
+  .status-monitor:not(.has-history) .metric-progress i {
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.16),
+      0 0 12px color-mix(in srgb, var(--metric-accent) 58%, transparent);
+  }
+}
+
+@container status-pane (max-width: 240px) {
   .status-monitor { padding: .28rem; }
-  .header-main { padding-inline: .5rem; gap: .32rem; }
+  .header-main { min-height: 2.55rem; padding: .38rem .5rem; gap: .3rem; }
   .header-main > strong { font-size: .82rem; }
   .live-state { font-size: .66rem; }
-  .collapse-control { width: clamp(1.68rem, 9cqh, 1.82rem); height: clamp(1.68rem, 9cqh, 1.82rem); }
-  .monitor-content { padding: .38rem; }
-  .ip-row { gap: .2rem; padding: .34rem; }
-  .ip-label { gap: .18rem; font-size: .58rem; }
-  .ip-label .small-icon { width: 1.3rem; height: 1.3rem; flex-basis: 1.3rem; }
-  .ip-label .small-icon svg { width: .78rem; height: .78rem; }
-  .ip-row > strong { font-size: .61rem; letter-spacing: -.01em; }
-  .copy-button { width: 1.56rem; height: 1.56rem; border-radius: .5rem; }
-  .copy-button svg { width: .86rem; height: .86rem; }
-  .metric-grid { gap: .38rem; }
-  .metric-card { min-height: 3.72rem; padding: .34rem; gap: .16rem; }
-  .metric-layout { gap: .25rem; }
-  .cpu-water { top: 1.9rem; }
-  .small-icon { width: 1.5rem; height: 1.5rem; flex-basis: 1.5rem; border-radius: .48rem; }
-  .small-icon svg { width: .92rem; height: .92rem; }
-  .metric-name { font-size: .7rem; }
-  .metric-percent { font-size: .69rem; }
-  .metric-detail { color: #aeb9c9; font-size: .59rem; }
-  .network-card { grid-template-columns: minmax(0,1fr) 1fr; gap: .32rem; }
-  .network-title { grid-column: 1 / -1; }
-  .network-rate { font-size: .58rem; }
-  .network-rate.rate-up { justify-self: end; }
-  .history-card { padding-inline: .42rem; }
-  .history-header > strong { font-size: .65rem; }
-  .range-tabs button { min-width: 1.55rem; padding-inline: .25rem; font-size: .56rem; }
-  .history-chart { min-height: 6.45rem; }
-}
-@container status-pane (max-width: 190px) {
-  .ip-label .small-icon,
-  .metric-identity .small-icon { display: none; }
+  .monitor-content { padding: .36rem; }
+  .ip-row { gap: .24rem; padding: .34rem; margin-bottom: .4rem; }
   .ip-label-long { display: none; }
   .ip-label-short { display: inline; }
-  .ip-row { grid-template-columns: auto minmax(0,1fr) auto; gap: .26rem; }
-  .ip-label { font-size: .64rem; }
-  .ip-row > strong { font-size: .65rem; text-align: left; }
-  .metric-layout { grid-template-columns: minmax(0,.86fr) minmax(0,1.14fr); gap: .2rem; }
-  .metric-identity { gap: 0; }
+  .ip-label { gap: .18rem; font-size: .64rem; }
+  .ip-label .small-icon { width: 1.34rem; height: 1.34rem; flex-basis: 1.34rem; }
+  .ip-label .small-icon svg { width: .8rem; height: .8rem; }
+  .ip-row > strong { font-size: .64rem; text-align: left; }
+  .copy-button { width: 1.58rem; height: 1.58rem; border-radius: .5rem; }
+  .metric-grid { gap: .34rem; }
+  .metric-card { min-height: 3.5rem; padding: .32rem; gap: .14rem; }
+  .metric-layout { grid-template-columns: minmax(0,.84fr) minmax(0,1.16fr); gap: .22rem; }
+  .small-icon { width: 1.45rem; height: 1.45rem; flex-basis: 1.45rem; border-radius: .46rem; }
+  .small-icon svg { width: .88rem; height: .88rem; }
   .metric-name { font-size: .69rem; }
   .metric-percent { font-size: .67rem; }
-  .cpu-water { top: 1.38rem; }
   .metric-detail-full { display: none; }
-  .metric-detail-compact { display: block; color: #b2bdcc; font-size: .59rem; letter-spacing: -.015em; }
-}
-@container status-pane (max-width: 175px) {
-  .metric-name { font-size: .65rem; }
-  .metric-percent { font-size: .63rem; }
-  .metric-detail { font-size: .56rem; }
-  .network-title { font-size: .65rem; }
-  .history-header { align-items: flex-start; }
-  .history-header > strong { max-width: 3.5rem; }
-  .range-tabs button { min-width: 1.35rem; font-size: .51rem; }
-  .axis-labels text { font-size: 6px; }
-}
-@container status-pane (max-height: 390px) {
-  .status-monitor { padding: .28rem; }
-  .header-main { min-height: 2.62rem; padding-block: .4rem; }
-  .monitor-content { padding: .32rem; }
-  .ip-row { margin-bottom: .36rem; padding: .3rem .36rem; }
-  .metric-grid { gap: .3rem; }
-  .metric-card { min-height: 3.32rem; padding: .28rem; gap: .1rem; }
-  .metric-layout { gap: .22rem; }
-  .small-icon { width: 1.36rem; height: 1.36rem; flex-basis: 1.36rem; border-radius: .44rem; }
-  .small-icon svg { width: .84rem; height: .84rem; }
-  .metric-name { font-size: .68rem; }
-  .metric-percent { font-size: .66rem; }
-  .metric-detail { color: #adb8c8; font-size: .57rem; }
-  .metric-progress { height: .24rem; }
+  .metric-detail-compact { display: block; font-size: .57rem; }
   .cpu-water { top: 1.72rem; }
-  .network-card { margin-top: .36rem; gap: .3rem; padding: .42rem .46rem; }
-  .history-card { margin-top: .4rem; padding: .46rem .42rem .28rem; }
-  .history-chart { min-height: 5.9rem; }
+  .network-card { grid-template-columns: minmax(0,1fr) 1fr; gap: .3rem; padding: .48rem; }
+  .network-title { grid-column: 1 / -1; }
+  .network-rate { font-size: .59rem; }
+  .network-rate.rate-up { justify-self: end; }
+  .history-header { display: grid; grid-template-columns: 1fr; align-items: center; }
+  .range-tabs { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .range-tabs button { min-width: 0; }
 }
-@container status-pane (max-height: 390px) and (max-width: 190px) {
-  .cpu-water { top: 1.18rem; }
+
+@container status-pane (max-width: 210px) and (min-height: 340px) {
+  .metric-grid { grid-template-columns: 1fr; }
+  .metric-card { min-height: 2.85rem; }
+  .metric-layout { grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr); }
+  .network-card { grid-template-columns: 1fr 1fr; }
+  .network-title { grid-column: 1 / -1; }
+  .has-history .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .has-history .metric-card { min-height: 1.9rem; }
 }
-@container status-pane (max-height: 320px) {
-  .status-monitor { padding: .2rem; }
-  .header-main { min-height: 2.38rem; padding: .3rem .48rem; }
-  .collapse-control { width: 1.62rem; height: 1.62rem; border-radius: .5rem; }
-  .collapse-control svg { width: .82rem; height: .82rem; }
-  .monitor-content { padding: .24rem; }
-  .ip-row { margin-bottom: .28rem; padding: .24rem .3rem; }
-  .metric-grid { gap: .24rem; }
-  .metric-card { min-height: 2.72rem; padding: .22rem; gap: .08rem; border-radius: .66rem; }
-  .metric-layout { gap: .15rem; }
-  .metric-identity .small-icon { display: none; }
-  .metric-name { font-size: .64rem; }
-  .metric-percent { font-size: .61rem; }
-  .metric-detail-full { display: none; }
-  .metric-detail-compact { display: block; color: #aeb9c8; font-size: .52rem; }
-  .metric-progress { height: .18rem; }
-  .cpu-water { top: 1.24rem; }
-  .network-card { margin-top: .26rem; padding: .32rem .38rem; border-radius: .66rem; }
-  .history-card { margin-top: .3rem; padding: .36rem .34rem .2rem; }
-  .history-chart { min-height: 5.2rem; }
-  .is-collapsed .collapsed-summary {
-    grid-template-rows: repeat(2,minmax(1.68rem,1fr));
-    gap: .62rem;
-    height: 5.25rem;
-    padding-top: .34rem;
-    padding-bottom: .76rem;
-  }
-  .is-collapsed .collapse-control { width: 1.8rem; height: 1.8rem; }
+
+@container status-pane (max-height: 440px) {
+  .status-monitor { padding: .28rem; }
+  .header-main { min-height: 2.45rem; padding-block: .34rem; }
+  .monitor-content { padding: .3rem; }
+  .ip-row { margin-bottom: .32rem; padding: .28rem .34rem; }
+  .metric-grid { gap: .28rem; }
+  .metric-card { min-height: 3.02rem; padding: .26rem; gap: .09rem; }
+  .metric-layout { gap: .18rem; }
+  .small-icon { width: 1.28rem; height: 1.28rem; flex-basis: 1.28rem; }
+  .small-icon svg { width: .78rem; height: .78rem; }
+  .metric-name { font-size: .66rem; }
+  .metric-percent { font-size: .64rem; }
+  .metric-detail { font-size: .54rem; }
+  .metric-progress { height: .2rem; }
+  .cpu-water { top: 1.48rem; }
+  .network-card { margin-top: .3rem; padding: .36rem .42rem; }
+  .history-card { margin-top: .34rem; padding: .4rem .4rem .24rem; }
 }
-@container status-pane (max-height: 260px) {
-  .status-monitor { padding: .16rem; }
-  .header-main { min-height: 2.12rem; padding: .24rem .42rem; }
-  .header-main > strong { font-size: .76rem; }
-  .live-state { font-size: .61rem; }
-  .monitor-content { padding: .18rem; }
-  .ip-row { margin-bottom: .2rem; padding: .2rem .26rem; }
-  .ip-label .small-icon { display: none; }
-  .ip-label-long { display: none; }
-  .ip-label-short { display: inline; }
-  .metric-grid { gap: .18rem; }
-  .metric-card {
-    min-height: 2.5rem;
-    grid-template-rows: minmax(0,1fr) auto;
-    padding: .2rem .24rem;
-    gap: .07rem;
-    border-radius: .58rem;
+
+@container status-pane (max-height: 560px) {
+  .has-history .metric-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: .22rem;
   }
-  .metric-layout { grid-template-columns: minmax(0,.84fr) minmax(0,1.16fr); gap: .16rem; }
-  .metric-values { display: grid; height: 100%; gap: .08rem; }
-  .metric-name { font-size: .61rem; }
-  .metric-percent { font-size: .6rem; }
-  .metric-detail-full { display: none; }
-  .metric-detail-compact { display: block; color: #aeb9c8; font-size: .49rem; }
-  .metric-progress { display: block; height: .16rem; }
-  .cpu-water { top: 1.08rem; }
-  .network-card {
-    grid-template-columns: minmax(0,1fr) auto auto;
-    margin-top: .2rem;
-    gap: .2rem;
-    padding: .24rem .3rem;
+  .has-history .metric-card {
+    min-height: 1.82rem;
+    grid-template-rows: minmax(0,1fr);
+    padding: .15rem .24rem;
+    gap: 0;
+    border-radius: .52rem;
   }
-  .network-title { grid-column: auto; font-size: .59rem; }
-  .network-title small { display: none; }
-  .network-rate { font-size: .53rem; }
-  .network-rate svg { width: .7rem; height: .7rem; }
-  .history-card { margin-top: .22rem; padding: .28rem .3rem .16rem; }
-  .history-chart { min-height: 4.6rem; }
-  .is-collapsed .header-main { min-height: 2.58rem; padding-block: .42rem; }
-  .is-collapsed .collapsed-summary {
-    grid-template-rows: repeat(2,minmax(1.55rem,1fr));
-    gap: .58rem;
-    height: 4.9rem;
-    padding: .28rem .6rem .68rem;
+  .has-history .metric-layout {
+    grid-template-columns: minmax(0,1fr) 2.75rem;
+    align-items: center;
+    gap: .18rem;
   }
-  .summary-row { min-height: 1.55rem; font-size: clamp(.68rem, 5.55cqw, .78rem); }
-  .summary-network svg { width: .86rem; height: .86rem; }
-  .is-collapsed .collapse-control { width: 1.7rem; height: 1.7rem; }
+  .has-history .metric-identity { height: auto; }
+  .has-history .metric-identity .small-icon,
+  .has-history .metric-detail,
+  .has-history .metric-progress,
+  .has-history .cpu-water { display: none; }
+  .has-history .metric-values {
+    display: grid;
+    height: auto;
+    justify-items: start;
+    text-align: left;
+    padding-left: .24rem;
+  }
+  .has-history .metric-name,
+  .has-history .metric-percent { font-size: .61rem; }
+  .has-history .network-card {
+    margin-top: .24rem;
+    padding: .3rem .38rem;
+    gap: .28rem;
+  }
+  .has-history .network-title small { display: none; }
+  .has-history .history-card {
+    min-height: 0;
+    margin-top: .28rem;
+  }
 }
-@container status-pane (max-height: 215px) {
-  .header-main { min-height: 1.98rem; padding-block: .2rem; }
-  .collapse-control { width: 1.48rem; height: 1.48rem; border-radius: .46rem; }
-  .collapse-control svg { width: .74rem; height: .74rem; }
+
+@container status-pane (max-height: 300px) {
   .ip-row { display: none; }
-  .metric-card {
-    min-height: 2.42rem;
-    grid-template-rows: minmax(0,1fr) auto;
-    padding: .18rem .22rem;
-    gap: .06rem;
-  }
+  .metric-card { min-height: 2.45rem; padding: .2rem .24rem; }
+  .metric-identity .small-icon { display: none; }
   .metric-layout { grid-template-columns: minmax(0,.82fr) minmax(0,1.18fr); }
-  .metric-values { display: grid; height: 100%; gap: .06rem; }
   .metric-detail-full { display: none; }
-  .metric-detail-compact { display: block; font-size: .47rem; }
-  .metric-progress { display: block; height: .14rem; }
-  .cpu-water { top: 1.02rem; }
-  .network-card { padding-block: .2rem; }
-  .is-collapsed .header-main { min-height: 2.42rem; }
-  .is-collapsed .collapsed-summary {
-    grid-template-rows: repeat(2,minmax(1.42rem,1fr));
-    gap: .48rem;
-    height: 4.45rem;
-    padding: .24rem .54rem .58rem;
-  }
-  .summary-row { min-height: 1.42rem; font-size: clamp(.65rem, 5.35cqw, .74rem); }
-  .is-collapsed .collapse-control { width: 1.62rem; height: 1.62rem; }
+  .metric-detail-compact { display: block; font-size: .49rem; }
+  .network-title small { display: none; }
 }
-@container status-pane (max-height: 320px) and (max-width: 190px) {
-  .cpu-water { top: 1.02rem; }
+
+@container status-pane (max-height: 440px) {
+  .status-monitor .metric-card { grid-template-rows: minmax(0,1fr); }
+  .status-monitor .metric-layout {
+    grid-template-columns: minmax(0,1fr) auto;
+    align-items: center;
+  }
+  .status-monitor .metric-values,
+  .status-monitor .metric-progress { display: none; }
+  .status-monitor .metric-ring { display: grid; }
+  .status-monitor .metric-name {
+    color: var(--metric-accent);
+    text-shadow: 0 0 9px color-mix(in srgb, var(--metric-accent) 25%, transparent);
+  }
+}
+
+@container status-pane (max-width: 210px) {
+  .status-monitor .metric-card { grid-template-rows: minmax(0,1fr); }
+  .status-monitor .metric-layout {
+    grid-template-columns: minmax(0,1fr) auto;
+    align-items: center;
+  }
+  .status-monitor .metric-values,
+  .status-monitor .metric-progress { display: none; }
+  .status-monitor .metric-ring { display: grid; }
+  .status-monitor .metric-name {
+    color: var(--metric-accent);
+    text-shadow: 0 0 9px color-mix(in srgb, var(--metric-accent) 25%, transparent);
+  }
+}
+
+@container status-pane (max-height: 235px) {
+  .monitor-header {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .header-main {
+    flex: 0 0 auto;
+    min-height: 2.35rem;
+    padding: .32rem .48rem;
+  }
+  .auto-summary {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: repeat(2,minmax(0,1fr));
+    align-content: stretch;
+    gap: .22rem;
+    padding: .28rem .52rem .42rem;
+    color: #a7b3c4;
+  }
+  .monitor-content { display: none; }
+  .summary-row { min-height: 0; font-size: clamp(.74rem, 5.8cqw, .88rem); }
+  .summary-resources { column-gap: clamp(.16rem, 2.2cqw, .4rem); }
+  .summary-network {
+    width: min(100%, 14rem);
+    justify-self: center;
+    column-gap: 1rem;
+    padding-inline: 0;
+  }
+}
+
+@container status-pane (max-width: 132px) {
+  .monitor-header {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .header-main {
+    flex: 0 0 auto;
+    min-height: 2.2rem;
+    padding: .28rem .38rem;
+  }
+  .auto-summary {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: repeat(2,minmax(0,1fr));
+    align-content: stretch;
+    gap: .18rem;
+    padding: .24rem .28rem .34rem;
+    color: #a7b3c4;
+  }
+  .monitor-content { display: none; }
+  .summary-row { min-height: 0; font-size: .58rem; }
+  .summary-resources { grid-template-columns: repeat(3,minmax(0,1fr)); column-gap: .14rem; padding-inline: 0; }
+  .summary-separator { display: none; }
+  .summary-metric { flex-direction: column; gap: .02rem !important; }
+  .summary-network { column-gap: .28rem; padding-inline: .08rem; }
+  .summary-network > span { gap: .1rem; }
+  .summary-network .rate-unit { display: none; }
+}
+
+@container status-pane (max-height: 130px) {
+  .status-monitor { padding: .16rem; }
+  .header-main { min-height: 1.9rem; padding: .2rem .38rem; }
+  .header-main > strong { font-size: .72rem; }
+  .live-state { font-size: .58rem; gap: .22rem; }
+  .live-state i { width: .36rem; height: .36rem; }
+  .auto-summary { gap: .06rem; padding: .12rem .34rem .2rem; }
+  .summary-row { font-size: clamp(.56rem, 5.2cqw, .68rem); line-height: 1.1; }
+  .summary-resources { grid-template-columns: repeat(3,minmax(0,1fr)); column-gap: .18rem; }
+  .summary-separator { display: none; }
+  .summary-row > span { gap: .12rem; overflow: hidden; }
+  .summary-row b,
+  .summary-percent,
+  .rate-value,
+  .rate-unit { overflow: hidden; text-overflow: ellipsis; }
+  .summary-network { column-gap: .34rem; padding-inline: .18rem; }
+  .summary-network > span { gap: .14rem; }
+  .summary-network svg { width: .72rem; height: .72rem; }
+}
+
+@container status-pane (max-width: 125px) {
+  .header-main > strong { font-size: .68rem; }
+  .live-state { font-size: .55rem; }
+  .auto-summary { padding-inline: .22rem; }
+  .summary-row { font-size: .56rem; }
+  .summary-resources { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .summary-separator { display: none; }
+  .summary-metric { flex-direction: column; gap: .02rem !important; }
+  .summary-network .rate-unit { display: none; }
+}
+
+@container status-pane (max-width: 125px) {
+  .status-monitor { padding: .12rem; }
+  .monitor-panel { border-radius: .58rem; }
+  .header-main {
+    min-height: 1.9rem;
+    grid-template-columns: minmax(0,1fr) auto;
+    gap: .12rem;
+    padding: .2rem .28rem;
+  }
+  .header-main > strong { font-size: .58rem; }
+  .live-state { gap: 0; font-size: 0; }
+  .live-state i { width: .34rem; height: .34rem; }
+  .auto-summary {
+    grid-template-rows: auto auto;
+    align-content: center;
+    gap: .82rem;
+    padding: .46rem .3rem .58rem;
+  }
+  .summary-row { font-size: .56rem; }
+  .summary-resources {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3,auto);
+    row-gap: .4rem;
+  }
+  .summary-metric {
+    width: min(100%, 4.8rem);
+    margin-inline: auto;
+    flex-direction: row;
+    justify-content: space-between !important;
+    gap: .12rem !important;
+  }
+  .summary-network {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2,auto);
+    row-gap: .38rem;
+    padding-inline: 0;
+  }
+  .summary-network > span {
+    width: min(100%, 4.8rem);
+    margin-inline: auto;
+    justify-self: stretch !important;
+    justify-content: space-between;
+  }
 }
 </style>
