@@ -1508,9 +1508,10 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .summary-memory b { color: #36d982; }
   .summary-disk b { color: #ff814a; }
   .summary-resources {
-    display: grid;
-    grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);
-    column-gap: clamp(.18rem, 2cqw, .36rem);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(.18rem, 2cqw, .36rem);
     padding-inline: clamp(.08rem, 1.2cqw, .22rem);
   }
   .summary-separator {
@@ -1519,24 +1520,38 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     font-style: normal;
   }
   .summary-network {
-    width: min(100%, 14rem);
+    width: min(100%, 15rem);
     justify-self: center;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0,1fr));
-    column-gap: clamp(.55rem, 5cqw, .9rem);
+    grid-template-columns: auto auto;
+    justify-content: center;
+    column-gap: clamp(.2rem, 1.2cqw, .32rem);
     padding-inline: 0;
   }
   .summary-network > span {
-    display: inline-flex;
+    width: auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: .88rem auto auto;
     align-items: center;
-    gap: .26rem;
+    justify-self: stretch;
+    justify-content: center;
+    column-gap: .12rem;
     line-height: 1;
   }
   .summary-network .rate-up,
-  .summary-network .rate-down { color: #c8d1dd; }
-  .summary-network .rate-up { justify-self: start; }
-  .summary-network .rate-down { justify-self: end; }
-  .summary-network .rate-value { color: #c8d1dd; }
+  .summary-network .rate-down {
+    justify-self: stretch;
+    color: #c8d1dd;
+  }
+  .summary-network .rate-value {
+    min-width: 0;
+    justify-self: start;
+    text-align: left;
+    color: #c8d1dd;
+    font-variant-numeric: tabular-nums;
+  }
+  .summary-network .rate-unit { justify-self: start; }
   .summary-network .rate-up svg,
   .summary-network .rate-up .rate-unit { color: #ff814a; }
   .summary-network .rate-down svg,
@@ -1604,12 +1619,12 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     padding-inline: 0;
   }
   .summary-network > span {
-    width: 100%;
-    justify-self: stretch !important;
+    width: auto;
+    justify-self: center !important;
     display: grid;
-    grid-template-columns: .82rem minmax(0, 1fr);
+    grid-template-columns: .82rem minmax(4.4ch, max-content);
     align-items: center;
-    justify-content: stretch;
+    justify-content: center;
     column-gap: .22rem;
   }
   .summary-network svg {
@@ -1619,6 +1634,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
   .summary-network .rate-value {
     min-width: 0;
+    width: auto;
     justify-self: end;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -1640,8 +1656,27 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .summary-percent,
   .rate-value,
   .rate-unit { overflow: hidden; text-overflow: ellipsis; }
-  .summary-network { column-gap: .34rem; padding-inline: .18rem; }
-  .summary-network > span { gap: .14rem; }
+  .summary-network { column-gap: .28rem; padding-inline: 0; }
+  .summary-network > span { gap: 0; column-gap: .18rem; }
   .summary-network svg { width: .72rem; height: .72rem; }
+}
+@container status-pane (max-width: 132px) and (max-height: 130px) {
+  .auto-summary { padding-inline: .2rem; }
+  .summary-network {
+    width: min(100%, 5.2rem);
+    column-gap: 0;
+    row-gap: .18rem;
+    padding-inline: 0;
+  }
+  .summary-network > span {
+    grid-template-columns: .82rem minmax(4.4ch, max-content);
+    gap: 0;
+    column-gap: .18rem;
+  }
+  .summary-network .rate-value {
+    width: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 </style>
