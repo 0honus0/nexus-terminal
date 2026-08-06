@@ -937,7 +937,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .cpu-wave path {
   fill: currentColor;
   transform-origin: center;
-  animation: waterWaveBob 3.8s ease-in-out infinite;
+  animation: waterWaveBob 3.8s linear infinite;
 }
 /* 第二层波浪: 不同速度/相位/起伏节奏, 叠加后波峰错开更自然 */
 .cpu-wave-two {
