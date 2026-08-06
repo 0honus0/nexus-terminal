@@ -1741,9 +1741,19 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     justify-self: stretch;
   }
   .summary-network > span {
-    width: auto;
+    width: min(100%, 5.2rem);
     justify-self: center !important;
+    display: grid;
+    grid-template-columns: .82rem minmax(0, 1fr);
+    justify-content: stretch;
+    column-gap: .18rem;
   }
+  .summary-network .rate-value {
+    grid-column: 2;
+    justify-self: end;
+    text-align: right;
+  }
+  .summary-network .rate-unit { display: none; }
 }
 
 @container status-pane (max-height: 130px) {
@@ -1783,5 +1793,19 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+}
+@container status-pane (max-width: 200px) and (max-height: 130px) {
+  .summary-network > span {
+    width: min(100%, 5.2rem) !important;
+    grid-template-columns: .82rem minmax(0, 1fr) !important;
+    justify-content: stretch !important;
+    column-gap: .18rem !important;
+  }
+  .summary-network .rate-value {
+    grid-column: 2 !important;
+    justify-self: end !important;
+    text-align: right !important;
+  }
+  .summary-network .rate-unit { display: none !important; }
 }
 </style>
