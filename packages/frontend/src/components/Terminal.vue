@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
 import { Terminal, type ITheme, type ITerminalAddon, type IDisposable } from '@xterm/xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
@@ -39,6 +39,8 @@ let observedElement: HTMLElement | null = null; // +++ Store the observed elemen
 let debounceTimer: number | null = null; // 用于防抖的计时器 ID
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
 let scrollListenerDisposable: IDisposable | null = null;
+let backgroundColorOscDisposable: IDisposable | null = null;
+let backgroundColorResetOscDisposable: IDisposable | null = null;
 let lastResizeObserverWidth = 0;
 let lastResizeObserverHeight = 0;
 let lastEmittedCols = 0;
@@ -80,6 +82,8 @@ const appearanceStore = useAppearanceStore();
 const {
   effectiveTerminalTheme,
   isTerminalBackgroundEnabled,
+  terminalBackgroundImage,
+  terminalCustomHTML,
   currentTerminalFontFamily,
   currentTerminalFontSize,
   // --- 文字描边和阴影状态 ---
@@ -94,8 +98,13 @@ const {
   initialAppearanceDataLoaded, 
 } = storeToRefs(appearanceStore);
 
-const resolveTerminalTheme = (theme: ITheme): ITheme => (
+const hasTerminalVisualBackground = computed(() => (
   isTerminalBackgroundEnabled.value
+  && Boolean(terminalBackgroundImage.value || terminalCustomHTML.value)
+));
+
+const resolveTerminalTheme = (theme: ITheme): ITheme => (
+  hasTerminalVisualBackground.value
     ? { ...theme, background: 'rgba(0, 0, 0, 0)' }
     : theme
 );
@@ -655,16 +664,28 @@ onMounted(() => {
       cursorBlink: true,
       fontSize: currentTerminalFontSize.value, 
       fontFamily: currentTerminalFontFamily.value, // 使用 store 中的字体设置
-      theme: resolveTerminalTheme(effectiveTerminalTheme.value),
       rows: 24, // 初始行数
       cols: 80, // 初始列数
-      allowTransparency: true,
       disableStdin: false,
       convertEol: true,
       scrollback: getScrollbackValue(terminalScrollbackLimitNumber.value), //  Use setting from store
       scrollOnUserInput: true, // 输入时滚动到底部
       ...props.options, // 合并外部传入的选项
+      // 背景透明属于应用级约束，不能被会话 options 覆盖。
+      allowTransparency: true,
+      theme: resolveTerminalTheme(effectiveTerminalTheme.value),
     });
+
+    // 某些远端 shell 会在连接后发送 OSC 11/111，把默认背景改成黑色。
+    // 启用终端背景时拦截这两个序列，保留图片/HTML 主题的透明底层；查询
+    // OSC 11;? 仍交给 xterm 正常响应。
+    backgroundColorOscDisposable = terminal.parser.registerOscHandler(11, (data) => {
+      if (!hasTerminalVisualBackground.value || data.trim() === '?') return false;
+      return true;
+    });
+    backgroundColorResetOscDisposable = terminal.parser.registerOscHandler(111, () => (
+      hasTerminalVisualBackground.value
+    ));
     
     // 注意: 终端数据的解码已在useSshTerminal.ts中进行处理
 
@@ -845,7 +866,7 @@ onMounted(() => {
     });
 
     // --- 监听外观变化 ---
-    watch([effectiveTerminalTheme, isTerminalBackgroundEnabled], ([newTheme]) => {
+    watch([effectiveTerminalTheme, hasTerminalVisualBackground], ([newTheme]) => {
       if (terminal) {
         console.log(`[Terminal ${props.sessionId}] 应用新终端主题 (effective)。`);
         terminal.options.theme = resolveTerminalTheme(newTheme);
@@ -1001,6 +1022,11 @@ onBeforeUnmount(() => {
   }
   resizeObserver = null;
   observedElement = null;
+
+  backgroundColorOscDisposable?.dispose();
+  backgroundColorOscDisposable = null;
+  backgroundColorResetOscDisposable?.dispose();
+  backgroundColorResetOscDisposable = null;
 
   if (terminal) {
     emitWorkspaceEvent('terminal:detached', {

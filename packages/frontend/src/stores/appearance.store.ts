@@ -271,14 +271,10 @@ export const useAppearanceStore = defineStore('appearance', () => {
         try {
             // 移除预设主题闪烁修复逻辑，不再需要
 
-            // Construct the full payload to send to the backend
-            // This includes all current settings merged with the specific updates
-            const payloadToSend: Partial<AppearanceSettings> = {
-                ...appearanceSettings.value, // Start with all current settings from the store
-                ...updates // Apply the specific changes passed to this function
-            };
-
-            const response = await apiClient.put<AppearanceSettings>('/appearance', payloadToSend); // 使用 apiClient, 发送合并后的 payload
+            // 后端更新接口支持部分字段更新。这里只发送本次变更，避免把本地缓存中
+            // 已失效的其他设置（例如已被重新导入后不存在的终端主题 ID）一并提交，
+            // 导致与当前操作无关的校验失败。
+            const response = await apiClient.put<AppearanceSettings>('/appearance', updates);
             // 使用后端返回的最新设置更新本地状态
             appearanceSettings.value = response.data;
             console.log('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
@@ -291,7 +287,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
  
         } catch (err: any) {
             console.error('更新外观设置失败:', err);
-            throw new Error(err.response?.data?.message || err.message || '更新外观设置失败');
+            throw new Error(err.response?.data?.error || err.response?.data?.message || err.message || '更新外观设置失败');
         }
     }
 

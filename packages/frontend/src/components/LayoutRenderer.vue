@@ -477,9 +477,17 @@ const terminalBackgroundImageStyle = computed((): CSSProperties => {
   return { backgroundImage: 'none' };
 });
 
-const sandboxedTerminalCustomHtml = computed(() => terminalCustomHTML.value
-  ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; media-src data: blob:"><style>html,body{width:100%;height:100%;margin:0;overflow:hidden}</style>${terminalCustomHTML.value}`
-  : '');
+const sandboxedTerminalCustomHtml = computed(() => {
+  if (!terminalCustomHTML.value) return '';
+
+  // When an uploaded terminal image is present, HTML effects should sit on top of
+  // that image instead of replacing it with an opaque preset root background.
+  const imageLayerTransparencyOverride = terminalBackgroundImage.value
+    ? 'html,body{background:transparent!important}body>:not(style):not(script){background-color:transparent!important}'
+    : '';
+
+  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; media-src data: blob:"><style>html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}${imageLayerTransparencyOverride}</style>${terminalCustomHTML.value}`;
+});
 
 
 onBeforeUnmount(() => {
@@ -865,13 +873,11 @@ onBeforeUnmount(() => {
   contain: strict;
 }
 
-.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-outer-wrapper {
-  background-color: transparent !important; /* 使 Terminal.vue 的最外层容器背景透明 */
-}
-
-.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container .xterm,
-.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container .xterm-viewport,
-.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container .xterm-screen {
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-outer-wrapper,
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .terminal-inner-container,
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .xterm,
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .xterm-viewport,
+.terminal-pane-container.has-global-terminal-background .terminal-instance-wrapper.terminal-transparent .xterm-screen {
   background-color: transparent !important;
 }
 

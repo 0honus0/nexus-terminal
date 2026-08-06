@@ -10,6 +10,63 @@ import sanitize from 'sanitize-filename'; // 用于清理文件名
 const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
 
 const USER_CUSTOM_HTML_THEMES_DIR = path.join(__dirname, '../../data/custom_html_theme/');
+const BACKGROUND_FILES_DIR = path.join(__dirname, '../../data/background/');
+const BACKGROUND_FILE_ROUTE_PREFIX = '/api/v1/appearance/background/file/';
+const DEFAULT_REMOTE_HTML_PRESETS_URL = 'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
+const LEGACY_REMOTE_HTML_PRESETS_URLS = new Set([
+  'https://github.com/Heavrnl/nexus-terminal/tree/main/doc/custom_html_theme',
+]);
+
+type BackgroundSettingKey = 'pageBackgroundImage' | 'terminalBackgroundImage';
+
+const clearMissingBackgroundReference = async (
+  settings: AppearanceSettings,
+  key: BackgroundSettingKey,
+): Promise<void> => {
+  const storedPath = settings[key];
+  if (typeof storedPath !== 'string' || !storedPath.startsWith(BACKGROUND_FILE_ROUTE_PREFIX)) {
+    return;
+  }
+
+  const filename = storedPath.slice(BACKGROUND_FILE_ROUTE_PREFIX.length);
+  if (!filename || path.basename(filename) !== filename || filename.includes('\\')) {
+    return;
+  }
+
+  try {
+    await fs.access(path.join(BACKGROUND_FILES_DIR, filename));
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') {
+      console.warn(`[AppearanceService] 检查背景文件失败 (${filename}):`, error);
+      return;
+    }
+
+    console.warn(`[AppearanceService] 清理不存在的背景文件引用: ${storedPath}`);
+    settings[key] = '';
+    await appearanceRepository.updateAppearanceSettings({ [key]: '' });
+  }
+};
+
+const ensureDefaultRemoteHtmlPresetsUrl = async (settings: AppearanceSettings): Promise<void> => {
+  const storedUrl = typeof settings.remoteHtmlPresetsUrl === 'string'
+    ? settings.remoteHtmlPresetsUrl.trim()
+    : '';
+  const normalizedStoredUrl = storedUrl.replace(/\/+$/, '');
+
+  // 保留用户主动设置的其他仓库，只初始化空值并迁移旧版默认仓库。
+  if (
+    normalizedStoredUrl === DEFAULT_REMOTE_HTML_PRESETS_URL
+    || (normalizedStoredUrl && !LEGACY_REMOTE_HTML_PRESETS_URLS.has(normalizedStoredUrl))
+  ) {
+    settings.remoteHtmlPresetsUrl = storedUrl || DEFAULT_REMOTE_HTML_PRESETS_URL;
+    return;
+  }
+
+  settings.remoteHtmlPresetsUrl = DEFAULT_REMOTE_HTML_PRESETS_URL;
+  await appearanceRepository.updateAppearanceSettings({
+    remoteHtmlPresetsUrl: DEFAULT_REMOTE_HTML_PRESETS_URL,
+  });
+};
 
 
 // 确保预设 html-themes 目录存在
@@ -45,6 +102,13 @@ ensureUserCustomHtmlThemesDirExists();
  */
 export const getSettings = async (): Promise<AppearanceSettings> => {
   const settings = await appearanceRepository.getAppearanceSettings();
+
+  // 数据库可能从旧备份恢复，但背景文件目录没有一同恢复。返回设置前清理
+  // 失效引用，避免前端持续请求一个已不存在的图片并产生 404。
+  await clearMissingBackgroundReference(settings, 'pageBackgroundImage');
+  await clearMissingBackgroundReference(settings, 'terminalBackgroundImage');
+  await ensureDefaultRemoteHtmlPresetsUrl(settings);
+
   // 为 terminalBackgroundOverlayOpacity 提供默认值
   if (settings.terminalBackgroundOverlayOpacity === undefined || settings.terminalBackgroundOverlayOpacity === null) {
     settings.terminalBackgroundOverlayOpacity = 0.5; // 默认透明度为 0.5

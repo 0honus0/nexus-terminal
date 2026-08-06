@@ -11,9 +11,9 @@
 <script>
 (function() {
     const canvas = document.getElementById('matrix-canvas');
-    const layerElement = canvas.closest('.terminal-custom-html-layer');
+    const layerElement = document.documentElement;
     if (!canvas || !layerElement) {
-        console.error("Canvas or layerElement not found.");
+        console.error("Canvas or document root not found.");
         return;
     }
 
