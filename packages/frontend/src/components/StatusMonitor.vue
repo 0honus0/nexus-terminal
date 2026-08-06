@@ -910,7 +910,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   pointer-events: none;
 }
 .cpu-water-fill {
-  --cpu-water-color: color-mix(in srgb, var(--metric-accent) 40%, transparent);
+  --cpu-water-color: color-mix(in srgb, var(--metric-accent) 40%, #151b27 60%);
   position: absolute;
   left: 0;
   right: 0;
