@@ -1744,16 +1744,21 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     width: min(100%, 5.2rem);
     justify-self: center !important;
     display: grid;
-    grid-template-columns: .82rem minmax(0, 1fr);
+    grid-template-columns: .82rem minmax(0, 1fr) max-content;
     justify-content: stretch;
-    column-gap: .18rem;
+    column-gap: .12rem;
   }
   .summary-network .rate-value {
     grid-column: 2;
     justify-self: end;
     text-align: right;
   }
-  .summary-network .rate-unit { display: none; }
+  .summary-network .rate-unit {
+    display: inline;
+    grid-column: 3;
+    justify-self: start;
+    text-align: left;
+  }
 }
 
 @container status-pane (max-height: 130px) {
@@ -1797,15 +1802,20 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 @container status-pane (max-width: 200px) and (max-height: 130px) {
   .summary-network > span {
     width: min(100%, 5.2rem) !important;
-    grid-template-columns: .82rem minmax(0, 1fr) !important;
+    grid-template-columns: .82rem minmax(0, 1fr) max-content !important;
     justify-content: stretch !important;
-    column-gap: .18rem !important;
+    column-gap: .12rem !important;
   }
   .summary-network .rate-value {
     grid-column: 2 !important;
     justify-self: end !important;
     text-align: right !important;
   }
-  .summary-network .rate-unit { display: none !important; }
+  .summary-network .rate-unit {
+    display: inline !important;
+    grid-column: 3 !important;
+    justify-self: start !important;
+    text-align: left !important;
+  }
 }
 </style>
