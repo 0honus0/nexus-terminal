@@ -1347,7 +1347,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 
 /* 更窄时才切换为上下两行 */
-@container status-pane (max-width: 160px) {
+@container status-pane (max-width: 175px) {
   .network-card {
     grid-template-columns: minmax(0, 1fr);
     column-gap: 0;
