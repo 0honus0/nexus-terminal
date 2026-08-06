@@ -854,7 +854,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .metric-percent {
   flex: none;
   margin-left: auto;
-  color: #ffffff;
+  color: var(--metric-accent, #42a5ff);
   font-size: 1.12rem;
   font-weight: 800;
   line-height: 1;
@@ -895,10 +895,10 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   box-shadow: 0 0 8px color-mix(in srgb, var(--metric-accent) 52%, transparent);
   transition: width .5s ease;
 }
-.metric-cpu .metric-percent { color: #7fc0ff; }
-.metric-memory .metric-percent { color: #6fe8a5; }
-.metric-swap .metric-percent { color: #c39aff; }
-.metric-disk .metric-percent { color: #ffab7d; }
+.metric-cpu .metric-percent,
+.metric-memory .metric-percent,
+.metric-swap .metric-percent,
+.metric-disk .metric-percent { color: var(--metric-accent); }
 
 /* ---------- CPU 水波动效 ---------- */
 .cpu-water {
@@ -1400,7 +1400,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-detail-compact,
   .status-monitor:not(.has-history) .metric-progress { display: none; }
   .status-monitor:not(.has-history) .metric-name {
-    color: var(--metric-accent);
+    color: #e7edf6;
     font-size: 0.76rem;
   }
   .status-monitor:not(.has-history) .metric-percent {
@@ -1409,7 +1409,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     margin-left: 0;
     justify-self: end;
     text-align: right;
-    color: #d7dee9;
+    color: var(--metric-accent);
     font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
   }
@@ -1456,6 +1456,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-top {
     width: 100%;
     margin-inline: 0;
+    transform: translateY(-0.16rem);
     display: grid;
     grid-template-columns: minmax(0, 1fr) 3rem;
     align-items: center;
@@ -1465,6 +1466,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-detail-full { display: none; }
   .status-monitor:not(.has-history) .metric-detail-compact {
     display: block;
+    transform: translateY(-0.12rem);
     font-size: 0.57rem;
     line-height: 1.05;
     text-align: right;
@@ -1474,7 +1476,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     height: 0.18rem;
   }
   .status-monitor:not(.has-history) .metric-name {
-    color: var(--metric-accent);
+    color: #e7edf6;
     font-size: clamp(0.74rem, 4.4cqh, 0.86rem);
   }
   .status-monitor:not(.has-history) .metric-percent {
@@ -1483,7 +1485,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     margin-left: 0;
     justify-self: end;
     text-align: right;
-    color: #d7dee9;
+    color: var(--metric-accent);
     font-size: clamp(0.78rem, 4.7cqh, 0.94rem);
     font-variant-numeric: tabular-nums;
   }
