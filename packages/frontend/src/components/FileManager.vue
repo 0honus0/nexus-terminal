@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, watchEffect, type PropType, readonly, shallowRef } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, watchEffect, type Component, type PropType, readonly, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -23,6 +23,7 @@ import { usePathHistoryStore } from '../stores/pathHistory.store';
 import FavoritePathsModal from './FavoritePathsModal.vue';
 import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
 
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
@@ -64,6 +65,22 @@ const effectiveSessionId = computed(() => sessionStore.resolveSessionId(props.se
 // --- 获取并存储 SFTP 管理器实例 ---
 // 使用 shallowRef 存储管理器实例，以便在 sessionId 变化时切换
 const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
+const previewComponent = shallowRef<Component | null>(null);
+const previewFile = shallowRef<FileListItem | null>(null);
+const previewProps = shallowRef<Record<string, unknown>>({});
+const previewDispose = shallowRef<(() => void) | null>(null);
+const isPreviewLoading = ref(false);
+let previewLoadToken = 0;
+
+const closePreview = () => {
+  previewLoadToken += 1;
+  previewDispose.value?.();
+  previewDispose.value = null;
+  isPreviewLoading.value = false;
+  previewComponent.value = null;
+  previewFile.value = null;
+  previewProps.value = {};
+};
 const sftpReadyStateByManager = new WeakMap<SftpManagerInstance, boolean>();
 
 const initializeSftpManager = (sessionId: string, instanceId: string) => {
@@ -425,146 +442,171 @@ const handleSort = (key: keyof FileListItem | 'type' | 'size' | 'mtime') => {
 
 
 // --- 列表项点击与选择逻辑 (使用 Composable) ---
-// 定义单击时的动作回调 (移到 Selection 实例化之前)
-const handleItemAction = (item: FileListItem) => {
-  if (!currentSftpManager.value) return;
+const buildInlinePreviewUrl = (filePath: string): string => {
+  const params = new URLSearchParams({
+    connectionId: props.dbConnectionId,
+    sessionId: effectiveSessionId.value,
+    remotePath: filePath,
+    disposition: 'inline',
+  });
+  return `/api/v1/sftp/download?${params.toString()}`;
+};
 
-  const itemPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
-
-  if (item.attrs.isSymbolicLink) {
-    if (currentSftpManager.value.isLoading.value) {
+const openFileTarget = async (item: FileListItem, filePath: string): Promise<void> => {
+  const previewProvider = resolveFilePreviewProvider(item);
+  if (previewProvider) {
+    const maxInlineSize = previewProvider.maxInlineSize;
+    if (maxInlineSize && item.attrs.size > maxInlineSize) {
+      uiNotificationsStore.showError(
+        t('fileManager.preview.fileTooLarge', { size: formatSize(maxInlineSize) })
+      );
       return;
     }
-    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Symbolic link clicked: ${itemPath}. Attempting to resolve with sftp:realpath...`);
 
+    closePreview();
+    const loadToken = previewLoadToken;
+    previewFile.value = item;
+    isPreviewLoading.value = true;
+
+    try {
+      const data = await previewProvider.load(item, {
+        filePath,
+        buildInlineUrl: buildInlinePreviewUrl,
+      });
+
+      if (previewLoadToken !== loadToken) {
+        data.dispose?.();
+        return;
+      }
+
+      previewDispose.value = data.dispose ?? null;
+      previewProps.value = data.componentProps;
+      previewComponent.value = previewProvider.preview(item);
+      isPreviewLoading.value = false;
+    } catch (error) {
+      console.error('[FileManager] Failed loading preview data', error);
+      if (previewLoadToken === loadToken) {
+        closePreview();
+        uiNotificationsStore.showError(t('fileManager.preview.loadFailed'));
+      }
+    }
+    return;
+  }
+
+  const fileInfo: FileInfo = { name: item.filename, fullPath: filePath };
+  if (settingsStore.showPopupFileEditorBoolean) {
+    fileEditorStore.triggerPopup(filePath, effectiveSessionId.value);
+  }
+  if (shareFileEditorTabsBoolean.value) {
+    fileEditorStore.openFile(filePath, effectiveSessionId.value, props.instanceId);
+  } else {
+    sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
+  }
+};
+
+// 定义单击时的动作回调 (移到 Selection 实例化之前)
+const handleItemAction = async (item: FileListItem): Promise<void> => {
+  const manager = currentSftpManager.value;
+  if (!manager) return;
+
+  if (props.isMobile && isMultiSelectMode.value && (item.attrs.isFile || item.attrs.isSymbolicLink)) {
+    if (selectedItems.value.has(item.filename)) {
+      selectedItems.value.delete(item.filename);
+    } else {
+      selectedItems.value.add(item.filename);
+    }
+    return;
+  }
+
+  const itemPath = manager.joinPath(manager.currentPath.value, item.filename);
+
+  if (item.attrs.isSymbolicLink) {
+    if (manager.isLoading.value) return;
+
+    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Symbolic link clicked: ${itemPath}. Attempting to resolve with sftp:realpath...`);
     const { sendMessage: wsSend, onMessage: wsOnMessage } = props.wsDeps;
     const requestId = generateRequestId();
 
-    const handleResolvedPath = (realPath: string, targetType: 'file' | 'directory' | 'unknown', originalLinkItem: FileListItem) => {
-      if (!currentSftpManager.value) return;
-
+    const handleResolvedPath = (realPath: string, targetType: 'file' | 'directory' | 'unknown') => {
+      const activeManager = currentSftpManager.value;
+      if (!activeManager) return;
 
       if (targetType === 'directory') {
-        currentSftpManager.value.loadDirectory(realPath);
-      } else if (targetType === 'file') {
-        const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename; // Get filename from realPath
-        const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
-
-        // Preserve mobile multi-select behavior for the original link item
-        if (props.isMobile && isMultiSelectMode.value) {
-          if (selectedItems.value.has(originalLinkItem.filename)) {
-            selectedItems.value.delete(originalLinkItem.filename);
-          } else {
-            selectedItems.value.add(originalLinkItem.filename);
-          }
-          return;
-        }
-
-        if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, effectiveSessionId.value);
-        }
-        if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, effectiveSessionId.value, props.instanceId);
-        } else {
-          sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
-        }
-      } else { // targetType is 'unknown' or not provided as expected
-        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}'). Defaulting to open as file.`);
-        // Fallback: attempt to open as file, or display an error
-        const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename;
-        const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
-        if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, effectiveSessionId.value);
-        }
-        if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, effectiveSessionId.value, props.instanceId);
-        } else {
-          sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
-        }
+        activeManager.loadDirectory(realPath);
+        return;
       }
+
+      const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || item.filename;
+      const resolvedFile: FileListItem = {
+        ...item,
+        filename: targetFilename,
+        attrs: {
+          ...item.attrs,
+          isDirectory: false,
+          isFile: true,
+          isSymbolicLink: false,
+        },
+      };
+      void openFileTarget(resolvedFile, realPath);
     };
 
     let unregisterSuccess: (() => void) | undefined;
     let unregisterError: (() => void) | undefined;
-    let timeoutId: NodeJS.Timeout | number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const cleanupListeners = () => {
       unregisterSuccess?.();
       unregisterError?.();
-      if (timeoutId) clearTimeout(timeoutId as any);
+      if (timeoutId) clearTimeout(timeoutId);
       timeoutId = undefined;
     };
 
     unregisterSuccess = wsOnMessage('sftp:realpath:success', (payload: any, message: WebSocketMessage) => {
-      if (message.requestId === requestId && payload.requestedPath === itemPath) {
-        cleanupListeners();
-        if (!currentSftpManager.value) return;
-        // 从 payload 中获取 absolutePath 和 targetType
-        const absolutePath = payload.absolutePath;
-        const targetType = payload.targetType as ('file' | 'directory' | 'unknown'); // 类型断言
+      if (message.requestId !== requestId || payload.requestedPath !== itemPath) return;
+      cleanupListeners();
 
-        if (!absolutePath) {
-            console.error(`[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing absolutePath. Payload:`, payload);
-            return;
-        }
-         if (!targetType) {
-            console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing targetType. Defaulting to 'file'. Payload:`, payload);
-        }
-
-        handleResolvedPath(absolutePath, targetType || 'unknown', item);
+      const absolutePath = payload.absolutePath;
+      if (!absolutePath) {
+        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] sftp:realpath:success for ${itemPath} missing absolutePath. Payload:`, payload);
+        return;
       }
+
+      const targetType = (payload.targetType || 'unknown') as 'file' | 'directory' | 'unknown';
+      if (targetType === 'unknown') {
+        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target type is unknown; attempting to open it as a file.`);
+      }
+      handleResolvedPath(absolutePath, targetType);
     });
 
     unregisterError = wsOnMessage('sftp:realpath:error', (payload: any, message: WebSocketMessage) => {
-      if (message.requestId === requestId && payload?.requestedPath === itemPath) {
-        cleanupListeners();
-        // payload.error 可能包含来自后端的具体错误信息
-        // payload.absolutePath 可能在 stat 失败时仍然存在
-        const serverErrorMsg = payload.error || 'Unknown error resolving symlink target type';
-        const resolvedPathInfo = payload.absolutePath ? ` (Resolved path: ${payload.absolutePath})` : '';
-
-        console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to get realpath or target type for symlink '${itemPath}': ${serverErrorMsg}${resolvedPathInfo}`);
-      }
+      if (message.requestId !== requestId || payload?.requestedPath !== itemPath) return;
+      cleanupListeners();
+      const serverErrorMsg = payload.error || 'Unknown error resolving symlink target type';
+      console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to resolve symlink '${itemPath}': ${serverErrorMsg}`);
+      uiNotificationsStore.showError(t('fileManager.errors.readFileFailed'));
     });
 
     timeoutId = setTimeout(() => {
       cleanupListeners();
       console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Timeout getting realpath for symlink '${itemPath}' (ID: ${requestId}).`);
-    }, 10000); // 10 秒超时
-    wsSend({ type: 'sftp:realpath', requestId: requestId, payload: { path: itemPath } });
-    return; // Handled by async callbacks
+      uiNotificationsStore.showError(t('fileManager.errors.readFileTimeout'));
+    }, 10000);
+
+    wsSend({ type: 'sftp:realpath', requestId, payload: { path: itemPath } });
+    return;
   }
 
   if (item.attrs.isDirectory) {
-    if (currentSftpManager.value.isLoading.value) {
-      return;
-    }
+    if (manager.isLoading.value) return;
     const newPath = item.filename === '..'
-      ? currentSftpManager.value.currentPath.value.substring(0, currentSftpManager.value.currentPath.value.lastIndexOf('/')) || '/'
-      : currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
-    currentSftpManager.value.loadDirectory(newPath);
-  } else if (item.attrs.isFile) {
-    // This block now only handles regular files, as symlinks are handled above.
-    if (props.isMobile && isMultiSelectMode.value) {
-      if (selectedItems.value.has(item.filename)) {
-        selectedItems.value.delete(item.filename);
-      } else {
-        selectedItems.value.add(item.filename);
-      }
-      return;
-    }
-    const filePath = itemPath; // itemPath is already calculated
-    const fileInfo: FileInfo = { name: item.filename, fullPath: filePath };
+      ? manager.currentPath.value.substring(0, manager.currentPath.value.lastIndexOf('/')) || '/'
+      : manager.joinPath(manager.currentPath.value, item.filename);
+    manager.loadDirectory(newPath);
+    return;
+  }
 
-    if (settingsStore.showPopupFileEditorBoolean) {
-      fileEditorStore.triggerPopup(filePath, effectiveSessionId.value);
-    }
-
-    if (shareFileEditorTabsBoolean.value) {
-      fileEditorStore.openFile(filePath, effectiveSessionId.value, props.instanceId);
-    } else {
-      sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
-    }
+  if (item.attrs.isFile) {
+    await openFileTarget(item, itemPath);
   }
 };
 
@@ -1027,6 +1069,7 @@ const {
 // --- 重置选中索引和清空选择的 Watchers ---
 // 修改：监听 manager 的 currentPath
 watch(() => currentSftpManager.value?.currentPath.value, () => {
+    closePreview();
     selectedIndex.value = -1;
     clearSelection();
     resetFileListScroll();
@@ -1219,6 +1262,7 @@ watch(() => focusSwitcherStore.activateFileManagerSearchTrigger, (newValue, oldV
 // --- 监听 sessionId prop 的变化 ---
 watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
+        closePreview();
         closePathHistory(); // 关闭可能打开的路径历史下拉菜单
         pathHistoryStore.setSearchTerm(''); // 清空搜索词
         // 保留旧会话的 SFTP manager。切换回该会话时直接复用目录树和当前路径，避免重新加载。
@@ -1272,6 +1316,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+ closePreview();
  fileListResizeObserver?.disconnect();
  fileListResizeObserver = null;
  // 注销搜索框动作
@@ -2128,6 +2173,33 @@ const handleOpenEditorClick = () => {
      @confirm="handleModalConfirm"
    />
 
+   <div
+     v-if="isPreviewLoading"
+     class="file-preview-loading-overlay"
+     role="dialog"
+     aria-modal="true"
+     :aria-label="t('fileManager.preview.loading')"
+     @click.self="closePreview"
+   >
+     <div class="file-preview-loading-card">
+       <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+       <span>{{ t('fileManager.preview.loading', 'Loading preview...') }}</span>
+       <button
+         type="button"
+         :aria-label="t('fileManager.preview.close')"
+         @click="closePreview"
+       >×</button>
+     </div>
+   </div>
+
+   <component
+     v-if="previewComponent && previewFile"
+     :is="previewComponent"
+     :file="previewFile"
+     v-bind="previewProps"
+     @close="closePreview"
+   />
+
   <!-- Favorite Paths Modal is now positioned near its button -->
 
 
@@ -2135,6 +2207,37 @@ const handleOpenEditorClick = () => {
 </template>
 
 <style scoped>
+.file-preview-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.file-preview-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2));
+  border-radius: 0.5rem;
+  color: white;
+  background: rgba(20, 20, 20, 0.95);
+}
+
+.file-preview-loading-card button {
+  margin-left: 0.25rem;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .file-manager-path-button {
   width: 1.75rem;
   height: 1.75rem;

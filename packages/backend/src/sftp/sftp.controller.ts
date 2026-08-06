@@ -150,7 +150,20 @@ interface SftpDownloadQuery {
     connectionId?: string;
     sessionId?: string;
     remotePath?: string;
+    disposition?: 'inline' | 'attachment';
 }
+
+const inlineContentTypes: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+};
+const MAX_INLINE_PREVIEW_SIZE = 20 * 1024 * 1024;
+
+const getSafeDownloadFilename = (remotePath: string): string =>
+    path.basename(remotePath).replace(/["\r\n]/g, '_');
 
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
@@ -163,6 +176,7 @@ export const downloadFile = async (
     const connectionId = req.query.connectionId;
     const requestedSessionId = req.query.sessionId;
     const remotePath = req.query.remotePath;
+    const disposition = req.query.disposition === 'inline' ? 'inline' : 'attachment';
 
     // 参数验证
     if (!userId) {
@@ -227,9 +241,21 @@ export const downloadFile = async (
             return;
         }
 
-        // 设置响应头
-        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(remotePath)}"`); // 建议浏览器下载的文件名
-        res.setHeader('Content-Type', 'application/octet-stream'); // 通用二进制类型
+        if (disposition === 'inline' && stats.size > MAX_INLINE_PREVIEW_SIZE) {
+            res.status(413).json({ message: '文件过大，无法进行内联预览。' });
+            return;
+        }
+
+        // 内联预览仅对白名单图片类型返回图片 MIME，其他文件仍按通用二进制处理。
+        const extension = path.extname(remotePath).toLowerCase();
+        const contentType = disposition === 'inline'
+            ? inlineContentTypes[extension] ?? 'application/octet-stream'
+            : 'application/octet-stream';
+        const filename = getSafeDownloadFilename(remotePath);
+        res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, no-store');
         if (stats.size) {
             res.setHeader('Content-Length', stats.size.toString());
         }

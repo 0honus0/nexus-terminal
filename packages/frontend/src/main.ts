@@ -12,10 +12,13 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
 import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
+import { initFilePreviewProviders } from './composables/file-preview';
 
 
 const pinia = createPinia(); // 创建 Pinia 实例
 pinia.use(piniaPluginPersistedstate); // 使用持久化插件
+
+initFilePreviewProviders();
 
 const app = createApp(App);
 

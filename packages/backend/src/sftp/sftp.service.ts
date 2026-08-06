@@ -268,10 +268,12 @@ export class SftpService {
         console.debug(`[SFTP ${sessionId}] Received readFile request for ${path} (ID: ${requestId}, Requested Encoding: ${requestedEncoding ?? 'auto'})`);
         try {
             const readStream = state.sftp.createReadStream(path);
-            let fileData = Buffer.alloc(0);
+            const chunks: Buffer[] = [];
             let errorOccurred = false;
 
-            readStream.on('data', (chunk: Buffer) => { fileData = Buffer.concat([fileData, chunk]); });
+            readStream.on('data', (chunk: Buffer) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            });
             readStream.on('error', (err: Error) => {
                 if (errorOccurred) return; errorOccurred = true;
                 console.error(`[SFTP ${sessionId}] readFile ${path} stream error (ID: ${requestId}):`, err);
@@ -279,6 +281,7 @@ export class SftpService {
             });
             readStream.on('end', () => {
                 if (errorOccurred) return;
+                const fileData = Buffer.concat(chunks);
 
                 console.log(`[SFTP ${sessionId}] readFile ${path} success, size: ${fileData.length} bytes (ID: ${requestId}). Processing content...`);
                 let encodingUsed: string = 'utf-8'; // Default encoding

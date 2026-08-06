@@ -444,6 +444,7 @@
       "closeTab": "Close Tab",
       "closeEditor": "Close Editor",
       "cdToTerminal": "Change terminal directory to current path",
+      "syncFromTerminalPath": "Sync current path from terminal",
       "copy": "Copy",
       "cut": "Cut",
       "paste": "Paste",
@@ -462,6 +463,13 @@
       "filesProcessed": "{count} files processed",
       "filesProcessedTotal": "{count}/{total} entries processed",
       "starting": "Starting remote archive command..."
+    },
+    "preview": {
+      "loading": "Loading preview...",
+      "loadFailed": "Failed to load file preview.",
+      "imageLoadFailed": "The image could not be displayed.",
+      "fileTooLarge": "File is too large for inline preview (maximum {size}).",
+      "close": "Close preview"
     },
     "headers": {
       "type": "Type",
@@ -1530,6 +1538,10 @@
       "remove": "Remove",
       "exportLog": "Export Log"
     }
+  },
+  "term": {
+    "sshSuspend": "SSH Session Suspend",
+    "unknownError": "Unknown error"
   },
   "time": {
     "unknown": "Unknown time",

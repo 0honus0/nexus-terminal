@@ -444,6 +444,7 @@
       "closeTab": "关闭标签页",
       "closeEditor": "关闭编辑器",
       "cdToTerminal": "将终端目录切换到当前路径",
+      "syncFromTerminalPath": "从终端同步当前路径",
       "copy": "复制",
       "cut": "剪切",
       "paste": "粘贴",
@@ -462,6 +463,13 @@
       "filesProcessed": "已处理 {count} 个文件",
       "filesProcessedTotal": "已处理 {count}/{total} 个条目",
       "starting": "正在启动远程归档命令..."
+    },
+    "preview": {
+      "loading": "正在加载预览...",
+      "loadFailed": "文件预览加载失败。",
+      "imageLoadFailed": "图片无法显示。",
+      "fileTooLarge": "文件过大，无法进行内联预览（最大 {size}）。",
+      "close": "关闭预览"
     },
     "headers": {
       "type": "类型",
@@ -1611,6 +1619,10 @@
     "transferInitiated": "传输任务已创建",
     "transferInitiatedGeneric": "传输任务创建成功。",
     "transferFailedError": "发起传输失败。请重试。"
+  },
+  "term": {
+    "sshSuspend": "SSH 会话挂起",
+    "unknownError": "未知错误"
   },
   "time": {
     "unknown": "未知时间",

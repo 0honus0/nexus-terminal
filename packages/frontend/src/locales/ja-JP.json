@@ -370,6 +370,7 @@
             "cancel": "キャンセル",
             "cancelAll": "すべてキャンセル",
             "cdToTerminal": "ターミナルのディレクトリを現在のパスに変更",
+            "syncFromTerminalPath": "ターミナルから現在のパスを同期",
             "changePermissions": "権限を変更",
             "closeEditor": "エディターを閉じる",
             "closeTab": "タブを閉じる",
@@ -404,6 +405,13 @@
             "filesProcessed": "{count} 件のファイルを処理しました",
             "filesProcessedTotal": "{count}/{total} 件を処理済み",
             "starting": "リモートアーカイブコマンドを開始しています..."
+        },
+        "preview": {
+            "loading": "プレビューを読み込んでいます...",
+            "loadFailed": "ファイルのプレビューを読み込めませんでした。",
+            "imageLoadFailed": "画像を表示できませんでした。",
+            "fileTooLarge": "ファイルが大きすぎるためインラインプレビューできません（最大 {size}）。",
+            "close": "プレビューを閉じる"
         },
     "currentPath": "現在のパス",
         "dropFilesHere": "ファイルをここにドラッグ＆ドロップしてアップロード",
@@ -1523,6 +1531,10 @@
       "remove": "削除",
       "exportLog": "ログをエクスポート"
     }
+  },
+  "term": {
+    "sshSuspend": "SSH セッション中断",
+    "unknownError": "不明なエラー"
   },
   "time": {
     "unknown": "不明な時間",
