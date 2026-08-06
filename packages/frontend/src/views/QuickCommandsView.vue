@@ -942,6 +942,7 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
 @container quick-commands-pane (max-width: 240px) {
   .quick-commands-controls {
     flex-wrap: wrap;
+    justify-content: center;
   }
   .quick-commands-search {
     flex: 1 1 100%;
