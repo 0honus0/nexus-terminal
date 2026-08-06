@@ -537,13 +537,14 @@ const handleQuickCommandExecute = (command: string) => {
 .command-bar-inner {
   min-width: 0;
   min-height: 100%;
-  flex-wrap: wrap;
-  align-content: space-evenly;
+  flex-wrap: nowrap;
+  align-content: center;
   align-self: center;
   flex-grow: 1;
-  row-gap: 0.18rem;
+  row-gap: 0;
   column-gap: 0.3rem;
   padding: 0.04rem 0.5rem;
+  overflow: hidden;
 }
 .command-bar-input {
   min-width: 0;
@@ -554,17 +555,18 @@ const handleQuickCommandExecute = (command: string) => {
   padding-bottom: 0.24rem;
 }
 .command-bar-command-input {
-  flex: 1 1 7.5rem !important;
-  min-width: min(100%, 7.5rem);
+  flex: 1 1 auto !important;
+  width: auto;
+  min-width: 0;
 }
 .command-bar-controls {
-  min-width: min(100%, max-content);
-  max-width: 100%;
-  flex: 0 1 max-content;
-  flex-wrap: wrap;
+  min-width: max-content;
+  max-width: max-content;
+  flex: 0 0 max-content;
+  flex-wrap: nowrap;
   align-items: center;
   align-content: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 0.3rem;
   overflow: visible;
 }
@@ -599,13 +601,15 @@ const handleQuickCommandExecute = (command: string) => {
 }
 
 @container command-bar-pane (max-width: 280px) {
-  .command-bar-command-input,
-  .command-bar-controls {
-    flex-basis: 100% !important;
-    width: 100%;
+  .command-bar-command-input {
+    flex: 1 1 3.5rem !important;
+    min-width: 0;
   }
   .command-bar-controls {
-    min-width: 0;
+    min-width: max-content;
+    max-width: max-content;
+    flex: 0 0 max-content;
+    flex-wrap: nowrap;
   }
 }
 </style>
