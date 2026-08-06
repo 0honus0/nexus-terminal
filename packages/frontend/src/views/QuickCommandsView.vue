@@ -979,4 +979,7 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   line-height: 1.2;
   letter-spacing: 0;
 }
+.quick-command-group-header {
+  font-size: 0.96rem !important;
+}
 </style>
