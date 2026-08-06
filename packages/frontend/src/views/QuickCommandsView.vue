@@ -969,4 +969,13 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     line-height: 1.35;
   }
 }
+.quick-command-display-text,
+.quick-command-display-name,
+.quick-command-display-code {
+  font-family: inherit !important;
+  font-size: 0.84rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
 </style>
