@@ -919,7 +919,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   max-height: 100%;
   min-height: 0;
   background: var(--cpu-water-color);
-  transition: height .75s cubic-bezier(.2,.8,.2,1);
+  transition: height 1.4s ease-in-out;
   will-change: height;
 }
 .cpu-wave {
@@ -995,7 +995,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .cpu-wave-two { animation: waterWaveFlowReverse 9.5s linear infinite; animation-delay: -3.1s; }
   .cpu-wave-two path { animation: waterWaveBobAlt 6.4s ease-in-out infinite; }
   .cpu-bubble { animation: bubbleRise 5.2s ease-in infinite; }
-  .cpu-water-fill { transition: height .75s cubic-bezier(.2,.8,.2,1); }
+  .cpu-water-fill { transition: height 1.4s ease-in-out; }
 }
 
 /* ---------- 网络卡 ---------- */
