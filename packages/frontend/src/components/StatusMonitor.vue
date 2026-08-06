@@ -1357,7 +1357,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .network-title { grid-column: 1; }
   .network-rate,
   .network-rate.rate-up {
-    justify-self: start;
+    justify-self: center;
     line-height: 1;
   }
 }
