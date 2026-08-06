@@ -1466,7 +1466,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-detail-full { display: none; }
   .status-monitor:not(.has-history) .metric-detail-compact {
     display: block;
-    transform: translateY(-0.12rem);
+    transform: translateY(-0.2rem);
     font-size: 0.57rem;
     line-height: 1.05;
     text-align: right;
