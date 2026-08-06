@@ -1478,6 +1478,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-name {
     color: #e7edf6;
     font-size: clamp(0.74rem, 4.4cqh, 0.86rem);
+    transform: translateY(0.12rem);
   }
   .status-monitor:not(.has-history) .metric-percent {
     display: block;
@@ -1487,6 +1488,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     text-align: right;
     color: var(--metric-accent);
     font-size: clamp(0.78rem, 4.7cqh, 0.94rem);
+    transform: translateY(-0.1rem);
     font-variant-numeric: tabular-nums;
   }
   .network-card { min-height: 0; padding-block: 0.32rem; }
