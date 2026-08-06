@@ -212,34 +212,38 @@
               </g>
             </svg>
 
-            <div
-              v-if="historyHoverData"
-              class="history-tooltip"
-              :style="{ '--history-hover-left': `${historyHoverData.leftPercent}%` }"
-              aria-hidden="true"
-            >
-              <strong>{{ historyHoverData.timeLabel }}</strong>
-              <template v-if="selectedMetric === 'network'">
-                <span class="history-tooltip-row rate-down">
-                  <i></i><span>下载</span><b>{{ formatBytesPerSecond(historyHoverData.downloadValue) }}</b>
-                </span>
-                <span class="history-tooltip-row rate-up">
-                  <i></i><span>上传</span><b>{{ formatBytesPerSecond(historyHoverData.uploadValue) }}</b>
-                </span>
-              </template>
-              <span v-else class="history-tooltip-row">
-                <i></i><span>{{ selectedMetricLabel }}</span><b>{{ formatHistoryPercentage(historyHoverData.primaryValue) }}</b>
-              </span>
-            </div>
           </div>
         </section>
       </div>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="historyHoverData"
+        ref="historyTooltipRef"
+        class="history-tooltip"
+        :style="historyTooltipStyle"
+        aria-hidden="true"
+      >
+        <strong>{{ historyHoverData.timeLabel }}</strong>
+        <template v-if="selectedMetric === 'network'">
+          <span class="history-tooltip-row rate-down">
+            <i></i><span>下载</span><b>{{ formatBytesPerSecond(historyHoverData.downloadValue) }}</b>
+          </span>
+          <span class="history-tooltip-row rate-up">
+            <i></i><span>上传</span><b>{{ formatBytesPerSecond(historyHoverData.uploadValue) }}</b>
+          </span>
+        </template>
+        <span v-else class="history-tooltip-row">
+          <i></i><span>{{ selectedMetricLabel }}</span><b>{{ formatHistoryPercentage(historyHoverData.primaryValue) }}</b>
+        </span>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref, watch, type Component, type PropType } from 'vue';
+import { computed, defineComponent, h, nextTick, ref, watch, type Component, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '../stores/session.store';
@@ -482,6 +486,13 @@ const sampledPercentHistory = computed(() => downsample(percentHistory.value));
 const sampledNetworkRxHistory = computed(() => downsample(networkRxHistory.value));
 const sampledNetworkTxHistory = computed(() => downsample(networkTxHistory.value));
 const historyHoverRatio = ref<number | null>(null);
+const historyTooltipRef = ref<HTMLElement | null>(null);
+const historyTooltipStyle = ref<Record<string, string>>({
+  left: '0px',
+  top: '0px',
+  visibility: 'hidden',
+});
+let historyTooltipPositionRequest = 0;
 
 const networkHistoryMax = computed(() => Math.max(
   ...networkRxHistory.value,
@@ -562,6 +573,39 @@ const historyHoverData = computed(() => {
   };
 });
 
+const positionHistoryTooltip = async (target: HTMLElement) => {
+  const requestId = ++historyTooltipPositionRequest;
+  await nextTick();
+  if (requestId !== historyTooltipPositionRequest) return;
+
+  const tooltip = historyTooltipRef.value;
+  const hoverData = historyHoverData.value;
+  if (!tooltip || !hoverData) return;
+
+  const chartRect = target.getBoundingClientRect();
+  const viewportGap = 8;
+  const chartGap = 6;
+  const markerX = chartRect.left + hoverData.leftPercent / 100 * chartRect.width;
+  const tooltipWidth = tooltip.offsetWidth;
+  const tooltipHeight = tooltip.offsetHeight;
+  const maxLeft = Math.max(viewportGap, window.innerWidth - tooltipWidth - viewportGap);
+  const maxTop = Math.max(viewportGap, window.innerHeight - tooltipHeight - viewportGap);
+  const left = Math.min(maxLeft, Math.max(viewportGap, markerX - tooltipWidth / 2));
+
+  let top = chartRect.top + chartGap;
+  if (top + tooltipHeight > window.innerHeight - viewportGap) {
+    top = chartRect.bottom - tooltipHeight - chartGap;
+  }
+  top = Math.min(maxTop, Math.max(viewportGap, top));
+
+  historyTooltipStyle.value = {
+    '--history-accent': selectedMetricColor.value,
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+    visibility: 'visible',
+  };
+};
+
 const handleHistoryPointerMove = (event: PointerEvent) => {
   const target = event.currentTarget as HTMLElement | null;
   if (!target) return;
@@ -578,9 +622,11 @@ const handleHistoryPointerMove = (event: PointerEvent) => {
   const rawRatio = Math.max(0, Math.min(1, (svgX - HISTORY_PLOT_LEFT) / HISTORY_PLOT_WIDTH));
   const nearestIndex = Math.round(rawRatio * Math.max(0, sourceLength - 1));
   historyHoverRatio.value = sourceLength === 1 ? 1 : nearestIndex / (sourceLength - 1);
+  void positionHistoryTooltip(target);
 };
 
 const clearHistoryHover = () => {
+  historyTooltipPositionRequest += 1;
   historyHoverRatio.value = null;
 };
 
@@ -1173,13 +1219,12 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .history-hover-marker .history-hover-download { stroke: #35db81; }
 .history-hover-marker .history-hover-upload { stroke: #ff814a; }
 .history-tooltip {
-  --history-hover-left: 50%;
-  position: absolute;
-  z-index: 4;
-  top: 0.35rem;
-  left: clamp(4.5rem, var(--history-hover-left), calc(100% - 4.5rem));
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: max-content;
   min-width: 7.8rem;
-  max-width: calc(100% - 0.5rem);
+  max-width: calc(100vw - 1rem);
   display: grid;
   gap: 0.24rem;
   padding: 0.42rem 0.5rem;
@@ -1189,7 +1234,6 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   background: rgba(8,13,22,.92);
   box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
   backdrop-filter: blur(8px);
-  transform: translateX(-50%);
   pointer-events: none;
   font-size: 0.68rem;
   line-height: 1.15;
