@@ -124,7 +124,7 @@
                             @contextmenu.prevent="showQuickCommandContextMenu($event, cmd)"
                         >
                             <!-- Command Info -->
-                            <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
+                            <div class="quick-command-info flex flex-col overflow-hidden flex-grow min-w-0">
                                 <span
                                   class="quick-command-display-text truncate"
                                   :class="commandDisplayMode === 'name'
@@ -132,22 +132,6 @@
                                     : 'quick-command-display-code'"
                                   :title="getCommandDisplayText(cmd)"
                                 >{{ getCommandDisplayText(cmd) }}</span>
-                            </div>
-                            <!-- Actions -->
-                            <div class="quick-command-actions flex items-center flex-shrink-0 transition-opacity duration-150"
-                                 :class="{
-                                    'opacity-0 group-hover:opacity-100 focus-within:opacity-100': isCompactMode,
-                                    'opacity-100': !isCompactMode
-                                 }">
-                                <button @click.stop="copyCommand(cmd.command)" :class="isCompactMode ? 'p-1' : 'p-1.5'" class="quick-command-action-button rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary" :title="$t('commandHistory.copy', '复制')">
-                                    <i class="fas fa-copy" :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"></i>
-                                </button>
-                                <button @click.stop="openEditForm(cmd)" :class="isCompactMode ? 'p-1' : 'p-1.5'" class="quick-command-action-button rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary" :title="$t('common.edit', '编辑')">
-                                    <i class="fas fa-edit" :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"></i>
-                                </button>
-                                <button @click.stop="confirmDelete(cmd)" :class="isCompactMode ? 'p-1' : 'p-1.5'" class="quick-command-action-button rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-error" :title="$t('common.delete', '删除')">
-                                    <i class="fas fa-times" :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"></i>
-                                </button>
                             </div>
                         </li>
                     </ul>
@@ -166,7 +150,7 @@
                     @contextmenu.prevent="showQuickCommandContextMenu($event, cmd)"
                 >
                     <!-- Command Info -->
-                    <div class="quick-command-info flex flex-col overflow-hidden mr-2 flex-grow min-w-0">
+                    <div class="quick-command-info flex flex-col overflow-hidden flex-grow min-w-0">
                         <span
                           class="quick-command-display-text truncate"
                           :class="commandDisplayMode === 'name'
@@ -174,22 +158,6 @@
                             : 'quick-command-display-code'"
                           :title="getCommandDisplayText(cmd)"
                         >{{ getCommandDisplayText(cmd) }}</span>
-                    </div>
-                    <!-- Actions -->
-                    <div class="quick-command-actions flex items-center flex-shrink-0 transition-opacity duration-150"
-                         :class="{
-                            'opacity-0 group-hover:opacity-100 focus-within:opacity-100': isCompactMode,
-                            'opacity-100': !isCompactMode
-                         }">
-                        <button @click.stop="copyCommand(cmd.command)" :class="isCompactMode ? 'p-1' : 'p-1.5'" class="quick-command-action-button rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary" :title="$t('commandHistory.copy', '复制')">
-                            <i class="fas fa-copy" :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"></i>
-                        </button>
-                        <button @click.stop="openEditForm(cmd)" :class="isCompactMode ? 'p-1' : 'p-1.5'" class="quick-command-action-button rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary" :title="$t('common.edit', '编辑')">
-                            <i class="fas fa-edit" :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"></i>
-                        </button>
-                        <button @click.stop="confirmDelete(cmd)" :class="isCompactMode ? 'p-1' : 'p-1.5'" class="quick-command-action-button rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-error" :title="$t('common.delete', '删除')">
-                            <i class="fas fa-times" :style="{ fontSize: isCompactMode ? `calc(0.8em * max(0.8, var(--qc-row-size-multiplier) * 0.5 + 0.5))` : `calc(0.875em * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4))` }"></i>
-                        </button>
                     </div>
                 </li>
             </ul>
@@ -214,9 +182,35 @@
       <ul class="list-none p-0 m-0">
         <li
           v-if="quickCommandContextTargetCommand"
-          class="group px-4 py-1.5 cursor-pointer flex items-center text-foreground hover:bg-primary/10 hover:text-primary text-sm transition-colors duration-150 rounded-md mx-1"
+          class="group px-4 py-1.5 cursor-pointer flex items-center gap-2 text-foreground hover:bg-primary/10 hover:text-primary text-sm transition-colors duration-150 rounded-md mx-1"
+          @click="handleQuickCommandMenuAction('copy', quickCommandContextTargetCommand!)"
+        >
+          <i class="fas fa-copy w-4 text-center"></i>
+          <span>{{ t('commandHistory.copy', '复制') }}</span>
+        </li>
+        <li
+          v-if="quickCommandContextTargetCommand"
+          class="group px-4 py-1.5 cursor-pointer flex items-center gap-2 text-foreground hover:bg-primary/10 hover:text-primary text-sm transition-colors duration-150 rounded-md mx-1"
+          @click="handleQuickCommandMenuAction('edit', quickCommandContextTargetCommand!)"
+        >
+          <i class="fas fa-edit w-4 text-center"></i>
+          <span>{{ t('common.edit', '编辑') }}</span>
+        </li>
+        <li
+          v-if="quickCommandContextTargetCommand"
+          class="group px-4 py-1.5 cursor-pointer flex items-center gap-2 text-foreground hover:bg-error/10 hover:text-error text-sm transition-colors duration-150 rounded-md mx-1"
+          @click="handleQuickCommandMenuAction('delete', quickCommandContextTargetCommand!)"
+        >
+          <i class="fas fa-trash-alt w-4 text-center"></i>
+          <span>{{ t('common.delete', '删除') }}</span>
+        </li>
+        <li class="my-1 border-t border-border/50" aria-hidden="true"></li>
+        <li
+          v-if="quickCommandContextTargetCommand"
+          class="group px-4 py-1.5 cursor-pointer flex items-center gap-2 text-foreground hover:bg-primary/10 hover:text-primary text-sm transition-colors duration-150 rounded-md mx-1"
           @click="handleQuickCommandMenuAction('sendToAllSessions', quickCommandContextTargetCommand!)"
         >
+          <i class="fas fa-paper-plane w-4 text-center"></i>
           <span>{{ t('quickCommands.actions.sendToAllSessions', '发送到全部会话') }}</span>
         </li>
       </ul>
@@ -793,8 +787,22 @@ const closeQuickCommandContextMenu = () => {
   document.removeEventListener('click', closeQuickCommandContextMenu);
 };
 
-const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: QuickCommandFE) => {
+type QuickCommandMenuAction = 'copy' | 'edit' | 'delete' | 'sendToAllSessions';
+
+const handleQuickCommandMenuAction = async (action: QuickCommandMenuAction, command: QuickCommandFE) => {
   closeQuickCommandContextMenu();
+  if (action === 'copy') {
+    await copyCommand(command.command);
+    return;
+  }
+  if (action === 'edit') {
+    openEditForm(command);
+    return;
+  }
+  if (action === 'delete') {
+    await confirmDelete(command);
+    return;
+  }
   if (action === 'sendToAllSessions') {
     const activeSshSessions = Array.from(sessionStore.sessions.values()).filter(
       (s: SessionState) => {
@@ -919,12 +927,6 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     padding-left: 0.45rem !important;
     padding-right: 0.35rem !important;
   }
-  .quick-command-info {
-    margin-right: 0.25rem;
-  }
-  .quick-command-action-button {
-    padding: 0.25rem !important;
-  }
   .quick-command-display-text {
     font-size: calc(0.7rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
     font-weight: 650;
@@ -957,9 +959,6 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
     width: 100%;
     margin-right: 0;
     flex-direction: row;
-  }
-  .quick-command-actions {
-    display: none;
   }
   .quick-command-display-text {
     width: 100%;
