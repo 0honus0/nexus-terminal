@@ -940,12 +940,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 /* 第二层波浪: 不同速度/相位/起伏节奏, 叠加后波峰错开更自然 */
 .cpu-wave-two {
-  left: -100%;
-  top: -5px;
-  height: 14px;
-  opacity: .55;
-  animation: waterWaveFlowReverse 9.5s linear infinite;
-  animation-delay: -3.1s;
+  display: none;
 }
 .cpu-wave-two path {
   animation: waterWaveBobAlt 6.4s ease-in-out infinite;
