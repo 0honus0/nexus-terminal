@@ -2204,6 +2204,8 @@ const handleOpenEditorClick = () => {
 }
 @container file-manager-pane (max-width: 420px) {
   .file-manager-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     flex: 1 1 100%;
     width: 100%;
     gap: 0.25rem;
@@ -2211,23 +2213,30 @@ const handleOpenEditorClick = () => {
   .file-manager-actions > .file-manager-action-button,
   .file-manager-search-slot,
   .file-manager-favorite-slot {
-    flex: 1 1 1.85rem;
-    min-width: 1.75rem;
+    width: 100%;
+    min-width: 0;
+    flex: none;
   }
   .file-manager-action-button {
-    width: auto !important;
-    height: 1.85rem !important;
+    width: 100% !important;
+    height: 1.75rem !important;
   }
   .file-manager-search-slot,
   .file-manager-favorite-slot {
-    width: auto;
+    width: 100%;
   }
   .file-manager-search-slot .file-manager-action-button,
   .file-manager-favorite-slot .file-manager-action-button {
     width: 100% !important;
   }
+  .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
+    width: 100% !important;
+    height: 1.75rem !important;
+    min-width: 0;
+    flex-basis: auto;
+  }
   .file-manager-search-slot.is-active {
-    flex: 1 0 100%;
+    grid-column: 1 / -1;
   }
   .file-manager-search-slot.is-active .file-manager-search-box {
     width: 100%;
