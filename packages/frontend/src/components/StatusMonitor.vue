@@ -1711,6 +1711,39 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
 }
 
+/* 窄摘要统一居中, 流量避免横向挤压 */
+@container status-pane (max-width: 200px) {
+  .auto-summary {
+    grid-template-rows: auto auto;
+    align-content: space-evenly;
+    row-gap: 0.36rem;
+  }
+  .summary-resources {
+    width: 100%;
+    max-width: none;
+    min-height: max-content;
+    align-self: start;
+    align-content: start;
+    row-gap: 0;
+    justify-self: stretch;
+  }
+  .summary-metric {
+    width: min(100%, 5.2rem);
+    justify-self: center;
+  }
+  .summary-network {
+    width: 100%;
+    margin-top: 0.9rem;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, auto);
+    row-gap: 0.22rem;
+    justify-self: stretch;
+  }
+  .summary-network > span {
+    width: auto;
+    justify-self: center !important;
+  }
+
 @container status-pane (max-height: 130px) {
   .status-monitor { padding: .16rem; }
   .header-main { min-height: 1.9rem; padding: .2rem .38rem; }
