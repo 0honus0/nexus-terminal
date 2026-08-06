@@ -930,7 +930,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   width: 200%;
   height: 12px;
   color: var(--cpu-water-color);
-  filter: drop-shadow(0 -1px 2px color-mix(in srgb, var(--metric-accent) 16%, transparent));
+  opacity: 1;
+  filter: none;
   animation: waterWaveFlow 6s linear infinite;
 }
 .cpu-wave path {
