@@ -1628,28 +1628,27 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .monitor-content { display: none; }
   .summary-row { min-height: 0; font-size: clamp(.59rem, 6.4cqw, .68rem); }
   .summary-resources {
-    width: min(100%, 5.2rem);
+    width: 100%;
+    max-width: none;
     justify-self: center;
     align-content: center;
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(3, auto);
-    row-gap: clamp(.24rem, 2.8cqh, .4rem);
+    display: flex !important;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    gap: 0.08rem;
     padding-inline: 0;
   }
-  .summary-separator { display: none; }
+  .summary-separator { display: block; }
   .summary-metric {
-    width: 100%;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) 2.35rem;
-    align-items: center;
-    gap: .28rem !important;
+    width: auto;
+    display: inline-flex !important;
+    grid-template-columns: none;
+    gap: 0.12rem !important;
   }
-  .summary-metric b { justify-self: start; }
   .summary-metric .summary-percent {
-    width: 2.35rem;
-    justify-self: end;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
+    width: auto;
+    justify-self: auto;
+    text-align: left;
   }
   .summary-network {
     width: min(100%, 5.2rem);
@@ -1682,6 +1681,30 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     font-variant-numeric: tabular-nums;
   }
   .summary-network .rate-unit { display: none; }
+}
+
+/* 只有更窄时才将资源摘要改成 1×3 */
+@container status-pane (max-width: 110px) {
+  .summary-resources {
+    width: min(100%, 5.2rem);
+    display: grid !important;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, auto);
+    row-gap: clamp(.24rem, 2.8cqh, .4rem);
+  }
+  .summary-separator { display: none; }
+  .summary-metric {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 2.35rem;
+    gap: .28rem !important;
+  }
+  .summary-metric b { justify-self: start; }
+  .summary-metric .summary-percent {
+    width: 2.35rem;
+    justify-self: end;
+    text-align: right;
+  }
 }
 @container status-pane (max-height: 130px) {
   .status-monitor { padding: .16rem; }
