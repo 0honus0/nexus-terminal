@@ -71,6 +71,11 @@ const previewProps = shallowRef<Record<string, unknown>>({});
 const previewDispose = shallowRef<(() => void) | null>(null);
 const isPreviewLoading = ref(false);
 let previewLoadToken = 0;
+const pendingPathResolutionCleanups = new Set<() => void>();
+
+const cancelPendingPathResolutions = () => {
+  for (const cleanup of [...pendingPathResolutionCleanups]) cleanup();
+};
 
 const closePreview = () => {
   previewLoadToken += 1;
@@ -509,6 +514,9 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
   const manager = currentSftpManager.value;
   if (!manager) return;
 
+  // Only the latest open action may resolve a symbolic-link target.
+  cancelPendingPathResolutions();
+
   if (props.isMobile && isMultiSelectMode.value && (item.attrs.isFile || item.attrs.isSymbolicLink)) {
     if (selectedItems.value.has(item.filename)) {
       selectedItems.value.delete(item.filename);
@@ -526,6 +534,10 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
     console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Symbolic link clicked: ${itemPath}. Attempting to resolve with sftp:realpath...`);
     const { sendMessage: wsSend, onMessage: wsOnMessage } = props.wsDeps;
     const requestId = generateRequestId();
+    const requestSessionId = effectiveSessionId.value;
+    const requestManager = manager;
+    const isCurrentResolution = () =>
+      effectiveSessionId.value === requestSessionId && currentSftpManager.value === requestManager;
 
     const handleResolvedPath = (realPath: string, targetType: 'file' | 'directory' | 'unknown') => {
       const activeManager = currentSftpManager.value;
@@ -559,11 +571,15 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
       unregisterError?.();
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = undefined;
+      pendingPathResolutionCleanups.delete(cleanupListeners);
     };
+
+    pendingPathResolutionCleanups.add(cleanupListeners);
 
     unregisterSuccess = wsOnMessage('sftp:realpath:success', (payload: any, message: WebSocketMessage) => {
       if (message.requestId !== requestId || payload.requestedPath !== itemPath) return;
       cleanupListeners();
+      if (!isCurrentResolution()) return;
 
       const absolutePath = payload.absolutePath;
       if (!absolutePath) {
@@ -581,6 +597,7 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
     unregisterError = wsOnMessage('sftp:realpath:error', (payload: any, message: WebSocketMessage) => {
       if (message.requestId !== requestId || payload?.requestedPath !== itemPath) return;
       cleanupListeners();
+      if (!isCurrentResolution()) return;
       const serverErrorMsg = payload.error || 'Unknown error resolving symlink target type';
       console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to resolve symlink '${itemPath}': ${serverErrorMsg}`);
       uiNotificationsStore.showError(t('fileManager.errors.readFileFailed'));
@@ -1069,6 +1086,7 @@ const {
 // --- 重置选中索引和清空选择的 Watchers ---
 // 修改：监听 manager 的 currentPath
 watch(() => currentSftpManager.value?.currentPath.value, () => {
+    cancelPendingPathResolutions();
     closePreview();
     selectedIndex.value = -1;
     clearSelection();
@@ -1262,6 +1280,7 @@ watch(() => focusSwitcherStore.activateFileManagerSearchTrigger, (newValue, oldV
 // --- 监听 sessionId prop 的变化 ---
 watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
+        cancelPendingPathResolutions();
         closePreview();
         closePathHistory(); // 关闭可能打开的路径历史下拉菜单
         pathHistoryStore.setSearchTerm(''); // 清空搜索词
@@ -1316,6 +1335,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+ cancelPendingPathResolutions();
  closePreview();
  fileListResizeObserver?.disconnect();
  fileListResizeObserver = null;

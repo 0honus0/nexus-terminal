@@ -162,8 +162,23 @@ const inlineContentTypes: Record<string, string> = {
 };
 const MAX_INLINE_PREVIEW_SIZE = 20 * 1024 * 1024;
 
-const getSafeDownloadFilename = (remotePath: string): string =>
-    path.basename(remotePath).replace(/["\r\n]/g, '_');
+const encodeContentDispositionFilename = (filename: string): string =>
+    encodeURIComponent(filename).replace(/[!'()*]/g, (character) =>
+        `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+    );
+
+const getContentDisposition = (
+    disposition: 'inline' | 'attachment',
+    remotePath: string,
+): string => {
+    const filename = path.basename(remotePath);
+    const asciiFallback = filename
+        .replace(/["\\\r\n]/g, '_')
+        .replace(/[^\x20-\x7E]/g, '_') || 'download';
+    const encodedFilename = encodeContentDispositionFilename(filename);
+
+    return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
+};
 
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
@@ -251,8 +266,7 @@ export const downloadFile = async (
         const contentType = disposition === 'inline'
             ? inlineContentTypes[extension] ?? 'application/octet-stream'
             : 'application/octet-stream';
-        const filename = getSafeDownloadFilename(remotePath);
-        res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+        res.setHeader('Content-Disposition', getContentDisposition(disposition, remotePath));
         res.setHeader('Content-Type', contentType);
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Cache-Control', 'private, no-store');
