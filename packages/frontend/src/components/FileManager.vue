@@ -2205,7 +2205,7 @@ const handleOpenEditorClick = () => {
 @container file-manager-pane (max-width: 420px) {
   .file-manager-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(1.75rem, 1fr));
     flex: 1 1 100%;
     width: 100%;
     gap: 0.25rem;
