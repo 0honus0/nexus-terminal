@@ -1316,10 +1316,18 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .history-card .axis-x-label { font-size: 9.8px; }
 }
 
-/* 极窄 (<= 250px) - 单列, 避免 2 列名称截断 */
+/* 极窄 (<= 250px) - 单列, 避免指标和网速内容挤压 */
 @container status-pane (max-width: 250px) {
   .status-monitor:not(.has-history) .metric-grid { grid-template-columns: 1fr; }
   .has-history .metric-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .network-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.18rem;
+    padding-block: 0.38rem;
+  }
+  .network-title { grid-column: 1; }
+  .network-rate,
+  .network-rate.rate-up { justify-self: start; }
 }
 
 /* 高而窄：保持 1×4，但卡片内部仍横向排布，避免标题与数值被拉得过远 */
