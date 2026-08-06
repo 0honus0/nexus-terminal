@@ -837,9 +837,10 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
 }
 .quick-command-group-header {
   min-width: 0;
-  padding: calc(0.4rem * var(--qc-row-size-multiplier)) 0.2rem;
-  font-size: calc(0.82rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
+  padding: calc(0.46rem * var(--qc-row-size-multiplier)) 0.2rem;
+  font-size: calc(0.9rem * max(0.85, var(--qc-row-size-multiplier) * 0.6 + 0.4));
   line-height: 1.25;
+  font-weight: 700;
 }
 .quick-command-group-header-compact {
   padding-top: calc(0.22rem * var(--qc-row-size-multiplier));
@@ -912,7 +913,7 @@ const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: Quic
   .quick-command-group-header {
     padding-left: 0.1rem;
     padding-right: 0.1rem;
-    font-size: 0.8rem;
+    font-size: 0.86rem;
   }
   .quick-command-row {
     padding-left: 0.45rem !important;
