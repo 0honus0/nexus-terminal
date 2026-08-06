@@ -1714,9 +1714,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 /* 窄摘要统一居中, 流量避免横向挤压 */
 @container status-pane (max-width: 200px) {
   .auto-summary {
-    grid-template-rows: auto auto;
-    align-content: space-evenly;
-    row-gap: 0.36rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-evenly;
+    gap: 0;
   }
   .summary-resources {
     width: 100%;
@@ -1733,10 +1735,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
   .summary-network {
     width: 100%;
-    margin-top: 0.9rem;
     grid-template-columns: 1fr;
     grid-template-rows: repeat(2, auto);
-    row-gap: 0.22rem;
+    row-gap: 0;
     justify-self: stretch;
   }
   .summary-network > span {
