@@ -1712,7 +1712,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 
 /* 窄摘要统一居中, 流量避免横向挤压 */
-@container status-pane (max-width: 200px) {
+@container status-pane (max-width: 200px) and (max-height: 235px) {
   .auto-summary {
     display: flex;
     flex-direction: column;
