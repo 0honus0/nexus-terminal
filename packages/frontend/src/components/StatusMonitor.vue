@@ -1420,8 +1420,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .network-card { grid-template-columns: 1fr; gap: 0.14rem; }
   .network-title { grid-column: 1 / -1; }
   .network-title small { display: none; }
-  .network-rate { font-size: 0.62rem; justify-self: start; }
-  .network-rate.rate-up { justify-self: start; }
+  .network-rate { font-size: 0.62rem; justify-self: center; }
+  .network-rate.rate-up { justify-self: center; }
   .has-history .metric-card { padding-inline: 0.2rem; gap: 0.18rem; }
   .has-history .metric-name,
   .has-history .metric-percent { font-size: 0.62rem; }
