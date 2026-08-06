@@ -2135,6 +2135,19 @@ const handleOpenEditorClick = () => {
 </template>
 
 <style scoped>
+.file-manager-path-button {
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  flex: 0 0 1.75rem;
+  padding: 0;
+}
+.file-manager-search-slot > .file-manager-path-button {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-basis: 1.75rem;
+}
 .file-manager-root {
   container-type: inline-size;
   container-name: file-manager-pane;
