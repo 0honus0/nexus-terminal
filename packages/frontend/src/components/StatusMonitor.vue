@@ -1743,6 +1743,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     width: auto;
     justify-self: center !important;
   }
+}
 
 @container status-pane (max-height: 130px) {
   .status-monitor { padding: .16rem; }
