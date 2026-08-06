@@ -1601,7 +1601,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 @container status-pane (max-width: 132px) {
   .monitor-header {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     flex-direction: column;
     align-items: stretch;
@@ -1616,13 +1616,13 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
   .live-state i { width: .34rem; height: .34rem; }
   .auto-summary {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     display: grid;
     grid-template-rows: auto auto;
-    align-content: center;
-    gap: clamp(.42rem, 4cqh, .72rem);
-    padding: .38rem .24rem .48rem;
+    align-content: start;
+    gap: 0.36rem;
+    padding: 0.34rem 0.24rem 0.3rem;
     color: #a7b3c4;
   }
   .monitor-content { display: none; }
