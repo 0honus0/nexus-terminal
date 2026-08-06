@@ -1330,17 +1330,31 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .network-rate.rate-up { justify-self: start; }
 }
 
-/* 窄网速卡 (<= 300px 内容宽度) - 三行紧凑排列 */
+/* 窄网速卡 (<= 300px 内容宽度) - 两组速率保持同一行 */
 @container status-pane (max-width: 300px) {
   .network-card {
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    column-gap: 0.24rem;
+    row-gap: 0.06rem;
+    padding-block: 0.24rem;
+  }
+  .network-title { grid-column: 1 / -1; }
+  .network-rate {
+    min-width: 0;
+    font-size: 0.62rem;
+  }
+  .network-rate.rate-up { justify-self: end; }
+}
+
+/* 更窄时才切换为上下两行 */
+@container status-pane (max-width: 160px) {
+  .network-card {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    column-gap: 0;
+    row-gap: 0;
     padding-block: 0.16rem;
   }
-  .network-title {
-    grid-column: 1;
-    line-height: 1.08;
-  }
+  .network-title { grid-column: 1; }
   .network-rate,
   .network-rate.rate-up {
     justify-self: start;
