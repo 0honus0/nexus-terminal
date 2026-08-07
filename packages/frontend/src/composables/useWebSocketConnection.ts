@@ -403,7 +403,9 @@ export function createWebSocketConnectionManager(
             throw new Error(`WebSocket 未连接，无法发送二进制消息（状态: ${connectionStatus.value}）`);
         }
 
-        const highWaterMark = 2 * 1024 * 1024;
+        // 上传采用 1 MiB 分块并允许多块在途；提高浏览器发送缓冲上限，
+        // 避免单文件在高 RTT 链路上频繁出现“发一段、等一段”的停顿。
+        const highWaterMark = 8 * 1024 * 1024;
         while (
             socket === ws.value
             && socket.readyState === WebSocket.OPEN

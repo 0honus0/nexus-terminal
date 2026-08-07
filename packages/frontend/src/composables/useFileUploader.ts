@@ -10,8 +10,11 @@ import type { WebSocketDependencies } from './useSftpActions';
 
 // Keep a bounded pipeline so network latency does not leave the SFTP write stream idle.
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
-const UPLOAD_CHUNK_SIZE = 512 * 1024;
-const UPLOAD_MAX_IN_FLIGHT = 2;
+// 单文件优先吞吐；文件夹/批量上传依靠“多文件并发”获得总吞吐，因此批量中的单文件流水线更保守。
+const SINGLE_FILE_UPLOAD_CHUNK_SIZE = 1024 * 1024;
+const SINGLE_FILE_UPLOAD_MAX_IN_FLIGHT = 4;
+const BATCH_UPLOAD_CHUNK_SIZE = 512 * 1024;
+const BATCH_UPLOAD_MAX_IN_FLIGHT = 2;
 const UPLOAD_ACTIVE_WEIGHT_BUDGET = 12;
 const UPLOAD_MAX_ACTIVE_FILES = 12;
 const UPLOAD_SMALL_FILE_THRESHOLD = 256 * 1024;
@@ -22,11 +25,16 @@ const UPLOAD_FRAME_VERSION = 1;
 const UPLOAD_FRAME_FIXED_HEADER_SIZE = 12;
 const MAX_UPLOAD_ID_BYTES = 512;
 
+type UploadPipelineMode = 'single' | 'batch';
+
 interface UploadTransferState {
     file: File;
     remotePath: string;
     relativePath?: string;
     prepareId: string;
+    pipelineMode: UploadPipelineMode;
+    chunkSize: number;
+    maxInFlight: number;
     offset: number;
     nextChunkIndex: number;
     inFlight: number;
@@ -190,6 +198,7 @@ export function useFileUploader(
         if (restart) {
             resetTransferForRestart(transfer);
             upload.progress = 0;
+            upload.bytesWritten = 0;
         }
         transfer.startRequestSent = true;
         upload.status = 'pending';
@@ -267,10 +276,10 @@ export function useFileUploader(
             while (
                 wsDeps.value.isConnected.value
                 && uploads[uploadId]?.status === 'uploading'
-                && transfer.inFlight < UPLOAD_MAX_IN_FLIGHT
+                && transfer.inFlight < transfer.maxInFlight
                 && transfer.offset < transfer.file.size
             ) {
-                const slice = transfer.file.slice(transfer.offset, transfer.offset + UPLOAD_CHUNK_SIZE);
+                const slice = transfer.file.slice(transfer.offset, transfer.offset + transfer.chunkSize);
                 const chunk = await slice.arrayBuffer();
                 if (!wsDeps.value.isConnected.value || uploads[uploadId]?.status !== 'uploading') return;
 
@@ -312,7 +321,7 @@ export function useFileUploader(
                 if (
                     wsDeps.value.isConnected.value
                     && uploads[uploadId]?.status === 'uploading'
-                    && current.inFlight < UPLOAD_MAX_IN_FLIGHT
+                    && current.inFlight < current.maxInFlight
                     && current.offset < current.file.size
                 ) queueMicrotask(() => void pumpUpload(uploadId));
             }
@@ -356,6 +365,22 @@ export function useFileUploader(
             return;
         }
 
+        const pipelineMode: UploadPipelineMode = files.length === 1
+            && directories.length === 0
+            && preparedFiles[0]?.relativeDirectory === ''
+            ? 'single'
+            : 'batch';
+        const chunkSize = pipelineMode === 'single'
+            ? SINGLE_FILE_UPLOAD_CHUNK_SIZE
+            : BATCH_UPLOAD_CHUNK_SIZE;
+        const maxInFlight = pipelineMode === 'single'
+            ? SINGLE_FILE_UPLOAD_MAX_IN_FLIGHT
+            : BATCH_UPLOAD_MAX_IN_FLIGHT;
+        console.log(
+            `[FileUploader ${sessionIdForLog.value}] Using ${pipelineMode} upload pipeline: `
+            + `${chunkSize / 1024} KiB chunks, ${maxInFlight} in flight.`,
+        );
+
         const uploadIds = new Set<string>();
         uploadBatches.set(prepareId, {
             prepareId,
@@ -377,6 +402,7 @@ export function useFileUploader(
                 file: preparedFile.file,
                 filename: preparedFile.file.name,
                 progress: 0,
+                bytesWritten: 0,
                 status: 'pending',
             };
             uploadTransferStates.set(uploadId, {
@@ -384,6 +410,9 @@ export function useFileUploader(
                 remotePath: preparedFile.remotePath,
                 relativePath: preparedFile.relativeDirectory || undefined,
                 prepareId,
+                pipelineMode,
+                chunkSize,
+                maxInFlight,
                 offset: 0,
                 nextChunkIndex: 0,
                 inFlight: 0,
@@ -502,6 +531,7 @@ export function useFileUploader(
             console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
             upload.status = 'success';
             upload.progress = 100;
+            upload.bytesWritten = upload.file.size;
             removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
             releaseUploadSlot(uploadId);
@@ -605,7 +635,10 @@ export function useFileUploader(
         if (upload && upload.status === 'uploading') {
             // payload 现在应该包含 bytesWritten 和 totalSize
             if (typeof payload?.bytesWritten === 'number' && typeof payload?.totalSize === 'number') {
-                upload.progress = Math.min(100, Math.round((payload.bytesWritten / payload.totalSize) * 100));
+                upload.bytesWritten = Math.max(0, Math.min(payload.totalSize, payload.bytesWritten));
+                upload.progress = payload.totalSize === 0
+                    ? 100
+                    : Math.min(100, (upload.bytesWritten / payload.totalSize) * 100);
                 
             } else {
                 console.warn(`[FileUploader ${sessionIdForLog.value}] Received upload:progress with incorrect payload format:`, payload);
@@ -624,10 +657,13 @@ export function useFileUploader(
         if (!transfer) return;
 
         const upload = uploads[uploadId];
-        if (upload && typeof payload?.progress === 'number') {
-            upload.progress = Math.min(100, Math.max(upload.progress, Math.round(payload.progress)));
-        } else if (upload && typeof payload?.bytesWritten === 'number' && transfer.file.size > 0) {
-            upload.progress = Math.min(100, Math.round((payload.bytesWritten / transfer.file.size) * 100));
+        if (upload && typeof payload?.bytesWritten === 'number') {
+            upload.bytesWritten = Math.max(0, Math.min(transfer.file.size, payload.bytesWritten));
+            upload.progress = transfer.file.size === 0
+                ? 100
+                : Math.min(100, (upload.bytesWritten / transfer.file.size) * 100);
+        } else if (upload && typeof payload?.progress === 'number') {
+            upload.progress = Math.min(100, Math.max(upload.progress, payload.progress));
         }
 
         transfer.inFlight = Math.max(0, transfer.inFlight - 1);

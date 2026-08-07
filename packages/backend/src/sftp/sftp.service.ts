@@ -2179,18 +2179,23 @@ export class SftpService {
 
         if (activeUpload) {
             console.log(`[SFTP Upload ${uploadId}] Cancelling upload for ${activeUpload.remotePath}`);
-            await this.cancelUploadInternal(uploadId, 'User cancelled');
+            // Logical cancellation takes effect synchronously inside cancelUploadInternal
+            // (the active state is removed before its first await). Do the potentially slow
+            // stream-close + remote .part cleanup in the background so the WebSocket handler
+            // can acknowledge cancellation immediately instead of making the file manager wait.
+            void this.cancelUploadInternal(uploadId, 'User cancelled').catch((error) => {
+                console.warn(`[SFTP Upload ${uploadId}] Background cleanup after cancel failed:`, error);
+            });
         } else if (pendingUpload) {
-            // The start routine checks cancelledUploadIds after every await. Removing here
-            // as well handles the case where its writability probe already created the part.
-            await this.removeRemoteUploadFile(sessionId, pendingUpload.temporaryPath);
+            // The start routine observes cancelledUploadIds at its next checkpoint and owns
+            // cleanup of the temporary path. Do not issue a second SFTP unlink here: avoiding
+            // duplicate remote I/O keeps an immediate cancel from competing with directory UI work.
+            console.log(`[SFTP Upload ${uploadId}] Marked pending upload cancelled; start routine will clean it up.`);
         } else {
             console.log(`[SFTP Upload ${uploadId}] Cancel request is already complete or unknown; treating it as idempotent.`);
-        }
-
-        if (!this.pendingUploads.has(uploadId) && !this.activeUploads.has(uploadId)) {
             this.cancelledUploadIds.delete(uploadId);
         }
+
         if (state?.ws.readyState === WebSocket.OPEN) {
             state.ws.send(JSON.stringify({ type: 'sftp:upload:cancelled', payload: { uploadId } }));
         }

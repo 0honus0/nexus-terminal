@@ -498,6 +498,7 @@
             "uploading": "アップロード中"
         },
         "uploadTasks": "アップロードタスク",
+        "uploadSpeed": "合計速度",
         "warnings": {
             "moveSameDirectory": "同じディレクトリ内で切り取りと貼り付けはできません。"
         },

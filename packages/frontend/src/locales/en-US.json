@@ -424,6 +424,7 @@
     "loading": "Loading directory...",
     "emptyDirectory": "Directory is empty",
     "uploadTasks": "Upload Tasks",
+    "uploadSpeed": "Total speed",
     "actions": {
       "refresh": "Refresh",
       "parentDirectory": "Parent Directory",

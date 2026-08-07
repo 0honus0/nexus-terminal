@@ -424,6 +424,7 @@
     "loading": "正在加载目录...",
     "emptyDirectory": "目录为空",
     "uploadTasks": "上传任务",
+    "uploadSpeed": "总速度",
     "actions": {
       "refresh": "刷新",
       "parentDirectory": "上一级",

@@ -27,6 +27,57 @@ let positionRestored = false;
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused'].includes(upload.status)
 ).length);
+const hasUploading = computed(() => Object.values(props.uploads).some(upload => upload.status === 'uploading'));
+const totalUploadSpeed = ref(0);
+const speedSnapshots = new Map<string, number>();
+let speedTimer: number | null = null;
+let lastSpeedSampleAt = performance.now();
+
+const formatProgress = (progress: number) => {
+  const normalized = Math.max(0, Math.min(100, progress));
+  return normalized >= 100 ? '100' : normalized.toFixed(1);
+};
+
+const formatTransferRate = (bytesPerSecond: number) => {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond < 1) return '0 B/s';
+  if (bytesPerSecond < 1024) return `${Math.round(bytesPerSecond)} B/s`;
+  if (bytesPerSecond < 1024 ** 2) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  if (bytesPerSecond < 1024 ** 3) return `${(bytesPerSecond / 1024 ** 2).toFixed(1)} MB/s`;
+  return `${(bytesPerSecond / 1024 ** 3).toFixed(1)} GB/s`;
+};
+
+const sampleTotalUploadSpeed = () => {
+  const now = performance.now();
+  const elapsedMs = Math.max(1, now - lastSpeedSampleAt);
+  lastSpeedSampleAt = now;
+  let bytesDelta = 0;
+  const activeIds = new Set<string>();
+
+  for (const upload of Object.values(props.uploads)) {
+    if (upload.status !== 'uploading') continue;
+    activeIds.add(upload.id);
+    const previousBytes = speedSnapshots.get(upload.id);
+    if (previousBytes !== undefined && upload.bytesWritten >= previousBytes) {
+      bytesDelta += upload.bytesWritten - previousBytes;
+    }
+    speedSnapshots.set(upload.id, upload.bytesWritten);
+  }
+
+  for (const uploadId of [...speedSnapshots.keys()]) {
+    if (!activeIds.has(uploadId)) speedSnapshots.delete(uploadId);
+  }
+
+  if (!activeIds.size) {
+    totalUploadSpeed.value = 0;
+    return;
+  }
+
+  const instantSpeed = bytesDelta * 1000 / elapsedMs;
+  totalUploadSpeed.value = totalUploadSpeed.value > 0
+    ? totalUploadSpeed.value * 0.55 + instantSpeed * 0.45
+    : instantSpeed;
+  if (totalUploadSpeed.value < 1) totalUploadSpeed.value = 0;
+};
 
 // 计算显示的上传列表（可以过滤掉已完成/取消的，或者全部显示）
 // 这里选择全部显示，让用户能看到最终状态
@@ -143,9 +194,16 @@ watch(() => uploadList.value.length, async (count) => {
   positionReady.value = true;
 }, { immediate: true });
 
-onMounted(() => window.addEventListener('resize', clampPosition));
+onMounted(() => {
+  window.addEventListener('resize', clampPosition);
+  lastSpeedSampleAt = performance.now();
+  speedTimer = window.setInterval(sampleTotalUploadSpeed, 500);
+});
 onBeforeUnmount(() => {
   stopDragging();
+  if (speedTimer !== null) window.clearInterval(speedTimer);
+  speedTimer = null;
+  speedSnapshots.clear();
   window.removeEventListener('resize', clampPosition);
 });
 </script>
@@ -161,20 +219,25 @@ onBeforeUnmount(() => {
   >
     <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
       <h4 class="m-0 min-w-0 truncate text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
-      <button
-        v-if="cancellableCount > 1"
-        type="button"
-        class="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
-        @click="handleCancelAll"
-      >
-        {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
-      </button>
+      <div class="ml-auto flex items-center gap-2">
+        <span v-if="hasUploading" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
+          {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
+        </span>
+        <button
+          v-if="cancellableCount > 1"
+          type="button"
+          class="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
+          @click="handleCancelAll"
+        >
+          {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
+        </button>
+      </div>
     </div>
     <ul class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
       <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2 last:mb-0">
         <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
         <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" :value="upload.progress" max="100" class="w-20 h-2 flex-shrink-0 [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
-        <span v-if="upload.status === 'uploading' && upload.progress < 100" class="text-xs flex-shrink-0"> {{ upload.progress }}%</span>
+        <span v-if="upload.status === 'uploading' && upload.progress < 100" class="text-xs flex-shrink-0 tabular-nums"> {{ formatProgress(upload.progress) }}%</span>
         <span v-if="upload.status === 'error'" class="text-red-600 basis-full text-xs"> {{ t('fileManager.errors.generic') }}: {{ upload.error }}</span>
         <span v-if="upload.status === 'success' || (upload.status === 'uploading' && upload.progress === 100)" class="text-green-600"> ✅</span>
         <span v-if="upload.status === 'cancelled'" class="text-red-600"> ❌ {{ t('fileManager.uploadStatus.cancelled') }}</span>
