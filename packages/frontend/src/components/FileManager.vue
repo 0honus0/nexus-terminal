@@ -1881,42 +1881,38 @@ const handleOpenEditorClick = () => {
               @click="openPopupEditor"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.openEditor', 'Open Popup Editor')"
-              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center px-2 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="far fa-edit text-sm"></i> <!-- 使用编辑图标 -->
-              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.openEditor', 'Open Editor') }}</span> <!-- 添加 i18n key -->
             </button>
             <!-- 上传按钮 -->
             <button
               @click="triggerFileUpload"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.uploadFile')"
-              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center px-2 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="fas fa-upload text-sm"></i>
-              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.upload') }}</span>
             </button>
             <button
               @click="handleNewFolderContextMenuClick"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.newFolder')"
-              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center px-2 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="fas fa-folder-plus text-sm"></i>
-              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.newFolder') }}</span>
             </button>
             <button
               @click="handleNewFileContextMenuClick"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.newFile')"
-              class="file-manager-action-button flex items-center gap-1 px-2.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
+              class="file-manager-action-button flex items-center px-2 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
               :class="{ 'px-1.5': props.isMobile }"
             >
               <i class="far fa-file-alt text-sm"></i>
-              <span v-if="!props.isMobile" class="file-manager-action-label">{{ t('fileManager.actions.newFile') }}</span>
             </button>
             <!-- 多选模式切换按钮 (仅移动端) -->
             <button
