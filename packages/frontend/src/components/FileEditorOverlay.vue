@@ -96,6 +96,8 @@ const {
 const popupWidthPx = ref(window.innerWidth * 0.75); // 初始宽度 75vw (像素)
 const popupHeightPx = ref(window.innerHeight * 0.85); // 初始高度 85vh (像素)
 const isResizing = ref(false);
+const suppressBackdropClick = ref(false);
+let suppressBackdropClickTimer: ReturnType<typeof setTimeout> | null = null;
 const startX = ref(0);
 const startY = ref(0);
 const startWidthPx = ref(0);
@@ -492,6 +494,13 @@ const hideEditorOverlay = () => {
     isVisible.value = false;
 };
 
+// 拖拽调整大小结束后，浏览器可能把随后生成的 click 事件归到遮罩层。
+// 在当前点击事件周期结束前屏蔽遮罩关闭，避免松开鼠标时误关编辑器。
+const handleBackdropClick = () => {
+    if (isResizing.value || suppressBackdropClick.value) return;
+    hideEditorOverlay();
+};
+
 // 关闭按钮根据工作区设置决定是否清空当前编辑器的全部文件缓存。
 const handleCloseButton = () => {
     if (clearFileEditorTabsOnCloseBoolean.value) {
@@ -510,6 +519,12 @@ const handleCloseButton = () => {
 
 // --- 拖拽调整大小逻辑 ---
 const startResize = (event: MouseEvent) => {
+    if (suppressBackdropClickTimer !== null) {
+        clearTimeout(suppressBackdropClickTimer);
+        suppressBackdropClickTimer = null;
+    }
+    suppressBackdropClick.value = true;
+
     isResizing.value = true;
     startX.value = event.clientX;
     startY.value = event.clientY;
@@ -525,8 +540,10 @@ const handleResize = (event: MouseEvent) => {
     if (!isResizing.value) return;
     const diffX = event.clientX - startX.value;
     const diffY = event.clientY - startY.value;
-    popupWidthPx.value = Math.min(maxPopupWidth(), Math.max(minWidth, startWidthPx.value + diffX));
-    popupHeightPx.value = Math.min(maxPopupHeight(), Math.max(minHeight, startHeightPx.value + diffY));
+    // 弹窗保持中心点固定时，宽高变化会平均分配到两侧。
+    // 因此宽高需要变化鼠标位移的 2 倍，右下角才能与鼠标保持 1:1 跟随。
+    popupWidthPx.value = Math.min(maxPopupWidth(), Math.max(minWidth, startWidthPx.value + diffX * 2));
+    popupHeightPx.value = Math.min(maxPopupHeight(), Math.max(minHeight, startHeightPx.value + diffY * 2));
     scheduleEditorLayout();
 };
 
@@ -536,7 +553,13 @@ const stopResize = () => {
         document.removeEventListener('mousemove', handleResize);
         document.removeEventListener('mouseup', stopResize);
         document.body.style.cursor = ''; // 恢复默认光标
-    document.body.style.userSelect = ''; // 恢复文本选择
+        document.body.style.userSelect = ''; // 恢复文本选择
+
+        // click 会在 mouseup 之后触发；延迟到下一轮事件循环再恢复遮罩点击。
+        suppressBackdropClickTimer = setTimeout(() => {
+            suppressBackdropClick.value = false;
+            suppressBackdropClickTimer = null;
+        }, 0);
     }
 };
 
@@ -573,6 +596,11 @@ watch(currentSelectedEncoding, () => {
 onMounted(() => window.addEventListener('resize', clampPopupSize));
 onBeforeUnmount(() => {
     stopResize();
+    if (suppressBackdropClickTimer !== null) {
+        clearTimeout(suppressBackdropClickTimer);
+        suppressBackdropClickTimer = null;
+    }
+    suppressBackdropClick.value = false;
     window.removeEventListener('resize', clampPopupSize);
     if (editorLayoutFrame !== null) cancelAnimationFrame(editorLayoutFrame);
 });
@@ -581,7 +609,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- 使用本地 isVisible 控制显示 (App.vue 中已有 v-if="showPopupFileEditorBoolean") -->
-  <div v-if="isVisible" class="editor-overlay-backdrop" @click.self="hideEditorOverlay">
+  <div v-if="isVisible" class="editor-overlay-backdrop" @click.self="handleBackdropClick">
     <!-- 编辑器弹窗/容器，应用动态样式 -->
     <div class="editor-popup" :style="popupStyle">
 
@@ -698,7 +726,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 添加拖拽手柄 -->
-      <div class="resize-handle" @mousedown.prevent="startResize"></div>
+      <div class="resize-handle" @mousedown.stop.prevent="startResize" @click.stop.prevent></div>
 
     </div> <!-- 关闭 editor-popup -->
   </div> <!-- 关闭 editor-overlay-backdrop -->
