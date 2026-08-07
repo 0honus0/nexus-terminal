@@ -463,13 +463,16 @@ const percentHistory = computed(() => {
 const networkRxHistory = computed(() => sliceHistory(manager.value?.netRxHistory?.value));
 const networkTxHistory = computed(() => sliceHistory(manager.value?.netTxHistory?.value));
 
-const downsample = (values: number[], maxPoints = 110) => {
+type DownsampleMode = 'average' | 'max';
+
+const downsample = (values: number[], maxPoints = 110, mode: DownsampleMode = 'average') => {
   if (values.length <= maxPoints) return values;
   const bucket = values.length / maxPoints;
   return Array.from({ length: maxPoints }, (_, index) => {
     const start = Math.floor(index * bucket);
     const end = Math.max(start + 1, Math.floor((index + 1) * bucket));
     const group = values.slice(start, end);
+    if (mode === 'max') return Math.max(...group);
     return group.reduce((sum, value) => sum + value, 0) / group.length;
   });
 };
@@ -483,8 +486,9 @@ const HISTORY_PLOT_WIDTH = HISTORY_PLOT_RIGHT - HISTORY_PLOT_LEFT;
 const HISTORY_PLOT_HEIGHT = HISTORY_PLOT_BOTTOM - HISTORY_PLOT_TOP;
 
 const sampledPercentHistory = computed(() => downsample(percentHistory.value));
-const sampledNetworkRxHistory = computed(() => downsample(networkRxHistory.value));
-const sampledNetworkTxHistory = computed(() => downsample(networkTxHistory.value));
+// 网络速率需要保留短时尖峰；取桶内最大值，避免 5/10/30 分钟视图把峰值平均掉。
+const sampledNetworkRxHistory = computed(() => downsample(networkRxHistory.value, 110, 'max'));
+const sampledNetworkTxHistory = computed(() => downsample(networkTxHistory.value, 110, 'max'));
 const historyHoverRatio = ref<number | null>(null);
 const historyTooltipRef = ref<HTMLElement | null>(null);
 const historyTooltipStyle = ref<Record<string, string>>({
@@ -494,13 +498,46 @@ const historyTooltipStyle = ref<Record<string, string>>({
 });
 let historyTooltipPositionRequest = 0;
 
-const networkHistoryMax = computed(() => Math.max(
+const rawNetworkHistoryMax = computed(() => Math.max(
   ...networkRxHistory.value,
   ...networkTxHistory.value,
   currentServerStatus.value?.netRxRate ?? 0,
   currentServerStatus.value?.netTxRate ?? 0,
   1,
 ));
+
+const niceNetworkAxisMax = (rawMaxBytes: number) => {
+  if (!Number.isFinite(rawMaxBytes) || rawMaxBytes <= 1) return 1;
+
+  const unit = rawMaxBytes >= 1024 ** 2
+    ? 1024 ** 2
+    : rawMaxBytes >= 1024
+      ? 1024
+      : 1;
+  const valueInUnit = rawMaxBytes / unit;
+  const roughStep = Math.max(valueInUnit / 10, Number.EPSILON);
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const fraction = roughStep / magnitude;
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  const step = niceFraction * magnitude;
+
+  return Math.max(unit, Math.ceil(valueInUnit / step) * step * unit);
+};
+
+const networkHistoryMax = ref(1);
+const syncNetworkHistoryMax = (force = false) => {
+  const rawMax = rawNetworkHistoryMax.value;
+  const currentMax = networkHistoryMax.value;
+  const shouldGrow = rawMax > currentMax;
+  const shouldShrink = rawMax < currentMax * 0.55;
+
+  if (force || currentMax <= 1 || shouldGrow || shouldShrink) {
+    networkHistoryMax.value = niceNetworkAxisMax(rawMax);
+  }
+};
+
+watch(rawNetworkHistoryMax, () => syncNetworkHistoryMax(), { immediate: true });
+watch(historyRange, () => syncNetworkHistoryMax(true));
 
 const pointString = (values: number[], maxValue: number) => {
   if (!values.length) return `${HISTORY_PLOT_LEFT},${HISTORY_PLOT_BOTTOM}`;
@@ -641,6 +678,7 @@ const yAxisLabels = computed(() => selectedMetric.value === 'network'
 
 watch(() => props.activeSessionId, () => {
   selectedMetric.value = null;
+  syncNetworkHistoryMax(true);
 });
 watch([selectedMetric, historyRange], clearHistoryHover);
 
