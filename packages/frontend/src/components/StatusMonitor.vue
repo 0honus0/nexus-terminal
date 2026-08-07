@@ -441,39 +441,69 @@ const selectedMetricColor = computed(() => ({
 }[selectedMetric.value || 'cpu']));
 
 const manager = computed(() => currentSessionState.value?.statusMonitorManager);
+const historySequence = computed(() => manager.value?.historySequence?.value ?? 0);
 const historySampleCount = computed(() => {
   const interval = Math.max(1, statusMonitorIntervalSecondsNumber.value || 3);
   return Math.max(2, Math.ceil((historyRange.value * 60) / interval));
 });
 
+const normalizeHistoryValue = (value: number | null | undefined) => Number.isFinite(value) ? Number(value) : 0;
 const sliceHistory = (values: readonly (number | null)[] | undefined) => {
   const source = values ?? [];
-  return source.slice(-historySampleCount.value).map(value => Number.isFinite(value) ? Number(value) : 0);
+  return source.slice(-historySampleCount.value).map(normalizeHistoryValue);
 };
 
-const percentHistory = computed(() => {
+const percentHistorySource = computed<readonly (number | null)[]>(() => {
   if (!selectedMetric.value || selectedMetric.value === 'network') return [];
-  if (selectedMetric.value === 'cpu') return sliceHistory(manager.value?.cpuHistory?.value);
-  if (selectedMetric.value === 'swap') return sliceHistory(manager.value?.swapPercentHistory?.value);
-  if (selectedMetric.value === 'disk') return sliceHistory(manager.value?.diskPercentHistory?.value);
-  const used = sliceHistory(manager.value?.memUsedHistory?.value);
-  const total = currentServerStatus.value?.memTotal || 0;
-  return total ? used.map(value => Math.min(100, Math.max(0, value / total * 100))) : used.map(() => 0);
+  if (selectedMetric.value === 'cpu') return manager.value?.cpuHistory?.value ?? [];
+  if (selectedMetric.value === 'memory') return manager.value?.memPercentHistory?.value ?? [];
+  if (selectedMetric.value === 'swap') return manager.value?.swapPercentHistory?.value ?? [];
+  return manager.value?.diskPercentHistory?.value ?? [];
 });
 const networkRxHistory = computed(() => sliceHistory(manager.value?.netRxHistory?.value));
 const networkTxHistory = computed(() => sliceHistory(manager.value?.netTxHistory?.value));
 
 type DownsampleMode = 'average' | 'max';
 
-const downsample = (values: number[], maxPoints = 110, mode: DownsampleMode = 'average') => {
-  if (values.length <= maxPoints) return values;
-  const bucket = values.length / maxPoints;
-  return Array.from({ length: maxPoints }, (_, index) => {
-    const start = Math.floor(index * bucket);
-    const end = Math.max(start + 1, Math.floor((index + 1) * bucket));
-    const group = values.slice(start, end);
-    if (mode === 'max') return Math.max(...group);
-    return group.reduce((sum, value) => sum + value, 0) / group.length;
+// 按全局采样序号固定分桶：只有最右侧尚未完成的桶会继续变化，
+// 已完成的历史桶不会随着滑动窗口推进被重新分组、重新计算。
+const stableDownsample = (
+  values: readonly (number | null)[] | undefined,
+  maxPoints = 110,
+  mode: DownsampleMode = 'average',
+) => {
+  const source = values ?? [];
+  const sequence = Math.max(0, historySequence.value);
+  const sampleCount = historySampleCount.value;
+  const bucketSize = Math.max(1, Math.ceil(sampleCount / maxPoints));
+  const lastSequence = Math.max(1, sequence);
+  const firstWindowSequence = lastSequence - sampleCount + 1;
+  const firstBucket = Math.floor((firstWindowSequence - 1) / bucketSize);
+  const lastBucket = Math.floor((lastSequence - 1) / bucketSize);
+  const bucketCount = lastBucket - firstBucket + 1;
+  const sums = Array(bucketCount).fill(0) as number[];
+  const counts = Array(bucketCount).fill(0) as number[];
+  const maxima = Array(bucketCount).fill(0) as number[];
+
+  const availableCount = Math.min(sequence, source.length);
+  const firstAvailableSequence = sequence - availableCount + 1;
+  const sourceStartIndex = source.length - availableCount;
+
+  for (let offset = 0; offset < availableCount; offset += 1) {
+    const sampleSequence = firstAvailableSequence + offset;
+    const bucket = Math.floor((sampleSequence - 1) / bucketSize);
+    if (bucket < firstBucket || bucket > lastBucket) continue;
+
+    const bucketIndex = bucket - firstBucket;
+    const value = normalizeHistoryValue(source[sourceStartIndex + offset]);
+    sums[bucketIndex] += value;
+    counts[bucketIndex] += 1;
+    maxima[bucketIndex] = Math.max(maxima[bucketIndex], value);
+  }
+
+  return sums.map((sum, index) => {
+    if (counts[index] === 0) return 0;
+    return mode === 'max' ? maxima[index] : sum / counts[index];
   });
 };
 
@@ -485,10 +515,10 @@ const HISTORY_PLOT_BOTTOM = 94;
 const HISTORY_PLOT_WIDTH = HISTORY_PLOT_RIGHT - HISTORY_PLOT_LEFT;
 const HISTORY_PLOT_HEIGHT = HISTORY_PLOT_BOTTOM - HISTORY_PLOT_TOP;
 
-const sampledPercentHistory = computed(() => downsample(percentHistory.value));
-// 网络速率需要保留短时尖峰；取桶内最大值，避免 5/10/30 分钟视图把峰值平均掉。
-const sampledNetworkRxHistory = computed(() => downsample(networkRxHistory.value, 110, 'max'));
-const sampledNetworkTxHistory = computed(() => downsample(networkTxHistory.value, 110, 'max'));
+const sampledPercentHistory = computed(() => stableDownsample(percentHistorySource.value));
+// 网络速率同样使用固定桶，并取桶内最大值保留短时尖峰。
+const sampledNetworkRxHistory = computed(() => stableDownsample(manager.value?.netRxHistory?.value, 110, 'max'));
+const sampledNetworkTxHistory = computed(() => stableDownsample(manager.value?.netTxHistory?.value, 110, 'max'));
 const historyHoverRatio = ref<number | null>(null);
 const historyTooltipRef = ref<HTMLElement | null>(null);
 const historyTooltipStyle = ref<Record<string, string>>({
@@ -585,9 +615,7 @@ const historyHoverData = computed(() => {
   const primaryValues = sampledPercentHistory.value;
   const downloadValues = sampledNetworkRxHistory.value;
   const uploadValues = sampledNetworkTxHistory.value;
-  const sourceLength = selectedMetric.value === 'network'
-    ? Math.max(networkRxHistory.value.length, networkTxHistory.value.length)
-    : percentHistory.value.length;
+  const sourceLength = historySampleCount.value;
   if (!sourceLength) return null;
 
   const primaryValue = valueAtRatio(primaryValues, ratio);

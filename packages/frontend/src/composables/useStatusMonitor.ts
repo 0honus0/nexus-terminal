@@ -14,8 +14,10 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
 
     const serverStatus = ref<ServerStatus | null>(null);
     const statusError = ref<string | null>(null);
+    const historySequence = ref(0);
     const cpuHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const memUsedHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
+    const memPercentHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const swapPercentHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const diskPercentHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
     const netRxHistory = ref<(number | null)[]>(Array(MAX_HISTORY_POINTS).fill(null));
@@ -38,8 +40,10 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
         const status = payload.status as ServerStatus;
         serverStatus.value = status;
         statusError.value = null;
+        historySequence.value += 1;
         updateHistory(cpuHistory, status.cpuPercent);
         updateHistory(memUsedHistory, status.memUsed);
+        updateHistory(memPercentHistory, status.memPercent);
         updateHistory(swapPercentHistory, status.swapPercent);
         updateHistory(diskPercentHistory, status.diskPercent);
         updateHistory(netRxHistory, status.netRxRate);
@@ -133,8 +137,10 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
     return {
         serverStatus: readonly(serverStatus),
         statusError: readonly(statusError),
+        historySequence: readonly(historySequence),
         cpuHistory: readonly(cpuHistory),
         memUsedHistory: readonly(memUsedHistory),
+        memPercentHistory: readonly(memPercentHistory),
         swapPercentHistory: readonly(swapPercentHistory),
         diskPercentHistory: readonly(diskPercentHistory),
         netRxHistory: readonly(netRxHistory),
