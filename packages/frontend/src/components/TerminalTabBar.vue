@@ -412,8 +412,12 @@ onBeforeUnmount(() => {
                          session.status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
                          session.status === 'disconnected' ? 'bg-red-500' : 'bg-gray-400']"></span>
           <span class="truncate text-sm" style="transform: translateY(-1px);">{{ session.connectionName }}</span>
-          <button class="ml-2 p-0.5 rounded-full text-text-secondary hover:bg-border hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                  :class="{'text-foreground hover:bg-header': session.sessionId === activeSessionId}"
+          <button
+                  class="ml-2 p-0.5 rounded-full hover:bg-border hover:text-foreground transition-opacity duration-150 flex-shrink-0"
+                  :class="[
+                    props.isMobile ? 'opacity-100 text-foreground bg-border/30' : 'opacity-0 group-hover:opacity-100 text-text-secondary',
+                    { 'text-foreground hover:bg-header': session.sessionId === activeSessionId }
+                  ]"
                   @click="closeSession($event, session.sessionId)" :title="$t('tabs.closeTabTooltip')">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />

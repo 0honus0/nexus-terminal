@@ -48,7 +48,8 @@ export type WorkspaceEventPayloads = {
 
   // UI Interaction Events
   'ui:openLayoutConfigurator': void;
-'ui:openTransferProgressModal': void; // 请求打开文件传输进度模态框
+  'ui:openTransferProgressModal': void; // 请求打开文件传输进度模态框
+  'ui:openSidebarPane': { pane: 'statusMonitor' | 'fileManager' | 'connections' | 'editor' | 'commandHistory' | 'quickCommands' | 'dockerManager' | 'suspendedSshSessions'; side?: 'left' | 'right' };
   // 'ui:toggleVirtualKeyboard': void; // 如果决定迁移 CommandInputBar 的这个事件
   'fileManager:openModalRequest': { sessionId: string }; // 请求打开文件管理器模态框
 

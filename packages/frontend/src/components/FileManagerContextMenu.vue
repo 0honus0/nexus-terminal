@@ -133,6 +133,7 @@ onUnmounted(() => {
 const emit = defineEmits(['item-click', 'close-request']); // 添加 close-request
 
 const handleItemClick = (item: ContextMenuItem) => {
+  if (item.disabled) return;
   if (item.action) {
     item.action(); // 只有当 action 存在时才执行
     emit('close-request'); // <-- 发出关闭请求
@@ -235,11 +236,12 @@ onUnmounted(() => {
             :key="`${index}-${subIndex}`"
             @click.stop="handleItemClick(subItem)"
             :class="[
-              'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-              'hover:bg-primary/10 hover:text-primary'
+              'px-4 py-1.5 text-foreground text-sm flex items-center justify-between gap-4 transition-colors duration-150 rounded mx-1',
+              subItem.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
             ]"
           >
-            {{ subItem.label }}
+            <span>{{ subItem.label }}</span>
+            <span v-if="subItem.shortcut" class="text-[11px] text-text-secondary whitespace-nowrap">{{ subItem.shortcut }}</span>
           </li>
           <!-- 如果 menuItem (作为移动端子菜单容器) 是 "压缩", 在其子项后添加 "发送到" -->
           <template v-if="menuItem.label === t('fileManager.contextMenu.compress')">
@@ -259,11 +261,12 @@ onUnmounted(() => {
           v-else-if="!menuItem.submenu"
           @click.stop="handleItemClick(menuItem)"
           :class="[
-            'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-            'hover:bg-primary/10 hover:text-primary'
+            'px-4 py-1.5 text-foreground text-sm flex items-center justify-between gap-4 transition-colors duration-150 rounded mx-1',
+            menuItem.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
           ]"
         >
-          {{ menuItem.label }}
+          <span>{{ menuItem.label }}</span>
+          <span v-if="menuItem.shortcut" class="text-[11px] text-text-secondary whitespace-nowrap">{{ menuItem.shortcut }}</span>
         </li>
         <!-- 如果普通菜单项是 "压缩", 在其后添加 "发送到" -->
         <template v-if="!menuItem.submenu && menuItem.label === t('fileManager.contextMenu.compress')">
@@ -296,11 +299,12 @@ onUnmounted(() => {
               :key="subIndex"
               @click.stop="handleItemClick(subItem)"
               :class="[
-                'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-                'hover:bg-primary/10 hover:text-primary'
+                'px-4 py-1.5 text-foreground text-sm flex items-center justify-between gap-4 transition-colors duration-150 rounded mx-1',
+                subItem.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
               ]"
             >
-              {{ subItem.label }}
+              <span>{{ subItem.label }}</span>
+              <span v-if="subItem.shortcut" class="text-[11px] text-text-secondary whitespace-nowrap">{{ subItem.shortcut }}</span>
             </li>
           </ul>
         </li>

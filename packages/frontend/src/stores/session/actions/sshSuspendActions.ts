@@ -49,6 +49,7 @@ type ResumeContext = {
 };
 
 const pendingResumeContexts = new Map<string, ResumeContext>();
+const silentSuspendMarkSessionIds = new Set<string>();
 let foregroundRecoveryPromise: Promise<void> | null = null;
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => window.setTimeout(resolve, ms));
@@ -108,7 +109,10 @@ const getActiveWsManager = (): WsManagerInstance | null => {
  * 请求启动 SSH 会话挂起
  * @param sessionId 要挂起的活动会话 ID
  */
-export const requestStartSshSuspend = (sessionId: string): void => {
+export const requestStartSshSuspend = (
+  sessionId: string,
+  options?: { silent?: boolean; markedAt?: string },
+): void => {
   const session = sessions.value.get(sessionId);
   if (session && session.wsManager) {
     if (!session.wsManager.isConnected.value) {
@@ -133,7 +137,8 @@ export const requestStartSshSuspend = (sessionId: string): void => {
     // 先更新本地列表，让用户标记后立即能在挂起管理器看到该终端；
     // 后端 ACK 失败时会回滚此状态。
     session.isMarkedForSuspend = true;
-    session.suspendMarkedAt = new Date().toISOString();
+    session.suspendMarkedAt = options?.markedAt || session.suspendMarkedAt || new Date().toISOString();
+    if (options?.silent) silentSuspendMarkSessionIds.add(sessionId);
     sessions.value = new Map(sessions.value);
     suspendedSshSessions.value = mergeMarkedActiveSessions(suspendedSshSessions.value);
     session.wsManager.sendMessage(message);
@@ -658,11 +663,14 @@ export const exportSshSessionLog = async (suspendSessionId: string): Promise<voi
 const handleSshMarkedForSuspendAck = (payload: SshMarkedForSuspendAckPayload): void => {
   const uiNotificationsStore = useUiNotificationsStore();
   console.log(`[${t('term.sshSuspend')}] 接到 SSH_MARKED_FOR_SUSPEND_ACK:`, payload);
+  const silentMark = silentSuspendMarkSessionIds.delete(payload.sessionId);
   if (payload.success) {
-    uiNotificationsStore.addNotification({
-      type: 'success',
-      message: t('sshSuspend.notifications.markedForSuspendSuccess', { id: payload.sessionId.slice(0,8) }),
-    });
+    if (!silentMark) {
+      uiNotificationsStore.addNotification({
+        type: 'success',
+        message: t('sshSuspend.notifications.markedForSuspendSuccess', { id: payload.sessionId.slice(0,8) }),
+      });
+    }
     const session = sessions.value.get(payload.sessionId);
     if (session) {
       session.isMarkedForSuspend = true; // 假设 SessionState 有此字段
@@ -780,6 +788,13 @@ const handleSshSuspendResumedNotif = async (payload: SshSuspendResumedNotifPaylo
           closeSession(oldSessionId);
         }
       }
+
+      // “挂起”是一个持续状态：恢复只是把 SSH 重新接回当前浏览器，不代表取消挂起。
+      // 自动重新标记恢复后的活动会话，使挂起列表继续显示“待关闭”；只有用户手动取消才移除。
+      requestStartSshSuspend(payload.newFrontendSessionId, {
+        silent: true,
+        markedAt: suspendedSession?.suspendStartTime,
+      });
 
       if (!(resumeContext?.activateOnSuccess ?? true)) {
         restoreContextActiveSession();

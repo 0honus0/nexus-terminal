@@ -386,6 +386,23 @@ const toggleSidebarPane = (side: 'left' | 'right', paneName: PaneName) => {
   }
 };
 
+const handleOpenSidebarPane = (payload: { pane: PaneName; side?: 'left' | 'right' }) => {
+  if (!props.isRootRenderer) return;
+  const configuredSide = sidebarPanes.value.left.includes(payload.pane)
+    ? 'left'
+    : sidebarPanes.value.right.includes(payload.pane)
+      ? 'right'
+      : undefined;
+  const side = payload.side || configuredSide || 'right';
+  if (side === 'left') {
+    activeLeftSidebarPane.value = payload.pane;
+    activeRightSidebarPane.value = null;
+  } else {
+    activeRightSidebarPane.value = payload.pane;
+    activeLeftSidebarPane.value = null;
+  }
+};
+
 // 关闭所有侧栏
 const closeSidebars = () => {
   activeLeftSidebarPane.value = null;
@@ -431,6 +448,9 @@ const getIconClasses = (paneName: PaneName): string[] => {
 onMounted(() => {
   if (props.layoutNode.component === 'terminal') {
     subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  }
+  if (props.isRootRenderer) {
+    subscribeToWorkspaceEvent('ui:openSidebarPane', handleOpenSidebarPane);
   }
 
 
@@ -493,6 +513,9 @@ const sandboxedTerminalCustomHtml = computed(() => {
 onBeforeUnmount(() => {
   if (props.layoutNode.component === 'terminal') {
     unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  }
+  if (props.isRootRenderer) {
+    unsubscribeFromWorkspaceEvent('ui:openSidebarPane', handleOpenSidebarPane);
   }
   if (customHtmlResizeFrame !== null) {
     window.cancelAnimationFrame(customHtmlResizeFrame);

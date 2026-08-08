@@ -10,6 +10,7 @@ export interface ContextMenuItem {
   disabled?: boolean;
   separator?: boolean; // 添加分隔符类型
   submenu?: ContextMenuItem[]; // 添加二级菜单支持
+  shortcut?: string; // Windows/desktop style shortcut hint
 }
 
 // 支持的压缩格式
@@ -255,7 +256,21 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
         ];
     }
 
-    contextMenuItems.value = menu;
+    const shortcutByLabel = new Map<string, string>([
+      [t('fileManager.actions.copy'), 'Ctrl+C'],
+      [t('fileManager.actions.cut'), 'Ctrl+X'],
+      [t('fileManager.actions.paste'), 'Ctrl+V'],
+      [t('fileManager.actions.rename'), 'F2'],
+      [t('fileManager.actions.delete'), 'Delete'],
+      [t('fileManager.actions.newFolder'), 'Ctrl+Shift+N'],
+      [t('fileManager.actions.refresh'), 'F5'],
+    ]);
+    const applyShortcutHints = (items: ContextMenuItem[]): ContextMenuItem[] => items.map(menuItem => ({
+      ...menuItem,
+      shortcut: menuItem.shortcut || shortcutByLabel.get(menuItem.label),
+      submenu: menuItem.submenu ? applyShortcutHints(menuItem.submenu) : undefined,
+    }));
+    contextMenuItems.value = applyShortcutHints(menu);
 
     // Set initial position based on click event
     contextMenuPosition.value = { x: event.clientX, y: event.clientY };

@@ -649,8 +649,16 @@ const {
   activateOnSingleClick: (item) => props.isMobile || item.attrs.isDirectory || item.filename === '..',
 });
 
+let suppressClickAfterLongPress = false;
+
 // 自定义 handleItemClick 函数以支持移动端多选模式
 const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect = false) => {
+  if (props.isMobile && suppressClickAfterLongPress) {
+    suppressClickAfterLongPress = false;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   if (props.isMobile && (isMultiSelectMode.value || forceMultiSelect)) {
     if (selectedItems.value.has(item.filename)) {
       selectedItems.value.delete(item.filename);
@@ -1019,6 +1027,71 @@ const {
   onCopyPath: handleCopyPath, // +++ 传递复制路径回调 +++
 });
 
+const MOBILE_CONTEXT_LONG_PRESS_MS = 550;
+const MOBILE_CONTEXT_MOVE_TOLERANCE = 12;
+let mobileContextTimer: ReturnType<typeof setTimeout> | null = null;
+let mobileContextStart: { x: number; y: number } | null = null;
+let mobileContextTriggered = false;
+
+const clearMobileContextTimer = () => {
+  if (mobileContextTimer) {
+    clearTimeout(mobileContextTimer);
+    mobileContextTimer = null;
+  }
+};
+
+const handleMobileContextTouchStart = (event: TouchEvent, item?: FileListItem) => {
+  if (!props.isMobile || event.touches.length !== 1) return;
+  clearMobileContextTimer();
+  const touch = event.touches[0];
+  mobileContextStart = { x: touch.clientX, y: touch.clientY };
+  mobileContextTriggered = false;
+  mobileContextTimer = setTimeout(() => {
+    mobileContextTimer = null;
+    mobileContextTriggered = true;
+    suppressClickAfterLongPress = !!item;
+    fileListContainerRef.value?.focus({ preventScroll: true });
+    showContextMenu(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+    }), item);
+    navigator.vibrate?.(15);
+  }, MOBILE_CONTEXT_LONG_PRESS_MS);
+};
+
+const handleMobileContextTouchMove = (event: TouchEvent) => {
+  if (!mobileContextStart || event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  if (
+    Math.abs(touch.clientX - mobileContextStart.x) > MOBILE_CONTEXT_MOVE_TOLERANCE
+    || Math.abs(touch.clientY - mobileContextStart.y) > MOBILE_CONTEXT_MOVE_TOLERANCE
+  ) {
+    clearMobileContextTimer();
+    mobileContextStart = null;
+    mobileContextTriggered = false;
+  }
+};
+
+const handleMobileContextTouchEnd = (event: TouchEvent) => {
+  if (mobileContextTriggered) {
+    event.preventDefault();
+    window.setTimeout(() => {
+      suppressClickAfterLongPress = false;
+    }, 350);
+  }
+  clearMobileContextTimer();
+  mobileContextStart = null;
+  mobileContextTriggered = false;
+};
+
+const handleMobileContextTouchCancel = () => {
+  clearMobileContextTimer();
+  mobileContextStart = null;
+  mobileContextTriggered = false;
+};
+
 // --- 目录加载与导航 ---
 // loadDirectory is provided by props.sftpManager
 
@@ -1081,6 +1154,76 @@ const {
   // 当 Enter 键按下时，模拟鼠标单击
   onEnterPress: (item) => handleItemAction(item),
 });
+
+const ensureKeyboardSelection = (): FileListItem[] => {
+  if (selectedItems.value.size > 0) return computedSelectedFullItems.value;
+  if (selectedIndex.value < 0) return [];
+  const offset = currentSftpManager.value?.currentPath.value !== '/' ? 1 : 0;
+  const itemIndex = selectedIndex.value - offset;
+  const item = filteredFileList.value[itemIndex];
+  if (!item) return [];
+  selectedItems.value.add(item.filename);
+  return [item];
+};
+
+// Windows Explorer-style shortcuts also work with a physical keyboard on mobile/tablet.
+const handleFileListKeydown = (event: KeyboardEvent) => {
+  const key = event.key.toLowerCase();
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+
+  if (ctrlOrMeta && key === 'a') {
+    event.preventDefault();
+    selectedItems.value.clear();
+    filteredFileList.value.forEach(item => selectedItems.value.add(item.filename));
+    return;
+  }
+  if (ctrlOrMeta && key === 'c') {
+    event.preventDefault();
+    ensureKeyboardSelection();
+    handleCopy();
+    return;
+  }
+  if (ctrlOrMeta && key === 'x') {
+    event.preventDefault();
+    ensureKeyboardSelection();
+    handleCut();
+    return;
+  }
+  if (ctrlOrMeta && key === 'v') {
+    event.preventDefault();
+    handlePaste();
+    return;
+  }
+  if (ctrlOrMeta && event.shiftKey && key === 'n') {
+    event.preventDefault();
+    handleNewFolderContextMenuClick();
+    return;
+  }
+  if (event.key === 'Delete') {
+    event.preventDefault();
+    ensureKeyboardSelection();
+    handleDeleteSelectedClick();
+    return;
+  }
+  if (event.key === 'F2') {
+    event.preventDefault();
+    const items = ensureKeyboardSelection();
+    if (items.length === 1) handleRenameContextMenuClick(items[0]);
+    return;
+  }
+  if (event.key === 'F5') {
+    event.preventDefault();
+    currentSftpManager.value?.loadDirectory(currentSftpManager.value.currentPath.value, true);
+    return;
+  }
+  if (event.altKey && event.key === 'ArrowUp' && currentSftpManager.value?.currentPath.value !== '/') {
+    event.preventDefault();
+    handleItemAction({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } });
+    return;
+  }
+
+  handleKeydown(event);
+};
 
 
 // --- 重置选中索引和清空选择的 Watchers ---
@@ -1335,6 +1478,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+ clearMobileContextTimer();
  cancelPendingPathResolutions();
  closePreview();
  fileListResizeObserver?.disconnect();
@@ -1974,10 +2118,14 @@ const handleOpenEditorClick = () => {
       @dragleave.prevent="handleDragLeave"
       @drop.prevent="handleDrop"
       @click="fileListContainerRef?.focus()"
-      @keydown="handleKeydown"
+      @keydown="handleFileListKeydown"
       @wheel="handleWheel"
       @scroll="handleFileListScroll"
       @contextmenu.prevent="showContextMenu($event)"
+      @touchstart="handleMobileContextTouchStart($event)"
+      @touchmove="handleMobileContextTouchMove"
+      @touchend="handleMobileContextTouchEnd"
+      @touchcancel="handleMobileContextTouchCancel"
       tabindex="0"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
     >
@@ -2116,6 +2264,7 @@ const handleOpenEditorClick = () => {
                 :draggable="item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
                 @dblclick="handleItemDoubleClick($event, item)"
+                @touchstart.stop="handleMobileContextTouchStart($event, item)"
                 class="transition-colors duration-150 select-none"
                 :class="[
                     { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },

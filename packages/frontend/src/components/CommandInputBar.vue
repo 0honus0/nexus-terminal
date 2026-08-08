@@ -365,6 +365,10 @@ const closeSuspendedSshSessionsModal = () => {
   showSuspendedSshSessionsModal.value = false;
 };
 
+const openStatusMonitor = () => {
+  emitWorkspaceEvent('ui:openSidebarPane', { pane: 'statusMonitor' });
+};
+
 // +++ Function to request opening the file manager modal via event bus +++
 const openFileManagerModal = () => {
   if (activeSessionId.value) {
@@ -433,6 +437,15 @@ const handleQuickCommandExecute = (command: string) => {
           :title="t('quickCommands.title', '快捷指令')"
         >
           <i class="fas fa-bolt text-base"></i>
+        </button>
+        <!-- Status Monitor Button (Mobile only) -->
+        <button
+          v-if="props.isMobile"
+          @click="openStatusMonitor"
+          class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+          :title="t('layout.pane.statusMonitor', '状态监视器')"
+        >
+          <i class="fas fa-tachometer-alt text-base"></i>
         </button>
         <!-- Focus Switcher Config Button (Hide on mobile) -->
         <button
