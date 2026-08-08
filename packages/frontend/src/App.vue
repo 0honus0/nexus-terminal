@@ -66,6 +66,22 @@ const updateUnderline = async () => {
   }
 };
 
+let wasDocumentHidden = false;
+const handleDocumentVisibilityChange = () => {
+  if (!isMobile.value) return;
+  if (document.visibilityState === 'hidden') {
+    wasDocumentHidden = true;
+    return;
+  }
+  if (!wasDocumentHidden) return;
+
+  wasDocumentHidden = false;
+  // 恢复事务需要 Workspace 中的 Terminal 组件挂载后 ACK 缓存帧；如果当前不在
+  // workspace，先保持后端 hanging，等用户回到终端页再恢复。
+  if (!isWorkspaceRoute.value) return;
+  void sessionStore.recoverMarkedSshSessionsAfterForeground();
+};
+
 onMounted(() => {
   // Initial position update
   // Use setTimeout to ensure styles are applied and elements have dimensions
@@ -74,6 +90,7 @@ onMounted(() => {
   // +++ 全局 Alt 键监听器 +++
   window.addEventListener('keydown', handleAltKeyDown); // +++ 监听 keydown 设置状态 +++
   window.addEventListener('keyup', handleGlobalKeyUp);   // +++ 监听 keyup 执行切换 +++
+  document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
   
   // PWA Install Prompt
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -100,11 +117,19 @@ watch(isAuthenticated, (loggedIn) => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleAltKeyDown); // +++ 移除 keydown 监听 +++
   window.removeEventListener('keyup', handleGlobalKeyUp);   // +++ 移除 keyup 监听 +++
+  document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
 });
 
 
 // *** 计算属性，判断是否在 workspace 路由 ***
 const isWorkspaceRoute = computed(() => route.path === '/workspace');
+
+watch(isWorkspaceRoute, (inWorkspace) => {
+  if (inWorkspace && isMobile.value && document.visibilityState === 'visible') {
+    // 如果用户在别的页面回到前台，挂起会话保持在后端；真正回到终端页时再恢复。
+    void sessionStore.recoverMarkedSshSessionsAfterForeground();
+  }
+});
 
 watch(route, () => {
   updateUnderline();

@@ -194,6 +194,7 @@ export class SshSuspendService extends EventEmitter {
     for (const [suspendSessionId, details] of userSessions.entries()) {
       sessionsInfo.push({
         suspendSessionId,
+        originalSessionId: details.originalSessionId,
         connectionName: details.connectionName,
         connectionId: details.connectionId,
         suspendStartTime: details.suspendStartTime,

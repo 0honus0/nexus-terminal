@@ -346,40 +346,8 @@ const handleDragStart = (event: DragEvent) => {
   }
 };
 
-// 处理长按事件以在手机模式下触发挂起和取消挂起
-let touchTimeout: number | null = null;
-const touchDuration = 800; // 长按时间阈值，单位毫秒
-let touchedSessionId: string | null = null;
-
-const handleTouchStart = (event: TouchEvent, sessionId: string) => {
-  if (props.isMobile) {
-    touchedSessionId = sessionId;
-    if (touchTimeout) {
-      clearTimeout(touchTimeout);
-    }
-    touchTimeout = window.setTimeout(() => {
-      if (touchedSessionId === sessionId) {
-        const sessionState = sessionStore.sessions.get(sessionId);
-        if (sessionState && sessionState.isMarkedForSuspend) {
-          console.log(`[TabBar] Long press to unmark suspend for session ID: ${sessionId}`);
-          sessionStore.requestUnmarkSshSuspend(sessionId);
-        } else if (sessionState) {
-          console.log(`[TabBar] Long press to mark suspend for session ID: ${sessionId}`);
-          sessionStore.requestStartSshSuspend(sessionId);
-        }
-      }
-      touchTimeout = null;
-    }, touchDuration);
-  }
-};
-
-const handleTouchEnd = (event: TouchEvent) => {
-  if (touchTimeout) {
-    clearTimeout(touchTimeout);
-    touchTimeout = null;
-  }
-  touchedSessionId = null;
-};
+// 手机端长按只交给 contextmenu 事件打开菜单。
+// 挂起/取消挂起必须由用户在菜单中明确选择，避免长按标题时先改变会话状态。
  // 处理鼠标滚轮事件以支持水平滚动
 const handleWheel: EventListener = (event: Event) => {
   const wheelEvent = event as WheelEvent;
@@ -434,8 +402,6 @@ onBeforeUnmount(() => {
                      session.sessionId === activeSessionId ? 'bg-background text-foreground' : 'bg-header text-text-secondary hover:bg-border']"
             @click="activateSession(session.sessionId)"
             @contextmenu.prevent="showContextMenu($event, session.sessionId)"
-            @touchstart="handleTouchStart($event, session.sessionId)"
-            @touchend="handleTouchEnd($event)"
             @dragstart="handleDragStart"
             :title="session.connectionName"
         >

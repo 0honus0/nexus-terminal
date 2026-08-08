@@ -54,6 +54,8 @@ export type SuspendedSessionsMap = Map<number, Map<string, SuspendSessionDetails
  */
 export interface SuspendedSessionInfo {
   suspendSessionId: string;
+  /** 进入挂起服务前的前端/后端活动会话 ID，用于前端自动恢复原标签。 */
+  originalSessionId: string;
   connectionName: string;
   connectionId: string;
   suspendStartTime: string;

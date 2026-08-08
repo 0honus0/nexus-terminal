@@ -13,7 +13,7 @@ import { createWebSocketConnectionManager } from '../../../composables/useWebSoc
 import { createSshTerminalManager, type SshTerminalDependencies } from '../../../composables/useSshTerminal';
 import { createStatusMonitorManager, type StatusMonitorDependencies } from '../../../composables/useStatusMonitor';
 import { createDockerManager, type DockerManagerDependencies } from '../../../composables/useDockerManager';
-import { registerSshSuspendHandlers } from './sshSuspendActions'; 
+import { recoverMarkedSshSessionsAfterForeground, registerSshSuspendHandlers } from './sshSuspendActions';
 import { serializeTerminalSnapshot } from '../../../utils/terminalSnapshot';
 
 
@@ -304,6 +304,15 @@ export const handleConnectRequest = (
         console.log(`[SessionActions] 点击的是当前活动会话 ${activeSessionId.value}，状态: ${currentStatus}`);
         if (currentStatus === 'disconnected' || currentStatus === 'error' || currentStatus === 'connecting') {
           activeAndDisconnected = true;
+
+          if (currentActiveSession.isMarkedForSuspend) {
+            console.log(`[SessionActions] 活动会话 ${activeSessionId.value} 已标记挂起，断线后优先恢复挂起会话，不执行普通 SSH 重连。`);
+            void recoverMarkedSshSessionsAfterForeground();
+            activateSession(activeSessionId.value);
+            router.push({ name: 'Workspace' });
+            return;
+          }
+
           console.log(`[SessionActions] 活动会话 ${activeSessionId.value} 未连接，立即尝试重连...`);
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           const wsHostAndPort = window.location.host;

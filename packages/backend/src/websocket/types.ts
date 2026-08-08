@@ -179,6 +179,7 @@ export interface SshSuspendStartedResponse {
 
 export interface SuspendedSessionInfo {
   suspendSessionId: string;
+  originalSessionId: string; // Session ID before the backend took it over for suspension
   connectionName: string; // Original connection name
   connectionId: string; // Original connection ID
   suspendStartTime: string; // ISO string

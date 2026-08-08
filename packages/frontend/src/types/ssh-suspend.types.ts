@@ -4,6 +4,8 @@
 export interface SuspendedSshSession {
   /** 挂起会话的唯一ID。 */
   suspendSessionId: string;
+  /** 被后端接管前的活动会话 ID；用于手机回到前台时精确恢复原标签。 */
+  originalSessionId?: string;
   /** 原始连接的名称，通常是主机名或用户定义的连接别名。 */
   connectionName: string;
   /** 原始连接的ID。 */

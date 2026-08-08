@@ -35,12 +35,13 @@ const service = new SshSuspendService(storage);
 const channel = new FakeChannel();
 const client = new FakeClient();
 const logIdentifier = `verify_${randomUUID().replaceAll('-', '')}`;
+const originalSessionId = randomUUID();
 let suspendSessionId;
 
 try {
   suspendSessionId = await service.takeOverMarkedSession({
     userId: 1,
-    originalSessionId: randomUUID(),
+    originalSessionId,
     sshClient: client,
     channel,
     connectionName: 'verification',
@@ -48,6 +49,9 @@ try {
     logIdentifier,
   });
   assert.ok(suspendSessionId);
+  const suspendedList = await service.listSuspendedSessions(1);
+  assert.equal(suspendedList.length, 1);
+  assert.equal(suspendedList[0]?.originalSessionId, originalSessionId, 'Suspended list must preserve the original frontend session ID for foreground recovery');
 
   const firstBatch = Array.from({ length: 128 }, (_, index) => `first-${index.toString().padStart(3, '0')}\n`);
   for (const chunk of firstBatch) channel.emit('data', Buffer.from(chunk));

@@ -319,7 +319,15 @@ onBeforeUnmount(() => {
      return;
    }
    const wsStatus = session.wsManager.connectionStatus.value;
-   // 任意键应立即打断自动重连退避；connecting 也可能只是等待下一次尝试。
+   // 已标记挂起的会话断开后，SSH 可能已被后端接管。此时输入只能触发挂起恢复，
+   // 不能走普通 reconnect，否则会建立一个全新的 SSH 并丢失原终端上下文。
+   if (data.length > 0 && wsStatus !== 'connected' && session.isMarkedForSuspend) {
+     console.log(`[WorkspaceView] 标记挂起会话 ${resolvedSessionId} 收到输入，优先尝试恢复后端挂起会话。`);
+     void sessionStore.recoverMarkedSshSessionsAfterForeground();
+     return;
+   }
+
+   // 未标记的普通断线保持原有行为：任意键立即打断自动重连退避。
    const shouldReconnect = data.length > 0 && wsStatus !== 'connected';
    if (shouldReconnect) {
      console.log(`[WorkspaceView] 检测到断开的会话 ${resolvedSessionId} 收到键盘输入，尝试重连...`);
