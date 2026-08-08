@@ -570,6 +570,30 @@ const handleQuickCommandExecute = (command: string) => {
   padding-block: 0.25rem;
 }
 
+/*
+ * 手机端快捷按钮数量会随功能增长。保持单行高度，把按钮区变成横向可滚动条，
+ * 同时给命令输入保留稳定的最小宽度，避免新增按钮后把输入框挤到不可用。
+ */
+.command-bar-root--mobile .command-bar-command-input {
+  min-width: 5.5rem;
+}
+
+.command-bar-root--mobile .command-bar-controls {
+  min-width: 0;
+  max-width: min(58vw, 14.5rem);
+  flex: 0 1 auto;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.command-bar-root--mobile .command-bar-controls::-webkit-scrollbar {
+  display: none;
+}
+
 .command-bar-inner {
   min-width: 0;
   min-height: 100%;
