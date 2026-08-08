@@ -396,7 +396,10 @@ const handleQuickCommandExecute = (command: string) => {
 </script>
 
 <template>
-  <div :class="$attrs.class" class="command-bar-root flex items-center bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
+  <div
+    :class="[$attrs.class, { 'command-bar-root--mobile': props.isMobile }]"
+    class="command-bar-root flex items-center bg-background"
+  > <!-- Bind $attrs.class, keep mobile sizing explicit so it cannot consume the whole workspace -->
     <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
       <!-- 命令输入与终端搜索共用同一个输入框 -->
       <input
@@ -534,6 +537,26 @@ const handleQuickCommandExecute = (command: string) => {
   overflow-y: auto;
   padding-block: 0;
 }
+
+/*
+ * Desktop layout panes need the command bar to fill their configured pane height.
+ * On mobile it is a sibling of the flexing terminal area; height:100% here would
+ * make this non-shrinking child consume the entire workspace and collapse the
+ * terminal to zero height. Keep the mobile bar content-sized instead.
+ */
+.command-bar-root--mobile {
+  height: auto;
+  min-height: 2.35rem;
+  flex: 0 0 auto;
+  overflow-y: hidden;
+}
+
+.command-bar-root--mobile .command-bar-inner {
+  min-height: 0;
+  align-self: auto;
+  padding-block: 0.25rem;
+}
+
 .command-bar-inner {
   min-width: 0;
   min-height: 100%;
