@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, computed, ref, shallowRef, nextTick, type PropType } from 'vue';
+import { onMounted, onBeforeUnmount, computed, ref, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useLayoutStore, type LayoutNode } from '../stores/layout.store'; // +++ Import LayoutNode +++
@@ -9,7 +9,6 @@ import AddConnectionFormComponent from '../components/AddConnectionForm.vue';
 import TerminalTabBar from '../components/TerminalTabBar.vue';
 import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
-import Terminal from '../components/Terminal.vue';
 import CommandInputBar from '../components/CommandInputBar.vue'; 
 import VirtualKeyboard from '../components/VirtualKeyboard.vue';
 import FileManager from '../components/FileManager.vue'; 
@@ -81,26 +80,9 @@ const showLayoutConfigurator = ref(false); // 控制布局配置器可见性
 
 // --- 搜索状态 ---
 const currentSearchTerm = ref(''); // 当前搜索的关键词
-const mobileTerminalRef = ref<InstanceType<typeof Terminal> | null>(null);
 const isVirtualKeyboardVisible = ref(false); 
 const isVirtualCtrlActive = ref(false);
 const isVirtualAltActive = ref(false);
-const mobileCommandInputBarRef = ref<InstanceType<typeof CommandInputBar> | null>(null);
-const mobileViewportHeight = ref<number | null>(null);
-
-const mobileWorkspaceStyle = computed(() => {
-  if (!isMobile.value || mobileViewportHeight.value === null) return undefined;
-  return { '--mobile-viewport-height': `${mobileViewportHeight.value}px` };
-});
-
-const updateMobileViewportHeight = () => {
-  if (!isMobile.value) {
-    mobileViewportHeight.value = null;
-    return;
-  }
-  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-  mobileViewportHeight.value = Math.round(viewportHeight);
-};
 
 const clearVirtualModifiers = () => {
   isVirtualCtrlActive.value = false;
@@ -110,7 +92,7 @@ const clearVirtualModifiers = () => {
 const toggleVirtualModifier = (modifier: 'ctrl' | 'alt') => {
   if (modifier === 'ctrl') isVirtualCtrlActive.value = !isVirtualCtrlActive.value;
   else isVirtualAltActive.value = !isVirtualAltActive.value;
-  nextTick(() => mobileCommandInputBarRef.value?.focusCommandInput());
+  // 不主动聚焦输入框：手机上 focus 会唤起系统软键盘，与应用快捷键栏叠加后挤压终端。
 };
 
 const subscribeToWorkspaceEvents = useWorkspaceEventSubscriber();
@@ -176,9 +158,7 @@ onMounted(() => {
   console.log('[工作区视图] 组件已挂载。');
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleGlobalKeyDown);
-  updateMobileViewportHeight();
-  window.addEventListener('resize', updateMobileViewportHeight);
-  window.visualViewport?.addEventListener('resize', updateMobileViewportHeight);
+  // 移动端高度交给 CSS dvh；不要跟随 visualViewport 的软键盘缩放反复压缩工作区。
   // 确保布局已初始化 (layoutStore 内部会处理)
 
   // +++ 订阅工作区事件 +++
@@ -225,8 +205,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   console.log('[工作区视图] 组件即将卸载，清理工作区事件监听...');
   window.removeEventListener('keydown', handleGlobalKeyDown);
-  window.removeEventListener('resize', updateMobileViewportHeight);
-  window.visualViewport?.removeEventListener('resize', updateMobileViewportHeight);
 
   while (workspaceEventCleanups.length > 0) {
     const cleanup = workspaceEventCleanups.pop();
@@ -322,9 +300,9 @@ onBeforeUnmount(() => {
  // 处理终端输入 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-input', sessionId, data)
  const handleTerminalInput = (payload: { sessionId: string; data: string }) => {
-   const { sessionId } = payload;
+   const resolvedSessionId = sessionStore.resolveSessionId(payload.sessionId);
    let data = payload.data;
-   if (isMobile.value && sessionId === activeSessionId.value && (isVirtualCtrlActive.value || isVirtualAltActive.value)) {
+   if (isMobile.value && resolvedSessionId === activeSessionId.value && (isVirtualCtrlActive.value || isVirtualAltActive.value)) {
      const modifiedData = applyTerminalModifiers(data, {
        ctrl: isVirtualCtrlActive.value,
        alt: isVirtualAltActive.value,
@@ -334,17 +312,17 @@ onBeforeUnmount(() => {
        clearVirtualModifiers();
      }
    }
-   const session = sessionStore.sessions.get(sessionId);
+   const session = sessionStore.sessions.get(resolvedSessionId);
    const manager = session?.terminalManager as (SshTerminalInstance | undefined);
    if (!session || !manager) {
-     console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`);
+     console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${payload.sessionId}（解析为 ${resolvedSessionId}）或其 terminalManager`);
      return;
    }
    const wsStatus = session.wsManager.connectionStatus.value;
    // 任意键应立即打断自动重连退避；connecting 也可能只是等待下一次尝试。
    const shouldReconnect = data.length > 0 && wsStatus !== 'connected';
    if (shouldReconnect) {
-     console.log(`[WorkspaceView] 检测到断开的会话 ${sessionId} 收到键盘输入，尝试重连...`);
+     console.log(`[WorkspaceView] 检测到断开的会话 ${resolvedSessionId} 收到键盘输入，尝试重连...`);
      if (manager.terminalInstance?.value) {
        manager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
      } else {
@@ -365,7 +343,8 @@ onBeforeUnmount(() => {
  // 处理终端大小调整 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-resize', sessionId, dims)
  const handleTerminalResize = (payload: { sessionId: string; dims: { cols: number; rows: number } }) => {
-    sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalResize(payload.dims);
+    const resolvedSessionId = sessionStore.resolveSessionId(payload.sessionId);
+    sessionStore.sessions.get(resolvedSessionId)?.terminalManager.handleTerminalResize(payload.dims);
  };
 
  // 处理终端就绪 (用于 Terminal)
@@ -379,12 +358,19 @@ onBeforeUnmount(() => {
     } else {
         console.warn(`[工作区视图 ${payload.sessionId}] Payload 未包含 searchAddon 实例！ Payload:`, payload);
     }
-    // *** 修正：传递包含 terminal 和 searchAddon 的完整 payload ***
-    sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalReady(payload);
+    // sessionId 可能刚被后端重键；通过 alias 找到同一个 SessionState，避免新终端挂载后丢失缓存输出。
+    const resolvedSessionId = sessionStore.resolveSessionId(payload.sessionId);
+    sessionStore.sessions.get(resolvedSessionId)?.terminalManager.handleTerminalReady(payload);
 };
 
  const handleTerminalDetached = (payload: { sessionId: string; terminal: XtermTerminal; snapshot?: string }) => {
-    sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalDetached(payload);
+    const resolvedSessionId = sessionStore.resolveSessionId(payload.sessionId);
+    const session = sessionStore.sessions.get(resolvedSessionId);
+    if (!session) return;
+    // sessionActions 在重键前会主动抓取当前终端 snapshot 放进 pendingOutput。
+    // 旧组件随后触发 detached 时不要再次缓存同一份 snapshot，否则新终端会重复回放。
+    if (resolvedSessionId !== payload.sessionId && (session.pendingOutput?.length ?? 0) > 0) return;
+    session.terminalManager.handleTerminalDetached(payload);
  };
 
 
@@ -467,7 +453,8 @@ const handleClearTerminal = () => {
 
 // +++ 处理滚动到底部请求 +++
 const handleScrollToBottomRequest = (payload: { sessionId: string }) => {
-  const session = sessionStore.sessions.get(payload.sessionId);
+  const resolvedSessionId = sessionStore.resolveSessionId(payload.sessionId);
+  const session = sessionStore.sessions.get(resolvedSessionId);
   const terminalManager = session?.terminalManager as (SshTerminalInstance | undefined);
   if (terminalManager?.terminalInstance?.value) {
     console.log(`[WorkspaceView] Scrolling to bottom for session ${payload.sessionId}`);
@@ -740,10 +727,7 @@ const closeFileManagerModal = () => {
 
 <template>
   <!-- *** 动态 class 绑定，添加 is-mobile 类 *** -->
-  <div
-    :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile }]"
-    :style="mobileWorkspaceStyle"
-  >
+  <div :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile }]">
     <!-- TerminalTabBar 始终渲染, 传递 isMobile 状态 -->
     <TerminalTabBar
         :sessions="sessionTabsWithStatus"
@@ -788,7 +772,6 @@ const closeFileManagerModal = () => {
         </div>
       </div>
       <CommandInputBar
-        ref="mobileCommandInputBarRef"
         class="mobile-command-bar"
         :is-mobile="isMobile"
         @send-command="handleSendCommand"
@@ -910,16 +893,16 @@ const closeFileManagerModal = () => {
 
 /* --- Mobile Layout Styles --- */
 .workspace-view.is-mobile {
-  /* Ensure flex column layout */
-  display: flex; /* Uncommented */
-  flex-direction: column; /* Uncommented */
-  height: var(--mobile-viewport-height, 100dvh);
+  /* 由动态视口单位负责跟随浏览器可用高度，避免软键盘关闭后残留旧的 visualViewport 高度。 */
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
   min-height: 0;
   transition: none;
 }
 
 .workspace-view.is-mobile.with-header {
-  height: calc(var(--mobile-viewport-height, 100dvh) - 55px);
+  height: calc(100dvh - 55px);
 }
 
 .workspace-view.is-mobile .main-content-area {

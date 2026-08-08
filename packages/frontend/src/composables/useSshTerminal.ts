@@ -1,6 +1,6 @@
 import { ref, readonly, type Ref, ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { sessions as globalSessionsRef } from '../stores/session/state'; // +++ 导入全局 sessions state +++
+import { resolveSessionId, sessions as globalSessionsRef } from '../stores/session/state'; // +++ 导入全局 sessions state +++
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
 import type { Terminal } from '@xterm/xterm';
 import type { SearchAddon, ISearchOptions } from '@xterm/addon-search'; // *** 移除 ISearchResult 导入 ***
@@ -23,6 +23,10 @@ export interface SshTerminalDependencies {
 export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalDependencies, t: ReturnType<typeof useI18n>['t']) { // +++ Update type of t +++
     // 使用依赖注入的 WebSocket 函数
     const { sendMessage, onMessage, isConnected } = wsDeps;
+    const getResolvedSessionId = () => resolveSessionId(sessionId);
+    const isMessageForCurrentSession = (message?: WebSocketMessage) => (
+        !message?.sessionId || resolveSessionId(message.sessionId) === getResolvedSessionId()
+    );
 
     const terminalInstance = ref<Terminal | null>(null);
     const searchAddon = ref<SearchAddon | null>(null); // Keep searchAddon ref
@@ -82,7 +86,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             inputQueue.shift();
             pendingInputBytes.set(next.sequence, next.bytes);
             inputBytesInFlight += next.bytes;
-            sendMessage({ type: 'ssh:input', sessionId, payload: next });
+            sendMessage({ type: 'ssh:input', sessionId: getResolvedSessionId(), payload: next });
         }
     };
 
@@ -137,7 +141,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
         
         // 1. 处理 SessionState.pendingOutput (来自 SSH_OUTPUT_CACHED_CHUNK 的早期数据)
-        const currentSessionState = globalSessionsRef.value.get(sessionId);
+        const currentSessionState = globalSessionsRef.value.get(getResolvedSessionId());
         if (currentSessionState && currentSessionState.pendingOutput && currentSessionState.pendingOutput.length > 0) {
             const pendingOutput = currentSessionState.pendingOutput;
             const completesResume = currentSessionState.pendingOutputComplete === true;
@@ -194,7 +198,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             if (!force && dimensions.cols === lastSentCols && dimensions.rows === lastSentRows) return;
             lastSentCols = dimensions.cols;
             lastSentRows = dimensions.rows;
-            sendMessage({ type: 'ssh:resize', sessionId, payload: dimensions });
+            sendMessage({ type: 'ssh:resize', sessionId: getResolvedSessionId(), payload: dimensions });
         }
     };
 
@@ -202,7 +206,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleSshOutput = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 
@@ -228,7 +232,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleSshConnected = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 
@@ -270,7 +274,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleSshDisconnected = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 
@@ -288,7 +292,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleSshError = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 
@@ -305,7 +309,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleSshStatus = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 
@@ -320,7 +324,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleInfoMessage = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 
@@ -330,7 +334,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleErrorMessage = (payload: MessagePayload, message?: WebSocketMessage) => {
         // 检查消息是否属于此会话
-        if (message?.sessionId && message.sessionId !== sessionId) {
+        if (!isMessageForCurrentSession(message)) {
             return; // 忽略不属于此会话的消息
         }
 

@@ -373,12 +373,14 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font-family-sans-serif); /* 使用字体变量 */
 }
 
 
 main {
   flex-grow: 1;
+  min-height: 0;
 
 }
 
