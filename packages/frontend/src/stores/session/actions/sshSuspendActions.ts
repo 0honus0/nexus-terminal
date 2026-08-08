@@ -37,7 +37,9 @@ const MAX_PENDING_RESUME_OUTPUT_BYTES = 1024 * 1024;
 const terminalOutputEncoder = new TextEncoder();
 const FOREGROUND_RECOVERY_ATTEMPTS = 10;
 const FOREGROUND_RECOVERY_DELAY_MS = 400;
-const RESUME_COMPLETION_TIMEOUT_MS = 15000;
+// 后端单个终端缓存帧 ACK 最长等待 120s。前端恢复事务必须晚于这个窗口，
+// 否则慢网络下会在后端仍正常等待 ACK 时误判失败并主动关闭恢复连接。
+const RESUME_COMPLETION_TIMEOUT_MS = 135_000;
 
 type ResumeContext = {
   replaceSessionId?: string;
@@ -249,6 +251,11 @@ export const recoverMarkedSshSessionsAfterForeground = async (): Promise<void> =
           candidateOriginalIds.delete(originalId);
           continue;
         }
+        if (oldSession.wsManager.isConnected.value) {
+          // 已在线的待关闭会话无需“恢复”，保持标记即可。
+          candidateOriginalIds.delete(originalId);
+          continue;
+        }
         if (!oldSession.wsManager.isConnected.value && !oldSession.isResuming) {
           disconnectedIds.push(originalId);
         }
@@ -290,7 +297,42 @@ export const recoverMarkedSshSessionsAfterForeground = async (): Promise<void> =
       return !!session?.isMarkedForSuspend && !session.wsManager.isConnected.value && !session.isResuming;
     });
     if (unresolvedDisconnected.length > 0) {
-      console.warn(`[${t('term.sshSuspend')}] 前台自动恢复等待超时，仍有 ${unresolvedDisconnected.length} 个断开的标记会话尚未出现在挂起服务中。`);
+      // 最后一轮同步后再决定是否 fallback，避免 cleanup/takeover 恰好落在轮询边界。
+      await fetchSuspendedSshSessions({ showLoadingIndicator: false, notifyOnError: false });
+
+      for (const originalId of unresolvedDisconnected) {
+        const resolvedOriginalId = resolveSessionId(originalId);
+        const oldSession = sessions.value.get(resolvedOriginalId);
+        if (!oldSession || !oldSession.isMarkedForSuspend || oldSession.wsManager.isConnected.value || oldSession.isResuming) continue;
+
+        const hanging = suspendedSshSessions.value.find(item =>
+          item.backendSshStatus === 'hanging'
+          && item.originalSessionId === resolvedOriginalId,
+        );
+        if (hanging) {
+          oldSession.isResuming = true;
+          const shouldActivate = activeSessionId.value === resolvedOriginalId;
+          await resumeSshSession(hanging.suspendSessionId, {
+            replaceSessionId: resolvedOriginalId,
+            activateOnSuccess: shouldActivate,
+            notifyOnSuccess: false,
+            notifyOnError: false,
+          });
+          continue;
+        }
+
+        // 后端没有可恢复的 hanging 会话，说明 SSH 接管失败或已经由后端断开。
+        // 此时继续保留 isMarkedForSuspend 会永久阻止普通 WebSocket 重连；安全降级为新 SSH 重连。
+        console.warn(`[${t('term.sshSuspend')}] 未找到会话 ${resolvedOriginalId} 的可恢复挂起连接，清除本地待挂起标记并降级为普通重连。`);
+        oldSession.isMarkedForSuspend = false;
+        oldSession.suspendMarkedAt = undefined;
+        sessions.value = new Map(sessions.value);
+        suspendedSshSessions.value = mergeMarkedActiveSessions(suspendedSshSessions.value);
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/`;
+        oldSession.wsManager.connect(wsUrl);
+      }
     }
   })().finally(() => {
     foregroundRecoveryPromise = null;
@@ -335,7 +377,8 @@ export const resumeSshSession = async (
     const originalSessionId = resolveSessionId(sessionToResumeInfo.originalSessionId || suspendSessionId);
     const activeMarkedSession = sessions.value.get(originalSessionId);
     if (activeMarkedSession?.wsManager.isConnected.value) {
-      requestUnmarkSshSuspend(originalSessionId);
+      // marked_active 表示“当前在线但仍处于待关闭/挂起保护状态”。
+      // “恢复”只回到该终端，不等价于取消挂起；只有显式的取消操作才能清除标记。
       activateSessionAction(originalSessionId);
       return;
     }
