@@ -9,6 +9,7 @@ import { useQuickCommandsStore } from '../stores/quickCommands.store';
 import { useCommandHistoryStore } from '../stores/commandHistory.store';
 import QuickCommandsModal from './QuickCommandsModal.vue'; 
 import SuspendedSshSessionsModal from './SuspendedSshSessionsModal.vue'; 
+import StatusMonitorModal from './StatusMonitorModal.vue';
 import { useFileEditorStore } from '../stores/fileEditor.store'; 
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { applyTerminalModifiers } from '../utils/terminalModifiers';
@@ -56,6 +57,7 @@ const isSearching = ref(false);
 const searchTerm = ref('');
 const showQuickCommands = ref(false); // +++ Add state for modal visibility +++
 const showSuspendedSshSessionsModal = ref(false); // +++ Add state for suspended SSH sessions modal +++
+const showStatusMonitorModal = ref(false);
 // *** 移除本地的搜索结果 ref ***
 // const searchResultCount = ref(0);
 // const currentSearchResultIndex = ref(0);
@@ -366,7 +368,19 @@ const closeSuspendedSshSessionsModal = () => {
 };
 
 const openStatusMonitor = () => {
-  emitWorkspaceEvent('ui:openSidebarPane', { pane: 'statusMonitor' });
+  showStatusMonitorModal.value = true;
+};
+
+const closeStatusMonitor = () => {
+  showStatusMonitorModal.value = false;
+};
+
+const handleCommandBarPointerUp = (event: PointerEvent) => {
+  if (!props.isMobile || event.pointerType === 'mouse') return;
+  const target = event.target instanceof Element ? event.target.closest('button') : null;
+  if (target instanceof HTMLButtonElement) {
+    window.setTimeout(() => target.blur(), 0);
+  }
 };
 
 // +++ Function to request opening the file manager modal via event bus +++
@@ -403,6 +417,7 @@ const handleQuickCommandExecute = (command: string) => {
   <div
     :class="[$attrs.class, { 'command-bar-root--mobile': props.isMobile }]"
     class="command-bar-root flex items-center bg-background"
+    @pointerup="handleCommandBarPointerUp"
   > <!-- Bind $attrs.class, keep mobile sizing explicit so it cannot consume the whole workspace -->
     <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
       <!-- 命令输入与终端搜索共用同一个输入框 -->
@@ -443,7 +458,7 @@ const handleQuickCommandExecute = (command: string) => {
           v-if="props.isMobile"
           @click="openStatusMonitor"
           class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
-          :title="t('layout.pane.statusMonitor', '状态监视器')"
+          :title="t('statusMonitor.title', '服务器状态')"
         >
           <i class="fas fa-tachometer-alt text-base"></i>
         </button>
@@ -535,6 +550,11 @@ const handleQuickCommandExecute = (command: string) => {
     :is-visible="showSuspendedSshSessionsModal"
     @close="closeSuspendedSshSessionsModal"
   />
+  <StatusMonitorModal
+    :is-visible="showStatusMonitorModal"
+    :active-session-id="activeSessionId"
+    @close="closeStatusMonitor"
+  />
   <!-- File Manager Modal is now handled by a listener for 'fileManager:openModalRequest' event -->
 </template>
 
@@ -575,13 +595,17 @@ const handleQuickCommandExecute = (command: string) => {
  * 同时给命令输入保留稳定的最小宽度，避免新增按钮后把输入框挤到不可用。
  */
 .command-bar-root--mobile .command-bar-command-input {
-  min-width: 5.5rem;
+  /* 约等于“输入命令后回车”的完整显示宽度，避免输入框占掉过多快捷按钮空间。 */
+  flex: 0 0 7.25rem !important;
+  width: 7.25rem;
+  min-width: 7.25rem;
+  padding-inline: 0.5rem;
 }
 
 .command-bar-root--mobile .command-bar-controls {
   min-width: 0;
-  max-width: min(58vw, 14.5rem);
-  flex: 0 1 auto;
+  max-width: none;
+  flex: 1 1 0;
   justify-content: flex-start;
   overflow-x: auto;
   overflow-y: hidden;
@@ -592,6 +616,17 @@ const handleQuickCommandExecute = (command: string) => {
 
 .command-bar-root--mobile .command-bar-controls::-webkit-scrollbar {
   display: none;
+}
+
+@media (hover: none) {
+  .command-bar-root--mobile .command-bar-button {
+    touch-action: manipulation;
+  }
+
+  .command-bar-root--mobile .command-bar-button:hover:not(:active) {
+    background-color: transparent !important;
+    color: var(--text-secondary-color) !important;
+  }
 }
 
 .command-bar-inner {
