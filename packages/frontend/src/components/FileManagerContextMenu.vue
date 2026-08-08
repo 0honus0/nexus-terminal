@@ -51,6 +51,7 @@ const sourceConnectionId = computed(() => { // +++ 获取并转换源服务器 I
 
 const contextMenuRef = ref<HTMLDivElement | null>(null);
 const computedRenderPosition = ref({ x: props.position.x, y: props.position.y });
+let contextMenuOpenedAt = 0;
 
 watch(
   [() => props.isVisible, () => props.position],
@@ -111,6 +112,9 @@ watch(
 
 // 点击其他地方自动关闭菜单
 const handleClickOutside = (event: MouseEvent) => {
+  // Android/iOS 长按结束后通常还会补发一次 compatibility click。
+  // 如果立即按“外部点击”处理，菜单会在手指松开的同一瞬间关闭，看起来就像长按没有反应。
+  if (Date.now() - contextMenuOpenedAt < 600) return;
   if (contextMenuRef.value && !contextMenuRef.value.contains(event.target as Node)) {
     emit('close-request');
   }
@@ -118,6 +122,7 @@ const handleClickOutside = (event: MouseEvent) => {
 
 watch(() => props.isVisible, (newValue) => {
   if (newValue) {
+    contextMenuOpenedAt = Date.now();
     document.addEventListener('click', handleClickOutside, { capture: true });
   } else {
     document.removeEventListener('click', handleClickOutside, { capture: true });

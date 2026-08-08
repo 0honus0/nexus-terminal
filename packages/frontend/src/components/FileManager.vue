@@ -1032,6 +1032,7 @@ const MOBILE_CONTEXT_MOVE_TOLERANCE = 12;
 let mobileContextTimer: ReturnType<typeof setTimeout> | null = null;
 let mobileContextStart: { x: number; y: number } | null = null;
 let mobileContextTriggered = false;
+let mobileContextPointerId: number | null = null;
 
 const clearMobileContextTimer = () => {
   if (mobileContextTimer) {
@@ -1040,12 +1041,30 @@ const clearMobileContextTimer = () => {
   }
 };
 
-const handleMobileContextTouchStart = (event: TouchEvent, item?: FileListItem) => {
-  if (!props.isMobile || event.touches.length !== 1) return;
+const releaseMobileContextPointer = (event: PointerEvent) => {
+  const target = event.currentTarget;
+  if (!(target instanceof Element) || mobileContextPointerId === null) return;
+  try {
+    if (target.hasPointerCapture(mobileContextPointerId)) {
+      target.releasePointerCapture(mobileContextPointerId);
+    }
+  } catch {
+    // Pointer may already have been released/cancelled by the browser scroll gesture.
+  }
+};
+
+const handleMobileContextPointerStart = (event: PointerEvent, item?: FileListItem) => {
+  if (!props.isMobile || !event.isPrimary || (event.pointerType !== 'touch' && event.pointerType !== 'pen')) return;
   clearMobileContextTimer();
-  const touch = event.touches[0];
-  mobileContextStart = { x: touch.clientX, y: touch.clientY };
+  mobileContextPointerId = event.pointerId;
+  mobileContextStart = { x: event.clientX, y: event.clientY };
   mobileContextTriggered = false;
+
+  const target = event.currentTarget;
+  if (target instanceof Element) {
+    try { target.setPointerCapture(event.pointerId); } catch { /* browser may reject capture during native gestures */ }
+  }
+
   mobileContextTimer = setTimeout(() => {
     mobileContextTimer = null;
     mobileContextTriggered = true;
@@ -1054,42 +1073,61 @@ const handleMobileContextTouchStart = (event: TouchEvent, item?: FileListItem) =
     showContextMenu(new MouseEvent('contextmenu', {
       bubbles: true,
       cancelable: true,
-      clientX: touch.clientX,
-      clientY: touch.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
     }), item);
     navigator.vibrate?.(15);
   }, MOBILE_CONTEXT_LONG_PRESS_MS);
 };
 
-const handleMobileContextTouchMove = (event: TouchEvent) => {
-  if (!mobileContextStart || event.touches.length !== 1) return;
-  const touch = event.touches[0];
+const handleMobileContextPointerMove = (event: PointerEvent) => {
+  if (mobileContextPointerId !== event.pointerId || !mobileContextStart) return;
   if (
-    Math.abs(touch.clientX - mobileContextStart.x) > MOBILE_CONTEXT_MOVE_TOLERANCE
-    || Math.abs(touch.clientY - mobileContextStart.y) > MOBILE_CONTEXT_MOVE_TOLERANCE
+    Math.abs(event.clientX - mobileContextStart.x) > MOBILE_CONTEXT_MOVE_TOLERANCE
+    || Math.abs(event.clientY - mobileContextStart.y) > MOBILE_CONTEXT_MOVE_TOLERANCE
   ) {
     clearMobileContextTimer();
+    releaseMobileContextPointer(event);
+    mobileContextPointerId = null;
     mobileContextStart = null;
     mobileContextTriggered = false;
   }
 };
 
-const handleMobileContextTouchEnd = (event: TouchEvent) => {
+const handleMobileContextPointerEnd = (event: PointerEvent) => {
+  if (mobileContextPointerId !== event.pointerId) return;
   if (mobileContextTriggered) {
     event.preventDefault();
     window.setTimeout(() => {
       suppressClickAfterLongPress = false;
-    }, 350);
+    }, 500);
   }
   clearMobileContextTimer();
+  releaseMobileContextPointer(event);
+  mobileContextPointerId = null;
   mobileContextStart = null;
   mobileContextTriggered = false;
 };
 
-const handleMobileContextTouchCancel = () => {
+const handleMobileContextPointerCancel = (event: PointerEvent) => {
+  if (mobileContextPointerId !== event.pointerId) return;
   clearMobileContextTimer();
+  releaseMobileContextPointer(event);
+  mobileContextPointerId = null;
   mobileContextStart = null;
   mobileContextTriggered = false;
+};
+
+const handleItemContextMenu = (event: MouseEvent, item: FileListItem) => {
+  if (props.isMobile) {
+    // Android 浏览器可能直接把长按转成 contextmenu，并取消 pointer 序列。
+    // 同时抑制随后补发的 click，避免文件夹菜单刚出现就被单击导航覆盖。
+    suppressClickAfterLongPress = true;
+    window.setTimeout(() => {
+      suppressClickAfterLongPress = false;
+    }, 800);
+  }
+  showContextMenu(event, item);
 };
 
 // --- 目录加载与导航 ---
@@ -2122,10 +2160,10 @@ const handleOpenEditorClick = () => {
       @wheel="handleWheel"
       @scroll="handleFileListScroll"
       @contextmenu.prevent="showContextMenu($event)"
-      @touchstart="handleMobileContextTouchStart($event)"
-      @touchmove="handleMobileContextTouchMove"
-      @touchend="handleMobileContextTouchEnd"
-      @touchcancel="handleMobileContextTouchCancel"
+      @pointerdown="handleMobileContextPointerStart($event)"
+      @pointermove="handleMobileContextPointerMove"
+      @pointerup="handleMobileContextPointerEnd"
+      @pointercancel="handleMobileContextPointerCancel"
       tabindex="0"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
     >
@@ -2261,11 +2299,14 @@ const handleOpenEditorClick = () => {
             </tr>
             <tr v-for="(item, index) in virtualFileList"
                 :key="item.filename"
-                :draggable="item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
+                :draggable="!props.isMobile && item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
                 @dblclick="handleItemDoubleClick($event, item)"
-                @touchstart.stop="handleMobileContextTouchStart($event, item)"
-                class="transition-colors duration-150 select-none"
+                @pointerdown.stop="handleMobileContextPointerStart($event, item)"
+                @pointermove.stop="handleMobileContextPointerMove"
+                @pointerup.stop="handleMobileContextPointerEnd"
+                @pointercancel.stop="handleMobileContextPointerCancel"
+                class="transition-colors duration-150 select-none touch-pan-y"
                 :class="[
                     { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
                     { 'bg-primary text-white': selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) },
@@ -2274,7 +2315,7 @@ const handleOpenEditorClick = () => {
                 ]"
                :data-filename="item.filename"
                :data-list-index="virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0)"
-               @contextmenu.prevent.stop="showContextMenu($event, item)"
+               @contextmenu.prevent.stop="handleItemContextMenu($event, item)"
                @dragover.prevent="handleDragOverRow(item, $event)"
                @dragleave="handleDragLeaveRow(item)"
                @drop.prevent="handleDropOnRow(item, $event)">
