@@ -128,6 +128,10 @@ const consumePromptMarkers = (state: ClientState, chunk: string): string => {
         }
         state.shellAtPrompt = true;
         state.shellIntegrationReady = true;
+        // The hook is not considered ready until its first real prompt marker arrives.
+        // This prevents the first directory-change request from seeing a false busy state
+        // when the hook setup acknowledgement and the prompt are delivered in separate SSH chunks.
+        if (state.shellHookPromise) resolveShellHook(state);
         void handleShellPrompt(state);
         cursor = markerIndex + SHELL_PROMPT_MARKER.length;
         markerIndex = data.indexOf(SHELL_PROMPT_MARKER, cursor);
@@ -202,8 +206,16 @@ const rejectShellProbe = (state: ClientState, error: Error): void => {
     reject?.(error);
 };
 
+const clearShellHookPromptTimeout = (state: ClientState): void => {
+    if (state.shellHookPromptTimeout) {
+        clearTimeout(state.shellHookPromptTimeout);
+        state.shellHookPromptTimeout = undefined;
+    }
+};
+
 const resolveShellHook = (state: ClientState): void => {
     const resolve = state.shellHookResolve;
+    clearShellHookPromptTimeout(state);
     state.shellHookPromise = undefined;
     state.shellHookResolve = undefined;
     state.shellHookReject = undefined;
@@ -212,6 +224,7 @@ const resolveShellHook = (state: ClientState): void => {
 
 const rejectShellHook = (state: ClientState, error: Error): void => {
     const reject = state.shellHookReject;
+    clearShellHookPromptTimeout(state);
     state.shellHookPromise = undefined;
     state.shellHookResolve = undefined;
     state.shellHookReject = undefined;
@@ -270,10 +283,10 @@ const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
 
     const output = pending.buffer.slice(outputStart, endIndex).trim();
     const trailingOutput = pending.buffer.slice(endIndex + pending.endMarker.length);
-    clearTimeout(pending.timeout);
     state.shellSetup = undefined;
 
     if (pending.phase === 'probe') {
+        clearTimeout(pending.timeout);
         const match = output.match(/^(\d+):(bash|zsh|other)$/);
         if (match) {
             state.shellPid = Number.parseInt(match[1], 10);
@@ -284,9 +297,12 @@ const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
         }
     } else if (pending.phase === 'hook') {
         if (output === 'ok') {
-            state.shellIntegrationReady = true;
-            resolveShellHook(state);
+            // Keep the original setup timeout alive while waiting for the first prompt
+            // emitted by the newly installed hook. Only that marker proves the shell is
+            // actually ready to accept a queued directory change.
+            state.shellHookPromptTimeout = pending.timeout;
         } else {
+            clearTimeout(pending.timeout);
             rejectShellHook(state, new Error('终端提示符集成初始化失败。'));
         }
     }

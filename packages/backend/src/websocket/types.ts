@@ -44,6 +44,7 @@ export interface ClientState { // 导出以便 Service 可以导入
     shellHookPromise?: Promise<void>;
     shellHookResolve?: () => void;
     shellHookReject?: (error: Error) => void;
+    shellHookPromptTimeout?: NodeJS.Timeout;
     shellSetup?: {
         phase: 'probe' | 'hook';
         startMarker: string;

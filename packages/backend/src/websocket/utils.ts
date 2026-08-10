@@ -79,6 +79,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
             clearTimeout(state.shellSetup.timeout);
             state.shellSetup = undefined;
         }
+        if (state.shellHookPromptTimeout) {
+            clearTimeout(state.shellHookPromptTimeout);
+            state.shellHookPromptTimeout = undefined;
+        }
         if (state.pendingDirectoryChange) {
             clearTimeout(state.pendingDirectoryChange.timeout);
             state.pendingDirectoryChange = undefined;
