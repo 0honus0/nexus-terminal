@@ -157,15 +157,6 @@
                 <line x1="240" y1="10" x2="240" y2="94" />
               </g>
 
-              <g class="axis-labels">
-                <text class="axis-y-label" x="18" y="13" text-anchor="start">{{ yAxisLabels[0] }}</text>
-                <text class="axis-y-label" x="18" y="55" text-anchor="start">{{ yAxisLabels[1] }}</text>
-                <text class="axis-y-label" x="18" y="97" text-anchor="start">{{ yAxisLabels[2] }}</text>
-                <text class="axis-x-label axis-x-start" x="12" y="116" text-anchor="start">-{{ historyRange }}m</text>
-                <text class="axis-x-label axis-x-middle" x="126" y="116" text-anchor="middle">-{{ historyRange / 2 }}m</text>
-                <text class="axis-x-label axis-x-end" x="240" y="116" text-anchor="end">当前</text>
-              </g>
-
               <path
                 v-if="selectedMetric !== 'network'"
                 class="history-area"
@@ -212,6 +203,14 @@
               </g>
             </svg>
 
+            <div class="history-axis-labels" aria-hidden="true">
+              <span class="history-axis-y history-axis-y-top">{{ yAxisLabels[0] }}</span>
+              <span class="history-axis-y history-axis-y-middle">{{ yAxisLabels[1] }}</span>
+              <span class="history-axis-y history-axis-y-bottom">{{ yAxisLabels[2] }}</span>
+              <span class="history-axis-x history-axis-x-start">-{{ historyRange }}m</span>
+              <span class="history-axis-x history-axis-x-middle">-{{ historyRange / 2 }}m</span>
+              <span class="history-axis-x history-axis-x-end">当前</span>
+            </div>
           </div>
         </section>
       </div>
@@ -779,6 +778,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
    - 自适应: container query 三档 (窄/中/宽) + 矮屏摘要模式
    ============================================================ */
 .status-monitor {
+  --status-text: var(--text-color);
+  --status-muted: var(--text-color-secondary);
+  --status-border: color-mix(in srgb, var(--border-color) 72%, transparent);
+  --status-surface: color-mix(in srgb, var(--header-bg-color) 62%, var(--app-bg-color));
+  --status-surface-soft: color-mix(in srgb, var(--header-bg-color) 34%, var(--app-bg-color));
   container-type: size;
   container-name: status-pane;
   min-width: 0;
@@ -811,11 +815,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   display: flex;
   flex-direction: column;
   margin: 0;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  border: 1px solid var(--status-border);
   border-radius: 0.86rem;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,.006));
-  box-shadow: 0 14px 36px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.025);
+  background: linear-gradient(180deg, var(--status-surface-soft), color-mix(in srgb, var(--app-bg-color) 96%, transparent));
+  box-shadow: 0 14px 36px rgba(0,0,0,.12), inset 0 1px 0 color-mix(in srgb, var(--text-color) 5%, transparent);
 }
 
 /* ---------- 头部 ---------- */
@@ -827,7 +831,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.52rem 0.7rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
 }
 .header-main {
   min-width: 0;
@@ -909,10 +913,10 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   justify-content: space-between;
   gap: 0.3rem;
   padding: 0.5rem 0.55rem;
-  border: 1px solid rgba(148,163,184,.13);
+  border: 1px solid var(--status-border);
   border-radius: 0.68rem;
   color: inherit;
-  background: rgba(148,163,184,.028);
+  background: var(--status-surface-soft);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -921,7 +925,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .metric-card:hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--metric-accent) 48%, transparent);
-  background: rgba(148,163,184,.05);
+  background: var(--status-surface);
 }
 .metric-card.selected {
   border-color: color-mix(in srgb, var(--metric-accent) 62%, transparent);
@@ -959,7 +963,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #e7edf6;
+  color: var(--status-text);
   font-weight: 700;
   font-size: 0.84rem;
 }
@@ -982,7 +986,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #b9c6d8;
+  color: var(--status-muted);
   font-size: 0.78rem;
   font-weight: 600;
   text-align: right;
@@ -1022,7 +1026,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   pointer-events: none;
 }
 .cpu-water-fill {
-  --cpu-water-color: color-mix(in srgb, var(--metric-accent) 40%, #151b27 60%);
+  --cpu-water-color: color-mix(in srgb, var(--metric-accent) 30%, var(--app-bg-color) 70%);
   position: absolute;
   left: 0;
   right: 0;
@@ -1064,7 +1068,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   bottom: 5%;
   width: 3px;
   height: 3px;
-  border: 1px solid color-mix(in srgb, var(--metric-accent) 55%, white 10%);
+  border: 1px solid color-mix(in srgb, var(--metric-accent) 55%, var(--text-color) 10%);
   border-radius: 50%;
   background: color-mix(in srgb, var(--metric-accent) 13%, transparent);
   box-shadow: inset 0 0 2px rgba(255,255,255,.18), 0 0 3px color-mix(in srgb, var(--metric-accent) 18%, transparent);
@@ -1120,10 +1124,10 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.52rem 0.6rem;
-  border: 1px solid rgba(148,163,184,.13);
+  border: 1px solid var(--status-border);
   border-radius: 0.68rem;
   color: inherit;
-  background: rgba(148,163,184,.028);
+  background: var(--status-surface-soft);
   cursor: pointer;
   text-align: left;
   transition: border-color .15s ease;
@@ -1147,12 +1151,12 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 0.12rem 0.4rem;
-  border: 1px solid rgba(148,163,184,.14);
+  border: 1px solid var(--status-border);
   border-radius: 999px;
-  color: #95a2b4;
+  color: var(--status-muted);
   font-size: 0.62rem;
   font-weight: 600;
-  background: rgba(148,163,184,.05);
+  background: var(--status-surface);
 }
 .network-rate {
   min-width: 0;
@@ -1175,9 +1179,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   display: flex;
   flex-direction: column;
   padding: 0.54rem 0.52rem 0.36rem;
-  border: 1px solid rgba(148,163,184,.13);
+  border: 1px solid var(--status-border);
   border-radius: 0.68rem;
-  background: rgba(148,163,184,.022);
+  background: var(--status-surface-soft);
 }
 .history-header {
   min-width: 0;
@@ -1200,14 +1204,14 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   gap: 0.1rem;
   padding: 0.14rem;
   border-radius: 0.5rem;
-  background: rgba(2,6,23,.4);
+  background: color-mix(in srgb, var(--border-color) 18%, transparent);
 }
 .range-tabs button {
   min-width: 0;
   padding: 0.22rem 0.3rem;
   border: 0;
   border-radius: 0.38rem;
-  color: #8491a4;
+  color: var(--status-muted);
   background: transparent;
   font-size: 0.66rem;
   line-height: 1;
@@ -1216,9 +1220,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   transition: color .15s ease, background .15s ease;
 }
 .range-tabs button.active {
-  color: #fff;
-  background: color-mix(in srgb, var(--history-accent) 24%, #151b2a);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--history-accent) 18%, transparent);
+  color: var(--status-text);
+  background: color-mix(in srgb, var(--history-accent) 18%, var(--app-bg-color));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--history-accent) 28%, transparent);
 }
 .chart-legend {
   display: flex;
@@ -1244,20 +1248,40 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   display: block;
   overflow: visible;
 }
-.chart-grid line { stroke: rgba(148,163,184,.1); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.axis-labels text {
-  fill: #9aadc6;
-  stroke: rgba(8, 13, 22, .78);
-  stroke-width: .75px;
-  paint-order: stroke fill;
-  font-size: 9.5px;
-  font-weight: 650;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-rendering: geometricPrecision;
+.chart-grid line {
+  stroke: color-mix(in srgb, var(--border-color) 52%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
-.axis-x-label { fill: #879bb6; font-size: 8.8px; }
+.history-axis-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--status-muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+.history-axis-y,
+.history-axis-x {
+  position: absolute;
+  text-shadow: 0 0 3px var(--app-bg-color), 0 0 3px var(--app-bg-color);
+}
+.history-axis-y { left: 7.26%; transform: translateY(-50%); }
+.history-axis-y-top { top: 7.94%; }
+.history-axis-y-middle { top: 41.27%; }
+.history-axis-y-bottom { top: 74.60%; }
+.history-axis-x {
+  top: 92.06%;
+  color: color-mix(in srgb, var(--status-muted) 88%, var(--status-text));
+  font-size: 9px;
+}
+.history-axis-x-start { left: 4.84%; transform: translateY(-50%); }
+.history-axis-x-middle { left: 50.81%; transform: translate(-50%, -50%); }
+.history-axis-x-end { right: 3.23%; transform: translateY(-50%); }
 .history-area { fill: url(#historyAreaGradient); }
 .history-line {
   fill: none;
@@ -1270,13 +1294,13 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .network-upload-line { stroke: #ff814a; }
 .history-hover-marker { pointer-events: none; }
 .history-hover-marker line {
-  stroke: rgba(226,232,240,.52);
+  stroke: color-mix(in srgb, var(--text-color-secondary) 58%, transparent);
   stroke-width: 1;
   stroke-dasharray: 3 3;
   vector-effect: non-scaling-stroke;
 }
 .history-hover-marker circle {
-  fill: #101827;
+  fill: var(--app-bg-color);
   stroke: var(--history-accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
@@ -1294,11 +1318,11 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   display: grid;
   gap: 0.24rem;
   padding: 0.42rem 0.5rem;
-  border: 1px solid rgba(148,163,184,.24);
+  border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
   border-radius: 0.5rem;
-  color: #dce6f3;
-  background: rgba(8,13,22,.92);
-  box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--app-bg-color) 94%, transparent);
+  box-shadow: 0 8px 24px rgba(0,0,0,.2), inset 0 1px 0 color-mix(in srgb, var(--text-color) 5%, transparent);
   backdrop-filter: blur(8px);
   pointer-events: none;
   font-size: 0.68rem;
@@ -1306,7 +1330,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   white-space: nowrap;
 }
 .history-tooltip > strong {
-  color: #9fb0c5;
+  color: var(--text-color-secondary);
   font-size: 0.62rem;
   font-weight: 650;
 }
@@ -1325,9 +1349,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   box-shadow: 0 0 5px currentColor;
 }
 .history-tooltip-row:not(.rate-down):not(.rate-up) { color: var(--history-accent); }
-.history-tooltip-row span { color: #b9c6d8; }
+.history-tooltip-row span { color: var(--text-color-secondary); }
 .history-tooltip-row b {
-  color: #f2f6fb;
+  color: var(--text-color);
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }
@@ -1418,8 +1442,6 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .history-header { display: grid; grid-template-columns: 1fr; align-items: center; }
   .range-tabs { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); }
   .range-tabs button { min-width: 0; }
-  .history-card .axis-y-label { font-size: 11px; }
-  .history-card .axis-x-label { font-size: 9.8px; }
 }
 
 /* 极窄 (<= 250px) - 单列, 避免指标和网速内容挤压 */
@@ -1510,7 +1532,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .status-monitor:not(.has-history) .metric-detail-compact,
   .status-monitor:not(.has-history) .metric-progress { display: none; }
   .status-monitor:not(.has-history) .metric-name {
-    color: #e7edf6;
+    color: var(--status-text);
     font-size: 0.76rem;
   }
   .status-monitor:not(.has-history) .metric-percent {
@@ -1532,11 +1554,8 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .has-history .metric-name,
   .has-history .metric-percent { font-size: 0.62rem; }
   .chart-legend { display: none; }
-  .history-card .axis-labels { display: block; }
   .history-card .chart-grid { display: block; }
-  .history-card .axis-y-label { font-size: 12px; }
-  .history-card .axis-x-label { font-size: 10.5px; }
-  .history-card .axis-x-middle { display: none; }
+  .history-axis-x-middle { display: none; }
   .history-card .chart-grid line { stroke-opacity: .8; }
   .history-chart { min-height: 2.2rem; }
 }
@@ -1586,7 +1605,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     height: 0.18rem;
   }
   .status-monitor:not(.has-history) .metric-name {
-    color: #e7edf6;
+    color: var(--status-text);
     font-size: clamp(0.74rem, 4.4cqh, 0.86rem);
     transform: translateY(0.12rem);
   }
@@ -1625,7 +1644,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     align-content: stretch;
     gap: 0.2rem;
     padding: 0.26rem 0.5rem 0.4rem;
-    color: #a7b3c4;
+    color: var(--status-muted);
   }
   .monitor-content { display: none; }
   .summary-row {
@@ -1650,7 +1669,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   }
   .summary-percent {
     display: inline;
-    color: #c8d1dd;
+    color: var(--status-text);
     font-variant-numeric: tabular-nums;
   }
   .summary-row b { font-weight: 760; }
@@ -1692,13 +1711,13 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
   .summary-network .rate-up,
   .summary-network .rate-down {
     justify-self: stretch;
-    color: #c8d1dd;
+    color: var(--status-text);
   }
   .summary-network .rate-value {
     min-width: 0;
     justify-self: start;
     text-align: left;
-    color: #c8d1dd;
+    color: var(--status-text);
     font-variant-numeric: tabular-nums;
   }
   .summary-network .rate-unit { justify-self: start; }
@@ -1733,7 +1752,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     align-content: stretch;
     gap: 0.36rem;
     padding: 0.34rem 0.24rem 0.3rem;
-    color: #a7b3c4;
+    color: var(--status-muted);
   }
   .monitor-content { display: none; }
   .summary-row { min-height: 0; font-size: clamp(.59rem, 6.4cqw, .68rem); }
