@@ -15,6 +15,7 @@ import { useFileManagerSelection } from '../composables/file-manager/useFileMana
 import { useFileManagerDragAndDrop } from '../composables/file-manager/useFileManagerDragAndDrop';
 import { useFileManagerKeyboardNavigation } from '../composables/file-manager/useFileManagerKeyboardNavigation';
 import FileUploadPopup from './FileUploadPopup.vue';
+import FileTransferPopup from './FileTransferPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
 import type { FileListItem } from '../types/sftp.types';
@@ -127,6 +128,7 @@ const emptyArchiveProgress = {
   archiveName: null as string | null,
 };
 const archiveProgress = computed(() => currentSftpManager.value?.archiveProgress ?? emptyArchiveProgress);
+const transferTasks = computed(() => currentSftpManager.value?.transferTasks ?? {});
 
 
 // --- 文件上传模块 ---
@@ -879,7 +881,7 @@ const setFileClipboard = (operation: 'copy' | 'cut') => {
 const handleCopy = () => setFileClipboard('copy');
 const handleCut = () => setFileClipboard('cut');
 
-const deleteSourcePathsAfterCrossHostCopy = (sourceSessionId: string, paths: string[]): Promise<void> => {
+const deleteSourcePathsAfterCrossHostCopy = (sourceSessionId: string, paths: string[], requestId: string): Promise<void> => {
     return new Promise((resolve, reject) => {
         const sourceSession = sessionStore.sessions.get(sourceSessionId);
         if (!sourceSession?.wsManager.isConnected.value || !sourceSession.wsManager.isSftpReady.value) {
@@ -887,7 +889,6 @@ const deleteSourcePathsAfterCrossHostCopy = (sourceSessionId: string, paths: str
             return;
         }
 
-        const requestId = generateRequestId();
         let unregisterSuccess = () => {};
         let unregisterError = () => {};
         const timeout = setTimeout(() => {
@@ -957,15 +958,16 @@ const handlePaste = async () => {
         return;
     }
 
+    let transferRequestId: string;
     try {
-        await manager.copyItemsFromSession(sourceSessionId, sources, destinationDir);
+        transferRequestId = await manager.copyItemsFromSession(sourceSessionId, sources, destinationDir, 'move');
     } catch {
         // copyItemsFromSession shares the normal copy success/error notifications.
         return;
     }
 
     try {
-        await deleteSourcePathsAfterCrossHostCopy(sourceSessionId, sources);
+        await deleteSourcePathsAfterCrossHostCopy(sourceSessionId, sources, transferRequestId);
         const clipboardStillMatches = clipboardState.value.operation === 'cut'
             && sessionStore.resolveSessionId(clipboardSourceSessionId.value) === sourceSessionId
             && clipboardSourcePaths.value.length === sources.length
@@ -973,9 +975,11 @@ const handlePaste = async () => {
         if (clipboardStillMatches) {
             fileClipboardStore.clearClipboard();
         }
+        manager.completeTransfer(transferRequestId);
         uiNotificationsStore.showSuccess(t('fileManager.notifications.crossHostMoveSuccess'));
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        manager.failTransfer(transferRequestId, message);
         uiNotificationsStore.showWarning(t('fileManager.warnings.crossHostDeleteFailed', { error: message }));
     }
 };
@@ -2469,6 +2473,7 @@ const handleOpenEditorClick = () => {
 
      <!-- 使用 FileUploadPopup 组件 -->
      <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" @cancel-all="cancelAllUploads" />
+     <FileTransferPopup :transfers="transferTasks" />
 
      <ArchiveProgressPopup :progress="archiveProgress" @cancel="currentSftpManager?.cancelArchive()" />
 

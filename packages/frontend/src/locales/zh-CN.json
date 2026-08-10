@@ -425,6 +425,17 @@
     "emptyDirectory": "目录为空",
     "uploadTasks": "上传任务",
     "uploadSpeed": "总速度",
+    "transferTasks": "复制/移动任务",
+    "transferSpeed": "速度",
+    "transferOperation": {
+      "copy": "复制",
+      "move": "剪切移动"
+    },
+    "transferStatus": {
+      "preparing": "正在准备并遍历文件",
+      "running": "正在传输",
+      "deleting": "复制完成，正在删除源文件"
+    },
     "actions": {
       "refresh": "刷新",
       "parentDirectory": "上一级",

@@ -511,6 +511,17 @@
         },
         "uploadTasks": "アップロードタスク",
         "uploadSpeed": "合計速度",
+        "transferTasks": "コピー/移動タスク",
+        "transferSpeed": "速度",
+        "transferOperation": {
+            "copy": "コピー",
+            "move": "移動"
+        },
+        "transferStatus": {
+            "preparing": "ファイルを準備して走査中",
+            "running": "転送中",
+            "deleting": "コピー完了、コピー元を削除中"
+        },
         "warnings": {
             "moveSameDirectory": "同じディレクトリ内で切り取りと貼り付けはできません。",
             "crossHostDeleteFailed": "コピー先へのコピーは成功しましたが、コピー元ファイルの削除に失敗しました: {error}"

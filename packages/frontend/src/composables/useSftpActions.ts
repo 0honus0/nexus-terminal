@@ -1,6 +1,7 @@
 import { ref, readonly, reactive, computed, type Ref, type ComputedRef } from 'vue'; 
 import type { ArchiveProgressState, FileListItem, FileAttributes, EditorFileContent, SftpReadFileSuccessPayload, SftpReadFileRequestPayload } from '../types/sftp.types';
 import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/websocket.types';
+import type { FileTransferItem, FileTransferOperation } from '../types/fileTransfer.types';
 
 import { useUiNotificationsStore } from '../stores/uiNotifications.store'; 
 
@@ -28,6 +29,7 @@ export interface SftpManagerInstance {
    initialLoadDone: Readonly<Ref<boolean>>;
    currentPath: Readonly<Ref<string>>;
    archiveProgress: ArchiveProgressState;
+   transferTasks: Readonly<Record<string, FileTransferItem>>;
 
    // Methods
    loadDirectory: (path: string, forceRefresh?: boolean) => void;
@@ -39,8 +41,10 @@ export interface SftpManagerInstance {
    readFile: (path: string, encoding?: string) => Promise<SftpReadFileSuccessPayload>;
    writeFile: (path: string, content: string, encoding?: string) => Promise<void>;
    copyItems: (sourcePaths: string[], destinationDir: string) => void;
-   copyItemsFromSession: (sourceSessionId: string, sourcePaths: string[], destinationDir: string) => Promise<void>;
+   copyItemsFromSession: (sourceSessionId: string, sourcePaths: string[], destinationDir: string, operation?: FileTransferOperation) => Promise<string>;
    moveItems: (sourcePaths: string[], destinationDir: string) => void;
+   completeTransfer: (requestId: string) => void;
+   failTransfer: (requestId: string, error: string) => void;
    compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2') => Promise<void>;
    decompressItem: (item: FileListItem) => Promise<void>;
    cancelArchive: () => void;
@@ -113,6 +117,44 @@ export function createSftpActionsManager(
         currentFile: null,
         archiveName: null,
     });
+    const transferTasks = reactive<Record<string, FileTransferItem>>({});
+
+    const startTransfer = (requestId: string, operation: FileTransferOperation, sourcePaths: string[], crossHost: boolean) => {
+        const names = sourcePaths.map(path => path.split('/').filter(Boolean).pop() || path);
+        transferTasks[requestId] = {
+            id: requestId,
+            operation,
+            crossHost,
+            status: 'preparing',
+            label: names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`,
+            progress: 0,
+            bytesWritten: 0,
+            totalBytes: 0,
+            completedFiles: 0,
+            totalFiles: 0,
+            totalKnown: false,
+        };
+    };
+
+    const removeTransferLater = (requestId: string, delay = 800) => {
+        window.setTimeout(() => { delete transferTasks[requestId]; }, delay);
+    };
+
+    const completeTransfer = (requestId: string) => {
+        const task = transferTasks[requestId];
+        if (!task) return;
+        task.progress = 100;
+        task.bytesWritten = Math.max(task.bytesWritten, task.totalBytes);
+        removeTransferLater(requestId);
+    };
+
+    const failTransfer = (requestId: string, error: string) => {
+        const task = transferTasks[requestId];
+        if (!task) return;
+        task.status = 'error';
+        task.error = error;
+        removeTransferLater(requestId, 8000);
+    };
 
     const resetArchiveProgress = () => {
         archiveProgress.active = false;
@@ -483,6 +525,7 @@ export function createSftpActionsManager(
         }
         if (sourcePaths.length === 0) return;
         const requestId = generateRequestId();
+        startTransfer(requestId, 'copy', sourcePaths, false);
         sendMessage({
             type: 'sftp:copy',
             requestId: requestId,
@@ -492,7 +535,12 @@ export function createSftpActionsManager(
         // 可选：显示一个“正在复制...”的通知
     };
 
-    const copyItemsFromSession = (sourceSessionId: string, sourcePaths: string[], destinationDir: string): Promise<void> => {
+    const copyItemsFromSession = (
+        sourceSessionId: string,
+        sourcePaths: string[],
+        destinationDir: string,
+        operation: FileTransferOperation = 'copy',
+    ): Promise<string> => {
         return new Promise((resolve, reject) => {
             if (!isSftpReady.value) {
                 const error = new Error(t('fileManager.errors.sftpNotReady'));
@@ -507,12 +555,15 @@ export function createSftpActionsManager(
             }
 
             const requestId = generateRequestId();
+            startTransfer(requestId, operation, sourcePaths, true);
             let unregisterSuccess = () => {};
             let unregisterError = () => {};
             const timeout = setTimeout(() => {
                 unregisterSuccess();
                 unregisterError();
-                reject(new Error(t('fileManager.errors.copyTimeout', 'Copy timed out')));
+                const message = t('fileManager.errors.copyTimeout', 'Copy timed out');
+                failTransfer(requestId, message);
+                reject(new Error(message));
             }, 30 * 60 * 1000);
             const finish = () => {
                 clearTimeout(timeout);
@@ -523,12 +574,19 @@ export function createSftpActionsManager(
             unregisterSuccess = onMessage('sftp:copy:success', (_payload, message) => {
                 if (message.requestId !== requestId) return;
                 finish();
-                resolve();
+                const task = transferTasks[requestId];
+                if (task && operation === 'move') {
+                    task.status = 'deleting';
+                    task.progress = 100;
+                }
+                resolve(requestId);
             });
             unregisterError = onMessage('sftp:copy:error', (payload, message) => {
                 if (message.requestId !== requestId) return;
                 finish();
-                reject(new Error(typeof payload === 'string' ? payload : t('fileManager.errors.copyFailed')));
+                const errorMessage = typeof payload === 'string' ? payload : t('fileManager.errors.copyFailed');
+                failTransfer(requestId, errorMessage);
+                reject(new Error(errorMessage));
             });
 
             sendMessage({
@@ -555,6 +613,7 @@ export function createSftpActionsManager(
         //     return;
         // }
         const requestId = generateRequestId();
+        startTransfer(requestId, 'move', sourcePaths, false);
         sendMessage({
             type: 'sftp:move', // 使用 'sftp:move' 类型
             requestId: requestId,
@@ -1123,6 +1182,35 @@ export function createSftpActionsManager(
         }
     };
 
+    const onTransferProgress = (payload: MessagePayload, message: WebSocketMessage) => {
+        const requestId = message.requestId;
+        if (!requestId) return;
+        const task = transferTasks[requestId];
+        if (!task) return;
+        const progress = payload as {
+            transferredBytes?: number;
+            totalBytes?: number;
+            completedFiles?: number;
+            totalFiles?: number;
+            totalKnown?: boolean;
+            currentFile?: string;
+        };
+        if (typeof progress.transferredBytes === 'number') task.bytesWritten = progress.transferredBytes;
+        if (typeof progress.totalBytes === 'number') task.totalBytes = progress.totalBytes;
+        if (typeof progress.completedFiles === 'number') task.completedFiles = progress.completedFiles;
+        if (typeof progress.totalFiles === 'number') task.totalFiles = progress.totalFiles;
+        if (typeof progress.totalKnown === 'boolean') task.totalKnown = progress.totalKnown;
+        if (typeof progress.currentFile === 'string') task.currentFile = progress.currentFile;
+        if (task.status === 'preparing' && (task.totalKnown || Boolean(task.currentFile) || task.bytesWritten > 0)) {
+            task.status = 'running';
+        }
+        if (task.totalKnown && task.totalBytes > 0) {
+            task.progress = Math.min(100, task.bytesWritten / task.totalBytes * 100);
+        } else if (task.totalKnown && task.totalFiles > 0) {
+            task.progress = Math.min(100, task.completedFiles / task.totalFiles * 100);
+        }
+    };
+
     // +++ 处理复制成功 +++
     const onCopySuccess = (payload: MessagePayload, message: WebSocketMessage) => {
         // 后端应发送 { destination: string, items: FileListItem[] | null }
@@ -1131,7 +1219,16 @@ export function createSftpActionsManager(
         const newItems = copyPayload.items;
 
         console.log(`[SFTP ${instanceSessionId}] 复制成功到: ${destinationDir}`);
-        uiNotificationsStore.showSuccess(t('fileManager.notifications.copySuccess')); // 添加成功通知
+        const transferTask = message.requestId ? transferTasks[message.requestId] : undefined;
+        if (!transferTask || transferTask.operation === 'copy') {
+            uiNotificationsStore.showSuccess(t('fileManager.notifications.copySuccess'));
+        }
+        if (message.requestId && transferTask?.operation === 'copy') {
+            completeTransfer(message.requestId);
+        } else if (transferTask?.operation === 'move') {
+            transferTask.status = 'deleting';
+            transferTask.progress = 100;
+        }
 
         // 更新文件树
         const destNode = findNodeByPath(fileTree, destinationDir);
@@ -1171,6 +1268,7 @@ export function createSftpActionsManager(
 
         console.log(`[SFTP ${instanceSessionId}] 移动成功到: ${destinationDir}`);
         uiNotificationsStore.showSuccess(t('fileManager.notifications.moveSuccess')); // 添加成功通知
+        if (message.requestId) completeTransfer(message.requestId);
 
         // 1. 从旧位置移除
         sourcePaths.forEach(oldPath => {
@@ -1266,6 +1364,9 @@ export function createSftpActionsManager(
             'sftp:move:error': t('fileManager.errors.moveFailed'), // +++
         };
         const prefix = actionTypeMap[message.type] || t('fileManager.errors.generic');
+        if (message.requestId && (message.type === 'sftp:copy:error' || message.type === 'sftp:move:error')) {
+            failTransfer(message.requestId, errorPayload || prefix);
+        }
         // error.value = `${prefix}: ${errorPayload}`; // 使用通知
         uiNotificationsStore.showError(`${prefix}: ${errorPayload}`);
     };
@@ -1288,6 +1389,7 @@ export function createSftpActionsManager(
     unregisterCallbacks.push(onMessage('sftp:chmod:error', onActionError));
     unregisterCallbacks.push(onMessage('sftp:writefile:error', onActionError));
     // +++ 监听复制/移动错误 +++
+    unregisterCallbacks.push(onMessage('sftp:transfer:progress', onTransferProgress));
     unregisterCallbacks.push(onMessage('sftp:copy:success', onCopySuccess));
     unregisterCallbacks.push(onMessage('sftp:copy:error', onActionError));
     unregisterCallbacks.push(onMessage('sftp:move:success', onMoveSuccess));
@@ -1341,6 +1443,7 @@ export function createSftpActionsManager(
        fileTree: fileTree, // (类型已在接口中定义为 Readonly<FileTreeNode>)
        initialLoadDone: initialLoadDone, // (类型已在接口中定义为 Readonly<Ref>)
        archiveProgress,
+       transferTasks: readonly(transferTasks),
 
         // Methods
         loadDirectory,
@@ -1354,6 +1457,8 @@ export function createSftpActionsManager(
         copyItems, // +++ 暴露 copyItems +++
        copyItemsFromSession,
        moveItems, // +++ 暴露 moveItems +++
+       completeTransfer,
+       failTransfer,
        compressItems,
        decompressItem,
        cancelArchive,

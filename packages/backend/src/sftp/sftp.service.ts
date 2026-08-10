@@ -1,4 +1,4 @@
-import { Client, ClientChannel, SFTPWrapper, Stats, WriteStream } from 'ssh2';
+import { Client, ClientChannel, SFTPWrapper, Stats, WriteStream, type OpenMode } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import * as pathModule from 'path'; 
@@ -60,6 +60,23 @@ const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
 const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
 const UPLOAD_WRITE_HIGH_WATER_MARK = 1024 * 1024;
 const UPLOAD_DIRECTORY_PREPARE_CONCURRENCY = 8;
+const SFTP_TRANSFER_CHUNK_SIZE = 32 * 1024;
+const SFTP_TRANSFER_CONCURRENCY = 64;
+const SFTP_TRANSFER_PROGRESS_INTERVAL_MS = 200;
+
+interface SftpTransferTracker {
+    state: ClientState;
+    requestId: string;
+    totalBytes: number;
+    transferredBytes: number;
+    totalFiles: number;
+    completedFiles: number;
+    totalKnown: boolean;
+    topLevelRemaining: number;
+    containsDirectory: boolean;
+    currentFile?: string;
+    lastEmittedAt: number;
+}
 
 // Interface for tracking active uploads
 interface ActiveUpload {
@@ -816,6 +833,90 @@ export class SftpService {
         }
     }
 
+    private createTransferTracker(state: ClientState, sources: string[], requestId: string): SftpTransferTracker {
+        // Do not block transfer startup just to calculate progress. Top-level metadata is
+        // collected by the copy loop itself, so a single file needs only one source stat.
+        const tracker: SftpTransferTracker = {
+            state,
+            requestId,
+            totalBytes: 0,
+            transferredBytes: 0,
+            totalFiles: 0,
+            completedFiles: 0,
+            totalKnown: false,
+            topLevelRemaining: sources.length,
+            containsDirectory: false,
+            lastEmittedAt: 0,
+        };
+        this.emitTransferProgress(tracker, true);
+        return tracker;
+    }
+
+    private registerTopLevelTransferEntry(tracker: SftpTransferTracker | undefined, stats: Stats): void {
+        if (!tracker) return;
+        if (stats.isFile()) {
+            tracker.totalBytes += Math.max(0, stats.size);
+            tracker.totalFiles += 1;
+        } else if (stats.isDirectory()) {
+            tracker.containsDirectory = true;
+        }
+        tracker.topLevelRemaining = Math.max(0, tracker.topLevelRemaining - 1);
+        if (tracker.topLevelRemaining === 0 && !tracker.containsDirectory) {
+            tracker.totalKnown = true;
+        }
+        this.emitTransferProgress(tracker, true);
+    }
+
+    private discoverTransferFile(tracker: SftpTransferTracker | undefined, bytes: number): void {
+        if (!tracker || tracker.totalKnown) return;
+        tracker.totalBytes += Math.max(0, bytes);
+        tracker.totalFiles += 1;
+        this.emitTransferProgress(tracker);
+    }
+
+    private finalizeTransferTracker(tracker: SftpTransferTracker | undefined): void {
+        if (!tracker) return;
+        tracker.totalKnown = true;
+        tracker.currentFile = undefined;
+        this.emitTransferProgress(tracker, true);
+    }
+
+    private emitTransferProgress(tracker: SftpTransferTracker, force = false): void {
+        const now = Date.now();
+        if (!force && now - tracker.lastEmittedAt < SFTP_TRANSFER_PROGRESS_INTERVAL_MS) return;
+        tracker.lastEmittedAt = now;
+        tracker.state.ws.send(JSON.stringify({
+            type: 'sftp:transfer:progress',
+            requestId: tracker.requestId,
+            payload: {
+                transferredBytes: tracker.transferredBytes,
+                totalBytes: tracker.totalBytes,
+                completedFiles: tracker.completedFiles,
+                totalFiles: tracker.totalFiles,
+                totalKnown: tracker.totalKnown,
+                currentFile: tracker.currentFile,
+            },
+        }));
+    }
+
+    private beginTransferFile(tracker: SftpTransferTracker | undefined, remotePath: string): void {
+        if (!tracker) return;
+        tracker.currentFile = remotePath;
+        this.emitTransferProgress(tracker, true);
+    }
+
+    private recordTransferredBytes(tracker: SftpTransferTracker | undefined, bytes: number): void {
+        if (!tracker || bytes <= 0) return;
+        tracker.transferredBytes += bytes;
+        this.emitTransferProgress(tracker);
+    }
+
+    private completeTransferFile(tracker: SftpTransferTracker | undefined): void {
+        if (!tracker) return;
+        tracker.completedFiles += 1;
+        this.emitTransferProgress(tracker, true);
+    }
+
     // +++ 复制文件或目录 +++
     async copy(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
         const state = this.clientStates.get(sessionId);
@@ -831,13 +932,7 @@ export class SftpService {
         let firstError: Error | null = null;
 
         try {
-            // Ensure destination directory exists
-            try {
-                await this.ensureDirectoryExists(sftp, destinationDir);
-            } catch (ensureErr: any) {
-                 console.error(`[SFTP ${sessionId}] Failed to ensure destination directory ${destinationDir} exists (ID: ${requestId}):`, ensureErr);
-                 throw new Error(`无法创建或访问目标目录: ${ensureErr.message}`);
-            }
+            const tracker = this.createTransferTracker(state, sources, requestId);
 
             for (const sourcePath of sources) {
                 const sourceName = pathModule.basename(sourcePath);
@@ -850,12 +945,15 @@ export class SftpService {
 
                 try {
                     const stats = await this.getTargetStats(sftp, sourcePath);
+                    this.registerTopLevelTransferEntry(tracker, stats);
                     if (stats.isDirectory()) {
                         console.log(`[SFTP ${sessionId}] Copying directory ${sourcePath} to ${destPath} (ID: ${requestId})`);
-                        await this.copyDirectoryRecursive(sftp, sourcePath, destPath);
+                        await this.copyDirectoryRecursive(sftp, sourcePath, destPath, new Set(), tracker);
                     } else if (stats.isFile()) {
                         console.log(`[SFTP ${sessionId}] Copying file ${sourcePath} to ${destPath} (ID: ${requestId})`);
-                        await this.copyFile(sftp, sourcePath, destPath);
+                        this.beginTransferFile(tracker, sourcePath);
+                        await this.copyFile(sftp, sourcePath, destPath, stats.size, tracker);
+                        this.completeTransferFile(tracker);
                     } else {
                         // Handle symlinks or other types if necessary, for now just skip/warn
                         console.warn(`[SFTP ${sessionId}] Skipping copy of unsupported file type: ${sourcePath} (ID: ${requestId})`);
@@ -875,6 +973,8 @@ export class SftpService {
             if (firstError) {
                 throw firstError; // Throw the first error to be caught below
             }
+
+            this.finalizeTransferTracker(tracker);
 
             // Send success message with details of copied items
             console.log(`[SFTP ${sessionId}] Copy operation completed successfully (ID: ${requestId}). Copied items: ${copiedItemsDetails.length}`);
@@ -921,7 +1021,7 @@ export class SftpService {
         const copiedItemsDetails: any[] = [];
 
         try {
-            await this.ensureDirectoryExists(destinationSftp, destinationDir);
+            const tracker = this.createTransferTracker(destinationState, sources, requestId);
 
             for (const sourcePath of sources) {
                 if (typeof sourcePath !== 'string' || !sourcePath.startsWith('/')) {
@@ -930,11 +1030,14 @@ export class SftpService {
                 const sourceName = pathModule.basename(sourcePath);
                 const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/');
                 const stats = await this.getTargetStats(sourceSftp, sourcePath);
+                this.registerTopLevelTransferEntry(tracker, stats);
 
                 if (stats.isDirectory()) {
-                    await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath);
+                    await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath, new Set(), tracker);
                 } else if (stats.isFile()) {
-                    await this.copyFileBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath);
+                    this.beginTransferFile(tracker, sourcePath);
+                    await this.copyFileBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath, stats.size, tracker);
+                    this.completeTransferFile(tracker);
                 } else {
                     console.warn(`[SFTP Cross Copy] Skipping unsupported type: ${sourcePath}`);
                     continue;
@@ -943,6 +1046,8 @@ export class SftpService {
                 const copiedStats = await this.getStats(destinationSftp, destPath);
                 copiedItemsDetails.push(this.formatStatsToFileListItem(destPath, copiedStats));
             }
+
+            this.finalizeTransferTracker(tracker);
 
             destinationState.ws.send(JSON.stringify({
                 type: 'sftp:copy:success',
@@ -1007,6 +1112,19 @@ export class SftpService {
 
         const movedItemsDetails: any[] = [];
         let firstError: Error | null = null;
+        const tracker: SftpTransferTracker = {
+            state,
+            requestId,
+            totalBytes: 0,
+            transferredBytes: 0,
+            totalFiles: sources.length,
+            completedFiles: 0,
+            totalKnown: true,
+            topLevelRemaining: 0,
+            containsDirectory: false,
+            lastEmittedAt: 0,
+        };
+        this.emitTransferProgress(tracker, true);
 
         try {
              // Ensure destination directory exists (important for move)
@@ -1046,7 +1164,9 @@ export class SftpService {
                     }
                     
                     console.log(`[SFTP ${sessionId}] Moving ${oldPath} to ${newPath} (ID: ${requestId})`);
+                    this.beginTransferFile(tracker, oldPath);
                     await this.performRename(sftp, oldPath, newPath); // Use helper for rename logic
+                    this.completeTransferFile(tracker);
 
                     // Get stats of the *moved* item at the new location
                     const movedStats = await this.getStats(sftp, newPath);
@@ -1077,63 +1197,120 @@ export class SftpService {
     }
 
     // +++ 辅助方法 - 复制文件 +++
-    private copyFile(sftp: SFTPWrapper, sourcePath: string, destPath: string): Promise<void> {
+    private copyFile(
+        sftp: SFTPWrapper,
+        sourcePath: string,
+        destPath: string,
+        fileSize: number,
+        tracker?: SftpTransferTracker,
+    ): Promise<void> {
+        return this.copyFileBetweenSftp(sftp, sftp, sourcePath, destPath, fileSize, tracker);
+    }
+
+    private openSftpFile(sftp: SFTPWrapper, remotePath: string, flags: OpenMode): Promise<Buffer> {
         return new Promise((resolve, reject) => {
-            const readStream = sftp.createReadStream(sourcePath);
-            const writeStream = sftp.createWriteStream(destPath);
-            let errorOccurred = false;
-
-            const onError = (err: Error) => {
-                if (errorOccurred) return;
-                errorOccurred = true;
-                // Ensure streams are destroyed on error
-                readStream.destroy();
-                writeStream.destroy();
-                console.error(`Error copying file ${sourcePath} to ${destPath}:`, err);
-                reject(new Error(`复制文件失败: ${err.message}`));
-            };
-
-            readStream.on('error', onError);
-            writeStream.on('error', onError);
-
-            writeStream.on('close', () => { // Use 'close' for write stream completion
-                if (!errorOccurred) {
-                    resolve();
-                }
+            sftp.open(remotePath, flags, (error, handle) => {
+                if (error) reject(error);
+                else resolve(handle);
             });
-
-            readStream.pipe(writeStream);
         });
     }
 
-    private copyFileBetweenSftp(
+    private closeSftpFile(sftp: SFTPWrapper, handle: Buffer | undefined): Promise<void> {
+        if (!handle) return Promise.resolve();
+        return new Promise((resolve) => {
+            sftp.close(handle, () => resolve());
+        });
+    }
+
+    private readSftpBlock(sftp: SFTPWrapper, handle: Buffer, buffer: Buffer, position: number, length: number): Promise<number> {
+        return new Promise((resolve, reject) => {
+            sftp.read(handle, buffer, 0, length, position, (error, bytesRead) => {
+                if (error) reject(error);
+                else resolve(bytesRead);
+            });
+        });
+    }
+
+    private writeSftpBlock(sftp: SFTPWrapper, handle: Buffer, buffer: Buffer, position: number, length: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            sftp.write(handle, buffer, 0, length, position, (error) => {
+                if (error) reject(error);
+                else resolve();
+            });
+        });
+    }
+
+    private async copyFileBetweenSftp(
         sourceSftp: SFTPWrapper,
         destinationSftp: SFTPWrapper,
         sourcePath: string,
         destPath: string,
+        fileSize: number,
+        tracker?: SftpTransferTracker,
     ): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const readStream = sourceSftp.createReadStream(sourcePath);
-            const writeStream = destinationSftp.createWriteStream(destPath);
-            let settled = false;
+        let sourceHandle: Buffer | undefined;
+        let destinationHandle: Buffer | undefined;
+        try {
+            const [sourceOpen, destinationOpen] = await Promise.allSettled([
+                this.openSftpFile(sourceSftp, sourcePath, 'r'),
+                this.openSftpFile(destinationSftp, destPath, 'w'),
+            ]);
+            if (sourceOpen.status === 'fulfilled') sourceHandle = sourceOpen.value;
+            if (destinationOpen.status === 'fulfilled') destinationHandle = destinationOpen.value;
+            if (sourceOpen.status === 'rejected') throw sourceOpen.reason;
+            if (destinationOpen.status === 'rejected') throw destinationOpen.reason;
+            if (fileSize <= 0) return;
 
-            const fail = (error: Error) => {
-                if (settled) return;
-                settled = true;
-                readStream.destroy();
-                writeStream.destroy();
-                reject(new Error(`跨主机复制文件失败: ${error.message}`));
+            let nextPosition = 0;
+            const workerCount = Math.min(
+                SFTP_TRANSFER_CONCURRENCY,
+                Math.max(1, Math.ceil(fileSize / SFTP_TRANSFER_CHUNK_SIZE)),
+            );
+
+            const worker = async () => {
+                while (true) {
+                    const position = nextPosition;
+                    if (position >= fileSize) return;
+                    const blockLength = Math.min(SFTP_TRANSFER_CHUNK_SIZE, fileSize - position);
+                    nextPosition += blockLength;
+
+                    let blockOffset = 0;
+                    while (blockOffset < blockLength) {
+                        const remaining = blockLength - blockOffset;
+                        const buffer = Buffer.allocUnsafe(remaining);
+                        const bytesRead = await this.readSftpBlock(
+                            sourceSftp,
+                            sourceHandle!,
+                            buffer,
+                            position + blockOffset,
+                            remaining,
+                        );
+                        if (bytesRead <= 0) {
+                            throw new Error(`读取 ${sourcePath} 时提前到达文件末尾`);
+                        }
+                        await this.writeSftpBlock(
+                            destinationSftp,
+                            destinationHandle!,
+                            buffer,
+                            position + blockOffset,
+                            bytesRead,
+                        );
+                        blockOffset += bytesRead;
+                        this.recordTransferredBytes(tracker, bytesRead);
+                    }
+                }
             };
 
-            readStream.on('error', fail);
-            writeStream.on('error', fail);
-            writeStream.on('close', () => {
-                if (settled) return;
-                settled = true;
-                resolve();
-            });
-            readStream.pipe(writeStream);
-        });
+            await Promise.all(Array.from({ length: workerCount }, () => worker()));
+        } catch (error: any) {
+            throw new Error(`复制文件失败: ${error.message}`);
+        } finally {
+            await Promise.all([
+                this.closeSftpFile(sourceSftp, sourceHandle),
+                this.closeSftpFile(destinationSftp, destinationHandle),
+            ]);
+        }
     }
 
     private async copyDirectoryBetweenSftp(
@@ -1142,6 +1319,7 @@ export class SftpService {
         sourcePath: string,
         destPath: string,
         ancestorRealPaths: ReadonlySet<string> = new Set(),
+        tracker?: SftpTransferTracker,
     ): Promise<void> {
         const realPath = await this.getRealPath(sourceSftp, sourcePath);
         if (ancestorRealPaths.has(realPath)) {
@@ -1162,9 +1340,12 @@ export class SftpService {
                 : item.attrs;
 
             if (itemStats.isDirectory()) {
-                await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, currentSourcePath, currentDestPath, nextAncestors);
+                await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, currentSourcePath, currentDestPath, nextAncestors, tracker);
             } else if (itemStats.isFile()) {
-                await this.copyFileBetweenSftp(sourceSftp, destinationSftp, currentSourcePath, currentDestPath);
+                this.discoverTransferFile(tracker, itemStats.size);
+                this.beginTransferFile(tracker, currentSourcePath);
+                await this.copyFileBetweenSftp(sourceSftp, destinationSftp, currentSourcePath, currentDestPath, itemStats.size, tracker);
+                this.completeTransferFile(tracker);
             } else {
                 console.warn(`[SFTP Cross Copy] Skipping unsupported type: ${currentSourcePath}`);
             }
@@ -1176,7 +1357,8 @@ export class SftpService {
         sftp: SFTPWrapper,
         sourcePath: string,
         destPath: string,
-        ancestorRealPaths: ReadonlySet<string> = new Set()
+        ancestorRealPaths: ReadonlySet<string> = new Set(),
+        tracker?: SftpTransferTracker,
     ): Promise<void> {
         try {
             const realPath = await this.getRealPath(sftp, sourcePath);
@@ -1201,9 +1383,12 @@ export class SftpService {
                     : item.attrs;
 
                 if (itemStats.isDirectory()) {
-                    await this.copyDirectoryRecursive(sftp, currentSourcePath, currentDestPath, nextAncestors);
+                    await this.copyDirectoryRecursive(sftp, currentSourcePath, currentDestPath, nextAncestors, tracker);
                 } else if (itemStats.isFile()) {
-                    await this.copyFile(sftp, currentSourcePath, currentDestPath);
+                    this.discoverTransferFile(tracker, itemStats.size);
+                    this.beginTransferFile(tracker, currentSourcePath);
+                    await this.copyFile(sftp, currentSourcePath, currentDestPath, itemStats.size, tracker);
+                    this.completeTransferFile(tracker);
                 } else {
                     console.warn(`[SFTP Copy Recurse] Skipping unsupported type: ${currentSourcePath}`);
                 }

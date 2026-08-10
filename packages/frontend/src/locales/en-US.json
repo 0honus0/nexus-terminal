@@ -425,6 +425,17 @@
     "emptyDirectory": "Directory is empty",
     "uploadTasks": "Upload Tasks",
     "uploadSpeed": "Total speed",
+    "transferTasks": "Copy/Move Tasks",
+    "transferSpeed": "Speed",
+    "transferOperation": {
+      "copy": "Copy",
+      "move": "Move"
+    },
+    "transferStatus": {
+      "preparing": "Preparing and traversing files",
+      "running": "Transferring",
+      "deleting": "Copy complete, deleting source files"
+    },
     "actions": {
       "refresh": "Refresh",
       "parentDirectory": "Parent Directory",
