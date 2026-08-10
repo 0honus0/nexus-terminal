@@ -510,6 +510,10 @@
       "fileExists": "File \"{name}\" already exists.",
       "loadDirectoryFailed": "Failed to load directory",
       "copyFailed": "Copy failed",
+      "copyTimeout": "Copy timed out",
+      "sourceSessionNotReady": "The source host SFTP session is not ready or has disconnected",
+      "sourceDeleteTimeout": "Timed out while deleting source files",
+      "sourceDeleteFailed": "Failed to delete source files",
       "moveFailed": "Move failed",
       "sftpNotReady": "SFTP session not ready",
       "sftpManagerNotFound": "SFTP manager not found",
@@ -538,10 +542,12 @@
     "compressSuccess": "Compressed {name} successfully",
     "compressSuccessWithWarning": "Compressed {name}, but some files were skipped: {warning}",
     "decompressSuccess": "Decompressed {name} successfully",
-    "pathCopied": "Path copied to clipboard"
+    "pathCopied": "Path copied to clipboard",
+    "crossHostMoveSuccess": "Cross-host move completed and the source files were deleted"
   },
   "warnings": {
-        "moveSameDirectory": "Cannot cut and paste in the same directory."
+        "moveSameDirectory": "Cannot cut and paste in the same directory.",
+        "crossHostDeleteFailed": "The target copy succeeded, but deleting the source files failed: {error}"
     },
     "prompts": {
       "enterFolderName": "Enter the name for the new folder:",

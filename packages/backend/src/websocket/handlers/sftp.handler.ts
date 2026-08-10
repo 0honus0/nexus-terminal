@@ -80,6 +80,16 @@ export async function handleSftpOperation(
                     sftpService.copy(sessionId, payload.sources, payload.destination, requestId);
                 } else throw new Error("Missing 'sources' (array) or 'destination' in payload for copy");
                 break;
+            case 'sftp:cross_copy':
+                if (typeof payload?.sourceSessionId === 'string' && Array.isArray(payload?.sources) && payload?.destination) {
+                    sftpService.copyAcrossSessions(sessionId, payload.sourceSessionId, payload.sources, payload.destination, requestId);
+                } else throw new Error("Missing 'sourceSessionId', 'sources' (array), or 'destination' in payload for cross copy");
+                break;
+            case 'sftp:delete_paths':
+                if (Array.isArray(payload?.paths)) {
+                    await sftpService.deletePaths(sessionId, payload.paths, requestId);
+                } else throw new Error("Missing 'paths' (array) in payload for delete paths");
+                break;
             case 'sftp:move':
                  if (Array.isArray(payload?.sources) && payload?.destination) {
                     sftpService.move(sessionId, payload.sources, payload.destination, requestId);

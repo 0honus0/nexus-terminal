@@ -428,6 +428,10 @@
         "errors": {
             "chmodFailed": "権限の変更に失敗しました",
             "copyFailed": "コピーに失敗しました",
+            "copyTimeout": "コピーがタイムアウトしました",
+            "sourceSessionNotReady": "コピー元ホストの SFTP セッションが準備できていないか、切断されています",
+            "sourceDeleteTimeout": "コピー元ファイルの削除がタイムアウトしました",
+            "sourceDeleteFailed": "コピー元ファイルの削除に失敗しました",
             "createFolderFailed": "フォルダーの作成に失敗しました",
             "deleteFailed": "削除に失敗しました",
             "downloadDirectoryFailed": "フォルダのダウンロードに失敗しました",
@@ -482,7 +486,8 @@
             "compressSuccess": "{name} を正常に圧縮しました",
             "compressSuccessWithWarning": "{name} の圧縮は完了しましたが、一部のファイルがスキップされました: {warning}",
             "decompressSuccess": "{name} を正常に解凍しました",
-            "pathCopied": "パスがクリップボードにコピーされました"
+            "pathCopied": "パスがクリップボードにコピーされました",
+            "crossHostMoveSuccess": "ホスト間の移動が完了し、コピー元ファイルを削除しました"
         },
         "prompts": {
             "confirmDeleteFile": "ファイル \"{name}\" を削除しますか？この操作は元に戻せません。",
@@ -507,7 +512,8 @@
         "uploadTasks": "アップロードタスク",
         "uploadSpeed": "合計速度",
         "warnings": {
-            "moveSameDirectory": "同じディレクトリ内で切り取りと貼り付けはできません。"
+            "moveSameDirectory": "同じディレクトリ内で切り取りと貼り付けはできません。",
+            "crossHostDeleteFailed": "コピー先へのコピーは成功しましたが、コピー元ファイルの削除に失敗しました: {error}"
         },
         "changeEncodingTooltip": "ファイルエンコーディングを変更",
         "loadingEncoding": "読み込み中...",

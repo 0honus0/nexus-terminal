@@ -39,6 +39,7 @@ export interface SftpManagerInstance {
    readFile: (path: string, encoding?: string) => Promise<SftpReadFileSuccessPayload>;
    writeFile: (path: string, content: string, encoding?: string) => Promise<void>;
    copyItems: (sourcePaths: string[], destinationDir: string) => void;
+   copyItemsFromSession: (sourceSessionId: string, sourcePaths: string[], destinationDir: string) => Promise<void>;
    moveItems: (sourcePaths: string[], destinationDir: string) => void;
    compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2') => Promise<void>;
    decompressItem: (item: FileListItem) => Promise<void>;
@@ -489,6 +490,54 @@ export function createSftpActionsManager(
         });
         console.log(`[SFTP ${instanceSessionId}] 发送 sftp:copy 请求 (ID: ${requestId}) Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`);
         // 可选：显示一个“正在复制...”的通知
+    };
+
+    const copyItemsFromSession = (sourceSessionId: string, sourcePaths: string[], destinationDir: string): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            if (!isSftpReady.value) {
+                const error = new Error(t('fileManager.errors.sftpNotReady'));
+                uiNotificationsStore.showError(error.message);
+                console.warn(`[SFTP ${instanceSessionId}] 尝试跨会话复制项目但目标 SFTP 未就绪。`);
+                reject(error);
+                return;
+            }
+            if (!sourceSessionId || sourcePaths.length === 0) {
+                reject(new Error('Missing source session or source paths'));
+                return;
+            }
+
+            const requestId = generateRequestId();
+            let unregisterSuccess = () => {};
+            let unregisterError = () => {};
+            const timeout = setTimeout(() => {
+                unregisterSuccess();
+                unregisterError();
+                reject(new Error(t('fileManager.errors.copyTimeout', 'Copy timed out')));
+            }, 30 * 60 * 1000);
+            const finish = () => {
+                clearTimeout(timeout);
+                unregisterSuccess();
+                unregisterError();
+            };
+
+            unregisterSuccess = onMessage('sftp:copy:success', (_payload, message) => {
+                if (message.requestId !== requestId) return;
+                finish();
+                resolve();
+            });
+            unregisterError = onMessage('sftp:copy:error', (payload, message) => {
+                if (message.requestId !== requestId) return;
+                finish();
+                reject(new Error(typeof payload === 'string' ? payload : t('fileManager.errors.copyFailed')));
+            });
+
+            sendMessage({
+                type: 'sftp:cross_copy',
+                requestId,
+                payload: { sourceSessionId, sources: sourcePaths, destination: destinationDir },
+            });
+            console.log(`[SFTP ${instanceSessionId}] 发送 sftp:cross_copy 请求 (ID: ${requestId}) Source session: ${sourceSessionId}, Sources: ${sourcePaths.join(', ')}, Dest: ${destinationDir}`);
+        });
     };
 
     // +++ 移动项目 +++
@@ -1303,6 +1352,7 @@ export function createSftpActionsManager(
         readFile,
         writeFile,
         copyItems, // +++ 暴露 copyItems +++
+       copyItemsFromSession,
        moveItems, // +++ 暴露 moveItems +++
        compressItems,
        decompressItem,

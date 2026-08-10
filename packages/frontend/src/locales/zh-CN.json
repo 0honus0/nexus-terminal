@@ -510,6 +510,10 @@
       "fileExists": "文件 \"{name}\" 已存在。",
       "loadDirectoryFailed": "加载目录失败",
       "copyFailed": "复制失败",
+      "copyTimeout": "复制超时",
+      "sourceSessionNotReady": "源主机 SFTP 会话未就绪或已断开",
+      "sourceDeleteTimeout": "删除源文件超时",
+      "sourceDeleteFailed": "删除源文件失败",
       "moveFailed": "移动失败",
       "sftpNotReady": "SFTP 会话未就绪",
       "sftpManagerNotFound": "SFTP 管理器未找到",
@@ -538,10 +542,12 @@
     "compressSuccess": "压缩 {name} 成功",
     "compressSuccessWithWarning": "压缩 {name} 已完成，但有文件被跳过：{warning}",
     "decompressSuccess": "解压 {name} 成功",
-    "pathCopied": "路径已复制到剪贴板"
+    "pathCopied": "路径已复制到剪贴板",
+    "crossHostMoveSuccess": "跨主机移动完成，源文件已删除"
   },
   "warnings": {
-        "moveSameDirectory": "不能在同一目录下剪切和粘贴。"
+        "moveSameDirectory": "不能在同一目录下剪切和粘贴。",
+        "crossHostDeleteFailed": "目标主机复制成功，但源文件删除失败：{error}"
     },
     "prompts": {
       "enterFolderName": "请输入新文件夹的名称:",

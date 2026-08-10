@@ -890,6 +890,110 @@ export class SftpService {
         }
     }
 
+    async copyAcrossSessions(
+        destinationSessionId: string,
+        sourceSessionId: string,
+        sources: string[],
+        destinationDir: string,
+        requestId: string,
+    ): Promise<void> {
+        const destinationState = this.clientStates.get(destinationSessionId);
+        const sourceState = this.clientStates.get(sourceSessionId);
+        const fail = (message: string) => {
+            destinationState?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: message, requestId }));
+        };
+
+        if (!destinationState?.sftp) {
+            fail('目标 SFTP 会话未就绪');
+            return;
+        }
+        if (!sourceState?.sftp) {
+            fail('源 SFTP 会话未就绪或已断开');
+            return;
+        }
+        if (destinationState.ws.userId === undefined || sourceState.ws.userId !== destinationState.ws.userId) {
+            fail('无权访问源 SFTP 会话');
+            return;
+        }
+
+        const sourceSftp = sourceState.sftp;
+        const destinationSftp = destinationState.sftp;
+        const copiedItemsDetails: any[] = [];
+
+        try {
+            await this.ensureDirectoryExists(destinationSftp, destinationDir);
+
+            for (const sourcePath of sources) {
+                if (typeof sourcePath !== 'string' || !sourcePath.startsWith('/')) {
+                    throw new Error('源路径无效');
+                }
+                const sourceName = pathModule.basename(sourcePath);
+                const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/');
+                const stats = await this.getTargetStats(sourceSftp, sourcePath);
+
+                if (stats.isDirectory()) {
+                    await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath);
+                } else if (stats.isFile()) {
+                    await this.copyFileBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath);
+                } else {
+                    console.warn(`[SFTP Cross Copy] Skipping unsupported type: ${sourcePath}`);
+                    continue;
+                }
+
+                const copiedStats = await this.getStats(destinationSftp, destPath);
+                copiedItemsDetails.push(this.formatStatsToFileListItem(destPath, copiedStats));
+            }
+
+            destinationState.ws.send(JSON.stringify({
+                type: 'sftp:copy:success',
+                payload: {
+                    destination: destinationDir,
+                    items: copiedItemsDetails,
+                    sourceSessionId,
+                    crossHost: true,
+                },
+                requestId,
+            }));
+        } catch (error: any) {
+            console.error(`[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Failed (ID: ${requestId}):`, error);
+            fail(`跨主机复制失败: ${error.message}`);
+        }
+    }
+
+    async deletePaths(sessionId: string, paths: string[], requestId: string): Promise<void> {
+        const state = this.clientStates.get(sessionId);
+        if (!state?.sftp) {
+            state?.ws.send(JSON.stringify({ type: 'sftp:delete_paths:error', payload: 'SFTP 会话未就绪', requestId }));
+            return;
+        }
+
+        try {
+            for (const remotePath of paths) {
+                if (typeof remotePath !== 'string' || !remotePath.startsWith('/')) {
+                    throw new Error('删除路径无效');
+                }
+                const normalizedPath = pathModule.posix.normalize(remotePath);
+                if (!normalizedPath || normalizedPath === '/' || normalizedPath === '.') {
+                    throw new Error('拒绝删除根目录或无效路径');
+                }
+                await this.removeSftpPathRecursive(state.sftp, normalizedPath);
+            }
+
+            state.ws.send(JSON.stringify({
+                type: 'sftp:delete_paths:success',
+                payload: { paths },
+                requestId,
+            }));
+        } catch (error: any) {
+            console.error(`[SFTP ${sessionId}] delete_paths failed (ID: ${requestId}):`, error);
+            state.ws.send(JSON.stringify({
+                type: 'sftp:delete_paths:error',
+                payload: `删除源文件失败: ${error.message}`,
+                requestId,
+            }));
+        }
+    }
+
     // +++ 移动文件或目录 +++
     async move(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
         const state = this.clientStates.get(sessionId);
@@ -1000,6 +1104,71 @@ export class SftpService {
 
             readStream.pipe(writeStream);
         });
+    }
+
+    private copyFileBetweenSftp(
+        sourceSftp: SFTPWrapper,
+        destinationSftp: SFTPWrapper,
+        sourcePath: string,
+        destPath: string,
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const readStream = sourceSftp.createReadStream(sourcePath);
+            const writeStream = destinationSftp.createWriteStream(destPath);
+            let settled = false;
+
+            const fail = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                readStream.destroy();
+                writeStream.destroy();
+                reject(new Error(`跨主机复制文件失败: ${error.message}`));
+            };
+
+            readStream.on('error', fail);
+            writeStream.on('error', fail);
+            writeStream.on('close', () => {
+                if (settled) return;
+                settled = true;
+                resolve();
+            });
+            readStream.pipe(writeStream);
+        });
+    }
+
+    private async copyDirectoryBetweenSftp(
+        sourceSftp: SFTPWrapper,
+        destinationSftp: SFTPWrapper,
+        sourcePath: string,
+        destPath: string,
+        ancestorRealPaths: ReadonlySet<string> = new Set(),
+    ): Promise<void> {
+        const realPath = await this.getRealPath(sourceSftp, sourcePath);
+        if (ancestorRealPaths.has(realPath)) {
+            console.warn(`[SFTP Cross Copy] Skipping circular symbolic link: ${sourcePath} -> ${realPath}`);
+            return;
+        }
+        const nextAncestors = new Set(ancestorRealPaths);
+        nextAncestors.add(realPath);
+
+        await this.ensureDirectoryExists(destinationSftp, destPath);
+        const items = await this.listDirectory(sourceSftp, sourcePath);
+
+        for (const item of items) {
+            const currentSourcePath = pathModule.join(sourcePath, item.filename).replace(/\\/g, '/');
+            const currentDestPath = pathModule.join(destPath, item.filename).replace(/\\/g, '/');
+            const itemStats = item.attrs.isSymbolicLink()
+                ? await this.getTargetStats(sourceSftp, currentSourcePath)
+                : item.attrs;
+
+            if (itemStats.isDirectory()) {
+                await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, currentSourcePath, currentDestPath, nextAncestors);
+            } else if (itemStats.isFile()) {
+                await this.copyFileBetweenSftp(sourceSftp, destinationSftp, currentSourcePath, currentDestPath);
+            } else {
+                console.warn(`[SFTP Cross Copy] Skipping unsupported type: ${currentSourcePath}`);
+            }
+        }
     }
 
     // +++ 辅助方法 - 递归复制目录 +++

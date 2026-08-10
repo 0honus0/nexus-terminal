@@ -7,9 +7,10 @@ import { createSftpActionsManager, type WebSocketDependencies } from '../composa
 import { useFileUploader } from '../composables/useFileUploader';
 import { useFileEditorStore, type FileInfo } from '../stores/fileEditor.store';
 import { useSessionStore } from '../stores/session.store';
+import { useFileClipboardStore } from '../stores/fileClipboard.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
-import { useFileManagerContextMenu, type ClipboardState, type CompressFormat } from '../composables/file-manager/useFileManagerContextMenu';
+import { useFileManagerContextMenu, type CompressFormat } from '../composables/file-manager/useFileManagerContextMenu';
 import { useFileManagerSelection } from '../composables/file-manager/useFileManagerSelection';
 import { useFileManagerDragAndDrop } from '../composables/file-manager/useFileManagerDragAndDrop';
 import { useFileManagerKeyboardNavigation } from '../composables/file-manager/useFileManagerKeyboardNavigation';
@@ -60,6 +61,8 @@ const props = defineProps({
 const { t } = useI18n();
 const route = useRoute(); // Keep for download URL generation for now
 const sessionStore = useSessionStore(); // 实例化 Session Store
+const fileClipboardStore = useFileClipboardStore();
+const { clipboardState, sourceSessionId: clipboardSourceSessionId, sourcePaths: clipboardSourcePaths, sourceBaseDir: clipboardSourceBaseDir } = storeToRefs(fileClipboardStore);
 const effectiveSessionId = computed(() => sessionStore.resolveSessionId(props.sessionId));
 
 // --- 获取并存储 SFTP 管理器实例 ---
@@ -191,10 +194,7 @@ const actionItem = ref<FileListItem | null>(null); // For single item operations
 const actionItems = ref<FileListItem[]>([]); // For multi-item operations (e.g., delete)
 const actionInitialValue = ref(''); // For pre-filling input in modal
 
-// +++ 剪贴板状态 +++
-const clipboardState = ref<ClipboardState>({ hasContent: false });
-const clipboardSourcePaths = ref<string[]>([]); // 存储源完整路径
-const clipboardSourceBaseDir = ref<string>(''); // 存储源目录
+// 文件剪贴板由 Pinia 全局共享，支持跨会话/跨主机粘贴。
 
 const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会被 store 覆盖
 const isSyncingPathFromTerminal = ref(false);
@@ -862,58 +862,122 @@ const handleNewFileContextMenuClick = () => {
 };
 
 // +++ 复制、剪切、粘贴处理函数 +++
-const handleCopy = () => {
+const setFileClipboard = (operation: 'copy' | 'cut') => {
     if (!currentSftpManager.value || selectedItems.value.size === 0) return;
     const manager = currentSftpManager.value;
-    clipboardSourcePaths.value = Array.from(selectedItems.value)
+    const sourcePaths = Array.from(selectedItems.value)
         .map(filename => manager.joinPath(manager.currentPath.value, filename));
-    clipboardState.value = { hasContent: true, operation: 'copy' };
-    clipboardSourceBaseDir.value = manager.currentPath.value; // 记录源目录
-    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Copied to clipboard:`, clipboardSourcePaths.value);
-    // 可选：添加 UI 通知
+    fileClipboardStore.setClipboard({
+        operation,
+        sourceSessionId: effectiveSessionId.value,
+        sourcePaths,
+        sourceBaseDir: manager.currentPath.value,
+    });
+    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] ${operation === 'copy' ? 'Copied' : 'Cut'} to shared clipboard:`, sourcePaths);
 };
 
-const handleCut = () => {
-    if (!currentSftpManager.value || selectedItems.value.size === 0) return;
-    const manager = currentSftpManager.value;
-    clipboardSourcePaths.value = Array.from(selectedItems.value)
-        .map(filename => manager.joinPath(manager.currentPath.value, filename));
-    clipboardState.value = { hasContent: true, operation: 'cut' };
-    clipboardSourceBaseDir.value = manager.currentPath.value; // 记录源目录
-    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Cut to clipboard:`, clipboardSourcePaths.value);
-    // 可选：添加 UI 通知
+const handleCopy = () => setFileClipboard('copy');
+const handleCut = () => setFileClipboard('cut');
+
+const deleteSourcePathsAfterCrossHostCopy = (sourceSessionId: string, paths: string[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const sourceSession = sessionStore.sessions.get(sourceSessionId);
+        if (!sourceSession?.wsManager.isConnected.value || !sourceSession.wsManager.isSftpReady.value) {
+            reject(new Error(t('fileManager.errors.sourceSessionNotReady')));
+            return;
+        }
+
+        const requestId = generateRequestId();
+        let unregisterSuccess = () => {};
+        let unregisterError = () => {};
+        const timeout = setTimeout(() => {
+            unregisterSuccess();
+            unregisterError();
+            reject(new Error(t('fileManager.errors.sourceDeleteTimeout')));
+        }, 30 * 60 * 1000);
+        const finish = () => {
+            clearTimeout(timeout);
+            unregisterSuccess();
+            unregisterError();
+        };
+
+        unregisterSuccess = sourceSession.wsManager.onMessage('sftp:delete_paths:success', (_payload, message) => {
+            if (message.requestId !== requestId) return;
+            finish();
+            sourceSession.sftpManagers.forEach(sourceManager => {
+                sourceManager.loadDirectory(sourceManager.currentPath.value, true);
+            });
+            resolve();
+        });
+        unregisterError = sourceSession.wsManager.onMessage('sftp:delete_paths:error', (payload, message) => {
+            if (message.requestId !== requestId) return;
+            finish();
+            reject(new Error(typeof payload === 'string' ? payload : t('fileManager.errors.sourceDeleteFailed')));
+        });
+
+        sourceSession.wsManager.sendMessage({
+            type: 'sftp:delete_paths',
+            requestId,
+            payload: { paths },
+        });
+    });
 };
 
-const handlePaste = () => {
+const handlePaste = async () => {
     if (!currentSftpManager.value || !clipboardState.value.hasContent || clipboardSourcePaths.value.length === 0) return;
     const manager = currentSftpManager.value;
     const destinationDir = manager.currentPath.value;
     const operation = clipboardState.value.operation;
-    const sources = clipboardSourcePaths.value;
-    const sourceBaseDir = clipboardSourceBaseDir.value; // 获取源目录
+    const sources = [...clipboardSourcePaths.value];
+    const sourceBaseDir = clipboardSourceBaseDir.value;
+    const sourceSessionId = sessionStore.resolveSessionId(clipboardSourceSessionId.value);
+    const destinationSessionId = effectiveSessionId.value;
+    const isCrossHost = sourceSessionId !== destinationSessionId;
 
-    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Pasting items. Operation: ${operation}, Sources: ${sources.join(', ')}, Destination: ${destinationDir}`);
+    console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Pasting items. Operation: ${operation}, Source session: ${sourceSessionId}, Destination session: ${destinationSessionId}, Sources: ${sources.join(', ')}, Destination: ${destinationDir}`);
 
     if (operation === 'copy') {
-        // 调用 SFTP 管理器的 copyItems 方法 (稍后添加)
-        manager.copyItems(sources, destinationDir);
-    } else if (operation === 'cut') {
-        // 调用 SFTP 管理器的 moveItems 方法 (稍后添加)
-        // 检查是否在同一目录下剪切粘贴（无效操作）
+        if (isCrossHost) {
+            void manager.copyItemsFromSession(sourceSessionId, sources, destinationDir).catch(() => {});
+        } else {
+            manager.copyItems(sources, destinationDir);
+        }
+        return;
+    }
+
+    if (operation !== 'cut') return;
+
+    if (!isCrossHost) {
         if (sourceBaseDir === destinationDir) {
-             console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot cut and paste in the same directory.`);
-             // 可选：显示警告通知
-             return;
+            console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot cut and paste in the same directory.`);
+            return;
         }
         manager.moveItems(sources, destinationDir);
-        // 剪切后清空剪贴板
-        clipboardState.value = { hasContent: false };
-        clipboardSourcePaths.value = [];
-        clipboardSourceBaseDir.value = '';
+        fileClipboardStore.clearClipboard();
+        return;
     }
-    // 粘贴后不清空复制的剪贴板，允许重复粘贴
-    // 清空选择可能不是最佳体验，用户可能想继续操作粘贴后的文件
-    // clearSelection();
+
+    try {
+        await manager.copyItemsFromSession(sourceSessionId, sources, destinationDir);
+    } catch {
+        // copyItemsFromSession shares the normal copy success/error notifications.
+        return;
+    }
+
+    try {
+        await deleteSourcePathsAfterCrossHostCopy(sourceSessionId, sources);
+        const clipboardStillMatches = clipboardState.value.operation === 'cut'
+            && sessionStore.resolveSessionId(clipboardSourceSessionId.value) === sourceSessionId
+            && clipboardSourcePaths.value.length === sources.length
+            && clipboardSourcePaths.value.every((path, index) => path === sources[index]);
+        if (clipboardStillMatches) {
+            fileClipboardStore.clearClipboard();
+        }
+        uiNotificationsStore.showSuccess(t('fileManager.notifications.crossHostMoveSuccess'));
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        uiNotificationsStore.showWarning(t('fileManager.warnings.crossHostDeleteFailed', { error: message }));
+    }
 };
 
 
