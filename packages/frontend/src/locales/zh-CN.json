@@ -450,6 +450,8 @@
       "cut": "剪切",
       "paste": "粘贴",
       "openEditor": "打开编辑器",
+      "openAsText": "以文本打开",
+      "edit": "编辑",
       "copyPath": "复制路径"
     },
 "contextMenu": {
@@ -470,7 +472,12 @@
       "loadFailed": "文件预览加载失败。",
       "imageLoadFailed": "图片无法显示。",
       "fileTooLarge": "文件过大，无法进行内联预览（最大 {size}）。",
-      "close": "关闭预览"
+      "close": "关闭预览",
+      "markdown": "Markdown",
+      "spreadsheet": "电子表格",
+      "worksheet": "工作表",
+      "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",
+      "spreadsheetLimited": "为保证性能，预览最多显示 {rows} 行和 {columns} 列。"
     },
     "headers": {
       "type": "类型",

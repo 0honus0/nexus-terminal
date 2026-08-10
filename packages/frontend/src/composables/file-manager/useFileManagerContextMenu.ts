@@ -50,6 +50,8 @@ export interface UseFileManagerContextMenuOptions {
   onCompressRequest: (items: FileListItem[], format: CompressFormat) => void; // +++ 压缩回调 +++
   onDecompressRequest: (item: FileListItem) => void; // +++ 解压回调 +++
   onCopyPath?: (item: FileListItem) => void; // +++ 复制路径回调 +++
+  onOpenAsText?: (item: FileListItem) => void;
+  canOpenAsText?: (item: FileListItem) => boolean;
 }
 
 // 辅助函数：检查文件是否为支持的压缩格式
@@ -85,6 +87,8 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     onCompressRequest, // +++ 解构压缩回调 +++
     onDecompressRequest, // +++ 解构解压回调 +++
     onCopyPath, // +++ 解构复制路径回调 +++
+    onOpenAsText,
+    canOpenAsText,
   } = options;
 
   const contextMenuVisible = ref(false);
@@ -163,6 +167,14 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     } else if (targetItem && targetItem.filename !== '..') {
         // Single item (not '..') menu
         menu = [];
+
+        if (onOpenAsText && canOpenAsText?.(targetItem)) {
+            menu.push({
+                label: t('fileManager.actions.openAsText', 'Open as text'),
+                action: () => onOpenAsText(targetItem),
+                disabled: !(isConnected.value && isSftpReady.value),
+            });
+        }
 
         // --- 修改：区分文件和文件夹下载 ---
         if (targetItem.attrs.isFile || targetItem.attrs.isSymbolicLink) {

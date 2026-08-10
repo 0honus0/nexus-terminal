@@ -67,8 +67,10 @@ const effectiveSessionId = computed(() => sessionStore.resolveSessionId(props.se
 const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
 const previewComponent = shallowRef<Component | null>(null);
 const previewFile = shallowRef<FileListItem | null>(null);
+const previewFilePath = ref('');
 const previewProps = shallowRef<Record<string, unknown>>({});
 const previewDispose = shallowRef<(() => void) | null>(null);
+const previewAbortController = shallowRef<AbortController | null>(null);
 const isPreviewLoading = ref(false);
 let previewLoadToken = 0;
 const pendingPathResolutionCleanups = new Set<() => void>();
@@ -79,11 +81,14 @@ const cancelPendingPathResolutions = () => {
 
 const closePreview = () => {
   previewLoadToken += 1;
+  previewAbortController.value?.abort();
+  previewAbortController.value = null;
   previewDispose.value?.();
   previewDispose.value = null;
   isPreviewLoading.value = false;
   previewComponent.value = null;
   previewFile.value = null;
+  previewFilePath.value = '';
   previewProps.value = {};
 };
 const sftpReadyStateByManager = new WeakMap<SftpManagerInstance, boolean>();
@@ -457,6 +462,31 @@ const buildInlinePreviewUrl = (filePath: string): string => {
   return `/api/v1/sftp/download?${params.toString()}`;
 };
 
+const fetchInlinePreview = async (filePath: string, signal: AbortSignal): Promise<Response> => {
+  const response = await fetch(buildInlinePreviewUrl(filePath), {
+    credentials: 'same-origin',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Preview request failed with HTTP ${response.status}`);
+  }
+
+  return response;
+};
+
+const openFileInEditor = (item: FileListItem, filePath: string): void => {
+  const fileInfo: FileInfo = { name: item.filename, fullPath: filePath };
+  if (settingsStore.showPopupFileEditorBoolean) {
+    fileEditorStore.triggerPopup(filePath, effectiveSessionId.value);
+  }
+  if (shareFileEditorTabsBoolean.value) {
+    fileEditorStore.openFile(filePath, effectiveSessionId.value, props.instanceId);
+  } else {
+    sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
+  }
+};
+
 const openFileTarget = async (item: FileListItem, filePath: string): Promise<void> => {
   const previewProvider = resolveFilePreviewProvider(item);
   if (previewProvider) {
@@ -470,13 +500,18 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
 
     closePreview();
     const loadToken = previewLoadToken;
+    const abortController = new AbortController();
+    previewAbortController.value = abortController;
     previewFile.value = item;
+    previewFilePath.value = filePath;
     isPreviewLoading.value = true;
 
     try {
       const data = await previewProvider.load(item, {
         filePath,
+        signal: abortController.signal,
         buildInlineUrl: buildInlinePreviewUrl,
+        fetchInline: (path = filePath) => fetchInlinePreview(path, abortController.signal),
       });
 
       if (previewLoadToken !== loadToken) {
@@ -485,10 +520,12 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
       }
 
       previewDispose.value = data.dispose ?? null;
+      previewAbortController.value = null;
       previewProps.value = data.componentProps;
       previewComponent.value = previewProvider.preview(item);
       isPreviewLoading.value = false;
     } catch (error) {
+      if (abortController.signal.aborted) return;
       console.error('[FileManager] Failed loading preview data', error);
       if (previewLoadToken === loadToken) {
         closePreview();
@@ -498,15 +535,27 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
     return;
   }
 
-  const fileInfo: FileInfo = { name: item.filename, fullPath: filePath };
-  if (settingsStore.showPopupFileEditorBoolean) {
-    fileEditorStore.triggerPopup(filePath, effectiveSessionId.value);
-  }
-  if (shareFileEditorTabsBoolean.value) {
-    fileEditorStore.openFile(filePath, effectiveSessionId.value, props.instanceId);
-  } else {
-    sessionStore.openFileInSession(effectiveSessionId.value, fileInfo);
-  }
+  openFileInEditor(item, filePath);
+};
+
+const canOpenAsText = (item: FileListItem): boolean => {
+  return (item.attrs.isFile || item.attrs.isSymbolicLink) && /\.(md|markdown)$/i.test(item.filename);
+};
+
+const openItemAsText = (item: FileListItem): void => {
+  const manager = currentSftpManager.value;
+  if (!manager) return;
+  const filePath = manager.joinPath(manager.currentPath.value, item.filename);
+  closePreview();
+  openFileInEditor(item, filePath);
+};
+
+const editCurrentPreview = (): void => {
+  const item = previewFile.value;
+  const filePath = previewFilePath.value;
+  if (!item || !filePath) return;
+  closePreview();
+  openFileInEditor(item, filePath);
 };
 
 // 定义单击时的动作回调 (移到 Selection 实例化之前)
@@ -1025,6 +1074,8 @@ const {
   onCompressRequest: handleCompress,
   onDecompressRequest: handleDecompress,
   onCopyPath: handleCopyPath, // +++ 传递复制路径回调 +++
+  onOpenAsText: openItemAsText,
+  canOpenAsText,
 });
 
 const MOBILE_CONTEXT_LONG_PRESS_MS = 550;
@@ -2404,6 +2455,7 @@ const handleOpenEditorClick = () => {
      :file="previewFile"
      v-bind="previewProps"
      @close="closePreview"
+     @edit="editCurrentPreview"
    />
 
   <!-- Favorite Paths Modal is now positioned near its button -->

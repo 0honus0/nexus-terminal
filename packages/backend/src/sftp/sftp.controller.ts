@@ -159,6 +159,9 @@ const inlineContentTypes: Record<string, string> = {
     '.jpeg': 'image/jpeg',
     '.gif': 'image/gif',
     '.webp': 'image/webp',
+    '.md': 'text/markdown; charset=utf-8',
+    '.markdown': 'text/markdown; charset=utf-8',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 const MAX_INLINE_PREVIEW_SIZE = 20 * 1024 * 1024;
 

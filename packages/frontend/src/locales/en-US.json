@@ -450,6 +450,8 @@
       "cut": "Cut",
       "paste": "Paste",
       "openEditor": "Open Editor",
+      "openAsText": "Open as text",
+      "edit": "Edit",
       "copyPath": "Copy Path"
     },
 "contextMenu": {
@@ -470,7 +472,12 @@
       "loadFailed": "Failed to load file preview.",
       "imageLoadFailed": "The image could not be displayed.",
       "fileTooLarge": "File is too large for inline preview (maximum {size}).",
-      "close": "Close preview"
+      "close": "Close preview",
+      "markdown": "Markdown",
+      "spreadsheet": "Spreadsheet",
+      "worksheet": "Worksheet",
+      "spreadsheetMeta": "{sheet} · {rows} rows × {columns} columns",
+      "spreadsheetLimited": "Preview is limited to {rows} rows and {columns} columns for performance."
     },
     "headers": {
       "type": "Type",

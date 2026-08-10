@@ -386,6 +386,8 @@
             "parentDirectory": "上位ディレクトリ",
             "paste": "貼り付け",
             "openEditor": "エディターを開く",
+            "openAsText": "テキストとして開く",
+            "edit": "編集",
             "refresh": "更新",
             "rename": "名前を変更",
             "save": "保存",
@@ -411,7 +413,12 @@
             "loadFailed": "ファイルのプレビューを読み込めませんでした。",
             "imageLoadFailed": "画像を表示できませんでした。",
             "fileTooLarge": "ファイルが大きすぎるためインラインプレビューできません（最大 {size}）。",
-            "close": "プレビューを閉じる"
+            "close": "プレビューを閉じる",
+            "markdown": "Markdown",
+            "spreadsheet": "スプレッドシート",
+            "worksheet": "ワークシート",
+            "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",
+            "spreadsheetLimited": "パフォーマンスのため、プレビューは最大 {rows} 行、{columns} 列まで表示します。"
         },
     "currentPath": "現在のパス",
         "dropFilesHere": "ファイルをここにドラッグ＆ドロップしてアップロード",

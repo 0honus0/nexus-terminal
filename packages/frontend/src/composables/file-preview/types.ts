@@ -5,11 +5,20 @@ export interface FilePreviewContext {
   /** 当前文件的完整远程路径。 */
   filePath: string;
 
+  /** 当预览关闭或切换到其他文件时会被取消。 */
+  signal: AbortSignal;
+
   /**
    * 构造同源、带认证会话的流式预览地址。
    * 浏览器关闭预览时会自动取消未完成的 HTTP 请求。
    */
   buildInlineUrl(path: string): string;
+
+  /**
+   * 通过当前 SFTP 会话读取远程文件，并自动绑定预览生命周期。
+   * Provider 可按需调用 response.text()/blob()/arrayBuffer()。
+   */
+  fetchInline(path?: string): Promise<Response>;
 }
 
 export interface FilePreviewData {
