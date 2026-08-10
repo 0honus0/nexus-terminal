@@ -11,8 +11,10 @@ import type { WebSocketDependencies } from './useSftpActions';
 // Keep a bounded pipeline so network latency does not leave the SFTP write stream idle.
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
 // 单文件优先吞吐；文件夹/批量上传依靠“多文件并发”获得总吞吐，因此批量中的单文件流水线更保守。
-const SINGLE_FILE_UPLOAD_CHUNK_SIZE = 1024 * 1024;
-const SINGLE_FILE_UPLOAD_MAX_IN_FLIGHT = 4;
+// Keep an 8 MiB single-file byte window, but split it into smaller frames. This keeps
+// the SFTP pipeline full while producing steadier ACK/progress updates than 1 MiB steps.
+const SINGLE_FILE_UPLOAD_CHUNK_SIZE = 512 * 1024;
+const SINGLE_FILE_UPLOAD_MAX_IN_FLIGHT = 16;
 const BATCH_UPLOAD_CHUNK_SIZE = 512 * 1024;
 const BATCH_UPLOAD_MAX_IN_FLIGHT = 2;
 const UPLOAD_ACTIVE_WEIGHT_BUDGET = 12;

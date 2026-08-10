@@ -151,6 +151,12 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
         } else {
             // Standard SSH/SFTP/Docker connection
             ws.on('message', async (message: RawData, isBinary: boolean) => {
+                // Any successfully received application frame proves that the peer and
+                // proxy path are alive. During uploads, pong frames can sit behind queued
+                // binary data on a slow uplink, so relying on pong alone can terminate an
+                // actively transferring connection.
+                ws.isAlive = true;
+
                 if (isBinary) {
                     try {
                         await handleSftpUploadChunk(ws, parseBinaryUploadChunk(message));
