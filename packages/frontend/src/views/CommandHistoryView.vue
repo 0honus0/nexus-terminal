@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full overflow-hidden bg-background">
+  <div data-testid="command-history-view" class="flex flex-col h-full overflow-hidden bg-background">
     <!-- Container for controls and list -->
     <div class="flex flex-col flex-grow overflow-hidden bg-background">
       <!-- Controls Area -->

@@ -768,7 +768,7 @@ const cancelEditingTag = () => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col overflow-hidden bg-background text-foreground">
+  <div data-testid="workspace-connection-list" class="h-full flex flex-col overflow-hidden bg-background text-foreground">
     <!-- ... Loading/Error states ... -->
     <div v-if="(connectionsLoading || tagsLoading) && connections.length === 0 && tags.length === 0" class="flex items-center justify-center h-full text-text-secondary">
       <i class="fas fa-spinner fa-spin mr-2"></i> {{ t('common.loading') }}

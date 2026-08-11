@@ -1,5 +1,5 @@
  <template>
-  <div class="quick-commands-root flex flex-col h-full overflow-hidden bg-background">
+  <div data-testid="quick-commands-view" class="quick-commands-root flex flex-col h-full overflow-hidden bg-background">
     <!-- Container for controls and list -->
     <div class="flex flex-col flex-grow overflow-hidden bg-background">
       <!-- Controls Area -->
