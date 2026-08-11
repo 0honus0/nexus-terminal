@@ -122,7 +122,14 @@ const currentTabSaveError = computed(() => activeTab.value?.saveError ?? null);
 const currentTabLanguage = computed(() => activeTab.value?.language ?? 'plaintext');
 const currentTabFilePath = computed(() => activeTab.value?.filePath ?? '');
 const currentTabIsModified = computed(() => activeTab.value?.isModified ?? false); // 用于显示修改状态
-const currentSelectedEncoding = computed(() => activeTab.value?.selectedEncoding ?? 'utf-8');
+const normalizeEncodingOptionValue = (encoding: string): string => {
+  const normalized = encoding.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalized === 'utf16le') return 'utf-16le';
+  if (normalized === 'utf16be') return 'utf-16be';
+  if (normalized === 'utf8') return 'utf-8';
+  return encoding;
+};
+const currentSelectedEncoding = computed(() => normalizeEncodingOptionValue(activeTab.value?.selectedEncoding ?? 'utf-8'));
 const currentTabSessionName = computed(() => {
   const sessionId = activeTab.value?.sessionId;
   if (!sessionId) return null;

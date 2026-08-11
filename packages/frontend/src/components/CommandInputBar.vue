@@ -478,6 +478,7 @@ const handleQuickCommandExecute = (command: string) => {
         <!-- +++ Suspended SSH Sessions Button (Mobile only, new position) +++ -->
         <button
           v-if="props.isMobile"
+          data-testid="open-suspended-sessions-button"
           @click="openSuspendedSshSessionsModal"
           class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
           :title="t('suspendedSshSessions.title', '挂起会话')"

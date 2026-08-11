@@ -255,7 +255,14 @@ const currentTabLanguage = computed(() => activeTab.value?.language ?? 'plaintex
 const currentTabFilePath = computed(() => activeTab.value?.filePath ?? '');
 const currentTabIsModified = computed(() => activeTab.value?.isModified ?? false);
 // +++ 计算当前选择的编码 (与 Container 逻辑一致) +++
-const currentSelectedEncoding = computed(() => activeTab.value?.selectedEncoding ?? 'utf-8');
+const normalizeEncodingOptionValue = (encoding: string): string => {
+  const normalized = encoding.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalized === 'utf16le') return 'utf-16le';
+  if (normalized === 'utf16be') return 'utf-16be';
+  if (normalized === 'utf8') return 'utf-8';
+  return encoding;
+};
+const currentSelectedEncoding = computed(() => normalizeEncodingOptionValue(activeTab.value?.selectedEncoding ?? 'utf-8'));
 const currentLineEnding = computed<'lf' | 'crlf' | 'cr'>(() => {
   const content = activeTab.value?.content ?? '';
   if (content.includes('\r\n')) return 'crlf';
@@ -635,6 +642,7 @@ onBeforeUnmount(() => {
           <div class="encoding-select-wrapper" v-if="activeTab && !currentTabIsLoading">
             <select
               ref="encodingSelectRef"
+              data-testid="file-editor-encoding"
               :value="currentSelectedEncoding"
               @change="handleEncodingChange"
               class="encoding-select"
@@ -649,6 +657,7 @@ onBeforeUnmount(() => {
 
           <select
             v-if="activeTab && !currentTabIsLoading"
+            data-testid="file-editor-line-ending"
             :value="currentLineEnding"
             @change="handleLineEndingChange"
             class="encoding-select"
@@ -663,7 +672,7 @@ onBeforeUnmount(() => {
           <span v-if="currentTabSaveStatus === 'saving'" class="save-status saving">{{ t('fileManager.saving') }}...</span>
           <span v-if="currentTabSaveStatus === 'success'" class="save-status success">✅ {{ t('fileManager.saveSuccess') }}</span>
           <span v-if="currentTabSaveStatus === 'error'" class="save-status error">❌ {{ t('fileManager.saveError') }}: {{ currentTabSaveError }}</span>
-          <button @click="handleReloadRequest" :disabled="currentTabIsSaving || currentTabIsLoading || !activeTab" class="save-btn">
+          <button data-testid="file-editor-refresh" @click="handleReloadRequest" :disabled="currentTabIsSaving || currentTabIsLoading || !activeTab" class="save-btn">
             {{ t('fileManager.actions.refresh', 'Refresh') }}
           </button>
           <!-- +++ 移动端搜索按钮 (Font Awesome) +++ -->

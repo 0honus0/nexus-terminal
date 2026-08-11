@@ -1,5 +1,5 @@
 <template>
-  <div class="suspended-ssh-sessions-view p-2 flex flex-col h-full" style="container-type: inline-size; container-name: suspended-sessions-view-pane;">
+  <div data-testid="suspended-sessions-view" class="suspended-ssh-sessions-view p-2 flex flex-col h-full" style="container-type: inline-size; container-name: suspended-sessions-view-pane;">
     <div class="view-header mb-2">
       <div class="relative w-full">
         <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -31,6 +31,8 @@
         <li
           v-for="session in filteredSessions"
           :key="session.suspendSessionId"
+          :data-testid="`suspended-session-${session.suspendSessionId}`"
+          :data-suspend-id="session.suspendSessionId"
           class="session-item p-3 mb-2 border border-border/70 rounded-md bg-surface-ground"
           :class="{ 'opacity-60': session.backendSshStatus === 'disconnected_by_backend' }"
         >

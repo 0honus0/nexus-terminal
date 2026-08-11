@@ -77,6 +77,40 @@ function statusForError(error) {
 }
 
 async function writeXlsxFixture(destination) {
+  const columnName = (index) => {
+    let value = index + 1;
+    let result = '';
+    while (value > 0) {
+      value -= 1;
+      result = String.fromCharCode(65 + (value % 26)) + result;
+      value = Math.floor(value / 26);
+    }
+    return result;
+  };
+  const buildWorksheetXml = (sheetLabel, rows = 40, columns = 16) => {
+    const rowXml = [];
+    for (let row = 1; row <= rows; row += 1) {
+      const cells = [];
+      for (let column = 0; column < columns; column += 1) {
+        const ref = `${columnName(column)}${row}`;
+        let value = `${sheetLabel}-${ref}`;
+        if (sheetLabel === 'E2E' && ref === 'A2') value = 'Nexus XLSX E2E';
+        if (sheetLabel === 'E2E' && ref === 'B2') {
+          cells.push(`<c r="${ref}"><v>2026</v></c>`);
+          continue;
+        }
+        if (sheetLabel === 'Second' && ref === 'A1') value = 'Second Sheet E2E';
+        cells.push(`<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`);
+      }
+      rowXml.push(`<row r="${row}">${cells.join('')}</row>`);
+    }
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + `<dimension ref="A1:${columnName(columns - 1)}${rows}"/><sheetData>`
+      + rowXml.join('')
+      + '</sheetData></worksheet>';
+  };
+
   await new Promise((resolve, reject) => {
     const output = createWriteStream(destination);
     const archive = new ZipArchive({ zlib: { level: 9 } });
@@ -91,6 +125,7 @@ async function writeXlsxFixture(destination) {
       + '<Default Extension="xml" ContentType="application/xml"/>'
       + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
       + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
       + '</Types>',
       { name: '[Content_Types].xml' },
     );
@@ -105,25 +140,20 @@ async function writeXlsxFixture(destination) {
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
       + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-      + '<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      + '<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/>'
+      + '<sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>',
       { name: 'xl/workbook.xml' },
     );
     archive.append(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
       + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+      + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
       + '</Relationships>',
       { name: 'xl/_rels/workbook.xml.rels' },
     );
-    archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-      + '<dimension ref="A1:B2"/><sheetData>'
-      + '<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1" t="inlineStr"><is><t>Value</t></is></c></row>'
-      + '<row r="2"><c r="A2" t="inlineStr"><is><t>Nexus XLSX E2E</t></is></c><c r="B2"><v>2026</v></c></row>'
-      + '</sheetData></worksheet>',
-      { name: 'xl/worksheets/sheet1.xml' },
-    );
+    archive.append(buildWorksheetXml('E2E'), { name: 'xl/worksheets/sheet1.xml' });
+    archive.append(buildWorksheetXml('Second'), { name: 'xl/worksheets/sheet2.xml' });
     void archive.finalize();
   });
 }
@@ -133,6 +163,11 @@ async function resetRoot() {
   await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'refresh-e2e.txt'), 'refresh-original\n', 'utf8');
+  await fsp.writeFile(
+    path.join(rootDir, 'utf16-crlf.txt'),
+    Buffer.from('\uFEFFENCODING_E2E\r\nSECOND_LINE\r\n', 'utf16le'),
+  );
   await fsp.writeFile(path.join(rootDir, 'README-e2e.md'), '# Nexus Markdown E2E\n\n**preview-ok**\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
@@ -579,6 +614,13 @@ const controlServer = http.createServer(async (req, res) => {
       const files = await fsp.readdir(rootDir);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ files }));
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/read') {
+      const name = path.basename(requestUrl.searchParams.get('name') || '');
+      const data = await fsp.readFile(path.join(rootDir, name));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ name, base64: data.toString('base64') }));
       return;
     }
     if (req.method === 'GET' && requestUrl.pathname === '/stat') {

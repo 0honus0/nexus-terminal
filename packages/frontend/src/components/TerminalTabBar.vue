@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- +++ 使用 :class 绑定来条件化样式，包括高度 (修正 props 引用) +++ -->
-  <div :class="['flex bg-header border border-border overflow-hidden',
+  <div data-testid="terminal-tab-bar" :class="['flex bg-header border border-border overflow-hidden',
                { 'rounded-t-md mx-2 mt-2': !props.isMobile }, // Desktop margins/rounding - Use props.isMobile
                props.isMobile ? 'h-8' : 'h-10' // Mobile height h-8, Desktop h-10 - Use props.isMobile
               ]">
@@ -398,6 +398,8 @@ onBeforeUnmount(() => {
         <template #item="{ element: session }">
           <li
             :key="session.sessionId"
+            :data-testid="`terminal-tab-${session.sessionId}`"
+            :data-session-id="session.sessionId"
             :class="['flex items-center px-3 h-full cursor-pointer border-r border-border transition-colors duration-150 relative group',
                      session.sessionId === activeSessionId ? 'bg-background text-foreground' : 'bg-header text-text-secondary hover:bg-border']"
             @click="activateSession(session.sessionId)"

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
+  E2E_SSH,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -73,6 +74,52 @@ test('file previews and text editor protect historical file-opening regressions'
     await reopened.getByTestId('file-editor-close').click();
   });
 
+  await slowStep('Refresh reloads content changed outside the Nexus editor', async () => {
+    await row(page, 'refresh-e2e.txt').dblclick();
+    const editor = page.getByTestId('file-editor-overlay');
+    await expect(editor).toBeVisible();
+    const viewLines = editor.locator('.monaco-editor .view-lines');
+    await expect.poll(async () => viewLines.innerText()).toContain('refresh-original');
+
+    const externalWrite = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent('refresh-e2e.txt')}`, { method: 'POST' });
+    expect(externalWrite.ok).toBeTruthy();
+    await editor.getByTestId('file-editor-refresh').click();
+    await expect.poll(async () => viewLines.innerText(), { timeout: 15_000 })
+      .toContain('created outside Nexus for refresh verification');
+    await editor.getByTestId('file-editor-close').click();
+  });
+
+  await slowStep('encoding and line-ending controls decode UTF-16, switch previews, and save LF bytes', async () => {
+    await row(page, 'utf16-crlf.txt').dblclick();
+    const editor = page.getByTestId('file-editor-overlay');
+    await expect(editor).toBeVisible();
+    const encoding = editor.getByTestId('file-editor-encoding');
+    const lineEnding = editor.getByTestId('file-editor-line-ending');
+    const viewLines = editor.locator('.monaco-editor .view-lines');
+
+    await expect.poll(async () => viewLines.innerText()).toContain('ENCODING_E2E');
+    await expect(encoding).toHaveValue('utf-16le');
+    await expect(lineEnding).toHaveValue('crlf');
+
+    await encoding.selectOption('utf-8');
+    await expect(encoding).toHaveValue('utf-8');
+    await encoding.selectOption('utf-16le');
+    await expect.poll(async () => viewLines.innerText()).toContain('SECOND_LINE');
+
+    await lineEnding.selectOption('lf');
+    await expect(lineEnding).toHaveValue('lf');
+    await editor.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(editor).toContainText('Save successful', { timeout: 15_000 });
+
+    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent('utf16-crlf.txt')}`);
+    expect(remoteRead.ok).toBeTruthy();
+    const body = await remoteRead.json() as { base64: string };
+    const decoded = Buffer.from(body.base64, 'base64').toString('utf16le');
+    expect(decoded).toContain('ENCODING_E2E\nSECOND_LINE\n');
+    expect(decoded).not.toContain('\r\n');
+    await editor.getByTestId('file-editor-close').click();
+  });
+
   await slowStep('Unicode image filename streams and renders inline', async () => {
     const filename = '预览-测试.png';
     await row(page, filename).dblclick();
@@ -99,13 +146,41 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByTestId('file-editor-close').click();
   });
 
-  await slowStep('XLSX preview parses workbook cells', async () => {
+  await slowStep('XLSX preview supports bottom sheet tabs and keyboard scrolling in both directions', async () => {
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog).toBeVisible({ timeout: 20_000 });
     await expect(dialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
     await expect(dialog.getByText('2026', { exact: true })).toBeVisible();
+
+    const preview = dialog.getByTestId('spreadsheet-preview');
+    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    await expect(sheetTabs).toBeVisible();
+    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
+    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
+
+    const dimensions = await scroller.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+    }));
+    expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+    expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+
+    await preview.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowDown');
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
+    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
     await closePreview(page, filename);
   });
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="p-0"> 
+  <div data-testid="notification-settings" class="p-0">
     <h2 class="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-border"> <!-- Title styling -->
       {{ $t('settings.notifications.title') }}
     </h2>
@@ -10,7 +10,7 @@
     </div>
 
     <!-- Add Button (Show if no error) -->
-    <button v-if="!store.error" @click="showAddForm = true" class="px-4 py-2 bg-button text-button-text rounded hover:bg-button-hover mb-4 inline-flex items-center text-sm font-medium">
+    <button v-if="!store.error" data-testid="notification-add-channel" @click="showAddForm = true" class="px-4 py-2 bg-button text-button-text rounded hover:bg-button-hover mb-4 inline-flex items-center text-sm font-medium">
        {{ $t('settings.notifications.addChannel') }}
     </button>
 
