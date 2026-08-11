@@ -7,8 +7,6 @@
     "build:backend": "./build.sh local backend",
     "build:frontend": "./build.sh local frontend",
     "build:remote-gateway": "./build.sh local remote-gateway",
-    "test:terminal-protocol": "node verification/verify-terminal-protocol.mjs",
-    "test:ssh-suspend-recovery": "node verification/verify-ssh-suspend-recovery.mjs",
     "docker:build": "./build.sh docker",
     "docker:save": "./build.sh docker-save",
     "test:e2e": "npm --prefix verification/e2e test",

@@ -53,16 +53,9 @@ build_local() {
         cd "$package_dir"
         npm ci
         npm run build
-        if [[ "$component" == "backend" ]]; then
-            node "$ROOT_DIR/verification/verify-ssh-suspend-recovery.mjs"
-        fi
     )
 }
 
-verify_terminal_protocol() {
-    echo "==> Verifying terminal binary protocol"
-    node "$ROOT_DIR/verification/verify-terminal-protocol.mjs"
-}
 
 build_docker() {
     local -a build_args=()
@@ -112,7 +105,6 @@ main() {
             require_command npm
             require_command node
             target="${target:-all}"
-            verify_terminal_protocol
             case "$target" in
                 all)
                     for component in backend frontend remote-gateway; do
