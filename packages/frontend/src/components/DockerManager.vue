@@ -84,7 +84,7 @@ const viewContainerLogs = (containerId: string) => {
 </script>
 
 <template>
-  <div class="docker-manager flex flex-col h-full overflow-hidden bg-background text-foreground">
+  <div data-testid="docker-manager" class="docker-manager flex flex-col h-full overflow-hidden bg-background text-foreground">
      <!-- Case 1: No active session -->
      <div v-if="!currentSessionId" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4">
         <i class="fas fa-plug text-4xl mb-3"></i>

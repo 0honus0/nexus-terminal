@@ -25,8 +25,8 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 10_000 },
   reporter: process.env.CI
-    ? [['github'], ['html', { open: 'never' }]]
-    : [['list'], ['html', { open: 'never' }]],
+    ? [['./support/mirrored-log-reporter.ts'], ['github'], ['html', { open: 'never' }]]
+    : [['./support/mirrored-log-reporter.ts'], ['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
@@ -56,8 +56,29 @@ export default defineConfig({
       dependencies: ['auth'],
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'ssh',
+      testMatch: /ssh\/.*\.spec\.ts/,
+      dependencies: ['auth'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'mobile',
+      testMatch: /mobile\/.*\.spec\.ts/,
+      dependencies: ['auth'],
+      use: { ...devices['Pixel 7'] },
+    },
   ],
   webServer: [
+    {
+      command: 'node support/test-ssh-server.mjs',
+      cwd: e2eRoot,
+      url: 'http://127.0.0.1:22223/health',
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
     {
       command: `node ${JSON.stringify(prepareTestDataScript)} && npm exec tsx -- src/index.ts`,
       cwd: path.join(repoRoot, 'packages/backend'),

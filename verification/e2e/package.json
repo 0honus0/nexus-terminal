@@ -8,6 +8,8 @@
     "test:http": "playwright test --project=http",
     "test:websocket": "playwright test --project=websocket",
     "test:ui": "playwright test --project=ui",
+    "test:ssh": "playwright test --project=ssh",
+    "test:mobile": "playwright test --project=mobile",
     "test:list": "playwright test --list"
   },
   "devDependencies": {

@@ -188,7 +188,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-center z-[100] p-4" @click.self="closeModal">
+  <div v-if="isVisible" data-testid="file-manager-action-modal" :data-action-type="actionType || ''" class="fixed inset-0 bg-overlay flex justify-center items-center z-[100] p-4" @click.self="closeModal">
     <div class="bg-background text-foreground p-5 rounded-lg shadow-xl border border-border w-full max-w-md flex flex-col relative">
       <!-- Close Button -->
       <button class="absolute top-3 right-3 p-1 text-text-secondary hover:text-foreground z-10" @click="closeModal" :title="t('fileManager.modals.buttons.close', 'Close')">
@@ -237,6 +237,7 @@ onUnmounted(() => {
           {{ t('fileManager.modals.buttons.cancel', 'Cancel') }}
         </button>
         <button
+          data-testid="file-manager-action-confirm"
           @click="confirmAction"
           type="button"
           :disabled="isConfirmDisabled"

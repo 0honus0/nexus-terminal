@@ -1170,7 +1170,7 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper">
+  <div ref="terminalOuterWrapperRef" data-testid="terminal" class="terminal-outer-wrapper">
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
     <template v-if="isMobile && mobileSelectionHandles.visible">

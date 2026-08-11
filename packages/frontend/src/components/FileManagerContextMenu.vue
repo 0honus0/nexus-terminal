@@ -227,6 +227,7 @@ onUnmounted(() => {
   <div
     ref="contextMenuRef"
     v-if="isVisible"
+    data-testid="file-manager-context-menu"
     class="fixed bg-background border border-border shadow-lg rounded-md z-[1002] min-w-[150px]"
     :style="{ top: `${computedRenderPosition.y}px`, left: `${computedRenderPosition.x}px` }"
     @click.stop

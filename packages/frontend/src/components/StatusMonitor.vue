@@ -1,5 +1,6 @@
 <template>
   <div
+    data-testid="status-monitor"
     class="status-monitor h-full bg-background text-foreground"
     :class="{
       'has-history': Boolean(selectedMetric),

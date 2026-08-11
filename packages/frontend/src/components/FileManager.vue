@@ -2269,6 +2269,7 @@ const handleOpenEditorClick = () => {
     <!-- File List Container -->
     <div
       ref="fileListContainerRef"
+      data-testid="file-manager-list"
       class="flex-grow overflow-y-auto relative outline-none"
       @dragenter.prevent="handleDragEnter"
       @dragover.prevent="handleDragOver"

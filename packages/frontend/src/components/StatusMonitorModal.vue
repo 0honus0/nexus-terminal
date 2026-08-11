@@ -19,6 +19,7 @@ const closeModal = () => emit('close');
   <Teleport to="body">
     <div
       v-if="props.isVisible"
+      data-testid="status-monitor-modal"
       class="fixed inset-0 z-[1000] bg-overlay flex items-center justify-center p-3"
       @click.self="closeModal"
     >

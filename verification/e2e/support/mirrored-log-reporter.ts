@@ -1,0 +1,98 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import type {
+  FullConfig,
+  Reporter,
+  Suite,
+  TestCase,
+  TestResult,
+  TestStep,
+} from '@playwright/test/reporter';
+
+function safeName(value: string): string {
+  const normalized = value
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  return normalized || 'unnamed-test';
+}
+
+export default class MirroredLogReporter implements Reporter {
+  private testDir = '';
+  private logRoot = '';
+  private fileByTestId = new Map<string, string>();
+
+  onBegin(config: FullConfig, _suite: Suite) {
+    this.testDir = config.projects[0]?.testDir || process.cwd();
+    this.logRoot = path.resolve(this.testDir, '..', 'logs');
+    fs.rmSync(this.logRoot, { recursive: true, force: true });
+    fs.mkdirSync(this.logRoot, { recursive: true });
+  }
+
+  onTestBegin(test: TestCase, result: TestResult) {
+    const file = this.logFileFor(test, result.retry);
+    this.fileByTestId.set(test.id, file);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(
+      file,
+      [
+        `test: ${test.titlePath().filter(Boolean).join(' > ')}`,
+        `source: ${path.relative(this.testDir, test.location.file)}:${test.location.line}`,
+        `project: ${test.parent.project()?.name || 'unknown'}`,
+        `retry: ${result.retry}`,
+        `started: ${new Date().toISOString()}`,
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+  }
+
+  onStepBegin(test: TestCase, _result: TestResult, step: TestStep) {
+    if (step.category === 'hook' || step.category === 'fixture') return;
+    this.append(test, `[STEP START] ${step.title}\n`);
+  }
+
+  onStepEnd(test: TestCase, _result: TestResult, step: TestStep) {
+    if (step.category === 'hook' || step.category === 'fixture') return;
+    const suffix = step.error ? `FAILED: ${step.error.message}` : 'OK';
+    this.append(test, `[STEP END] ${step.title} — ${suffix}\n`);
+  }
+
+  onStdOut(chunk: string | Buffer, test?: TestCase) {
+    if (!test) return;
+    this.append(test, `[stdout] ${chunk.toString()}`);
+  }
+
+  onStdErr(chunk: string | Buffer, test?: TestCase) {
+    if (!test) return;
+    this.append(test, `[stderr] ${chunk.toString()}`);
+  }
+
+  onTestEnd(test: TestCase, result: TestResult) {
+    this.append(test, `\nstatus: ${result.status}\ndurationMs: ${result.duration}\nfinished: ${new Date().toISOString()}\n`);
+    if (result.error) {
+      this.append(test, `\n[ERROR]\n${result.error.stack || result.error.message}\n`);
+    }
+    if (result.attachments.length > 0) {
+      this.append(test, '\n[ATTACHMENTS]\n');
+      for (const attachment of result.attachments) {
+        this.append(test, `${attachment.name}: ${attachment.path || attachment.contentType}\n`);
+      }
+    }
+  }
+
+  private logFileFor(test: TestCase, retry = 0): string {
+    const relativeSpec = path.relative(this.testDir, test.location.file);
+    const parsed = path.parse(relativeSpec);
+    const testFolder = path.join(this.logRoot, parsed.dir, parsed.name);
+    const retrySuffix = retry > 0 ? `-retry-${retry}` : '';
+    return path.join(testFolder, `${safeName(test.title)}${retrySuffix}.log`);
+  }
+
+  private append(test: TestCase, value: string) {
+    const file = this.fileByTestId.get(test.id) || this.logFileFor(test);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, value, 'utf8');
+  }
+}

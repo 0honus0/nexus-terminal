@@ -20,7 +20,7 @@ on:
 jobs:
   playwright:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -55,8 +55,19 @@ jobs:
         working-directory: verification/e2e
         run: npx playwright install --with-deps chromium
 
-      - name: Run HTTP, WebSocket, and UI E2E
+      - name: Install remote archive command dependencies
+        run: sudo apt-get update && sudo apt-get install -y zip unzip bzip2
+
+      - name: Run HTTP, WebSocket, UI, SSH, SFTP, and Mobile E2E
         run: npm run test:e2e
+
+      - name: Upload E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-logs
+          path: verification/e2e/logs/
+          if-no-files-found: ignore
 
       - name: Upload Playwright report
         if: failure()

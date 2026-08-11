@@ -609,7 +609,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- 使用本地 isVisible 控制显示 (App.vue 中已有 v-if="showPopupFileEditorBoolean") -->
-  <div v-if="isVisible" class="editor-overlay-backdrop" @click.self="handleBackdropClick">
+  <div v-if="isVisible" data-testid="file-editor-overlay" class="editor-overlay-backdrop" @click.self="handleBackdropClick">
     <!-- 编辑器弹窗/容器，应用动态样式 -->
     <div class="editor-popup" :style="popupStyle">
 
@@ -679,9 +679,9 @@ onBeforeUnmount(() => {
             {{ t('fileManager.actions.save') }}
           </button>
 
-          <button v-if="!props.isMobile" @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
+          <button v-if="!props.isMobile" data-testid="file-editor-close" @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
         </div>
-        <button v-if="props.isMobile" @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
+        <button v-if="props.isMobile" data-testid="file-editor-close" @click="handleCloseButton" class="close-editor-btn" :title="t('fileManager.actions.closeEditor')">✖</button>
       </div>
        <!-- 如果没有活动标签页 -->
       <div v-else class="editor-header editor-header-placeholder" :class="{ 'is-mobile': props.isMobile }">
@@ -726,7 +726,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 添加拖拽手柄 -->
-      <div class="resize-handle" @mousedown.stop.prevent="startResize" @click.stop.prevent></div>
+      <div data-testid="file-editor-resize-handle" class="resize-handle" @mousedown.stop.prevent="startResize" @click.stop.prevent></div>
 
     </div> <!-- 关闭 editor-popup -->
   </div> <!-- 关闭 editor-overlay-backdrop -->

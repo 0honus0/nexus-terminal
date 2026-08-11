@@ -171,6 +171,7 @@ electron-app/dist_electron/
 /verification/e2e/playwright-report/
 /verification/e2e/blob-report/
 /verification/e2e/test-results/
+/verification/e2e/logs/
 /verification/e2e/*.log
 /verification/e2e/*.pid
 /verification/e2e/*.db

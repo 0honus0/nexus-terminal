@@ -556,7 +556,7 @@ const handleConnectAllFilteredConnections = async () => {
               <i :class="['fas', isAscending ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'w-4 h-4']"></i>
             </button>
           </div>
-          <button @click="openAddConnectionForm" :title="t('connections.addConnection', 'Add Connection')" class="h-8 w-8 bg-button rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out flex items-center justify-center flex-shrink-0 ml-2 sm:ml-0">
+          <button data-testid="connections-add-button" @click="openAddConnectionForm" :title="t('connections.addConnection', 'Add Connection')" class="h-8 w-8 bg-button rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out flex items-center justify-center flex-shrink-0 ml-2 sm:ml-0">
             <i class="fas fa-plus" style="color: white;"></i>
           </button>
           <!-- Test All Filtered Connections Button -->
@@ -629,6 +629,7 @@ const handleConnectAllFilteredConnections = async () => {
           <li
             v-for="conn in filteredAndSortedConnections"
             :key="conn.id"
+            :data-connection-id="conn.id"
             @click="handleConnectionClick(conn.id)"
             :class="[
               'flex items-center p-3 bg-header/50 border border-border/50 rounded transition duration-150 ease-in-out', // Changed: items-center, removed justify-between

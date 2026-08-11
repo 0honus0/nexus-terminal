@@ -173,7 +173,7 @@ const handleHostIconMouseLeave = () => {
          <!-- Test Area (Only show for SSH and when script mode is NOT active) -->
          <div v-if="formData.type === 'SSH' && !isScriptModeActive" class="flex flex-col items-start gap-1">
              <div class="flex items-center gap-2"> <!-- Button and Icon -->
-                 <button type="button" @click="handleTestConnection" :disabled="isLoading || testStatus === 'testing'"
+                 <button data-testid="connection-test-button" type="button" @click="handleTestConnection" :disabled="isLoading || testStatus === 'testing'"
                          class="px-3 py-1.5 border border-border rounded-md text-sm font-medium text-text-secondary bg-background hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center transition-colors duration-150">
                      <svg v-if="testStatus === 'testing'" class="animate-spin -ml-0.5 mr-2 h-4 w-4 text-text-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -211,7 +211,7 @@ const handleHostIconMouseLeave = () => {
                      class="px-4 py-2 bg-transparent text-red-600 border border-red-500 rounded-md shadow-sm hover:bg-red-500/10 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ t('connections.actions.delete') }}
              </button>
-             <button type="submit" @click="handleSubmit" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
+             <button data-testid="connection-submit-button" type="submit" @click="handleSubmit" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ submitButtonText }}
              </button>

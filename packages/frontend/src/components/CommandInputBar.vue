@@ -415,6 +415,7 @@ const handleQuickCommandExecute = (command: string) => {
 
 <template>
   <div
+    data-testid="command-input-bar"
     :class="[$attrs.class, { 'command-bar-root--mobile': props.isMobile }]"
     class="command-bar-root flex items-center bg-background"
     @pointerup="handleCommandBarPointerUp"
@@ -422,6 +423,7 @@ const handleQuickCommandExecute = (command: string) => {
     <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
       <!-- 命令输入与终端搜索共用同一个输入框 -->
       <input
+        data-testid="command-input"
         type="text"
         v-model="activeInputValue"
         :placeholder="isSearching ? t('commandInputBar.searchPlaceholder') : t('commandInputBar.placeholder')"
@@ -456,6 +458,7 @@ const handleQuickCommandExecute = (command: string) => {
         <!-- Status Monitor Button (Mobile only) -->
         <button
           v-if="props.isMobile"
+          data-testid="open-status-monitor-button"
           @click="openStatusMonitor"
           class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
           :title="t('statusMonitor.title', '服务器状态')"
@@ -521,6 +524,7 @@ const handleQuickCommandExecute = (command: string) => {
         <!-- File Manager Button -->
         <button
           v-if="showPopupFileManagerBoolean || props.isMobile"
+          data-testid="open-file-manager-button"
           @click="openFileManagerModal"
           class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
         >

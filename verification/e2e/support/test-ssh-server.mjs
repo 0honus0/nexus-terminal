@@ -1,0 +1,604 @@
+import http from 'node:http';
+import { createWriteStream } from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { generateKeyPairSync } from 'node:crypto';
+import { spawn } from 'node:child_process';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const e2eRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(e2eRoot, '../..');
+const rootDir = path.join(e2eRoot, '.tmp', 'ssh-root');
+const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
+const {
+  Server,
+  utils: { sftp: { OPEN_MODE, STATUS_CODE } },
+} = requireFromBackend('ssh2');
+const { ZipArchive } = requireFromBackend('archiver');
+
+const SSH_HOST = '127.0.0.1';
+const SSH_PORT = 22222;
+const CONTROL_PORT = 22223;
+const USERNAME = 'e2e';
+const PASSWORD = 'e2e-password';
+let statusSample = 0;
+
+const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
+
+function normalizeRemotePath(remotePath = '.') {
+  const raw = String(remotePath || '.').replace(/\\/g, '/');
+  if (raw === '.' || raw === './') return '';
+  const normalized = path.posix.normalize(raw.startsWith('/') ? raw : `/${raw}`);
+  return normalized === '/' ? '' : normalized.slice(1);
+}
+
+function resolveRemotePath(remotePath = '.') {
+  const relativePath = normalizeRemotePath(remotePath);
+  const resolved = path.resolve(rootDir, relativePath);
+  const rootWithSeparator = `${path.resolve(rootDir)}${path.sep}`;
+  if (resolved !== path.resolve(rootDir) && !resolved.startsWith(rootWithSeparator)) {
+    throw new Error(`Path escapes test SSH root: ${remotePath}`);
+  }
+  return resolved;
+}
+
+function virtualPath(remotePath = '.') {
+  const relativePath = normalizeRemotePath(remotePath);
+  return relativePath ? `/${relativePath.split(path.sep).join('/')}` : '/';
+}
+
+function attrsFromStats(stats) {
+  return {
+    mode: stats.mode,
+    uid: stats.uid ?? 1000,
+    gid: stats.gid ?? 1000,
+    size: stats.size,
+    atime: Math.floor(stats.atimeMs / 1000),
+    mtime: Math.floor(stats.mtimeMs / 1000),
+  };
+}
+
+function statusForError(error) {
+  if (error?.code === 'ENOENT') return STATUS_CODE.NO_SUCH_FILE;
+  if (error?.code === 'EACCES' || error?.code === 'EPERM') return STATUS_CODE.PERMISSION_DENIED;
+  return STATUS_CODE.FAILURE;
+}
+
+async function writeXlsxFixture(destination) {
+  await new Promise((resolve, reject) => {
+    const output = createWriteStream(destination);
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    output.on('close', resolve);
+    output.on('error', reject);
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      + '<Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+      + '</Types>',
+      { name: '[Content_Types].xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+      + '</Relationships>',
+      { name: '_rels/.rels' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+      + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      { name: 'xl/workbook.xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+      + '</Relationships>',
+      { name: 'xl/_rels/workbook.xml.rels' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<dimension ref="A1:B2"/><sheetData>'
+      + '<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1" t="inlineStr"><is><t>Value</t></is></c></row>'
+      + '<row r="2"><c r="A2" t="inlineStr"><is><t>Nexus XLSX E2E</t></is></c><c r="B2"><v>2026</v></c></row>'
+      + '</sheetData></worksheet>',
+      { name: 'xl/worksheets/sheet1.xml' },
+    );
+    void archive.finalize();
+  });
+}
+
+async function resetRoot() {
+  await fsp.rm(rootDir, { recursive: true, force: true });
+  await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
+  await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'README-e2e.md'), '# Nexus Markdown E2E\n\n**preview-ok**\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'folder-seed', 'nested.txt'), 'nested\n', 'utf8');
+  await fsp.mkdir(path.join(rootDir, 'cross-target'), { recursive: true });
+  await fsp.writeFile(path.join(rootDir, 'cross-copy.txt'), 'cross-copy-body\n', 'utf8');
+  await fsp.writeFile(path.join(rootDir, 'cross-move.txt'), 'cross-move-body\n', 'utf8');
+  await fsp.writeFile(
+    path.join(rootDir, '预览-测试.png'),
+    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=', 'base64'),
+  );
+  await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
+  await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
+  await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
+  await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
+  statusSample = 0;
+}
+
+function openModeToFsFlags(flags) {
+  const canRead = Boolean(flags & OPEN_MODE.READ);
+  const canWrite = Boolean(flags & OPEN_MODE.WRITE);
+  const append = Boolean(flags & OPEN_MODE.APPEND);
+  const create = Boolean(flags & OPEN_MODE.CREAT);
+  const truncate = Boolean(flags & OPEN_MODE.TRUNC);
+  const exclusive = Boolean(flags & OPEN_MODE.EXCL);
+
+  if (append) return canRead ? (exclusive ? 'ax+' : 'a+') : (exclusive ? 'ax' : 'a');
+  if (canWrite && canRead) {
+    if (create || truncate) return exclusive ? 'wx+' : 'w+';
+    return 'r+';
+  }
+  if (canWrite) {
+    if (create || truncate) return exclusive ? 'wx' : 'w';
+    return 'r+';
+  }
+  return 'r';
+}
+
+function createHandleRegistry() {
+  let nextHandleId = 1;
+  const handles = new Map();
+
+  return {
+    add(value) {
+      const id = nextHandleId++;
+      handles.set(id, value);
+      const buffer = Buffer.alloc(4);
+      buffer.writeUInt32BE(id, 0);
+      return buffer;
+    },
+    get(handle) {
+      if (!Buffer.isBuffer(handle) || handle.length !== 4) return null;
+      return handles.get(handle.readUInt32BE(0)) ?? null;
+    },
+    delete(handle) {
+      if (!Buffer.isBuffer(handle) || handle.length !== 4) return null;
+      const id = handle.readUInt32BE(0);
+      const value = handles.get(id) ?? null;
+      handles.delete(id);
+      return value;
+    },
+  };
+}
+
+function attachSftp(session, accept) {
+  const sftp = accept();
+  const registry = createHandleRegistry();
+
+  const respondError = (reqid, error) => {
+    sftp.status(reqid, statusForError(error), error?.message || 'SFTP test server failure');
+  };
+
+  const statRequest = async (reqid, remotePath, useLstat = false) => {
+    try {
+      const fullPath = resolveRemotePath(remotePath);
+      const stats = useLstat ? await fsp.lstat(fullPath) : await fsp.stat(fullPath);
+      sftp.attrs(reqid, attrsFromStats(stats));
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  };
+
+  sftp.on('REALPATH', async (reqid, remotePath) => {
+    try {
+      const fullPath = resolveRemotePath(remotePath);
+      await fsp.stat(fullPath);
+      sftp.name(reqid, [{ filename: virtualPath(remotePath), longname: virtualPath(remotePath), attrs: {} }]);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('STAT', (reqid, remotePath) => void statRequest(reqid, remotePath, false));
+  sftp.on('LSTAT', (reqid, remotePath) => void statRequest(reqid, remotePath, true));
+
+  sftp.on('OPENDIR', async (reqid, remotePath) => {
+    try {
+      const fullPath = resolveRemotePath(remotePath);
+      const entries = await fsp.readdir(fullPath, { withFileTypes: true });
+      const names = [];
+      for (const entry of entries) {
+        const entryPath = path.join(fullPath, entry.name);
+        const stats = await fsp.lstat(entryPath);
+        names.push({
+          filename: entry.name,
+          longname: entry.name,
+          attrs: attrsFromStats(stats),
+        });
+      }
+      const handle = registry.add({ type: 'dir', entries: names, sent: false });
+      sftp.handle(reqid, handle);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('READDIR', (reqid, handle) => {
+    const state = registry.get(handle);
+    if (!state || state.type !== 'dir') {
+      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid directory handle');
+      return;
+    }
+    if (state.sent) {
+      sftp.status(reqid, STATUS_CODE.EOF);
+      return;
+    }
+    state.sent = true;
+    if (state.entries.length === 0) sftp.status(reqid, STATUS_CODE.EOF);
+    else sftp.name(reqid, state.entries);
+  });
+
+  sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
+    try {
+      const fullPath = resolveRemotePath(remotePath);
+      await fsp.mkdir(path.dirname(fullPath), { recursive: true });
+      const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? (attrs.mode & 0o7777) : 0o644);
+      const handle = registry.add({ type: 'file', fileHandle, path: fullPath });
+      sftp.handle(reqid, handle);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('READ', async (reqid, handle, offset, length) => {
+    const state = registry.get(handle);
+    if (!state || state.type !== 'file') {
+      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+      return;
+    }
+    try {
+      const buffer = Buffer.alloc(length);
+      const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
+      if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
+      else sftp.data(reqid, buffer.subarray(0, bytesRead));
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('WRITE', async (reqid, handle, offset, data) => {
+    const state = registry.get(handle);
+    if (!state || state.type !== 'file') {
+      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+      return;
+    }
+    try {
+      await state.fileHandle.write(data, 0, data.length, Number(offset));
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('FSTAT', async (reqid, handle) => {
+    const state = registry.get(handle);
+    if (!state || state.type !== 'file') {
+      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+      return;
+    }
+    try {
+      sftp.attrs(reqid, attrsFromStats(await state.fileHandle.stat()));
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('FSETSTAT', async (reqid, handle, attrs) => {
+    const state = registry.get(handle);
+    if (!state || state.type !== 'file') {
+      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid file handle');
+      return;
+    }
+    try {
+      if (typeof attrs?.mode === 'number') await state.fileHandle.chmod(attrs.mode & 0o7777);
+      if (typeof attrs?.size === 'number') await state.fileHandle.truncate(attrs.size);
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('CLOSE', async (reqid, handle) => {
+    const state = registry.delete(handle);
+    if (!state) {
+      sftp.status(reqid, STATUS_CODE.FAILURE, 'Invalid handle');
+      return;
+    }
+    try {
+      if (state.type === 'file') await state.fileHandle.close();
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('MKDIR', async (reqid, remotePath, attrs) => {
+    try {
+      await fsp.mkdir(resolveRemotePath(remotePath), { mode: attrs?.mode ? (attrs.mode & 0o7777) : 0o755 });
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('RMDIR', async (reqid, remotePath) => {
+    try {
+      await fsp.rmdir(resolveRemotePath(remotePath));
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('REMOVE', async (reqid, remotePath) => {
+    try {
+      await fsp.unlink(resolveRemotePath(remotePath));
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('RENAME', async (reqid, oldRemotePath, newRemotePath) => {
+    try {
+      const destination = resolveRemotePath(newRemotePath);
+      await fsp.mkdir(path.dirname(destination), { recursive: true });
+      await fsp.rename(resolveRemotePath(oldRemotePath), destination);
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+
+  sftp.on('SETSTAT', async (reqid, remotePath, attrs) => {
+    try {
+      const fullPath = resolveRemotePath(remotePath);
+      if (typeof attrs?.mode === 'number') await fsp.chmod(fullPath, attrs.mode & 0o7777);
+      if (typeof attrs?.size === 'number') await fsp.truncate(fullPath, attrs.size);
+      sftp.status(reqid, STATUS_CODE.OK);
+    } catch (error) {
+      respondError(reqid, error);
+    }
+  });
+}
+
+function finishExec(stream, stdout = '', stderr = '', code = 0) {
+  if (stdout) stream.write(stdout);
+  if (stderr) stream.stderr.write(stderr);
+  stream.exit(code);
+  stream.end();
+}
+
+function buildStatusFixture() {
+  statusSample += 1;
+  const user = 1000 + statusSample * 80;
+  const system = 500 + statusSample * 20;
+  const idle = 8000 + statusSample * 100;
+  const rx = 1_000_000 + statusSample * 3_000_000;
+  const tx = 2_000_000 + statusSample * 2_000_000;
+  return [
+    '__NEXUS_STATUS_OS_RELEASE__',
+    'PRETTY_NAME="Nexus E2E Linux"',
+    '__NEXUS_STATUS_CPU_MODEL__',
+    'Nexus Virtual CPU',
+    '__NEXUS_STATUS_NET_ROUTE__',
+    'Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT',
+    'eth0 00000000 0100007F 0003 0 0 0 00000000 0 0 0',
+    '__NEXUS_STATUS_MEMINFO__',
+    'MemTotal:        2097152 kB',
+    'MemFree:          524288 kB',
+    'MemAvailable:    1048576 kB',
+    'Buffers:           65536 kB',
+    'Cached:           262144 kB',
+    'SwapTotal:       1048576 kB',
+    'SwapFree:         786432 kB',
+    '__NEXUS_STATUS_DISK__',
+    'Filesystem 1024-blocks Used Available Capacity Mounted on',
+    '/dev/e2e 10485760 3145728 7340032 30% /',
+    '__NEXUS_STATUS_PROC_STAT__',
+    `cpu ${user} 0 ${system} ${idle} 0 0 0 0 0 0`,
+    '__NEXUS_STATUS_LOADAVG__',
+    '0.12 0.34 0.56 1/100 1234',
+    '__NEXUS_STATUS_NET_DEV__',
+    'Inter-|   Receive                                                |  Transmit',
+    ' face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed',
+    `  eth0: ${rx} 100 0 0 0 0 0 0 ${tx} 100 0 0 0 0 0 0`,
+    '',
+  ].join('\n');
+}
+
+function runRemoteCommand(command, stream) {
+  if (command.includes('__NEXUS_STATUS_')) {
+    finishExec(stream, buildStatusFixture());
+    return;
+  }
+  if (command === "docker version --format '{{.Server.Version}}'") {
+    finishExec(stream, '27.0.0\n');
+    return;
+  }
+  if (command === "docker ps -a --no-trunc --format '{{json .}}'") {
+    finishExec(stream, `${JSON.stringify({
+      ID: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      Names: 'nexus-e2e-container',
+      Image: 'alpine:latest',
+      ImageID: 'sha256:e2e',
+      Command: 'sleep 3600',
+      CreatedAt: 1_700_000_000,
+      State: 'running',
+      Status: 'Up 10 minutes',
+      Ports: '127.0.0.1:8080->80/tcp',
+      Labels: 'suite=e2e',
+    })}\n`);
+    return;
+  }
+  if (command.startsWith('docker stats ')) {
+    finishExec(stream, `${JSON.stringify({
+      ID: '0123456789ab',
+      Name: 'nexus-e2e-container',
+      CPUPerc: '12.34%',
+      MemUsage: '32MiB / 2GiB',
+      MemPerc: '1.56%',
+      NetIO: '1.2MB / 800kB',
+      BlockIO: '0B / 0B',
+      PIDs: '3',
+    })}\n`);
+    return;
+  }
+  if (/^docker\s+(start|stop|restart|pause|unpause|rm)\b/.test(command)) {
+    finishExec(stream, 'nexus-e2e-container\n');
+    return;
+  }
+
+  const child = spawn('/bin/sh', ['-lc', command], {
+    cwd: rootDir,
+    env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', (chunk) => stream.write(chunk));
+  child.stderr.on('data', (chunk) => stream.stderr.write(chunk));
+  stream.on('data', (chunk) => child.stdin.write(chunk));
+  stream.on('close', () => child.kill('SIGTERM'));
+  child.on('close', (code) => {
+    stream.exit(code ?? 0);
+    stream.end();
+  });
+}
+
+function attachShell(session, accept) {
+  const stream = accept();
+  const child = spawn('/bin/bash', ['--noprofile', '--norc', '-i'], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      HOME: rootDir,
+      TERM: 'xterm-256color',
+      PS1: 'nexus-e2e$ ',
+      PROMPT_COMMAND: '',
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', (data) => stream.write(data));
+  child.stderr.on('data', (data) => stream.stderr.write(data));
+  stream.on('data', (data) => child.stdin.write(data));
+  stream.on('close', () => child.kill('SIGTERM'));
+  child.on('close', (code) => {
+    stream.exit(code ?? 0);
+    stream.end();
+  });
+}
+
+await resetRoot();
+
+const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
+  client.on('authentication', (ctx) => {
+    if (ctx.method === 'password' && ctx.username === USERNAME && ctx.password === PASSWORD) ctx.accept();
+    else ctx.reject();
+  });
+
+  client.on('ready', () => {
+    client.on('session', (accept) => {
+      const session = accept();
+      session.on('pty', (acceptPty) => acceptPty());
+      session.on('window-change', (acceptWindowChange) => acceptWindowChange?.());
+      session.on('shell', (acceptShell) => attachShell(session, acceptShell));
+      session.on('exec', (acceptExec, _rejectExec, info) => runRemoteCommand(info.command, acceptExec()));
+      session.on('sftp', (acceptSftp) => attachSftp(session, acceptSftp));
+    });
+  });
+
+  client.on('error', (error) => {
+    console.error('[E2E SSH] client error:', error.message);
+  });
+});
+
+sshServer.on('error', (error) => {
+  console.error('[E2E SSH] server error:', error);
+  process.exitCode = 1;
+});
+
+const controlServer = http.createServer(async (req, res) => {
+  try {
+    const requestUrl = new URL(req.url || '/', `http://${SSH_HOST}:${CONTROL_PORT}`);
+    if (req.method === 'GET' && requestUrl.pathname === '/health') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, sshPort: SSH_PORT, rootDir }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+      await resetRoot();
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
+      const name = path.basename(requestUrl.searchParams.get('name') || 'external-refresh.txt');
+      await fsp.writeFile(path.join(rootDir, name), 'created outside Nexus for refresh verification\n', 'utf8');
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/files') {
+      const files = await fsp.readdir(rootDir);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ files }));
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/stat') {
+      const name = requestUrl.searchParams.get('name') || '';
+      const stats = await fsp.stat(resolveRemotePath(name));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        name,
+        size: stats.size,
+        mode: stats.mode & 0o7777,
+        isFile: stats.isFile(),
+        isDirectory: stats.isDirectory(),
+      }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  } catch (error) {
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+  }
+});
+
+await new Promise((resolve) => sshServer.listen(SSH_PORT, SSH_HOST, resolve));
+await new Promise((resolve) => controlServer.listen(CONTROL_PORT, SSH_HOST, resolve));
+console.log(`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, root ${rootDir}`);
+
+const shutdown = () => {
+  controlServer.close();
+  sshServer.close();
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

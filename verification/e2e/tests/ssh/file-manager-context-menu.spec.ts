@@ -1,0 +1,212 @@
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { loginAsInitialAdmin } from '../../support/auth';
+import {
+  configureSshE2eSettings,
+  connectTestSshFromConnectionsPage,
+  ensureTestSshConnection,
+  openConnectedFileManager,
+  resetTestSshFilesystem,
+  E2E_SSH,
+} from '../../support/ssh';
+
+const row = (page: Page, filename: string): Locator => page.locator(`tr[data-filename="${filename}"]`);
+const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
+
+async function rightClickRow(page: Page, filename: string): Promise<void> {
+  const target = row(page, filename);
+  await expect(target).toBeVisible();
+  await target.click({ button: 'right' });
+  await expect(menu(page)).toBeVisible();
+}
+
+async function clickMenuItem(page: Page, label: string): Promise<void> {
+  await menu(page).getByText(label, { exact: true }).click();
+}
+
+async function confirmAction(page: Page, actionType: string, value?: string): Promise<void> {
+  const modal = page.getByTestId('file-manager-action-modal');
+  await expect(modal).toHaveAttribute('data-action-type', actionType);
+  if (value !== undefined) {
+    await modal.locator(`#fileManagerActionInput-${actionType}`).fill(value);
+  }
+  await modal.getByTestId('file-manager-action-confirm').click();
+}
+
+async function goIntoFolder(page: Page, folder: string): Promise<void> {
+  await row(page, folder).click();
+  await expect(row(page, '..')).toBeVisible();
+}
+
+async function goToParent(page: Page): Promise<void> {
+  await row(page, '..').click();
+  await expect(row(page, 'seed.txt')).toBeVisible();
+}
+
+async function compressFromMenu(page: Page, source: string, submenuLabel: string, archiveName: string): Promise<void> {
+  await rightClickRow(page, source);
+  const compress = menu(page).getByText('Compress', { exact: true });
+  await compress.hover();
+  await page.getByText(submenuLabel, { exact: true }).click();
+  await expect(row(page, archiveName)).toBeVisible({ timeout: 30_000 });
+}
+
+test('verifies file manager right-click actions over real SFTP', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await test.step('Open as text reads the remote file', async () => {
+    await rightClickRow(page, 'plainfile');
+    await clickMenuItem(page, 'Open as text');
+    const editor = page.getByTestId('file-editor-overlay');
+    await expect(editor).toBeVisible();
+    await expect(editor).toContainText('plainfile');
+    await expect(editor.locator('.view-lines')).toContainText('plain-no-extension', { timeout: 20_000 });
+    await expect(editor).not.toContainText('Failed to');
+    await editor.getByTestId('file-editor-close').click();
+    await expect(editor).toBeHidden();
+  });
+
+  await test.step('Download streams a remote file through the browser', async () => {
+    await rightClickRow(page, 'seed.txt');
+    const downloadPromise = page.waitForEvent('download');
+    await clickMenuItem(page, 'Download');
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('seed.txt');
+  });
+
+  await test.step('Copy Path writes the remote path to clipboard', async () => {
+    await rightClickRow(page, 'seed.txt');
+    await clickMenuItem(page, 'Copy Path');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/seed\.txt$/);
+  });
+
+  await test.step('New File creates a real SFTP file', async () => {
+    await rightClickRow(page, 'seed.txt');
+    await clickMenuItem(page, 'New File');
+    await confirmAction(page, 'newFile', 'created-by-menu.txt');
+    await expect(row(page, 'created-by-menu.txt')).toBeVisible();
+  });
+
+  await test.step('New Folder creates a real SFTP directory', async () => {
+    await rightClickRow(page, 'seed.txt');
+    await clickMenuItem(page, 'New Folder');
+    await confirmAction(page, 'newFolder', 'created-folder');
+    await expect(row(page, 'created-folder')).toBeVisible();
+  });
+
+  await test.step('Rename changes the remote filename', async () => {
+    await rightClickRow(page, 'created-by-menu.txt');
+    await clickMenuItem(page, 'Rename');
+    await confirmAction(page, 'rename', 'renamed-by-menu.txt');
+    await expect(row(page, 'renamed-by-menu.txt')).toBeVisible();
+    await expect(row(page, 'created-by-menu.txt')).toHaveCount(0);
+  });
+
+  await test.step('Change Permissions changes the remote mode', async () => {
+    await rightClickRow(page, 'renamed-by-menu.txt');
+    await clickMenuItem(page, 'Change Permissions');
+    await confirmAction(page, 'chmod', '600');
+    await rightClickRow(page, 'renamed-by-menu.txt');
+    await clickMenuItem(page, 'Change Permissions');
+    const modal = page.getByTestId('file-manager-action-modal');
+    await expect(modal.locator('#fileManagerActionInput-chmod')).toHaveValue('600');
+    await page.keyboard.press('Escape');
+  });
+
+  await test.step('Copy and Paste copies a remote file into another directory', async () => {
+    await rightClickRow(page, 'copy-source.txt');
+    await clickMenuItem(page, 'Copy');
+    await goIntoFolder(page, 'folder-seed');
+    await rightClickRow(page, '..');
+    await clickMenuItem(page, 'Paste');
+    await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
+    await goToParent(page);
+    await expect(row(page, 'copy-source.txt')).toBeVisible();
+  });
+
+  await test.step('Cut and Paste moves a remote file into another directory', async () => {
+    await rightClickRow(page, 'move-source.txt');
+    await clickMenuItem(page, 'Cut');
+    await goIntoFolder(page, 'folder-seed');
+    await rightClickRow(page, '..');
+    await clickMenuItem(page, 'Paste');
+    await expect(row(page, 'move-source.txt')).toBeVisible({ timeout: 20_000 });
+    await goToParent(page);
+    await expect(row(page, 'move-source.txt')).toHaveCount(0);
+  });
+
+  await test.step('Upload keeps a multi-block transfer alive and writes the full remote file', async () => {
+    const filename = 'uploaded-large.bin';
+    const size = 3 * 1024 * 1024 + 123;
+    await rightClickRow(page, 'seed.txt');
+    const chooserPromise = page.waitForEvent('filechooser');
+    await clickMenuItem(page, 'Upload');
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+      name: filename,
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.alloc(size, 0x5a),
+    });
+    await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
+    await expect.poll(async () => {
+      const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(filename)}`);
+      if (!response.ok) return -1;
+      return Number((await response.json() as { size: number }).size);
+    }, { timeout: 30_000 }).toBe(size);
+  });
+
+  await test.step('Refresh reloads changes made outside the UI', async () => {
+    const fixtureName = 'external-refresh.txt';
+    await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(fixtureName)}`, { method: 'POST' });
+    await expect(row(page, fixtureName)).toHaveCount(0);
+    await rightClickRow(page, 'seed.txt');
+    await clickMenuItem(page, 'Refresh');
+    await expect(row(page, fixtureName)).toBeVisible({ timeout: 20_000 });
+  });
+
+  await test.step('Download Folder streams a ZIP archive', async () => {
+    await rightClickRow(page, 'folder-seed');
+    const downloadPromise = page.waitForEvent('download');
+    await clickMenuItem(page, 'Download Folder');
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('folder-seed.zip');
+  });
+
+  await test.step('Compress to zip creates a remote archive', async () => {
+    await compressFromMenu(page, 'archive-source.txt', 'Compress to zip', 'archive-source.zip');
+  });
+
+  await test.step('Compress to tar.gz creates a remote archive', async () => {
+    await compressFromMenu(page, 'archive-source.txt', 'Compress to tar.gz', 'archive-source.tar.gz');
+  });
+
+  await test.step('Compress to tar.bz2 creates a remote archive', async () => {
+    await compressFromMenu(page, 'archive-source.txt', 'Compress to tar.bz2', 'archive-source.tar.bz2');
+  });
+
+  await test.step('Delete removes a real remote file', async () => {
+    await rightClickRow(page, 'archive-source.txt');
+    await clickMenuItem(page, 'Delete');
+    await confirmAction(page, 'delete');
+    await expect(row(page, 'archive-source.txt')).toHaveCount(0);
+  });
+
+  await test.step('Decompress restores files from the remote ZIP archive', async () => {
+    await rightClickRow(page, 'archive-source.zip');
+    await clickMenuItem(page, 'Decompress');
+    await expect(row(page, 'archive-source.txt')).toBeVisible({ timeout: 30_000 });
+  });
+
+  await test.step('Send to opens the transfer workflow with the selected file', async () => {
+    await rightClickRow(page, 'seed.txt');
+    await clickMenuItem(page, 'Send to...');
+    await expect(page.getByRole('heading', { name: 'Send Files' })).toBeVisible();
+    await expect(page.getByText('seed.txt', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close modal' }).click();
+  });
+});
