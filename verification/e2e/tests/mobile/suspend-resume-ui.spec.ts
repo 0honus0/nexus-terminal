@@ -79,6 +79,14 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
       .toBeVisible({ timeout: 30_000 });
     await expect(terminal).toBeVisible({ timeout: 30_000 });
 
+    // A replacement terminal tab is mounted before the resume transaction is
+    // fully committed. Wait for the backend hanging record to disappear so a
+    // command cannot race the final resume/ACK handoff.
+    await expect.poll(async () => {
+      const sessions = await suspendedSessions(context.request);
+      return sessions.some((session) => session.originalSessionId === originalSessionId);
+    }, { timeout: 30_000 }).toBeFalsy();
+
     const resumedInput = page.getByTestId('command-input');
     await resumedInput.fill("printf 'AFTER_RESUME=%s\\n' \"$PWD\"");
     await resumedInput.press('Enter');
