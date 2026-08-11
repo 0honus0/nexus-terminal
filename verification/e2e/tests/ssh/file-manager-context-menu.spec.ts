@@ -23,7 +23,7 @@ async function rightClickRow(page: Page, filename: string): Promise<void> {
 }
 
 async function clickMenuItem(page: Page, label: string): Promise<void> {
-  await menu(page).getByText(label, { exact: true }).click();
+  await menu(page).getByText(label, { exact: true }).first().click();
 }
 
 async function openCurrentDirectoryContextMenu(page: Page): Promise<void> {
