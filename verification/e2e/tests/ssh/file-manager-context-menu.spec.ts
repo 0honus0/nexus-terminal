@@ -55,7 +55,8 @@ async function goToParent(page: Page): Promise<void> {
 
 async function compressFromMenu(page: Page, source: string, submenuLabel: string, archiveName: string): Promise<void> {
   await rightClickRow(page, source);
-  const compress = menu(page).getByText('Compress', { exact: true });
+  const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+  await expect(compress).toBeVisible();
   await compress.hover();
   await page.getByText(submenuLabel, { exact: true }).click();
   await expect(row(page, archiveName)).toBeVisible({ timeout: 30_000 });

@@ -112,7 +112,7 @@ test('file previews and text editor protect historical file-opening regressions'
   await step('stale symlink reports its own load error instead of reusing stale preview data', async () => {
     await expect(row(page, 'stale-image-link.png')).toBeVisible();
     await row(page, 'stale-image-link.png').dblclick();
-    await expect(page.getByText('Failed to load file preview.', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Failed to read file', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
