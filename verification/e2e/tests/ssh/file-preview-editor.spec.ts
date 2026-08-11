@@ -94,7 +94,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await dialog.getByRole('button', { name: 'Edit', exact: true }).click();
     const editor = page.getByTestId('file-editor-overlay');
     await expect(editor).toBeVisible();
-    await expect.poll(async () => await editor.locator('.monaco-editor .view-lines').innerText())
+    await expect.poll(async () => (await editor.locator('.monaco-editor .view-lines').innerText()).replace(/\u00a0/g, ' '))
       .toContain('Nexus Markdown E2E');
     await editor.getByTestId('file-editor-close').click();
   });

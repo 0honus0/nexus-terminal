@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
+  activeFileManagerList,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -23,6 +24,14 @@ async function rightClickRow(page: Page, filename: string): Promise<void> {
 
 async function clickMenuItem(page: Page, label: string): Promise<void> {
   await menu(page).getByText(label, { exact: true }).click();
+}
+
+async function openCurrentDirectoryContextMenu(page: Page): Promise<void> {
+  await activeFileManagerList(page).dispatchEvent('contextmenu', {
+    clientX: 120,
+    clientY: 120,
+  });
+  await expect(menu(page)).toBeVisible();
 }
 
 async function confirmAction(page: Page, actionType: string, value?: string): Promise<void> {
@@ -124,7 +133,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await rightClickRow(page, 'copy-source.txt');
     await clickMenuItem(page, 'Copy');
     await goIntoFolder(page, 'folder-seed');
-    await rightClickRow(page, '..');
+    await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'Paste');
     await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
     await goToParent(page);
@@ -135,7 +144,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await rightClickRow(page, 'move-source.txt');
     await clickMenuItem(page, 'Cut');
     await goIntoFolder(page, 'folder-seed');
-    await rightClickRow(page, '..');
+    await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'Paste');
     await expect(row(page, 'move-source.txt')).toBeVisible({ timeout: 20_000 });
     await goToParent(page);
