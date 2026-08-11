@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { step, slowStep } from '../../support/steps';
 
 const BACKUP_CONNECTION_NAME = 'E2E Backup SSH';
 
 test('full backup restores settings and connection data', async ({ request }) => {
   await loginAsInitialAdmin(request);
 
-  await test.step('prepare data that must survive backup and restore', async () => {
+  await step('prepare data that must survive backup and restore', async () => {
     const currentConnections = await request.get('/api/v1/connections');
     expect(currentConnections.ok()).toBeTruthy();
     for (const connection of await currentConnections.json() as Array<{ id: number; name?: string }>) {
@@ -35,7 +36,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
   });
 
   let backup: Buffer;
-  await test.step('export an encrypted full backup', async () => {
+  await slowStep('export an encrypted full backup', async () => {
     const response = await request.post('/api/v1/settings/backup/export', {
       data: { password: E2E_ADMIN.password },
     });
@@ -45,7 +46,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
     expect(backup.subarray(0, 25).toString('utf8')).toContain('NEXUS_TERMINAL_BACKUP_V1');
   });
 
-  await test.step('destroy the backed up data', async () => {
+  await step('destroy the backed up data', async () => {
     const connections = await request.get('/api/v1/connections');
     const target = (await connections.json() as Array<{ id: number; name?: string }>).find(
       (connection) => connection.name === BACKUP_CONNECTION_NAME,
@@ -55,7 +56,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
     expect((await request.put('/api/v1/settings', { data: { showPopupFileManager: 'false' } })).ok()).toBeTruthy();
   });
 
-  await test.step('import the backup and restore the data', async () => {
+  await slowStep('import the backup and restore the data', async () => {
     const response = await request.post('/api/v1/settings/backup/import', {
       multipart: {
         password: E2E_ADMIN.password,
@@ -70,7 +71,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
     await expect(response.json()).resolves.toMatchObject({ message: '备份导入成功。' });
   });
 
-  await test.step('verify settings and encrypted connection credentials survived restore', async () => {
+  await slowStep('verify settings and encrypted connection credentials survived restore', async () => {
     const settings = await request.get('/api/v1/settings');
     expect(settings.ok()).toBeTruthy();
     await expect(settings.json()).resolves.toMatchObject({ showPopupFileManager: 'true' });

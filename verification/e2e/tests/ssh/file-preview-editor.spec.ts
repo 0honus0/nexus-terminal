@@ -7,6 +7,7 @@ import {
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { step, slowStep } from '../../support/steps';
 
 const row = (page: Page, filename: string) => page.locator(`tr[data-filename="${filename}"]`);
 
@@ -24,7 +25,7 @@ test('file previews and text editor protect historical file-opening regressions'
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
 
-  await test.step('extensionless text opens with its real remote content', async () => {
+  await step('extensionless text opens with its real remote content', async () => {
     await row(page, 'plainfile').dblclick();
     const editor = page.getByTestId('file-editor-overlay');
     await expect(editor).toBeVisible({ timeout: 20_000 });
@@ -33,7 +34,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect.poll(async () => await viewLines.innerText()).toContain('plain-no-extension');
   });
 
-  await test.step('editor popup resize keeps Monaco visible and usable', async () => {
+  await step('editor popup resize keeps Monaco visible and usable', async () => {
     const editor = page.getByTestId('file-editor-overlay');
     const popup = editor.locator('.editor-popup');
     const before = await popup.boundingBox();
@@ -52,7 +53,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(editor.locator('.monaco-editor')).toBeVisible();
   });
 
-  await test.step('editing and saving an extensionless file persists over SFTP', async () => {
+  await slowStep('editing and saving an extensionless file persists over SFTP', async () => {
     const editor = page.getByTestId('file-editor-overlay');
     const input = editor.locator('.monaco-editor textarea.inputarea');
     await input.click({ force: true });
@@ -71,7 +72,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await reopened.getByTestId('file-editor-close').click();
   });
 
-  await test.step('Unicode image filename streams and renders inline', async () => {
+  await slowStep('Unicode image filename streams and renders inline', async () => {
     const filename = '预览-测试.png';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
@@ -83,7 +84,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await closePreview(page, filename);
   });
 
-  await test.step('Markdown preview renders parsed content and exposes text editing', async () => {
+  await slowStep('Markdown preview renders parsed content and exposes text editing', async () => {
     const filename = 'README-e2e.md';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
@@ -97,7 +98,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByTestId('file-editor-close').click();
   });
 
-  await test.step('XLSX preview parses workbook cells', async () => {
+  await slowStep('XLSX preview parses workbook cells', async () => {
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
@@ -107,7 +108,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await closePreview(page, filename);
   });
 
-  await test.step('stale symlink reports its own load error instead of reusing stale preview data', async () => {
+  await step('stale symlink reports its own load error instead of reusing stale preview data', async () => {
     await expect(row(page, 'stale-image-link.png')).toBeVisible();
     await row(page, 'stale-image-link.png').dblclick();
     const editor = page.getByTestId('file-editor-overlay');

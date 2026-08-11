@@ -6,6 +6,7 @@ import {
   ensureTestSshConnection,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { step } from '../../support/steps';
 
 test('connected SSH terminal accepts commands and keeps the rendered terminal alive', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
@@ -17,7 +18,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   const terminal = page.getByTestId('terminal');
   const commandInput = page.getByTestId('command-input');
 
-  await test.step('terminal remains mounted after ssh:connected', async () => {
+  await step('terminal remains mounted after ssh:connected', async () => {
     await expect(terminal).toBeVisible({ timeout: 20_000 });
     await expect(terminal.locator('.xterm-screen')).toBeVisible();
     const box = await terminal.boundingBox();
@@ -25,7 +26,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     expect(box!.height).toBeGreaterThan(100);
   });
 
-  await test.step('command input executes a real command in the persistent SSH shell', async () => {
+  await step('command input executes a real command in the persistent SSH shell', async () => {
     await expect(commandInput).toBeVisible();
     await commandInput.fill("printf 'NEXUS_TERMINAL_E2E\\n'");
     await commandInput.press('Enter');
@@ -33,7 +34,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       .toContain('NEXUS_TERMINAL_E2E');
   });
 
-  await test.step('shell cwd persists between commands', async () => {
+  await step('shell cwd persists between commands', async () => {
     await commandInput.fill('cd folder-seed');
     await commandInput.press('Enter');
     await commandInput.fill("printf 'CWD=%s\\n' \"$PWD\"");

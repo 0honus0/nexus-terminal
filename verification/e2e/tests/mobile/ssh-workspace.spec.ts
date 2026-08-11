@@ -7,6 +7,7 @@ import {
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { step, slowStep } from '../../support/steps';
 
 test('mobile SSH workspace keeps terminal space and exposes touch-only tools', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
@@ -15,7 +16,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  await test.step('terminal stays mounted instead of being collapsed by the mobile command bar', async () => {
+  await step('terminal stays mounted instead of being collapsed by the mobile command bar', async () => {
     const terminal = page.getByTestId('terminal');
     const commandBar = page.getByTestId('command-input-bar');
     await expect(terminal).toBeVisible({ timeout: 20_000 });
@@ -29,7 +30,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     expect(commandBarBox!.height).toBeLessThan(terminalBox!.height / 2);
   });
 
-  await test.step('mobile status monitor opens and receives live SSH status samples', async () => {
+  await slowStep('mobile status monitor opens and receives live SSH status samples', async () => {
     await page.getByTestId('open-status-monitor-button').click();
     const modal = page.getByTestId('status-monitor-modal');
     await expect(modal).toBeVisible();
@@ -39,7 +40,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect(modal).toBeHidden();
   });
 
-  await test.step('long press on a remote file opens the touch context menu', async () => {
+  await slowStep('long press on a remote file opens the touch context menu', async () => {
     await openConnectedFileManager(page);
     const file = page.locator('tr[data-filename="seed.txt"]');
     const box = await file.boundingBox();

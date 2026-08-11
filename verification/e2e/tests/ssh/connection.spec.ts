@@ -6,6 +6,7 @@ import {
   removeNamedSshConnections,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { step, slowStep } from '../../support/steps';
 
 test('adds, tests, and connects to a real SSH server', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
@@ -13,13 +14,13 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
   await resetTestSshFilesystem();
   await removeNamedSshConnections(context.request);
 
-  await test.step('open add SSH connection form', async () => {
+  await step('open add SSH connection form', async () => {
     await page.goto('/connections');
     await page.getByTestId('connections-add-button').click();
     await expect(page.getByRole('heading', { name: 'Add New Connection' })).toBeVisible();
   });
 
-  await test.step('fill SSH password connection', async () => {
+  await step('fill SSH password connection', async () => {
     await page.locator('#conn-name').fill(E2E_SSH.name);
     await page.locator('#conn-host').fill(E2E_SSH.host);
     await page.locator('#conn-port').fill(String(E2E_SSH.port));
@@ -27,7 +28,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     await page.locator('#conn-password').fill(E2E_SSH.password);
   });
 
-  await test.step('test unsaved SSH connection against real server', async () => {
+  await step('test unsaved SSH connection against real server', async () => {
     const responsePromise = page.waitForResponse((response) =>
       response.url().includes('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
     );
@@ -37,7 +38,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     await expect(response.json()).resolves.toMatchObject({ success: true });
   });
 
-  await test.step('save SSH connection', async () => {
+  await step('save SSH connection', async () => {
     const createPromise = page.waitForResponse((response) =>
       response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
     );
@@ -47,7 +48,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     await expect(page.getByText(E2E_SSH.name, { exact: true }).first()).toBeVisible();
   });
 
-  await test.step('open real SSH session and SFTP file manager', async () => {
+  await slowStep('open real SSH session and SFTP file manager', async () => {
     const row = page.getByText(E2E_SSH.name, { exact: true }).first().locator('xpath=ancestor::li');
     await row.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page).toHaveURL(/\/workspace$/);

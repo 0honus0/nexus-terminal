@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH } from '../../support/ssh';
+import { step } from '../../support/steps';
 
 test('connection update, tags, clone, credentials, and delete form a complete lifecycle', async ({ request }) => {
   await loginAsInitialAdmin(request);
@@ -9,7 +10,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
   let cloneId = 0;
   let tagId = 0;
 
-  await test.step('create a tagged SSH connection', async () => {
+  await step('create a tagged SSH connection', async () => {
     const tag = await request.post('/api/v1/tags', { data: { name: 'E2E Connection Tag' } });
     expect(tag.status()).toBe(201);
     tagId = (await tag.json() as { tag: { id: number } }).tag.id;
@@ -35,7 +36,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     expect(assignTag.ok()).toBeTruthy();
   });
 
-  await test.step('update non-credential fields without losing the encrypted password', async () => {
+  await step('update non-credential fields without losing the encrypted password', async () => {
     const update = await request.put(`/api/v1/connections/${connectionId}`, {
       data: {
         name: 'E2E Lifecycle SSH Updated',
@@ -56,7 +57,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
   });
 
-  await test.step('clone preserves SSH credentials and tag associations', async () => {
+  await step('clone preserves SSH credentials and tag associations', async () => {
     const clone = await request.post(`/api/v1/connections/${connectionId}/clone`, {
       data: { name: 'E2E Lifecycle SSH Clone' },
     });
@@ -73,7 +74,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     await expect(cloneTest.json()).resolves.toMatchObject({ success: true });
   });
 
-  await test.step('deleting the original does not damage the clone', async () => {
+  await step('deleting the original does not damage the clone', async () => {
     expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
     expect((await request.get(`/api/v1/connections/${connectionId}`)).status()).toBe(404);
 
@@ -86,7 +87,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     expect((await request.post(`/api/v1/connections/${cloneId}/test`)).ok()).toBeTruthy();
   });
 
-  await test.step('cleanup clone and tag', async () => {
+  await step('cleanup clone and tag', async () => {
     expect((await request.delete(`/api/v1/connections/${cloneId}`)).ok()).toBeTruthy();
     expect((await request.delete(`/api/v1/tags/${tagId}`)).ok()).toBeTruthy();
   });

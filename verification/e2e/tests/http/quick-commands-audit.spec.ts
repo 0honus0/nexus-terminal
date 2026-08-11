@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { step } from '../../support/steps';
 
 test('quick command CRUD and audit logs remain functional', async ({ request }) => {
   await loginAsInitialAdmin(request);
 
   let commandId: number;
-  await test.step('create a quick command with variables', async () => {
+  await step('create a quick command with variables', async () => {
     const response = await request.post('/api/v1/quick-commands', {
       data: {
         name: 'E2E Quick Command',
@@ -20,7 +21,7 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
     expect(body.command).toMatchObject({ name: 'E2E Quick Command', command: 'echo ${TARGET}' });
   });
 
-  await test.step('update and increment quick command usage', async () => {
+  await step('update and increment quick command usage', async () => {
     const update = await request.put(`/api/v1/quick-commands/${commandId!}`, {
       data: {
         name: 'E2E Quick Command Updated',
@@ -43,14 +44,14 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
     expect(Number(saved?.usage_count)).toBeGreaterThanOrEqual(1);
   });
 
-  await test.step('delete the quick command', async () => {
+  await step('delete the quick command', async () => {
     const response = await request.delete(`/api/v1/quick-commands/${commandId!}`);
     expect(response.ok()).toBeTruthy();
     const list = await request.get('/api/v1/quick-commands');
     expect((await list.json() as Array<{ id: number }>).some((item) => item.id === commandId)).toBeFalsy();
   });
 
-  await test.step('audit log records security and connection activity', async () => {
+  await step('audit log records security and connection activity', async () => {
     const response = await request.get('/api/v1/audit-logs?limit=100&offset=0');
     expect(response.ok()).toBeTruthy();
     const body = await response.json() as {

@@ -22,7 +22,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  timeout: 30_000,
+  timeout: 0,
   expect: { timeout: 10_000 },
   reporter: process.env.CI
     ? [['./support/mirrored-log-reporter.ts'], ['github'], ['html', { open: 'never' }]]

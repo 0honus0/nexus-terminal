@@ -8,6 +8,7 @@ import {
   waitForJson,
   waitForSftpReady,
 } from '../../support/ws';
+import { step, slowStep } from '../../support/steps';
 
 async function createConnection(request: APIRequestContext, name: string): Promise<number> {
   const response = await request.post('/api/v1/connections', {
@@ -48,7 +49,7 @@ test('cross-session copy and move transfer data and progress over real SFTP', as
   try {
     await Promise.all([waitForSftpReady(source.socket), waitForSftpReady(destination.socket)]);
 
-    await test.step('cross-session copy emits progress and writes the destination', async () => {
+    await slowStep('cross-session copy emits progress and writes the destination', async () => {
       const requestId = `cross-copy-${crypto.randomUUID()}`;
       const progressPromise = waitForJson(
         destination.socket,
@@ -73,7 +74,7 @@ test('cross-session copy and move transfer data and progress over real SFTP', as
         .resolves.toContain('cross-copy-body');
     });
 
-    await test.step('two-phase cross-session move deletes source only after copy success', async () => {
+    await slowStep('two-phase cross-session move deletes source only after copy success', async () => {
       const requestId = `cross-move-${crypto.randomUUID()}`;
       await requestJson(
         destination.socket,
