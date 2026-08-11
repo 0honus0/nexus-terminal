@@ -67,7 +67,7 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
 }
 
 export function activeFileManagerList(page: Page): Locator {
-  return page.locator('[data-testid="file-manager-list"]:visible').first();
+  return page.getByTestId('file-manager-modal').locator('[data-testid="file-manager-list"]');
 }
 
 export function fileManagerRow(page: Page, filename: string): Locator {
