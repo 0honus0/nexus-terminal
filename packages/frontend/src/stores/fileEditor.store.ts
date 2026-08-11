@@ -80,7 +80,12 @@ const decodeRawContent = (rawContentBase64: string, encoding: string): string =>
 
         // 优先使用 TextDecoder 处理标准编码
         if (['utf8', 'utf16le', 'utf16be'].includes(normalizedEncoding)) {
-            const decoder = new TextDecoder(encoding); // Use original encoding name for TextDecoder
+            const decoderLabel = normalizedEncoding === 'utf16le'
+                ? 'utf-16le'
+                : normalizedEncoding === 'utf16be'
+                    ? 'utf-16be'
+                    : 'utf-8';
+            const decoder = new TextDecoder(decoderLabel);
             return decoder.decode(buffer);
         }
         // 使用 iconv-lite 处理其他编码
