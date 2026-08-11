@@ -131,7 +131,7 @@ const cancelForm = () => {
 </script>
 
 <template>
-    <div class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4">
+    <div data-testid="ssh-key-management-modal" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4">
         <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-3xl max-h-[80vh] flex flex-col">
 
             <!-- Main Modal Content -->
@@ -139,7 +139,7 @@ const cancelForm = () => {
                 <h3 class="text-xl font-semibold text-center mb-4 flex-shrink-0">{{ t('sshKeys.modal.title') }}</h3>
 
                 <div class="mb-4 flex justify-end flex-shrink-0">
-                    <button @click="showAddForm"
+                    <button data-testid="ssh-key-add" @click="showAddForm"
                             class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
                             :disabled="isLoading">
                         <i class="fas fa-plus mr-2" style="color: white;"></i>{{ t('sshKeys.modal.addKey') }} <!-- Use inline style for white color -->
@@ -166,13 +166,13 @@ const cancelForm = () => {
                             <tr v-else-if="keys.length === 0">
                                 <td colspan="2" class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary text-center">{{ t('sshKeys.modal.noKeys') }}</td>
                             </tr>
-                            <tr v-for="key in keys" :key="key.id">
+                            <tr v-for="key in keys" :key="key.id" :data-key-id="key.id">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">{{ key.name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                    <button @click="showEditForm(key)" class="text-primary hover:text-primary-hover disabled:opacity-50" :disabled="isLoading" :title="t('sshKeys.modal.edit')">
+                                    <button data-testid="ssh-key-edit" @click="showEditForm(key)" class="text-primary hover:text-primary-hover disabled:opacity-50" :disabled="isLoading" :title="t('sshKeys.modal.edit')">
                                         <i class="fas fa-pencil-alt"></i>
                                     </button>
-                                    <button @click="handleDelete(key)" class="text-error hover:text-error-hover disabled:opacity-50" :disabled="isLoading" :title="t('sshKeys.modal.delete')">
+                                    <button data-testid="ssh-key-delete" @click="handleDelete(key)" class="text-error hover:text-error-hover disabled:opacity-50" :disabled="isLoading" :title="t('sshKeys.modal.delete')">
                                         <i class="fas fa-trash-alt"></i>
                                     </button>
                                 </td>
@@ -204,7 +204,7 @@ const cancelForm = () => {
                     </div>
                      <div>
                         <label for="key-private" class="block text-sm font-medium text-text-secondary mb-1">{{ t('sshKeys.modal.privateKey') }}</label>
-                        <textarea id="key-private" v-model="formData.private_key" rows="8" required
+                        <textarea id="key-private" v-model="formData.private_key" rows="8" :required="!keyToEdit"
                                   class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-mono text-sm"></textarea>
                          <!-- <small v-if="keyToEdit" class="block text-xs text-text-secondary mt-1">{{ t('sshKeys.modal.keyUpdateNote') }}</small> -->
                     </div>
@@ -226,7 +226,7 @@ const cancelForm = () => {
                             class="px-4 py-2 bg-transparent text-text-secondary border border-border rounded-md shadow-sm hover:bg-border hover:text-foreground focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50">
                         {{ t('sshKeys.modal.cancel') }}
                     </button>
-                    <button type="submit" @click="handleSubmit" :disabled="isLoading"
+                    <button data-testid="ssh-key-submit" type="submit" @click="handleSubmit" :disabled="isLoading"
                             class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50">
                         {{ keyToEdit ? t('sshKeys.modal.saveChanges') : t('sshKeys.modal.addKey') }}
                     </button>

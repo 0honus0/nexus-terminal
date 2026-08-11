@@ -99,7 +99,7 @@ const handleHostIconMouseLeave = () => {
   <!-- Host Tooltip is managed by AddConnectionFormBasicInfo for its specific host input,
        but if there was a general tooltip at this level, Teleport would be here.
        The original Teleport for host tooltip is removed as it's now encapsulated. -->
-  <div class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"> <!-- Overlay -->
+  <div data-testid="connection-form" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"> <!-- Overlay -->
     <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[90vh] flex flex-col"> <!-- Form Panel -->
       <h3 class="text-xl font-semibold text-center mb-6 flex-shrink-0">{{ formTitle }}</h3> <!-- Title -->
       <form @submit.prevent="handleSubmit" class="flex-grow overflow-y-auto pr-2 space-y-6"> <!-- Form with scroll and spacing -->
@@ -207,7 +207,7 @@ const handleHostIconMouseLeave = () => {
          <div v-else-if="!isScriptModeActive" class="flex-1"></div>
          <div v-else class="flex-1"></div> <!-- Also take up space if script mode is active, pushing buttons right -->
          <div class="flex space-x-3"> <!-- Main Actions -->
-             <button v-if="isEditMode && !isScriptModeActive" type="button" @click="handleDeleteConnection" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
+             <button data-testid="connection-delete-button" v-if="isEditMode && !isScriptModeActive" type="button" @click="handleDeleteConnection" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
                      class="px-4 py-2 bg-transparent text-red-600 border border-red-500 rounded-md shadow-sm hover:bg-red-500/10 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ t('connections.actions.delete') }}
              </button>

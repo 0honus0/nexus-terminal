@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed inset-0 bg-overlay flex justify-center items-center z-50">
+  <div data-testid="quick-command-form" class="fixed inset-0 bg-overlay flex justify-center items-center z-50">
     <div
       ref="modalContentRef"
       class="bg-background text-foreground p-6 rounded-xl border border-border/50 shadow-2xl flex flex-col"
@@ -51,6 +51,7 @@
               <label for="qc-name" class="block mb-1.5 text-sm font-medium text-text-secondary">{{ t('quickCommands.form.name', '名称:') }}</label>
               <input
                 id="qc-name"
+                data-testid="quick-command-name"
             type="text"
             v-model="formData.name"
             :placeholder="t('quickCommands.form.namePlaceholder', '可选，用于快速识别')"
@@ -61,6 +62,7 @@
           <label for="qc-command" class="block mb-1.5 text-sm font-medium text-text-secondary">{{ t('quickCommands.form.command', '指令:') }} <span class="text-error">*</span></label>
           <textarea
             id="qc-command"
+            data-testid="quick-command-command"
             v-model="formData.command"
             required
             :placeholder="placeholder"
@@ -94,7 +96,7 @@
               {{ t('quickCommands.form.execute', '执行') }}
             </button>
             <!-- 主要/提交按钮 -->
-            <button type="submit" :disabled="isSubmitting || !!commandError" class="py-2 px-5 rounded-lg text-sm font-semibold transition-colors duration-150 bg-primary text-white border-none shadow-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">
+            <button data-testid="quick-command-submit" type="submit" :disabled="isSubmitting || !!commandError" class="py-2 px-5 rounded-lg text-sm font-semibold transition-colors duration-150 bg-primary text-white border-none shadow-md hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-gray-400 disabled:opacity-70 disabled:cursor-not-allowed">
               {{ isSubmitting ? t('common.saving', '保存中...') : (isEditing ? t('common.save', '保存') : t('quickCommands.form.add', '添加')) }}
             </button>
           </div>

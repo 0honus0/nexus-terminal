@@ -5,6 +5,7 @@
       <!-- Controls Area -->
       <div class="flex items-center p-2 flex-shrink-0 gap-2 bg-background"> <!-- Reduced padding p-3 to p-2 -->
         <input
+          data-testid="command-history-search"
           type="text"
           :placeholder="$t('commandHistory.searchPlaceholder', '搜索历史记录...')"
           :value="searchTerm"
@@ -37,6 +38,8 @@
           <li
             v-for="(entry, index) in filteredHistory"
             :key="entry.id"
+            :data-testid="`command-history-row-${entry.id}`"
+            :data-history-id="entry.id"
             class="group flex justify-between items-center px-3 py-2.5 mb-1 cursor-pointer rounded-md hover:bg-primary/10 transition-colors duration-150"
             :class="{ 'bg-primary/20 font-medium': index === storeSelectedIndex }"
             @click="executeCommand(entry.command)"
@@ -48,11 +51,11 @@
             <!-- Actions (Show on Hover) -->
             <div class="flex items-center flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
               <!-- Copy Button -->
-              <button @click.stop="copyCommand(entry.command)" class="p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary" :title="$t('commandHistory.copy', '复制')">
+              <button data-testid="command-history-copy" @click.stop="copyCommand(entry.command)" class="p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-primary" :title="$t('commandHistory.copy', '复制')">
                 <i class="fas fa-copy text-sm"></i>
               </button>
               <!-- Delete Button -->
-              <button @click.stop="deleteSingleCommand(entry.id)" class="ml-1 p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-error" :title="$t('commandHistory.delete', '删除')">
+              <button data-testid="command-history-delete" @click.stop="deleteSingleCommand(entry.id)" class="ml-1 p-1.5 rounded hover:bg-black/10 transition-colors duration-150 text-text-secondary hover:text-error" :title="$t('commandHistory.delete', '删除')">
                 <i class="fas fa-times text-sm"></i>
               </button>
             </div>

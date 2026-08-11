@@ -2094,7 +2094,7 @@ const handleOpenEditorClick = () => {
     <div class="file-manager-toolbar flex items-center justify-between flex-wrap gap-1 p-2 bg-header flex-shrink-0">
         <!-- All file manager actions share one adaptive toolbar. -->
         <div class="file-manager-actions flex items-center gap-1 min-w-0">
-              <input type="file" ref="fileInputRef" @change="handleFileSelected" multiple class="hidden" />
+              <input data-testid="file-upload-input" type="file" ref="fileInputRef" @change="handleFileSelected" multiple class="hidden" />
               <!-- CD 到终端按钮 -->
               <button
                 class="file-manager-path-button file-manager-action-button flex items-center justify-center w-7 h-7 bg-background border border-border rounded text-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:enabled:bg-header hover:enabled:border-primary hover:enabled:text-primary"
@@ -2189,6 +2189,7 @@ const handleOpenEditorClick = () => {
             </button>
             <!-- 上传按钮 -->
             <button
+              data-testid="file-upload-button"
               @click="triggerFileUpload"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.uploadFile')"

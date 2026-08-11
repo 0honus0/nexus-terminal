@@ -630,6 +630,7 @@ const handleConnectAllFilteredConnections = async () => {
             v-for="conn in filteredAndSortedConnections"
             :key="conn.id"
             :data-connection-id="conn.id"
+            :data-testid="`connection-row-${conn.id}`"
             @click="handleConnectionClick(conn.id)"
             :class="[
               'flex items-center p-3 bg-header/50 border border-border/50 rounded transition duration-150 ease-in-out', // Changed: items-center, removed justify-between
@@ -696,6 +697,7 @@ const handleConnectAllFilteredConnections = async () => {
               <!-- Test Single Connection Button -->
               <button
                 v-if="conn.type === 'SSH'"
+                data-testid="connection-row-test"
                 @click.stop="handleTestSingleConnection(conn)"
                 :disabled="isBatchEditMode || getSingleTestButtonInfo(conn.id, conn.type).disabled"
                 class="px-3 py-1.5 bg-transparent text-foreground border border-border rounded-md shadow-sm hover:bg-border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium h-9 flex items-center justify-center"
@@ -706,6 +708,7 @@ const handleConnectAllFilteredConnections = async () => {
                 <span v-if="getSingleTestButtonInfo(conn.id, conn.type).textKey !== 'connections.actions.testing'">{{ t(getSingleTestButtonInfo(conn.id, conn.type).textKey) }}</span>
               </button>
               <button
+                data-testid="connection-row-edit"
                 @click.stop="openEditConnectionForm(conn)"
                 class="px-3 py-1.5 bg-transparent text-foreground border border-border rounded-md shadow-sm hover:bg-border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium h-9 flex items-center justify-center"
                 :disabled="isBatchEditMode"

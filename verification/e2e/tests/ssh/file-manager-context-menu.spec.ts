@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
@@ -89,6 +90,32 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await clickMenuItem(page, 'Download');
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('seed.txt');
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+    expect(await readFile(downloadPath!, 'utf8')).toBe('nexus-e2e-seed\n');
+  });
+
+  await slowStep('Upload writes exact bytes over SFTP and the uploaded file downloads intact', async () => {
+    const filename = 'uploaded-e2e.txt';
+    const payload = Buffer.from('UPLOAD_BYTES_E2E\nline-2-中文\n', 'utf8');
+    const fileChooserPromise = page.waitForEvent('filechooser');
+    await page.getByTestId('file-manager-modal').getByTestId('file-upload-button').click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({ name: filename, mimeType: 'text/plain', buffer: payload });
+    await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
+
+    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
+    expect(remoteRead.ok).toBeTruthy();
+    const remoteBody = await remoteRead.json() as { base64: string };
+    expect(Buffer.from(remoteBody.base64, 'base64')).toEqual(payload);
+
+    await rightClickRow(page, filename);
+    const downloadPromise = page.waitForEvent('download');
+    await clickMenuItem(page, 'Download');
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+    expect(await readFile(downloadPath!)).toEqual(payload);
   });
 
   await step('Copy Path writes the remote path to clipboard', async () => {
