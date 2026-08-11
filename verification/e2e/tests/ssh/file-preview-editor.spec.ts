@@ -84,7 +84,7 @@ test('file previews and text editor protect historical file-opening regressions'
     const externalWrite = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent('refresh-e2e.txt')}`, { method: 'POST' });
     expect(externalWrite.ok).toBeTruthy();
     await editor.getByTestId('file-editor-refresh').click();
-    await expect.poll(async () => viewLines.innerText(), { timeout: 15_000 })
+    await expect.poll(async () => (await viewLines.innerText()).replace(/\u00a0/g, ' '), { timeout: 15_000 })
       .toContain('created outside Nexus for refresh verification');
     await editor.getByTestId('file-editor-close').click();
   });
