@@ -10,7 +10,13 @@
     "test:terminal-protocol": "node verification/verify-terminal-protocol.mjs",
     "test:ssh-suspend-recovery": "node verification/verify-ssh-suspend-recovery.mjs",
     "docker:build": "./build.sh docker",
-    "docker:save": "./build.sh docker-save"
+    "docker:save": "./build.sh docker-save",
+    "test:e2e": "npm --prefix verification/e2e test",
+    "test:e2e:auth": "npm --prefix verification/e2e run test:auth",
+    "test:e2e:http": "npm --prefix verification/e2e run test:http",
+    "test:e2e:websocket": "npm --prefix verification/e2e run test:websocket",
+    "test:e2e:ui": "npm --prefix verification/e2e run test:ui",
+    "test:e2e:list": "npm --prefix verification/e2e run test:list"
   },
   "repository": {
     "type": "git",

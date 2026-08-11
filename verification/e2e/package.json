@@ -1,0 +1,16 @@
+{
+  "name": "@nexus-terminal/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:auth": "playwright test --project=auth",
+    "test:http": "playwright test --project=http",
+    "test:websocket": "playwright test --project=websocket",
+    "test:ui": "playwright test --project=ui",
+    "test:list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

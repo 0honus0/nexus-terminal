@@ -159,3 +159,20 @@ dist-scripts/
 /packages/backend/data
 electron-app/node_modules/
 electron-app/dist_electron/
+
+# Playwright E2E runtime artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/verification/e2e/node_modules/
+/verification/e2e/.tmp/
+/verification/e2e/.cache/
+/verification/e2e/.auth/
+/verification/e2e/playwright-report/
+/verification/e2e/blob-report/
+/verification/e2e/test-results/
+/verification/e2e/*.log
+/verification/e2e/*.pid
+/verification/e2e/*.db
+/verification/e2e/*.sqlite
+/verification/e2e/*.sqlite3

@@ -4,7 +4,9 @@ import fs from 'fs';
 import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations';
 
-const dbDir = path.join(__dirname, '..', '..', 'data');
+const dbDir = process.env.NEXUS_DATA_DIR
+    ? path.resolve(process.env.NEXUS_DATA_DIR)
+    : path.join(__dirname, '..', '..', 'data');
 const dbFilename = 'nexus-terminal.db';
 const dbPath = path.join(dbDir, dbFilename);
 

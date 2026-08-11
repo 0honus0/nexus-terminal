@@ -18,7 +18,10 @@ if (rootConfigResult.error && (rootConfigResult.error as NodeJS.ErrnoException).
 
 // 2. 加载 data/.env 文件 (定义密钥等)
 // 注意: 这个路径是相对于编译后的 dist/src/index.js
-const dataEnvPathGlobal = path.resolve(__dirname, '../data/.env'); // Renamed to avoid conflict if 'dataEnvPath' is used later
+const dataDirGlobal = process.env.NEXUS_DATA_DIR
+    ? path.resolve(process.env.NEXUS_DATA_DIR)
+    : path.resolve(__dirname, '../data');
+const dataEnvPathGlobal = path.join(dataDirGlobal, '.env');
 const dataConfigResultGlobal = dotenv.config({ path: dataEnvPathGlobal }); // Renamed
 
 if (dataConfigResultGlobal.error && (dataConfigResultGlobal.error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -84,7 +87,8 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 
 const initializeEnvironment = async () => {
 
-    const dataEnvPath = dataEnvPathGlobal; 
+    const dataEnvPath = dataEnvPathGlobal;
+    fs.mkdirSync(dataDirGlobal, { recursive: true });
     let keysGenerated = false;
     let keysToAppend = '';
 
@@ -263,7 +267,7 @@ const startServer = () => {
     const FileStore = sessionFileStore(session);
     // dist/index.js 在容器中位于 /app/dist，本地位于 packages/backend/dist。
     // 使用相对运行目录可同时解析到 /app/data 和 packages/backend/data。
-    const sessionsPath = path.resolve(__dirname, '../data/sessions');
+    const sessionsPath = path.join(dataDirGlobal, 'sessions');
     if (!fs.existsSync(sessionsPath)) {
         fs.mkdirSync(sessionsPath, { recursive: true });
     }

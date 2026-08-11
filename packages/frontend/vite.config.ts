@@ -11,6 +11,7 @@ const monacoEditorPluginModule: { default: typeof monacoEditorPlugin } = require
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  cacheDir: process.env.NEXUS_VITE_CACHE_DIR || undefined,
   resolve: {
     alias: {
       '@monaco-editor-api': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.api.js'),
