@@ -44,16 +44,16 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
       await expect.poll(async () => {
         const response = await context.request.get('/api/v1/settings');
         const data = await response.json() as Record<string, string>;
-        return `${data.maxLoginAttempts}:${data.loginBanDuration}`;
-      }).toBe('7:420');
+        return [Number(data.maxLoginAttempts), Number(data.loginBanDuration)];
+      }).toEqual([7, 420]);
     });
 
     await step('reload keeps the saved blacklist thresholds visible', async () => {
       await page.reload();
       await page.getByTestId('settings-tab-ipControl').click();
       const reloaded = page.getByTestId('ip-blacklist-settings');
-      await expect(reloaded.getByTestId('ip-blacklist-max-attempts')).toHaveValue('7');
-      await expect(reloaded.getByTestId('ip-blacklist-ban-duration')).toHaveValue('420');
+      expect(Number(await reloaded.getByTestId('ip-blacklist-max-attempts').inputValue())).toBe(7);
+      expect(Number(await reloaded.getByTestId('ip-blacklist-ban-duration').inputValue())).toBe(420);
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
