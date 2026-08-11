@@ -4,13 +4,14 @@ import {
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
+  fileManagerRow,
   openConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
 import { step, slowStep } from '../../support/steps';
 
-const row = (page: Page, filename: string): Locator => page.locator(`tr[data-filename="${filename}"]`);
+const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
 
 async function rightClickRow(page: Page, filename: string): Promise<void> {

@@ -4,6 +4,7 @@ import {
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
+  fileManagerRow,
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
@@ -34,7 +35,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await page.getByTestId('open-status-monitor-button').click();
     const modal = page.getByTestId('status-monitor-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.getByTestId('status-monitor')).toContainText('Nexus E2E Linux', { timeout: 15_000 });
+    await expect(modal.getByTestId('status-monitor')).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
     await expect(modal.getByTestId('status-monitor')).toContainText('CPU');
     await modal.locator('button').first().click();
     await expect(modal).toBeHidden();
@@ -42,7 +43,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
 
   await slowStep('long press on a remote file opens the touch context menu', async () => {
     await openConnectedFileManager(page);
-    const file = page.locator('tr[data-filename="seed.txt"]');
+    const file = fileManagerRow(page, 'seed.txt');
     const box = await file.boundingBox();
     expect(box).toBeTruthy();
     const point = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };

@@ -4,12 +4,13 @@ import {
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
+  fileManagerRow,
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
 import { step, slowStep } from '../../support/steps';
 
-const row = (page: Page, filename: string) => page.locator(`tr[data-filename="${filename}"]`);
+const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 
 async function closePreview(page: Page, filename: string): Promise<void> {
   const dialog = page.getByRole('dialog', { name: filename });

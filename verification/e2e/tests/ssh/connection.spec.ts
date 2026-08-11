@@ -3,6 +3,7 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import {
   E2E_SSH,
   configureSshE2eSettings,
+  fileManagerRow,
   removeNamedSshConnections,
   resetTestSshFilesystem,
 } from '../../support/ssh';
@@ -56,6 +57,6 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     const fileManagerButton = page.getByTestId('open-file-manager-button');
     await expect(fileManagerButton).toBeVisible({ timeout: 20_000 });
     await fileManagerButton.click();
-    await expect(page.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
+    await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
   });
 });

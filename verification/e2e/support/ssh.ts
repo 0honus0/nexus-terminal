@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 export const E2E_SSH = {
   name: 'E2E SSH',
@@ -66,10 +66,18 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
   await expect(page).toHaveURL(/\/workspace$/);
 }
 
+export function activeFileManagerList(page: Page): Locator {
+  return page.locator('[data-testid="file-manager-list"]:visible').first();
+}
+
+export function fileManagerRow(page: Page, filename: string): Locator {
+  return activeFileManagerList(page).locator(`tr[data-filename="${filename}"]`);
+}
+
 export async function openConnectedFileManager(page: Page): Promise<void> {
   const openButton = page.getByTestId('open-file-manager-button');
   await expect(openButton).toBeVisible({ timeout: 20_000 });
   await openButton.click();
   await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
-  await expect(page.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
+  await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
 }
