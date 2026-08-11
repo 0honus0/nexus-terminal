@@ -24,6 +24,7 @@ const CONTROL_PORT = 22223;
 const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
 let statusSample = 0;
+const executedCommands = [];
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
@@ -185,6 +186,7 @@ async function resetRoot() {
   await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
   statusSample = 0;
+  executedCommands.length = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -480,6 +482,7 @@ function buildStatusFixture() {
 }
 
 function runRemoteCommand(command, stream) {
+  executedCommands.push(String(command));
   if (command.includes('__NEXUS_STATUS_')) {
     finishExec(stream, buildStatusFixture());
     return;
@@ -614,6 +617,11 @@ const controlServer = http.createServer(async (req, res) => {
       const files = await fsp.readdir(rootDir);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ files }));
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/commands') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ commands: [...executedCommands] }));
       return;
     }
     if (req.method === 'GET' && requestUrl.pathname === '/read') {

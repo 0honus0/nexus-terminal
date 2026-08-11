@@ -10,12 +10,6 @@ import { slowStep, step } from '../../support/steps';
 
 const CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
-function countFrames(frames: string[], type: string): number {
-  return frames.filter((frame) => {
-    try { return JSON.parse(frame)?.type === type; } catch { return false; }
-  }).length;
-}
-
 test('Docker manager UI renders remote containers, stats, and executes a container action', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -23,10 +17,8 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
   const connectionId = await ensureTestSshConnection(context.request);
 
   const sentFrames: string[] = [];
-  const receivedFrames: string[] = [];
   page.on('websocket', (socket) => {
     socket.on('framesent', (event) => sentFrames.push(String(event.payload)));
-    socket.on('framereceived', (event) => receivedFrames.push(String(event.payload)));
   });
 
   await connectTestSshFromConnectionsPage(page, connectionId);
@@ -54,10 +46,9 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(manager).toContainText('1.2MB / 800kB');
   });
 
-  await slowStep('stop sends a Docker command and backend requests a fresh status after remote execution', async () => {
+  await slowStep('stop sends a Docker command that is executed on the remote SSH server', async () => {
     const manager = page.getByTestId('docker-manager');
     const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
-    const refreshCount = countFrames(receivedFrames, 'request_docker_status_update');
     await row.getByTestId('docker-stop').click();
 
     await expect.poll(() => sentFrames.some((frame) => {
@@ -67,6 +58,11 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
       } catch { return false; }
     }), { timeout: 15_000 }).toBeTruthy();
 
-    await expect.poll(() => countFrames(receivedFrames, 'request_docker_status_update'), { timeout: 15_000 }).toBeGreaterThan(refreshCount);
+    await expect.poll(async () => {
+      const response = await fetch('http://127.0.0.1:22223/commands');
+      if (!response.ok) return false;
+      const body = await response.json() as { commands: string[] };
+      return body.commands.includes(`docker stop ${CONTAINER_ID}`);
+    }, { timeout: 15_000 }).toBeTruthy();
   });
 });
