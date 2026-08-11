@@ -1,5 +1,5 @@
 <template>
-  <div ref="editorContainer" class="monaco-editor-container"></div>
+  <div ref="editorContainer" data-testid="monaco-editor" class="monaco-editor-container" @click="focusEditor"></div>
 </template>
 
 <script setup lang="ts">
@@ -52,6 +52,8 @@ let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let layoutFrame: number | null = null;
 let wheelHandler: ((event: WheelEvent) => void) | null = null;
+
+const focusEditor = () => editorInstance?.focus();
 
 const layout = () => {
   if (!editorInstance || !editorContainer.value) return;
@@ -263,7 +265,7 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-  focus: () => editorInstance?.focus(),
+  focus: focusEditor,
   layout,
 });
 

@@ -62,12 +62,12 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   await openConnectedFileManager(page);
 
   await step('Open as text reads the remote file', async () => {
-    await rightClickRow(page, 'plainfile');
+    await rightClickRow(page, 'README-e2e.md');
     await clickMenuItem(page, 'Open as text');
     const editor = page.getByTestId('file-editor-overlay');
     await expect(editor).toBeVisible();
-    await expect(editor).toContainText('plainfile');
-    await expect(editor.locator('.view-lines')).toContainText('plain-no-extension', { timeout: 20_000 });
+    await expect(editor).toContainText('README-e2e.md');
+    await expect(editor.locator('.view-lines')).toContainText('Nexus Markdown E2E', { timeout: 20_000 });
     await expect(editor).not.toContainText('Failed to');
     await editor.getByTestId('file-editor-close').click();
     await expect(editor).toBeHidden();

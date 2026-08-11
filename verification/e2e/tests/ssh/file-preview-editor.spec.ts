@@ -56,8 +56,8 @@ test('file previews and text editor protect historical file-opening regressions'
 
   await slowStep('editing and saving an extensionless file persists over SFTP', async () => {
     const editor = page.getByTestId('file-editor-overlay');
-    const input = editor.locator('.monaco-editor textarea.inputarea');
-    await input.click({ force: true });
+    const monaco = editor.getByTestId('monaco-editor');
+    await monaco.click();
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
     await page.keyboard.insertText('plain-updated-through-editor\n');
     await expect.poll(async () => await editor.locator('.monaco-editor .view-lines').innerText())
