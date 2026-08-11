@@ -38,6 +38,25 @@ const connectionsStore = useConnectionsStore();
 const { isHeaderVisible } = storeToRefs(layoutStore);
 const { isMobile } = useDeviceDetection();
 
+// 提前加载普通文本编辑器核心，避免首次打开无后缀/纯文本文件时才发起多个动态 import。
+// 具体语言包仍保持按需加载，不在这里预取。
+const preloadPlainTextEditor = () => {
+  const preloadTasks: Promise<unknown>[] = [
+    import('../components/FileEditorContainer.vue'),
+    import('../components/FileEditorOverlay.vue'),
+    isMobile.value
+      ? import('../components/CodeMirrorMobileEditor.vue')
+      : import('../components/MonacoEditor.vue'),
+  ];
+
+  void Promise.allSettled(preloadTasks).then((results) => {
+    const failed = results.filter((result) => result.status === 'rejected');
+    if (failed.length > 0) {
+      console.warn(`[WorkspaceView] 编辑器核心预加载有 ${failed.length} 个模块失败，将在实际打开文件时再次尝试。`, failed);
+    }
+  });
+};
+
 // --- 从 Store 获取响应式状态和 Getters ---
 const { sessionTabsWithStatus, activeSessionId, activeSession, isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // 使用 storeToRefs 获取 RDP 和 VNC 状态
 const { shareFileEditorTabsBoolean, layoutLockedBoolean } = storeToRefs(settingsStore); // +++ Add layoutLockedBoolean +++
@@ -156,6 +175,7 @@ const handleGlobalKeyDown = (event: KeyboardEvent) => {
 // --- 生命周期钩子 ---
 onMounted(() => {
   console.log('[工作区视图] 组件已挂载。');
+  preloadPlainTextEditor();
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleGlobalKeyDown);
   // 移动端高度交给 CSS dvh；不要跟随 visualViewport 的软键盘缩放反复压缩工作区。
