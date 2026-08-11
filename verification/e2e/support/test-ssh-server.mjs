@@ -50,6 +50,15 @@ function virtualPath(remotePath = '.') {
   return relativePath ? `/${relativePath.split(path.sep).join('/')}` : '/';
 }
 
+function remapArchiveExecWorkingDirectory(command) {
+  if (!command.includes('__NEXUS_ARCHIVE_TOTAL__:')) return command;
+
+  return command.replace(
+    /^cd\s+'([^']*)'(?=\s*(?:\|\||&&))/,
+    (_match, remoteDirectory) => `cd ${JSON.stringify(resolveRemotePath(remoteDirectory))}`,
+  );
+}
+
 function attrsFromStats(stats) {
   return {
     mode: stats.mode,
@@ -477,7 +486,8 @@ function runRemoteCommand(command, stream) {
     return;
   }
 
-  const child = spawn('/bin/sh', ['-lc', command], {
+  const executableCommand = remapArchiveExecWorkingDirectory(command);
+  const child = spawn('/bin/sh', ['-lc', executableCommand], {
     cwd: rootDir,
     env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
     stdio: ['pipe', 'pipe', 'pipe'],
