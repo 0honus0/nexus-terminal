@@ -1,5 +1,5 @@
 <template>
-  <div v-if="settings" class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
+  <div v-if="settings" data-testid="data-management-settings" class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
     <h2 class="text-lg font-semibold text-foreground px-6 py-4 border-b border-border bg-header/50">
       {{ t('settings.category.dataManagement', '数据管理') }}
     </h2>
@@ -15,6 +15,7 @@
           <label class="block max-w-md">
             <span class="block text-sm font-medium text-foreground mb-1">当前登录密码</span>
             <input
+              data-testid="backup-export-password"
               v-model="exportPassword"
               type="password"
               autocomplete="current-password"
@@ -25,6 +26,7 @@
           </label>
           <div class="flex flex-wrap items-center gap-3">
             <button
+              data-testid="backup-export"
               type="submit"
               :disabled="exportLoading || !exportPassword"
               class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium inline-flex items-center"
@@ -50,6 +52,7 @@
           <label class="block max-w-xl">
             <span class="block text-sm font-medium text-foreground mb-1">备份文件</span>
             <input
+              data-testid="backup-import-file"
               type="file"
               accept=".nexus-backup,application/octet-stream"
               required
@@ -60,6 +63,7 @@
           <label class="block max-w-md">
             <span class="block text-sm font-medium text-foreground mb-1">备份密码（跨实例时填写）</span>
             <input
+              data-testid="backup-import-password"
               v-model="importPassword"
               type="password"
               autocomplete="off"
@@ -69,6 +73,7 @@
           </label>
           <div class="flex flex-wrap items-center gap-3">
             <button
+              data-testid="backup-import"
               type="submit"
               :disabled="importLoading || !selectedBackupFile"
               class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium inline-flex items-center"

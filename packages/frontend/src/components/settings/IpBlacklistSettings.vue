@@ -1,9 +1,10 @@
 <template>
-  <div class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
+  <div data-testid="ip-blacklist-settings" class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border bg-header/50">
       <h2 class="text-lg font-semibold text-foreground">{{ $t('settings.ipBlacklist.title') }}</h2>
       <!-- IP Blacklist Enable/Disable Switch -->
       <button
+        data-testid="ip-blacklist-toggle"
         type="button"
         @click="handleUpdateIpBlacklistEnabled"
         :class="[
@@ -30,16 +31,16 @@
         <form @submit.prevent="handleUpdateBlacklistSettings" class="flex flex-wrap items-end gap-4">
            <div class="flex-grow min-w-[150px]">
              <label for="maxLoginAttempts" class="block text-sm font-medium text-text-secondary mb-1">{{ $t('settings.ipBlacklist.maxAttemptsLabel') }}</label>
-           <input type="number" id="maxLoginAttempts" v-model="blacklistSettingsForm.maxLoginAttempts" min="1" required
+           <input data-testid="ip-blacklist-max-attempts" type="number" id="maxLoginAttempts" v-model="blacklistSettingsForm.maxLoginAttempts" min="1" required
                   class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
          </div>
          <div class="flex-grow min-w-[150px]">
            <label for="loginBanDuration" class="block text-sm font-medium text-text-secondary mb-1">{{ $t('settings.ipBlacklist.banDurationLabel') }}</label>
-           <input type="number" id="loginBanDuration" v-model="blacklistSettingsForm.loginBanDuration" min="1" required
+           <input data-testid="ip-blacklist-ban-duration" type="number" id="loginBanDuration" v-model="blacklistSettingsForm.loginBanDuration" min="1" required
                   class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
          </div>
          <div class="flex-shrink-0">
-            <button type="submit"
+            <button data-testid="ip-blacklist-save" type="submit"
                     class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium">
               {{ $t('settings.ipBlacklist.saveConfigButton') }}
             </button>

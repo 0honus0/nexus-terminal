@@ -149,6 +149,7 @@
       <div class="text-center pt-4 mt-4 border-t border-border/50"> <!-- Test button container -->
           <button
               v-if="isEditing || canTestUnsaved"
+              data-testid="notification-test"
               type="button"
               @click="handleTestNotification"
               :disabled="testingNotification"

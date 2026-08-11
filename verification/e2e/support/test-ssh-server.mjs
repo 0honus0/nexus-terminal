@@ -25,6 +25,7 @@ const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
 let statusSample = 0;
 const executedCommands = [];
+const receivedWebhooks = [];
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
@@ -187,6 +188,7 @@ async function resetRoot() {
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
   statusSample = 0;
   executedCommands.length = 0;
+  receivedWebhooks.length = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -622,6 +624,23 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/commands') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ commands: [...executedCommands] }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      receivedWebhooks.push({
+        method: req.method,
+        headers: req.headers,
+        body: Buffer.concat(chunks).toString('utf8'),
+      });
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/webhooks') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ webhooks: [...receivedWebhooks] }));
       return;
     }
     if (req.method === 'GET' && requestUrl.pathname === '/read') {
