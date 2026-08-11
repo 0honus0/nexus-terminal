@@ -1151,7 +1151,7 @@ export class SftpService {
                         await this.getStats(sftp, newPath);
                         targetExists = true;
                     } catch (statErr: any) {
-                        if (!(statErr.code === 'ENOENT' || (statErr.message && statErr.message.includes('No such file')))) {
+                        if (!this.isNoSuchFileError(statErr)) {
                             // 如果 stat 失败不是因为 "No such file"，则抛出未知错误
                             throw new Error(`检查目标路径 ${newPath} 状态时出错: ${statErr.message}`);
                         }
@@ -1470,9 +1470,7 @@ export class SftpService {
             }
             return;
         } catch (statError: any) {
-            const isMissing = statError.code === 'ENOENT'
-                || (typeof statError.message === 'string' && statError.message.includes('No such file'));
-            if (!isMissing) {
+            if (!this.isNoSuchFileError(statError)) {
                 throw new Error(`检查目录失败 ${normalizedPath}: ${statError.message}`);
             }
         }
