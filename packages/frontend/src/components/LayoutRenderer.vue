@@ -535,6 +535,7 @@ onBeforeUnmount(() => {
         <button
             v-for="pane in sidebarPanes.left"
             :key="`left-${pane}`"
+            :data-testid="`sidebar-pane-${pane}`"
             @click="toggleSidebarPane('left', pane)"
             :class="['flex items-center justify-center w-10 h-10 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-lg',
                      { 'bg-primary text-white hover:bg-primary-dark': activeLeftSidebarPane === pane }]"
@@ -778,6 +779,7 @@ onBeforeUnmount(() => {
          <button
              v-for="pane in sidebarPanes.right"
             :key="`right-${pane}`"
+            :data-testid="`sidebar-pane-${pane}`"
             @click="toggleSidebarPane('right', pane)"
             :class="['flex items-center justify-center w-10 h-10 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-lg',
                      { 'bg-primary text-white hover:bg-primary-dark': activeRightSidebarPane === pane }]"

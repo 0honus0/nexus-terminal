@@ -396,7 +396,8 @@
       "errorPort": "Port must be between 1 and 65535.",
       "errorAdd": "Failed to add proxy: {error}",
       "errorUpdate": "Failed to update proxy: {error}",
-      "passwordUpdateNote": "Leave password blank to keep the existing password."
+      "passwordUpdateNote": "Leave password blank to keep the existing password.",
+      "clearStoredPassword": "Clear saved password"
     },
     "prompts": {
       "confirmDelete": "Are you sure you want to delete the proxy \"{name}\"? This cannot be undone."

@@ -208,6 +208,7 @@ onMounted(() => {
   <Teleport to="body">
     <div
       v-if="internalVisible"
+      data-testid="batch-edit-modal"
       class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"
       @click.self="handleCancel"
     >
@@ -271,7 +272,7 @@ onMounted(() => {
           <div class="p-4 border border-border rounded-md bg-card">
             <div class="flex justify-between items-center mb-2">
               <h4 class="text-base font-semibold">{{ t('connections.form.sectionAdvanced', '高级选项') }}</h4>
-              <input type="checkbox" v-model="enableAdvancedEdit" class="form-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary" />
+              <input data-testid="batch-edit-advanced-toggle" type="checkbox" v-model="enableAdvancedEdit" class="form-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary" />
             </div>
             <div v-if="enableAdvancedEdit" class="space-y-3">
               <div>
@@ -322,6 +323,7 @@ onMounted(() => {
             {{ t('common.cancel', '取消') }}
           </button>
           <button
+            data-testid="batch-edit-save"
             type="submit" @click="handleSave"
             class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out"
             :disabled="isLoading || (!enablePortEdit && !enableAuthEdit && !enableAdvancedEdit)"

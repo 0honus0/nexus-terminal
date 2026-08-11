@@ -720,6 +720,7 @@
             "optional": "オプション",
             "password": "パスワード:",
             "passwordUpdateNote": "パスワードを空のままにして、既存のパスワードを保持します。",
+            "clearStoredPassword": "保存済みパスワードをクリア",
             "port": "ポート:",
             "saving": "保存中...",
             "title": "新しいプロキシを追加",

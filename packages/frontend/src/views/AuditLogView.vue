@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 bg-background text-foreground"> <!-- Outer container with padding -->
+  <div data-testid="audit-log-view" class="p-4 bg-background text-foreground"> <!-- Outer container with padding -->
     <div class="max-w-7xl mx-auto"> <!-- Inner container for max-width (slightly wider for table) and centering -->
       <h1 class="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-border"> <!-- Title styling -->
         {{ $t('auditLog.title') }}
@@ -9,12 +9,12 @@
       <div class="flex flex-wrap items-center gap-4 mb-4 p-4 border border-border rounded-lg bg-header/50">
         <div class="flex-grow min-w-[200px]">
           <label for="search-term" class="block text-sm font-medium text-text-secondary mb-1">{{ $t('common.search') }}</label>
-          <input type="text" id="search-term" v-model="searchTerm" :placeholder="$t('auditLog.searchPlaceholder')"
+          <input data-testid="audit-search" type="text" id="search-term" v-model="searchTerm" :placeholder="$t('auditLog.searchPlaceholder')"
                  class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm">
         </div>
         <div class="flex-grow min-w-[200px]">
           <label for="action-type" class="block text-sm font-medium text-text-secondary mb-1">{{ $t('auditLog.table.actionType') }}</label>
-          <select id="action-type" v-model="selectedActionType"
+          <select data-testid="audit-action-type" id="action-type" v-model="selectedActionType"
                   class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary appearance-none bg-no-repeat bg-right pr-8 text-sm"
                   style="background-image: url('data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%236c757d\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3e%3c/svg%3e'); background-position: right 0.75rem center; background-size: 16px 12px;">
             <option value="">{{ $t('common.all') }}</option>
@@ -22,7 +22,7 @@
           </select>
         </div>
         <div class="self-end">
-           <button @click="applyFilters" class="px-4 py-2 bg-button text-button-text rounded hover:bg-button-hover text-sm font-medium">
+           <button data-testid="audit-apply-filter" @click="applyFilters" class="px-4 py-2 bg-button text-button-text rounded hover:bg-button-hover text-sm font-medium">
              {{ $t('common.filter') }}
            </button>
         </div>
@@ -84,7 +84,7 @@
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
-                  <tr v-for="log in logs" :key="log.id" class="hover:bg-header/50"> <!-- Table rows with hover -->
+                  <tr v-for="log in logs" :key="log.id" :data-audit-id="log.id" class="hover:bg-header/50"> <!-- Table rows with hover -->
                     <td class="px-6 py-4 whitespace-nowrap">{{ formatTimestamp(log.timestamp) }}</td>
                     <td class="px-6 py-4 whitespace-nowrap">{{ translateActionType(log.action_type) }}</td>
                     <td class="px-6 py-4">

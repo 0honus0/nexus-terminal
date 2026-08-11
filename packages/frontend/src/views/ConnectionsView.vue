@@ -497,6 +497,7 @@ const handleConnectAllFilteredConnections = async () => {
             <label for="batch-edit-toggle" class="mr-2 text-sm font-medium text-text-secondary">{{ t('connections.batchEdit.toggleLabel', '批量修改') }}</label>
             <button
               id="batch-edit-toggle"
+              data-testid="batch-edit-toggle"
               @click="toggleBatchEditMode"
               :class="[
                 'relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary',
@@ -604,6 +605,7 @@ const handleConnectAllFilteredConnections = async () => {
           {{ t('connections.batchEdit.invertSelection', '反选') }}
         </button>
         <button
+          data-testid="batch-edit-selected"
           @click="openBatchEditModal"
           :disabled="selectedConnectionIdsForBatch.size === 0"
           class="px-4 py-1.5 text-sm bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"

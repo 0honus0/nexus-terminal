@@ -6,6 +6,7 @@
         <button
           v-for="tab in tabs"
           :key="tab.key"
+          :data-testid="`settings-tab-${tab.key}`"
           @click="activeTab = tab.key"
           :class="['px-4 py-2 text-sm font-medium rounded-md focus:outline-none transition-colors duration-150 ease-in-out',
                    activeTab === tab.key ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground']"

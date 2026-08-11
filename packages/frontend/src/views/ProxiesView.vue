@@ -49,6 +49,7 @@ const closeForm = () => {
       </h2>
 
       <button
+        data-testid="proxy-add-button"
         @click="openAddForm"
         v-if="!showForm"
         class="px-4 py-2 bg-button text-button-text rounded hover:bg-button-hover mb-4 inline-flex items-center text-sm font-medium"

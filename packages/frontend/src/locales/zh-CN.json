@@ -396,7 +396,8 @@
       "errorPort": "端口号必须在 1 到 65535 之间。",
       "errorAdd": "添加代理失败: {error}",
       "errorUpdate": "更新代理失败: {error}",
-      "passwordUpdateNote": "将密码留空以保留现有密码。"
+      "passwordUpdateNote": "将密码留空以保留现有密码。",
+      "clearStoredPassword": "清除已保存密码"
     },
     "prompts": {
       "confirmDelete": "确定要删除代理 \"{name}\" 吗？此操作不可撤销。"

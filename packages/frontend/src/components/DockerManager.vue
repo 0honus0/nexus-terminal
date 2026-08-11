@@ -145,11 +145,11 @@ const viewContainerLogs = (containerId: string) => {
         <tbody class="responsive-tbody"> <!-- Use class for CSS control -->
           <template v-for="container in containers" :key="container.id"> <!-- Use computed containers -->
             <!-- Main Row / Card Container -->
-            <tr class="responsive-tr mb-4 border border-border rounded p-3 bg-background shadow-sm relative hover:bg-header/30 transition-colors duration-150"
+            <tr :data-testid="`docker-row-${container.id}`" class="responsive-tr mb-4 border border-border rounded p-3 bg-background shadow-sm relative hover:bg-header/30 transition-colors duration-150"
                 :class="{'expanded': expandedContainerIds.has(container.id)}"> <!-- Use computed expandedContainerIds -->
               <!-- Expand Button Cell (Desktop only) -->
               <td class="responsive-td-expand w-8 px-2 py-2 border-b border-border text-center align-middle">
-                <button @click="toggleExpand(container.id)" class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 text-xs" :title="expandedContainerIds.has(container.id) ? t('common.collapse') : t('common.expand')"> <!-- Use computed expandedContainerIds -->
+                <button data-testid="docker-expand" @click="toggleExpand(container.id)" class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 text-xs" :title="expandedContainerIds.has(container.id) ? t('common.collapse') : t('common.expand')"> <!-- Use computed expandedContainerIds -->
                   <i :class="['fas', expandedContainerIds.has(container.id) ? 'fa-chevron-down' : 'fa-chevron-right']"></i> <!-- Use computed expandedContainerIds -->
                 </button>
               </td>
@@ -182,7 +182,7 @@ const viewContainerLogs = (containerId: string) => {
                   <button @click="sendDockerCommand(container.id, 'start')" :title="t('dockerManager.action.start')" class="text-text-secondary hover:text-green-500 disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-0.5 text-base" :disabled="container.State === 'running'">
                     <i class="fas fa-play"></i>
                   </button>
-                  <button @click="sendDockerCommand(container.id, 'stop')" :title="t('dockerManager.action.stop')" class="text-text-secondary hover:text-yellow-500 disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-0.5 text-base" :disabled="container.State !== 'running'">
+                  <button data-testid="docker-stop" @click="sendDockerCommand(container.id, 'stop')" :title="t('dockerManager.action.stop')" class="text-text-secondary hover:text-yellow-500 disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-0.5 text-base" :disabled="container.State !== 'running'">
                      <i class="fas fa-stop"></i>
                   </button>
                   <button @click="sendDockerCommand(container.id, 'restart')" :title="t('dockerManager.action.restart')" class="text-text-secondary hover:text-blue-500 disabled:text-text-disabled disabled:cursor-not-allowed transition-colors duration-150 p-0.5 text-base" :disabled="container.State !== 'running'">

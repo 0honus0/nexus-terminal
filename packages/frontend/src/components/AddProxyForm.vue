@@ -33,6 +33,7 @@ const initialFormData = {
 const formData = reactive({ ...initialFormData });
 
 const formError = ref<string | null>(null); // 表单级别的错误信息
+const clearStoredPassword = ref(false);
 // 合并加载和错误状态
 const isCombinedLoading = computed(() => isLoading.value || isTagLoading.value);
 const combinedStoreError = computed(() => proxyStoreError.value || tagStoreError.value);
@@ -64,9 +65,11 @@ watch(() => props.proxyToEdit, (newVal) => {
         formData.port = newVal.port;
         formData.username = newVal.username ?? '';
         formData.password = ''; // 清空密码，要求用户重新输入以更新
+        clearStoredPassword.value = false;
     } else {
         // 添加模式：重置表单
         Object.assign(formData, initialFormData);
+        clearStoredPassword.value = false;
     }
 }, { immediate: true });
 
@@ -98,8 +101,8 @@ const handleSubmit = async () => {
   // 仅当用户输入新密码或在编辑模式下明确清空时才发送
   if (formData.password) {
       dataToSend.password = formData.password;
-  } else if (isEditMode.value && formData.password === '') {
-      dataToSend.password = null; // 发送 null 表示清空密码 (后端需要能处理 null)
+  } else if (isEditMode.value && clearStoredPassword.value) {
+      dataToSend.password = null;
   }
   // 如果是添加模式且密码为空，则不发送 password 字段
 
@@ -123,7 +126,7 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-overlay flex justify-center items-center z-50"> <!-- Use bg-overlay for the overlay -->
+  <div data-testid="proxy-form" class="fixed inset-0 bg-overlay flex justify-center items-center z-50"> <!-- Use bg-overlay for the overlay -->
     <div class="bg-background text-foreground p-8 rounded-lg shadow-xl border border-border min-w-[350px] max-w-lg"> <!-- Form Panel with Tailwind -->
       <h3 class="text-lg font-semibold text-center mb-6">{{ formTitle }}</h3> <!-- Title with Tailwind -->
       <form @submit.prevent="handleSubmit" class="space-y-4"> <!-- Form with spacing -->
@@ -159,8 +162,14 @@ const handleSubmit = async () => {
         <div> <!-- Form Group -->
           <label for="proxy-password" class="block text-sm font-medium text-text-secondary mb-1">{{ t('proxies.form.password') }} ({{ t('proxies.form.optional') }})</label>
           <input type="password" id="proxy-password" v-model="formData.password"
+                 @input="clearStoredPassword = false"
                  class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" />
             <small v-if="isEditMode" class="block mt-1 text-xs text-text-secondary">{{ t('proxies.form.passwordUpdateNote') }}</small>
+            <label v-if="isEditMode" class="mt-2 flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none">
+              <input data-testid="proxy-clear-password" type="checkbox" v-model="clearStoredPassword" @change="clearStoredPassword && (formData.password = '')"
+                     class="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+              <span>{{ t('proxies.form.clearStoredPassword', 'Clear saved password') }}</span>
+            </label>
          </div>
 
          <div v-if="formError || combinedStoreError" class="text-error bg-error/10 border border-error/30 rounded-md p-3 text-sm text-center font-medium"> <!-- Use semantic error colors -->
@@ -168,7 +177,7 @@ const handleSubmit = async () => {
          </div>
 
         <div class="flex justify-end space-x-3 pt-5 mt-6 border-t border-border"> <!-- Form Actions with Tailwind -->
-          <button type="submit" :disabled="isLoading"
+          <button data-testid="proxy-submit" type="submit" :disabled="isLoading"
                   class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
             {{ submitButtonText }}
           </button>

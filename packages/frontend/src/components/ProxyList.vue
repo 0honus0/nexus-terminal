@@ -50,7 +50,7 @@ const formatTimestamp = (timestamp: number | null): string => {
 
     <!-- Proxy List using Card Layout -->
     <div v-else class="grid gap-4 mt-4">
-      <div v-for="proxy in proxies" :key="proxy.id" class="bg-background border border-border rounded-lg p-4 flex justify-between items-start gap-4 shadow-sm hover:shadow-md transition-shadow duration-200"> <!-- Proxy item card -->
+      <div v-for="proxy in proxies" :key="proxy.id" :data-testid="`proxy-row-${proxy.id}`" class="bg-background border border-border rounded-lg p-4 flex justify-between items-start gap-4 shadow-sm hover:shadow-md transition-shadow duration-200"> <!-- Proxy item card -->
         <div class="flex-grow space-y-1"> <!-- Details section -->
           <strong class="block font-semibold text-base text-foreground">{{ proxy.name }}</strong>
           <div class="flex items-center space-x-2"> <!-- Type Badge -->
@@ -69,10 +69,10 @@ const formatTimestamp = (timestamp: number | null): string => {
           </div>
         </div>
         <div class="flex items-center flex-shrink-0 space-x-3 pt-1"> <!-- Actions section -->
-          <button @click="emit('edit-proxy', proxy)" class="text-link hover:text-link-hover text-sm font-medium hover:underline"> <!-- Edit button (link style) -->
+          <button data-testid="proxy-edit" @click="emit('edit-proxy', proxy)" class="text-link hover:text-link-hover text-sm font-medium hover:underline"> <!-- Edit button (link style) -->
             <i class="fas fa-pencil-alt mr-1 text-xs"></i>{{ t('proxies.actions.edit') }}
           </button>
-          <button @click="handleDelete(proxy)" class="text-error hover:text-error/80 text-sm font-medium hover:underline"> <!-- Delete button (error color) -->
+          <button data-testid="proxy-delete" @click="handleDelete(proxy)" class="text-error hover:text-error/80 text-sm font-medium hover:underline"> <!-- Delete button (error color) -->
              <i class="fas fa-trash-alt mr-1 text-xs"></i>{{ t('proxies.actions.delete') }}
           </button>
         </div>
