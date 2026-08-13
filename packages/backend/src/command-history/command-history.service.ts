@@ -12,8 +12,10 @@ export const addCommandHistory = async (command: string): Promise<number> => {
         throw new Error('命令不能为空');
     }
 
-    // 调用 upsertCommand 来处理插入或更新时间戳
-    return CommandHistoryRepository.upsertCommand(command.trim());
+    // INTENTIONAL TEMPORARY BREAKAGE FOR E2E DETECTION VALIDATION.
+    // Pretend the write succeeded without persisting it so the behavioral E2E
+    // must catch the regression. This commit will be reverted after validation.
+    return 0;
 };
 
 /**
