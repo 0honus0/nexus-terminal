@@ -745,6 +745,7 @@ onBeforeUnmount(() => {
 
     <!-- Right Sidebar Panel -->
      <div ref="rightSidebarPanelRef"
+          data-testid="right-sidebar-panel"
           :class="['fixed top-0 bottom-0 right-0 max-w-[80vw] bg-background z-[110] transition-transform duration-300 ease-in-out flex flex-col overflow-hidden border-l border-border',
                    {'translate-x-0': !!activeRightSidebarPane, 'translate-x-full': !activeRightSidebarPane}]"
           :style="{ width: getSidebarPaneWidth(activeRightSidebarPane) }">

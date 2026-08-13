@@ -212,14 +212,51 @@ const handleFilesSent = (payload: any) => {
 
 // 管理二级菜单的展开状态
 const expandedSubmenu = ref<string | null>(null);
+const submenuDirections = ref<Record<string, 'left' | 'right'>>({});
+const submenuElements = new Map<string, HTMLElement>();
 let closeTimeout: NodeJS.Timeout | null = null;
 
-const showSubmenu = (label: string) => {
+const setSubmenuElement = (label: string, element: unknown) => {
+  if (element instanceof HTMLElement) {
+    submenuElements.set(label, element);
+  } else {
+    submenuElements.delete(label);
+  }
+};
+
+const fitSubmenuToViewport = async (label: string) => {
+  await nextTick();
+
+  const submenu = submenuElements.get(label);
+  const trigger = submenu?.parentElement;
+  if (!submenu || !trigger) return;
+
+  const viewportMargin = 10;
+  const submenuGap = 4;
+  const submenuRect = submenu.getBoundingClientRect();
+  const triggerRect = trigger.getBoundingClientRect();
+  const currentDirection = submenuDirections.value[label] ?? 'right';
+
+  const fitsRight = triggerRect.right + submenuGap + submenuRect.width <= window.innerWidth - viewportMargin;
+  const fitsLeft = triggerRect.left - submenuGap - submenuRect.width >= viewportMargin;
+
+  if (currentDirection === 'right' && !fitsRight && fitsLeft) {
+    submenuDirections.value = { ...submenuDirections.value, [label]: 'left' };
+  } else if (currentDirection === 'left' && !fitsLeft && fitsRight) {
+    submenuDirections.value = { ...submenuDirections.value, [label]: 'right' };
+  }
+};
+
+const showSubmenu = (label: string, recalculate = false) => {
   if (closeTimeout) {
     clearTimeout(closeTimeout);
     closeTimeout = null;
   }
   expandedSubmenu.value = label;
+  if (recalculate || !submenuDirections.value[label]) {
+    submenuDirections.value = { ...submenuDirections.value, [label]: 'right' };
+    void fitSubmenuToViewport(label);
+  }
 };
 
 const hideSubmenu = () => {
@@ -308,14 +345,20 @@ onUnmounted(() => {
             'px-4 py-1.5 text-foreground text-sm flex items-center justify-between transition-colors duration-150 rounded mx-1 relative',
             isSubmenuDisabled(menuItem) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
           ]"
-          @mouseenter="showSubmenu(menuItem.label)"
+          @mouseenter="showSubmenu(menuItem.label, true)"
           @mouseleave="hideSubmenu()"
         >
           {{ menuItem.label }}
           <span class="ml-2">›</span>
           <ul
             v-if="expandedSubmenu === menuItem.label"
-            class="absolute left-full top-0 mt-0 ml-1 bg-background border border-border shadow-lg rounded-md z-[1003] min-w-[150px] list-none p-1"
+            :ref="element => setSubmenuElement(menuItem.label, element)"
+            data-testid="file-manager-context-submenu"
+            :data-side="submenuDirections[menuItem.label] ?? 'right'"
+            :class="[
+              'absolute top-0 mt-0 bg-background border border-border shadow-lg rounded-md z-[1003] min-w-[150px] list-none p-1',
+              (submenuDirections[menuItem.label] ?? 'right') === 'left' ? 'right-full mr-1' : 'left-full ml-1'
+            ]"
             @mouseenter="showSubmenu(menuItem.label)"
             @mouseleave="hideSubmenu()"
           >

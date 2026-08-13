@@ -63,6 +63,66 @@ async function compressFromMenu(page: Page, source: string, submenuLabel: string
   await expect(row(page, archiveName)).toBeVisible({ timeout: 30_000 });
 }
 
+test('keeps the compress submenu inside the viewport in a narrow right sidebar', async ({ page, context }) => {
+  await page.setViewportSize({ width: 900, height: 760 });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
+  expect(originalSidebarResponse.ok()).toBeTruthy();
+  const originalSidebar = await originalSidebarResponse.json() as { left: string[]; right: string[] };
+
+  try {
+    const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
+      data: { left: originalSidebar.left, right: ['fileManager'] },
+    });
+    expect(sidebarResponse.ok()).toBeTruthy();
+
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    await page.getByTestId('sidebar-pane-fileManager').click();
+
+    const rightSidebar = page.getByTestId('right-sidebar-panel');
+    await expect(rightSidebar).toBeVisible();
+    await rightSidebar.evaluate((element) => {
+      (element as HTMLElement).style.width = '220px';
+    });
+
+    const sidebarList = rightSidebar.getByTestId('file-manager-list');
+    await expect(sidebarList).toBeVisible();
+    const target = sidebarList.locator('tr[data-filename="archive-source.txt"]');
+    await expect(target).toBeVisible({ timeout: 20_000 });
+
+    const targetBox = await target.boundingBox();
+    const viewport = page.viewportSize();
+    expect(targetBox).toBeTruthy();
+    expect(viewport).toBeTruthy();
+    expect(targetBox!.x).toBeGreaterThan(viewport!.width - 230);
+
+    await target.click({
+      button: 'right',
+      position: { x: Math.max(1, targetBox!.width - 4), y: Math.round(targetBox!.height / 2) },
+    });
+    await expect(menu(page)).toBeVisible();
+
+    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    await expect(compress).toBeVisible();
+    await compress.hover();
+
+    const submenu = page.getByTestId('file-manager-context-submenu');
+    await expect(submenu).toBeVisible();
+    await expect(submenu).toHaveAttribute('data-side', 'left');
+
+    const submenuBox = await submenu.boundingBox();
+    expect(submenuBox).toBeTruthy();
+    expect(submenuBox!.x).toBeGreaterThanOrEqual(0);
+    expect(submenuBox!.x + submenuBox!.width).toBeLessThanOrEqual(viewport!.width);
+  } finally {
+    await context.request.put('/api/v1/settings/sidebar', { data: originalSidebar });
+  }
+});
+
 test('verifies file manager right-click actions over real SFTP', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
