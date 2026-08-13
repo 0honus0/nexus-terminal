@@ -31,6 +31,10 @@ const props = defineProps({
   currentDirectoryPath: { // Current path of the file manager
     type: String,
     required: true,
+  },
+  sourceReady: {
+    type: Boolean,
+    default: true,
   }
 });
 
@@ -137,8 +141,16 @@ onUnmounted(() => {
 // 但我们仍然需要触发菜单项的 action，并通知父组件关闭菜单
 const emit = defineEmits(['item-click', 'close-request']); // 添加 close-request
 
+const isItemDisabled = (item: ContextMenuItem): boolean => (
+  typeof item.disabled === 'function' ? item.disabled() : !!item.disabled
+);
+
+const isSubmenuDisabled = (item: ContextMenuItem): boolean => (
+  !!item.submenu?.length && item.submenu.every(isItemDisabled)
+);
+
 const handleItemClick = (item: ContextMenuItem) => {
-  if (item.disabled) return;
+  if (isItemDisabled(item)) return;
   if (item.action) {
     item.action(); // 只有当 action 存在时才执行
     emit('close-request'); // <-- 发出关闭请求
@@ -146,6 +158,7 @@ const handleItemClick = (item: ContextMenuItem) => {
 };
 
 const handleSendToClick = () => {
+  if (!props.sourceReady) return;
   const itemsToSend: { name: string; path: string; type: 'file' | 'directory' }[] = [];
 
   // 优先使用多选的项目
@@ -241,9 +254,10 @@ onUnmounted(() => {
             v-for="(subItem, subIndex) in menuItem.submenu"
             :key="`${index}-${subIndex}`"
             @click.stop="handleItemClick(subItem)"
+            :aria-disabled="isItemDisabled(subItem)"
             :class="[
               'px-4 py-1.5 text-foreground text-sm flex items-center justify-between gap-4 transition-colors duration-150 rounded mx-1',
-              subItem.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
+              isItemDisabled(subItem) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
             ]"
           >
             <span>{{ subItem.label }}</span>
@@ -254,8 +268,8 @@ onUnmounted(() => {
             <li
               @click.stop="handleSendToClick"
               :class="[
-                'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-                'hover:bg-primary/10 hover:text-primary'
+                'px-4 py-1.5 text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+                props.sourceReady ? 'cursor-pointer hover:bg-primary/10 hover:text-primary' : 'opacity-40 cursor-not-allowed'
               ]"
             >
               {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}
@@ -266,9 +280,10 @@ onUnmounted(() => {
         <li
           v-else-if="!menuItem.submenu"
           @click.stop="handleItemClick(menuItem)"
+          :aria-disabled="isItemDisabled(menuItem)"
           :class="[
             'px-4 py-1.5 text-foreground text-sm flex items-center justify-between gap-4 transition-colors duration-150 rounded mx-1',
-            menuItem.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
+            isItemDisabled(menuItem) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
           ]"
         >
           <span>{{ menuItem.label }}</span>
@@ -279,8 +294,8 @@ onUnmounted(() => {
           <li
             @click.stop="handleSendToClick"
             :class="[
-              'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-              'hover:bg-primary/10 hover:text-primary'
+              'px-4 py-1.5 text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+              props.sourceReady ? 'cursor-pointer hover:bg-primary/10 hover:text-primary' : 'opacity-40 cursor-not-allowed'
             ]"
           >
             {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}
@@ -288,7 +303,11 @@ onUnmounted(() => {
         </template>
         <li
           v-if="menuItem.submenu && !isMobile"
-          class="px-4 py-1.5 text-foreground text-sm flex items-center justify-between transition-colors duration-150 rounded mx-1 hover:bg-primary/10 hover:text-primary relative"
+          :aria-disabled="isSubmenuDisabled(menuItem)"
+          :class="[
+            'px-4 py-1.5 text-foreground text-sm flex items-center justify-between transition-colors duration-150 rounded mx-1 relative',
+            isSubmenuDisabled(menuItem) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
+          ]"
           @mouseenter="showSubmenu(menuItem.label)"
           @mouseleave="hideSubmenu()"
         >
@@ -304,9 +323,10 @@ onUnmounted(() => {
               v-for="(subItem, subIndex) in menuItem.submenu"
               :key="subIndex"
               @click.stop="handleItemClick(subItem)"
+              :aria-disabled="isItemDisabled(subItem)"
               :class="[
                 'px-4 py-1.5 text-foreground text-sm flex items-center justify-between gap-4 transition-colors duration-150 rounded mx-1',
-                subItem.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
+                isItemDisabled(subItem) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-primary/10 hover:text-primary'
               ]"
             >
               <span>{{ subItem.label }}</span>
@@ -319,8 +339,8 @@ onUnmounted(() => {
           <li
             @click.stop="handleSendToClick"
             :class="[
-              'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-              'hover:bg-primary/10 hover:text-primary'
+              'px-4 py-1.5 text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+              props.sourceReady ? 'cursor-pointer hover:bg-primary/10 hover:text-primary' : 'opacity-40 cursor-not-allowed'
             ]"
           >
             {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}

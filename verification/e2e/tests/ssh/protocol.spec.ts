@@ -24,6 +24,43 @@ test('backend can authenticate to the real SSH test server', async ({ request })
   await expect(response.json()).resolves.toMatchObject({ success: true });
 });
 
+test('duplicate ssh:connect stays non-fatal and leaves SFTP usable', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const session = await openSshSession(request, connectionId, `duplicate-${crypto.randomUUID()}`);
+
+  try {
+    await waitForSftpReady(session.socket);
+    await step('repeat ssh:connect on the same live websocket', async () => {
+      const infoPromise = waitForJson(
+        session.socket,
+        (message) => message.type === 'info' && String(message.payload ?? '').includes('重复连接请求'),
+        10_000,
+      );
+      sendJson(session.socket, {
+        type: 'ssh:connect',
+        payload: { connectionId: String(connectionId), clientSessionId: session.sessionId },
+      });
+      await infoPromise;
+    });
+
+    await step('SFTP operations still work after the duplicate request', async () => {
+      const root = await requestJson(
+        session.socket,
+        'sftp:readdir',
+        { path: '/' },
+        'sftp:readdir:success',
+        'sftp:readdir:error',
+      );
+      expect((Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename))
+        .toContain('seed.txt');
+    });
+  } finally {
+    await closeWebSocket(session.socket);
+  }
+});
+
 test('same-session move treats a missing destination path as available', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();

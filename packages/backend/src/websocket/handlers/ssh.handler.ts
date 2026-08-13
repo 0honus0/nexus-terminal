@@ -405,7 +405,10 @@ export async function handleSshConnect(
 
     if (sessionId && existingState) {
         console.warn(`WebSocket: 用户 ${ws.username} (会话: ${sessionId}) 已有活动连接，忽略新的连接请求。`);
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: '已存在活动的 SSH 连接。' }));
+        // A duplicate connect request is a no-op, not a transport failure. Sending
+        // ssh:error here caused the frontend to mark the still-live SSH/SFTP
+        // session as failed and grey out FileManager actions.
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'info', payload: '已存在活动的 SSH 连接，已忽略重复连接请求。' }));
         return;
     }
 

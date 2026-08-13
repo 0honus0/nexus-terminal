@@ -2487,6 +2487,7 @@ const handleOpenEditorClick = () => {
       :active-context-item="contextTargetItem"
       :selected-file-items="computedSelectedFullItems"
       :current-directory-path="currentSftpManager?.currentPath?.value ?? '/'"
+      :source-ready="props.wsDeps.isConnected.value && props.wsDeps.isSftpReady.value"
      @close-request="hideContextMenu"
    />
 

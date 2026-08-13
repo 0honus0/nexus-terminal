@@ -290,7 +290,7 @@ export function createWebSocketConnectionManager(
                             statusMessage.value = getStatusText('disconnected', { reason: message.payload || '未知原因' });
                             isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
                         }
-                    } else if (message.type === 'ssh:error' || message.type === 'error') {
+                    } else if (message.type === 'ssh:error') {
                         if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
                             let errorMsg = message.payload || '未知错误';
@@ -298,6 +298,14 @@ export function createWebSocketConnectionManager(
                             statusMessage.value = getStatusText('error', { message: errorMsg });
                             isSftpReady.value = false;
                         }
+                    } else if (message.type === 'error') {
+                        // Generic protocol/operation errors are not equivalent to the
+                        // underlying SSH transport being disconnected. Marking the whole
+                        // session as errored here used to flip isSftpReady to false and
+                        // leave FileManager actions disabled even though SSH/SFTP was
+                        // still usable (for example after an unsupported/non-fatal WS
+                        // request). Individual consumers still receive the error below.
+                        console.warn(`[WebSocket ${instanceSessionId}] 收到非致命通用错误:`, message.payload);
                     } else if (message.type === 'sftp_ready') {
                         console.log(`[WebSocket ${instanceSessionId}] SFTP 会话已就绪。`);
                         isSftpReady.value = true;
