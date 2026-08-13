@@ -22,6 +22,10 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
     const error = ref<string | null>(null);
     const uiNotificationsStore = useUiNotificationsStore();
     const selectedIndex = ref<number>(-1); //  Index of the selected command in the filtered list
+    // CommandInputBar can submit commands faster than the POST + refresh round-trip.
+    // Serialize history mutations so an older fetchHistory response can never land
+    // after a newer one and overwrite the UI with a stale snapshot.
+    let addCommandQueue: Promise<void> = Promise.resolve();
 
     // --- Getters ---
 
@@ -108,26 +112,30 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
     };
 
     // 添加命令到历史记录 (由 CommandInputBar 调用, 添加后清除缓存)
-    const addCommand = async (command: string) => {
+    const addCommand = (command: string): Promise<void> => {
         //  Filter out Ctrl+C signal (\x03) from being added to history
         if (command === '\x03') {
             console.log('[CmdHistoryStore] Ignoring Ctrl+C signal for history.');
-            return;
+            return Promise.resolve();
         }
         if (!command || command.trim().length === 0) {
-            return; // 不添加空命令
+            return Promise.resolve(); // 不添加空命令
         }
-        try {
-            const response = await apiClient.post<{ id: number }>('/command-history', { command: command.trim() }); // 使用 apiClient
-            // 添加成功后，重新获取列表以保证顺序和 ID 正确
-            // 添加成功后，清除缓存并重新获取
-            localStorage.removeItem('commandHistoryCache');
-            await fetchHistory(); // fetchHistory 会处理获取和缓存更新
-        } catch (err: any) {
-            console.error('添加命令历史记录失败:', err);
-            const message = err.response?.data?.message || '添加历史记录时发生错误';
-            uiNotificationsStore.showError(message);
-        }
+        const normalizedCommand = command.trim();
+        addCommandQueue = addCommandQueue.then(async () => {
+            try {
+                await apiClient.post<{ id: number }>('/command-history', { command: normalizedCommand });
+                // 添加成功后，清除缓存并重新获取。由于整个流程在队列中串行，
+                // 后提交的命令不会被更早请求的旧快照覆盖。
+                localStorage.removeItem('commandHistoryCache');
+                await fetchHistory();
+            } catch (err: any) {
+                console.error('添加命令历史记录失败:', err);
+                const message = err.response?.data?.message || '添加历史记录时发生错误';
+                uiNotificationsStore.showError(message);
+            }
+        });
+        return addCommandQueue;
     };
 
 

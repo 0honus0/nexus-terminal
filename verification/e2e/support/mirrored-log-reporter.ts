@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type {
   FullConfig,
+  FullResult,
   Reporter,
   Suite,
   TestCase,
@@ -22,6 +23,7 @@ export default class MirroredLogReporter implements Reporter {
   private testDir = '';
   private logRoot = '';
   private fileByTestId = new Map<string, string>();
+  private unexpectedFirstAttempts = new Map<string, string>();
 
   onBegin(config: FullConfig, _suite: Suite) {
     this.testDir = config.projects[0]?.testDir || process.cwd();
@@ -80,6 +82,33 @@ export default class MirroredLogReporter implements Reporter {
         this.append(test, `${attachment.name}: ${attachment.path || attachment.contentType}\n`);
       }
     }
+
+    if (
+      result.retry === 0
+      && test.expectedStatus === 'passed'
+      && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')
+    ) {
+      this.unexpectedFirstAttempts.set(test.id, test.titlePath().filter(Boolean).join(' > '));
+    }
+  }
+
+  onEnd(result: FullResult) {
+    if (this.unexpectedFirstAttempts.size === 0) return;
+
+    const summaryFile = path.join(this.logRoot, '_flaky-tests.log');
+    const summary = [
+      'E2E run contained tests that failed on their first attempt.',
+      'Retries are retained for diagnostics, but flaky tests fail CI.',
+      '',
+      ...Array.from(this.unexpectedFirstAttempts.values()).map((title) => `- ${title}`),
+      '',
+    ].join('\n');
+    fs.writeFileSync(summaryFile, summary, 'utf8');
+
+    // Playwright permits reporters to override the final run status. Keep retry
+    // artifacts/logs for diagnosis while preventing a retry-pass from producing
+    // a misleading green CI run.
+    if (result.status === 'passed') return { status: 'failed' as const };
   }
 
   private logFileFor(test: TestCase, retry = 0): string {

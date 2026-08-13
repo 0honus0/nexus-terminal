@@ -34,6 +34,18 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
     await commandInput.fill(COMMAND_B);
     await commandInput.press('Enter');
     await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('HISTORY_MANAGED_B');
+
+    // Verify persistence first. This distinguishes backend history-write failures
+    // from frontend refresh problems and protects rapid sequential submissions.
+    await expect.poll(async () => {
+      const response = await context.request.get('/api/v1/command-history');
+      if (!response.ok()) return [];
+      const items = await response.json() as Array<{ command: string }>;
+      return items
+        .map((item) => item.command)
+        .filter((command) => command.includes('HISTORY_MANAGED_'));
+    }, { timeout: 15_000 }).toEqual(expect.arrayContaining([COMMAND_A, COMMAND_B]));
+
     await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first()).toBeVisible({ timeout: 15_000 });
     await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' }).first()).toBeVisible();
   });
