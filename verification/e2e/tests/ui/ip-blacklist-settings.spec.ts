@@ -28,13 +28,17 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
     await step('disable and re-enable the blacklist switch through the UI', async () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'false');
-      let settings = await context.request.get('/api/v1/settings');
-      expect((await settings.json() as Record<string, string>).ipBlacklistEnabled).toBe('false');
+      await expect.poll(async () => {
+        const settings = await context.request.get('/api/v1/settings');
+        return (await settings.json() as Record<string, string>).ipBlacklistEnabled;
+      }).toBe('false');
 
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'true');
-      settings = await context.request.get('/api/v1/settings');
-      expect((await settings.json() as Record<string, string>).ipBlacklistEnabled).toBe('true');
+      await expect.poll(async () => {
+        const settings = await context.request.get('/api/v1/settings');
+        return (await settings.json() as Record<string, string>).ipBlacklistEnabled;
+      }).toBe('true');
     });
 
     await step('save login failure threshold and ban duration', async () => {
