@@ -26,6 +26,8 @@ const PASSWORD = 'e2e-password';
 let statusSample = 0;
 const executedCommands = [];
 const receivedWebhooks = [];
+const activeSshClients = new Set();
+let sshServerOnline = false;
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
@@ -568,6 +570,9 @@ function attachShell(session, accept) {
 await resetRoot();
 
 const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
+  activeSshClients.add(client);
+  client.once('close', () => activeSshClients.delete(client));
+
   client.on('authentication', (ctx) => {
     if (ctx.method === 'password' && ctx.username === USERNAME && ctx.password === PASSWORD) ctx.accept();
     else ctx.reject();
@@ -594,6 +599,33 @@ sshServer.on('error', (error) => {
   process.exitCode = 1;
 });
 
+async function startSshServer() {
+  if (sshServerOnline) return;
+  await new Promise((resolve, reject) => {
+    const onError = (error) => reject(error);
+    sshServer.once('error', onError);
+    sshServer.listen(SSH_PORT, SSH_HOST, () => {
+      sshServer.off('error', onError);
+      sshServerOnline = true;
+      resolve();
+    });
+  });
+}
+
+async function stopSshServer() {
+  for (const client of [...activeSshClients]) {
+    try { client.end(); } catch { /* already closed */ }
+  }
+  if (!sshServerOnline) return;
+  await new Promise((resolve, reject) => {
+    sshServer.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+  sshServerOnline = false;
+}
+
 const controlServer = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', `http://${SSH_HOST}:${CONTROL_PORT}`);
@@ -606,6 +638,23 @@ const controlServer = http.createServer(async (req, res) => {
       await resetRoot();
       res.writeHead(204);
       res.end();
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/ssh/offline') {
+      await stopSshServer();
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/ssh/online') {
+      await startSshServer();
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/ssh/status') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ online: sshServerOnline, activeClients: activeSshClients.size }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
@@ -671,7 +720,7 @@ const controlServer = http.createServer(async (req, res) => {
   }
 });
 
-await new Promise((resolve) => sshServer.listen(SSH_PORT, SSH_HOST, resolve));
+await startSshServer();
 await new Promise((resolve) => controlServer.listen(CONTROL_PORT, SSH_HOST, resolve));
 console.log(`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, root ${rootDir}`);
 
