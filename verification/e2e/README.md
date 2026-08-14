@@ -6,6 +6,7 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 
 - `tests/auth/` — first-run setup, administrator creation, login, and session establishment.
 - `tests/http/` — HTTP API authentication and protected endpoint flows.
+- `tests/ingress/` — production Nginx ingress regressions that must not be hidden by the Vite development server.
 - `tests/websocket/` — WebSocket upgrade authentication and protocol frame flows.
 - `tests/ui/` — authenticated browser navigation and UI behavior.
 - `tests/ssh/` — real SSH connection flows and file-manager SFTP behavior against an isolated in-process SSH server.
@@ -42,6 +43,14 @@ npm run test:e2e:ssh
 npm run test:e2e:mobile
 npm run test:e2e:list
 ```
+
+The production ingress suite is run separately because it targets a real Nginx endpoint rather than the Vite development server. Set `NEXUS_PRODUCTION_BASE_URL` to the prepared ingress URL and run:
+
+```bash
+NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix verification/e2e run test:ingress
+```
+
+GitHub Actions prepares that ingress with `RP_ID=ssh.honus.top` and `RP_ORIGIN=https://ssh.honus.top,https://ssh.trui.de`, then sends `Host: ssh.honus.top` so the regression does not depend on public DNS.
 
 ## Regression coverage
 
