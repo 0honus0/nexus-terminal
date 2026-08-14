@@ -26,6 +26,11 @@ export async function resetTestSshFilesystem(): Promise<void> {
   expect(response.ok).toBeTruthy();
 }
 
+export async function setTestSshOnline(online: boolean): Promise<void> {
+  const response = await fetch(`${E2E_SSH.controlUrl}/ssh/${online ? 'online' : 'offline'}`, { method: 'POST' });
+  expect(response.ok).toBeTruthy();
+}
+
 export async function removeNamedSshConnections(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
