@@ -44,8 +44,10 @@ export function createWebSocketConnectionManager(
     const instanceDbConnectionId = dbConnectionId; // 保存数据库连接 ID
     const getIsMarkedForSuspend = options?.getIsMarkedForSuspend; // +++ 获取回调函数 +++
     let reconnectAttempts = 0; // 重连尝试次数
-    const maxReconnectAttempts = 5; // 最大重连次数
+    const maxReconnectAttempts = 5; // 首次连接失败仍限制次数，避免配置错误时无限重试
+    const reconnectMaxDelayMs = 30000; // 已建立过连接的会话断线后最多每 30 秒重试一次
     let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null; // 重连定时器 ID
+    let hasConnectedOnce = false; // 区分首次连接失败与已建立会话后的断线
     let lastUrl = ''; // 保存上次连接的 URL
     let intentionalDisconnect = false; // 标记是否为用户主动断开
     let lastTerminalFrameSequence: number | null = null;
@@ -100,21 +102,28 @@ export function createWebSocketConnectionManager(
             return;
         }
 
-        if (reconnectAttempts >= maxReconnectAttempts) {
+        // 首次连接失败保持原来的上限；一旦会话成功建立过，后续断线则持续周期重试。
+        if (!hasConnectedOnce && reconnectAttempts >= maxReconnectAttempts) {
             statusMessage.value = getStatusText('reconnectFailed');
             connectionStatus.value = 'error'; // 标记为错误状态
             return;
         }
 
-        reconnectAttempts++;
-        // 指数退避延迟 (例如: 2s, 4s, 8s, 16s, 32s)
-        const delay = Math.pow(2, reconnectAttempts) * 1000;
-        statusMessage.value = getStatusText('reconnecting', { attempt: reconnectAttempts, delay: delay / 1000 });
-        connectionStatus.value = 'connecting'; // 更新状态为正在连接
+        // ssh:error / ssh:disconnected / WebSocket close 可能连续到达。
+        // 同一轮断线只保留一个定时器，避免重复计数和重复建连。
+        if (reconnectTimeoutId) {
+            return;
+        }
 
-        if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId); // 清除旧的定时器
+        reconnectAttempts++;
+        // 2s, 4s, 8s, 16s, 30s，之后保持 30s 周期重试。
+        const delay = Math.min(Math.pow(2, reconnectAttempts) * 1000, reconnectMaxDelayMs);
+        statusMessage.value = getStatusText('reconnecting', { attempt: reconnectAttempts, delay: delay / 1000 });
+        // 退避等待期间保持 disconnected，让任意键可以立即打断等待并重连。
+        connectionStatus.value = 'disconnected';
 
         reconnectTimeoutId = setTimeout(() => {
+            reconnectTimeoutId = null;
             if (!intentionalDisconnect && lastUrl) { // 再次检查是否主动断开
                 connect(lastUrl);
             }
@@ -189,7 +198,6 @@ export function createWebSocketConnectionManager(
             ws.value.binaryType = 'arraybuffer';
 
             ws.value.onopen = () => {
-                reconnectAttempts = 0; // 连接成功，重置尝试次数
                 lastTerminalFrameSequence = null;
                 statusMessage.value = getStatusText('wsConnected');
                 // 状态保持 'connecting' 直到收到 ssh:connected
@@ -280,6 +288,8 @@ export function createWebSocketConnectionManager(
 
                     // --- 更新此实例的连接状态 ---
                     if (message.type === 'ssh:connected') {
+                        hasConnectedOnce = true;
+                        reconnectAttempts = 0; // SSH 真正恢复后再重置退避计数
                         if (connectionStatus.value !== 'connected') {
                             connectionStatus.value = 'connected';
                             statusMessage.value = getStatusText('connected');
@@ -290,6 +300,7 @@ export function createWebSocketConnectionManager(
                             statusMessage.value = getStatusText('disconnected', { reason: message.payload || '未知原因' });
                             isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
                         }
+                        scheduleReconnect();
                     } else if (message.type === 'ssh:error') {
                         if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
@@ -298,6 +309,9 @@ export function createWebSocketConnectionManager(
                             statusMessage.value = getStatusText('error', { message: errorMsg });
                             isSftpReady.value = false;
                         }
+                        // 已经成功建立过 SSH 后出现 ssh:error，通常表示传输层或 Shell 已失效。
+                        // WebSocket 本身可能仍是 OPEN，因此不能只依赖 onclose 来启动重连。
+                        if (hasConnectedOnce) scheduleReconnect();
                     } else if (message.type === 'error') {
                         // Generic protocol/operation errors are not equivalent to the
                         // underlying SSH transport being disconnected. Marking the whole
@@ -358,6 +372,20 @@ export function createWebSocketConnectionManager(
              isSftpReady.value = false;
              ws.value = null;
         }
+    };
+
+    /**
+     * 立即重连。用于断线状态下的键盘输入：取消当前退避等待，并马上尝试一次。
+     */
+    const reconnectNow = () => {
+        if (getIsMarkedForSuspend && getIsMarkedForSuspend()) {
+            return;
+        }
+        if (!lastUrl) {
+            console.warn(`[WebSocket ${instanceSessionId}] 无法立即重连：没有可用的上次连接 URL。`);
+            return;
+        }
+        connect(lastUrl);
     };
 
     /**
@@ -476,6 +504,7 @@ export function createWebSocketConnectionManager(
 
         // 方法
         connect,
+        reconnectNow,
         disconnect,
         sendMessage,
         sendBinaryMessage,

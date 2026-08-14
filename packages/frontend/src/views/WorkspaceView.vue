@@ -356,12 +356,7 @@ onBeforeUnmount(() => {
      } else {
        console.warn(`[WorkspaceView] 无法写入重连提示，terminalInstance 不可用。`);
      }
-     const connectionInfo = connectionsStore.connections.find(c => c.id === Number(session.connectionId));
-     if (connectionInfo) {
-       sessionStore.handleConnectRequest(connectionInfo);
-     } else {
-       console.error(`[WorkspaceView] handleTerminalInput: 未找到 ID 为 ${session.connectionId} 的连接信息。`);
-     }
+     session.wsManager.reconnectNow();
      return;
    }
 
