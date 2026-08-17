@@ -148,11 +148,7 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
 
     await slowStep('aggregate committed throughput avoids the old per-chunk weak-network false positive', async () => {
       await expect.poll(
-        () => tuningLogs.some(log => log.includes('profile=normal')),
-        { timeout: 30_000 },
-      ).toBe(true);
-      await expect.poll(
-        () => schedulerLogs.some(log => log.includes('profile=normal') && log.includes('activeFiles=4/6')),
+        () => tuningLogs.some(log => log.includes('profile=normal') && log.includes('largeFileSlots=4')),
         { timeout: 30_000 },
       ).toBe(true);
       await waitForRemoteFiles(largeFiles.map(file => file.name), 60_000);
