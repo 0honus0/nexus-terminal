@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG NODE_VERSION=24
+ARG ALPINE_VERSION=3.24
 
 FROM node:${NODE_VERSION}-alpine AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++
@@ -35,11 +36,11 @@ RUN npm run build \
     && npm prune --omit=dev \
     && npm cache clean --force
 
-FROM node:${NODE_VERSION}-alpine AS runtime
+FROM alpine:${ALPINE_VERSION} AS runtime
 LABEL org.opencontainers.image.title="Nexus Terminal" \
       org.opencontainers.image.description="Unified runtime image for the frontend, backend, and remote gateway"
 
-RUN apk add --no-cache nginx tini \
+RUN apk add --no-cache nodejs nginx tini \
     && rm -rf /usr/share/nginx/html/* /var/cache/apk/*
 
 WORKDIR /app
