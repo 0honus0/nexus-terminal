@@ -523,8 +523,16 @@
         "selectFileToEdit": "ファイルマネージャーから編集するファイルを選択してください。",
         "uploadStatus": {
             "cancelled": "キャンセルされました",
+            "conflict": "同名ファイルの選択待ち",
             "pending": "待機中",
             "uploading": "アップロード中"
+        },
+        "uploadConflict": {
+            "title": "同名のファイルが存在します",
+            "description": "既存のファイルを上書きするか、このファイルのアップロードをスキップしてください。",
+            "applyToAll": "以降のすべての競合にこの選択を適用する",
+            "skip": "このファイルをスキップ",
+            "overwrite": "上書き"
         },
         "uploadTasks": "アップロードタスク",
         "uploadSpeed": "合計速度",

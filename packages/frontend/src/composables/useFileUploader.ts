@@ -1,4 +1,4 @@
-import { reactive, onUnmounted, type Ref, watch, watchEffect } from 'vue';
+import { computed, reactive, ref, onUnmounted, type Ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../types/sftp.types'; 
 import type { UploadItem } from '../types/upload.types'; 
@@ -8,26 +8,85 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 import type { WebSocketDependencies } from './useSftpActions'; 
 
 
-// Keep a bounded pipeline so network latency does not leave the SFTP write stream idle.
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
-// 单文件优先吞吐；文件夹/批量上传依靠“多文件并发”获得总吞吐，因此批量中的单文件流水线更保守。
-// Keep an 8 MiB single-file byte window, but split it into smaller frames. This keeps
-// the SFTP pipeline full while producing steadier ACK/progress updates than 1 MiB steps.
-const SINGLE_FILE_UPLOAD_CHUNK_SIZE = 512 * 1024;
-const SINGLE_FILE_UPLOAD_MAX_IN_FLIGHT = 16;
-const BATCH_UPLOAD_CHUNK_SIZE = 512 * 1024;
-const BATCH_UPLOAD_MAX_IN_FLIGHT = 2;
-const UPLOAD_ACTIVE_WEIGHT_BUDGET = 12;
-const UPLOAD_MAX_ACTIVE_FILES = 12;
-const UPLOAD_SMALL_FILE_THRESHOLD = 256 * 1024;
-const UPLOAD_MEDIUM_FILE_THRESHOLD = 2 * 1024 * 1024;
+// The pipeline adapts to measured ACK RTT + committed throughput. Weak links keep a
+// deliberately small browser/SFTP queue so terminal traffic is not stuck behind MiBs of
+// upload data; healthy links progressively open the window again.
+const KiB = 1024;
+const MiB = 1024 * KiB;
+const UPLOAD_SMALL_FILE_THRESHOLD = 256 * KiB;
+const UPLOAD_MEDIUM_FILE_THRESHOLD = 2 * MiB;
 const UPLOAD_RECONNECT_RESTART_DELAY_MS = 750;
 const UPLOAD_FRAME_MAGIC = [0x4e, 0x58, 0x55, 0x50] as const; // NXUP
 const UPLOAD_FRAME_VERSION = 1;
 const UPLOAD_FRAME_FIXED_HEADER_SIZE = 12;
 const MAX_UPLOAD_ID_BYTES = 512;
+const UPLOAD_NETWORK_MIN_SAMPLES = 3;
+const UPLOAD_NETWORK_PROFILE_CONFIRM_SAMPLES = 2;
+const UPLOAD_NETWORK_EWMA_ALPHA = 0.25;
+const UPLOAD_WEAK_RTT_MS = 650;
+const UPLOAD_WEAK_THROUGHPUT_BPS = 1 * MiB;
+const UPLOAD_FAST_RTT_MS = 160;
+const UPLOAD_FAST_THROUGHPUT_BPS = 6 * MiB;
 
 type UploadPipelineMode = 'single' | 'batch';
+type UploadNetworkProfile = 'probing' | 'weak' | 'normal' | 'fast';
+type UploadConflictPolicy = 'ask' | 'overwrite' | 'skip';
+export type UploadConflictDecision = Exclude<UploadConflictPolicy, 'ask'>;
+
+interface UploadTuning {
+    singleChunkSize: number;
+    singleByteWindow: number;
+    batchChunkSize: number;
+    batchByteWindow: number;
+    wsBufferedBytes: number;
+    maxActiveFiles: number;
+    activeWeightBudget: number;
+}
+
+const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
+    probing: {
+        singleChunkSize: 256 * KiB,
+        singleByteWindow: 2 * MiB,
+        batchChunkSize: 256 * KiB,
+        batchByteWindow: 512 * KiB,
+        wsBufferedBytes: 2 * MiB,
+        maxActiveFiles: 4,
+        activeWeightBudget: 6,
+    },
+    weak: {
+        singleChunkSize: 128 * KiB,
+        singleByteWindow: 1 * MiB,
+        batchChunkSize: 128 * KiB,
+        batchByteWindow: 256 * KiB,
+        wsBufferedBytes: 1536 * KiB,
+        maxActiveFiles: 2,
+        activeWeightBudget: 4,
+    },
+    normal: {
+        singleChunkSize: 512 * KiB,
+        singleByteWindow: 4 * MiB,
+        batchChunkSize: 256 * KiB,
+        batchByteWindow: 1 * MiB,
+        wsBufferedBytes: 6 * MiB,
+        maxActiveFiles: 6,
+        activeWeightBudget: 10,
+    },
+    fast: {
+        singleChunkSize: 1 * MiB,
+        singleByteWindow: 8 * MiB,
+        batchChunkSize: 512 * KiB,
+        batchByteWindow: 2 * MiB,
+        wsBufferedBytes: 12 * MiB,
+        maxActiveFiles: 12,
+        activeWeightBudget: 16,
+    },
+};
+
+interface SentUploadChunk {
+    sentAt: number;
+    size: number;
+}
 
 interface UploadTransferState {
     file: File;
@@ -35,13 +94,14 @@ interface UploadTransferState {
     relativePath?: string;
     prepareId: string;
     pipelineMode: UploadPipelineMode;
-    chunkSize: number;
-    maxInFlight: number;
     offset: number;
     nextChunkIndex: number;
     inFlight: number;
+    inFlightBytes: number;
+    sentChunks: Map<number, SentUploadChunk>;
     pumping: boolean;
     startRequestSent: boolean;
+    conflictPolicyOverride?: UploadConflictDecision;
 }
 
 export interface UploadBatchFile {
@@ -56,6 +116,14 @@ interface UploadBatchState {
     uploadIds: Set<string>;
     prepared: boolean;
     prepareRequestSent: boolean;
+    conflictPolicy?: UploadConflictDecision;
+}
+
+export interface UploadConflictPrompt {
+    uploadId: string;
+    filename: string;
+    remotePath: string;
+    prepareId: string;
 }
 
 const textEncoder = new TextEncoder();
@@ -141,14 +209,101 @@ export function useFileUploader(
     const activeUploadIds = new Set<string>();
     const activeUploadWeights = new Map<string, number>();
     const queuedUploadStarts = new Map<string, boolean>();
+    const uploadConflictQueue = ref<UploadConflictPrompt[]>([]);
+    const uploadConflict = computed(() => uploadConflictQueue.value[0] ?? null);
+    const uploadNetwork = reactive({
+        profile: 'probing' as UploadNetworkProfile,
+        smoothedRttMs: 0,
+        smoothedThroughputBps: 0,
+        sampleCount: 0,
+        candidateProfile: 'probing' as UploadNetworkProfile,
+        candidateCount: 0,
+    });
 
     // --- 上传逻辑 ---
     let reconnectRestartTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const getUploadTuning = (): UploadTuning => UPLOAD_TUNING[uploadNetwork.profile];
+
+    const getTransferTuning = (transfer: UploadTransferState) => {
+        const tuning = getUploadTuning();
+        return transfer.pipelineMode === 'single'
+            ? {
+                chunkSize: tuning.singleChunkSize,
+                byteWindow: tuning.singleByteWindow,
+                wsBufferedBytes: tuning.wsBufferedBytes,
+            }
+            : {
+                chunkSize: tuning.batchChunkSize,
+                byteWindow: tuning.batchByteWindow,
+                wsBufferedBytes: tuning.wsBufferedBytes,
+            };
+    };
+
+    const classifyUploadNetwork = (): UploadNetworkProfile => {
+        if (uploadNetwork.sampleCount < UPLOAD_NETWORK_MIN_SAMPLES) return 'probing';
+        if (
+            uploadNetwork.smoothedRttMs >= UPLOAD_WEAK_RTT_MS
+            || uploadNetwork.smoothedThroughputBps <= UPLOAD_WEAK_THROUGHPUT_BPS
+        ) return 'weak';
+        if (
+            uploadNetwork.smoothedRttMs <= UPLOAD_FAST_RTT_MS
+            && uploadNetwork.smoothedThroughputBps >= UPLOAD_FAST_THROUGHPUT_BPS
+        ) return 'fast';
+        return 'normal';
+    };
+
+    const describeUploadTuning = (profile: UploadNetworkProfile): string => {
+        const tuning = UPLOAD_TUNING[profile];
+        return `profile=${profile}, rtt=${Math.round(uploadNetwork.smoothedRttMs)}ms, throughput=${(uploadNetwork.smoothedThroughputBps / MiB).toFixed(2)}MiB/s, `
+            + `single=${tuning.singleChunkSize / KiB}KiB/${(tuning.singleByteWindow / MiB).toFixed(1)}MiB, `
+            + `batch=${tuning.batchChunkSize / KiB}KiB/${(tuning.batchByteWindow / MiB).toFixed(1)}MiB, `
+            + `maxActiveFiles=${tuning.maxActiveFiles}, weightBudget=${tuning.activeWeightBudget}`;
+    };
+
+    const recordUploadNetworkSample = (sampleRttMs: number, chunkSize: number) => {
+        if (!Number.isFinite(sampleRttMs) || sampleRttMs <= 0 || chunkSize <= 0) return;
+        const sampleThroughputBps = chunkSize * 1000 / sampleRttMs;
+        if (uploadNetwork.sampleCount === 0) {
+            uploadNetwork.smoothedRttMs = sampleRttMs;
+            uploadNetwork.smoothedThroughputBps = sampleThroughputBps;
+        } else {
+            uploadNetwork.smoothedRttMs = uploadNetwork.smoothedRttMs * (1 - UPLOAD_NETWORK_EWMA_ALPHA)
+                + sampleRttMs * UPLOAD_NETWORK_EWMA_ALPHA;
+            uploadNetwork.smoothedThroughputBps = uploadNetwork.smoothedThroughputBps * (1 - UPLOAD_NETWORK_EWMA_ALPHA)
+                + sampleThroughputBps * UPLOAD_NETWORK_EWMA_ALPHA;
+        }
+        uploadNetwork.sampleCount += 1;
+
+        const candidate = classifyUploadNetwork();
+        if (candidate === 'probing') return;
+        if (candidate === uploadNetwork.profile) {
+            uploadNetwork.candidateProfile = candidate;
+            uploadNetwork.candidateCount = 0;
+            return;
+        }
+        if (candidate !== uploadNetwork.candidateProfile) {
+            uploadNetwork.candidateProfile = candidate;
+            uploadNetwork.candidateCount = 1;
+            return;
+        }
+
+        uploadNetwork.candidateCount += 1;
+        if (uploadNetwork.candidateCount < UPLOAD_NETWORK_PROFILE_CONFIRM_SAMPLES) return;
+
+        uploadNetwork.profile = candidate;
+        uploadNetwork.candidateCount = 0;
+        console.log(`[FileUploader ${sessionIdForLog.value}] Adaptive upload tuning changed: ${describeUploadTuning(candidate)}`);
+        drainUploadStartQueue();
+        for (const uploadId of activeUploadIds) void pumpUpload(uploadId);
+    };
 
     const resetTransferForRestart = (transfer: UploadTransferState) => {
         transfer.offset = 0;
         transfer.nextChunkIndex = 0;
         transfer.inFlight = 0;
+        transfer.inFlightBytes = 0;
+        transfer.sentChunks.clear();
         transfer.pumping = false;
         transfer.startRequestSent = false;
     };
@@ -202,6 +357,8 @@ export function useFileUploader(
             upload.progress = 0;
             upload.bytesWritten = 0;
         }
+        const conflictPolicy: UploadConflictPolicy = transfer.conflictPolicyOverride ?? batch.conflictPolicy ?? 'ask';
+        transfer.conflictPolicyOverride = undefined;
         transfer.startRequestSent = true;
         upload.status = 'pending';
         upload.error = undefined;
@@ -214,6 +371,7 @@ export function useFileUploader(
                 size: transfer.file.size,
                 relativePath: transfer.relativePath,
                 prepareId: transfer.prepareId,
+                conflictPolicy,
             },
         });
         return true;
@@ -222,9 +380,10 @@ export function useFileUploader(
     const drainUploadStartQueue = () => {
         if (!wsDeps.value.isConnected.value || !wsDeps.value.isSftpReady.value) return;
 
+        const tuning = getUploadTuning();
         let activeWeight = getActiveUploadWeightTotal();
         for (const [uploadId, restart] of queuedUploadStarts) {
-            if (activeUploadIds.size >= UPLOAD_MAX_ACTIVE_FILES) break;
+            if (activeUploadIds.size >= tuning.maxActiveFiles) break;
 
             const upload = uploads[uploadId];
             const transfer = uploadTransferStates.get(uploadId);
@@ -236,8 +395,8 @@ export function useFileUploader(
             if (!batch?.prepared) continue;
 
             const uploadWeight = getUploadActiveWeight(transfer.file.size);
-            if (activeWeight + uploadWeight > UPLOAD_ACTIVE_WEIGHT_BUDGET) {
-                // Avoid head-of-line blocking: later small files may still fit the budget.
+            if (activeWeight + uploadWeight > tuning.activeWeightBudget) {
+                // Avoid head-of-line blocking: later small files may still fit the current network budget.
                 continue;
             }
 
@@ -267,10 +426,14 @@ export function useFileUploader(
         transfer.pumping = true;
         try {
             if (transfer.file.size === 0 && transfer.offset === 0 && transfer.inFlight === 0) {
+                const tuning = getTransferTuning(transfer);
+                const sentAt = performance.now();
                 await wsDeps.value.sendBinaryMessage(
                     encodeUploadChunkFrame(uploadId, 0, true, new ArrayBuffer(0)),
+                    tuning.wsBufferedBytes,
                 );
                 transfer.inFlight = 1;
+                transfer.sentChunks.set(0, { sentAt, size: 0 });
                 transfer.offset = 1;
                 return;
             }
@@ -278,22 +441,33 @@ export function useFileUploader(
             while (
                 wsDeps.value.isConnected.value
                 && uploads[uploadId]?.status === 'uploading'
-                && transfer.inFlight < transfer.maxInFlight
                 && transfer.offset < transfer.file.size
             ) {
-                const slice = transfer.file.slice(transfer.offset, transfer.offset + transfer.chunkSize);
+                const tuning = getTransferTuning(transfer);
+                const availableWindow = tuning.byteWindow - transfer.inFlightBytes;
+                if (availableWindow <= 0) break;
+
+                const remainingBytes = transfer.file.size - transfer.offset;
+                const nextChunkSize = Math.min(tuning.chunkSize, availableWindow, remainingBytes);
+                if (nextChunkSize <= 0) break;
+
+                const slice = transfer.file.slice(transfer.offset, transfer.offset + nextChunkSize);
                 const chunk = await slice.arrayBuffer();
                 if (!wsDeps.value.isConnected.value || uploads[uploadId]?.status !== 'uploading') return;
 
                 const chunkIndex = transfer.nextChunkIndex;
                 const nextOffset = transfer.offset + slice.size;
                 const isLast = nextOffset >= transfer.file.size;
+                const sentAt = performance.now();
                 await wsDeps.value.sendBinaryMessage(
                     encodeUploadChunkFrame(uploadId, chunkIndex, isLast, chunk),
+                    tuning.wsBufferedBytes,
                 );
                 transfer.offset = nextOffset;
                 transfer.nextChunkIndex += 1;
                 transfer.inFlight += 1;
+                transfer.inFlightBytes += slice.size;
+                transfer.sentChunks.set(chunkIndex, { sentAt, size: slice.size });
             }
         } catch (error) {
             const failedUpload = uploads[uploadId];
@@ -320,10 +494,11 @@ export function useFileUploader(
             const current = uploadTransferStates.get(uploadId);
             if (current) {
                 current.pumping = false;
+                const tuning = getTransferTuning(current);
                 if (
                     wsDeps.value.isConnected.value
                     && uploads[uploadId]?.status === 'uploading'
-                    && current.inFlight < current.maxInFlight
+                    && current.inFlightBytes < tuning.byteWindow
                     && current.offset < current.file.size
                 ) queueMicrotask(() => void pumpUpload(uploadId));
             }
@@ -372,15 +547,17 @@ export function useFileUploader(
             && preparedFiles[0]?.relativeDirectory === ''
             ? 'single'
             : 'batch';
-        const chunkSize = pipelineMode === 'single'
-            ? SINGLE_FILE_UPLOAD_CHUNK_SIZE
-            : BATCH_UPLOAD_CHUNK_SIZE;
-        const maxInFlight = pipelineMode === 'single'
-            ? SINGLE_FILE_UPLOAD_MAX_IN_FLIGHT
-            : BATCH_UPLOAD_MAX_IN_FLIGHT;
+        const initialTuning = getUploadTuning();
+        const initialChunkSize = pipelineMode === 'single'
+            ? initialTuning.singleChunkSize
+            : initialTuning.batchChunkSize;
+        const initialByteWindow = pipelineMode === 'single'
+            ? initialTuning.singleByteWindow
+            : initialTuning.batchByteWindow;
         console.log(
-            `[FileUploader ${sessionIdForLog.value}] Using ${pipelineMode} upload pipeline: `
-            + `${chunkSize / 1024} KiB chunks, ${maxInFlight} in flight.`,
+            `[FileUploader ${sessionIdForLog.value}] Using ${pipelineMode} adaptive upload pipeline: `
+            + `${initialChunkSize / KiB} KiB chunks, ${(initialByteWindow / MiB).toFixed(1)} MiB byte window, `
+            + `network=${uploadNetwork.profile}.`,
         );
 
         const uploadIds = new Set<string>();
@@ -413,11 +590,11 @@ export function useFileUploader(
                 relativePath: preparedFile.relativeDirectory || undefined,
                 prepareId,
                 pipelineMode,
-                chunkSize,
-                maxInFlight,
                 offset: 0,
                 nextChunkIndex: 0,
                 inFlight: 0,
+                inFlightBytes: 0,
+                sentChunks: new Map(),
                 pumping: false,
                 startRequestSent: false,
             });
@@ -432,9 +609,10 @@ export function useFileUploader(
 
     const cancelUpload = (uploadId: string, notifyBackend = true) => {
         const upload = uploads[uploadId];
-        if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
+        if (upload && ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)) {
             console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
             upload.status = 'cancelled'; // 立即更新状态
+            removeConflictFromQueue(uploadId);
             removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
             releaseUploadSlot(uploadId);
@@ -455,9 +633,43 @@ export function useFileUploader(
 
     const cancelAllUploads = () => {
         const cancellableIds = Object.values(uploads)
-            .filter(upload => ['pending', 'uploading', 'paused'].includes(upload.status))
+            .filter(upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status))
             .map(upload => upload.id);
         cancellableIds.forEach(uploadId => cancelUpload(uploadId, true));
+    };
+
+    const removeConflictFromQueue = (uploadId: string) => {
+        uploadConflictQueue.value = uploadConflictQueue.value.filter(conflict => conflict.uploadId !== uploadId);
+    };
+
+    const resolveUploadConflict = (decision: UploadConflictDecision, applyToAll = false) => {
+        const conflict = uploadConflict.value;
+        if (!conflict) return;
+
+        const transfer = uploadTransferStates.get(conflict.uploadId);
+        const batch = transfer ? uploadBatches.get(transfer.prepareId) : undefined;
+        const upload = uploads[conflict.uploadId];
+        removeConflictFromQueue(conflict.uploadId);
+        if (!transfer || !batch || !upload) return;
+
+        if (applyToAll) batch.conflictPolicy = decision;
+        transfer.conflictPolicyOverride = decision;
+        upload.status = 'pending';
+        requestUploadStart(conflict.uploadId);
+
+        if (applyToAll) {
+            const sameBatchConflicts = uploadConflictQueue.value.filter(item => item.prepareId === batch.prepareId);
+            for (const queuedConflict of sameBatchConflicts) {
+                const queuedTransfer = uploadTransferStates.get(queuedConflict.uploadId);
+                const queuedUpload = uploads[queuedConflict.uploadId];
+                removeConflictFromQueue(queuedConflict.uploadId);
+                if (!queuedTransfer || !queuedUpload) continue;
+                queuedTransfer.conflictPolicyOverride = decision;
+                queuedUpload.status = 'pending';
+                requestUploadStart(queuedConflict.uploadId);
+            }
+        }
+        drainUploadStartQueue();
     };
 
     // --- 消息处理器 ---
@@ -478,6 +690,7 @@ export function useFileUploader(
         for (const uploadId of batch.uploadIds) {
             const upload = uploads[uploadId];
             if (!upload) continue;
+            if (upload.status === 'conflict') continue;
             requestUploadStart(uploadId, upload.status === 'paused');
         }
         drainUploadStartQueue();
@@ -502,10 +715,56 @@ export function useFileUploader(
                     if (uploads[uploadId]?.status === 'error') delete uploads[uploadId];
                 }, 5000);
             }
+            removeConflictFromQueue(uploadId);
             releaseUploadSlot(uploadId);
             uploadTransferStates.delete(uploadId);
         }
         uploadBatches.delete(prepareId);
+        drainUploadStartQueue();
+    };
+
+    const onUploadConflict = (payload: MessagePayload, message: WebSocketMessage) => {
+        const uploadId = message.uploadId || payload?.uploadId;
+        if (!uploadId) return;
+        const transfer = uploadTransferStates.get(uploadId);
+        const upload = uploads[uploadId];
+        const batch = transfer ? uploadBatches.get(transfer.prepareId) : undefined;
+        if (!transfer || !upload || !batch) return;
+
+        transfer.startRequestSent = false;
+        upload.status = 'conflict';
+        releaseUploadSlot(uploadId);
+
+        if (batch.conflictPolicy) {
+            transfer.conflictPolicyOverride = batch.conflictPolicy;
+            upload.status = 'pending';
+            requestUploadStart(uploadId);
+            return;
+        }
+
+        if (!uploadConflictQueue.value.some(conflict => conflict.uploadId === uploadId)) {
+            uploadConflictQueue.value.push({
+                uploadId,
+                filename: typeof payload?.filename === 'string' ? payload.filename : upload.filename,
+                remotePath: typeof payload?.remotePath === 'string' ? payload.remotePath : transfer.remotePath,
+                prepareId: transfer.prepareId,
+            });
+        }
+        drainUploadStartQueue();
+    };
+
+    const onUploadSkipped = (payload: MessagePayload, message: WebSocketMessage) => {
+        const uploadId = message.uploadId || payload?.uploadId;
+        if (!uploadId) return;
+        const upload = uploads[uploadId];
+        if (!upload) return;
+
+        console.log(`[FileUploader ${sessionIdForLog.value}] Skipped existing remote file for upload ${uploadId}.`);
+        removeConflictFromQueue(uploadId);
+        removeUploadFromBatch(uploadId);
+        uploadTransferStates.delete(uploadId);
+        releaseUploadSlot(uploadId);
+        delete uploads[uploadId];
         drainUploadStartQueue();
     };
 
@@ -534,6 +793,7 @@ export function useFileUploader(
             upload.status = 'success';
             upload.progress = 100;
             upload.bytesWritten = upload.file.size;
+            removeConflictFromQueue(uploadId);
             removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
             releaseUploadSlot(uploadId);
@@ -567,6 +827,7 @@ export function useFileUploader(
             console.error(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} error:`, errorMessage);
             upload.status = 'error';
             upload.error = errorMessage; // 使用 payload 作为错误消息
+            removeConflictFromQueue(uploadId);
             removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
             releaseUploadSlot(uploadId);
@@ -609,6 +870,7 @@ export function useFileUploader(
         if (!uploadId) return;
         const upload = uploads[uploadId];
         if (upload) {
+            removeConflictFromQueue(uploadId);
             removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
             releaseUploadSlot(uploadId);
@@ -668,6 +930,27 @@ export function useFileUploader(
             upload.progress = Math.min(100, Math.max(upload.progress, payload.progress));
         }
 
+        const acknowledgedChunkIndex = typeof payload?.chunkIndex === 'number'
+            ? payload.chunkIndex
+            : undefined;
+        let sentChunk: SentUploadChunk | undefined;
+        if (acknowledgedChunkIndex !== undefined) {
+            sentChunk = transfer.sentChunks.get(acknowledgedChunkIndex);
+            transfer.sentChunks.delete(acknowledgedChunkIndex);
+        } else {
+            const oldest = transfer.sentChunks.entries().next().value as [number, SentUploadChunk] | undefined;
+            if (oldest) {
+                transfer.sentChunks.delete(oldest[0]);
+                sentChunk = oldest[1];
+            }
+        }
+        if (sentChunk) {
+            transfer.inFlightBytes = Math.max(0, transfer.inFlightBytes - sentChunk.size);
+            if (sentChunk.size > 0) {
+                recordUploadNetworkSample(Math.max(1, performance.now() - sentChunk.sentAt), sentChunk.size);
+            }
+        }
+
         transfer.inFlight = Math.max(0, transfer.inFlight - 1);
         if (upload?.status === 'uploading') void pumpUpload(uploadId);
     };
@@ -719,6 +1002,8 @@ export function useFileUploader(
 
         const unregisterUploadPrepareReady = wsDeps.value.onMessage('sftp:upload:prepare:ready', onUploadPrepareReady);
         const unregisterUploadPrepareError = wsDeps.value.onMessage('sftp:upload:prepare:error', onUploadPrepareError);
+        const unregisterUploadConflict = wsDeps.value.onMessage('sftp:upload:conflict', onUploadConflict);
+        const unregisterUploadSkipped = wsDeps.value.onMessage('sftp:upload:skipped', onUploadSkipped);
         const unregisterUploadReady = wsDeps.value.onMessage('sftp:upload:ready', onUploadReady);
         const unregisterUploadSuccess = wsDeps.value.onMessage('sftp:upload:success', onUploadSuccess);
         const unregisterUploadError = wsDeps.value.onMessage('sftp:upload:error', onUploadError);
@@ -731,6 +1016,8 @@ export function useFileUploader(
         onCleanup(() => {
             unregisterUploadPrepareReady?.();
             unregisterUploadPrepareError?.();
+            unregisterUploadConflict?.();
+            unregisterUploadSkipped?.();
             unregisterUploadReady?.();
             unregisterUploadSuccess?.();
             unregisterUploadError?.();
@@ -761,13 +1048,17 @@ export function useFileUploader(
         activeUploadIds.clear();
         activeUploadWeights.clear();
         queuedUploadStarts.clear();
+        uploadConflictQueue.value = [];
     });
 
     return {
         uploads, 
+        uploadConflict,
+        uploadNetworkProfile: computed(() => uploadNetwork.profile),
         startFileUpload,
         startFileUploadBatch,
         cancelUpload,
         cancelAllUploads,
+        resolveUploadConflict,
     };
 }

@@ -517,8 +517,16 @@
     },
     "uploadStatus": {
       "cancelled": "已取消",
+      "conflict": "等待处理同名文件",
       "pending": "等待中",
       "uploading": "上传中"
+    },
+    "uploadConflict": {
+      "title": "目标中已存在同名文件",
+      "description": "请选择覆盖现有文件，或中止当前文件的上传。",
+      "applyToAll": "后续同名文件全部使用此选择",
+      "skip": "中止此文件",
+      "overwrite": "覆盖"
     },
     "errors": {
       "generic": "错误",

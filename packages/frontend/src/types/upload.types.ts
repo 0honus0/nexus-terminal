@@ -6,7 +6,7 @@ export interface UploadItem {
     progress: number; // 上传进度 (0-100)
     bytesWritten: number; // 后端已确认写入的字节数，用于计算真实上传速度
     error?: string; // 错误信息
-    status: 'pending' | 'uploading' | 'paused' | 'success' | 'error' | 'cancelled'; // 上传状态
+    status: 'pending' | 'uploading' | 'paused' | 'conflict' | 'success' | 'error' | 'cancelled'; // 上传状态
 }
 
 // 可以根据需要添加其他与上传相关的类型

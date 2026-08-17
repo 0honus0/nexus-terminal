@@ -436,15 +436,16 @@ export function createWebSocketConnectionManager(
      * this guard, several concurrent uploads can grow bufferedAmount until the proxy or
      * browser closes the socket and triggers a reconnect.
      */
-    const sendBinaryMessage = async (frame: ArrayBuffer): Promise<void> => {
+    const sendBinaryMessage = async (
+        frame: ArrayBuffer,
+        maxBufferedBytes = 8 * 1024 * 1024,
+    ): Promise<void> => {
         const socket = ws.value;
         if (!socket || socket.readyState !== WebSocket.OPEN) {
             throw new Error(`WebSocket 未连接，无法发送二进制消息（状态: ${connectionStatus.value}）`);
         }
 
-        // 上传采用 1 MiB 分块并允许多块在途；提高浏览器发送缓冲上限，
-        // 避免单文件在高 RTT 链路上频繁出现“发一段、等一段”的停顿。
-        const highWaterMark = 8 * 1024 * 1024;
+        const highWaterMark = Math.max(frame.byteLength, maxBufferedBytes);
         while (
             socket === ws.value
             && socket.readyState === WebSocket.OPEN

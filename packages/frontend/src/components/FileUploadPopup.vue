@@ -25,7 +25,7 @@ let dragOffsetY = 0;
 let positionRestored = false;
 
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
-  upload => ['pending', 'uploading', 'paused'].includes(upload.status)
+  upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)
 ).length);
 const hasUploading = computed(() => Object.values(props.uploads).some(upload => upload.status === 'uploading'));
 const totalUploadSpeed = ref(0);
@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
         <span v-if="upload.status === 'success' || (upload.status === 'uploading' && upload.progress === 100)" class="text-green-600"> ✅</span>
         <span v-if="upload.status === 'cancelled'" class="text-red-600"> ❌ {{ t('fileManager.uploadStatus.cancelled') }}</span>
         <!-- 只有在可取消状态时显示取消按钮 -->
-        <button v-if="['pending', 'uploading', 'paused'].includes(upload.status)" @click="handleCancel(upload.id)" class="ml-auto px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200 flex-shrink-0">{{ t('fileManager.actions.cancel') }}</button>
+        <button v-if="['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)" @click="handleCancel(upload.id)" class="ml-auto px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200 flex-shrink-0">{{ t('fileManager.actions.cancel') }}</button>
       </li>
     </ul>
   </div>

@@ -24,6 +24,7 @@ const CONTROL_PORT = 22223;
 const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
 let statusSample = 0;
+let sftpWriteDelayMs = 0;
 const executedCommands = [];
 const receivedWebhooks = [];
 const activeSshClients = new Set();
@@ -191,6 +192,7 @@ async function resetRoot() {
   statusSample = 0;
   executedCommands.length = 0;
   receivedWebhooks.length = 0;
+  sftpWriteDelayMs = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -341,6 +343,9 @@ function attachSftp(session, accept) {
       return;
     }
     try {
+      if (sftpWriteDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, sftpWriteDelayMs));
+      }
       await state.fileHandle.write(data, 0, data.length, Number(offset));
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
@@ -655,6 +660,15 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/ssh/status') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ online: sshServerOnline, activeClients: activeSshClients.size }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/sftp/write-delay') {
+      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+      sftpWriteDelayMs = Number.isFinite(requestedDelay)
+        ? Math.max(0, Math.min(5000, Math.round(requestedDelay)))
+        : 0;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ sftpWriteDelayMs }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
