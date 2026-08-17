@@ -199,6 +199,47 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       await collectFileTree(entry, directoryPath, files, directories);
     }
   };
+
+  interface DroppedItemSnapshot {
+    entry?: FileSystemEntry;
+    file?: File;
+  }
+
+  // DataTransferItemList is only guaranteed to be fully usable while the drop event is
+  // executing. In particular, Windows/Chromium can invalidate later items after the first
+  // awaited FileSystemEntry read. Snapshot every top-level entry/file synchronously first.
+  const snapshotDroppedItems = (dataTransfer: DataTransfer): DroppedItemSnapshot[] => {
+    const snapshots: DroppedItemSnapshot[] = [];
+    const representedRootFiles = new Set<string>();
+
+    for (let i = 0; i < dataTransfer.items.length; i++) {
+      const item = dataTransfer.items[i];
+      if (item.kind !== 'file') continue;
+
+      const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+      if (entry) {
+        snapshots.push({ entry });
+        if (entry.isFile) representedRootFiles.add(entry.name);
+        continue;
+      }
+
+      const file = item.getAsFile();
+      if (file) {
+        snapshots.push({ file });
+        representedRootFiles.add(file.name);
+      }
+    }
+
+    // Some Windows drag sources expose more files through DataTransfer.files than through
+    // DataTransfer.items. Add any root files that were not represented above.
+    for (const file of Array.from(dataTransfer.files)) {
+      if (representedRootFiles.has(file.name)) continue;
+      snapshots.push({ file });
+      representedRootFiles.add(file.name);
+    }
+
+    return snapshots;
+  };
   
 
   // 处理蒙版上的 Drop 事件
@@ -207,25 +248,28 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     showExternalDropOverlay.value = false; // 隐藏蒙版
     stopAutoScroll(); // 停止滚动
 
-    const items = event.dataTransfer?.items;
-    if (!items || items.length === 0 || !isConnected.value) {
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer || !isConnected.value) {
         console.log("[DragDrop] Overlay drop ignored: No items or not connected.");
+        return;
+    }
+
+    const droppedItems = snapshotDroppedItems(dataTransfer);
+    if (droppedItems.length === 0) {
+        console.log('[DragDrop] Overlay drop ignored: No file entries found.');
         return;
     }
 
     const files: Array<{ file: File; relativePath?: string }> = [];
     const directories: string[] = [];
-    console.log(`[DragDrop] Collecting ${items.length} dropped items before upload.`);
+    console.log(`[DragDrop] Collecting ${droppedItems.length} snapshotted dropped items before upload.`);
     try {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.kind !== 'file') continue;
-        const entry = item.webkitGetAsEntry();
-        if (!entry) {
-          console.warn(`[DragDrop] Could not get entry for item ${i} from overlay.`);
-          continue;
+      for (const droppedItem of droppedItems) {
+        if (droppedItem.entry) {
+          await collectFileTree(droppedItem.entry, '', files, directories);
+        } else if (droppedItem.file) {
+          files.push({ file: droppedItem.file });
         }
-        await collectFileTree(entry, '', files, directories);
       }
     } catch (error) {
       console.error('[DragDrop] Failed to collect dropped file tree:', error);

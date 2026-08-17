@@ -517,8 +517,16 @@
     },
     "uploadStatus": {
       "cancelled": "Cancelled",
+      "conflict": "Waiting for conflict choice",
       "pending": "Pending",
       "uploading": "Uploading"
+    },
+    "uploadConflict": {
+      "title": "File already exists",
+      "description": "A file with the same name already exists at the destination.",
+      "applyToAll": "Use this choice for all remaining conflicts in this upload",
+      "skip": "Skip this file",
+      "overwrite": "Overwrite"
     },
     "errors": {
       "generic": "Error",

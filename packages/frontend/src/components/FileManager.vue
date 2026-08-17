@@ -19,6 +19,7 @@ import FileTransferPopup from './FileTransferPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
 import ArchivePasswordModal from './ArchivePasswordModal.vue';
+import UploadConflictModal from './UploadConflictModal.vue';
 import type { FileListItem } from '../types/sftp.types';
 import type { WebSocketMessage } from '../types/websocket.types';
 import PathHistoryDropdown from './PathHistoryDropdown.vue';
@@ -136,9 +137,11 @@ const transferTasks = computed(() => currentSftpManager.value?.transferTasks ?? 
 // 修改：依赖 currentSftpManager 的状态
 const {
     uploads,
+    uploadConflict,
     startFileUploadBatch,
     cancelUpload,
     cancelAllUploads,
+    resolveUploadConflict,
 } = useFileUploader(
     effectiveSessionId,
     // 传递 manager 的 currentPath 和 fileList ref
@@ -2373,6 +2376,7 @@ const handleOpenEditorClick = () => {
         <div
           v-if="showExternalDropOverlay"
           ref="dropOverlayRef"
+          data-testid="file-upload-drop-overlay"
           class="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-xl font-semibold rounded z-50 pointer-events-auto"
           @dragover.prevent
           @dragleave.prevent="handleDragLeave"
@@ -2556,6 +2560,7 @@ const handleOpenEditorClick = () => {
 
      <!-- 使用 FileUploadPopup 组件 -->
      <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" @cancel-all="cancelAllUploads" />
+     <UploadConflictModal :conflict="uploadConflict" @resolve="resolveUploadConflict" />
      <FileTransferPopup :transfers="transferTasks" />
 
      <ArchiveProgressPopup :progress="archiveProgress" @cancel="currentSftpManager?.cancelArchive()" />

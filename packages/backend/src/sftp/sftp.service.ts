@@ -2362,6 +2362,7 @@ export class SftpService {
         totalSize: number,
         relativePath?: string,
         prepareId?: string,
+        conflictPolicy: 'ask' | 'overwrite' | 'skip' = 'ask',
     ): Promise<void> {
         const state = this.clientStates.get(sessionId);
         if (!state || !state.sftp) {
@@ -2397,6 +2398,36 @@ export class SftpService {
             }
             directoryWasPrepared = true;
         }
+
+        const destinationExists = conflictPolicy === 'overwrite'
+            ? false
+            : await this.remotePathExists(state.sftp, normalizedRemotePath);
+        if (destinationExists && conflictPolicy === 'ask') {
+            if (state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({
+                    type: 'sftp:upload:conflict',
+                    uploadId,
+                    payload: {
+                        uploadId,
+                        remotePath: normalizedRemotePath,
+                        filename: pathModule.posix.basename(normalizedRemotePath),
+                    },
+                }));
+            }
+            return;
+        }
+        if (destinationExists && conflictPolicy === 'skip') {
+            if (state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({
+                    type: 'sftp:upload:skipped',
+                    uploadId,
+                    path: normalizedRemotePath,
+                    payload: { uploadId, remotePath: normalizedRemotePath },
+                }));
+            }
+            return;
+        }
+
         const temporaryPath = pathModule.posix.join(targetDirectory, `.nexus-upload-${uploadId}.part`);
         this.pendingUploads.set(uploadId, { sessionId, remotePath: normalizedRemotePath, temporaryPath });
 

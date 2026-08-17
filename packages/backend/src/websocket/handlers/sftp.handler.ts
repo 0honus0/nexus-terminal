@@ -159,8 +159,23 @@ export async function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload:
     }
     const relativePath = payload?.relativePath;
     const prepareId = payload?.prepareId;
+    const conflictPolicy = payload?.conflictPolicy;
+    if (conflictPolicy !== undefined && !['ask', 'overwrite', 'skip'].includes(conflictPolicy)) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId: payload.uploadId, message: '无效的同名文件处理策略' } }));
+        }
+        return;
+    }
     console.log(`WebSocket: SFTP Upload Start - Session: ${sessionId}, UploadID: ${payload.uploadId}, RemotePath: ${payload.remotePath}, Size: ${payload.size}, RelativePath: ${relativePath}, PrepareID: ${prepareId}`);
-    await sftpService.startUpload(sessionId, payload.uploadId, payload.remotePath, payload.size, relativePath, prepareId);
+    await sftpService.startUpload(
+        sessionId,
+        payload.uploadId,
+        payload.remotePath,
+        payload.size,
+        relativePath,
+        prepareId,
+        conflictPolicy ?? 'ask',
+    );
 }
 
 export async function handleSftpUploadPrepare(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
