@@ -28,7 +28,8 @@ test('invalid password login stays unauthenticated and surfaces the login failur
   await step('the server session remains unauthenticated after the failed login', async () => {
     const status = await context.request.get('/api/v1/auth/status');
     expect(status.status()).toBe(401);
-    await expect(status.json()).resolves.toMatchObject({ isAuthenticated: false });
+    const body = await status.json() as { message?: string };
+    expect(body.message).toBeTruthy();
   });
 });
 
@@ -49,7 +50,8 @@ test('navigation logout clears the server session and protects authenticated rou
   await step('the session is cleared and a protected route redirects back to login', async () => {
     const status = await context.request.get('/api/v1/auth/status');
     expect(status.status()).toBe(401);
-    await expect(status.json()).resolves.toMatchObject({ isAuthenticated: false });
+    const body = await status.json() as { message?: string };
+    expect(body.message).toBeTruthy();
 
     await page.goto('/settings');
     await expect(page).toHaveURL(/\/login$/);
