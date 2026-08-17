@@ -24,12 +24,16 @@ export default class MirroredLogReporter implements Reporter {
   private logRoot = '';
   private fileByTestId = new Map<string, string>();
   private unexpectedFirstAttempts = new Map<string, string>();
+  private consoleEnabled = process.env.GITHUB_ACTIONS === 'true' || process.env.E2E_CONSOLE_LOGS === '1';
+  private runStartedAt = 0;
 
-  onBegin(config: FullConfig, _suite: Suite) {
+  onBegin(config: FullConfig, suite: Suite) {
+    this.runStartedAt = Date.now();
     this.testDir = config.projects[0]?.testDir || process.cwd();
     this.logRoot = path.resolve(this.testDir, '..', 'logs');
     fs.rmSync(this.logRoot, { recursive: true, force: true });
     fs.mkdirSync(this.logRoot, { recursive: true });
+    this.consoleLog(`[E2E] Starting ${suite.allTests().length} tests with ${config.workers} worker(s)`);
   }
 
   onTestBegin(test: TestCase, result: TestResult) {
@@ -48,17 +52,27 @@ export default class MirroredLogReporter implements Reporter {
       ].join('\n'),
       'utf8',
     );
+    const retry = result.retry > 0 ? ` retry=${result.retry}` : '';
+    this.consoleLog(`\n[E2E] ▶ ${this.consoleTitle(test)}${retry}`);
   }
 
   onStepBegin(test: TestCase, _result: TestResult, step: TestStep) {
     if (step.category === 'hook' || step.category === 'fixture') return;
     this.append(test, `[STEP START] ${step.title}\n`);
+    if (step.category === 'test.step') {
+      this.consoleLog(`[E2E]   → ${this.singleLine(step.title)}`);
+    }
   }
 
   onStepEnd(test: TestCase, _result: TestResult, step: TestStep) {
     if (step.category === 'hook' || step.category === 'fixture') return;
     const suffix = step.error ? `FAILED: ${step.error.message}` : 'OK';
     this.append(test, `[STEP END] ${step.title} — ${suffix}\n`);
+    if (step.category === 'test.step') {
+      const marker = step.error ? '✗' : '✓';
+      const duration = Number.isFinite(step.duration) ? ` (${this.formatDuration(step.duration)})` : '';
+      this.consoleLog(`[E2E]   ${marker} ${this.singleLine(step.title)}${duration}`);
+    }
   }
 
   onStdOut(chunk: string | Buffer, test?: TestCase) {
@@ -90,9 +104,17 @@ export default class MirroredLogReporter implements Reporter {
     ) {
       this.unexpectedFirstAttempts.set(test.id, test.titlePath().filter(Boolean).join(' > '));
     }
+
+    const marker = result.status === 'passed' ? '✓' : result.status === 'skipped' ? '○' : '✗';
+    this.consoleLog(`[E2E] ${marker} ${this.consoleTitle(test)} — ${result.status} (${this.formatDuration(result.duration)})`);
+    if (result.error) {
+      this.consoleLog(`[E2E]   error: ${this.singleLine(result.error.message)}`);
+    }
   }
 
   onEnd(result: FullResult) {
+    const elapsed = this.runStartedAt > 0 ? Date.now() - this.runStartedAt : result.duration;
+    this.consoleLog(`\n[E2E] Finished: ${result.status} in ${this.formatDuration(elapsed)}`);
     if (this.unexpectedFirstAttempts.size === 0) return;
 
     const summaryFile = path.join(this.logRoot, '_flaky-tests.log');
@@ -123,5 +145,25 @@ export default class MirroredLogReporter implements Reporter {
     const file = this.fileByTestId.get(test.id) || this.logFileFor(test);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.appendFileSync(file, value, 'utf8');
+  }
+
+  private consoleTitle(test: TestCase): string {
+    const project = test.parent.project()?.name || 'unknown';
+    const title = test.titlePath().filter(Boolean).join(' > ');
+    return `[${project}] ${this.singleLine(title)}`;
+  }
+
+  private consoleLog(value: string): void {
+    if (!this.consoleEnabled) return;
+    process.stdout.write(`${value}\n`);
+  }
+
+  private singleLine(value: string): string {
+    return value.replace(/\s+/g, ' ').trim();
+  }
+
+  private formatDuration(durationMs: number): string {
+    if (durationMs < 1000) return `${durationMs}ms`;
+    return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
   }
 }
