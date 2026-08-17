@@ -16,15 +16,15 @@
   "description": "Unified Remote Desktop Gateway for Nexus Terminal",
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.23.1",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "guacamole-lite": "^1.2.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   }
 }
