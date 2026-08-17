@@ -352,7 +352,7 @@ const handleTaskAction = async (task: TransferTask) => {
 <template>
   <div
     v-if="internalVisible"
-    class="fixed inset-0 bg-overlay z-[1200] p-4"
+    class="fixed inset-0 bg-overlay z-[70] p-4"
     @click.self="handleClose"
   >
     <div
