@@ -446,6 +446,7 @@ onBeforeUnmount(() => {
         </button>
         <!-- 查看传输进度按钮 (移除 v-if="!isMobile" 以在移动端显示) -->
         <button
+                data-testid="transfer-progress-toggle"
                 class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
                 @click="showTransferProgressModal = true"
                 :title="t('terminalTabBar.showTransferProgressTooltip', '查看传输进度')">

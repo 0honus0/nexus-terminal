@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   E2E_SSH,
@@ -13,6 +13,10 @@ import { step, slowStep } from '../../support/steps';
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 
+async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
+  await target.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
+}
+
 async function closePreview(page: Page, filename: string): Promise<void> {
   const dialog = page.getByRole('dialog', { name: filename });
   await dialog.getByRole('button', { name: 'Close preview' }).click();
@@ -26,6 +30,7 @@ test('file previews and text editor protect historical file-opening regressions'
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
+  await page.evaluate(() => localStorage.removeItem('monacoEditorFontSize'));
 
   await step('extensionless text opens with its real remote content', async () => {
     await row(page, 'plainfile').dblclick();
@@ -53,6 +58,25 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(after!.width).toBeGreaterThan(before!.width + 50);
     expect(after!.height).toBeGreaterThan(before!.height + 40);
     await expect(editor.locator('.monaco-editor')).toBeVisible();
+  });
+
+  await step('editor Ctrl+wheel filters tiny opposing deltas instead of jittering font size', async () => {
+    const editor = page.getByTestId('file-editor-overlay');
+    const monaco = editor.locator('.monaco-editor');
+    await expect(monaco).toBeVisible();
+
+    await ctrlWheel(monaco, -20);
+    expect(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize'))).toBeNull();
+    await ctrlWheel(monaco, 20);
+    expect(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize'))).toBeNull();
+
+    await ctrlWheel(monaco, -80);
+    const increased = Number(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize')));
+    expect(increased).toBeGreaterThan(0);
+
+    await ctrlWheel(monaco, 20);
+    await page.waitForTimeout(80);
+    expect(Number(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize')))).toBe(increased);
   });
 
   await slowStep('editing and saving an extensionless file persists over SFTP', async () => {

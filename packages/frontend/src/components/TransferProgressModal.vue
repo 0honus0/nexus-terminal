@@ -362,10 +362,19 @@ const handleTaskAction = async (task: TransferTask) => {
       :style="[modalStyle, { borderColor: 'var(--border-color)' }]"
     >
       <!-- Header -->
-      <div class="transfer-progress-header flex-shrink-0 px-6 py-4" @pointerdown="startModalDragging">
+      <div class="transfer-progress-header relative flex-shrink-0 px-6 py-4" @pointerdown="startModalDragging">
         <h3 class="m-0 text-center text-xl font-semibold">
           {{ t('transferProgressModal.title', '文件传输进度') }}
         </h3>
+        <button
+          type="button"
+          data-testid="transfer-progress-minimize"
+          class="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          @click.stop="handleClose"
+          :title="t('common.minimize', '最小化')"
+        >
+          <i class="fas fa-minus"></i>
+        </button>
       </div>
 
       <!-- Content Area -->

@@ -151,6 +151,27 @@ const {
     computed(() => props.wsDeps)
 );
 
+const floatingProgressVisible = ref(true);
+const floatingProgressRestoreToken = ref(0);
+const hasFloatingProgress = computed(() => {
+  const hasUploads = Object.values(uploads).some(upload => {
+    const effectivelyComplete = upload.status === 'success'
+      || upload.status === 'cancelled'
+      || (upload.status === 'uploading' && upload.progress >= 100);
+    return !effectivelyComplete;
+  });
+  return hasUploads || Object.keys(transferTasks.value).length > 0 || archiveProgress.value.active;
+});
+
+const toggleFloatingProgress = () => {
+  if (floatingProgressVisible.value) {
+    floatingProgressVisible.value = false;
+    return;
+  }
+  floatingProgressVisible.value = true;
+  floatingProgressRestoreToken.value += 1;
+};
+
 // 实例化其他 Stores
 const fileEditorStore = useFileEditorStore(); // 实例化 File Editor Store
 // const sessionStore = useSessionStore(); // 已在上面实例化
@@ -2326,6 +2347,18 @@ const handleOpenEditorClick = () => {
               <i class="fas fa-upload text-sm"></i>
             </button>
             <button
+              v-if="hasFloatingProgress"
+              data-testid="floating-transfer-progress-toggle"
+              @click="toggleFloatingProgress"
+              :title="floatingProgressVisible
+                ? t('fileManager.actions.hideTransferProgress', '隐藏传输进度')
+                : t('fileManager.actions.showTransferProgress', '显示传输进度')"
+              class="file-manager-action-button flex items-center px-2 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 hover:bg-header hover:border-primary hover:text-primary"
+              :class="{ 'px-1.5': props.isMobile, 'text-primary border-primary': !floatingProgressVisible }"
+            >
+              <i :class="['fas text-sm', floatingProgressVisible ? 'fa-eye-slash' : 'fa-chart-line']"></i>
+            </button>
+            <button
               @click="handleNewFolderContextMenuClick"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.newFolder')"
@@ -2610,11 +2643,26 @@ const handleOpenEditorClick = () => {
      </div>
 
      <!-- 使用 FileUploadPopup 组件 -->
-     <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" @cancel-all="cancelAllUploads" />
+     <FileUploadPopup
+       :uploads="uploads"
+       :visible="floatingProgressVisible"
+       :restore-token="floatingProgressRestoreToken"
+       @cancel-upload="cancelUpload"
+       @cancel-all="cancelAllUploads"
+     />
      <UploadConflictModal :conflict="uploadConflict" @resolve="resolveUploadConflict" />
-     <FileTransferPopup :transfers="transferTasks" />
+     <FileTransferPopup
+       :transfers="transferTasks"
+       :visible="floatingProgressVisible"
+       :restore-token="floatingProgressRestoreToken"
+     />
 
-     <ArchiveProgressPopup :progress="archiveProgress" @cancel="currentSftpManager?.cancelArchive()" />
+     <ArchiveProgressPopup
+       :progress="archiveProgress"
+       :visible="floatingProgressVisible"
+       :restore-token="floatingProgressRestoreToken"
+       @cancel="currentSftpManager?.cancelArchive()"
+     />
 
     <FileManagerContextMenu
       ref="contextMenuRef"

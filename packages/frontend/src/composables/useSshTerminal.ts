@@ -39,6 +39,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     }
     const terminalOutputBuffer: BufferedTerminalOutput[] = []; // 非响应式队列，仅在终端未挂载时使用
     const MAX_BUFFERED_OUTPUT_BYTES = 1024 * 1024;
+    const DIRECT_INPUT_MAX_CODE_UNITS = 256;
     const MAX_INPUT_CHUNK_CODE_UNITS = 32 * 1024;
     const MAX_INPUT_IN_FLIGHT_BYTES = 128 * 1024;
     const outputEncoder = new TextEncoder();
@@ -97,6 +98,23 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     };
 
     const sendInputData = (data: string): void => {
+        // Normal typing should take the shortest possible path. The backend already
+        // accepts unsequenced SSH input, so small interactive writes do not need a
+        // round-trip ACK. Large paste/command payloads keep the existing ACK-based
+        // flow control to preserve bounded memory and ordering under backpressure.
+        if (
+            data.length <= DIRECT_INPUT_MAX_CODE_UNITS
+            && inputQueue.length === 0
+            && inputBytesInFlight === 0
+        ) {
+            sendMessage({
+                type: 'ssh:input',
+                sessionId: getResolvedSessionId(),
+                payload: { data },
+            });
+            return;
+        }
+
         if (data.length <= MAX_INPUT_CHUNK_CODE_UNITS) {
             enqueueInputChunk(data);
             flushInputQueue();

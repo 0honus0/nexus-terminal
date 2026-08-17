@@ -140,6 +140,22 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
   try {
     await slowStep('folder upload starts at least two large files while the network profile is still probing', async () => {
       await dragLocalFiles(page, largeFiles);
+
+      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+      const progressBody = progressPopup.locator('ul');
+      await expect(progressBody).toBeVisible();
+      await progressPopup.getByTestId('file-upload-progress-minimize').click();
+      await expect(progressBody).toBeHidden();
+
+      const progressToggle = page.getByTestId('floating-transfer-progress-toggle');
+      await expect(progressToggle).toBeVisible();
+      await progressToggle.click();
+      await expect(progressPopup).toBeHidden();
+      await progressToggle.click();
+      await expect(progressPopup).toBeVisible();
+      await expect(progressBody).toBeVisible();
+
       await expect.poll(
         () => schedulerLogs.some(log => log.includes('profile=probing') && log.includes('activeFiles=2/4')),
         { timeout: 20_000 },

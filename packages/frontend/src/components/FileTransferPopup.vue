@@ -1,16 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileTransferItem } from '../types/fileTransfer.types';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   transfers: Readonly<Record<string, FileTransferItem>>;
-}>();
+  visible?: boolean;
+  restoreToken?: number;
+}>(), {
+  visible: true,
+  restoreToken: 0,
+});
 
 const { t } = useI18n();
 const transferList = computed(() => Object.values(props.transfers));
 const speedSnapshots = new Map<string, number>();
 const totalSpeed = ref(0);
+const minimized = ref(false);
 let speedTimer: number | null = null;
 let lastSampleAt = performance.now();
 
@@ -34,6 +40,18 @@ const currentFilename = (transfer: FileTransferItem) => {
   if (!transfer.currentFile) return transfer.label;
   return transfer.currentFile.split('/').filter(Boolean).pop() || transfer.currentFile;
 };
+
+const toggleMinimized = () => {
+  minimized.value = !minimized.value;
+};
+
+watch(() => props.restoreToken, () => {
+  minimized.value = false;
+});
+
+watch(() => transferList.value.length, (count, previousCount) => {
+  if (count > 0 && !previousCount) minimized.value = false;
+});
 
 const sampleSpeed = () => {
   const now = performance.now();
@@ -77,17 +95,29 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="transferList.length"
+    v-if="props.visible && transferList.length"
+    data-testid="file-transfer-progress-popup"
     class="fixed bottom-4 right-4 z-[1002] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-md border border-border bg-background text-sm shadow-lg"
   >
     <div class="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
       <h4 class="m-0 truncate text-sm font-semibold">{{ t('fileManager.transferTasks') }}</h4>
-      <span v-if="transferList.some(item => item.status === 'running')" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
-        {{ t('fileManager.transferSpeed') }} {{ formatTransferRate(totalSpeed) }}
-      </span>
+      <div class="flex items-center gap-2">
+        <span v-if="transferList.some(item => item.status === 'running')" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
+          {{ t('fileManager.transferSpeed') }} {{ formatTransferRate(totalSpeed) }}
+        </span>
+        <button
+          type="button"
+          data-testid="file-transfer-progress-minimize"
+          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          @click="toggleMinimized"
+          :title="minimized ? t('common.expand') : t('common.minimize')"
+        >
+          <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
+        </button>
+      </div>
     </div>
 
-    <ul class="custom-scrollbar m-0 max-h-52 list-none overflow-y-auto p-3">
+    <ul v-if="!minimized" class="custom-scrollbar m-0 max-h-52 list-none overflow-y-auto p-3">
       <li v-for="transfer in transferList" :key="transfer.id" class="mb-3 last:mb-0">
         <div class="mb-1 flex min-w-0 items-center gap-2 text-xs">
           <span class="min-w-0 flex-1 truncate" :title="transfer.currentFile || transfer.label">

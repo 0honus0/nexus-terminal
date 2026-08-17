@@ -442,6 +442,8 @@
       "parentDirectory": "Parent Directory",
       "uploadFile": "Upload File",
       "upload": "Upload",
+      "showTransferProgress": "Show transfer progress",
+      "hideTransferProgress": "Hide transfer progress",
       "newFolder": "New Folder",
       "rename": "Rename",
       "changePermissions": "Change Permissions",

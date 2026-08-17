@@ -392,6 +392,8 @@
             "rename": "名前を変更",
             "save": "保存",
             "upload": "アップロード",
+            "showTransferProgress": "転送進捗を表示",
+            "hideTransferProgress": "転送進捗を非表示",
             "uploadFile": "ファイルをアップロード",
             "copyPath": "パスをコピー"
         },

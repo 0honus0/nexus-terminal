@@ -4,7 +4,14 @@ import { useI18n } from 'vue-i18n';
 import type { ArchiveProgressState } from '../types/sftp.types';
 
 const POSITION_KEY = 'nexusArchiveProgressPosition';
-const props = defineProps<{ progress: ArchiveProgressState }>();
+const props = withDefaults(defineProps<{
+  progress: ArchiveProgressState;
+  visible?: boolean;
+  restoreToken?: number;
+}>(), {
+  visible: true,
+  restoreToken: 0,
+});
 const emit = defineEmits<{ (event: 'cancel'): void }>();
 const { t } = useI18n();
 
@@ -115,6 +122,14 @@ const toggleMinimized = async () => {
   savePosition();
 };
 
+watch(() => props.restoreToken, async () => {
+  minimized.value = false;
+  await nextTick();
+  restorePosition();
+  await nextTick();
+  clampPosition();
+});
+
 watch(() => props.progress.active, async (active) => {
   if (!active) return;
   minimized.value = false;
@@ -134,8 +149,9 @@ onBeforeUnmount(() => {
 <template>
   <Transition name="archive-progress">
     <div
-      v-if="progress.active"
+      v-if="props.visible && progress.active"
       ref="popupRef"
+      data-testid="archive-progress-popup"
       class="archive-progress-card"
       :class="{ minimized, dragging }"
       :style="popupStyle"
@@ -154,7 +170,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="archive-actions">
           <span v-if="progress.percent !== null" class="percent-badge">{{ progress.percent }}%</span>
-          <button type="button" class="icon-button" @click="toggleMinimized" :title="minimized ? t('common.expand', '展开') : t('common.minimize', '最小化')">
+          <button type="button" data-testid="archive-progress-minimize" class="icon-button" @click="toggleMinimized" :title="minimized ? t('common.expand', '展开') : t('common.minimize', '最小化')">
             <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
           </button>
         </div>
