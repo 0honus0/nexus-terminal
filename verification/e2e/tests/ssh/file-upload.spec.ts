@@ -119,6 +119,49 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
   });
 });
 
+test('aggregate committed throughput keeps folder uploads concurrent on moderate-latency links', async ({ page, context }) => {
+  await openFileManager(page, context);
+
+  const tuningLogs: string[] = [];
+  const schedulerLogs: string[] = [];
+  page.on('console', (message) => {
+    const text = message.text();
+    if (text.includes('Adaptive upload tuning changed:')) tuningLogs.push(text);
+    if (text.includes('Upload scheduler:')) schedulerLogs.push(text);
+  });
+
+  const largeFiles = Array.from({ length: 4 }, (_, index) => ({
+    name: `moderate-latency-${index + 1}.bin`,
+    size: 3 * 1024 * 1024,
+    fill: 0x20 + index,
+  }));
+
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=50`, { method: 'POST' });
+  try {
+    await slowStep('folder upload starts at least two large files while the network profile is still probing', async () => {
+      await dragLocalFiles(page, largeFiles);
+      await expect.poll(
+        () => schedulerLogs.some(log => log.includes('profile=probing') && log.includes('activeFiles=2/4')),
+        { timeout: 20_000 },
+      ).toBe(true);
+    });
+
+    await slowStep('aggregate committed throughput avoids the old per-chunk weak-network false positive', async () => {
+      await expect.poll(
+        () => tuningLogs.some(log => log.includes('profile=normal')),
+        { timeout: 30_000 },
+      ).toBe(true);
+      await expect.poll(
+        () => schedulerLogs.some(log => log.includes('profile=normal') && log.includes('activeFiles=4/6')),
+        { timeout: 30_000 },
+      ).toBe(true);
+      await waitForRemoteFiles(largeFiles.map(file => file.name), 60_000);
+    });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});
+
 test('slow SFTP acknowledgements move batch uploads into the weak-network window and concurrency profile', async ({ page, context }) => {
   await openFileManager(page, context);
 
@@ -141,7 +184,7 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
       await waitForRemoteFiles(weakFiles.map(file => file.name), 60_000);
 
       await expect.poll(
-        () => tuningLogs.some(log => log.includes('profile=weak') && log.includes('maxActiveFiles=2')),
+        () => tuningLogs.some(log => log.includes('profile=weak') && log.includes('maxActiveFiles=2') && log.includes('largeFileSlots=2')),
         { timeout: 20_000 },
       ).toBe(true);
     });
