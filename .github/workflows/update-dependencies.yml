@@ -1,0 +1,139 @@
+name: Update dependencies
+
+on:
+  schedule:
+    # Every Monday at 02:23 UTC.
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nexus-dependency-updates
+  cancel-in-progress: false
+
+env:
+  UPDATE_BRANCH: chore/dependency-updates
+
+jobs:
+  update:
+    name: Update frontend, backend and remote gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: |
+            packages/frontend/package-lock.json
+            packages/backend/package-lock.json
+            packages/remote-gateway/package-lock.json
+
+      - name: Create update branch
+        shell: bash
+        run: git checkout -B "$UPDATE_BRANCH"
+
+      - name: Update frontend dependencies
+        run: npm --prefix packages/frontend update --save
+
+      - name: Keep DOMPurify override aligned
+        shell: bash
+        run: |
+          version="$(node -p "require('./packages/frontend/package.json').dependencies.dompurify")"
+          npm --prefix packages/frontend pkg set "overrides.dompurify=$version"
+          npm --prefix packages/frontend install --package-lock-only
+
+      - name: Update backend dependencies
+        run: npm --prefix packages/backend update --save
+
+      - name: Update remote gateway dependencies
+        run: npm --prefix packages/remote-gateway update --save
+
+      - name: Build frontend
+        run: npm --prefix packages/frontend run build
+
+      - name: Build backend
+        run: npm --prefix packages/backend run build
+
+      - name: Build remote gateway
+        run: npm --prefix packages/remote-gateway run build
+
+      - name: Audit dependencies
+        shell: bash
+        run: |
+          npm --prefix packages/frontend audit --audit-level=high
+          npm --prefix packages/backend audit --audit-level=high
+          npm --prefix packages/remote-gateway audit --audit-level=high
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- \
+            packages/frontend/package.json packages/frontend/package-lock.json \
+            packages/backend/package.json packages/backend/package-lock.json \
+            packages/remote-gateway/package.json packages/remote-gateway/package-lock.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dependency updates are available." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Dependency updates"
+              echo
+              echo '```text'
+              git diff --stat -- \
+                packages/frontend/package.json packages/frontend/package-lock.json \
+                packages/backend/package.json packages/backend/package-lock.json \
+                packages/remote-gateway/package.json packages/remote-gateway/package-lock.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Commit and push update branch
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/frontend/package.json packages/frontend/package-lock.json \
+            packages/backend/package.json packages/backend/package-lock.json \
+            packages/remote-gateway/package.json packages/remote-gateway/package-lock.json
+          git commit -m "chore(deps): update Nexus dependencies"
+          git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+
+      - name: Create dependency update pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          existing_pr="$(gh pr list \
+            --base "$BASE_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [[ -n "$existing_pr" ]]; then
+            echo "Updated existing dependency PR #$existing_pr." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          gh pr create \
+            --base "$BASE_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --title "chore(deps): update Nexus dependencies" \
+            --body $'Automated dependency refresh for the three Nexus packages:\n\n- `packages/frontend`\n- `packages/backend`\n- `packages/remote-gateway`\n\nThe workflow updates dependencies within the semver ranges already declared in each `package.json`, then builds all three packages and runs `npm audit --audit-level=high` before opening this PR. Major-version upgrades are intentionally excluded.'
