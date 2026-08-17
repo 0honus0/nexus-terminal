@@ -987,12 +987,14 @@
       "success": {
         "sidebarPersistentSaved": "Sidebar setting saved.",
         "showConnectionTagsSaved": "Connection tags visibility setting saved.",
-        "showQuickCommandTagsSaved": "Quick command tags visibility setting saved."
+        "showQuickCommandTagsSaved": "Quick command tags visibility setting saved.",
+        "quickCommandsCollapsibleSearchSaved": "Quick command search display setting saved."
       },
       "error": {
         "sidebarPersistentSaveFailed": "Failed to save sidebar setting.",
         "showConnectionTagsSaveFailed": "Failed to save connection tags visibility setting.",
-        "showQuickCommandTagsSaveFailed": "Failed to save quick command tags visibility setting."
+        "showQuickCommandTagsSaveFailed": "Failed to save quick command tags visibility setting.",
+        "quickCommandsCollapsibleSearchSaveFailed": "Failed to save quick command search display setting."
       },
       "showConnectionTagsTitle": "Show Connection Tags",
       "showConnectionTagsLabel": "Show tags in connection list",
@@ -1000,6 +1002,9 @@
       "showQuickCommandTagsTitle": "Show Quick Command Tags",
       "showQuickCommandTagsLabel": "Show tags in quick command list",
       "showQuickCommandTagsDescription": "Disable to hide tags in the quick command list and exclude them from search.",
+      "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
+      "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
+      "quickCommandsCollapsibleSearchDescription": "Disabled by default. When enabled, the Quick Commands panel shows a search button until you click it to expand the search box.",
       "fileManagerDeleteConfirmTitle": "File Manager Delete Confirmation",
       "fileManagerShowDeleteConfirmationLabel": "Show confirmation dialog when deleting files or folders",
       "fileManagerDeleteConfirmSuccess": "File manager delete confirmation setting saved.",
@@ -1374,6 +1379,7 @@
   },
   "quickCommands": {
     "searchPlaceholder": "Search name or command...",
+    "expandSearch": "Expand search",
     "add": "Add",
     "switchToName": "Showing commands; click to show names",
     "switchToCommand": "Showing names; click to show commands",

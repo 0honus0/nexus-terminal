@@ -16,6 +16,7 @@ export function useWorkspaceSettings() {
     commandInputSyncTarget,
     showConnectionTagsBoolean,
     showQuickCommandTagsBoolean,
+    quickCommandsCollapsibleSearchBoolean,
     terminalScrollbackLimitNumber,
     fileManagerShowDeleteConfirmationBoolean,
     terminalEnableRightClickPasteBoolean,
@@ -212,6 +213,38 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- Collapsible Quick Command Search ---
+  const quickCommandsCollapsibleSearchLocal = ref(false);
+  const quickCommandsCollapsibleSearchLoading = ref(false);
+  const quickCommandsCollapsibleSearchMessage = ref('');
+  const quickCommandsCollapsibleSearchSuccess = ref(false);
+
+  const handleUpdateQuickCommandsCollapsibleSearch = async () => {
+    quickCommandsCollapsibleSearchLoading.value = true;
+    quickCommandsCollapsibleSearchMessage.value = '';
+    quickCommandsCollapsibleSearchSuccess.value = false;
+    try {
+      await settingsStore.updateSetting(
+        'quickCommandsCollapsibleSearch',
+        String(quickCommandsCollapsibleSearchLocal.value),
+      );
+      quickCommandsCollapsibleSearchMessage.value = t(
+        'settings.workspace.success.quickCommandsCollapsibleSearchSaved',
+        '快捷指令搜索框显示方式已保存',
+      );
+      quickCommandsCollapsibleSearchSuccess.value = true;
+    } catch (error: any) {
+      console.error('更新快捷指令搜索框显示方式失败:', error);
+      quickCommandsCollapsibleSearchMessage.value = error.message || t(
+        'settings.workspace.error.quickCommandsCollapsibleSearchSaveFailed',
+        '保存快捷指令搜索框显示方式失败',
+      );
+      quickCommandsCollapsibleSearchSuccess.value = false;
+    } finally {
+      quickCommandsCollapsibleSearchLoading.value = false;
+    }
+  };
+
   // --- Terminal Scrollback Limit ---
   const terminalScrollbackLimitLocal = ref<number | null>(null);
   const terminalScrollbackLimitLoading = ref(false);
@@ -345,6 +378,7 @@ export function useWorkspaceSettings() {
   watch(commandInputSyncTarget, (newValue) => { commandInputSyncTargetLocal.value = newValue; }, { immediate: true });
   watch(showConnectionTagsBoolean, (newValue) => { showConnectionTagsLocal.value = newValue; }, { immediate: true });
   watch(showQuickCommandTagsBoolean, (newValue) => { showQuickCommandTagsLocal.value = newValue; }, { immediate: true });
+  watch(quickCommandsCollapsibleSearchBoolean, (newValue) => { quickCommandsCollapsibleSearchLocal.value = newValue; }, { immediate: true });
   watch(terminalScrollbackLimitNumber, (newValue) => { terminalScrollbackLimitLocal.value = newValue; }, { immediate: true });
   watch(fileManagerShowDeleteConfirmationBoolean, (newValue) => { fileManagerShowDeleteConfirmationLocal.value = newValue; }, { immediate: true });
   watch(terminalEnableRightClickPasteBoolean, (newValue) => { terminalEnableRightClickPasteLocal.value = newValue; }, { immediate: true });
@@ -400,6 +434,12 @@ export function useWorkspaceSettings() {
     showQuickCommandTagsMessage,
     showQuickCommandTagsSuccess,
     handleUpdateShowQuickCommandTags,
+
+    quickCommandsCollapsibleSearchLocal,
+    quickCommandsCollapsibleSearchLoading,
+    quickCommandsCollapsibleSearchMessage,
+    quickCommandsCollapsibleSearchSuccess,
+    handleUpdateQuickCommandsCollapsibleSearch,
 
     terminalScrollbackLimitLocal,
     terminalScrollbackLimitLoading,

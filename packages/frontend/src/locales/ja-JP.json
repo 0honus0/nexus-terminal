@@ -792,6 +792,7 @@
             "clickToEditTag": "クリックしてタグ名を編集"
         },
         "searchPlaceholder": "名前またはコマンドを検索...",
+        "expandSearch": "検索を展開",
         "sortByName": "名前",
         "sortByUsage": "使用頻度",
         "usageCount": "使用回数",
@@ -1182,7 +1183,8 @@
             "error": {
                 "sidebarPersistentSaveFailed": "サイドバーの設定の保存に失敗しました。",
                 "showConnectionTagsSaveFailed": "接続タグ表示設定の保存に失敗しました。",
-                "showQuickCommandTagsSaveFailed": "クイックコマンドタグ表示設定の保存に失敗しました。"
+                "showQuickCommandTagsSaveFailed": "クイックコマンドタグ表示設定の保存に失敗しました。",
+                "quickCommandsCollapsibleSearchSaveFailed": "クイックコマンド検索の表示設定の保存に失敗しました。"
             },
             "sidebarPersistentDescription": "有効にすると、サイドバーの外側をクリックしてもサイドバーは自動的に折りたたまれません。",
             "editorCloseBehaviorTitle": "ファイルエディターを閉じるときの動作",
@@ -1195,7 +1197,8 @@
             "success": {
                 "sidebarPersistentSaved": "サイドバーの設定を保存しました。",
                 "showConnectionTagsSaved": "接続タグ表示設定を保存しました。",
-                "showQuickCommandTagsSaved": "クイックコマンドタグ表示設定を保存しました。"
+                "showQuickCommandTagsSaved": "クイックコマンドタグ表示設定を保存しました。",
+                "quickCommandsCollapsibleSearchSaved": "クイックコマンド検索の表示設定を保存しました。"
             },
             "title": "ワークスペースとターミナル",
             "showConnectionTagsTitle": "接続タグを表示",
@@ -1204,6 +1207,9 @@
             "showQuickCommandTagsTitle": "クイックコマンドタグを表示",
             "showQuickCommandTagsLabel": "クイックコマンドリストにタグを表示",
             "showQuickCommandTagsDescription": "無効にすると、クイックコマンドリストのタグが非表示になり、検索から除外されます。",
+            "quickCommandsCollapsibleSearchTitle": "クイックコマンド検索",
+            "quickCommandsCollapsibleSearchLabel": "検索ボックスを既定で検索ボタンに折りたたむ",
+            "quickCommandsCollapsibleSearchDescription": "既定では無効です。有効にすると、クイックコマンドパネルには検索ボタンだけが表示され、クリックすると検索ボックスが展開されます。",
             "fileManagerDeleteConfirmTitle": "ファイルマネージャー削除確認",
             "fileManagerShowDeleteConfirmationLabel": "ファイルまたはフォルダーを削除する際に確認ダイアログを表示する",
             "fileManagerDeleteConfirmSuccess": "ファイルマネージャーの削除確認設定を保存しました。",

@@ -982,12 +982,14 @@
       "success": {
         "sidebarPersistentSaved": "侧边栏设置已保存。",
         "showConnectionTagsSaved": "连接标签显示设置已保存。",
-        "showQuickCommandTagsSaved": "快捷指令标签显示设置已保存。"
+        "showQuickCommandTagsSaved": "快捷指令标签显示设置已保存。",
+        "quickCommandsCollapsibleSearchSaved": "快捷指令搜索框显示方式已保存。"
       },
       "error": {
         "sidebarPersistentSaveFailed": "保存侧边栏设置失败。",
         "showConnectionTagsSaveFailed": "保存连接标签显示设置失败。",
-        "showQuickCommandTagsSaveFailed": "保存快捷指令标签显示设置失败。"
+        "showQuickCommandTagsSaveFailed": "保存快捷指令标签显示设置失败。",
+        "quickCommandsCollapsibleSearchSaveFailed": "保存快捷指令搜索框显示方式失败。"
       },
       "showConnectionTagsTitle": "显示连接标签",
       "showConnectionTagsLabel": "在连接列表中显示标签",
@@ -995,6 +997,9 @@
       "showQuickCommandTagsTitle": "显示快捷指令标签",
       "showQuickCommandTagsLabel": "在快捷指令列表中显示标签",
       "showQuickCommandTagsDescription": "关闭后将隐藏快捷指令列表中的标签，并从搜索中排除标签。",
+      "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
+      "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
+      "quickCommandsCollapsibleSearchDescription": "默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。",
       "fileManagerDeleteConfirmTitle": "文件管理器删除确认",
       "fileManagerShowDeleteConfirmationLabel": "删除文件或文件夹时显示确认提示框",
       "fileManagerDeleteConfirmSuccess": "文件管理器删除确认设置已保存。",
@@ -1378,6 +1383,7 @@
   },
   "quickCommands": {
     "searchPlaceholder": "搜索名称或指令...",
+    "expandSearch": "展开搜索",
     "add": "添加",
     "switchToName": "当前显示指令，点击显示名称",
     "switchToCommand": "当前显示名称，点击显示指令",

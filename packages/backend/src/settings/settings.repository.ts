@@ -260,6 +260,7 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
         dockerDefaultExpand: 'false',
         statusMonitorIntervalSeconds: '3',
         statusMonitorScale: '1.0',
+        quickCommandsCollapsibleSearch: 'false',
         [SIDEBAR_CONFIG_KEY]: JSON.stringify(defaultSidebarPanesStructure),
         [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),
         timezone: 'UTC', // 时区默认值

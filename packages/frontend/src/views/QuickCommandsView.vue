@@ -4,7 +4,19 @@
     <div class="flex flex-col flex-grow overflow-hidden bg-background">
       <!-- Controls Area -->
       <div class="quick-commands-controls flex items-center p-2 flex-shrink-0 gap-2 bg-background"> <!-- Reduced padding p-3 to p-2 -->
+        <button
+          v-if="quickCommandsCollapsibleSearchBoolean && !shouldShowSearchInput"
+          data-testid="quick-command-search-toggle"
+          type="button"
+          class="quick-commands-control-button w-8 h-8 border border-border/50 rounded-lg text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150 flex-shrink-0 flex items-center justify-center"
+          :title="$t('quickCommands.expandSearch', '展开搜索')"
+          :aria-label="$t('quickCommands.expandSearch', '展开搜索')"
+          @click="expandSearch"
+        >
+          <i class="fas fa-search text-base"></i>
+        </button>
         <input
+          v-if="shouldShowSearchInput"
           data-testid="quick-command-search"
           type="text"
           :placeholder="$t('quickCommands.searchPlaceholder', '搜索名称或指令...')"
@@ -292,7 +304,23 @@ const {
   showQuickCommandTagsBoolean,
   quickCommandRowSizeMultiplierNumber: qcRowSizeMultiplierFromStore,
   quickCommandsCompactModeBoolean, // +++ 引入紧凑模式状态 +++
+  quickCommandsCollapsibleSearchBoolean,
 } = storeToRefs(settingsStore);
+
+const isSearchExpanded = ref(!quickCommandsCollapsibleSearchBoolean.value);
+const shouldShowSearchInput = computed(() => (
+  !quickCommandsCollapsibleSearchBoolean.value || isSearchExpanded.value || Boolean(searchTerm.value)
+));
+
+watch(quickCommandsCollapsibleSearchBoolean, (enabled) => {
+  isSearchExpanded.value = !enabled;
+});
+
+const expandSearch = async () => {
+  isSearchExpanded.value = true;
+  await nextTick();
+  searchInputRef.value?.focus();
+};
 
 const quickCommandRowSizeMultiplier = ref(1.0);
 const QUICK_COMMAND_SCALE_MIN = 0.5;
@@ -471,6 +499,12 @@ watch(storeSelectedIndex, (newIndex) => {
 
 // Keyboard navigation now operates on the flat visible list from the store
 const handleSearchInputKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && quickCommandsCollapsibleSearchBoolean.value && !searchTerm.value) {
+      event.preventDefault();
+      isSearchExpanded.value = false;
+      return;
+    }
+
     // 使用 store 的 flatVisibleCommands
     const commands = flatVisibleCommands.value;
     if (!commands.length) return;
@@ -504,6 +538,9 @@ const handleSearchInputBlur = () => {
     // 如果焦点移出整个组件区域，则重置选择
     if (document.activeElement !== searchInputRef.value && !commandListContainerRef.value?.contains(document.activeElement)) {
         quickCommandsStore.resetSelection();
+        if (quickCommandsCollapsibleSearchBoolean.value && !searchTerm.value) {
+          isSearchExpanded.value = false;
+        }
     }
 }, 100); // 短暂延迟
 };
@@ -644,12 +681,14 @@ const executeCommand = (cmd: QuickCommandFE) => {
 };
 
 // +++ 聚焦搜索框的方法 +++
-const focusSearchInput = (): boolean => {
-  if (searchInputRef.value) {
-    searchInputRef.value.focus();
-    return true;
+const focusSearchInput = async (): Promise<boolean> => {
+  if (!shouldShowSearchInput.value) {
+    isSearchExpanded.value = true;
+    await nextTick();
   }
-  return false;
+  if (!searchInputRef.value) return false;
+  searchInputRef.value.focus();
+  return true;
 };
 defineExpose({ focusSearchInput });
 
