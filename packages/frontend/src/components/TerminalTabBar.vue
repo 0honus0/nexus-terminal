@@ -451,7 +451,7 @@ onBeforeUnmount(() => {
         <!-- 全局进度显示入口：打开任务详情并恢复已最小化的悬浮进度 -->
         <button
                 data-testid="transfer-progress-toggle"
-                class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
+                class="relative z-[1100] flex items-center justify-center px-3 h-full border-l border-border bg-header text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
                 @click="showProgressDisplay"
                 :title="t('terminalTabBar.progressDisplay', '进度显示')">
           <i class="fas fa-tasks text-sm"></i>
