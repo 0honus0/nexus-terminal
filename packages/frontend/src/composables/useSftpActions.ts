@@ -45,8 +45,8 @@ export interface SftpManagerInstance {
    moveItems: (sourcePaths: string[], destinationDir: string) => void;
    completeTransfer: (requestId: string) => void;
    failTransfer: (requestId: string, error: string) => void;
-   compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2') => Promise<void>;
-   decompressItem: (item: FileListItem) => Promise<void>;
+   compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2', password?: string) => Promise<void>;
+   decompressItem: (item: FileListItem, password?: string) => Promise<void>;
    cancelArchive: () => void;
    joinPath: (base: string, name: string) => string;
    setInitialLoadDone: (value: boolean) => void;
@@ -623,7 +623,7 @@ export function createSftpActionsManager(
         // 可选：显示一个“正在移动...”的通知
    };
 
-   const compressItems = (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2'): Promise<void> => {
+   const compressItems = (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2', password?: string): Promise<void> => {
        return new Promise((resolve, reject) => {
            if (!isSftpReady.value) {
                const errMsg = t('fileManager.errors.sftpNotReady');
@@ -704,11 +704,15 @@ export function createSftpActionsManager(
 
            unregisterError = onMessage('sftp:compress:error', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
-               const errorPayload = payload as { error: string, details?: string };
+               const errorPayload = payload as { error: string, details?: string, code?: string };
                cleanupOperation();
                const errorMsg = errorPayload.details || errorPayload.error || t('fileManager.errors.compressFailed');
-               uiNotificationsStore.showError(t('fileManager.errors.compressErrorDetailed', { error: errorMsg }));
-               reject(new Error(errorMsg));
+               const archiveError = new Error(errorMsg);
+               if (errorPayload.code) archiveError.name = errorPayload.code;
+               if (!errorPayload.code) {
+                   uiNotificationsStore.showError(t('fileManager.errors.compressErrorDetailed', { error: errorMsg }));
+               }
+               reject(archiveError);
            });
 
            unregisterProgress = onMessage('sftp:compress:progress', (payload: MessagePayload, message: WebSocketMessage) => {
@@ -744,7 +748,12 @@ export function createSftpActionsManager(
            sendMessage({
                type: 'sftp:compress',
                requestId,
-               payload: { sources: sourcePaths, destination: destinationPath, format }
+               payload: {
+                   sources: sourcePaths,
+                   destination: destinationPath,
+                   format,
+                   ...(password !== undefined ? { password } : {}),
+               }
            });
        });
    };
@@ -762,7 +771,7 @@ export function createSftpActionsManager(
        });
    };
 
-   const decompressItem = (item: FileListItem): Promise<void> => {
+   const decompressItem = (item: FileListItem, password?: string): Promise<void> => {
        return new Promise((resolve, reject) => {
            if (!isSftpReady.value) {
                const errMsg = t('fileManager.errors.sftpNotReady');
@@ -819,11 +828,15 @@ export function createSftpActionsManager(
 
            unregisterError = onMessage('sftp:decompress:error', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
-               const errorPayload = payload as { error: string, details?: string };
+               const errorPayload = payload as { error: string, details?: string, code?: string };
                cleanupOperation();
                const errorMsg = errorPayload.details || errorPayload.error || t('fileManager.errors.decompressFailed');
-               uiNotificationsStore.showError(t('fileManager.errors.decompressErrorDetailed', { error: errorMsg }));
-               reject(new Error(errorMsg));
+               const archiveError = new Error(errorMsg);
+               if (errorPayload.code) archiveError.name = errorPayload.code;
+               if (!errorPayload.code) {
+                   uiNotificationsStore.showError(t('fileManager.errors.decompressErrorDetailed', { error: errorMsg }));
+               }
+               reject(archiveError);
            });
 
            unregisterProgress = onMessage('sftp:decompress:progress', (payload: MessagePayload, message: WebSocketMessage) => {
@@ -847,7 +860,11 @@ export function createSftpActionsManager(
            sendMessage({
                type: 'sftp:decompress',
                requestId,
-               payload: { source: sourcePath, destination: destinationDir }
+               payload: {
+                   source: sourcePath,
+                   destination: destinationDir,
+                   ...(password !== undefined ? { password } : {}),
+               }
            });
        });
    };

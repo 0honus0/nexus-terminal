@@ -58,11 +58,31 @@ const DEFAULT_POLLING_INTERVAL = 1000;
 const previousNetStats = new Map<string, { rx: number, tx: number, timestamp: number }>();
 const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
 const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
+const ARCHIVE_PASSWORD_REQUIRED_MARKER = '__NEXUS_ARCHIVE_PASSWORD_REQUIRED__';
+const ARCHIVE_INVALID_PASSWORD_MARKER = '__NEXUS_ARCHIVE_INVALID_PASSWORD__';
+const MAX_ARCHIVE_PASSWORD_LENGTH = 128;
 const UPLOAD_WRITE_HIGH_WATER_MARK = 1024 * 1024;
 const UPLOAD_DIRECTORY_PREPARE_CONCURRENCY = 8;
 const SFTP_TRANSFER_CHUNK_SIZE = 32 * 1024;
 const SFTP_TRANSFER_CONCURRENCY = 64;
 const SFTP_TRANSFER_PROGRESS_INTERVAL_MS = 200;
+
+type ArchivePasswordValidationError = {
+    code: 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT';
+    message: string;
+};
+
+const validateArchivePassword = (password: string | undefined): ArchivePasswordValidationError | null => {
+    if (password === undefined) return null;
+    if (password.length === 0) return { code: 'INVALID_PASSWORD_FORMAT', message: 'ZIP 密码不能为空' };
+    if (Array.from(password).length > MAX_ARCHIVE_PASSWORD_LENGTH) {
+        return { code: 'PASSWORD_TOO_LONG', message: `ZIP 密码不能超过 ${MAX_ARCHIVE_PASSWORD_LENGTH} 个字符` };
+    }
+    if (/[\0\r\n]/.test(password)) {
+        return { code: 'INVALID_PASSWORD_FORMAT', message: 'ZIP 密码不能包含换行或空字符' };
+    }
+    return null;
+};
 
 interface SftpTransferTracker {
     state: ClientState;
@@ -1551,11 +1571,21 @@ export class SftpService {
      */
     async compress(sessionId: string, payload: SftpCompressRequestPayload): Promise<void> {
         const state = this.clientStates.get(sessionId);
-        const { sources, destinationArchiveName, format, targetDirectory, requestId } = payload;
+        const { sources, destinationArchiveName, format, targetDirectory, password, requestId } = payload;
         const archiveKey = `${sessionId}:${requestId}`;
 
         if (!state?.sshClient) {
             this.sendCompressError(state?.ws, 'SSH 会话未就绪', requestId);
+            return;
+        }
+
+        const passwordError = validateArchivePassword(password);
+        if (passwordError) {
+            this.sendCompressError(state.ws, passwordError.message, requestId, undefined, passwordError.code);
+            return;
+        }
+        if (password !== undefined && format !== 'zip') {
+            this.sendCompressError(state.ws, '只有 ZIP 格式支持密码保护', requestId);
             return;
         }
 
@@ -1597,9 +1627,10 @@ export class SftpService {
         const quotedWorkspace = quotePosixShellArg(workspaceRelativePath);
         const quotedTemporaryArchive = quotePosixShellArg(temporaryArchiveRelativePath);
         const quotedDestinationName = quotePosixShellArg(destinationArchiveRelativePath);
+        const quotedPassword = password !== undefined ? quotePosixShellArg(password) : null;
         const countCommand = `total=$(find ${quotedSources} -print 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
         const archiveCommand = format === 'zip'
-            ? `zip -b ${quotedWorkspace} -r ${quotedTemporaryArchive} ${quotedSources}`
+            ? `zip ${quotedPassword ? `-P ${quotedPassword} ` : ''}-b ${quotedWorkspace} -r ${quotedTemporaryArchive} ${quotedSources}`
             : format === 'targz'
                 ? `tar -czvf ${quotedTemporaryArchive} ${quotedSources}`
                 : `tar -cjvf ${quotedTemporaryArchive} ${quotedSources}`;
@@ -1612,7 +1643,7 @@ export class SftpService {
             'exit "$status";',
             '}',
         ].join(' ');
-        const archiveResultCheck = format === 'zip'
+        const archiveResultCheck = format === 'zip' && password === undefined
             ? `if [ "$archive_status" -ne 0 ]; then if [ -s ${quotedTemporaryArchive} ] && zip -T ${quotedTemporaryArchive} >/dev/null 2>&1; then printf '${ARCHIVE_WARNING_MARKER}%s\n' "$archive_status"; else exit "$archive_status"; fi; fi`
             : 'if [ "$archive_status" -ne 0 ]; then exit "$archive_status"; fi';
         const command = [
@@ -1826,7 +1857,7 @@ export class SftpService {
      */
     async decompress(sessionId: string, payload: SftpDecompressRequestPayload): Promise<void> {
         const state = this.clientStates.get(sessionId);
-        const { archivePath, requestId } = payload;
+        const { archivePath, password, requestId } = payload;
 
         if (!state || !state.sshClient) {
             console.warn(`[SFTP Decompress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 decompress (ID: ${requestId})`);
@@ -1835,6 +1866,16 @@ export class SftpService {
         }
 
         const lowerArchivePath = archivePath.toLowerCase(); // 在此声明一次
+
+        const passwordError = validateArchivePassword(password);
+        if (passwordError) {
+            this.sendDecompressError(state.ws, passwordError.message, requestId, undefined, passwordError.code);
+            return;
+        }
+        if (password !== undefined && !lowerArchivePath.endsWith('.zip')) {
+            this.sendDecompressError(state.ws, '只有 ZIP 格式支持密码解压', requestId);
+            return;
+        }
 
         // 命令检查
         let requiredCommand = '';
@@ -1870,15 +1911,25 @@ export class SftpService {
         // 确保路径被正确引用
         const quotedExtractDir = quotePosixShellArg(extractDir);
         const quotedArchiveBasename = quotePosixShellArg(safeArchiveArgument);
+        const quotedPassword = password !== undefined ? quotePosixShellArg(password) : null;
 
         const cdCommand = `cd ${quotedExtractDir}`;
 
         // 使用在方法开始处声明的 lowerArchivePath
         if (lowerArchivePath.endsWith('.zip')) {
-            // List first to provide an exact total; extraction still proceeds when the
-            // listing command cannot determine a count (the pipeline yields zero).
+            // Detect encryption before extraction so a mixed archive is never partially
+            // unpacked while we are only discovering that a password is required.
+            const passwordPreflight = quotedPassword
+                ? [
+                    `password_test_output=$(LC_ALL=C unzip -tq -P ${quotedPassword} ${quotedArchiveBasename} 2>&1)`,
+                    'password_test_status=$?',
+                    `if [ "$password_test_status" -eq 82 ] || printf '%s' "$password_test_output" | grep -Eqi 'incorrect password|bad password'; then printf '${ARCHIVE_INVALID_PASSWORD_MARKER}\n' >&2; exit 82; fi`,
+                    'if [ "$password_test_status" -ne 0 ]; then printf "%s\n" "$password_test_output" >&2; exit "$password_test_status"; fi',
+                ].join('; ')
+                : `if LC_ALL=C unzip -Z -v ${quotedArchiveBasename} 2>/dev/null | grep -Eqi 'file security status:[[:space:]]*encrypted'; then printf '${ARCHIVE_PASSWORD_REQUIRED_MARKER}\n' >&2; exit 82; fi`;
+            const passwordOption = quotedPassword ? `-P ${quotedPassword} ` : '';
             const countCommand = `total=$(unzip -Z1 ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
-            command = `${cdCommand} && ${countCommand} && unzip -o ${quotedArchiveBasename}`;
+            command = `${cdCommand} && ${passwordPreflight} && ${countCommand} && LC_ALL=C unzip -o ${passwordOption}${quotedArchiveBasename}`;
         } else if (lowerArchivePath.endsWith('.tar.gz') || lowerArchivePath.endsWith('.tgz')) {
             const countCommand = `total=$(tar -tzf ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
             command = `${cdCommand} && ${countCommand} && tar -xzvf ${quotedArchiveBasename}`;
@@ -1890,7 +1941,11 @@ export class SftpService {
             return;
         }
 
-        console.log(`[SFTP Decompress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+        if (password === undefined) {
+            console.log(`[SFTP Decompress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+        } else {
+            console.log(`[SFTP Decompress ${sessionId}] Executing password-protected ZIP extraction (ID: ${requestId})`);
+        }
 
         // --- 执行命令 ---
         try {
@@ -1961,7 +2016,31 @@ export class SftpService {
                     if (stderrRemainder) stderrRemainder = consumeOutput(`${stderrRemainder}\n`, '');
                     code = exitCode;
                     if (fileCount > 0) sendProgress(true);
-                    console.log(`[SFTP Decompress ${sessionId}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${stderrData.trim()}`);
+
+                    const trimmedStderr = stderrData.trim();
+                    const passwordRequired = lowerArchivePath.endsWith('.zip')
+                        && password === undefined
+                        && (trimmedStderr.includes(ARCHIVE_PASSWORD_REQUIRED_MARKER)
+                            || code === 82
+                            || /unable to get password|password required/i.test(trimmedStderr));
+                    const invalidPassword = lowerArchivePath.endsWith('.zip')
+                        && password !== undefined
+                        && (trimmedStderr.includes(ARCHIVE_INVALID_PASSWORD_MARKER)
+                            || code === 82
+                            || /incorrect password|bad password/i.test(trimmedStderr));
+
+                    if (passwordRequired) {
+                        console.log(`[SFTP Decompress ${sessionId}] ZIP requires a password (ID: ${requestId}).`);
+                        this.sendDecompressError(state.ws, '该 ZIP 文件需要密码', requestId, undefined, 'PASSWORD_REQUIRED');
+                        return;
+                    }
+                    if (invalidPassword) {
+                        console.warn(`[SFTP Decompress ${sessionId}] ZIP password was rejected (ID: ${requestId}).`);
+                        this.sendDecompressError(state.ws, 'ZIP 密码不正确', requestId, undefined, 'INVALID_PASSWORD');
+                        return;
+                    }
+
+                    console.log(`[SFTP Decompress ${sessionId}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${trimmedStderr}`);
                     if (code === 0 && !this.isErrorInStdErr(stderrData)) { // 检查退出码和 stderr
                         console.log(`[SFTP Decompress ${sessionId}] Decompression successful (ID: ${requestId}).`);
                         const successPayload: SftpDecompressSuccessPayload = {
@@ -2047,10 +2126,17 @@ export class SftpService {
 
 
     /** 发送压缩错误消息 */
-    private sendCompressError(ws: AuthenticatedWebSocket | undefined, error: string, requestId: string, details?: string): void {
+    private sendCompressError(
+        ws: AuthenticatedWebSocket | undefined,
+        error: string,
+        requestId: string,
+        details?: string,
+        code?: SftpCompressErrorPayload['code'],
+    ): void {
          if (ws && ws.readyState === WebSocket.OPEN) {
             const payload: SftpCompressErrorPayload = { error, requestId };
             if (details) payload.details = details;
+            if (code) payload.code = code;
             // 检查是否是命令未找到的特定错误
             if (error.includes('在服务器上未找到')) {
                  ws.send(JSON.stringify({ type: 'sftp:command_not_found', payload: { operation: 'compress', command: error.match(/'([^']+)'/)?.[1] || 'unknown', message: details || error }, requestId }));
@@ -2063,10 +2149,17 @@ export class SftpService {
     }
 
     /** 发送解压错误消息 */
-    private sendDecompressError(ws: AuthenticatedWebSocket | undefined, error: string, requestId: string, details?: string): void {
+    private sendDecompressError(
+        ws: AuthenticatedWebSocket | undefined,
+        error: string,
+        requestId: string,
+        details?: string,
+        code?: SftpDecompressErrorPayload['code'],
+    ): void {
          if (ws && ws.readyState === WebSocket.OPEN) {
             const payload: SftpDecompressErrorPayload = { error, requestId };
             if (details) payload.details = details;
+            if (code) payload.code = code;
             // 检查是否是命令未找到的特定错误
             if (error.includes('在服务器上未找到')) {
                 ws.send(JSON.stringify({ type: 'sftp:command_not_found', payload: { operation: 'decompress', command: error.match(/'([^']+)'/)?.[1] || 'unknown', message: details || error }, requestId }));

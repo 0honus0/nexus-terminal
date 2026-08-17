@@ -48,6 +48,7 @@ export interface UseFileManagerContextMenuOptions {
   onPaste: () => void; // +++ 粘贴回调 +++
   // --- 压缩/解压回调 ---
   onCompressRequest: (items: FileListItem[], format: CompressFormat) => void; // +++ 压缩回调 +++
+  onEncryptedCompressRequest: (items: FileListItem[]) => void;
   onDecompressRequest: (item: FileListItem) => void; // +++ 解压回调 +++
   onCopyPath?: (item: FileListItem) => void; // +++ 复制路径回调 +++
   onOpenAsText?: (item: FileListItem) => void;
@@ -85,6 +86,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     onPaste, // +++ 解构粘贴回调 +++
     onDownloadDirectory, // +++ 解构文件夹下载回调 +++
     onCompressRequest, // +++ 解构压缩回调 +++
+    onEncryptedCompressRequest,
     onDecompressRequest, // +++ 解构解压回调 +++
     onCopyPath, // +++ 解构复制路径回调 +++
     onOpenAsText,
@@ -156,6 +158,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
             label: t('fileManager.contextMenu.compress'),
             submenu: [
                 { label: t('fileManager.contextMenu.compressZip'), action: () => onCompressRequest(selectedFileItems, 'zip'), disabled: sftpUnavailable },
+                { label: t('fileManager.contextMenu.compressEncryptedZip'), action: () => onEncryptedCompressRequest(selectedFileItems), disabled: sftpUnavailable },
                 { label: t('fileManager.contextMenu.compressTarGz'), action: () => onCompressRequest(selectedFileItems, 'targz'), disabled: sftpUnavailable },
                 { label: t('fileManager.contextMenu.compressTarBz2'), action: () => onCompressRequest(selectedFileItems, 'tarbz2'), disabled: sftpUnavailable }
             ]
@@ -226,6 +229,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
             label: t('fileManager.contextMenu.compress'),
             submenu: [
                 { label: t('fileManager.contextMenu.compressZip'), action: () => onCompressRequest([targetItem], 'zip'), disabled: sftpUnavailable },
+                { label: t('fileManager.contextMenu.compressEncryptedZip'), action: () => onEncryptedCompressRequest([targetItem]), disabled: sftpUnavailable },
                 { label: t('fileManager.contextMenu.compressTarGz'), action: () => onCompressRequest([targetItem], 'targz'), disabled: sftpUnavailable },
                 { label: t('fileManager.contextMenu.compressTarBz2'), action: () => onCompressRequest([targetItem], 'tarbz2'), disabled: sftpUnavailable }
             ]

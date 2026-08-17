@@ -166,3 +166,147 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
     await closeWebSocket(session.socket);
   }
 });
+
+test('password-protected ZIP validates passwords and preserves the normal decompress flow', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const session = await openSshSession(request, connectionId, `archive-password-${crypto.randomUUID()}`);
+  const specialPassword = "Nexus !@#$%^&*()_+-=[]{};:'\",.<>/?\\|`~";
+  const maxPassword = 'x'.repeat(128);
+
+  const archiveRequest = async (
+    type: 'sftp:compress' | 'sftp:decompress',
+    payload: Record<string, unknown>,
+  ) => {
+    const requestId = `archive-password-${crypto.randomUUID()}`;
+    const responsePromise = waitForJson(
+      session.socket,
+      (message) => message.requestId === requestId
+        && [`${type}:success`, `${type}:error`, 'sftp:command_not_found'].includes(String(message.type)),
+      30_000,
+    );
+    sendJson(session.socket, { type, requestId, payload });
+    return responsePromise;
+  };
+
+  try {
+    await waitForSftpReady(session.socket);
+
+    await step('create a password-protected ZIP with shell-special characters', async () => {
+      const response = await archiveRequest('sftp:compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-special.zip',
+        format: 'zip',
+        password: specialPassword,
+      });
+      test.skip(response.type === 'sftp:command_not_found', 'zip is not installed in this test environment');
+      expect(response.type).toBe('sftp:compress:success');
+
+      await requestJson(
+        session.socket,
+        'sftp:delete_paths',
+        { paths: ['/archive-source.txt'] },
+        'sftp:delete_paths:success',
+        'sftp:delete_paths:error',
+      );
+    });
+
+    await step('decompress without a password reports PASSWORD_REQUIRED without extracting files', async () => {
+      const response = await archiveRequest('sftp:decompress', { source: '/archive-special.zip' });
+      test.skip(response.type === 'sftp:command_not_found', 'unzip is not installed in this test environment');
+      expect(response.type).toBe('sftp:decompress:error');
+      expect(response.payload?.code).toBe('PASSWORD_REQUIRED');
+
+      const root = await requestJson(
+        session.socket,
+        'sftp:readdir',
+        { path: '/' },
+        'sftp:readdir:success',
+        'sftp:readdir:error',
+      );
+      expect((Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename))
+        .not.toContain('archive-source.txt');
+    });
+
+    await step('wrong password reports INVALID_PASSWORD and correct special-character password succeeds', async () => {
+      const wrongResponse = await archiveRequest('sftp:decompress', {
+        source: '/archive-special.zip',
+        password: 'definitely-wrong',
+      });
+      expect(wrongResponse.type).toBe('sftp:decompress:error');
+      expect(wrongResponse.payload?.code).toBe('INVALID_PASSWORD');
+
+      const correctResponse = await archiveRequest('sftp:decompress', {
+        source: '/archive-special.zip',
+        password: specialPassword,
+      });
+      expect(correctResponse.type).toBe('sftp:decompress:success');
+
+      const restored = await requestJson(
+        session.socket,
+        'sftp:readfile',
+        { path: '/archive-source.txt', encoding: 'utf8' },
+        'sftp:readfile:success',
+        'sftp:readfile:error',
+      );
+      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
+        .toContain('archive-me');
+    });
+
+    await step('128-character password is accepted and round-trips', async () => {
+      const compressResponse = await archiveRequest('sftp:compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-max-password.zip',
+        format: 'zip',
+        password: maxPassword,
+      });
+      expect(compressResponse.type).toBe('sftp:compress:success');
+
+      await requestJson(
+        session.socket,
+        'sftp:delete_paths',
+        { paths: ['/archive-source.txt'] },
+        'sftp:delete_paths:success',
+        'sftp:delete_paths:error',
+      );
+
+      const decompressResponse = await archiveRequest('sftp:decompress', {
+        source: '/archive-max-password.zip',
+        password: maxPassword,
+      });
+      expect(decompressResponse.type).toBe('sftp:decompress:success');
+    });
+
+    await step('129-character and line-break passwords are rejected before shell execution', async () => {
+      const tooLong = await archiveRequest('sftp:compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-too-long.zip',
+        format: 'zip',
+        password: 'x'.repeat(129),
+      });
+      expect(tooLong.type).toBe('sftp:compress:error');
+      expect(tooLong.payload?.code).toBe('PASSWORD_TOO_LONG');
+
+      const invalidFormat = await archiveRequest('sftp:compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-invalid-password.zip',
+        format: 'zip',
+        password: 'line-one\nline-two',
+      });
+      expect(invalidFormat.type).toBe('sftp:compress:error');
+      expect(invalidFormat.payload?.code).toBe('INVALID_PASSWORD_FORMAT');
+
+      const nullCharacter = await archiveRequest('sftp:compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-null-password.zip',
+        format: 'zip',
+        password: 'before\0after',
+      });
+      expect(nullCharacter.type).toBe('sftp:compress:error');
+      expect(nullCharacter.payload?.code).toBe('INVALID_PASSWORD_FORMAT');
+    });
+  } finally {
+    await closeWebSocket(session.socket);
+  }
+});

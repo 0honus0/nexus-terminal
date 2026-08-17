@@ -301,6 +301,62 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await expect(row(page, 'archive-source.txt')).toBeVisible({ timeout: 30_000 });
   });
 
+  await slowStep('Password-protected ZIP prompts only when decompression discovers encryption', async () => {
+    const specialPassword = "Nexus !@#$%^&*()_+-=[]{};:'\",.<>/?\\|`~";
+
+    await rightClickRow(page, 'archive-source.zip');
+    await clickMenuItem(page, 'Delete');
+    await confirmAction(page, 'delete');
+    await expect(row(page, 'archive-source.zip')).toHaveCount(0);
+
+    await rightClickRow(page, 'archive-source.txt');
+    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    await expect(compress).toBeVisible();
+    await compress.hover();
+    await page.getByText('Password-protected ZIP...', { exact: true }).click();
+
+    const passwordModal = page.getByTestId('archive-password-modal');
+    const passwordInput = passwordModal.getByTestId('archive-password-input');
+    const passwordConfirm = passwordModal.getByTestId('archive-password-confirm');
+    const submit = passwordModal.getByTestId('archive-password-submit');
+    await expect(passwordModal).toHaveAttribute('data-mode', 'compress');
+
+    await passwordInput.fill('x'.repeat(129));
+    await passwordConfirm.fill('x'.repeat(129));
+    await expect(passwordModal.getByTestId('archive-password-error')).toContainText('128');
+    await expect(submit).toBeDisabled();
+
+    await passwordInput.fill('x'.repeat(128));
+    await passwordConfirm.fill('x'.repeat(128));
+    await expect(submit).toBeEnabled();
+
+    await passwordInput.fill(specialPassword);
+    await passwordConfirm.fill(specialPassword);
+    await submit.click();
+    await expect(passwordModal).toBeHidden();
+    await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
+
+    await rightClickRow(page, 'archive-source.txt');
+    await clickMenuItem(page, 'Delete');
+    await confirmAction(page, 'delete');
+    await expect(row(page, 'archive-source.txt')).toHaveCount(0);
+
+    await rightClickRow(page, 'archive-source.zip');
+    await clickMenuItem(page, 'Decompress');
+    await expect(passwordModal).toBeVisible({ timeout: 30_000 });
+    await expect(passwordModal).toHaveAttribute('data-mode', 'decompress');
+
+    await passwordInput.fill('wrong-password');
+    await submit.click();
+    await expect(passwordModal).toBeVisible({ timeout: 30_000 });
+    await expect(passwordModal.getByTestId('archive-password-error')).toContainText('Incorrect ZIP password');
+
+    await passwordInput.fill(specialPassword);
+    await submit.click();
+    await expect(passwordModal).toBeHidden();
+    await expect(row(page, 'archive-source.txt')).toBeVisible({ timeout: 30_000 });
+  });
+
   await step('Send to opens the transfer workflow with the selected file', async () => {
     await rightClickRow(page, 'seed.txt');
     await clickMenuItem(page, 'Send to...');

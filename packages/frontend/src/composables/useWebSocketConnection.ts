@@ -420,7 +420,10 @@ export function createWebSocketConnectionManager(
                 const messageString = JSON.stringify(message);
                 ws.value.send(messageString);
             } catch (e) {
-                console.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, e, message);
+                console.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, e, {
+                    type: message.type,
+                    requestId: message.requestId,
+                });
             }
         } else {
             console.warn(`[WebSocket ${instanceSessionId}] 无法发送消息，连接未打开。状态: ${connectionStatus.value}, ReadyState: ${ws.value?.readyState}`);

@@ -109,6 +109,7 @@ export async function handleSftpOperation(
                         destinationArchiveName: destinationArchiveName,
                         format: payload.format as 'zip' | 'targz' | 'tarbz2',
                         targetDirectory: targetDirectory,
+                        ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
                         requestId: requestId
                     };
                     sftpService.compress(sessionId, compressPayload);
@@ -125,6 +126,7 @@ export async function handleSftpOperation(
                     const decompressPayload = {
                         archivePath: payload.source as string,
                         // destinationDirectory: payload.destination as string, // sftpService.decompress 目前不使用此参数
+                        ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
                         requestId: requestId
                     };
                     sftpService.decompress(sessionId, decompressPayload);

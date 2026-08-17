@@ -18,6 +18,7 @@ import FileUploadPopup from './FileUploadPopup.vue';
 import FileTransferPopup from './FileTransferPopup.vue';
 import FileManagerContextMenu from './FileManagerContextMenu.vue';
 import FileManagerActionModal from './FileManagerActionModal.vue';
+import ArchivePasswordModal from './ArchivePasswordModal.vue';
 import type { FileListItem } from '../types/sftp.types';
 import type { WebSocketMessage } from '../types/websocket.types';
 import PathHistoryDropdown from './PathHistoryDropdown.vue';
@@ -195,6 +196,12 @@ const currentActionType = ref<'delete' | 'rename' | 'chmod' | 'newFile' | 'newFo
 const actionItem = ref<FileListItem | null>(null); // For single item operations
 const actionItems = ref<FileListItem[]>([]); // For multi-item operations (e.g., delete)
 const actionInitialValue = ref(''); // For pre-filling input in modal
+
+const archivePasswordModalVisible = ref(false);
+const archivePasswordMode = ref<'compress' | 'decompress' | null>(null);
+const archivePasswordItems = ref<FileListItem[]>([]);
+const archivePasswordItem = ref<FileListItem | null>(null);
+const archivePasswordError = ref('');
 
 // 文件剪贴板由 Pinia 全局共享，支持跨会话/跨主机粘贴。
 
@@ -1060,28 +1067,101 @@ const triggerDownloadDirectory = (item: FileListItem) => {
 const handleCompress = (items: FileListItem[], format: CompressFormat) => {
   if (!currentSftpManager.value) {
     console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot compress: SFTP manager not available.`);
-    // TODO: Show error notification
     return;
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Requesting compression for ${items.length} items, format: ${format}`);
-  // 调用 SFTP 管理器上的新方法 (将在 useSftpActions.ts 中实现)
   void currentSftpManager.value.compressItems(items, format).catch((error) => {
     if (error instanceof Error && error.message === 'ARCHIVE_CANCELLED') return;
     console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Compression failed:`, error);
   });
 };
 
+const openArchivePasswordModal = (
+  mode: 'compress' | 'decompress',
+  options: { items?: FileListItem[]; item?: FileListItem; error?: string } = {},
+) => {
+  archivePasswordMode.value = mode;
+  archivePasswordItems.value = options.items ? [...options.items] : [];
+  archivePasswordItem.value = options.item ?? null;
+  archivePasswordError.value = options.error ?? '';
+  archivePasswordModalVisible.value = true;
+};
+
+const closeArchivePasswordModal = () => {
+  archivePasswordModalVisible.value = false;
+  archivePasswordMode.value = null;
+  archivePasswordItems.value = [];
+  archivePasswordItem.value = null;
+  archivePasswordError.value = '';
+};
+
+const handleEncryptedCompress = (items: FileListItem[]) => {
+  if (!currentSftpManager.value || items.length === 0) return;
+  openArchivePasswordModal('compress', { items });
+};
+
+const getArchivePasswordErrorMessage = (error: Error): string => {
+  if (error.name === 'INVALID_PASSWORD') {
+    return t('fileManager.archivePassword.wrongPassword', 'Incorrect ZIP password. Try again.');
+  }
+  if (error.name === 'PASSWORD_TOO_LONG') {
+    return t('fileManager.archivePassword.tooLong', { max: 128 });
+  }
+  if (error.name === 'INVALID_PASSWORD_FORMAT') {
+    return t('fileManager.archivePassword.invalidCharacters', 'Password cannot contain line breaks or null characters.');
+  }
+  return error.message;
+};
+
 const handleDecompress = (item: FileListItem) => {
-  if (!currentSftpManager.value) {
+  const manager = currentSftpManager.value;
+  if (!manager) {
     console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot decompress: SFTP manager not available.`);
-    // TODO: Show error notification
     return;
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Requesting decompression for item: ${item.filename}`);
-  // 调用 SFTP 管理器上的新方法 (将在 useSftpActions.ts 中实现)
-  void currentSftpManager.value.decompressItem(item).catch((error) => {
+  void manager.decompressItem(item).catch((error) => {
+    if (error instanceof Error && error.name === 'PASSWORD_REQUIRED') {
+      openArchivePasswordModal('decompress', { item });
+      return;
+    }
     console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Decompression failed:`, error);
   });
+};
+
+const handleArchivePasswordConfirm = (password: string) => {
+  const manager = currentSftpManager.value;
+  const mode = archivePasswordMode.value;
+  const items = [...archivePasswordItems.value];
+  const item = archivePasswordItem.value;
+  if (!manager || !mode) {
+    closeArchivePasswordModal();
+    return;
+  }
+
+  closeArchivePasswordModal();
+
+  if (mode === 'compress' && items.length > 0) {
+    void manager.compressItems(items, 'zip', password).catch((error) => {
+      if (error instanceof Error && error.message === 'ARCHIVE_CANCELLED') return;
+      if (error instanceof Error && ['PASSWORD_TOO_LONG', 'INVALID_PASSWORD_FORMAT'].includes(error.name)) {
+        openArchivePasswordModal('compress', { items, error: getArchivePasswordErrorMessage(error) });
+        return;
+      }
+      console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Password-protected ZIP compression failed:`, error);
+    });
+    return;
+  }
+
+  if (mode === 'decompress' && item) {
+    void manager.decompressItem(item, password).catch((error) => {
+      if (error instanceof Error && ['INVALID_PASSWORD', 'PASSWORD_TOO_LONG', 'INVALID_PASSWORD_FORMAT'].includes(error.name)) {
+        openArchivePasswordModal('decompress', { item, error: getArchivePasswordErrorMessage(error) });
+        return;
+      }
+      console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Password-protected ZIP extraction failed:`, error);
+    });
+  }
 };
 
 
@@ -1140,6 +1220,7 @@ const {
   onDownloadDirectory: triggerDownloadDirectory, // +++ 传递文件夹下载回调 +++
   // +++ 传递压缩/解压回调 +++
   onCompressRequest: handleCompress,
+  onEncryptedCompressRequest: handleEncryptedCompress,
   onDecompressRequest: handleDecompress,
   onCopyPath: handleCopyPath, // +++ 传递复制路径回调 +++
   onOpenAsText: openItemAsText,
@@ -2500,6 +2581,16 @@ const handleOpenEditorClick = () => {
      :initial-value="actionInitialValue"
      @close="handleModalClose"
      @confirm="handleModalConfirm"
+   />
+
+   <ArchivePasswordModal
+     :is-visible="archivePasswordModalVisible"
+     :mode="archivePasswordMode"
+     :item-count="archivePasswordItems.length"
+     :archive-name="archivePasswordItem?.filename ?? ''"
+     :error-message="archivePasswordError"
+     @close="closeArchivePasswordModal"
+     @confirm="handleArchivePasswordConfirm"
    />
 
    <div

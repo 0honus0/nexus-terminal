@@ -398,11 +398,28 @@
 "contextMenu": {
       "compress": "圧縮",
       "compressZip": "zip に圧縮",
+      "compressEncryptedZip": "パスワード付き ZIP...",
       "compressTarGz": "tar.gz に圧縮",
       "compressTarBz2": "tar.bz2 に圧縮",
       "decompress": "解凍",
       "sendTo": "送信..."
     },
+        "archivePassword": {
+            "compressTitle": "パスワード付き ZIP を作成",
+            "decompressTitle": "ZIP パスワードが必要です",
+            "compressDescription": "選択した {count} 件をパスワードで保護した ZIP にします。",
+            "decompressDescription": "{name} はパスワードで保護されています。ZIP パスワードを入力してください。",
+            "password": "パスワード",
+            "confirmPassword": "パスワードの確認",
+            "showPassword": "パスワードを表示",
+            "mismatch": "パスワードが一致しません。",
+            "tooLong": "パスワードは {max} 文字以内で入力してください。",
+            "invalidCharacters": "パスワードに改行または NUL 文字は使用できません。",
+            "wrongPassword": "ZIP パスワードが正しくありません。もう一度入力してください。",
+            "compatibilityNotice": "互換性を優先した従来の ZIP パスワード保護（ZipCrypto）を使用します。強力な AES 暗号化ではなく、Nexus Terminal はパスワードを保存しません。",
+            "create": "ZIP を作成",
+            "extract": "解凍"
+        },
         "archiveProgress": {
             "filesProcessed": "{count} 件のファイルを処理しました",
             "filesProcessedTotal": "{count}/{total} 件を処理済み",
