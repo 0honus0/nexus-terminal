@@ -85,6 +85,7 @@ const validateArchivePassword = (password: string | undefined): ArchivePasswordV
 };
 
 interface SftpTransferTracker {
+    sessionId: string;
     state: ClientState;
     requestId: string;
     totalBytes: number;
@@ -128,7 +129,7 @@ interface PreparedUploadBatch {
 interface ActiveArchiveOperation {
     sessionId: string;
     requestId: string;
-    workspacePath: string;
+    workspacePath?: string;
     stream: ClientChannel;
     heartbeatInterval: ReturnType<typeof setInterval>;
     cancelled: boolean;
@@ -141,6 +142,7 @@ export class SftpService {
     private cancelledUploadIds: Set<string>;
     private activeArchives: Map<string, ActiveArchiveOperation>;
     private cancelledArchiveIds: Set<string>;
+    private cancelledTransferIds: Set<string>;
     private directoryEnsurePromises = new WeakMap<SFTPWrapper, Map<string, Promise<void>>>();
     private preparedUploadBatches: Map<string, PreparedUploadBatch>;
 
@@ -151,6 +153,7 @@ export class SftpService {
         this.cancelledUploadIds = new Set();
         this.activeArchives = new Map();
         this.cancelledArchiveIds = new Set();
+        this.cancelledTransferIds = new Set();
         this.preparedUploadBatches = new Map();
     }
 
@@ -222,6 +225,10 @@ export class SftpService {
         this.preparedUploadBatches.forEach((batch, prepareId) => {
             if (batch.sessionId === sessionId) this.preparedUploadBatches.delete(prepareId);
         });
+
+        for (const key of [...this.cancelledTransferIds]) {
+            if (key.startsWith(`${sessionId}:`)) this.cancelledTransferIds.delete(key);
+        }
 
         void Promise.allSettled(cleanupTasks).finally(() => {
             if (sftp) sftp.end();
@@ -853,10 +860,50 @@ export class SftpService {
         }
     }
 
-    private createTransferTracker(state: ClientState, sources: string[], requestId: string): SftpTransferTracker {
+    private transferCancellationKey(sessionId: string, requestId: string): string {
+        return `${sessionId}:${requestId}`;
+    }
+
+    private assertTransferNotCancelled(tracker: SftpTransferTracker | undefined): void {
+        if (!tracker) return;
+        if (this.cancelledTransferIds.has(this.transferCancellationKey(tracker.sessionId, tracker.requestId))) {
+            throw new Error('SFTP_TRANSFER_CANCELLED');
+        }
+    }
+
+    private isTransferCancelledError(error: unknown): boolean {
+        return error instanceof Error && error.message.includes('SFTP_TRANSFER_CANCELLED');
+    }
+
+    private sendTransferCancelled(state: ClientState | undefined, requestId: string): void {
+        if (state?.ws.readyState === WebSocket.OPEN) {
+            state.ws.send(JSON.stringify({
+                type: 'sftp:transfer:cancelled',
+                requestId,
+                payload: { requestId },
+            }));
+        }
+    }
+
+    async cancelTransfer(sessionId: string, requestId: string): Promise<void> {
+        const state = this.clientStates.get(sessionId);
+        const key = this.transferCancellationKey(sessionId, requestId);
+        this.cancelledTransferIds.add(key);
+        setTimeout(() => this.cancelledTransferIds.delete(key), 30_000).unref?.();
+        if (state?.ws.readyState === WebSocket.OPEN) {
+            state.ws.send(JSON.stringify({
+                type: 'sftp:transfer:cancelling',
+                requestId,
+                payload: { requestId },
+            }));
+        }
+    }
+
+    private createTransferTracker(sessionId: string, state: ClientState, sources: string[], requestId: string): SftpTransferTracker {
         // Do not block transfer startup just to calculate progress. Top-level metadata is
         // collected by the copy loop itself, so a single file needs only one source stat.
         const tracker: SftpTransferTracker = {
+            sessionId,
             state,
             requestId,
             totalBytes: 0,
@@ -950,11 +997,14 @@ export class SftpService {
 
         const copiedItemsDetails: any[] = []; // Store details of successfully copied items
         let firstError: Error | null = null;
+        const transferKey = this.transferCancellationKey(sessionId, requestId);
 
         try {
-            const tracker = this.createTransferTracker(state, sources, requestId);
+            const tracker = this.createTransferTracker(sessionId, state, sources, requestId);
+            this.assertTransferNotCancelled(tracker);
 
             for (const sourcePath of sources) {
+                this.assertTransferNotCancelled(tracker);
                 const sourceName = pathModule.basename(sourcePath);
                 const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/'); // Ensure forward slashes
 
@@ -994,7 +1044,9 @@ export class SftpService {
                 throw firstError; // Throw the first error to be caught below
             }
 
+            this.assertTransferNotCancelled(tracker);
             this.finalizeTransferTracker(tracker);
+            this.cancelledTransferIds.delete(transferKey);
 
             // Send success message with details of copied items
             console.log(`[SFTP ${sessionId}] Copy operation completed successfully (ID: ${requestId}). Copied items: ${copiedItemsDetails.length}`);
@@ -1005,6 +1057,13 @@ export class SftpService {
             }));
 
         } catch (error: any) {
+            const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
+            this.cancelledTransferIds.delete(transferKey);
+            if (cancelled) {
+                console.log(`[SFTP ${sessionId}] Copy operation cancelled (ID: ${requestId}).`);
+                this.sendTransferCancelled(state, requestId);
+                return;
+            }
             console.error(`[SFTP ${sessionId}] Copy operation failed (ID: ${requestId}):`, error);
             state.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: `复制操作失败: ${error.message}`, requestId: requestId }));
         }
@@ -1039,11 +1098,14 @@ export class SftpService {
         const sourceSftp = sourceState.sftp;
         const destinationSftp = destinationState.sftp;
         const copiedItemsDetails: any[] = [];
+        const transferKey = this.transferCancellationKey(destinationSessionId, requestId);
 
         try {
-            const tracker = this.createTransferTracker(destinationState, sources, requestId);
+            const tracker = this.createTransferTracker(destinationSessionId, destinationState, sources, requestId);
+            this.assertTransferNotCancelled(tracker);
 
             for (const sourcePath of sources) {
+                this.assertTransferNotCancelled(tracker);
                 if (typeof sourcePath !== 'string' || !sourcePath.startsWith('/')) {
                     throw new Error('源路径无效');
                 }
@@ -1067,7 +1129,9 @@ export class SftpService {
                 copiedItemsDetails.push(this.formatStatsToFileListItem(destPath, copiedStats));
             }
 
+            this.assertTransferNotCancelled(tracker);
             this.finalizeTransferTracker(tracker);
+            this.cancelledTransferIds.delete(transferKey);
 
             destinationState.ws.send(JSON.stringify({
                 type: 'sftp:copy:success',
@@ -1080,6 +1144,13 @@ export class SftpService {
                 requestId,
             }));
         } catch (error: any) {
+            const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
+            this.cancelledTransferIds.delete(transferKey);
+            if (cancelled) {
+                console.log(`[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Cancelled (ID: ${requestId}).`);
+                this.sendTransferCancelled(destinationState, requestId);
+                return;
+            }
             console.error(`[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Failed (ID: ${requestId}):`, error);
             fail(`跨主机复制失败: ${error.message}`);
         }
@@ -1132,7 +1203,9 @@ export class SftpService {
 
         const movedItemsDetails: any[] = [];
         let firstError: Error | null = null;
+        const transferKey = this.transferCancellationKey(sessionId, requestId);
         const tracker: SftpTransferTracker = {
+            sessionId,
             state,
             requestId,
             totalBytes: 0,
@@ -1155,7 +1228,9 @@ export class SftpService {
                  throw new Error(`无法创建或访问目标目录: ${ensureErr.message}`);
             }
 
+            this.assertTransferNotCancelled(tracker);
             for (const oldPath of sources) {
+                this.assertTransferNotCancelled(tracker);
                 const sourceName = pathModule.basename(oldPath);
                 const newPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/'); // Ensure forward slashes
 
@@ -1203,6 +1278,8 @@ export class SftpService {
                 throw firstError;
             }
 
+            this.assertTransferNotCancelled(tracker);
+            this.cancelledTransferIds.delete(transferKey);
             console.log(`[SFTP ${sessionId}] Move operation completed successfully (ID: ${requestId}). Moved items: ${movedItemsDetails.length}`);
             state.ws.send(JSON.stringify({
                 type: 'sftp:move:success',
@@ -1211,6 +1288,13 @@ export class SftpService {
             }));
 
         } catch (error: any) {
+            const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
+            this.cancelledTransferIds.delete(transferKey);
+            if (cancelled) {
+                console.log(`[SFTP ${sessionId}] Move operation cancelled (ID: ${requestId}).`);
+                this.sendTransferCancelled(state, requestId);
+                return;
+            }
             console.error(`[SFTP ${sessionId}] Move operation failed (ID: ${requestId}):`, error);
             state.ws.send(JSON.stringify({ type: 'sftp:move:error', payload: `移动操作失败: ${error.message}`, requestId: requestId }));
         }
@@ -1272,6 +1356,7 @@ export class SftpService {
         let sourceHandle: Buffer | undefined;
         let destinationHandle: Buffer | undefined;
         try {
+            this.assertTransferNotCancelled(tracker);
             const [sourceOpen, destinationOpen] = await Promise.allSettled([
                 this.openSftpFile(sourceSftp, sourcePath, 'r'),
                 this.openSftpFile(destinationSftp, destPath, 'w'),
@@ -1290,6 +1375,7 @@ export class SftpService {
 
             const worker = async () => {
                 while (true) {
+                    this.assertTransferNotCancelled(tracker);
                     const position = nextPosition;
                     if (position >= fileSize) return;
                     const blockLength = Math.min(SFTP_TRANSFER_CHUNK_SIZE, fileSize - position);
@@ -1309,6 +1395,7 @@ export class SftpService {
                         if (bytesRead <= 0) {
                             throw new Error(`读取 ${sourcePath} 时提前到达文件末尾`);
                         }
+                        this.assertTransferNotCancelled(tracker);
                         await this.writeSftpBlock(
                             destinationSftp,
                             destinationHandle!,
@@ -1341,6 +1428,7 @@ export class SftpService {
         ancestorRealPaths: ReadonlySet<string> = new Set(),
         tracker?: SftpTransferTracker,
     ): Promise<void> {
+        this.assertTransferNotCancelled(tracker);
         const realPath = await this.getRealPath(sourceSftp, sourcePath);
         if (ancestorRealPaths.has(realPath)) {
             console.warn(`[SFTP Cross Copy] Skipping circular symbolic link: ${sourcePath} -> ${realPath}`);
@@ -1353,6 +1441,7 @@ export class SftpService {
         const items = await this.listDirectory(sourceSftp, sourcePath);
 
         for (const item of items) {
+            this.assertTransferNotCancelled(tracker);
             const currentSourcePath = pathModule.join(sourcePath, item.filename).replace(/\\/g, '/');
             const currentDestPath = pathModule.join(destPath, item.filename).replace(/\\/g, '/');
             const itemStats = item.attrs.isSymbolicLink()
@@ -1381,6 +1470,7 @@ export class SftpService {
         tracker?: SftpTransferTracker,
     ): Promise<void> {
         try {
+            this.assertTransferNotCancelled(tracker);
             const realPath = await this.getRealPath(sftp, sourcePath);
             if (ancestorRealPaths.has(realPath)) {
                 console.warn(`[SFTP Copy Recurse] Skipping circular symbolic link: ${sourcePath} -> ${realPath}`);
@@ -1396,6 +1486,7 @@ export class SftpService {
             const items = await this.listDirectory(sftp, sourcePath);
 
             for (const item of items) {
+                this.assertTransferNotCancelled(tracker);
                 const currentSourcePath = pathModule.join(sourcePath, item.filename).replace(/\\/g, '/');
                 const currentDestPath = pathModule.join(destPath, item.filename).replace(/\\/g, '/');
                 const itemStats = item.attrs.isSymbolicLink()
@@ -1790,7 +1881,9 @@ export class SftpService {
             this.activeArchives.delete(archiveKey);
             clearInterval(operation.heartbeatInterval);
             await this.stopArchiveChannel(operation.stream);
-            cleaned = await this.removeRemoteArchiveWorkspace(sessionId, operation.workspacePath);
+            if (operation.workspacePath) {
+                cleaned = await this.removeRemoteArchiveWorkspace(sessionId, operation.workspacePath);
+            }
             this.cancelledArchiveIds.delete(archiveKey);
         } else {
             // Cancellation may arrive while command availability is still being checked.
@@ -1858,6 +1951,7 @@ export class SftpService {
     async decompress(sessionId: string, payload: SftpDecompressRequestPayload): Promise<void> {
         const state = this.clientStates.get(sessionId);
         const { archivePath, password, requestId } = payload;
+        const archiveKey = `${sessionId}:${requestId}`;
 
         if (!state || !state.sshClient) {
             console.warn(`[SFTP Decompress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 decompress (ID: ${requestId})`);
@@ -1947,6 +2041,8 @@ export class SftpService {
             console.log(`[SFTP Decompress ${sessionId}] Executing password-protected ZIP extraction (ID: ${requestId})`);
         }
 
+        if (this.cancelledArchiveIds.delete(archiveKey)) return;
+
         // --- 执行命令 ---
         try {
             state.sshClient.exec(command, (err, stream) => {
@@ -1997,6 +2093,21 @@ export class SftpService {
                 };
 
                 const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
+                const operation: ActiveArchiveOperation = {
+                    sessionId,
+                    requestId,
+                    stream,
+                    heartbeatInterval,
+                    cancelled: false,
+                };
+                this.activeArchives.set(archiveKey, operation);
+                if (this.cancelledArchiveIds.delete(archiveKey)) {
+                    operation.cancelled = true;
+                    this.activeArchives.delete(archiveKey);
+                    clearInterval(heartbeatInterval);
+                    void this.stopArchiveChannel(stream);
+                    return;
+                }
 
                 stream.on('data', (data: Buffer) => {
                     // 必须持续消费 stdout，否则大型归档会耗尽 SSH 通道窗口并永久挂起。
@@ -2012,6 +2123,9 @@ export class SftpService {
                     if (streamFinished) return;
                     streamFinished = true;
                     clearInterval(heartbeatInterval);
+                    const active = this.activeArchives.get(archiveKey);
+                    if (active === operation) this.activeArchives.delete(archiveKey);
+                    if (operation.cancelled || !active) return;
                     if (stdoutRemainder) stdoutRemainder = consumeOutput(`${stdoutRemainder}\n`, '');
                     if (stderrRemainder) stderrRemainder = consumeOutput(`${stderrRemainder}\n`, '');
                     code = exitCode;
@@ -2060,6 +2174,8 @@ export class SftpService {
                      if (streamFinished) return;
                      streamFinished = true;
                      clearInterval(heartbeatInterval);
+                     if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
+                     if (operation.cancelled) return;
                      console.error(`[SFTP Decompress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
                      this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
                  });

@@ -1,5 +1,5 @@
 export type FileTransferOperation = 'copy' | 'move';
-export type FileTransferStatus = 'preparing' | 'running' | 'deleting' | 'error';
+export type FileTransferStatus = 'preparing' | 'running' | 'cancelling' | 'cancelled' | 'deleting' | 'error';
 
 export interface FileTransferItem {
   id: string;

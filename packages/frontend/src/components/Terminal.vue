@@ -13,6 +13,7 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { serializeTerminalSnapshot } from '../utils/terminalSnapshot';
 import '@xterm/xterm/css/xterm.css';
 import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // +++ Import subscriber and off
+import { createWheelStepAccumulator } from '../utils/wheelScale';
 
 
 // 定义 props 和 emits
@@ -41,6 +42,8 @@ let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明�
 let scrollListenerDisposable: IDisposable | null = null;
 let backgroundColorOscDisposable: IDisposable | null = null;
 let backgroundColorResetOscDisposable: IDisposable | null = null;
+let terminalWheelHandler: ((event: WheelEvent) => void) | null = null;
+const consumeTerminalWheelSteps = createWheelStepAccumulator({ thresholdPx: 72 });
 let lastResizeObserverWidth = 0;
 let lastResizeObserverHeight = 0;
 let lastEmittedCols = 0;
@@ -109,7 +112,8 @@ const resolveTerminalTheme = (theme: ITheme): ITheme => (
     : theme
 );
  
-const isTerminalDomReady = ref(false); 
+const isTerminalDomReady = ref(false);
+const renderedTerminalFontSize = ref<number | null>(null);
  
 // --- Settings Store ---
 const settingsStore = useSettingsStore(); // +++ 实例化设置 store +++
@@ -626,6 +630,7 @@ const handleTouchMove = (event: TouchEvent) => {
       const currentTerminalOptFontSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
       if (newSize !== currentTerminalOptFontSize) {
         terminal.options.fontSize = newSize;
+        renderedTerminalFontSize.value = newSize;
         fitAndEmitResizeNow(terminal);
         debouncedSaveFontSize(newSize); // 使用新的区分设备的保存函数
       }
@@ -675,6 +680,7 @@ onMounted(() => {
       allowTransparency: true,
       theme: resolveTerminalTheme(effectiveTerminalTheme.value),
     });
+    renderedTerminalFontSize.value = terminal.options.fontSize ?? currentTerminalFontSize.value;
 
     // 某些远端 shell 会在连接后发送 OSC 11/111，把默认背景改成黑色。
     // 启用终端背景时拦截这两个序列，保留图片/HTML 主题的透明底层；查询
@@ -895,6 +901,7 @@ onMounted(() => {
         if (terminal) {
             console.log(`[Terminal ${props.sessionId}] 应用新终端字体大小: ${newSize}`);
             terminal.options.fontSize = newSize;
+            renderedTerminalFontSize.value = newSize;
             // 字体大小变化需要重新 fit
             fitAndEmitResizeNow(terminal);
         }
@@ -957,34 +964,25 @@ onMounted(() => {
     });
 
 
-    // 重新添加鼠标滚轮缩放功能到内部容器 terminalRef
+    // Ctrl+wheel 使用与其他可缩放面板相同的离散步进累计器，
+    // 过滤高分辨率触控板/鼠标产生的细碎 delta，避免字号来回抖动。
     if (terminalRef.value) {
-      terminalRef.value.addEventListener('wheel', (event: WheelEvent) => {
-        if (event.ctrlKey) {
-          event.preventDefault(); // 阻止默认的滚动行为
+      terminalWheelHandler = (event: WheelEvent) => {
+        if (!event.ctrlKey || !terminal) return;
+        event.preventDefault();
+        const wheelSteps = consumeTerminalWheelSteps(event);
+        if (wheelSteps === 0) return;
 
-          if (terminal) {
-            let newSize;
-            const currentSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
-            if (event.deltaY < 0) {
-              // 向上滚动，增大字体
-              newSize = Math.min(currentSize + 1, 40);
-            } else {
-              // 向下滚动，减小字体
-              newSize = Math.max(currentSize - 1, 8);
-            }
+        const currentSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
+        const newSize = Math.min(40, Math.max(8, currentSize - wheelSteps));
+        if (newSize === currentSize) return;
 
-            if (newSize !== currentSize) { // 仅在字体大小实际改变时执行
-                console.log(`[Terminal ${props.sessionId}] Font size changed via wheel: ${newSize}`);
-                terminal.options.fontSize = newSize; // 先更新选项
-                fitAndEmitResizeNow(terminal); // 调用统一函数
-
-                // 调用防抖函数来保存设置
-                debouncedSaveFontSize(newSize); // 使用新的区分设备的保存函数
-            }
-          }
-        }
-      });
+        terminal.options.fontSize = newSize;
+        renderedTerminalFontSize.value = newSize;
+        fitAndEmitResizeNow(terminal);
+        debouncedSaveFontSize(newSize);
+      };
+      terminalRef.value.addEventListener('wheel', terminalWheelHandler, { passive: false });
     }
 
     // Add touch listeners for pinch zoom on mobile
@@ -1051,6 +1049,11 @@ onBeforeUnmount(() => {
   
     // 确保在卸载时移除右键监听器
     removeContextMenuListener();
+
+    if (terminalRef.value && terminalWheelHandler) {
+        terminalRef.value.removeEventListener('wheel', terminalWheelHandler);
+        terminalWheelHandler = null;
+    }
 
     // Remove touch listeners on unmount
     if (isMobile.value && terminalRef.value) {
@@ -1170,7 +1173,7 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div ref="terminalOuterWrapperRef" data-testid="terminal" class="terminal-outer-wrapper">
+  <div ref="terminalOuterWrapperRef" data-testid="terminal" :data-font-size="renderedTerminalFontSize ?? undefined" class="terminal-outer-wrapper">
     <!-- xterm 实际挂载点 -->
     <div ref="terminalRef" class="terminal-inner-container"></div>
     <template v-if="isMobile && mobileSelectionHandles.visible">

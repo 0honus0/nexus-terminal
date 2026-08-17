@@ -32,7 +32,7 @@ export const getOrCreateSftpManager = (
             isConnected: session.wsManager.isConnected,
             isSftpReady: session.wsManager.isSftpReady,
         };
-        manager = createSftpActionsManager(resolvedSessionId, currentSftpPath, wsDeps, t);
+        manager = createSftpActionsManager(resolvedSessionId, currentSftpPath, wsDeps, t, instanceId);
         session.sftpManagers.set(instanceId, manager);
     }
     return manager;

@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { UploadItem } from '../types/upload.types'; 
+import type { UploadItem } from '../types/upload.types';
+import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 const POSITION_KEY = 'nexusUploadPopupPosition';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   uploads: Record<string, UploadItem>; // 接收上传任务字典
-}>();
+  sessionLabel?: string;
+  progressSourceId?: string;
+  visible?: boolean;
+  restoreToken?: number;
+}>(), {
+  sessionLabel: '',
+  progressSourceId: '',
+  visible: true,
+  restoreToken: 0,
+});
 
 const emit = defineEmits<{
   (e: 'cancel-upload', uploadId: string): void;
@@ -15,10 +25,12 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const progressCenter = useProgressCenterStore();
 
 const popupRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
+const minimized = ref(false);
 const positionReady = ref(false);
 let dragOffsetX = 0;
 let dragOffsetY = 0;
@@ -27,6 +39,7 @@ let positionRestored = false;
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)
 ).length);
+const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSourceHidden(props.progressSourceId) : false);
 const hasUploading = computed(() => Object.values(props.uploads).some(upload => upload.status === 'uploading'));
 const totalUploadSpeed = ref(0);
 const speedSnapshots = new Map<string, number>();
@@ -172,11 +185,33 @@ const handleCancelAll = () => {
   emit('cancel-all');
 };
 
-watch(() => uploadList.value.length, async (count) => {
+const hidePopup = () => {
+  if (!props.progressSourceId) return;
+  minimized.value = false;
+  progressCenter.hideSource(props.progressSourceId);
+};
+
+const toggleMinimized = async () => {
+  minimized.value = !minimized.value;
+  await nextTick();
+  clampPosition();
+  savePosition();
+};
+
+watch(() => props.restoreToken, async () => {
+  minimized.value = false;
+  await restorePosition();
+  positionReady.value = true;
+  await nextTick();
+  clampPosition();
+});
+
+watch(() => uploadList.value.length, async (count, previousCount) => {
   if (count <= 0) {
     stopDragging();
     return;
   }
+  if (!previousCount) minimized.value = false;
 
   await nextTick();
   if (dragging.value) return;
@@ -211,29 +246,51 @@ onBeforeUnmount(() => {
 <template>
   <!-- 仅当有上传任务时显示 -->
   <div
-    v-if="uploadList.length > 0"
+    v-if="props.visible && !sourceHidden && uploadList.length > 0"
     ref="popupRef"
+    data-testid="file-upload-progress-popup"
     class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-48 overflow-hidden z-[1001] text-sm"
-    :class="{ dragging }"
+    :class="{ dragging, minimized }"
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
     <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
-      <h4 class="m-0 min-w-0 truncate text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
+      <h4 class="m-0 min-w-0 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
+        <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
+      </h4>
       <div class="ml-auto flex items-center gap-2">
         <span v-if="hasUploading" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
           {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
         </span>
         <button
-          v-if="cancellableCount > 1"
+          v-if="cancellableCount > 1 && !minimized"
           type="button"
           class="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
           @click="handleCancelAll"
         >
           {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
         </button>
+        <button
+          v-if="props.progressSourceId"
+          type="button"
+          data-testid="file-upload-progress-hide"
+          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          @click="hidePopup"
+          :title="t('progressCenter.hide', '隐藏进度')"
+        >
+          <i class="fas fa-eye-slash"></i>
+        </button>
+        <button
+          type="button"
+          data-testid="file-upload-progress-minimize"
+          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          @click="toggleMinimized"
+          :title="minimized ? t('common.expand') : t('common.minimize')"
+        >
+          <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
+        </button>
       </div>
     </div>
-    <ul class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
+    <ul v-if="!minimized" class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
       <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2 last:mb-0">
         <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
         <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" :value="upload.progress" max="100" class="w-20 h-2 flex-shrink-0 [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
@@ -252,6 +309,7 @@ onBeforeUnmount(() => {
 .upload-popup {
   width: min(320px, calc(100vw - 16px));
 }
+.upload-popup.minimized { width: min(300px, calc(100vw - 16px)); }
 .upload-popup.dragging {
   cursor: grabbing;
   transition: none;

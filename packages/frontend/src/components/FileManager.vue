@@ -29,6 +29,7 @@ import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
 import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
+import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
 
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
@@ -138,6 +139,7 @@ const transferTasks = computed(() => currentSftpManager.value?.transferTasks ?? 
 // 修改：依赖 currentSftpManager 的状态
 const {
     uploads,
+    progressSourceId: uploadProgressSourceId,
     uploadConflict,
     startFileUploadBatch,
     cancelUpload,
@@ -148,8 +150,30 @@ const {
     // 传递 manager 的 currentPath 和 fileList ref
     computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
     computed(() => currentSftpManager.value?.fileList.value ?? []),
-    computed(() => props.wsDeps)
+    computed(() => props.wsDeps),
+    props.instanceId,
 );
+
+const floatingProgressRestoreToken = ref(0);
+const progressSessionLabel = computed(() => {
+  const resolvedSessionId = effectiveSessionId.value;
+  const session = sessionStore.sessions.get(resolvedSessionId);
+  if (!session) return resolvedSessionId.slice(0, 8);
+
+  const baseName = session.connectionName?.trim() || resolvedSessionId.slice(0, 8);
+  const matchingSessions = [...sessionStore.sessions.values()]
+    .filter(candidate => candidate.connectionName?.trim() === baseName)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  if (matchingSessions.length <= 1) return baseName;
+
+  const index = matchingSessions.findIndex(candidate => candidate.sessionId === resolvedSessionId);
+  return index >= 0 ? `${baseName} #${index + 1}` : baseName;
+});
+const onWorkspaceEvent = useWorkspaceEventSubscriber();
+const offWorkspaceEvent = useWorkspaceEventOff();
+const restoreFloatingProgress = () => {
+  floatingProgressRestoreToken.value += 1;
+};
 
 // 实例化其他 Stores
 const fileEditorStore = useFileEditorStore(); // 实例化 File Editor Store
@@ -1713,6 +1737,8 @@ let unregisterSearchFocusAction: (() => void) | null = null; // 搜索框注销�
 let unregisterPathFocusAction: (() => void) | null = null; // 路径编辑框注销函数
 
 onMounted(() => {
+  onWorkspaceEvent('ui:restoreProgressDisplay', restoreFloatingProgress);
+
   // 注册搜索框聚焦动作
   const focusSearchActionWrapper = async (): Promise<boolean | undefined> => {
     if (effectiveSessionId.value === sessionStore.activeSessionId) {
@@ -1743,6 +1769,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+ offWorkspaceEvent('ui:restoreProgressDisplay', restoreFloatingProgress);
  clearMobileContextTimer();
  if (rowScaleSaveTimer) {
    clearTimeout(rowScaleSaveTimer);
@@ -2610,11 +2637,29 @@ const handleOpenEditorClick = () => {
      </div>
 
      <!-- 使用 FileUploadPopup 组件 -->
-     <FileUploadPopup :uploads="uploads" @cancel-upload="cancelUpload" @cancel-all="cancelAllUploads" />
+     <FileUploadPopup
+       :uploads="uploads"
+       :session-label="progressSessionLabel"
+       :progress-source-id="uploadProgressSourceId"
+       :restore-token="floatingProgressRestoreToken"
+       @cancel-upload="cancelUpload"
+       @cancel-all="cancelAllUploads"
+     />
      <UploadConflictModal :conflict="uploadConflict" @resolve="resolveUploadConflict" />
-     <FileTransferPopup :transfers="transferTasks" />
+     <FileTransferPopup
+       :transfers="transferTasks"
+       :session-label="progressSessionLabel"
+       :progress-source-id="currentSftpManager?.transferProgressSourceId"
+       :restore-token="floatingProgressRestoreToken"
+     />
 
-     <ArchiveProgressPopup :progress="archiveProgress" @cancel="currentSftpManager?.cancelArchive()" />
+     <ArchiveProgressPopup
+       :progress="archiveProgress"
+       :session-label="progressSessionLabel"
+       :progress-source-id="currentSftpManager?.archiveProgressSourceId"
+       :restore-token="floatingProgressRestoreToken"
+       @cancel="currentSftpManager?.cancelArchive()"
+     />
 
     <FileManagerContextMenu
       ref="contextMenuRef"

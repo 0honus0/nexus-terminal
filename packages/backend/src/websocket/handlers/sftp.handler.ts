@@ -95,6 +95,12 @@ export async function handleSftpOperation(
                     sftpService.move(sessionId, payload.sources, payload.destination, requestId);
                 } else throw new Error("Missing 'sources' (array) or 'destination' in payload for move");
                 break;
+            case 'sftp:transfer:cancel': {
+                const transferRequestId = payload?.requestId || requestId;
+                if (transferRequestId) await sftpService.cancelTransfer(sessionId, transferRequestId);
+                else throw new Error("Missing 'requestId' in payload for transfer cancellation");
+                break;
+            }
             case 'sftp:compress':
                 if (Array.isArray(payload?.sources) && payload?.destination && payload?.format && requestId) {
                     const destinationPath = payload.destination as string;

@@ -2,11 +2,24 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ArchiveProgressState } from '../types/sftp.types';
+import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 const POSITION_KEY = 'nexusArchiveProgressPosition';
-const props = defineProps<{ progress: ArchiveProgressState }>();
+const props = withDefaults(defineProps<{
+  progress: ArchiveProgressState;
+  sessionLabel?: string;
+  progressSourceId?: string;
+  visible?: boolean;
+  restoreToken?: number;
+}>(), {
+  sessionLabel: '',
+  progressSourceId: '',
+  visible: true,
+  restoreToken: 0,
+});
 const emit = defineEmits<{ (event: 'cancel'): void }>();
 const { t } = useI18n();
+const progressCenter = useProgressCenterStore();
 
 const popupRef = ref<HTMLElement | { $el?: unknown } | null>(null);
 const getPopupElement = (): HTMLElement | null => {
@@ -16,6 +29,7 @@ const getPopupElement = (): HTMLElement | null => {
   return componentElement instanceof HTMLElement ? componentElement : null;
 };
 const minimized = ref(false);
+const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSourceHidden(props.progressSourceId) : false);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
 let dragOffsetX = 0;
@@ -108,12 +122,26 @@ const startDragging = (event: PointerEvent) => {
   window.addEventListener('pointerup', stopDragging);
 };
 
+const hidePopup = () => {
+  if (!props.progressSourceId) return;
+  minimized.value = false;
+  progressCenter.hideSource(props.progressSourceId);
+};
+
 const toggleMinimized = async () => {
   minimized.value = !minimized.value;
   await nextTick();
   clampPosition();
   savePosition();
 };
+
+watch(() => props.restoreToken, async () => {
+  minimized.value = false;
+  await nextTick();
+  restorePosition();
+  await nextTick();
+  clampPosition();
+});
 
 watch(() => props.progress.active, async (active) => {
   if (!active) return;
@@ -134,8 +162,9 @@ onBeforeUnmount(() => {
 <template>
   <Transition name="archive-progress">
     <div
-      v-if="progress.active"
+      v-if="props.visible && !sourceHidden && progress.active"
       ref="popupRef"
+      data-testid="archive-progress-popup"
       class="archive-progress-card"
       :class="{ minimized, dragging }"
       :style="popupStyle"
@@ -144,7 +173,9 @@ onBeforeUnmount(() => {
         <div class="archive-title">
           <span class="archive-icon"><i class="fas fa-box-archive"></i></span>
           <div class="min-w-0">
-            <div class="truncate font-semibold">{{ operationLabel }} {{ progress.archiveName || '...' }}</div>
+            <div class="truncate font-semibold" :title="props.sessionLabel || undefined">
+              <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ operationLabel }} {{ progress.archiveName || '...' }}
+            </div>
             <div v-if="!minimized" class="text-[11px] text-text-muted">
               {{ progress.cancelling
                 ? t('fileManager.archiveProgress.stopping', '正在停止并清理临时文件...')
@@ -154,7 +185,10 @@ onBeforeUnmount(() => {
         </div>
         <div class="archive-actions">
           <span v-if="progress.percent !== null" class="percent-badge">{{ progress.percent }}%</span>
-          <button type="button" class="icon-button" @click="toggleMinimized" :title="minimized ? t('common.expand', '展开') : t('common.minimize', '最小化')">
+          <button v-if="props.progressSourceId" type="button" data-testid="archive-progress-hide" class="icon-button" @click="hidePopup" :title="t('progressCenter.hide', '隐藏进度')">
+            <i class="fas fa-eye-slash"></i>
+          </button>
+          <button type="button" data-testid="archive-progress-minimize" class="icon-button" @click="toggleMinimized" :title="minimized ? t('common.expand', '展开') : t('common.minimize', '最小化')">
             <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
           </button>
         </div>
@@ -190,7 +224,6 @@ onBeforeUnmount(() => {
           {{ t('fileManager.archiveProgress.starting') }}
         </div>
         <button
-          v-if="progress.operation === 'compress'"
           type="button"
           class="stop-button"
           :disabled="progress.cancelling"
@@ -199,11 +232,10 @@ onBeforeUnmount(() => {
           <i class="fas fa-stop"></i>
           {{ progress.cancelling
             ? t('fileManager.archiveProgress.stoppingShort', '正在停止')
-            : t('fileManager.archiveProgress.stop', '停止压缩') }}
+            : (progress.operation === 'compress'
+              ? t('fileManager.archiveProgress.stop', '停止压缩')
+              : t('fileManager.archiveProgress.stopDecompress', '停止解压')) }}
         </button>
-        <div v-else class="text-[11px] text-text-muted">
-          {{ t('fileManager.archiveProgress.decompressNotice', '关闭或最小化进度卡不会停止解压。') }}
-        </div>
       </div>
     </div>
   </Transition>
