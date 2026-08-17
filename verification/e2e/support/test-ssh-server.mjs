@@ -25,6 +25,7 @@ const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
+let archiveExecDelayMs = 0;
 const executedCommands = [];
 const receivedWebhooks = [];
 const activeSshClients = new Set();
@@ -193,6 +194,7 @@ async function resetRoot() {
   executedCommands.length = 0;
   receivedWebhooks.length = 0;
   sftpWriteDelayMs = 0;
+  archiveExecDelayMs = 0;
 }
 
 function openModeToFsFlags(flags) {
@@ -534,7 +536,10 @@ function runRemoteCommand(command, stream) {
   }
 
   const executableCommand = remapArchiveExecWorkingDirectory(command);
-  const child = spawn('/bin/sh', ['-lc', executableCommand], {
+  const delayedCommand = archiveExecDelayMs > 0 && command.includes('__NEXUS_ARCHIVE_TOTAL__:')
+    ? `sleep ${archiveExecDelayMs / 1000}; ${executableCommand}`
+    : executableCommand;
+  const child = spawn('/bin/sh', ['-lc', delayedCommand], {
     cwd: rootDir,
     env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -671,9 +676,24 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ sftpWriteDelayMs }));
       return;
     }
+    if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {
+      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+      archiveExecDelayMs = Number.isFinite(requestedDelay)
+        ? Math.max(0, Math.min(5000, Math.round(requestedDelay)))
+        : 0;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ archiveExecDelayMs }));
+      return;
+    }
     if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
       const name = path.basename(requestUrl.searchParams.get('name') || 'external-refresh.txt');
-      await fsp.writeFile(path.join(rootDir, name), 'created outside Nexus for refresh verification\n', 'utf8');
+      const requestedSize = Number(requestUrl.searchParams.get('size') || '0');
+      const size = Number.isFinite(requestedSize) ? Math.max(0, Math.min(32 * 1024 * 1024, Math.round(requestedSize))) : 0;
+      if (size > 0) {
+        await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
+      } else {
+        await fsp.writeFile(path.join(rootDir, name), 'created outside Nexus for refresh verification\n', 'utf8');
+      }
       res.writeHead(204);
       res.end();
       return;
