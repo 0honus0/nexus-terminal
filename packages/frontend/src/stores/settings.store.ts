@@ -67,6 +67,7 @@ interface SettingsState {
   showStatusMonitorIpAddress?: string; // 'true' or 'false' - 状态监视器显示IP地址
   quickCommandRowSizeMultiplier?: string; // +++ 快捷命令列表行大小乘数 (e.g., '1.0') +++
   quickCommandsCompactMode?: string; // +++ 快捷指令视图紧凑模式 (e.g., 'false') +++
+  quickCommandsCollapsibleSearch?: string; // 'true' 时快捷指令搜索框默认折叠为按钮
   [key: string]: string | undefined;
 }
 
@@ -329,6 +330,9 @@ export const useSettingsStore = defineStore('settings', () => {
         settings.value.quickCommandsCompactMode = 'false';
         console.log(`[SettingsStore] quickCommandsCompactMode not found, set to default: ${settings.value.quickCommandsCompactMode}`);
       }
+      if (settings.value.quickCommandsCollapsibleSearch === undefined) {
+        settings.value.quickCommandsCollapsibleSearch = 'false';
+      }
         
       // --- 从 localStorage 加载 QuickCommands 特有设置 ---
       const localQcRowSizeMultiplier = localStorage.getItem('nexus_quickCommandRowSizeMultiplier');
@@ -444,7 +448,8 @@ export const useSettingsStore = defineStore('settings', () => {
         'terminalEnableRightClickPaste',
         'showStatusMonitorIpAddress',
         'quickCommandRowSizeMultiplier',
-        'quickCommandsCompactMode'
+        'quickCommandsCompactMode',
+        'quickCommandsCollapsibleSearch'
       ];
       if (!allowedKeys.includes(key)) {
           console.error(`[SettingsStore] 尝试更新不允许的设置键: ${key}`);
@@ -554,7 +559,8 @@ export const useSettingsStore = defineStore('settings', () => {
         'terminalEnableRightClickPaste',
         'showStatusMonitorIpAddress',
         'quickCommandRowSizeMultiplier',
-        'quickCommandsCompactMode'
+        'quickCommandsCompactMode',
+        'quickCommandsCollapsibleSearch'
       ];
       const filteredUpdates: Partial<SettingsState> = {};
       let languageUpdate: string | undefined = undefined;
@@ -909,6 +915,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const quickCommandsCompactModeBoolean = computed(() => {
     return settings.value.quickCommandsCompactMode === 'true';
   });
+
+  const quickCommandsCollapsibleSearchBoolean = computed(() => {
+    return settings.value.quickCommandsCollapsibleSearch === 'true';
+  });
   
  return {
     settings, // 只包含通用设置
@@ -948,6 +958,7 @@ export const useSettingsStore = defineStore('settings', () => {
     timezone,
     quickCommandRowSizeMultiplierNumber, // +++ 暴露快捷命令大小 getter +++
     quickCommandsCompactModeBoolean, // +++ 暴露快捷指令紧凑模式 getter +++
+    quickCommandsCollapsibleSearchBoolean,
     dashboardSortBy,
     dashboardSortOrder,
     saveDashboardSortPreference,

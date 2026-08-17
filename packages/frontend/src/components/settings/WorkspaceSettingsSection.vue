@@ -185,6 +185,37 @@
          </form>
       </div>
       <hr class="border-border/50"> 
+      <!-- Collapsible Quick Command Search -->
+      <div class="settings-section-content" data-testid="quick-command-search-display-setting">
+         <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.workspace.quickCommandsCollapsibleSearchTitle', '快捷指令搜索框') }}</h3>
+         <form @submit.prevent="handleUpdateQuickCommandsCollapsibleSearch" class="space-y-4">
+             <div class="flex items-center">
+                 <input
+                   id="quickCommandsCollapsibleSearch"
+                   data-testid="quick-command-collapsible-search-toggle"
+                   type="checkbox"
+                   v-model="quickCommandsCollapsibleSearchLocal"
+                   class="h-4 w-4 rounded border-border text-primary focus:ring-primary mr-2 cursor-pointer"
+                 >
+                 <label for="quickCommandsCollapsibleSearch" class="text-sm text-foreground cursor-pointer select-none">
+                   {{ $t('settings.workspace.quickCommandsCollapsibleSearchLabel', '默认将搜索框折叠为搜索按钮') }}
+                 </label>
+             </div>
+             <p class="text-xs text-text-secondary mt-1">{{ $t('settings.workspace.quickCommandsCollapsibleSearchDescription', '默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。') }}</p>
+             <div class="flex items-center justify-between pt-2">
+                <button
+                  type="submit"
+                  data-testid="quick-command-collapsible-search-save"
+                  :disabled="quickCommandsCollapsibleSearchLoading"
+                  class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+                >
+                  {{ $t('common.save') }}
+                </button>
+                <p v-if="quickCommandsCollapsibleSearchMessage" :class="['text-sm', quickCommandsCollapsibleSearchSuccess ? 'text-success' : 'text-error']">{{ quickCommandsCollapsibleSearchMessage }}</p>
+             </div>
+         </form>
+      </div>
+      <hr class="border-border/50">
       <!-- Terminal Scrollback Limit -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.terminalScrollback.title', '终端回滚行数') }}</h3>
@@ -402,6 +433,11 @@ const {
   showQuickCommandTagsMessage,
   showQuickCommandTagsSuccess,
   handleUpdateShowQuickCommandTags,
+  quickCommandsCollapsibleSearchLocal,
+  quickCommandsCollapsibleSearchLoading,
+  quickCommandsCollapsibleSearchMessage,
+  quickCommandsCollapsibleSearchSuccess,
+  handleUpdateQuickCommandsCollapsibleSearch,
   terminalScrollbackLimitLocal,
   terminalScrollbackLimitMessage,
   terminalScrollbackLimitSuccess,
