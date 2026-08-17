@@ -2,19 +2,24 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileTransferItem } from '../types/fileTransfer.types';
+import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 const props = withDefaults(defineProps<{
   transfers: Readonly<Record<string, FileTransferItem>>;
   sessionLabel?: string;
+  progressSourceId?: string;
   visible?: boolean;
   restoreToken?: number;
 }>(), {
   sessionLabel: '',
+  progressSourceId: '',
   visible: true,
   restoreToken: 0,
 });
 
 const { t } = useI18n();
+const progressCenter = useProgressCenterStore();
+const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSourceHidden(props.progressSourceId) : false);
 const transferList = computed(() => Object.values(props.transfers));
 const speedSnapshots = new Map<string, number>();
 const totalSpeed = ref(0);
@@ -45,6 +50,12 @@ const currentFilename = (transfer: FileTransferItem) => {
 
 const toggleMinimized = () => {
   minimized.value = !minimized.value;
+};
+
+const hidePopup = () => {
+  if (!props.progressSourceId) return;
+  minimized.value = false;
+  progressCenter.hideSource(props.progressSourceId);
 };
 
 watch(() => props.restoreToken, () => {
@@ -97,7 +108,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="props.visible && transferList.length"
+    v-if="props.visible && !sourceHidden && transferList.length"
     data-testid="file-transfer-progress-popup"
     class="fixed bottom-4 right-4 z-[1002] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-md border border-border bg-background text-sm shadow-lg"
   >
@@ -109,6 +120,16 @@ onBeforeUnmount(() => {
         <span v-if="transferList.some(item => item.status === 'running')" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
           {{ t('fileManager.transferSpeed') }} {{ formatTransferRate(totalSpeed) }}
         </span>
+        <button
+          v-if="props.progressSourceId"
+          type="button"
+          data-testid="file-transfer-progress-hide"
+          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          @click="hidePopup"
+          :title="t('progressCenter.hide', '隐藏进度')"
+        >
+          <i class="fas fa-eye-slash"></i>
+        </button>
         <button
           type="button"
           data-testid="file-transfer-progress-minimize"

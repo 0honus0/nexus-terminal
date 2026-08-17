@@ -91,6 +91,32 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     if (hasNewTask || tasks.length === 0) source.hidden = false;
   };
 
+  const startTask = (
+    registration: ProgressSourceRegistration,
+    task: ProgressTaskRegistration,
+  ) => {
+    const source = ensureSource(registration);
+    source.tasks[task.id] = task;
+    source.hidden = false;
+  };
+
+  const updateTask = (
+    sourceId: string,
+    taskId: string,
+    patch: Partial<Omit<ProgressTaskRegistration, 'id'>>,
+  ) => {
+    const task = sources[sourceId]?.tasks[taskId];
+    if (!task) return;
+    Object.assign(task, patch);
+  };
+
+  const finishTask = (sourceId: string, taskId: string) => {
+    const source = sources[sourceId];
+    if (!source) return;
+    delete source.tasks[taskId];
+    if (Object.keys(source.tasks).length === 0) source.hidden = false;
+  };
+
   const unregisterSource = (sourceId: string) => {
     delete sources[sourceId];
   };
@@ -127,6 +153,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
   const cancelTask = async (sourceId: string, taskId: string) => {
     const task = sources[sourceId]?.tasks[taskId];
     if (!task?.cancel || task.cancellable === false) return;
+    task.status = 'cancelling';
     await task.cancel();
   };
 
@@ -134,6 +161,9 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     sources,
     hiddenTasks,
     registerSource,
+    startTask,
+    updateTask,
+    finishTask,
     syncSourceTasks,
     unregisterSource,
     hideSource,

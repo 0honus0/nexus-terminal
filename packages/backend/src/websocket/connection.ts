@@ -249,6 +249,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                         case 'sftp:cross_copy':
                         case 'sftp:delete_paths':
                         case 'sftp:move':
+                        case 'sftp:transfer:cancel':
                         case 'sftp:compress':
                         case 'sftp:archive:cancel':
                         case 'sftp:decompress':

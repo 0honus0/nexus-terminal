@@ -1529,6 +1529,26 @@
     "noConnectionsMatchSearch": "没有连接匹配搜索条件",
     "searchConnectionsPlaceholder": "搜索连接..."
   },
+  "progressCenter": {
+    "title": "进度显示",
+    "hiddenTitle": "已隐藏的进度",
+    "empty": "当前没有隐藏的进度任务。",
+    "hide": "隐藏进度",
+    "running": "进行中",
+    "cancelling": "取消中",
+    "unknownSession": "未知会话",
+    "serverTransfers": "跨服务器传输任务",
+    "kind": {
+      "upload": "上传",
+      "download": "下载",
+      "copy": "复制",
+      "move": "移动",
+      "compress": "压缩",
+      "decompress": "解压",
+      "transfer": "传输",
+      "other": "任务"
+    }
+  },
   "terminalTabBar": {
     "selectServerTitle": "选择要连接的服务器",
     "progressDisplay": "进度显示"

@@ -31,6 +31,8 @@ export interface SftpManagerInstance {
    currentPath: Readonly<Ref<string>>;
    archiveProgress: ArchiveProgressState;
    transferTasks: Readonly<Record<string, FileTransferItem>>;
+   transferProgressSourceId: string;
+   archiveProgressSourceId: string;
 
    // Methods
    loadDirectory: (path: string, forceRefresh?: boolean) => void;
@@ -46,6 +48,7 @@ export interface SftpManagerInstance {
    moveItems: (sourcePaths: string[], destinationDir: string) => void;
    completeTransfer: (requestId: string) => void;
    failTransfer: (requestId: string, error: string) => void;
+   cancelTransfer: (requestId: string) => void;
    compressItems: (items: FileListItem[], format: 'zip' | 'targz' | 'tarbz2', password?: string) => Promise<void>;
    decompressItem: (item: FileListItem, password?: string) => Promise<void>;
    cancelArchive: () => void;
@@ -161,6 +164,17 @@ export function createSftpActionsManager(
         task.status = 'error';
         task.error = error;
         removeTransferLater(requestId, 8000);
+    };
+
+    const cancelTransfer = (requestId: string) => {
+        const task = transferTasks[requestId];
+        if (!task || !['preparing', 'running'].includes(task.status)) return;
+        task.status = 'cancelling';
+        sendMessage({
+            type: 'sftp:transfer:cancel',
+            requestId,
+            payload: { requestId },
+        });
     };
 
     const resetArchiveProgress = () => {
@@ -571,9 +585,11 @@ export function createSftpActionsManager(
             startTransfer(requestId, operation, sourcePaths, true);
             let unregisterSuccess = () => {};
             let unregisterError = () => {};
+            let unregisterCancelled = () => {};
             const timeout = setTimeout(() => {
                 unregisterSuccess();
                 unregisterError();
+                unregisterCancelled();
                 const message = t('fileManager.errors.copyTimeout', 'Copy timed out');
                 failTransfer(requestId, message);
                 reject(new Error(message));
@@ -582,6 +598,7 @@ export function createSftpActionsManager(
                 clearTimeout(timeout);
                 unregisterSuccess();
                 unregisterError();
+                unregisterCancelled();
             };
 
             unregisterSuccess = onMessage('sftp:copy:success', (_payload, message) => {
@@ -600,6 +617,12 @@ export function createSftpActionsManager(
                 const errorMessage = typeof payload === 'string' ? payload : t('fileManager.errors.copyFailed');
                 failTransfer(requestId, errorMessage);
                 reject(new Error(errorMessage));
+            });
+
+            unregisterCancelled = onMessage('sftp:transfer:cancelled', (_payload, message) => {
+                if (message.requestId !== requestId) return;
+                finish();
+                reject(new Error('SFTP_TRANSFER_CANCELLED'));
             });
 
             sendMessage({
@@ -772,7 +795,7 @@ export function createSftpActionsManager(
    };
 
    const cancelArchive = () => {
-       if (!archiveProgress.active || archiveProgress.operation !== 'compress' || !archiveProgress.requestId || archiveProgress.cancelling) {
+       if (!archiveProgress.active || !archiveProgress.requestId || archiveProgress.cancelling) {
            return;
        }
        archiveProgress.cancelling = true;
@@ -809,6 +832,7 @@ export function createSftpActionsManager(
            let unregisterSuccess: (() => void) | null = null;
            let unregisterError: (() => void) | null = null;
            let unregisterProgress: (() => void) | null = null;
+           let unregisterCancelled: (() => void) | null = null;
            let unregisterCommandNotFound: (() => void) | null = null;
            let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -817,6 +841,7 @@ export function createSftpActionsManager(
                unregisterSuccess?.();
                unregisterError?.();
                unregisterProgress?.();
+               unregisterCancelled?.();
                unregisterCommandNotFound?.();
                resetArchiveProgress();
            };
@@ -862,6 +887,14 @@ export function createSftpActionsManager(
                if (progress.currentFile) archiveProgress.currentFile = progress.currentFile;
            });
 
+           unregisterCancelled = onMessage('sftp:archive:cancelled', (payload: MessagePayload, message: WebSocketMessage) => {
+               const cancelledRequestId = message.requestId || payload?.requestId;
+               if (cancelledRequestId !== requestId) return;
+               cleanupOperation();
+               uiNotificationsStore.showInfo(t('fileManager.archiveProgress.decompressCancelled', '解压已停止；已解出的部分文件会保留。'));
+               reject(new Error('ARCHIVE_CANCELLED'));
+           });
+
            unregisterCommandNotFound = onMessage('sftp:command_not_found', (payload: MessagePayload, message: WebSocketMessage) => {
                if (message.requestId !== requestId) return;
                const commandPayload = payload as { operation: string, command: string };
@@ -893,7 +926,8 @@ export function createSftpActionsManager(
                detail: task.currentFile,
                progress: task.totalKnown ? task.progress : null,
                status: task.status,
-               cancellable: false,
+               cancellable: ['preparing', 'running'].includes(task.status),
+               cancel: ['preparing', 'running'].includes(task.status) ? () => cancelTransfer(task.id) : undefined,
            })),
        );
    };
@@ -910,8 +944,8 @@ export function createSftpActionsManager(
                    detail: progress.currentFile || undefined,
                    progress: progress.percent,
                    status: progress.cancelling ? 'cancelling' : 'running',
-                   cancellable: progress.operation === 'compress' && !progress.cancelling,
-                   cancel: progress.operation === 'compress' ? () => cancelArchive() : undefined,
+                   cancellable: !progress.cancelling,
+                   cancel: () => cancelArchive(),
                }]
                : [],
        );
@@ -1278,6 +1312,20 @@ export function createSftpActionsManager(
         }
     };
 
+    const onTransferCancelling = (_payload: MessagePayload, message: WebSocketMessage) => {
+        if (!message.requestId) return;
+        const task = transferTasks[message.requestId];
+        if (task) task.status = 'cancelling';
+    };
+
+    const onTransferCancelled = (_payload: MessagePayload, message: WebSocketMessage) => {
+        if (!message.requestId) return;
+        const task = transferTasks[message.requestId];
+        if (!task) return;
+        task.status = 'cancelled';
+        removeTransferLater(message.requestId, 1200);
+    };
+
     // +++ 处理复制成功 +++
     const onCopySuccess = (payload: MessagePayload, message: WebSocketMessage) => {
         // 后端应发送 { destination: string, items: FileListItem[] | null }
@@ -1457,6 +1505,8 @@ export function createSftpActionsManager(
     unregisterCallbacks.push(onMessage('sftp:writefile:error', onActionError));
     // +++ 监听复制/移动错误 +++
     unregisterCallbacks.push(onMessage('sftp:transfer:progress', onTransferProgress));
+    unregisterCallbacks.push(onMessage('sftp:transfer:cancelling', onTransferCancelling));
+    unregisterCallbacks.push(onMessage('sftp:transfer:cancelled', onTransferCancelled));
     unregisterCallbacks.push(onMessage('sftp:copy:success', onCopySuccess));
     unregisterCallbacks.push(onMessage('sftp:copy:error', onActionError));
     unregisterCallbacks.push(onMessage('sftp:move:success', onMoveSuccess));
@@ -1511,6 +1561,8 @@ export function createSftpActionsManager(
        initialLoadDone: initialLoadDone, // (类型已在接口中定义为 Readonly<Ref>)
        archiveProgress,
        transferTasks: readonly(transferTasks),
+       transferProgressSourceId,
+       archiveProgressSourceId,
 
         // Methods
         loadDirectory,
@@ -1526,6 +1578,7 @@ export function createSftpActionsManager(
        moveItems, // +++ 暴露 moveItems +++
        completeTransfer,
        failTransfer,
+       cancelTransfer,
        compressItems,
        decompressItem,
        cancelArchive,

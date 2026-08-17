@@ -6,7 +6,7 @@ import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import WorkspaceConnectionListComponent from './WorkspaceConnectionList.vue';
 import TabBarContextMenu from './TabBarContextMenu.vue';
-import TransferProgressModal from './TransferProgressModal.vue';
+import ProgressDisplayModal from './ProgressDisplayModal.vue';
 import { useSessionStore } from '../stores/session.store';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import { useLayoutStore, type PaneName } from '../stores/layout.store';
@@ -492,6 +492,6 @@ onBeforeUnmount(() => {
       @close="closeContextMenu"
     />
     <!-- 传输进度模态框 -->
-    <TransferProgressModal v-model:visible="showTransferProgressModal" />
+    <ProgressDisplayModal v-model:visible="showTransferProgressModal" />
   </div>
 </template>

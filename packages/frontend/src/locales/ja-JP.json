@@ -1491,6 +1491,26 @@
         "deleteFailed": "タグ「{name}」の削除に失敗しました: {error}",
         "errorDelete": "タグの削除中にエラーが発生しました: {error}"
       },
+      "progressCenter": {
+          "title": "進捗表示",
+          "hiddenTitle": "非表示の進捗",
+          "empty": "非表示の進捗タスクはありません。",
+          "hide": "進捗を非表示",
+          "running": "実行中",
+          "cancelling": "キャンセル中",
+          "unknownSession": "不明なセッション",
+          "serverTransfers": "サーバー間転送タスク",
+          "kind": {
+              "upload": "アップロード",
+              "download": "ダウンロード",
+              "copy": "コピー",
+              "move": "移動",
+              "compress": "圧縮",
+              "decompress": "展開",
+              "transfer": "転送",
+              "other": "タスク"
+          }
+      },
       "terminalTabBar": {
           "selectServerTitle": "接続するサーバーを選択",
           "progressDisplay": "進捗表示"

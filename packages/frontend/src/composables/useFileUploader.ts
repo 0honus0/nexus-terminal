@@ -711,11 +711,11 @@ export function useFileUploader(
         cancellableIds.forEach(uploadId => cancelUpload(uploadId, true));
     };
 
-    const uploadProgressSourceId = () => `upload:${sessionIdForLog.value}:${progressInstanceId}`;
-    let registeredUploadProgressSourceId = uploadProgressSourceId();
+    const uploadProgressSourceId = computed(() => `upload:${sessionIdForLog.value}:${progressInstanceId}`);
+    let registeredUploadProgressSourceId = uploadProgressSourceId.value;
 
     const syncUploadProgress = () => {
-        const sourceId = uploadProgressSourceId();
+        const sourceId = uploadProgressSourceId.value;
         if (registeredUploadProgressSourceId !== sourceId) {
             progressCenter.unregisterSource(registeredUploadProgressSourceId);
             registeredUploadProgressSourceId = sourceId;
@@ -1160,6 +1160,7 @@ export function useFileUploader(
 
     return {
         uploads,
+        progressSourceId: uploadProgressSourceId,
         uploadConflict,
         uploadNetworkProfile: computed(() => uploadNetwork.profile),
         startFileUpload,

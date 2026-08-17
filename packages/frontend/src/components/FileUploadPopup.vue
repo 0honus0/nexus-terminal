@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { UploadItem } from '../types/upload.types'; 
+import type { UploadItem } from '../types/upload.types';
+import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 const POSITION_KEY = 'nexusUploadPopupPosition';
 
 const props = withDefaults(defineProps<{
   uploads: Record<string, UploadItem>; // 接收上传任务字典
   sessionLabel?: string;
+  progressSourceId?: string;
   visible?: boolean;
   restoreToken?: number;
 }>(), {
   sessionLabel: '',
+  progressSourceId: '',
   visible: true,
   restoreToken: 0,
 });
@@ -22,6 +25,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const progressCenter = useProgressCenterStore();
 
 const popupRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 16, y: 16 });
@@ -35,6 +39,7 @@ let positionRestored = false;
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)
 ).length);
+const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSourceHidden(props.progressSourceId) : false);
 const hasUploading = computed(() => Object.values(props.uploads).some(upload => upload.status === 'uploading'));
 const totalUploadSpeed = ref(0);
 const speedSnapshots = new Map<string, number>();
@@ -180,6 +185,12 @@ const handleCancelAll = () => {
   emit('cancel-all');
 };
 
+const hidePopup = () => {
+  if (!props.progressSourceId) return;
+  minimized.value = false;
+  progressCenter.hideSource(props.progressSourceId);
+};
+
 const toggleMinimized = async () => {
   minimized.value = !minimized.value;
   await nextTick();
@@ -235,7 +246,7 @@ onBeforeUnmount(() => {
 <template>
   <!-- 仅当有上传任务时显示 -->
   <div
-    v-if="props.visible && uploadList.length > 0"
+    v-if="props.visible && !sourceHidden && uploadList.length > 0"
     ref="popupRef"
     data-testid="file-upload-progress-popup"
     class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-48 overflow-hidden z-[1001] text-sm"
@@ -257,6 +268,16 @@ onBeforeUnmount(() => {
           @click="handleCancelAll"
         >
           {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
+        </button>
+        <button
+          v-if="props.progressSourceId"
+          type="button"
+          data-testid="file-upload-progress-hide"
+          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          @click="hidePopup"
+          :title="t('progressCenter.hide', '隐藏进度')"
+        >
+          <i class="fas fa-eye-slash"></i>
         </button>
         <button
           type="button"

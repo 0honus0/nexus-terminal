@@ -1525,6 +1525,26 @@
     "noConnectionsMatchSearch": "No connections match your search.",
     "searchConnectionsPlaceholder": "Search connections..."
   },
+  "progressCenter": {
+    "title": "Progress Display",
+    "hiddenTitle": "Hidden progress",
+    "empty": "There are no hidden progress tasks.",
+    "hide": "Hide progress",
+    "running": "Running",
+    "cancelling": "Cancelling",
+    "unknownSession": "Unknown session",
+    "serverTransfers": "Cross-server transfer tasks",
+    "kind": {
+      "upload": "Upload",
+      "download": "Download",
+      "copy": "Copy",
+      "move": "Move",
+      "compress": "Compress",
+      "decompress": "Decompress",
+      "transfer": "Transfer",
+      "other": "Task"
+    }
+  },
   "terminalTabBar": {
     "selectServerTitle": "Select server to connect",
     "progressDisplay": "Progress Display"

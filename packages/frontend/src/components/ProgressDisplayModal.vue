@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { useProgressCenterStore, type ProgressTaskKind, type RegisteredProgressTask } from '../stores/progressCenter.store';
+import { useSessionStore } from '../stores/session.store';
 
 interface Props {
   visible: boolean;
@@ -15,6 +17,9 @@ const emit = defineEmits(['update:visible']);
 const { t, locale } = useI18n(); // +++ 解构出 locale +++
 const connectionsStore = useConnectionsStore();
 const uiNotificationsStore = useUiNotificationsStore();
+const progressCenter = useProgressCenterStore();
+const sessionStore = useSessionStore();
+const hiddenProgressTasks = computed(() => progressCenter.hiddenTasks);
 
 const MODAL_POSITION_KEY = 'nexusTransferProgressModalPosition';
 const modalRef = ref<HTMLElement | null>(null);
@@ -134,6 +139,50 @@ const formatTaskTitle = (task: TransferTask): string => {
   return `${sourceServerName} (${fileName} -> ${targetPath})`;
 };
 
+
+const getProgressSessionLabel = (sessionId?: string): string => {
+  if (!sessionId) return t('progressCenter.unknownSession', '未知会话');
+  const session = sessionStore.sessions.get(sessionId);
+  if (!session) return sessionId.slice(0, 8);
+  const baseName = session.connectionName?.trim() || sessionId.slice(0, 8);
+  const matching = [...sessionStore.sessions.values()]
+    .filter(candidate => (candidate.connectionName?.trim() || candidate.sessionId.slice(0, 8)) === baseName)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  if (matching.length <= 1) return baseName;
+  const index = matching.findIndex(candidate => candidate.sessionId === sessionId);
+  return index >= 0 ? `${baseName} #${index + 1}` : baseName;
+};
+
+const getProgressKindLabel = (kind: ProgressTaskKind): string => {
+  const keyByKind: Record<ProgressTaskKind, string> = {
+    upload: 'progressCenter.kind.upload',
+    download: 'progressCenter.kind.download',
+    copy: 'progressCenter.kind.copy',
+    move: 'progressCenter.kind.move',
+    compress: 'progressCenter.kind.compress',
+    decompress: 'progressCenter.kind.decompress',
+    transfer: 'progressCenter.kind.transfer',
+    other: 'progressCenter.kind.other',
+  };
+  const fallbackByKind: Record<ProgressTaskKind, string> = {
+    upload: 'Upload', download: 'Download', copy: 'Copy', move: 'Move',
+    compress: 'Compress', decompress: 'Decompress', transfer: 'Transfer', other: 'Task',
+  };
+  return t(keyByKind[kind], fallbackByKind[kind]);
+};
+
+const normalizeRegisteredProgress = (progress?: number | null): number | null => {
+  if (typeof progress !== 'number' || !Number.isFinite(progress)) return null;
+  return Math.max(0, Math.min(100, progress));
+};
+
+const restoreRegisteredProgress = (task: RegisteredProgressTask) => {
+  progressCenter.restoreSource(task.sourceId);
+};
+
+const cancelRegisteredProgress = async (task: RegisteredProgressTask) => {
+  await progressCenter.cancelTask(task.sourceId, task.id);
+};
 
 // 数据结构参考
 interface TransferSubTask {
@@ -352,6 +401,7 @@ const handleTaskAction = async (task: TransferTask) => {
 <template>
   <div
     v-if="internalVisible"
+    data-testid="progress-display-modal"
     class="fixed inset-0 bg-overlay z-[70] p-4"
     @click.self="handleClose"
   >
@@ -364,7 +414,7 @@ const handleTaskAction = async (task: TransferTask) => {
       <!-- Header -->
       <div class="transfer-progress-header relative flex-shrink-0 px-6 py-4" @pointerdown="startModalDragging">
         <h3 class="m-0 text-center text-xl font-semibold">
-          {{ t('transferProgressModal.title', '文件传输进度') }}
+          {{ t('progressCenter.title', '进度显示') }}
         </h3>
         <button
           type="button"
@@ -379,6 +429,73 @@ const handleTaskAction = async (task: TransferTask) => {
 
       <!-- Content Area -->
       <div class="flex-grow overflow-y-auto mb-6 px-6 pr-8 space-y-4 custom-scrollbar">
+        <section data-testid="progress-display-hidden-section" class="space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <h4 class="m-0 text-sm font-semibold">{{ t('progressCenter.hiddenTitle', '已隐藏的进度') }}</h4>
+            <span class="text-xs text-text-muted">{{ hiddenProgressTasks.length }}</span>
+          </div>
+
+          <div v-if="hiddenProgressTasks.length === 0" data-testid="progress-display-empty" class="rounded border border-dashed border-border px-3 py-5 text-center text-xs text-text-secondary">
+            {{ t('progressCenter.empty', '当前没有隐藏的进度任务。') }}
+          </div>
+
+          <div v-else class="space-y-2" data-testid="hidden-progress-list">
+            <article
+              v-for="task in hiddenProgressTasks"
+              :key="task.key"
+              data-testid="hidden-progress-task"
+              class="rounded-md border border-border bg-background-alt p-3"
+            >
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="mb-1 flex min-w-0 items-center gap-2">
+                    <span class="shrink-0 rounded bg-border/60 px-2 py-0.5 text-[11px] font-medium">{{ getProgressKindLabel(task.kind) }}</span>
+                    <strong class="truncate text-sm" :title="task.title">{{ task.title }}</strong>
+                  </div>
+                  <div data-progress-session class="truncate text-xs text-text-secondary" :title="getProgressSessionLabel(task.sessionId)">
+                    {{ getProgressSessionLabel(task.sessionId) }}
+                  </div>
+                  <div v-if="task.detail" class="mt-1 truncate text-xs text-text-muted" :title="task.detail">{{ task.detail }}</div>
+                </div>
+
+                <div class="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="hidden-progress-restore"
+                    class="rounded border border-border px-2.5 py-1 text-xs hover:border-primary hover:text-primary"
+                    @click="restoreRegisteredProgress(task)"
+                  >
+                    <i class="fas fa-window-restore mr-1"></i>{{ t('common.restore', '还原') }}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="hidden-progress-cancel"
+                    class="rounded border border-red-300 bg-red-50 px-2.5 py-1 text-xs text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="task.cancellable === false || !task.cancel || task.status === 'cancelling'"
+                    @click="cancelRegisteredProgress(task)"
+                  >
+                    <i :class="task.status === 'cancelling' ? 'fas fa-spinner fa-spin mr-1' : 'fas fa-ban mr-1'"></i>
+                    {{ task.status === 'cancelling' ? t('progressCenter.cancelling', '取消中') : t('common.cancel', '取消') }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="normalizeRegisteredProgress(task.progress) !== null" class="mt-3">
+                <div class="mb-1 flex justify-between text-[11px] text-text-secondary">
+                  <span>{{ task.status || t('progressCenter.running', '进行中') }}</span>
+                  <span class="tabular-nums">{{ normalizeRegisteredProgress(task.progress)?.toFixed(1) }}%</span>
+                </div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-border">
+                  <div class="h-full rounded-full bg-primary" :style="{ width: `${normalizeRegisteredProgress(task.progress)}%` }"></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <div class="border-t border-border pt-4">
+          <h4 class="mb-3 mt-0 text-sm font-semibold">{{ t('progressCenter.serverTransfers', '跨服务器传输任务') }}</h4>
+        </div>
         <div v-if="isLoading && transferTasks.length === 0" class="text-center text-text-secondary py-10">
           <svg class="animate-spin h-8 w-8 text-primary mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -486,6 +603,7 @@ const handleTaskAction = async (task: TransferTask) => {
       <!-- Footer -->
       <div class="flex justify-end items-center px-6 py-4 mt-auto flex-shrink-0 border-t" :style="{ borderTopColor: 'var(--border-color)' }">
         <button
+          data-testid="progress-display-close"
           @click="handleClose"
           class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out"
         >

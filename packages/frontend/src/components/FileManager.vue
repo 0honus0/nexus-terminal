@@ -139,6 +139,7 @@ const transferTasks = computed(() => currentSftpManager.value?.transferTasks ?? 
 // 修改：依赖 currentSftpManager 的状态
 const {
     uploads,
+    progressSourceId: uploadProgressSourceId,
     uploadConflict,
     startFileUploadBatch,
     cancelUpload,
@@ -2639,6 +2640,7 @@ const handleOpenEditorClick = () => {
      <FileUploadPopup
        :uploads="uploads"
        :session-label="progressSessionLabel"
+       :progress-source-id="uploadProgressSourceId"
        :restore-token="floatingProgressRestoreToken"
        @cancel-upload="cancelUpload"
        @cancel-all="cancelAllUploads"
@@ -2647,12 +2649,14 @@ const handleOpenEditorClick = () => {
      <FileTransferPopup
        :transfers="transferTasks"
        :session-label="progressSessionLabel"
+       :progress-source-id="currentSftpManager?.transferProgressSourceId"
        :restore-token="floatingProgressRestoreToken"
      />
 
      <ArchiveProgressPopup
        :progress="archiveProgress"
        :session-label="progressSessionLabel"
+       :progress-source-id="currentSftpManager?.archiveProgressSourceId"
        :restore-token="floatingProgressRestoreToken"
        @cancel="currentSftpManager?.cancelArchive()"
      />
