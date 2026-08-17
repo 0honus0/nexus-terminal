@@ -178,6 +178,7 @@ const normalizeRegisteredProgress = (progress?: number | null): number | null =>
 
 const restoreRegisteredProgress = (task: RegisteredProgressTask) => {
   progressCenter.restoreSource(task.sourceId);
+  handleClose();
 };
 
 const cancelRegisteredProgress = async (task: RegisteredProgressTask) => {

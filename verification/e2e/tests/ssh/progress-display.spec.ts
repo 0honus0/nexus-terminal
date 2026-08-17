@@ -126,13 +126,13 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
 
       await task.getByTestId('hidden-progress-restore').click();
       const popup = page.getByTestId('file-upload-progress-popup');
+      await expect(modal).toBeHidden();
       await expect(popup).toBeVisible();
-      await expect(task).toBeHidden();
 
-      // The modal stays open while the provider returns to floating-window mode.
       await popup.getByTestId('file-upload-progress-hide').click();
       await expect(popup).toBeHidden();
-      await expect(hiddenTask(modal, filename)).toBeVisible();
+      const reopenedModal = await openProgressDisplay(page);
+      await expect(hiddenTask(reopenedModal, filename)).toBeVisible();
     });
 
     await slowStep('Cancel invokes the upload provider cancel callback and removes the hidden task', async () => {
@@ -197,7 +197,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
   await openFileManager(page, context);
 
   try {
-    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2200`, { method: 'POST' });
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=4500`, { method: 'POST' });
     await slowStep('compress task can hide, restore, hide again, and cancel from the shared list', async () => {
       await rightClickRow(page, 'archive-source.txt');
       const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
@@ -214,13 +214,15 @@ test('registered archive progress supports hide, restore, and real cancel for co
       let task = hiddenTask(modal, 'archive-source.zip');
       await expect(task).toContainText('Compress');
       await task.getByTestId('hidden-progress-restore').click();
+      await expect(modal).toBeHidden();
       await expect(popup).toBeVisible();
       await popup.getByTestId('archive-progress-hide').click();
-      task = hiddenTask(modal, 'archive-source.zip');
+      const reopenedModal = await openProgressDisplay(page);
+      task = hiddenTask(reopenedModal, 'archive-source.zip');
       await expect(task).toBeVisible();
       await task.getByTestId('hidden-progress-cancel').click();
       await expect(task).toBeHidden({ timeout: 10_000 });
-      await closeProgressDisplay(modal);
+      await closeProgressDisplay(reopenedModal);
       await expect(row(page, 'archive-source.zip')).toHaveCount(0);
     });
 
