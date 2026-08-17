@@ -4,7 +4,6 @@ import {
   devices,
   expect,
   test,
-  type Locator,
   type Page,
 } from "@playwright/test";
 import { loginAsInitialAdmin } from "../../support/auth";
@@ -17,25 +16,18 @@ import {
   resetTestSshFilesystem,
 } from "../../support/ssh";
 
-const screenshotDir = path.resolve(__dirname, "../../../../doc/imgs/generated");
+const screenshotDir = path.resolve(__dirname, "../../../../doc/imgs/e2e");
 
-async function saveScreenshot(page: Page, filename: string): Promise<void> {
+// Documentation screenshots intentionally capture the complete visible UI viewport.
+// Each scenario only needs to make the documented feature clearly visible before capture.
+async function saveViewportScreenshot(
+  page: Page,
+  filename: string,
+): Promise<void> {
   await mkdir(screenshotDir, { recursive: true });
   await page.screenshot({
     path: path.join(screenshotDir, filename),
     fullPage: false,
-    animations: "disabled",
-    caret: "hide",
-  });
-}
-
-async function saveLocatorScreenshot(
-  locator: Locator,
-  filename: string,
-): Promise<void> {
-  await mkdir(screenshotDir, { recursive: true });
-  await locator.screenshot({
-    path: path.join(screenshotDir, filename),
     animations: "disabled",
     caret: "hide",
   });
@@ -69,7 +61,7 @@ test.describe.serial("functional documentation screenshots", () => {
         timeout: 15_000,
       })
       .toContain("Nexus Terminal documentation screenshot");
-    await saveLocatorScreenshot(terminal, "ssh-terminal.png");
+    await saveViewportScreenshot(page, "ssh-terminal.png");
 
     await openConnectedFileManager(page);
     await expect(fileManagerRow(page, "README-e2e.md")).toBeVisible();
@@ -81,10 +73,7 @@ test.describe.serial("functional documentation screenshots", () => {
         editor.locator(".monaco-editor .view-lines").innerText(),
       )
       .toContain("plain-no-extension");
-    await saveLocatorScreenshot(
-      editor.locator(".editor-popup"),
-      "file-manager-editor.png",
-    );
+    await saveViewportScreenshot(page, "file-manager-editor.png");
     await editor.getByTestId("file-editor-close").click();
     await expect(editor).toBeHidden();
 
@@ -105,10 +94,7 @@ test.describe.serial("functional documentation screenshots", () => {
         ),
       )
       .toBe("#212529");
-    await saveLocatorScreenshot(
-      customizer.locator(":scope > div").first(),
-      "theme-customization.png",
-    );
+    await saveViewportScreenshot(page, "theme-customization.png");
   });
 
   test("captures the mobile SSH workspace with a real mobile browser context", async ({
@@ -138,7 +124,7 @@ test.describe.serial("functional documentation screenshots", () => {
           timeout: 15_000,
         })
         .toContain("Nexus mobile SSH");
-      await saveScreenshot(page, "mobile-workspace.png");
+      await saveViewportScreenshot(page, "mobile-workspace.png");
     } finally {
       await context.close();
     }

@@ -1,6 +1,6 @@
 # 部署与更新
 
-本文档集中说明 Nexus Terminal 的 Docker Compose 部署、运行时配置、反向代理与更新方式。README 只保留最短可用流程。
+Nexus Terminal 支持 Docker Compose 部署，并提供运行时配置、反向代理、IPv6、更新和源码构建方式。
 
 ## Docker Compose 部署
 
