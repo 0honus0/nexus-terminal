@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 import { loginAsInitialAdmin } from "../../support/auth";
 import {
   configureSshE2eSettings,
@@ -24,7 +24,7 @@ async function saveScreenshot(page: Page, filename: string): Promise<void> {
 }
 
 test.describe.serial("functional documentation screenshots", () => {
-  test("captures real user-facing SSH, file-management, theme, and mobile scenes", async ({
+  test("captures real user-facing SSH, file-management, and theme scenes", async ({
     page,
     context,
   }) => {
@@ -83,11 +83,28 @@ test.describe.serial("functional documentation screenshots", () => {
       )
       .toBe("#212529");
     await saveScreenshot(page, "theme-customization.png");
+  });
 
-    await page.keyboard.press("Escape");
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("terminal")).toBeVisible({ timeout: 20_000 });
-    await saveScreenshot(page, "mobile-workspace.png");
+  test("captures the mobile SSH workspace with a real mobile browser context", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ ...devices["Pixel 7"] });
+    const page = await context.newPage();
+
+    try {
+      await loginAsInitialAdmin(context.request);
+      await configureSshE2eSettings(context.request);
+      await resetTestSshFilesystem();
+      const connectionId = await ensureTestSshConnection(context.request);
+      await connectTestSshFromConnectionsPage(page, connectionId);
+
+      const terminal = page.getByTestId("terminal");
+      const commandBar = page.getByTestId("command-input-bar");
+      await expect(terminal).toBeVisible({ timeout: 20_000 });
+      await expect(commandBar).toBeVisible();
+      await saveScreenshot(page, "mobile-workspace.png");
+    } finally {
+      await context.close();
+    }
   });
 });
