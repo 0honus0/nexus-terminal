@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feat/docs-functional-screenshots
     paths:
       - "packages/frontend/**"
       - "packages/backend/**"

@@ -129,4 +129,28 @@ test.describe.serial("functional documentation screenshots", () => {
       await context.close();
     }
   });
+
+  test("captures system and security settings as full-interface feature scenes", async ({
+    page,
+    context,
+  }) => {
+    await loginAsInitialAdmin(context.request);
+    const language = await context.request.put("/api/v1/settings", {
+      data: { language: "en-US", timezone: "UTC" },
+    });
+    expect(language.ok()).toBeTruthy();
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/settings");
+
+    await page.getByTestId("settings-tab-system").click();
+    await expect(page.locator("#languageSelect")).toBeVisible();
+    await expect(page.locator("#timezoneSelect")).toBeVisible();
+    await saveViewportScreenshot(page, "system-settings.png");
+
+    await page.getByTestId("settings-tab-security").click();
+    await expect(page.getByTestId("change-password-settings")).toBeVisible();
+    await expect(page.getByTestId("captcha-settings")).toBeVisible();
+    await saveViewportScreenshot(page, "security-settings.png");
+  });
 });

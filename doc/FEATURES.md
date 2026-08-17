@@ -34,6 +34,16 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 
 安全配置见 [安全与认证](./USAGE.md#安全与认证) 和 [环境配置](./DEPLOYMENT.md#env-与持久化配置)。
 
+### 功能截图
+
+系统设置：
+
+![系统设置](./imgs/e2e/system-settings.png)
+
+安全设置：
+
+![安全设置](./imgs/e2e/security-settings.png)
+
 ## 界面与客户端
 
 - 响应式移动端界面。

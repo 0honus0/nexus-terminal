@@ -32,6 +32,8 @@ logs/ssh/file-manager-context-menu/verifies file manager right-click actions ove
 
 The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. GitHub Actions uploads `verification/e2e/logs/` as the `playwright-e2e-logs` artifact on every run.
 
+On GitHub Actions, the mirrored reporter also prints concise live progress to the job log: test start/end, explicit `test.step(...)` start/result, retry number, and duration. Set `E2E_CONSOLE_LOGS=1` to enable the same console output locally without changing the full per-test log files.
+
 ## Local commands
 
 From the repository root:
@@ -45,7 +47,10 @@ npm run test:e2e:ui
 npm run test:e2e:ssh
 npm run test:e2e:mobile
 npm run test:e2e:list
+npm --prefix verification/e2e run test:docs
 ```
+
+`test:docs` is reserved for user-facing feature presentation. It exports full-interface screenshots to `doc/imgs/e2e/`; `.github/workflows/update-functional-screenshots.yml` also uploads them as an Actions artifact and commits refreshed images back to the triggering branch.
 
 The production ingress suite is run separately because it targets a real Nginx endpoint rather than the Vite development server. Set `NEXUS_PRODUCTION_BASE_URL` to the prepared ingress URL and run:
 
