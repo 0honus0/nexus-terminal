@@ -3,18 +3,20 @@ name: E2E
 on:
   push:
     paths:
-      - 'packages/backend/**'
-      - 'packages/frontend/**'
-      - 'verification/e2e/**'
-      - 'package.json'
-      - '.github/workflows/e2e.yml'
+      - "packages/backend/**"
+      - "packages/frontend/**"
+      - "packages/remote-gateway/**"
+      - "verification/e2e/**"
+      - "package.json"
+      - ".github/workflows/e2e.yml"
   pull_request:
     paths:
-      - 'packages/backend/**'
-      - 'packages/frontend/**'
-      - 'verification/e2e/**'
-      - 'package.json'
-      - '.github/workflows/e2e.yml'
+      - "packages/backend/**"
+      - "packages/frontend/**"
+      - "packages/remote-gateway/**"
+      - "verification/e2e/**"
+      - "package.json"
+      - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
 jobs:
@@ -29,11 +31,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: npm
           cache-dependency-path: |
             packages/backend/package-lock.json
             packages/frontend/package-lock.json
+            packages/remote-gateway/package-lock.json
             verification/e2e/package-lock.json
 
       - name: Install backend dependencies
@@ -41,6 +44,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci --prefix packages/frontend
+
+      - name: Install remote gateway dependencies
+        run: npm ci --prefix packages/remote-gateway
 
       - name: Install E2E dependencies
         run: npm ci --prefix verification/e2e
@@ -51,11 +57,14 @@ jobs:
       - name: Build frontend
         run: npm run build --prefix packages/frontend
 
+      - name: Build remote gateway
+        run: npm run build --prefix packages/remote-gateway
+
       - name: Run production ingress WebAuthn E2E
         shell: bash
         env:
           NODE_ENV: test
-          PORT: '3001'
+          PORT: "3001"
           NEXUS_DATA_DIR: ${{ runner.temp }}/nexus-terminal-ingress-data
           SESSION_COOKIE_NAME: nexus.ingress.sid
           SESSION_SECRET: ingress-session-secret-do-not-use-outside-tests-0000000000000000000000
