@@ -21,12 +21,17 @@ const UPLOAD_FRAME_MAGIC = [0x4e, 0x58, 0x55, 0x50] as const; // NXUP
 const UPLOAD_FRAME_VERSION = 1;
 const UPLOAD_FRAME_FIXED_HEADER_SIZE = 12;
 const MAX_UPLOAD_ID_BYTES = 512;
-const UPLOAD_NETWORK_MIN_SAMPLES = 3;
+const UPLOAD_NETWORK_MIN_THROUGHPUT_SAMPLES = 1;
 const UPLOAD_NETWORK_PROFILE_CONFIRM_SAMPLES = 2;
-const UPLOAD_NETWORK_EWMA_ALPHA = 0.25;
-const UPLOAD_WEAK_RTT_MS = 650;
+const UPLOAD_NETWORK_THROUGHPUT_EWMA_ALPHA = 0.35;
+const UPLOAD_NETWORK_RTT_EWMA_ALPHA = 0.2;
+const UPLOAD_THROUGHPUT_WINDOW_MIN_MS = 500;
+const UPLOAD_THROUGHPUT_WINDOW_MAX_MS = 1000;
+const UPLOAD_THROUGHPUT_WINDOW_MIN_BYTES = 256 * KiB;
+const UPLOAD_NETWORK_IDLE_RESET_MS = 10_000;
+const UPLOAD_WEAK_RTT_MS = 900;
 const UPLOAD_WEAK_THROUGHPUT_BPS = 1 * MiB;
-const UPLOAD_FAST_RTT_MS = 160;
+const UPLOAD_WEAK_HIGH_RTT_THROUGHPUT_BPS = 2 * MiB;
 const UPLOAD_FAST_THROUGHPUT_BPS = 6 * MiB;
 
 type UploadPipelineMode = 'single' | 'batch';
@@ -47,39 +52,39 @@ interface UploadTuning {
 const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
     probing: {
         singleChunkSize: 256 * KiB,
-        singleByteWindow: 2 * MiB,
-        batchChunkSize: 256 * KiB,
-        batchByteWindow: 512 * KiB,
-        wsBufferedBytes: 2 * MiB,
-        maxActiveFiles: 4,
-        activeWeightBudget: 6,
-    },
-    weak: {
-        singleChunkSize: 128 * KiB,
-        singleByteWindow: 1 * MiB,
-        batchChunkSize: 128 * KiB,
-        batchByteWindow: 256 * KiB,
-        wsBufferedBytes: 1536 * KiB,
-        maxActiveFiles: 2,
-        activeWeightBudget: 4,
-    },
-    normal: {
-        singleChunkSize: 512 * KiB,
         singleByteWindow: 4 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 1 * MiB,
         wsBufferedBytes: 6 * MiB,
-        maxActiveFiles: 6,
-        activeWeightBudget: 10,
+        maxActiveFiles: 4,
+        activeWeightBudget: 8,
     },
-    fast: {
-        singleChunkSize: 1 * MiB,
+    weak: {
+        singleChunkSize: 128 * KiB,
+        singleByteWindow: 2 * MiB,
+        batchChunkSize: 128 * KiB,
+        batchByteWindow: 512 * KiB,
+        wsBufferedBytes: 3 * MiB,
+        maxActiveFiles: 2,
+        activeWeightBudget: 8,
+    },
+    normal: {
+        singleChunkSize: 256 * KiB,
         singleByteWindow: 8 * MiB,
-        batchChunkSize: 512 * KiB,
+        batchChunkSize: 256 * KiB,
         batchByteWindow: 2 * MiB,
         wsBufferedBytes: 12 * MiB,
-        maxActiveFiles: 12,
+        maxActiveFiles: 6,
         activeWeightBudget: 16,
+    },
+    fast: {
+        singleChunkSize: 512 * KiB,
+        singleByteWindow: 12 * MiB,
+        batchChunkSize: 256 * KiB,
+        batchByteWindow: 4 * MiB,
+        wsBufferedBytes: 20 * MiB,
+        maxActiveFiles: 10,
+        activeWeightBudget: 28,
     },
 };
 
@@ -215,7 +220,11 @@ export function useFileUploader(
         profile: 'probing' as UploadNetworkProfile,
         smoothedRttMs: 0,
         smoothedThroughputBps: 0,
-        sampleCount: 0,
+        rttSampleCount: 0,
+        throughputSampleCount: 0,
+        throughputWindowStartedAt: 0,
+        throughputWindowBytes: 0,
+        lastThroughputSampleAt: 0,
         candidateProfile: 'probing' as UploadNetworkProfile,
         candidateCount: 0,
     });
@@ -241,40 +250,29 @@ export function useFileUploader(
     };
 
     const classifyUploadNetwork = (): UploadNetworkProfile => {
-        if (uploadNetwork.sampleCount < UPLOAD_NETWORK_MIN_SAMPLES) return 'probing';
+        if (uploadNetwork.throughputSampleCount < UPLOAD_NETWORK_MIN_THROUGHPUT_SAMPLES) return 'probing';
+        if (uploadNetwork.smoothedThroughputBps <= UPLOAD_WEAK_THROUGHPUT_BPS) return 'weak';
         if (
             uploadNetwork.smoothedRttMs >= UPLOAD_WEAK_RTT_MS
-            || uploadNetwork.smoothedThroughputBps <= UPLOAD_WEAK_THROUGHPUT_BPS
+            && uploadNetwork.smoothedThroughputBps < UPLOAD_WEAK_HIGH_RTT_THROUGHPUT_BPS
         ) return 'weak';
-        if (
-            uploadNetwork.smoothedRttMs <= UPLOAD_FAST_RTT_MS
-            && uploadNetwork.smoothedThroughputBps >= UPLOAD_FAST_THROUGHPUT_BPS
-        ) return 'fast';
+        if (uploadNetwork.smoothedThroughputBps >= UPLOAD_FAST_THROUGHPUT_BPS) return 'fast';
         return 'normal';
     };
 
     const describeUploadTuning = (profile: UploadNetworkProfile): string => {
         const tuning = UPLOAD_TUNING[profile];
+        const largeFileSlots = Math.min(
+            tuning.maxActiveFiles,
+            Math.floor(tuning.activeWeightBudget / getUploadActiveWeight(UPLOAD_MEDIUM_FILE_THRESHOLD + 1)),
+        );
         return `profile=${profile}, rtt=${Math.round(uploadNetwork.smoothedRttMs)}ms, throughput=${(uploadNetwork.smoothedThroughputBps / MiB).toFixed(2)}MiB/s, `
             + `single=${tuning.singleChunkSize / KiB}KiB/${(tuning.singleByteWindow / MiB).toFixed(1)}MiB, `
             + `batch=${tuning.batchChunkSize / KiB}KiB/${(tuning.batchByteWindow / MiB).toFixed(1)}MiB, `
-            + `maxActiveFiles=${tuning.maxActiveFiles}, weightBudget=${tuning.activeWeightBudget}`;
+            + `maxActiveFiles=${tuning.maxActiveFiles}, largeFileSlots=${largeFileSlots}, weightBudget=${tuning.activeWeightBudget}`;
     };
 
-    const recordUploadNetworkSample = (sampleRttMs: number, chunkSize: number) => {
-        if (!Number.isFinite(sampleRttMs) || sampleRttMs <= 0 || chunkSize <= 0) return;
-        const sampleThroughputBps = chunkSize * 1000 / sampleRttMs;
-        if (uploadNetwork.sampleCount === 0) {
-            uploadNetwork.smoothedRttMs = sampleRttMs;
-            uploadNetwork.smoothedThroughputBps = sampleThroughputBps;
-        } else {
-            uploadNetwork.smoothedRttMs = uploadNetwork.smoothedRttMs * (1 - UPLOAD_NETWORK_EWMA_ALPHA)
-                + sampleRttMs * UPLOAD_NETWORK_EWMA_ALPHA;
-            uploadNetwork.smoothedThroughputBps = uploadNetwork.smoothedThroughputBps * (1 - UPLOAD_NETWORK_EWMA_ALPHA)
-                + sampleThroughputBps * UPLOAD_NETWORK_EWMA_ALPHA;
-        }
-        uploadNetwork.sampleCount += 1;
-
+    const applyUploadNetworkCandidate = () => {
         const candidate = classifyUploadNetwork();
         if (candidate === 'probing') return;
         if (candidate === uploadNetwork.profile) {
@@ -296,6 +294,71 @@ export function useFileUploader(
         console.log(`[FileUploader ${sessionIdForLog.value}] Adaptive upload tuning changed: ${describeUploadTuning(candidate)}`);
         drainUploadStartQueue();
         for (const uploadId of activeUploadIds) void pumpUpload(uploadId);
+    };
+
+    const markUploadDataSent = (sentAt: number) => {
+        if (uploadNetwork.throughputWindowStartedAt === 0) {
+            uploadNetwork.throughputWindowStartedAt = sentAt;
+        }
+    };
+
+    const recordUploadNetworkAck = (sampleRttMs: number, committedBytes: number) => {
+        if (!Number.isFinite(sampleRttMs) || sampleRttMs <= 0 || committedBytes <= 0) return;
+
+        if (uploadNetwork.rttSampleCount === 0) {
+            uploadNetwork.smoothedRttMs = sampleRttMs;
+        } else {
+            uploadNetwork.smoothedRttMs = uploadNetwork.smoothedRttMs * (1 - UPLOAD_NETWORK_RTT_EWMA_ALPHA)
+                + sampleRttMs * UPLOAD_NETWORK_RTT_EWMA_ALPHA;
+        }
+        uploadNetwork.rttSampleCount += 1;
+
+        const now = performance.now();
+        if (uploadNetwork.throughputWindowStartedAt === 0) {
+            uploadNetwork.throughputWindowStartedAt = Math.max(0, now - sampleRttMs);
+        }
+        uploadNetwork.throughputWindowBytes += committedBytes;
+        const elapsedMs = Math.max(1, now - uploadNetwork.throughputWindowStartedAt);
+        const enoughData = uploadNetwork.throughputWindowBytes >= UPLOAD_THROUGHPUT_WINDOW_MIN_BYTES;
+        const shouldSample = elapsedMs >= UPLOAD_THROUGHPUT_WINDOW_MAX_MS
+            || (elapsedMs >= UPLOAD_THROUGHPUT_WINDOW_MIN_MS && enoughData);
+        if (!shouldSample) return;
+
+        const sampleThroughputBps = uploadNetwork.throughputWindowBytes * 1000 / elapsedMs;
+        if (uploadNetwork.throughputSampleCount === 0) {
+            uploadNetwork.smoothedThroughputBps = sampleThroughputBps;
+        } else {
+            uploadNetwork.smoothedThroughputBps = uploadNetwork.smoothedThroughputBps * (1 - UPLOAD_NETWORK_THROUGHPUT_EWMA_ALPHA)
+                + sampleThroughputBps * UPLOAD_NETWORK_THROUGHPUT_EWMA_ALPHA;
+        }
+        uploadNetwork.throughputSampleCount += 1;
+        uploadNetwork.lastThroughputSampleAt = now;
+        uploadNetwork.throughputWindowStartedAt = now;
+        uploadNetwork.throughputWindowBytes = 0;
+        applyUploadNetworkCandidate();
+    };
+
+    const prepareUploadNetworkForNewBatch = () => {
+        if (activeUploadIds.size > 0 || queuedUploadStarts.size > 0) return;
+
+        const now = performance.now();
+        // Never let idle time leak into the next aggregate throughput window.
+        uploadNetwork.throughputWindowStartedAt = 0;
+        uploadNetwork.throughputWindowBytes = 0;
+        if (
+            uploadNetwork.lastThroughputSampleAt === 0
+            || now - uploadNetwork.lastThroughputSampleAt < UPLOAD_NETWORK_IDLE_RESET_MS
+        ) return;
+
+        // A stale weak/fast classification should not permanently throttle a later transfer.
+        uploadNetwork.profile = 'probing';
+        uploadNetwork.smoothedRttMs = 0;
+        uploadNetwork.smoothedThroughputBps = 0;
+        uploadNetwork.rttSampleCount = 0;
+        uploadNetwork.throughputSampleCount = 0;
+        uploadNetwork.lastThroughputSampleAt = 0;
+        uploadNetwork.candidateProfile = 'probing';
+        uploadNetwork.candidateCount = 0;
     };
 
     const resetTransferForRestart = (transfer: UploadTransferState) => {
@@ -405,6 +468,11 @@ export function useFileUploader(
                 activeUploadIds.add(uploadId);
                 activeUploadWeights.set(uploadId, uploadWeight);
                 activeWeight += uploadWeight;
+                console.log(
+                    `[FileUploader ${sessionIdForLog.value}] Upload scheduler: `
+                    + `profile=${uploadNetwork.profile}, activeFiles=${activeUploadIds.size}/${tuning.maxActiveFiles}, `
+                    + `activeWeight=${activeWeight}/${tuning.activeWeightBudget}`,
+                );
             }
         }
     };
@@ -427,11 +495,11 @@ export function useFileUploader(
         try {
             if (transfer.file.size === 0 && transfer.offset === 0 && transfer.inFlight === 0) {
                 const tuning = getTransferTuning(transfer);
-                const sentAt = performance.now();
                 await wsDeps.value.sendBinaryMessage(
                     encodeUploadChunkFrame(uploadId, 0, true, new ArrayBuffer(0)),
                     tuning.wsBufferedBytes,
                 );
+                const sentAt = performance.now();
                 transfer.inFlight = 1;
                 transfer.sentChunks.set(0, { sentAt, size: 0 });
                 transfer.offset = 1;
@@ -458,11 +526,12 @@ export function useFileUploader(
                 const chunkIndex = transfer.nextChunkIndex;
                 const nextOffset = transfer.offset + slice.size;
                 const isLast = nextOffset >= transfer.file.size;
-                const sentAt = performance.now();
                 await wsDeps.value.sendBinaryMessage(
                     encodeUploadChunkFrame(uploadId, chunkIndex, isLast, chunk),
                     tuning.wsBufferedBytes,
                 );
+                const sentAt = performance.now();
+                markUploadDataSent(sentAt);
                 transfer.offset = nextOffset;
                 transfer.nextChunkIndex += 1;
                 transfer.inFlight += 1;
@@ -507,6 +576,7 @@ export function useFileUploader(
 
     const startFileUploadBatch = (files: UploadBatchFile[], directories: string[] = []) => {
         if (!files.length && !directories.length) return;
+        prepareUploadNetworkForNewBatch();
         if (!wsDeps.value.isConnected.value) {
             console.warn(`[FileUploader ${sessionIdForLog.value}] Cannot start upload batch: WebSocket not connected.`);
             return;
@@ -947,7 +1017,7 @@ export function useFileUploader(
         if (sentChunk) {
             transfer.inFlightBytes = Math.max(0, transfer.inFlightBytes - sentChunk.size);
             if (sentChunk.size > 0) {
-                recordUploadNetworkSample(Math.max(1, performance.now() - sentChunk.sentAt), sentChunk.size);
+                recordUploadNetworkAck(Math.max(1, performance.now() - sentChunk.sentAt), sentChunk.size);
             }
         }
 
