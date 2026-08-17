@@ -28,6 +28,7 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
+import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
 
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
@@ -209,6 +210,13 @@ const archivePasswordError = ref('');
 // 文件剪贴板由 Pinia 全局共享，支持跨会话/跨主机粘贴。
 
 const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会被 store 覆盖
+const FILE_MANAGER_SCALE_MIN = 0.5;
+const FILE_MANAGER_SCALE_MAX = 2;
+const FILE_MANAGER_SCALE_STEP = 0.08;
+const consumeFileManagerWheelSteps = createWheelStepAccumulator({ thresholdPx: 72 });
+const rowScaleSyncLocked = ref(false);
+let rowScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let rowScaleSaveGeneration = 0;
 const isSyncingPathFromTerminal = ref(false);
 const isChangingTerminalPath = ref(false);
 let silentExecCleanup: (() => void) | null = null;
@@ -225,6 +233,7 @@ const colWidths = ref({ // 默认值会被 store 覆盖
     permissions: 120,
     modified: 180,
 });
+const totalColumnWidth = computed(() => Object.values(colWidths.value).reduce((sum, width) => sum + width, 0));
 const isResizing = ref(false);
 const resizingColumnIndex = ref(-1);
 const startX = ref(0);
@@ -1494,12 +1503,27 @@ watch(sortDirection, () => {
 
 
 // --- 保存设置的函数 ---
-const saveLayoutSettings = () => {
-  // 确保 colWidths.value 是普通对象，而不是 Proxy
+const persistLayoutSettings = async (multiplier = rowSizeMultiplier.value) => {
   const widthsToSave = JSON.parse(JSON.stringify(colWidths.value));
-  // +++ 日志：记录保存的值 +++
-  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering saveLayoutSettings: multiplier=${rowSizeMultiplier.value}, widths=${JSON.stringify(widthsToSave)}`);
-  settingsStore.updateFileManagerLayoutSettings(rowSizeMultiplier.value, widthsToSave);
+  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Persisting layout: multiplier=${multiplier}, widths=${JSON.stringify(widthsToSave)}`);
+  await settingsStore.updateFileManagerLayoutSettings(multiplier, widthsToSave);
+};
+
+const saveLayoutSettings = () => {
+  void persistLayoutSettings();
+};
+
+const scheduleRowScaleSave = () => {
+  rowScaleSyncLocked.value = true;
+  const generation = ++rowScaleSaveGeneration;
+  if (rowScaleSaveTimer) clearTimeout(rowScaleSaveTimer);
+  rowScaleSaveTimer = setTimeout(() => {
+    rowScaleSaveTimer = null;
+    const multiplier = rowSizeMultiplier.value;
+    void persistLayoutSettings(multiplier).finally(() => {
+      if (generation === rowScaleSaveGeneration) rowScaleSyncLocked.value = false;
+    });
+  }, 240);
 };
 
 // --- 生命周期钩子 ---
@@ -1536,7 +1560,7 @@ watchEffect(() => {
     console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Comparing values: Current Widths=${currentWidthsString}, Store Widths=${storeWidthsString}. Update needed: ${storeWidthsString !== currentWidthsString}`);
 
     // 仅在值不同时更新，避免不必要的重渲染和潜在的循环更新
-    if (storeMultiplier !== currentMultiplier) {
+    if (!rowScaleSyncLocked.value && storeMultiplier !== currentMultiplier) {
       rowSizeMultiplier.value = storeMultiplier;
       console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Row size multiplier updated from store: ${storeMultiplier}`);
     }
@@ -1720,6 +1744,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
  clearMobileContextTimer();
+ if (rowScaleSaveTimer) {
+   clearTimeout(rowScaleSaveTimer);
+   rowScaleSaveTimer = null;
+ }
  cancelPendingPathResolutions();
  closePreview();
  fileListResizeObserver?.disconnect();
@@ -2103,19 +2131,34 @@ const openPopupEditor = () => {
 };
 // --- 行大小调整逻辑 ---
 const handleWheel = (event: WheelEvent) => {
-    if (event.ctrlKey) {
-        event.preventDefault(); // 阻止页面默认滚动行为
-        const delta = event.deltaY > 0 ? -0.05 : 0.05; // 滚轮向下减小，向上增大
-        // 限制字体大小乘数在 0.5 到 2 之间
-        const newMultiplier = Math.max(0.5, Math.min(2, rowSizeMultiplier.value + delta));
-        const oldMultiplier = rowSizeMultiplier.value;
-        rowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2)); // 保留两位小数避免浮点数问题
-        if (rowSizeMultiplier.value !== oldMultiplier) {
-            // +++ 日志：记录触发保存 +++
-            console.log(`[FileManager ${props.sessionId}-${props.instanceId}] handleWheel triggered saveLayoutSettings.`);
-            saveLayoutSettings();
-        }
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+
+    const wheelSteps = consumeFileManagerWheelSteps(event);
+    if (wheelSteps === 0) return;
+
+    const oldMultiplier = rowSizeMultiplier.value;
+    const oldEstimatedRowHeight = estimatedFileRowHeight.value;
+    const container = fileListContainerRef.value;
+    const anchoredRow = shouldVirtualizeFileList.value && container
+      ? container.scrollTop / oldEstimatedRowHeight
+      : null;
+    const nextMultiplier = clampScale(
+      oldMultiplier - wheelSteps * FILE_MANAGER_SCALE_STEP,
+      FILE_MANAGER_SCALE_MIN,
+      FILE_MANAGER_SCALE_MAX,
+    );
+    rowSizeMultiplier.value = Number(nextMultiplier.toFixed(2));
+    if (rowSizeMultiplier.value === oldMultiplier) return;
+
+    if (anchoredRow !== null && container) {
+      void nextTick(() => {
+        const nextScrollTop = anchoredRow * estimatedFileRowHeight.value;
+        container.scrollTop = nextScrollTop;
+        fileListScrollTop.value = nextScrollTop;
+      });
     }
+    scheduleRowScaleSave();
 };
 
 // +++ 聚焦搜索框的方法 +++
@@ -2370,6 +2413,7 @@ const handleOpenEditorClick = () => {
       @pointerup="handleMobileContextPointerEnd"
       @pointercancel="handleMobileContextPointerCancel"
       tabindex="0"
+      :data-row-scale="rowSizeMultiplier.toFixed(2)"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
     >
         <!-- 外部文件拖拽蒙版 -->
@@ -2386,7 +2430,13 @@ const handleOpenEditorClick = () => {
         </div>
 
         <!-- File Table -->
-        <table ref="tableRef" class="w-full border-collapse table-fixed border-border rounded" :class="{'pointer-events-none': showExternalDropOverlay}" @contextmenu.prevent>
+        <table
+          ref="tableRef"
+          class="w-full border-collapse table-fixed border-border rounded"
+          :class="{'pointer-events-none': showExternalDropOverlay}"
+          :style="{ minWidth: `${totalColumnWidth}px` }"
+          @contextmenu.prevent
+        >
             <colgroup>
                  <col :style="{ width: `${colWidths.type}px` }">
                 <col :style="{ width: `${colWidths.name}px` }">
@@ -2397,9 +2447,10 @@ const handleOpenEditorClick = () => {
           <thead class="sticky top-0 z-10 bg-header">
             <tr>
               <th
+                data-testid="file-manager-type-header"
                 @click="handleSort('type')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-                :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }"
+                class="relative whitespace-nowrap overflow-hidden px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '1rem', paddingRight: '0.5rem' }"
               >
                 {{ t('fileManager.headers.type') }}
                 <span v-if="sortKey === 'type'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
@@ -2407,8 +2458,8 @@ const handleOpenEditorClick = () => {
               </th>
               <th
                 @click="handleSort('filename')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-                :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
+                class="relative whitespace-nowrap overflow-hidden px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem' }"
               >
                 {{ t('fileManager.headers.name') }}
                 <span v-if="sortKey === 'filename'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
@@ -2416,24 +2467,24 @@ const handleOpenEditorClick = () => {
               </th>
               <th
                 @click="handleSort('size')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-                :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
+                class="relative whitespace-nowrap overflow-hidden px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem' }"
               >
                 {{ t('fileManager.headers.size') }}
                 <span v-if="sortKey === 'size'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
                 <span class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20" @mousedown.prevent="startResize($event, 2)" @click.stop></span>
               </th>
               <th
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
-                :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
+                class="relative whitespace-nowrap overflow-hidden px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
+                :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem' }"
               >
                 {{ t('fileManager.headers.permissions') }}
                 <span class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20" @mousedown.prevent="startResize($event, 3)" @click.stop></span>
               </th>
               <th
                 @click="handleSort('mtime')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
-                :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
+                class="relative whitespace-nowrap overflow-hidden px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem' }"
               >
                 {{ t('fileManager.headers.modified') }}
                 <span v-if="sortKey === 'mtime'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
@@ -2458,10 +2509,10 @@ const handleOpenEditorClick = () => {
                    @click="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
                    :data-filename="'..'"
                >
-                 <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
+                 <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: '1rem', paddingRight: '0.5rem' }">
                    <i class="fas fa-level-up-alt text-primary" :style="{ fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }"></i>
                  </td>
-                 <td class="border-b border-border align-middle" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">..</td>
+                 <td class="border-b border-border align-middle" :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem', fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">..</td>
                  <td class="border-b border-border align-middle"></td>
                  <td class="border-b border-border align-middle"></td>
                  <td class="border-b border-border align-middle"></td>
@@ -2491,10 +2542,10 @@ const handleOpenEditorClick = () => {
                 :data-filename="'..'"
                 :data-list-index="0"
                 >
-              <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
+              <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: '1rem', paddingRight: '0.5rem' }">
                 <i class="fas fa-level-up-alt text-primary" :style="{ fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }"></i>
               </td>
-              <td class="border-b border-border align-middle" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">..</td>
+              <td class="border-b border-border align-middle" :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem', fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">..</td>
               <td class="border-b border-border align-middle"></td>
               <td class="border-b border-border align-middle"></td>
               <td class="border-b border-border align-middle"></td>
@@ -2525,7 +2576,7 @@ const handleOpenEditorClick = () => {
                @dragover.prevent="handleDragOverRow(item, $event)"
                @dragleave="handleDragLeaveRow(item)"
                @drop.prevent="handleDropOnRow(item, $event)">
-              <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
+              <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: '1rem', paddingRight: '0.5rem' }">
                 <i :class="[
                   'transition-colors duration-150',
                   item.attrs.isDirectory
@@ -2539,16 +2590,16 @@ const handleOpenEditorClick = () => {
                 ]"
                 :style="{ fontSize: `calc(1.1em * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }"></i>
               </td>
-              <td class="border-b border-border truncate align-middle" :class="{'font-medium': item.attrs.isDirectory}" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.filename }}</td>
+              <td class="border-b border-border truncate align-middle" :class="{'font-medium': item.attrs.isDirectory}" :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem', fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.filename }}</td>
               <td class="border-b border-border truncate align-middle" :class="[
                 selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
-              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}</td> 
+              ]" :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem', fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}</td>
               <td class="border-b border-border truncate font-mono align-middle" :class="[
                 selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
-              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ formatMode(item.attrs.mode) }}</td>
+              ]" :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem', fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ formatMode(item.attrs.mode) }}</td>
               <td class="border-b border-border truncate align-middle" :class="[
                 selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
-              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ new Date(item.attrs.mtime).toLocaleString() }}</td> 
+              ]" :style="{ paddingTop: `calc(0.4rem * var(--row-size-multiplier))`, paddingBottom: `calc(0.4rem * var(--row-size-multiplier))`, paddingLeft: '0.8rem', paddingRight: '0.8rem', fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ new Date(item.attrs.mtime).toLocaleString() }}</td>
             </tr>
             <tr v-if="virtualBottomPadding > 0" aria-hidden="true">
               <td :colspan="5" class="p-0 border-0" :style="{ height: `${virtualBottomPadding}px` }"></td>

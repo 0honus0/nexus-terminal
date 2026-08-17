@@ -1,11 +1,14 @@
 <template>
   <div
     data-testid="status-monitor"
+    :data-status-scale="statusMonitorScale.toFixed(2)"
     class="status-monitor h-full bg-background text-foreground"
+    :style="statusMonitorScaleStyle"
     :class="{
       'has-history': Boolean(selectedMetric),
       'bg-header': !activeSessionId,
     }"
+    @wheel.ctrl.prevent="handleStatusWheel"
   >
     <div v-if="!activeSessionId" class="empty-state">
       <i class="fas fa-plug"></i>
@@ -250,6 +253,7 @@ import { useSessionStore } from '../stores/session.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
 
 interface ServerStatus {
   cpuPercent?: number;
@@ -285,7 +289,62 @@ const settingsStore = useSettingsStore();
 const connectionsStore = useConnectionsStore();
 const uiNotificationsStore = useUiNotificationsStore();
 const { sessions } = storeToRefs(sessionStore);
-const { statusMonitorShowIpBoolean, statusMonitorIntervalSecondsNumber } = storeToRefs(settingsStore);
+const { statusMonitorShowIpBoolean, statusMonitorIntervalSecondsNumber, statusMonitorScaleNumber } = storeToRefs(settingsStore);
+
+const STATUS_MONITOR_SCALE_MIN = 0.65;
+const STATUS_MONITOR_SCALE_MAX = 1.6;
+const STATUS_MONITOR_SCALE_STEP = 0.1;
+const consumeStatusWheelSteps = createWheelStepAccumulator({ thresholdPx: 72 });
+const statusMonitorScale = ref(statusMonitorScaleNumber.value);
+const statusScaleSyncLocked = ref(false);
+let statusScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let statusScaleSaveGeneration = 0;
+
+const statusMonitorScaleStyle = computed(() => {
+  const scale = statusMonitorScale.value;
+  const inversePercent = 100 / scale;
+  return {
+    width: `${inversePercent}%`,
+    height: `${inversePercent}%`,
+    flex: '0 0 auto',
+    transform: `scale(${scale})`,
+    transformOrigin: 'top left',
+  };
+});
+
+watch(statusMonitorScaleNumber, (nextScale) => {
+  if (statusScaleSyncLocked.value) return;
+  statusMonitorScale.value = clampScale(nextScale, STATUS_MONITOR_SCALE_MIN, STATUS_MONITOR_SCALE_MAX);
+});
+
+const scheduleStatusScaleSave = () => {
+  statusScaleSyncLocked.value = true;
+  const generation = ++statusScaleSaveGeneration;
+  if (statusScaleSaveTimer) clearTimeout(statusScaleSaveTimer);
+  statusScaleSaveTimer = setTimeout(() => {
+    statusScaleSaveTimer = null;
+    const scale = statusMonitorScale.value.toFixed(2);
+    void settingsStore.updateSetting('statusMonitorScale', scale)
+      .catch((error) => console.error('[StatusMonitor] Failed to persist scale:', error))
+      .finally(() => {
+        if (generation === statusScaleSaveGeneration) statusScaleSyncLocked.value = false;
+      });
+  }, 240);
+};
+
+const handleStatusWheel = (event: WheelEvent) => {
+  if (!event.ctrlKey) return;
+  const wheelSteps = consumeStatusWheelSteps(event);
+  if (wheelSteps === 0) return;
+  const nextScale = clampScale(
+    statusMonitorScale.value - wheelSteps * STATUS_MONITOR_SCALE_STEP,
+    STATUS_MONITOR_SCALE_MIN,
+    STATUS_MONITOR_SCALE_MAX,
+  );
+  if (nextScale === statusMonitorScale.value) return;
+  statusMonitorScale.value = Number(nextScale.toFixed(2));
+  scheduleStatusScaleSave();
+};
 
 const icon = (paths: ReturnType<typeof h>[]) => defineComponent({
   setup: () => () => h('svg', { viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true' }, paths),
@@ -741,6 +800,12 @@ onMounted(activateStatusComponent);
 onActivated(activateStatusComponent);
 onDeactivated(deactivateStatusComponent);
 onBeforeUnmount(deactivateStatusComponent);
+onBeforeUnmount(() => {
+  if (statusScaleSaveTimer) {
+    clearTimeout(statusScaleSaveTimer);
+    statusScaleSaveTimer = null;
+  }
+});
 
 const copyIpToClipboard = async (ipAddress: string | null) => {
   if (!ipAddress) return;

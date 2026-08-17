@@ -65,6 +65,7 @@
         :class="{ 'quick-command-list-small-type': isSmallQuickCommandTypography }"
         ref="commandListContainerRef"
         tabindex="0"
+        :data-row-scale="quickCommandRowSizeMultiplier.toFixed(2)"
         @wheel.ctrl.prevent="handleWheel"
         :style="{ '--qc-row-size-multiplier': quickCommandRowSizeMultiplier }"
         @keydown="handleSearchInputKeydown"
@@ -231,6 +232,7 @@ import AddEditQuickCommandForm from '../components/AddEditQuickCommandForm.vue';
 import { useFocusSwitcherStore } from '../stores/focusSwitcher.store'; 
 import { useSettingsStore } from '../stores/settings.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
 import { useSessionStore } from '../stores/session.store';
 import type { SessionState } from '../stores/session/types'; 
 import { useConnectionsStore } from '../stores/connections.store';
@@ -293,11 +295,18 @@ const {
 } = storeToRefs(settingsStore);
 
 const quickCommandRowSizeMultiplier = ref(1.0);
+const QUICK_COMMAND_SCALE_MIN = 0.5;
+const QUICK_COMMAND_SCALE_MAX = 2.5;
+const QUICK_COMMAND_SCALE_STEP = 0.12;
+const consumeQuickCommandWheelSteps = createWheelStepAccumulator({ thresholdPx: 64 });
+const quickCommandScaleSyncLocked = ref(false);
+let quickCommandScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let quickCommandScaleSaveGeneration = 0;
 
 watchEffect(() => {
   const storeVal = qcRowSizeMultiplierFromStore.value;
   if (storeVal && typeof storeVal === 'number' && storeVal > 0) {
-    if (quickCommandRowSizeMultiplier.value !== storeVal) {
+    if (!quickCommandScaleSyncLocked.value && quickCommandRowSizeMultiplier.value !== storeVal) {
       quickCommandRowSizeMultiplier.value = storeVal;
       // console.log(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
     }
@@ -306,21 +315,32 @@ watchEffect(() => {
   }
 });
 
+const scheduleQuickCommandScaleSave = () => {
+  quickCommandScaleSyncLocked.value = true;
+  const generation = ++quickCommandScaleSaveGeneration;
+  if (quickCommandScaleSaveTimer) clearTimeout(quickCommandScaleSaveTimer);
+  quickCommandScaleSaveTimer = setTimeout(() => {
+    quickCommandScaleSaveTimer = null;
+    const scale = quickCommandRowSizeMultiplier.value;
+    void settingsStore.updateQuickCommandRowSizeMultiplier(scale).finally(() => {
+      if (generation === quickCommandScaleSaveGeneration) quickCommandScaleSyncLocked.value = false;
+    });
+  }, 220);
+};
+
 const handleWheel = (event: WheelEvent) => {
-    // event.ctrlKey 和 event.preventDefault() 将由模板中的 .ctrl.prevent 修饰符处理
-    const delta = event.deltaY > 0 ? -0.05 : 0.05;
-    const newMultiplier = Math.max(0.5, Math.min(2.5, quickCommandRowSizeMultiplier.value + delta));
+    const wheelSteps = consumeQuickCommandWheelSteps(event);
+    if (wheelSteps === 0) return;
     const oldMultiplier = quickCommandRowSizeMultiplier.value;
-    quickCommandRowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2));
+    const newMultiplier = clampScale(
+      oldMultiplier - wheelSteps * QUICK_COMMAND_SCALE_STEP,
+      QUICK_COMMAND_SCALE_MIN,
+      QUICK_COMMAND_SCALE_MAX,
+    );
+    quickCommandRowSizeMultiplier.value = Number(newMultiplier.toFixed(2));
 
     if (quickCommandRowSizeMultiplier.value !== oldMultiplier) {
-      // console.log(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
-      // 假设 settingsStore 有一个名为 updateQuickCommandRowSizeMultiplier 的 action
-      if (settingsStore.updateQuickCommandRowSizeMultiplier) {
-        settingsStore.updateQuickCommandRowSizeMultiplier(quickCommandRowSizeMultiplier.value);
-      } else {
-        console.warn('[QuickCmdView] settingsStore.updateQuickCommandRowSizeMultiplier action not found.');
-      }
+      scheduleQuickCommandScaleSave();
     }
 };
 
@@ -383,6 +403,10 @@ onMounted(async () => { // Make onMounted async
 });
 
 onBeforeUnmount(() => {
+  if (quickCommandScaleSaveTimer) {
+    clearTimeout(quickCommandScaleSaveTimer);
+    quickCommandScaleSaveTimer = null;
+  }
   // +++ 调用保存的注销函数 +++
   if (unregisterFocus) {
     unregisterFocus();
