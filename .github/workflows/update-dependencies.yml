@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: write
   pull-requests: write
 
@@ -259,10 +258,3 @@ jobs:
             --head "$UPDATE_BRANCH" \
             --title "chore(deps): update Nexus dependencies" \
             --body $'Automated dependency refresh for the three Nexus packages:\n\n- `packages/frontend`\n- `packages/backend`\n- `packages/remote-gateway`\n\nBefore this PR is created or updated, the workflow builds all three packages, runs `npm audit --audit-level=high`, and passes the full Nexus E2E suite. Major-version upgrades are intentionally excluded.'
-
-      - name: Trigger PR E2E verification
-        if: steps.changes.outputs.changed == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run e2e.yml --ref "$UPDATE_BRANCH"
