@@ -37,6 +37,7 @@ export interface RegisteredProgressTask extends ProgressTaskRegistration {
 
 interface ProgressSourceState extends ProgressSourceRegistration {
   hidden: boolean;
+  hiddenExplicitly: boolean;
   tasks: Record<string, ProgressTaskRegistration>;
 }
 
@@ -62,6 +63,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     const created: ProgressSourceState = {
       ...registration,
       hidden: false,
+      hiddenExplicitly: false,
       tasks: {},
     };
     sources[registration.id] = created;
@@ -86,9 +88,22 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     }
     for (const task of tasks) source.tasks[task.id] = task;
 
-    // A freshly-started task must be visible by default even when an earlier task from
-    // the same provider had been hidden. Empty providers also reset their UI state.
-    if (hasNewTask || tasks.length === 0) source.hidden = false;
+    const hadTasks = previousIds.size > 0;
+    if (tasks.length === 0) {
+      // Only clear an explicit hide after a real registered task has finished. When the
+      // provider UI races ahead of its first registry sync, preserve the user's Hide click.
+      if (hadTasks) {
+        source.hidden = false;
+        source.hiddenExplicitly = false;
+      }
+    } else if (hasNewTask && hadTasks) {
+      // A genuinely new task arriving beside an older hidden task should surface the
+      // provider again, so new work is never silently hidden by an old preference.
+      source.hidden = false;
+      source.hiddenExplicitly = false;
+    } else if (hasNewTask && !source.hiddenExplicitly) {
+      source.hidden = false;
+    }
   };
 
   const startTask = (
@@ -98,6 +113,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     const source = ensureSource(registration);
     source.tasks[task.id] = task;
     source.hidden = false;
+    source.hiddenExplicitly = false;
   };
 
   const updateTask = (
@@ -114,7 +130,10 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     const source = sources[sourceId];
     if (!source) return;
     delete source.tasks[taskId];
-    if (Object.keys(source.tasks).length === 0) source.hidden = false;
+    if (Object.keys(source.tasks).length === 0) {
+      source.hidden = false;
+      source.hiddenExplicitly = false;
+    }
   };
 
   const unregisterSource = (sourceId: string) => {
@@ -123,12 +142,16 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
 
   const hideSource = (sourceId: string) => {
     const source = sources[sourceId];
-    if (source && Object.keys(source.tasks).length > 0) source.hidden = true;
+    if (!source) return;
+    source.hidden = true;
+    source.hiddenExplicitly = true;
   };
 
   const restoreSource = (sourceId: string) => {
     const source = sources[sourceId];
-    if (source) source.hidden = false;
+    if (!source) return;
+    source.hidden = false;
+    source.hiddenExplicitly = false;
   };
 
   const isSourceHidden = (sourceId: string) => Boolean(sources[sourceId]?.hidden);
