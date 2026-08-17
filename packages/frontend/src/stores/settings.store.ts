@@ -44,6 +44,7 @@ interface SettingsState {
   dockerStatusIntervalSeconds?: string; //  Docker 状态刷新间隔 (秒)
   dockerDefaultExpand?: string; //  Docker 默认展开详情 'true' or 'false'
   statusMonitorIntervalSeconds?: string; //  状态监控轮询间隔 (秒)
+  statusMonitorScale?: string; // 状态监视器 Ctrl+滚轮缩放倍率
   workspaceSidebarPersistent?: string; //  工作区侧边栏是否固定 'true' or 'false'
   sidebarPaneWidths?: string; //  存储各侧边栏组件宽度的 JSON 字符串
   fileManagerRowSizeMultiplier?: string; //  文件管理器行大小乘数 (e.g., '1.0')
@@ -158,6 +159,9 @@ export const useSettingsStore = defineStore('settings', () => {
       //  Status Monitor interval default
       if (settings.value.statusMonitorIntervalSeconds === undefined) {
           settings.value.statusMonitorIntervalSeconds = '3'; // 默认 3 秒
+      }
+      if (settings.value.statusMonitorScale === undefined) {
+          settings.value.statusMonitorScale = '1.0';
       }
       //  Workspace sidebar persistent default
       if (settings.value.workspaceSidebarPersistent === undefined) {
@@ -418,6 +422,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'showPopupFileEditor', 'clearFileEditorTabsOnClose', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
         'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+        'statusMonitorScale',
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -527,6 +532,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'showPopupFileEditor', 'clearFileEditorTabsOnClose', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
         'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+        'statusMonitorScale',
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -801,6 +807,12 @@ export const useSettingsStore = defineStore('settings', () => {
       return isNaN(val) || val <= 0 ? 3 : val; // Fallback to 3 if invalid
   });
 
+  const statusMonitorScaleNumber = computed(() => {
+      const val = parseFloat(settings.value.statusMonitorScale || '1.0');
+      if (!Number.isFinite(val)) return 1.0;
+      return Math.min(1.6, Math.max(0.65, val));
+  });
+
   //  Getter for File Manager row size multiplier, returning number
   const fileManagerRowSizeMultiplierNumber = computed(() => {
       const val = parseFloat(settings.value.fileManagerRowSizeMultiplier || '1.0');
@@ -912,6 +924,7 @@ export const useSettingsStore = defineStore('settings', () => {
     autoCopyOnSelectBoolean,
     dockerDefaultExpandBoolean, // +++ 暴露 Docker 默认展开 getter +++
     statusMonitorIntervalSecondsNumber, // +++ 暴露状态监控间隔 getter +++
+    statusMonitorScaleNumber,
     workspaceSidebarPersistentBoolean, // +++ 暴露侧边栏固定 getter +++
     getSidebarPaneWidth, // +++ 暴露获取特定面板宽度的 getter +++
     fileManagerRowSizeMultiplierNumber, // +++ 暴露文件管理器行大小 getter +++
