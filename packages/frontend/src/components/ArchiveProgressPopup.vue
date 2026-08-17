@@ -6,9 +6,11 @@ import type { ArchiveProgressState } from '../types/sftp.types';
 const POSITION_KEY = 'nexusArchiveProgressPosition';
 const props = withDefaults(defineProps<{
   progress: ArchiveProgressState;
+  sessionLabel?: string;
   visible?: boolean;
   restoreToken?: number;
 }>(), {
+  sessionLabel: '',
   visible: true,
   restoreToken: 0,
 });
@@ -160,7 +162,9 @@ onBeforeUnmount(() => {
         <div class="archive-title">
           <span class="archive-icon"><i class="fas fa-box-archive"></i></span>
           <div class="min-w-0">
-            <div class="truncate font-semibold">{{ operationLabel }} {{ progress.archiveName || '...' }}</div>
+            <div class="truncate font-semibold" :title="props.sessionLabel || undefined">
+              <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ operationLabel }} {{ progress.archiveName || '...' }}
+            </div>
             <div v-if="!minimized" class="text-[11px] text-text-muted">
               {{ progress.cancelling
                 ? t('fileManager.archiveProgress.stopping', '正在停止并清理临时文件...')

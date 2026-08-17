@@ -7,9 +7,11 @@ const POSITION_KEY = 'nexusUploadPopupPosition';
 
 const props = withDefaults(defineProps<{
   uploads: Record<string, UploadItem>; // 接收上传任务字典
+  sessionLabel?: string;
   visible?: boolean;
   restoreToken?: number;
 }>(), {
+  sessionLabel: '',
   visible: true,
   restoreToken: 0,
 });
@@ -241,7 +243,9 @@ onBeforeUnmount(() => {
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
     <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
-      <h4 class="m-0 min-w-0 truncate text-sm font-semibold">{{ t('fileManager.uploadTasks') }}:</h4>
+      <h4 class="m-0 min-w-0 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
+        <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
+      </h4>
       <div class="ml-auto flex items-center gap-2">
         <span v-if="hasUploading" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
           {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}

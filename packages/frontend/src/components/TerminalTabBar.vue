@@ -63,6 +63,10 @@ const sessionStore = useSessionStore(); // Session store 保持不变
 const showConnectionListPopup = ref(false); // 连接列表弹出状态
 const draggableSessions = ref<SessionTabInfoWithStatus[]>([]); // + Local state for draggable
 const showTransferProgressModal = ref(false); // 控制传输进度模态框的显示状态
+const showProgressDisplay = () => {
+  showTransferProgressModal.value = true;
+  emitWorkspaceEvent('ui:restoreProgressDisplay');
+};
 
 // + Watch prop changes to update local state
 watch(() => props.sessions, (newSessions) => {
@@ -286,7 +290,7 @@ onMounted(() => {
   // +++ 监听打开传输进度模态框事件 +++
   const handleOpenTransferProgressModal = () => {
     console.log('[TabBar] Received ui:openTransferProgressModal event, opening modal.');
-    showTransferProgressModal.value = true;
+    showProgressDisplay();
   };
   onWorkspaceEvent('ui:openTransferProgressModal', handleOpenTransferProgressModal);
 
@@ -444,12 +448,12 @@ onBeforeUnmount(() => {
         >
           <i :class="[eyeIconClass, 'text-sm']"></i>
         </button>
-        <!-- 查看传输进度按钮 (移除 v-if="!isMobile" 以在移动端显示) -->
+        <!-- 全局进度显示入口：打开任务详情并恢复已最小化的悬浮进度 -->
         <button
                 data-testid="transfer-progress-toggle"
                 class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
-                @click="showTransferProgressModal = true"
-                :title="t('terminalTabBar.showTransferProgressTooltip', '查看传输进度')">
+                @click="showProgressDisplay"
+                :title="t('terminalTabBar.progressDisplay', '进度显示')">
           <i class="fas fa-tasks text-sm"></i>
         </button>
         <!-- +++ 使用 v-if 隐藏移动端的布局按钮 +++ -->

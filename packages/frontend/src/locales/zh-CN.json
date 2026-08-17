@@ -442,8 +442,6 @@
       "parentDirectory": "上一级",
       "uploadFile": "上传文件",
       "upload": "上传",
-      "showTransferProgress": "显示传输进度",
-      "hideTransferProgress": "隐藏传输进度",
       "newFolder": "新建文件夹",
       "newFile": "新建文件",
       "rename": "重命名",
@@ -1533,7 +1531,7 @@
   },
   "terminalTabBar": {
     "selectServerTitle": "选择要连接的服务器",
-    "showTransferProgressTooltip": "显示/隐藏传输进度"
+    "progressDisplay": "进度显示"
   },
   "tabs": {
     "contextMenu": {

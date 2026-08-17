@@ -5,9 +5,11 @@ import type { FileTransferItem } from '../types/fileTransfer.types';
 
 const props = withDefaults(defineProps<{
   transfers: Readonly<Record<string, FileTransferItem>>;
+  sessionLabel?: string;
   visible?: boolean;
   restoreToken?: number;
 }>(), {
+  sessionLabel: '',
   visible: true,
   restoreToken: 0,
 });
@@ -100,7 +102,9 @@ onBeforeUnmount(() => {
     class="fixed bottom-4 right-4 z-[1002] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-md border border-border bg-background text-sm shadow-lg"
   >
     <div class="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
-      <h4 class="m-0 truncate text-sm font-semibold">{{ t('fileManager.transferTasks') }}</h4>
+      <h4 class="m-0 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
+        <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.transferTasks') }}
+      </h4>
       <div class="flex items-center gap-2">
         <span v-if="transferList.some(item => item.status === 'running')" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
           {{ t('fileManager.transferSpeed') }} {{ formatTransferRate(totalSpeed) }}

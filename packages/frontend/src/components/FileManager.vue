@@ -29,6 +29,7 @@ import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
 import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
+import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
 
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
@@ -151,24 +152,24 @@ const {
     computed(() => props.wsDeps)
 );
 
-const floatingProgressVisible = ref(true);
 const floatingProgressRestoreToken = ref(0);
-const hasFloatingProgress = computed(() => {
-  const hasUploads = Object.values(uploads).some(upload => {
-    const effectivelyComplete = upload.status === 'success'
-      || upload.status === 'cancelled'
-      || (upload.status === 'uploading' && upload.progress >= 100);
-    return !effectivelyComplete;
-  });
-  return hasUploads || Object.keys(transferTasks.value).length > 0 || archiveProgress.value.active;
-});
+const progressSessionLabel = computed(() => {
+  const resolvedSessionId = effectiveSessionId.value;
+  const session = sessionStore.sessions.get(resolvedSessionId);
+  if (!session) return resolvedSessionId.slice(0, 8);
 
-const toggleFloatingProgress = () => {
-  if (floatingProgressVisible.value) {
-    floatingProgressVisible.value = false;
-    return;
-  }
-  floatingProgressVisible.value = true;
+  const baseName = session.connectionName?.trim() || resolvedSessionId.slice(0, 8);
+  const matchingSessions = [...sessionStore.sessions.values()]
+    .filter(candidate => candidate.connectionName?.trim() === baseName)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  if (matchingSessions.length <= 1) return baseName;
+
+  const index = matchingSessions.findIndex(candidate => candidate.sessionId === resolvedSessionId);
+  return index >= 0 ? `${baseName} #${index + 1}` : baseName;
+});
+const onWorkspaceEvent = useWorkspaceEventSubscriber();
+const offWorkspaceEvent = useWorkspaceEventOff();
+const restoreFloatingProgress = () => {
   floatingProgressRestoreToken.value += 1;
 };
 
@@ -1734,6 +1735,8 @@ let unregisterSearchFocusAction: (() => void) | null = null; // 搜索框注销�
 let unregisterPathFocusAction: (() => void) | null = null; // 路径编辑框注销函数
 
 onMounted(() => {
+  onWorkspaceEvent('ui:restoreProgressDisplay', restoreFloatingProgress);
+
   // 注册搜索框聚焦动作
   const focusSearchActionWrapper = async (): Promise<boolean | undefined> => {
     if (effectiveSessionId.value === sessionStore.activeSessionId) {
@@ -1764,6 +1767,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+ offWorkspaceEvent('ui:restoreProgressDisplay', restoreFloatingProgress);
  clearMobileContextTimer();
  if (rowScaleSaveTimer) {
    clearTimeout(rowScaleSaveTimer);
@@ -2347,18 +2351,6 @@ const handleOpenEditorClick = () => {
               <i class="fas fa-upload text-sm"></i>
             </button>
             <button
-              v-if="hasFloatingProgress"
-              data-testid="floating-transfer-progress-toggle"
-              @click="toggleFloatingProgress"
-              :title="floatingProgressVisible
-                ? t('fileManager.actions.hideTransferProgress', '隐藏传输进度')
-                : t('fileManager.actions.showTransferProgress', '显示传输进度')"
-              class="file-manager-action-button flex items-center px-2 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 hover:bg-header hover:border-primary hover:text-primary"
-              :class="{ 'px-1.5': props.isMobile, 'text-primary border-primary': !floatingProgressVisible }"
-            >
-              <i :class="['fas text-sm', floatingProgressVisible ? 'fa-eye-slash' : 'fa-chart-line']"></i>
-            </button>
-            <button
               @click="handleNewFolderContextMenuClick"
               :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
               :title="t('fileManager.actions.newFolder')"
@@ -2645,7 +2637,7 @@ const handleOpenEditorClick = () => {
      <!-- 使用 FileUploadPopup 组件 -->
      <FileUploadPopup
        :uploads="uploads"
-       :visible="floatingProgressVisible"
+       :session-label="progressSessionLabel"
        :restore-token="floatingProgressRestoreToken"
        @cancel-upload="cancelUpload"
        @cancel-all="cancelAllUploads"
@@ -2653,13 +2645,13 @@ const handleOpenEditorClick = () => {
      <UploadConflictModal :conflict="uploadConflict" @resolve="resolveUploadConflict" />
      <FileTransferPopup
        :transfers="transferTasks"
-       :visible="floatingProgressVisible"
+       :session-label="progressSessionLabel"
        :restore-token="floatingProgressRestoreToken"
      />
 
      <ArchiveProgressPopup
        :progress="archiveProgress"
-       :visible="floatingProgressVisible"
+       :session-label="progressSessionLabel"
        :restore-token="floatingProgressRestoreToken"
        @cancel="currentSftpManager?.cancelArchive()"
      />

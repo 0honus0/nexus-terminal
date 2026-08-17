@@ -143,18 +143,19 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
 
       const progressPopup = page.getByTestId('file-upload-progress-popup');
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+      await expect(progressPopup.locator('h4')).toContainText('·');
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
       await progressPopup.getByTestId('file-upload-progress-minimize').click();
       await expect(progressBody).toBeHidden();
 
-      const progressToggle = page.getByTestId('floating-transfer-progress-toggle');
-      await expect(progressToggle).toBeVisible();
-      await progressToggle.click();
-      await expect(progressPopup).toBeHidden();
-      await progressToggle.click();
+      const progressDisplay = page.getByTestId('transfer-progress-toggle');
+      await expect(progressDisplay).toBeVisible();
+      await expect(progressDisplay).toHaveAttribute('title', 'Progress Display');
+      await progressDisplay.click();
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
+      await expect(page.getByTestId('transfer-progress-minimize')).toBeVisible();
 
       await expect.poll(
         () => schedulerLogs.some(log => log.includes('profile=probing') && log.includes('activeFiles=2/4')),
