@@ -10,7 +10,7 @@
     "test:ui": "playwright test --project=ui",
     "test:ssh": "playwright test --project=ssh",
     "test:mobile": "playwright test --project=mobile",
-    "test:docs": "playwright test --project=docs",
+    "test:docs": "playwright test --config=playwright.docs.config.ts --project=docs",
     "test:ingress": "playwright test --config=playwright.ingress.config.ts",
     "test:list": "playwright test --list"
   },

@@ -54,11 +54,6 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "docs",
-      testMatch: /docs\/.*\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
       name: "auth",
       testMatch: /auth\/.*\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
