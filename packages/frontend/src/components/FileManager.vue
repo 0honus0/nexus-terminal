@@ -149,7 +149,8 @@ const {
     // 传递 manager 的 currentPath 和 fileList ref
     computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
     computed(() => currentSftpManager.value?.fileList.value ?? []),
-    computed(() => props.wsDeps)
+    computed(() => props.wsDeps),
+    props.instanceId,
 );
 
 const floatingProgressRestoreToken = ref(0);

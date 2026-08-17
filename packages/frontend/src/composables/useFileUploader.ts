@@ -1,11 +1,12 @@
 import { computed, reactive, ref, onUnmounted, type Ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { FileListItem } from '../types/sftp.types'; 
-import type { UploadItem } from '../types/upload.types'; 
-import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'; 
+import type { FileListItem } from '../types/sftp.types';
+import type { UploadItem } from '../types/upload.types';
+import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 
 
-import type { WebSocketDependencies } from './useSftpActions'; 
+import type { WebSocketDependencies } from './useSftpActions';
+import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 
 // Upload chunks use the NXUP v1 binary frame and never pass through JSON/base64.
@@ -203,9 +204,11 @@ export function useFileUploader(
     sessionIdForLog: Ref<string>,
     currentPathRef: Ref<string>,
     fileListRef: Readonly<Ref<readonly FileListItem[]>>, // 使用 Readonly 类型
-    wsDeps: Ref<WebSocketDependencies> 
+    wsDeps: Ref<WebSocketDependencies>,
+    progressInstanceId: string,
 ) {
     const { t } = useI18n();
+    const progressCenter = useProgressCenterStore();
 
     // 对 uploads 字典使用 reactive 以获得更好的深度响应性
     const uploads = reactive<Record<string, UploadItem>>({});
@@ -688,8 +691,8 @@ export function useFileUploader(
             releaseUploadSlot(uploadId);
             drainUploadStartQueue();
 
-            if (notifyBackend && wsDeps.value.isConnected.value) { 
-                wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } }); 
+            if (notifyBackend && wsDeps.value.isConnected.value) {
+                wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
             }
 
             // 短暂延迟后从列表中移除，以显示取消状态
@@ -707,6 +710,39 @@ export function useFileUploader(
             .map(upload => upload.id);
         cancellableIds.forEach(uploadId => cancelUpload(uploadId, true));
     };
+
+    const uploadProgressSourceId = () => `upload:${sessionIdForLog.value}:${progressInstanceId}`;
+    let registeredUploadProgressSourceId = uploadProgressSourceId();
+
+    const syncUploadProgress = () => {
+        const sourceId = uploadProgressSourceId();
+        if (registeredUploadProgressSourceId !== sourceId) {
+            progressCenter.unregisterSource(registeredUploadProgressSourceId);
+            registeredUploadProgressSourceId = sourceId;
+        }
+        progressCenter.syncSourceTasks(
+            { id: sourceId, sessionId: sessionIdForLog.value, label: 'upload' },
+            Object.values(uploads)
+                .filter(upload => {
+                    const effectivelyComplete = upload.status === 'success'
+                        || upload.status === 'cancelled'
+                        || (upload.status === 'uploading' && upload.progress >= 100);
+                    return !effectivelyComplete;
+                })
+                .map(upload => ({
+                    id: upload.id,
+                    kind: 'upload' as const,
+                    title: upload.filename,
+                    progress: upload.progress,
+                    status: upload.status,
+                    cancellable: ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status),
+                    cancel: () => cancelUpload(upload.id, true),
+                })),
+        );
+    };
+
+    watch(uploads, syncUploadProgress, { deep: true, immediate: true });
+    watch(sessionIdForLog, syncUploadProgress);
 
     const removeConflictFromQueue = (uploadId: string) => {
         uploadConflictQueue.value = uploadConflictQueue.value.filter(conflict => conflict.uploadId !== uploadId);
@@ -973,12 +1009,12 @@ export function useFileUploader(
                 upload.progress = payload.totalSize === 0
                     ? 100
                     : Math.min(100, (upload.bytesWritten / payload.totalSize) * 100);
-                
+
             } else {
                 console.warn(`[FileUploader ${sessionIdForLog.value}] Received upload:progress with incorrect payload format:`, payload);
             }
         } else if (upload) {
-            
+
         } else {
             console.warn(`[FileUploader ${sessionIdForLog.value}] Received upload:progress for unknown upload ID: ${uploadId}`);
         }
@@ -1060,7 +1096,7 @@ export function useFileUploader(
         },
         { immediate: true },
     );
-    
+
 
     // --- 动态注册和注销处理器 ---
     watchEffect((onCleanup) => {
@@ -1119,10 +1155,11 @@ export function useFileUploader(
         activeUploadWeights.clear();
         queuedUploadStarts.clear();
         uploadConflictQueue.value = [];
+        progressCenter.unregisterSource(registeredUploadProgressSourceId);
     });
 
     return {
-        uploads, 
+        uploads,
         uploadConflict,
         uploadNetworkProfile: computed(() => uploadNetwork.profile),
         startFileUpload,

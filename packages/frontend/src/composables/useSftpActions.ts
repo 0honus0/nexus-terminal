@@ -1,9 +1,10 @@
-import { ref, readonly, reactive, computed, type Ref, type ComputedRef } from 'vue'; 
+import { ref, readonly, reactive, computed, watch, type Ref, type ComputedRef } from 'vue';
 import type { ArchiveProgressState, FileListItem, FileAttributes, EditorFileContent, SftpReadFileSuccessPayload, SftpReadFileRequestPayload } from '../types/sftp.types';
 import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/websocket.types';
 import type { FileTransferItem, FileTransferOperation } from '../types/fileTransfer.types';
 
-import { useUiNotificationsStore } from '../stores/uiNotifications.store'; 
+import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 /**
  * @interface WebSocketDependencies
@@ -95,7 +96,8 @@ export function createSftpActionsManager(
     sessionId: string,
     currentPathRef: Ref<string>,
     wsDeps: WebSocketDependencies,
-    t: Function
+    t: Function,
+    progressInstanceId: string,
 ): SftpManagerInstance { // Add explicit return type
     const { sendMessage, onMessage, isConnected, isSftpReady } = wsDeps; // 使用注入的依赖
 
@@ -105,6 +107,11 @@ export function createSftpActionsManager(
     // const error = ref<string | null>(null); // 不再使用本地 error ref
     const instanceSessionId = sessionId; // 保存会话 ID 用于日志
     const uiNotificationsStore = useUiNotificationsStore(); // 初始化 UI 通知 store
+    const progressCenter = useProgressCenterStore();
+    const transferProgressSourceId = `sftp:${sessionId}:${progressInstanceId}:transfer`;
+    const archiveProgressSourceId = `sftp:${sessionId}:${progressInstanceId}:archive`;
+    let stopTransferProgressWatch: (() => void) | null = null;
+    let stopArchiveProgressWatch: (() => void) | null = null;
     const initialLoadDone = ref<boolean>(false); // +++ 跟踪此实例是否已完成初始加载 +++
     const archiveProgress = reactive<ArchiveProgressState>({
         active: false,
@@ -196,6 +203,12 @@ export function createSftpActionsManager(
         console.log(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
         unregisterCallbacks.forEach(cb => cb());
         unregisterCallbacks.length = 0; // 清空数组
+        stopTransferProgressWatch?.();
+        stopArchiveProgressWatch?.();
+        stopTransferProgressWatch = null;
+        stopArchiveProgressWatch = null;
+        progressCenter.unregisterSource(transferProgressSourceId);
+        progressCenter.unregisterSource(archiveProgressSourceId);
     };
 
     // 不再需要 clearSftpError 函数
@@ -870,6 +883,43 @@ export function createSftpActionsManager(
    };
 
 
+   const syncTransferProgressRegistry = () => {
+       progressCenter.syncSourceTasks(
+           { id: transferProgressSourceId, sessionId, label: 'file-transfer' },
+           Object.values(transferTasks).map(task => ({
+               id: task.id,
+               kind: task.operation === 'move' ? 'move' as const : 'copy' as const,
+               title: task.label,
+               detail: task.currentFile,
+               progress: task.totalKnown ? task.progress : null,
+               status: task.status,
+               cancellable: false,
+           })),
+       );
+   };
+
+   const syncArchiveProgressRegistry = () => {
+       const progress = archiveProgress;
+       progressCenter.syncSourceTasks(
+           { id: archiveProgressSourceId, sessionId, label: 'archive' },
+           progress.active && progress.requestId
+               ? [{
+                   id: progress.requestId,
+                   kind: progress.operation === 'compress' ? 'compress' as const : 'decompress' as const,
+                   title: progress.archiveName || (progress.operation === 'compress' ? 'Compress' : 'Decompress'),
+                   detail: progress.currentFile || undefined,
+                   progress: progress.percent,
+                   status: progress.cancelling ? 'cancelling' : 'running',
+                   cancellable: progress.operation === 'compress' && !progress.cancelling,
+                   cancel: progress.operation === 'compress' ? () => cancelArchive() : undefined,
+               }]
+               : [],
+       );
+   };
+
+   stopTransferProgressWatch = watch(transferTasks, syncTransferProgressRegistry, { deep: true, immediate: true });
+   stopArchiveProgressWatch = watch(archiveProgress, syncArchiveProgressRegistry, { deep: true, immediate: true });
+
    // --- Message Handlers ---
 
     const onSftpReaddirSuccess = (payload: MessagePayload, message: WebSocketMessage) => {
@@ -1015,7 +1065,7 @@ export function createSftpActionsManager(
     const addOrUpdateNodeInTree = (parentPath: string, item: FileListItem): boolean => {
         // --- 修改：调用 findNodeByPath 时允许创建缺失的父节点 ---
         const parentNode = findNodeByPath(fileTree, parentPath, true);
-        
+
 
         // 如果父节点被成功找到或创建
         if (parentNode) {
