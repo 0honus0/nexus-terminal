@@ -126,9 +126,8 @@ test('terminal font-size wheel change persists when the session is closed before
   await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
   await expect(terminal).toHaveAttribute('data-font-size', '15');
 
-  const activeTab = page.locator('[data-testid^="terminal-tab-"]').first();
-  await activeTab.hover();
-  await activeTab.locator('button').click();
+  const closeTabButton = page.getByRole('button', { name: 'Close Tab' });
+  await closeTabButton.click();
   await expect(terminal).toBeHidden();
 
   await expect.poll(async () => {
