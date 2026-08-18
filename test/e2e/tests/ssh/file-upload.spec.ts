@@ -296,3 +296,56 @@ test('cancelling a throttled upload keeps immediate file-manager refresh respons
     await cdp.detach();
   }
 });
+
+
+test('cancelled upload stays cancelled when the browser transport drops during a queued binary send', async ({ page, context }) => {
+  await openFileManager(page, context);
+  const filename = 'cancel-during-transport-drop.bin';
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: 128 * 1024,
+  });
+
+  try {
+    await dragLocalFiles(page, [{ name: filename, size: 32 * 1024 * 1024, fill: 0x4d }]);
+    const popup = page.getByTestId('file-upload-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await expect(popup).toContainText(filename);
+    await page.waitForTimeout(400);
+
+    await popup.getByTestId('file-upload-cancel').click();
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: true,
+      latency: 0,
+      downloadThroughput: 0,
+      uploadThroughput: 0,
+    });
+    await page.waitForTimeout(350);
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+
+    // A rejected in-flight send must not resurrect a user-cancelled upload as paused/error.
+    await page.waitForTimeout(3_500);
+    await expect(popup).toBeHidden();
+    const response = await fetch(`${E2E_SSH.controlUrl}/files`);
+    expect(response.ok).toBeTruthy();
+    const body = await response.json() as { files: string[] };
+    expect(body.files).not.toContain(filename);
+  } finally {
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+    await cdp.detach();
+  }
+});

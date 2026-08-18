@@ -153,3 +153,32 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
   });
 });
+
+
+test('large Ctrl+wheel delta does not leak unused zoom steps into the next event', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const settings = await context.request.put('/api/v1/settings', {
+    data: {
+      quickCommandRowSizeMultiplier: '1.0',
+      showQuickCommandTags: 'false',
+    },
+  });
+  expect(settings.ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.removeItem('nexus_quickCommandRowSizeMultiplier'));
+  await resetTestSshFilesystem();
+  const quickCommandId = await recreateQuickCommand(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+  const list = quickView.locator('.quick-command-list');
+  await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
+  await expect(list).toHaveAttribute('data-row-scale', '1.00');
+
+  await ctrlWheel(list, 640);
+  await expect.poll(() => readScale(list, 'data-row-scale')).toBe(0.64);
+  await ctrlWheel(list, 1);
+  await page.waitForTimeout(100);
+  expect(await readScale(list, 'data-row-scale')).toBe(0.64);
+});

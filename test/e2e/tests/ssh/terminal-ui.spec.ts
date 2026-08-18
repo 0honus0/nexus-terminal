@@ -108,3 +108,32 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       .toContain('folder-seed');
   });
 });
+
+
+test('terminal font-size wheel change persists when the session is closed before debounce fires', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const resetAppearance = await context.request.put('/api/v1/appearance', { data: { terminalFontSize: 14 } });
+  expect(resetAppearance.ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const terminal = page.getByTestId('terminal');
+  await expect(terminal).toBeVisible({ timeout: 20_000 });
+  await expect(terminal).toHaveAttribute('data-font-size', '14');
+  const inner = terminal.locator('.terminal-inner-container');
+  await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
+  await expect(terminal).toHaveAttribute('data-font-size', '15');
+
+  const activeTab = page.locator('[data-testid^="terminal-tab-"]').first();
+  await activeTab.hover();
+  await activeTab.locator('button').click();
+  await expect(terminal).toBeHidden();
+
+  await expect.poll(async () => {
+    const appearance = await context.request.get('/api/v1/appearance');
+    expect(appearance.ok()).toBeTruthy();
+    return Number((await appearance.json()).terminalFontSize);
+  }, { timeout: 3_000 }).toBe(15);
+});

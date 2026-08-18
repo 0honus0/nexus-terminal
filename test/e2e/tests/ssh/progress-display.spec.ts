@@ -274,3 +274,71 @@ test('registered archive progress supports hide, restore, and real cancel for co
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
   }
 });
+
+
+test('overlapping archive requests do not corrupt the visible task or its cancellation target', async ({ page, context }) => {
+  await openFileManager(page, context);
+  const secondSource = 'archive-second.txt';
+  const fixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(secondSource)}&size=64`, { method: 'POST' });
+  expect(fixture.ok).toBeTruthy();
+  await refreshFileManager(page);
+  await expect(row(page, secondSource)).toBeVisible();
+
+  await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2200`, { method: 'POST' });
+  try {
+    await slowStep('start two archive operations far enough apart to expose shared-state cleanup', async () => {
+      await rightClickRow(page, 'archive-source.txt');
+      let compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      await compress.hover();
+      await page.getByText('Compress to zip', { exact: true }).click();
+
+      const popup = page.getByTestId('archive-progress-popup');
+      await expect(popup).toBeVisible({ timeout: 10_000 });
+      await expect(popup).toContainText('archive-source.zip');
+
+      await page.waitForTimeout(700);
+      await rightClickRow(page, secondSource);
+      compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      await compress.hover();
+      await page.getByText('Compress to zip', { exact: true }).click();
+      await expect(popup).toContainText('archive-second.zip');
+
+      await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 15_000 }).toBe(true);
+      expect(await remoteFileExists('archive-second.zip')).toBe(false);
+
+      // The first operation finishing must not clear or retarget the second operation's UI.
+      await expect(popup).toBeVisible();
+      await expect(popup).toContainText('archive-second.zip');
+      await expect.poll(() => remoteFileExists('archive-second.zip'), { timeout: 15_000 }).toBe(true);
+    });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+  }
+});
+
+test('closing and reopening the file manager preserves an in-flight archive task', async ({ page, context }) => {
+  await openFileManager(page, context);
+  await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2500`, { method: 'POST' });
+
+  try {
+    await rightClickRow(page, 'archive-source.txt');
+    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    await compress.hover();
+    await page.getByText('Compress to zip', { exact: true }).click();
+
+    const popup = page.getByTestId('archive-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+
+    const fileManagerModal = page.getByTestId('file-manager-modal');
+    await fileManagerModal.locator(':scope > div > div').first().locator('button').last().click();
+    await expect(fileManagerModal).toBeHidden();
+
+    await page.getByTestId('open-file-manager-button').click();
+    await expect(fileManagerModal).toBeVisible();
+    await expect(popup).toBeVisible();
+    await expect(popup).toContainText('archive-source.zip');
+    await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 15_000 }).toBe(true);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+  }
+});
