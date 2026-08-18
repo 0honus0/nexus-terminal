@@ -682,11 +682,12 @@ const handleTaskAction = async (task: TransferTask) => {
 
 .hidden-progress-source-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 430px));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  align-items: start;
+  width: 100%;
 }
 .hidden-progress-source-card {
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border-color);
@@ -703,7 +704,8 @@ const handleTaskAction = async (task: TransferTask) => {
   background: color-mix(in srgb, var(--header-bg-color) 88%, transparent);
 }
 .hidden-progress-source-list {
-  max-height: 220px;
+  width: 100%;
+  max-height: 260px;
   overflow-y: auto;
   padding: 4px 10px 7px;
 }

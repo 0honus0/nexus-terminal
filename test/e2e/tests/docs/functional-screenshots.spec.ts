@@ -8,12 +8,14 @@ import {
 } from "@playwright/test";
 import { loginAsInitialAdmin } from "../../support/auth";
 import {
+  activeFileManagerList,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
   resetTestSshFilesystem,
+  E2E_SSH,
 } from "../../support/ssh";
 
 const screenshotDir = path.resolve(__dirname, "../../../../doc/imgs/e2e");
@@ -31,6 +33,30 @@ async function saveViewportScreenshot(
     animations: "disabled",
     caret: "hide",
   });
+}
+
+async function dragScreenshotFiles(page: Page, count = 12): Promise<void> {
+  const dataTransfer = await page.evaluateHandle((fileCount: number) => {
+    const transfer = new DataTransfer();
+    for (let index = 0; index < fileCount; index += 1) {
+      const name = `screenshot-upload-${String(index + 1).padStart(2, "0")}.bin`;
+      transfer.items.add(new File([
+        new Uint8Array(4 * 1024 * 1024).fill(0x40 + (index % 20)),
+      ], name, { type: "application/octet-stream" }));
+    }
+    return transfer;
+  }, count);
+
+  try {
+    const list = activeFileManagerList(page);
+    await list.dispatchEvent("dragenter", { dataTransfer });
+    const overlay = page.getByTestId("file-upload-drop-overlay");
+    await expect(overlay).toBeVisible();
+    await overlay.dispatchEvent("drop", { dataTransfer });
+    await expect(overlay).toBeHidden();
+  } finally {
+    await dataTransfer.dispose();
+  }
 }
 
 test.describe.serial("functional documentation screenshots", () => {
@@ -95,6 +121,53 @@ test.describe.serial("functional documentation screenshots", () => {
       )
       .toBe("#212529");
     await saveViewportScreenshot(page, "theme-customization.png");
+  });
+
+  test("captures upload progress and the full-width hidden task card", async ({
+    page,
+    context,
+  }) => {
+    await loginAsInitialAdmin(context.request);
+    await configureSshE2eSettings(context.request);
+    await resetTestSshFilesystem();
+    const connectionId = await ensureTestSshConnection(context.request);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    await openConnectedFileManager(page);
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=260`, { method: "POST" });
+
+    try {
+      await dragScreenshotFiles(page);
+      const popup = page.getByTestId("file-upload-progress-popup");
+      await expect(popup).toBeVisible({ timeout: 10_000 });
+      await expect(popup.getByTestId("file-upload-speed")).toBeVisible();
+      await expect(popup.getByTestId("file-upload-progress-hide")).toBeVisible();
+      await expect(popup.getByTestId("file-upload-cancel-all")).toBeVisible();
+      await page.waitForTimeout(700);
+      await saveViewportScreenshot(page, "upload-progress.png");
+
+      await popup.getByTestId("file-upload-progress-hide").click();
+      await expect(popup).toBeHidden();
+      await page.getByTestId("transfer-progress-toggle").click();
+      const progressDisplay = page.getByTestId("progress-display-modal");
+      await expect(progressDisplay).toBeVisible();
+      const sourceCard = progressDisplay.getByTestId("hidden-progress-source").first();
+      await expect(sourceCard).toBeVisible();
+      const [sourceCardBox, hiddenListBox] = await Promise.all([
+        sourceCard.boundingBox(),
+        progressDisplay.getByTestId("hidden-progress-list").boundingBox(),
+      ]);
+      expect(sourceCardBox).not.toBeNull();
+      expect(hiddenListBox).not.toBeNull();
+      expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - 2);
+      await saveViewportScreenshot(page, "hidden-upload-progress.png");
+
+      await sourceCard.getByTestId("hidden-progress-cancel-all").click();
+      await expect(sourceCard).toBeHidden({ timeout: 10_000 });
+    } finally {
+      await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: "POST" });
+    }
   });
 
   test("captures the mobile SSH workspace with a real mobile browser context", async ({

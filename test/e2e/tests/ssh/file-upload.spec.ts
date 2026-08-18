@@ -267,11 +267,30 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(speedMetrics.scrollHeight).toBeLessThanOrEqual(speedMetrics.clientHeight + 1);
     expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
     expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
-    expect(cancelAllBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
-    expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
     expect(hideBox!.width).toBeGreaterThanOrEqual(20);
-    expect(hideBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
-    expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+    expect(hideBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
+    expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
+    expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+    const headerCenterY = speedBox!.y + speedBox!.height / 2;
+    expect(Math.abs((hideBox!.y + hideBox!.height / 2) - headerCenterY)).toBeLessThanOrEqual(2);
+    expect(Math.abs((cancelAllBox!.y + cancelAllBox!.height / 2) - headerCenterY)).toBeLessThanOrEqual(2);
+    const headerOrder = await popup.getByTestId('file-upload-header-meta').evaluate((header) =>
+      [...header.children].map(element => element.getAttribute('data-testid')).filter(Boolean),
+    );
+    expect(headerOrder.slice(-3)).toEqual([
+      'file-upload-speed',
+      'file-upload-progress-hide',
+      'file-upload-cancel-all',
+    ]);
+    const progressBars = popup.getByTestId('file-upload-progress-bar');
+    await expect(progressBars.first()).toBeVisible();
+    const progressBarBoxes = await progressBars.evaluateAll(elements => elements.map(element => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, width: rect.width };
+    }));
+    expect(progressBarBoxes.length).toBeGreaterThan(1);
+    expect(Math.max(...progressBarBoxes.map(box => box.x)) - Math.min(...progressBarBoxes.map(box => box.x))).toBeLessThanOrEqual(1);
+    expect(Math.max(...progressBarBoxes.map(box => box.width)) - Math.min(...progressBarBoxes.map(box => box.width))).toBeLessThanOrEqual(1);
 
     const resizeHandle = popup.getByTestId('file-upload-resize-handle');
     await expect(resizeHandle).toBeVisible();
@@ -295,6 +314,14 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     const hiddenSources = modal.getByTestId('hidden-progress-source');
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
+    const hiddenList = modal.getByTestId('hidden-progress-list');
+    const [sourceCardBox, hiddenListBox] = await Promise.all([
+      sourceCard.boundingBox(),
+      hiddenList.boundingBox(),
+    ]);
+    expect(sourceCardBox).not.toBeNull();
+    expect(hiddenListBox).not.toBeNull();
+    expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - 2);
     const sourceTasks = sourceCard.getByTestId('hidden-progress-task');
     await expect(sourceTasks.first()).toBeVisible();
     expect(await sourceTasks.count()).toBeGreaterThan(1);

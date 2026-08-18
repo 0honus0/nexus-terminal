@@ -333,40 +333,34 @@ onBeforeUnmount(() => {
     :class="{ dragging, resizing }"
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
-    <div class="upload-popup-header border-b border-border px-3 py-2" @pointerdown="startDragging">
-      <div class="flex min-w-0 items-center gap-2">
+    <div class="upload-popup-header border-b border-border px-3 py-2.5" @pointerdown="startDragging">
+      <div data-testid="file-upload-header-meta" class="flex min-w-0 items-center gap-2">
         <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
           <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
         </h4>
+        <span
+          v-if="hasUploading"
+          data-testid="file-upload-speed"
+          class="shrink-0 whitespace-nowrap rounded-md bg-black/5 px-2 py-1 text-xs tabular-nums text-text-secondary dark:bg-white/5"
+        >
+          {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
+        </span>
         <button
           v-if="props.progressSourceId"
           type="button"
           data-testid="file-upload-progress-hide"
-          class="grid h-6 w-6 shrink-0 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          class="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-transparent text-text-secondary transition-colors hover:border-border hover:bg-border/50 hover:text-foreground"
           @click="hidePopup"
           :title="t('progressCenter.hide', '隐藏进度')"
           :aria-label="t('progressCenter.hide', '隐藏进度')"
         >
           <i class="fas fa-minus"></i>
         </button>
-      </div>
-      <div
-        v-if="hasUploading || cancellableCount > 1"
-        data-testid="file-upload-header-meta"
-        class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
-      >
-        <span
-          v-if="hasUploading"
-          data-testid="file-upload-speed"
-          class="shrink-0 whitespace-nowrap text-xs tabular-nums text-text-secondary"
-        >
-          {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
-        </span>
         <button
           v-if="cancellableCount > 1"
           type="button"
           data-testid="file-upload-cancel-all"
-          class="ml-auto shrink-0 rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
+          class="shrink-0 rounded-md border border-red-300 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:bg-red-950/30 dark:text-red-300"
           @click="handleCancelAll"
         >
           {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
@@ -374,15 +368,18 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <ul data-testid="file-upload-list" class="custom-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-3">
-      <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2 last:mb-0">
-        <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
-        <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" :value="upload.progress" max="100" class="w-20 h-2 flex-shrink-0 [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
-        <span v-if="upload.status === 'uploading' && upload.progress < 100" class="text-xs flex-shrink-0 tabular-nums"> {{ formatProgress(upload.progress) }}%</span>
-        <span v-if="upload.status === 'error'" class="text-red-600 basis-full text-xs"> {{ t('fileManager.errors.generic') }}: {{ upload.error }}</span>
-        <span v-if="upload.status === 'success' || (upload.status === 'uploading' && upload.progress === 100)" class="text-green-600"> ✅</span>
-        <span v-if="upload.status === 'cancelled'" class="text-red-600"> ❌ {{ t('fileManager.uploadStatus.cancelled') }}</span>
+      <li v-for="upload in uploadList" :key="upload.id" class="upload-task-row mb-1.5 text-xs last:mb-0">
+        <span class="min-w-0 truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
+        <div class="min-w-0">
+          <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" data-testid="file-upload-progress-bar" :value="upload.progress" max="100" class="h-2 w-full [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
+        </div>
+        <span data-testid="file-upload-progress-value" class="text-right text-xs tabular-nums text-text-secondary">
+          {{ ['pending', 'uploading'].includes(upload.status) ? `${formatProgress(upload.progress)}%` : '—' }}
+        </span>
         <!-- 只有在可取消状态时显示取消按钮 -->
-        <button v-if="['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)" data-testid="file-upload-cancel" @click="handleCancel(upload.id)" class="ml-auto px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200 flex-shrink-0">{{ t('fileManager.actions.cancel') }}</button>
+        <button v-if="['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)" data-testid="file-upload-cancel" @click="handleCancel(upload.id)" class="justify-self-end px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200">{{ t('fileManager.actions.cancel') }}</button>
+        <span v-else></span>
+        <span v-if="upload.status === 'error'" class="col-span-4 text-red-600 text-xs"> {{ t('fileManager.errors.generic') }}: {{ upload.error }}</span>
       </li>
     </ul>
     <button
@@ -443,6 +440,13 @@ onBeforeUnmount(() => {
   right: 6px;
   bottom: 3px;
   width: 5px;
+}
+.upload-task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem 3.25rem auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
 }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
