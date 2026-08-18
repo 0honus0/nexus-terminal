@@ -90,8 +90,8 @@ docker run -d \
   -e REMOTE_GATEWAY_SHARED_SECRET="$gateway_secret" \
   -e REMOTE_GATEWAY_API_BASE_DOCKER=http://remote-gateway:9090 \
   -e REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8080 \
-  -e RP_ID=127.0.0.1 \
-  -e RP_ORIGIN="http://127.0.0.1:${http_port}" \
+  -e RP_ID=ssh.honus.top \
+  -e RP_ORIGIN='https://ssh.honus.top,https://ssh.trui.de' \
   "$image" backend >/dev/null
 
 backend_ready=0
@@ -133,7 +133,9 @@ done
 
 curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
-curl -fsS -H "Host: 127.0.0.1:${http_port}" "http://127.0.0.1:${http_port}/.well-known/webauthn" >/dev/null
+curl -fsS -H "Host: ssh.honus.top" "http://127.0.0.1:${http_port}/.well-known/webauthn" >/dev/null
+
+NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" npm --prefix "$repo_root/test/e2e" run test:ingress
 
 login_body='{"username":"e2e-admin","password":"E2e-Admin-Password-2026!","rememberMe":false}'
 curl -fsS \

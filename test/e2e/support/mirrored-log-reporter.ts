@@ -25,6 +25,9 @@ export default class MirroredLogReporter implements Reporter {
   private fileByTestId = new Map<string, string>();
   private unexpectedFirstAttempts = new Map<string, string>();
   private specDurationsMs = new Map<string, number>();
+  private specOrder = new Map<string, number>();
+  private startedSpecs = new Set<string>();
+  private totalSpecs = 0;
   private consoleEnabled = process.env.GITHUB_ACTIONS === 'true' || process.env.E2E_CONSOLE_LOGS === '1';
   private runStartedAt = 0;
 
@@ -34,10 +37,23 @@ export default class MirroredLogReporter implements Reporter {
     this.logRoot = path.resolve(this.testDir, '..', 'logs');
     fs.rmSync(this.logRoot, { recursive: true, force: true });
     fs.mkdirSync(this.logRoot, { recursive: true });
-    this.consoleLog(`[E2E] Starting ${suite.allTests().length} tests with ${config.workers} worker(s)`);
+    for (const test of suite.allTests()) {
+      const spec = this.specPath(test);
+      if (!this.specOrder.has(spec)) {
+        this.specOrder.set(spec, this.specOrder.size + 1);
+      }
+    }
+    this.totalSpecs = this.specOrder.size;
+    this.consoleLog(`[E2E] Starting ${suite.allTests().length} tests across ${this.totalSpecs} specs with ${config.workers} worker(s)`);
   }
 
   onTestBegin(test: TestCase, result: TestResult) {
+    const spec = this.specPath(test);
+    if (!this.startedSpecs.has(spec)) {
+      this.startedSpecs.add(spec);
+      const index = this.specOrder.get(spec) || this.startedSpecs.size;
+      this.consoleLog(`\n[E2E] [${index}/${this.totalSpecs}] ▶ ${spec}`);
+    }
     const file = this.logFileFor(test, result.retry);
     this.fileByTestId.set(test.id, file);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -54,7 +70,7 @@ export default class MirroredLogReporter implements Reporter {
       'utf8',
     );
     const retry = result.retry > 0 ? ` retry=${result.retry}` : '';
-    this.consoleLog(`\n[E2E] ▶ ${this.consoleTitle(test)}${retry}`);
+    this.consoleLog(`[E2E]   ▶ ${this.consoleTitle(test)}${retry}`);
   }
 
   onStepBegin(test: TestCase, _result: TestResult, step: TestStep) {
@@ -174,6 +190,11 @@ export default class MirroredLogReporter implements Reporter {
     const project = test.parent.project()?.name || 'unknown';
     const title = test.titlePath().filter(Boolean).join(' > ');
     return `[${project}] ${this.singleLine(title)}`;
+  }
+
+  private specPath(test: TestCase): string {
+    const relativeSpec = path.relative(this.testDir, test.location.file).split(path.sep).join('/');
+    return path.posix.join('tests', relativeSpec);
   }
 
   private consoleLog(value: string): void {

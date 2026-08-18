@@ -238,6 +238,16 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
+      - name: Set up target Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.environment.outputs.node_version }}.x
+          cache: npm
+          cache-dependency-path: test/e2e/package-lock.json
+
+      - name: Install Docker smoke E2E dependencies
+        run: npm ci --prefix test/e2e
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -254,131 +264,6 @@ jobs:
 
       - name: Run Docker deployment smoke
         run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke
-
-  build-and-ingress:
-    needs: [environment, runner-image]
-    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Download E2E environment patch
-        if: needs.environment.outputs.changed == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: e2e-environment-patch
-          path: ${{ runner.temp }}/e2e-environment-patch
-
-      - name: Apply E2E environment patch
-        if: needs.environment.outputs.changed == 'true'
-        shell: bash
-        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
-
-      - name: Set up target Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ needs.environment.outputs.node_version }}.x
-          cache: npm
-          cache-dependency-path: |
-            packages/backend/package-lock.json
-            packages/frontend/package-lock.json
-            packages/remote-gateway/package-lock.json
-            test/e2e/package-lock.json
-
-      - name: Install dependencies
-        run: |
-          npm ci --prefix packages/backend
-          npm ci --prefix packages/frontend
-          npm ci --prefix packages/remote-gateway
-          npm ci --prefix test/e2e
-
-      - name: Build packages
-        run: |
-          npm run build --prefix packages/backend
-          npm run build --prefix packages/frontend
-          npm run build --prefix packages/remote-gateway
-
-      - name: Run production ingress WebAuthn E2E
-        shell: bash
-        env:
-          NODE_ENV: test
-          PORT: "3001"
-          NEXUS_DATA_DIR: ${{ runner.temp }}/nexus-terminal-ingress-data
-          SESSION_COOKIE_NAME: nexus.ingress.sid
-          SESSION_SECRET: ingress-session-secret-do-not-use-outside-tests-0000000000000000000000
-          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          REMOTE_GATEWAY_SHARED_SECRET: ingress-remote-gateway-shared-secret-do-not-use-outside-tests
-          RP_ID: ssh.honus.top
-          RP_ORIGIN: https://ssh.honus.top,https://ssh.trui.de
-        run: |
-          set -euo pipefail
-
-          backend_log="$RUNNER_TEMP/nexus-terminal-ingress-backend.log"
-          ingress_container="nexus-terminal-ingress-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-
-          node packages/backend/dist/index.js >"$backend_log" 2>&1 &
-          backend_pid=$!
-
-          cleanup() {
-            docker rm -f "$ingress_container" >/dev/null 2>&1 || true
-            kill "$backend_pid" >/dev/null 2>&1 || true
-            wait "$backend_pid" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-
-          backend_ready=0
-          for _ in {1..60}; do
-            if curl -fsS http://127.0.0.1:3001/api/v1/status >/dev/null; then
-              backend_ready=1
-              break
-            fi
-            if ! kill -0 "$backend_pid" >/dev/null 2>&1; then
-              cat "$backend_log"
-              exit 1
-            fi
-            sleep 1
-          done
-
-          if [[ "$backend_ready" -ne 1 ]]; then
-            cat "$backend_log"
-            exit 1
-          fi
-
-          docker run -d \
-            --name "$ingress_container" \
-            --add-host backend:host-gateway \
-            -p 127.0.0.1:18112:80 \
-            -v "$PWD/packages/frontend/dist:/usr/share/nginx/html:ro" \
-            -v "$PWD/packages/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
-            nginx:alpine >/dev/null
-
-          ingress_ready=0
-          for _ in {1..60}; do
-            if curl -fsS -H 'Host: ssh.honus.top' http://127.0.0.1:18112/.well-known/webauthn >/dev/null; then
-              ingress_ready=1
-              break
-            fi
-            if [[ "$(docker inspect -f '{{.State.Running}}' "$ingress_container" 2>/dev/null || true)" != "true" ]]; then
-              docker logs "$ingress_container" || true
-              cat "$backend_log"
-              exit 1
-            fi
-            sleep 1
-          done
-
-          if [[ "$ingress_ready" -ne 1 ]]; then
-            docker logs "$ingress_container" || true
-            cat "$backend_log"
-            exit 1
-          fi
-
-          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix test/e2e run test:ingress; then
-            docker logs "$ingress_container" || true
-            cat "$backend_log"
-            exit 1
-          fi
 
   playwright-groups:
     needs: [environment, runner-image, prepare]
@@ -486,8 +371,8 @@ jobs:
 
   screenshots:
     name: Refresh functional screenshots
-    needs: [environment, runner-image, build-image, build-and-ingress, playwright-groups]
-    if: ${{ always() && needs.environment.outputs.changed == 'true' && needs.environment.result == 'success' && needs.runner-image.result == 'success' && needs.build-image.result == 'success' && needs.build-and-ingress.result == 'success' && needs.playwright-groups.result == 'success' }}
+    needs: [environment, runner-image, playwright-groups]
+    if: ${{ always() && needs.environment.outputs.changed == 'true' && needs.environment.result == 'success' && needs.runner-image.result == 'success' && needs.playwright-groups.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -560,8 +445,8 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   rebalance:
-    needs: [environment, runner-image, prepare, build-image, build-and-ingress, playwright-groups, screenshots]
-    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.build-image.result == 'success' && needs.build-and-ingress.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots.result == 'success' || needs.screenshots.result == 'skipped') }}
+    needs: [environment, runner-image, prepare, playwright-groups, screenshots]
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots.result == 'success' || needs.screenshots.result == 'skipped') }}
     permissions:
       actions: read
       contents: write
