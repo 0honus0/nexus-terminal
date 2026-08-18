@@ -1113,7 +1113,7 @@ const handleCompress = (items: FileListItem[], format: CompressFormat) => {
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Requesting compression for ${items.length} items, format: ${format}`);
   void currentSftpManager.value.compressItems(items, format).catch((error) => {
-    if (error instanceof Error && error.message === 'ARCHIVE_CANCELLED') return;
+    if (error instanceof Error && (error.message === 'ARCHIVE_CANCELLED' || error.name === 'ARCHIVE_IN_PROGRESS')) return;
     console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Compression failed:`, error);
   });
 };
@@ -1163,6 +1163,7 @@ const handleDecompress = (item: FileListItem) => {
   }
   console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Requesting decompression for item: ${item.filename}`);
   void manager.decompressItem(item).catch((error) => {
+    if (error instanceof Error && error.name === 'ARCHIVE_IN_PROGRESS') return;
     if (error instanceof Error && error.name === 'PASSWORD_REQUIRED') {
       openArchivePasswordModal('decompress', { item });
       return;
@@ -1185,7 +1186,7 @@ const handleArchivePasswordConfirm = (password: string) => {
 
   if (mode === 'compress' && items.length > 0) {
     void manager.compressItems(items, 'zip', password).catch((error) => {
-      if (error instanceof Error && error.message === 'ARCHIVE_CANCELLED') return;
+      if (error instanceof Error && (error.message === 'ARCHIVE_CANCELLED' || error.name === 'ARCHIVE_IN_PROGRESS')) return;
       if (error instanceof Error && ['PASSWORD_TOO_LONG', 'INVALID_PASSWORD_FORMAT'].includes(error.name)) {
         openArchivePasswordModal('compress', { items, error: getArchivePasswordErrorMessage(error) });
         return;
@@ -1197,6 +1198,7 @@ const handleArchivePasswordConfirm = (password: string) => {
 
   if (mode === 'decompress' && item) {
     void manager.decompressItem(item, password).catch((error) => {
+      if (error instanceof Error && error.name === 'ARCHIVE_IN_PROGRESS') return;
       if (error instanceof Error && ['INVALID_PASSWORD', 'PASSWORD_TOO_LONG', 'INVALID_PASSWORD_FORMAT'].includes(error.name)) {
         openArchivePasswordModal('decompress', { item, error: getArchivePasswordErrorMessage(error) });
         return;

@@ -494,7 +494,8 @@
     "archiveProgress": {
       "filesProcessed": "{count} files processed",
       "filesProcessedTotal": "{count}/{total} entries processed",
-      "starting": "Starting remote archive command..."
+      "starting": "Starting remote archive command...",
+      "operationInProgress": "Another archive operation is already running."
     },
     "preview": {
       "loading": "Loading preview...",

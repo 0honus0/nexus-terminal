@@ -494,7 +494,8 @@
     "archiveProgress": {
       "filesProcessed": "已处理 {count} 个文件",
       "filesProcessedTotal": "已处理 {count}/{total} 个条目",
-      "starting": "正在启动远程归档命令..."
+      "starting": "正在启动远程归档命令...",
+      "operationInProgress": "已有压缩或解压任务正在运行，请等待当前任务结束。"
     },
     "preview": {
       "loading": "正在加载预览...",

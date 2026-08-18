@@ -276,7 +276,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
 });
 
 
-test('overlapping archive requests do not corrupt the visible task or its cancellation target', async ({ page, context }) => {
+test('overlapping archive requests are rejected without retargeting the active task', async ({ page, context }) => {
   await openFileManager(page, context);
   const secondSource = 'archive-second.txt';
   const fixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(secondSource)}&size=64`, { method: 'POST' });
@@ -286,7 +286,7 @@ test('overlapping archive requests do not corrupt the visible task or its cancel
 
   await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2200`, { method: 'POST' });
   try {
-    await slowStep('start two archive operations far enough apart to expose shared-state cleanup', async () => {
+    await slowStep('second archive request is rejected while the active task keeps ownership', async () => {
       await rightClickRow(page, 'archive-source.txt');
       let compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
       await compress.hover();
@@ -301,15 +301,15 @@ test('overlapping archive requests do not corrupt the visible task or its cancel
       compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
       await compress.hover();
       await page.getByText('Compress to zip', { exact: true }).click();
-      await expect(popup).toContainText('archive-second.zip');
+
+      // The active request remains the owner of the single archive progress state.
+      await expect(popup).toBeVisible();
+      await expect(popup).toContainText('archive-source.zip');
+      await expect(page.getByText('Another archive operation is already running.', { exact: true })).toBeVisible();
 
       await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 15_000 }).toBe(true);
+      await page.waitForTimeout(2_600);
       expect(await remoteFileExists('archive-second.zip')).toBe(false);
-
-      // The first operation finishing must not clear or retarget the second operation's UI.
-      await expect(popup).toBeVisible();
-      await expect(popup).toContainText('archive-second.zip');
-      await expect.poll(() => remoteFileExists('archive-second.zip'), { timeout: 15_000 }).toBe(true);
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });

@@ -664,6 +664,13 @@ export function createSftpActionsManager(
                console.warn(`[SFTP ${instanceSessionId}] 尝试压缩项目但 SFTP 未就绪。`);
                return reject(new Error(errMsg));
            }
+           if (archiveProgress.active) {
+               const errMsg = t('fileManager.archiveProgress.operationInProgress');
+               uiNotificationsStore.showWarning(errMsg);
+               const archiveBusyError = new Error(errMsg);
+               archiveBusyError.name = 'ARCHIVE_IN_PROGRESS';
+               return reject(archiveBusyError);
+           }
            const sourcePaths = items.map(item => joinPath(currentPathRef.value, item.filename));
            const requestId = generateRequestId();
            const parentDir = currentPathRef.value;
@@ -691,7 +698,7 @@ export function createSftpActionsManager(
                    progress: null,
                    status: 'running',
                    cancellable: true,
-                   cancel: () => cancelArchive(),
+                   cancel: () => cancelArchive(requestId),
                },
            );
 
@@ -720,7 +727,7 @@ export function createSftpActionsManager(
                unregisterCancelled?.();
                unregisterCommandNotFound?.();
                progressCenter.finishTask(archiveProgressSourceId, requestId);
-               resetArchiveProgress();
+               if (archiveProgress.requestId === requestId) resetArchiveProgress();
            };
            const resetTimeout = () => {
                clearTimeout(timeoutId);
@@ -809,12 +816,11 @@ export function createSftpActionsManager(
        });
    };
 
-   function cancelArchive() {
-       if (!archiveProgress.active || !archiveProgress.requestId || archiveProgress.cancelling) {
-           return;
-       }
-       archiveProgress.cancelling = true;
-       const requestId = archiveProgress.requestId;
+   function cancelArchive(requestId = archiveProgress.requestId ?? undefined) {
+       if (!requestId) return;
+       const isCurrentArchive = archiveProgress.requestId === requestId;
+       if (isCurrentArchive && (!archiveProgress.active || archiveProgress.cancelling)) return;
+       if (isCurrentArchive) archiveProgress.cancelling = true;
        progressCenter.updateTask(archiveProgressSourceId, requestId, {
            status: 'cancelling',
            cancellable: false,
@@ -834,6 +840,13 @@ export function createSftpActionsManager(
                console.warn(`[SFTP ${instanceSessionId}] 尝试解压项目 ${item.filename} 但 SFTP 未就绪。`);
                return reject(new Error(errMsg));
            }
+           if (archiveProgress.active) {
+               const errMsg = t('fileManager.archiveProgress.operationInProgress');
+               uiNotificationsStore.showWarning(errMsg);
+               const archiveBusyError = new Error(errMsg);
+               archiveBusyError.name = 'ARCHIVE_IN_PROGRESS';
+               return reject(archiveBusyError);
+           }
            const sourcePath = joinPath(currentPathRef.value, item.filename);
            const destinationDir = currentPathRef.value;
            const requestId = generateRequestId();
@@ -847,7 +860,7 @@ export function createSftpActionsManager(
                    progress: null,
                    status: 'running',
                    cancellable: true,
-                   cancel: () => cancelArchive(),
+                   cancel: () => cancelArchive(requestId),
                },
            );
 
@@ -876,7 +889,7 @@ export function createSftpActionsManager(
                unregisterCancelled?.();
                unregisterCommandNotFound?.();
                progressCenter.finishTask(archiveProgressSourceId, requestId);
-               resetArchiveProgress();
+               if (archiveProgress.requestId === requestId) resetArchiveProgress();
            };
            const resetTimeout = () => {
                clearTimeout(timeoutId);

@@ -52,7 +52,10 @@ export const createWheelStepAccumulator = ({
     if (steps === 0) return 0;
 
     const boundedSteps = Math.min(3, steps);
-    accumulated -= direction * boundedSteps * thresholdPx;
+    // Cap the visual change produced by one event, but consume every complete step
+    // represented by that event. Otherwise a large wheel/page delta leaves a backlog
+    // that leaks into later tiny events and causes surprise follow-up zoom jumps.
+    accumulated -= direction * steps * thresholdPx;
     return direction * boundedSteps;
   };
 };

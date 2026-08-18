@@ -423,7 +423,8 @@
         "archiveProgress": {
             "filesProcessed": "{count} 件のファイルを処理しました",
             "filesProcessedTotal": "{count}/{total} 件を処理済み",
-            "starting": "リモートアーカイブコマンドを開始しています..."
+            "starting": "リモートアーカイブコマンドを開始しています...",
+            "operationInProgress": "別の圧縮または解凍タスクが実行中です。完了するまでお待ちください。"
         },
         "preview": {
             "loading": "プレビューを読み込んでいます...",
