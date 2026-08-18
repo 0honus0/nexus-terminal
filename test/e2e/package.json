@@ -4,6 +4,11 @@
   "private": true,
   "scripts": {
     "seed:refresh": "npm exec --prefix ../../packages/backend tsx -- ../../test/e2e/support/create-seed.ts",
+    "groups:generate": "node support/groups.mjs generate",
+    "groups:check": "node support/groups.mjs check",
+    "groups:matrix": "node support/groups.mjs matrix",
+    "groups:run": "node support/groups.mjs run",
+    "groups:update-timings": "node support/groups.mjs update-timings",
     "test": "playwright test",
     "test:isolation": "node support/run-isolated-specs.mjs",
     "test:isolation:request": "node support/run-isolated-specs.mjs --request-only",

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "workers": 4,
+  "timingWindow": 5,
+  "defaultSpecDurationMs": 5000,
+  "familyWholeTargetRatio": 1.2,
+  "rebalance": {
+    "minImprovementPercent": 10,
+    "minImbalanceMs": 15000
+  }
+}

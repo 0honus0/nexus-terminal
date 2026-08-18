@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "group": 3,
+  "workers": 4,
+  "specs": [
+    "tests/ssh/command-history-management.spec.ts",
+    "tests/ssh/quick-command-collapsible-search.spec.ts",
+    "tests/ssh/quick-command-management.spec.ts",
+    "tests/ui/audit-log-filtering.spec.ts",
+    "tests/ui/backup-ui.spec.ts",
+    "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/notification-delivery.spec.ts",
+    "tests/ui/notification-settings.spec.ts",
+    "tests/ui/proxy-management.spec.ts",
+    "tests/ui/system-settings.spec.ts",
+    "tests/ui/theme-switching.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
+  ]
+}

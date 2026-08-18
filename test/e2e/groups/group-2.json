@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "group": 2,
+  "workers": 4,
+  "specs": [
+    "tests/http/auth-2fa.spec.ts",
+    "tests/http/auth-api.spec.ts",
+    "tests/http/backup.spec.ts",
+    "tests/http/connections-tags.spec.ts",
+    "tests/http/quick-commands-audit.spec.ts",
+    "tests/ssh/cross-session-transfer.spec.ts",
+    "tests/ssh/file-upload.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts",
+    "tests/ssh/panel-wheel-scaling.spec.ts",
+    "tests/ssh/terminal-protocol.spec.ts",
+    "tests/ssh/terminal-tools-ui.spec.ts",
+    "tests/ssh/terminal-ui.spec.ts"
+  ]
+}

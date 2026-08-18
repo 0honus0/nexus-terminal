@@ -30,7 +30,7 @@ tests/ssh/file-manager-context-menu.spec.ts
 logs/ssh/file-manager-context-menu/verifies file manager right-click actions over real SFTP.log
 ```
 
-The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. GitHub Actions uploads `test/e2e/logs/` as the `playwright-e2e-logs` artifact on every run.
+The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Grouped GitHub Actions runs upload one log artifact per group (`playwright-e2e-logs-group-N`).
 
 On GitHub Actions, the mirrored reporter also prints concise live progress to the job log: test start/end, explicit `test.step(...)` start/result, retry number, and duration. Set `E2E_CONSOLE_LOGS=1` to enable the same console output locally without changing the full per-test log files.
 
@@ -40,6 +40,10 @@ From the repository root:
 
 ```bash
 npm run test:e2e:seed
+npm run test:e2e:groups:generate -- --workers 4
+npm run test:e2e:groups:check -- --workers 4
+npm run test:e2e:groups:matrix -- --workers 4
+npm run test:e2e:group -- --workers 4 --group 1
 npm run test:e2e
 npm run test:e2e:isolation
 npm run test:e2e:isolation:request
@@ -54,6 +58,27 @@ npm --prefix test/e2e run test:docs
 ```
 
 Full browser E2E validation is expected to run in GitHub Actions. Local commands remain useful for listing tests, refreshing the seed, focused development checks, and request-only isolation checks, but a change that requires complete E2E validation should use the Actions environment where Chromium and its system dependencies are installed consistently.
+
+## Parallel groups
+
+`test/e2e/groups/settings.json` defines the default number of CI group workers. `workers` means independent GitHub Actions runners, not Playwright workers inside one process. Each group still runs Playwright with `workers: 1`; the parallelism comes from running multiple isolated group jobs at the same time.
+
+Generating groups with another worker count creates exactly that many `group-N.json` files:
+
+```bash
+npm run test:e2e:groups:generate -- --workers 3
+npm run test:e2e:groups:check -- --workers 3
+```
+
+The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families such as SSH file-manager, transfer, progress, terminal, connection, and UI security/settings/data. Related specs are kept together when doing so does not create an excessive load imbalance.
+
+`test/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful push run merges them back into the history. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
+
+Rebalancing is intentionally sticky. Existing assignments are retained unless the predicted longest-group improvement reaches the configured percentage threshold or the current longest/shortest gap exceeds the configured duration threshold. With identical specs and timing history, generation is deterministic and produces byte-for-byte stable group files.
+
+The `E2E` workflow accepts an optional `workers` value when manually dispatched. A manual override is ephemeral: each matrix job deterministically generates the requested number of groups from the committed timing history without changing the repository's default. To permanently change the default, update `groups/settings.json`, regenerate the groups, and commit them.
+
+On successful `push` runs, the workflow collects all group timing artifacts, refreshes the rolling history, reruns the default grouping algorithm, and commits the updated `test/e2e/groups/` state back to the triggering branch when it changed. Pull requests and manual worker overrides never write grouping state back to the branch.
 
 `test:docs` is reserved for user-facing feature presentation. It exports full-interface screenshots to `doc/imgs/e2e/`; `.github/workflows/update-functional-screenshots.yml` also uploads them as an Actions artifact and commits refreshed images back to the triggering branch.
 
