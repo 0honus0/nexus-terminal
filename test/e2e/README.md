@@ -82,6 +82,25 @@ Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62
 
 On successful `push` runs, the workflow collects all group timing artifacts, refreshes the rolling history, reruns the default grouping algorithm, and commits the updated `test/e2e/groups/` state back to the triggering branch when it changed. Pull requests and manual worker overrides never write grouping state back to the branch.
 
+## Test environment maintenance
+
+The repository keeps E2E/CI runtime versions in `scripts/e2e/versions.json`. Use the root-level maintenance scripts instead of editing the runner image and workflows independently:
+
+```bash
+# Resolve current upstream stable versions and synchronize the repository.
+npm run test:e2e:env:latest
+
+# Re-apply the already recorded versions without contacting upstream version sources.
+npm run test:e2e:env:sync
+
+# Build and smoke-check the configured image locally; add --push after GHCR login.
+npm run test:e2e:runner:build
+```
+
+`resolve-latest-test-environment.mjs` resolves the latest Node LTS major from the official Node.js release index, the latest stable `@playwright/test` version from npm, and the latest stable release major for the configured official GitHub/Docker actions. `sync-test-environment.mjs` then pins Playwright to that exact version, refreshes the E2E lockfile, synchronizes Node versions used by CI, updates the runner Dockerfile and GHCR image tag, and normalizes those action majors across workflows. OS-level browser dependencies and archive utilities are refreshed naturally when the runner image is rebuilt from its current Debian base.
+
+`.github/workflows/update-e2e-environment.yml` runs this process automatically every Monday and may also be triggered manually with no version inputs. It only builds and pushes a new runner when upstream versions changed; then it pushes `chore/e2e-test-environment`, waits for the full branch E2E workflow to pass, and creates or updates a pull request. The `E2E Runner Image` workflow calls the same root-level build script, so local and CI image construction use one implementation.
+
 `test:docs` is reserved for user-facing feature presentation. It exports full-interface screenshots to `doc/imgs/e2e/`; `.github/workflows/update-functional-screenshots.yml` also uploads them as an Actions artifact and commits refreshed images back to the triggering branch.
 
 The production ingress suite is run separately because it targets a real Nginx endpoint rather than the Vite development server. Set `NEXUS_PRODUCTION_BASE_URL` to the prepared ingress URL and run:

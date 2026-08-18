@@ -1,0 +1,170 @@
+name: Update E2E test environment
+
+on:
+  schedule:
+    # Every Monday at 03:17 UTC, after the regular dependency update window.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: nexus-e2e-environment-update
+  cancel-in-progress: false
+
+env:
+  UPDATE_BRANCH: chore/e2e-test-environment
+  IMAGE: ghcr.io/${{ github.repository }}-e2e-runner
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up current Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+
+      - name: Resolve latest stable test environment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run test:e2e:env:latest
+
+      - name: Validate synchronized files
+        run: |
+          node --check scripts/e2e/resolve-latest-test-environment.mjs
+          node --check scripts/e2e/sync-test-environment.mjs
+          bash -n scripts/e2e/build-runner-image.sh
+          npm run test:e2e:groups:check
+          git diff --check
+
+      - name: Detect environment updates
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "E2E test environment is already on the latest stable versions." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "## E2E test environment update"
+              echo
+              echo '```text'
+              git diff --stat
+              echo '```'
+              echo
+              echo '```json'
+              cat scripts/e2e/versions.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Log in to GHCR
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build, smoke-check, and push upgraded E2E runner
+        if: steps.changes.outputs.changed == 'true'
+        run: scripts/e2e/build-runner-image.sh --push --image "$IMAGE"
+
+      - name: Create update branch
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: git checkout -B "$UPDATE_BRANCH"
+
+      - name: Commit and push upgrade branch
+        if: steps.changes.outputs.changed == 'true'
+        id: push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(e2e): update test environment"
+          git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for branch E2E validation
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.push.outputs.sha }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          for _ in {1..60}; do
+            run_id="$(gh run list \
+              --workflow e2e.yml \
+              --branch "$UPDATE_BRANCH" \
+              --commit "$HEAD_SHA" \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // empty')"
+            [[ -n "$run_id" ]] && break
+            sleep 5
+          done
+          if [[ -z "$run_id" ]]; then
+            echo "Could not find E2E validation run for $HEAD_SHA" >&2
+            exit 1
+          fi
+          echo "Waiting for E2E run $run_id" >> "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" --exit-status
+
+      - name: Create or update test-environment pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          existing_pr="$(gh pr list \
+            --base "$BASE_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          body_file="$RUNNER_TEMP/e2e-environment-update.md"
+          {
+            echo 'Automated E2E test-environment refresh to the latest stable upstream versions.'
+            echo
+            echo 'Version sources:'
+            echo '- Node: latest LTS release from the official Node.js release index;'
+            echo '- Playwright: npm `@playwright/test@latest`;'
+            echo '- GitHub and Docker actions: latest stable release from each official repository.'
+            echo
+            echo 'Before this PR is created or updated, the workflow rebuilds and smoke-checks the E2E runner image and waits for the full branch E2E workflow to pass.'
+            echo
+            echo 'Current environment configuration:'
+            echo
+            echo '```json'
+            cat scripts/e2e/versions.json
+            echo '```'
+          } > "$body_file"
+
+          if [[ -n "$existing_pr" ]]; then
+            gh pr edit "$existing_pr" --title "chore(e2e): update test environment" --body-file "$body_file"
+            echo "Updated test-environment PR #$existing_pr." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$UPDATE_BRANCH" \
+              --title "chore(e2e): update test environment" \
+              --body-file "$body_file"
+          fi

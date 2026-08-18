@@ -41,7 +41,9 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
-scripts/
+scripts/*
+!scripts/e2e/
+!scripts/e2e/**
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
