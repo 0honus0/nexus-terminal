@@ -18,6 +18,12 @@ on:
       - "package.json"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
+    inputs:
+      isolation:
+        description: Run every main E2E spec as an independent Playwright invocation
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   playwright:
@@ -149,6 +155,10 @@ jobs:
 
       - name: Run HTTP, WebSocket, UI, SSH, SFTP, and Mobile E2E
         run: npm run test:e2e
+
+      - name: Run per-spec isolation audit
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.isolation }}
+        run: npm run test:e2e:isolation
 
       - name: Upload E2E logs
         if: always()

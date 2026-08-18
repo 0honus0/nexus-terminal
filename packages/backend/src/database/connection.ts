@@ -27,6 +27,7 @@ export interface RunResult {
 }
 
 let dbInstancePromise: Promise<Database> | null = null;
+let dbResetPromise: Promise<void> | null = null;
 
 const normalizeParams = (params: any[]): SQLInputValue[] => params as SQLInputValue[];
 
@@ -76,7 +77,7 @@ const runDatabaseInitializations = async (db: Database): Promise<void> => {
     }
 };
 
-export const getDbInstance = (): Promise<Database> => {
+const ensureDbInstance = (): Promise<Database> => {
     if (!dbInstancePromise) {
         dbInstancePromise = (async () => {
             let db: Database | null = null;
@@ -101,6 +102,63 @@ export const getDbInstance = (): Promise<Database> => {
         })();
     }
     return dbInstancePromise;
+};
+
+export const getDbInstance = async (): Promise<Database> => {
+    if (dbResetPromise) {
+        await dbResetPromise;
+    }
+    return ensureDbInstance();
+};
+
+export const closeDbInstance = async (): Promise<void> => {
+    const pending = dbInstancePromise;
+    dbInstancePromise = null;
+    if (!pending) return;
+
+    const db = await pending;
+    db.close();
+};
+
+export type E2EDatabaseResetMode = 'seed' | 'empty';
+
+export const resetDatabaseForE2E = async (mode: E2EDatabaseResetMode): Promise<void> => {
+    if (process.env.NODE_ENV !== 'test' || process.env.NEXUS_E2E_RESET_ENABLED !== '1') {
+        throw new Error('E2E database reset is disabled.');
+    }
+
+    if (dbResetPromise) {
+        await dbResetPromise;
+    }
+
+    const resetTask = (async () => {
+        await closeDbInstance();
+
+        for (const suffix of ['', '-wal', '-shm']) {
+            fs.rmSync(`${dbPath}${suffix}`, { force: true });
+        }
+
+        if (mode === 'seed') {
+            const seedPath = process.env.NEXUS_E2E_SEED_DB
+                ? path.resolve(process.env.NEXUS_E2E_SEED_DB)
+                : undefined;
+            if (!seedPath || !fs.existsSync(seedPath)) {
+                throw new Error(`E2E seed database not found: ${seedPath || '<unset>'}`);
+            }
+            fs.copyFileSync(seedPath, dbPath);
+        }
+
+        await ensureDbInstance();
+    })();
+
+    dbResetPromise = resetTask;
+    try {
+        await resetTask;
+    } finally {
+        if (dbResetPromise === resetTask) {
+            dbResetPromise = null;
+        }
+    }
 };
 
 process.on('SIGINT', async () => {

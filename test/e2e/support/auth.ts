@@ -1,9 +1,7 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import { E2E_ADMIN } from './test-identity';
 
-export const E2E_ADMIN = {
-  username: 'e2e-admin',
-  password: 'E2e-Admin-Password-2026!',
-} as const;
+export { E2E_ADMIN } from './test-identity';
 
 export async function ensureInitialAdmin(request: APIRequestContext): Promise<void> {
   const setupStateResponse = await request.get('/api/v1/auth/needs-setup');
@@ -23,8 +21,6 @@ export async function ensureInitialAdmin(request: APIRequestContext): Promise<vo
 }
 
 export async function loginAsInitialAdmin(request: APIRequestContext): Promise<void> {
-  await ensureInitialAdmin(request);
-
   const loginResponse = await request.post('/api/v1/auth/login', {
     data: {
       username: E2E_ADMIN.username,

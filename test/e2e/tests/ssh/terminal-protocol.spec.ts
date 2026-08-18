@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import { closeWebSocket, openAuthenticatedWebSocket, sendJson, waitForJson } from '../../support/ws';

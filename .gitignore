@@ -133,6 +133,7 @@ dist
 /packages/data
 *.db
 *.db
+!/test/e2e/fixtures/seeded-data/nexus-terminal.db
 *.jpg
 /packages/backend/uploads/backgrounds
 /temp_iterm_schemes

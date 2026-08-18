@@ -652,7 +652,11 @@ const controlServer = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/reset') {
+      await stopSshServer();
+      sftpWriteDelayMs = 0;
+      archiveExecDelayMs = 0;
       await resetRoot();
+      await startSshServer();
       res.writeHead(204);
       res.end();
       return;

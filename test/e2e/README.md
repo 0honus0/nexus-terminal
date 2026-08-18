@@ -15,7 +15,7 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 - `support/` — shared E2E helpers, test credentials, the test SSH server, and the mirrored log reporter.
 - `logs/` — generated per-test logs. Its directory structure mirrors `tests/` and it is ignored by Git.
 
-The Playwright projects are ordered with dependencies: `auth` runs first, and `http`, `websocket`, `ui`, `ssh`, and `mobile` depend on it. This guarantees that a clean E2E database is initialized through the real first-run setup flow before dependent tests execute.
+The main E2E projects do not depend on `auth` to create shared state. Normal specs start from the committed seeded database, while the first-run setup regression explicitly requests an empty database. This keeps project and spec scheduling independent from first-run setup order.
 
 The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `test/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
 
@@ -39,7 +39,10 @@ On GitHub Actions, the mirrored reporter also prints concise live progress to th
 From the repository root:
 
 ```bash
+npm run test:e2e:seed
 npm run test:e2e
+npm run test:e2e:isolation
+npm run test:e2e:isolation:request
 npm run test:e2e:auth
 npm run test:e2e:http
 npm run test:e2e:websocket
@@ -49,6 +52,8 @@ npm run test:e2e:mobile
 npm run test:e2e:list
 npm --prefix test/e2e run test:docs
 ```
+
+Full browser E2E validation is expected to run in GitHub Actions. Local commands remain useful for listing tests, refreshing the seed, focused development checks, and request-only isolation checks, but a change that requires complete E2E validation should use the Actions environment where Chromium and its system dependencies are installed consistently.
 
 `test:docs` is reserved for user-facing feature presentation. It exports full-interface screenshots to `doc/imgs/e2e/`; `.github/workflows/update-functional-screenshots.yml` also uploads them as an Actions artifact and commits refreshed images back to the triggering branch.
 
@@ -76,19 +81,40 @@ The suite intentionally keeps regression tests for previously fixed production i
 - TOTP 2FA setup, login gating, verification, and disable lifecycle;
 - connection update/clone/delete with preserved encrypted credentials and tag associations;
 
-Install the browser once when needed:
+For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:
 
 ```bash
 npm --prefix test/e2e ci
 npm --prefix test/e2e exec -- playwright install chromium
 ```
 
-On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. GitHub Actions performs this automatically.
+On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. Do not treat the AgentDock host as the canonical full-E2E environment; GitHub Actions performs the browser dependency setup and is the required environment for complete browser E2E evidence.
 
 ## Isolation
 
 Each run uses `test/e2e/.tmp/backend-data` through `NEXUS_DATA_DIR`. The backend database, generated environment data, and file-backed sessions therefore never touch `packages/backend/data`.
 
+Normal E2E specs use `test/e2e/fixtures/seeded-data/nexus-terminal.db` as their known baseline. The backend exposes the E2E reset endpoint only when both `NODE_ENV=test` and `NEXUS_E2E_RESET_ENABLED=1` are set. At a spec boundary the E2E fixture restores the database, clears file-backed sessions, and resets the isolated SSH test server state. The first-run setup spec uses an empty database instead of the seed.
+
 Vite also uses an E2E-specific cache directory so local dependency-cache permissions do not affect the test server.
 
 Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches, and test-installed `node_modules` are ignored by Git.
+
+## E2E constraints
+
+These rules are part of the test contract and must be preserved when adding, moving, grouping, or optimizing E2E coverage:
+
+- **Every spec must be independently runnable.** A spec must pass when invoked by itself from its declared baseline. It must never require another spec or project to have executed first.
+- **Normal specs start from the seed.** Authentication helpers for normal tests may log in to the seeded administrator, but must not silently create the initial administrator. First-run setup coverage is the explicit exception and must use an empty database.
+- **A spec file is the smallest scheduling unit.** Grouping and load balancing may move whole `*.spec.ts` files between execution groups, but must never split individual tests from one spec across groups.
+- **Business structure and execution grouping are separate.** Tests stay organized under `tests/auth`, `tests/http`, `tests/websocket`, `tests/ui`, `tests/ssh`, and `tests/mobile` according to product behavior. Do not move test files merely to balance CI runtime; group configuration owns execution placement.
+- **Intra-spec serial behavior is allowed only when intentional.** `test.describe.serial(...)` may be used for steps that deliberately share state inside one spec, but no serial relationship may cross a spec boundary.
+- **Do not rely on previous cleanup for correctness.** A test may clean up resources it creates, but the next spec must still be correct if the previous spec failed before its cleanup. The spec reset baseline is the source of isolation.
+- **Reset every shared E2E surface that can leak state.** This includes the SQLite database, file-backed sessions, SSH/SFTP filesystem fixtures, SSH online/offline state, artificial SFTP write delay, archive execution delay/hold flags, and any future shared test-server controls.
+- **Keep the seed reproducible.** Refresh the committed seed through `npm run test:e2e:seed`; do not hand-edit the SQLite file. The seed may contain deterministic test-only credentials and baseline data, but must not contain production secrets, user data, runtime sessions, or machine-specific state.
+- **New specs must be covered exactly once by grouping.** Group validation must reject missing specs, duplicate assignments, and stale paths. Deleted or renamed specs must be removed or reassigned deterministically.
+- **Group generation must be deterministic.** With identical spec inputs and identical timing data, regeneration must produce byte-for-byte stable group configuration. Sort/tie-break by stable keys such as normalized spec path and group id rather than filesystem enumeration order.
+- **Timing noise must not cause constant reshuffling.** Rebalancing should use stabilized historical durations (for example a recent median) and should retain the existing placement when the predicted improvement is insignificant. Prefer understandable affinity between related specs over shaving a negligible amount of runtime.
+- **Rebalancing must not change test semantics.** Timing data controls only which group owns a whole spec. It must never introduce a prerequisite, change the seed mode, alter test data, or change execution behavior inside the spec.
+- **Isolation is verified by execution, not assumption.** `npm run test:e2e:isolation` runs each main E2E spec as its own Playwright invocation. Complete isolation/browser validation should run in GitHub Actions; `npm run test:e2e:isolation:request` is a lighter local check for request-only specs.
+- **Complete E2E runs belong in GitHub Actions.** When browser E2E evidence is required for a change, run it through the repository Actions workflow instead of depending on the local AgentDock host browser libraries.
