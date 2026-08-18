@@ -23,15 +23,11 @@ on:
         description: Parallel E2E group workers; leave blank to use groups/settings.json
         required: false
         type: string
-      isolation:
-        description: Run every main E2E spec as an independent Playwright invocation
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   actions: read
   contents: read
+  packages: read
 
 concurrency:
   group: e2e-${{ github.ref }}
@@ -181,6 +177,12 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    container:
+      image: ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v1
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+      options: --ipc=host
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -190,28 +192,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: npm
-          cache-dependency-path: |
-            packages/backend/package-lock.json
-            packages/frontend/package-lock.json
-            test/e2e/package-lock.json
-
       - name: Install E2E runtime dependencies
         run: |
           npm ci --prefix packages/backend
           npm ci --prefix packages/frontend
           npm ci --prefix test/e2e
 
-      - name: Install Chromium and system dependencies
-        working-directory: test/e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Install remote archive command dependencies
-        run: sudo apt-get update && sudo apt-get install -y zip unzip bzip2
+      - name: Verify preinstalled Playwright runtime
+        run: |
+          node --version
+          npm --prefix test/e2e exec -- playwright --version
+          test -d "$PLAYWRIGHT_BROWSERS_PATH"
+          command -v zip
+          command -v unzip
+          command -v bzip2
 
       - name: Generate deterministic group configuration
         run: |
@@ -246,49 +240,6 @@ jobs:
           path: |
             test/e2e/playwright-report/
             test/e2e/test-results/
-          if-no-files-found: ignore
-
-  isolation:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.isolation }}
-    needs: [build-and-ingress, playwright-groups]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: npm
-          cache-dependency-path: |
-            packages/backend/package-lock.json
-            packages/frontend/package-lock.json
-            test/e2e/package-lock.json
-
-      - name: Install E2E runtime dependencies
-        run: |
-          npm ci --prefix packages/backend
-          npm ci --prefix packages/frontend
-          npm ci --prefix test/e2e
-
-      - name: Install Chromium and system dependencies
-        working-directory: test/e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Install remote archive command dependencies
-        run: sudo apt-get update && sudo apt-get install -y zip unzip bzip2
-
-      - name: Run per-spec isolation audit
-        run: npm run test:e2e:isolation
-
-      - name: Upload isolation logs
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-e2e-isolation-logs
-          path: test/e2e/logs/
           if-no-files-found: ignore
 
   rebalance:

@@ -109,8 +109,8 @@ function loadSettings() {
 function resolveWorkers(args, settings, specCount) {
   const raw = args.workers ?? process.env.E2E_GROUP_WORKERS ?? settings.workers;
   const workers = Number(raw);
-  if (!Number.isInteger(workers) || workers < 1 || workers > Math.min(32, specCount)) {
-    throw new Error(`workers must be an integer between 1 and ${Math.min(32, specCount)}; received ${raw}`);
+  if (!Number.isInteger(workers) || workers < 1 || workers > specCount) {
+    throw new Error(`workers must be an integer between 1 and ${specCount}; received ${raw}`);
   }
   return workers;
 }

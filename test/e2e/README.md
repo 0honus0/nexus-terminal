@@ -45,8 +45,6 @@ npm run test:e2e:groups:check -- --workers 4
 npm run test:e2e:groups:matrix -- --workers 4
 npm run test:e2e:group -- --workers 4 --group 1
 npm run test:e2e
-npm run test:e2e:isolation
-npm run test:e2e:isolation:request
 npm run test:e2e:auth
 npm run test:e2e:http
 npm run test:e2e:websocket
@@ -57,7 +55,7 @@ npm run test:e2e:list
 npm --prefix test/e2e run test:docs
 ```
 
-Full browser E2E validation is expected to run in GitHub Actions. Local commands remain useful for listing tests, refreshing the seed, focused development checks, and request-only isolation checks, but a change that requires complete E2E validation should use the Actions environment where Chromium and its system dependencies are installed consistently.
+Full browser E2E validation is expected to run in GitHub Actions. Local commands remain useful for listing tests, refreshing the seed, and focused development checks, but a change that requires complete E2E validation should use the Actions environment where Chromium and its system dependencies are installed consistently.
 
 ## Parallel groups
 
@@ -77,6 +75,10 @@ The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, 
 Rebalancing is intentionally sticky. Existing assignments are retained unless the predicted longest-group improvement reaches the configured percentage threshold or the current longest/shortest gap exceeds the configured duration threshold. With identical specs and timing history, generation is deterministic and produces byte-for-byte stable group files.
 
 The `E2E` workflow accepts an optional `workers` value when manually dispatched. A manual override is ephemeral: each matrix job deterministically generates the requested number of groups from the committed timing history without changing the repository's default. To permanently change the default, update `groups/settings.json`, regenerate the groups, and commit them.
+
+The group generator accepts up to one worker per discovered spec. GitHub-hosted runner concurrency is account-plan scoped, so requesting more workers than the account can run concurrently causes excess group jobs to queue rather than increasing effective parallelism. Keep the repository default conservative unless measured CI results justify a higher value.
+
+Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v1`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
 
 On successful `push` runs, the workflow collects all group timing artifacts, refreshes the rolling history, reruns the default grouping algorithm, and commits the updated `test/e2e/groups/` state back to the triggering branch when it changed. Pull requests and manual worker overrides never write grouping state back to the branch.
 
@@ -113,9 +115,9 @@ npm --prefix test/e2e ci
 npm --prefix test/e2e exec -- playwright install chromium
 ```
 
-On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. Do not treat the AgentDock host as the canonical full-E2E environment; GitHub Actions performs the browser dependency setup and is the required environment for complete browser E2E evidence.
+On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. Do not treat the AgentDock host as the canonical full-E2E environment; GitHub Actions uses the prebuilt E2E runner image and is the required environment for complete browser E2E evidence.
 
-## Isolation
+## Spec reset baseline
 
 Each run uses `test/e2e/.tmp/backend-data` through `NEXUS_DATA_DIR`. The backend database, generated environment data, and file-backed sessions therefore never touch `packages/backend/data`.
 
@@ -141,5 +143,4 @@ These rules are part of the test contract and must be preserved when adding, mov
 - **Group generation must be deterministic.** With identical spec inputs and identical timing data, regeneration must produce byte-for-byte stable group configuration. Sort/tie-break by stable keys such as normalized spec path and group id rather than filesystem enumeration order.
 - **Timing noise must not cause constant reshuffling.** Rebalancing should use stabilized historical durations (for example a recent median) and should retain the existing placement when the predicted improvement is insignificant. Prefer understandable affinity between related specs over shaving a negligible amount of runtime.
 - **Rebalancing must not change test semantics.** Timing data controls only which group owns a whole spec. It must never introduce a prerequisite, change the seed mode, alter test data, or change execution behavior inside the spec.
-- **Isolation is verified by execution, not assumption.** `npm run test:e2e:isolation` runs each main E2E spec as its own Playwright invocation. Complete isolation/browser validation should run in GitHub Actions; `npm run test:e2e:isolation:request` is a lighter local check for request-only specs.
 - **Complete E2E runs belong in GitHub Actions.** When browser E2E evidence is required for a change, run it through the repository Actions workflow instead of depending on the local AgentDock host browser libraries.

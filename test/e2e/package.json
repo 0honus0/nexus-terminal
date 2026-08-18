@@ -10,8 +10,6 @@
     "groups:run": "node support/groups.mjs run",
     "groups:update-timings": "node support/groups.mjs update-timings",
     "test": "playwright test",
-    "test:isolation": "node support/run-isolated-specs.mjs",
-    "test:isolation:request": "node support/run-isolated-specs.mjs --request-only",
     "test:auth": "playwright test --project=auth",
     "test:http": "playwright test --project=http",
     "test:websocket": "playwright test --project=websocket",
