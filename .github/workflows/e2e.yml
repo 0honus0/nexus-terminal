@@ -7,6 +7,7 @@ on:
       - "packages/frontend/**"
       - "packages/remote-gateway/**"
       - "test/e2e/**"
+      - "scripts/e2e/**"
       - "package.json"
       - ".github/workflows/e2e.yml"
   pull_request:
@@ -15,21 +16,63 @@ on:
       - "packages/frontend/**"
       - "packages/remote-gateway/**"
       - "test/e2e/**"
+      - "scripts/e2e/**"
       - "package.json"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
+    inputs:
+      workers:
+        description: Parallel E2E group workers; leave blank to use groups/settings.json
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  playwright:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    outputs:
+      workers: ${{ steps.groups.outputs.workers }}
+      matrix: ${{ steps.groups.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
+      - name: Resolve and validate E2E groups
+        id: groups
+        shell: bash
+        env:
+          REQUESTED_WORKERS: ${{ github.event_name == 'workflow_dispatch' && inputs.workers || '' }}
+        run: |
+          set -euo pipefail
+          workers="$REQUESTED_WORKERS"
+          if [[ -z "$workers" ]]; then
+            workers="$(node -p "require('./test/e2e/groups/settings.json').workers")"
+          fi
+
+          node test/e2e/support/groups.mjs generate --workers "$workers"
+          node test/e2e/support/groups.mjs check --workers "$workers"
+          matrix="$(node test/e2e/support/groups.mjs matrix --workers "$workers")"
+
+          echo "workers=$workers" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build-and-ingress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24.x
           cache: npm
@@ -39,26 +82,18 @@ jobs:
             packages/remote-gateway/package-lock.json
             test/e2e/package-lock.json
 
-      - name: Install backend dependencies
-        run: npm ci --prefix packages/backend
+      - name: Install dependencies
+        run: |
+          npm ci --prefix packages/backend
+          npm ci --prefix packages/frontend
+          npm ci --prefix packages/remote-gateway
+          npm ci --prefix test/e2e
 
-      - name: Install frontend dependencies
-        run: npm ci --prefix packages/frontend
-
-      - name: Install remote gateway dependencies
-        run: npm ci --prefix packages/remote-gateway
-
-      - name: Install E2E dependencies
-        run: npm ci --prefix test/e2e
-
-      - name: Build backend
-        run: npm run build --prefix packages/backend
-
-      - name: Build frontend
-        run: npm run build --prefix packages/frontend
-
-      - name: Build remote gateway
-        run: npm run build --prefix packages/remote-gateway
+      - name: Build packages
+        run: |
+          npm run build --prefix packages/backend
+          npm run build --prefix packages/frontend
+          npm run build --prefix packages/remote-gateway
 
       - name: Run production ingress WebAuthn E2E
         shell: bash
@@ -140,21 +175,62 @@ jobs:
             exit 1
           fi
 
-      - name: Install Chromium and system dependencies
-        working-directory: test/e2e
-        run: npx playwright install --with-deps chromium
+  playwright-groups:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v1
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+      options: --ipc=host
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      E2E_GROUP_WORKERS: ${{ needs.prepare.outputs.workers }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: Install remote archive command dependencies
-        run: sudo apt-get update && sudo apt-get install -y zip unzip bzip2
+      - name: Install E2E runtime dependencies
+        run: |
+          npm ci --prefix packages/backend
+          npm ci --prefix packages/frontend
+          npm ci --prefix test/e2e
 
-      - name: Run HTTP, WebSocket, UI, SSH, SFTP, and Mobile E2E
-        run: npm run test:e2e
+      - name: Verify preinstalled Playwright runtime
+        run: |
+          node --version
+          npm --prefix test/e2e exec -- playwright --version
+          test -d "$PLAYWRIGHT_BROWSERS_PATH"
+          command -v zip
+          command -v unzip
+          command -v bzip2
+
+      - name: Generate deterministic group configuration
+        run: |
+          node test/e2e/support/groups.mjs generate --workers "$E2E_GROUP_WORKERS"
+          node test/e2e/support/groups.mjs check --workers "$E2E_GROUP_WORKERS"
+
+      - name: Run E2E group ${{ matrix.group }} of ${{ needs.prepare.outputs.workers }}
+        run: node test/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
+
+      - name: Upload group timings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-timings-group-${{ matrix.group }}
+          path: test/e2e/.tmp/spec-timings-group-${{ matrix.group }}.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload E2E logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-e2e-logs
+          name: playwright-e2e-logs-group-${{ matrix.group }}
           path: test/e2e/logs/
           if-no-files-found: ignore
 
@@ -162,8 +238,82 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-e2e-report
+          name: playwright-e2e-report-group-${{ matrix.group }}
           path: |
             test/e2e/playwright-report/
             test/e2e/test-results/
           if-no-files-found: ignore
+
+  rebalance:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
+    needs: [prepare, build-and-ingress, playwright-groups]
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout triggering branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Download timing artifacts through the Actions API
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_root="test/e2e/.tmp/timing-artifacts"
+          mkdir -p "$artifact_root"
+
+          response="$RUNNER_TEMP/e2e-artifacts.json"
+          curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+            > "$response"
+
+          mapfile -t artifacts < <(jq -r '.artifacts[] | select(.name | startswith("e2e-timings-group-")) | [.id, .name] | @tsv' "$response")
+          if [[ "${#artifacts[@]}" -ne "${{ needs.prepare.outputs.workers }}" ]]; then
+            echo "Expected ${{ needs.prepare.outputs.workers }} timing artifacts, found ${#artifacts[@]}" >&2
+            exit 1
+          fi
+
+          for artifact in "${artifacts[@]}"; do
+            IFS=$'\t' read -r artifact_id artifact_name <<< "$artifact"
+            zip_path="$RUNNER_TEMP/${artifact_name}.zip"
+            target="$artifact_root/$artifact_name"
+            mkdir -p "$target"
+            curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+              > "$zip_path"
+            unzip -q "$zip_path" -d "$target"
+          done
+
+      - name: Update timing history and rebalance default groups
+        run: |
+          node test/e2e/support/groups.mjs update-timings --input-dir test/e2e/.tmp/timing-artifacts
+          node test/e2e/support/groups.mjs generate
+          node test/e2e/support/groups.mjs check
+
+      - name: Commit refreshed E2E timing data
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- test/e2e/groups; then
+            echo "No E2E grouping changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add test/e2e/groups
+          git commit -m "chore(e2e): refresh group timings [skip ci]"
+          if ! git push origin "HEAD:$GITHUB_REF_NAME"; then
+            echo "::warning::E2E timing refresh could not be pushed; a newer branch update may have won the race."
+          fi

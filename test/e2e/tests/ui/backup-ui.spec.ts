@@ -1,5 +1,5 @@
 import { stat } from 'node:fs/promises';
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { slowStep, step } from '../../support/steps';
 

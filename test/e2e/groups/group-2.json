@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "group": 2,
+  "workers": 4,
+  "specs": [
+    "tests/ssh/file-manager-context-menu.spec.ts",
+    "tests/ssh/file-manager-menu-readiness.spec.ts",
+    "tests/ssh/file-manager-navigation.spec.ts",
+    "tests/ssh/file-preview-editor.spec.ts",
+    "tests/ui/captcha-settings.spec.ts",
+    "tests/ui/change-password.spec.ts",
+    "tests/ui/ip-blacklist-settings.spec.ts",
+    "tests/ui/ip-whitelist-settings.spec.ts",
+    "tests/ui/protected-navigation.spec.ts",
+    "tests/ui/session-lifecycle.spec.ts",
+    "tests/ui/ssh-key-management.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
+  ]
+}

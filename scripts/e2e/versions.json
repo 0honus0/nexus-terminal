@@ -1,0 +1,14 @@
+{
+  "node": "24",
+  "playwright": "1.62.1",
+  "runnerRevision": 1,
+  "actions": {
+    "checkout": "v7",
+    "setupNode": "v7",
+    "uploadArtifact": "v7",
+    "setupQemu": "v4",
+    "setupBuildx": "v4",
+    "dockerLogin": "v4",
+    "dockerBuildPush": "v7"
+  }
+}

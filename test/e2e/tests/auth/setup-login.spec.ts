@@ -1,5 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN } from '../../support/auth';
+
+test.use({ e2eDatabaseMode: 'empty' });
 
 test.describe.serial('initial setup and login', () => {
   test('creates the initial administrator and redirects to login', async ({ page, request }) => {

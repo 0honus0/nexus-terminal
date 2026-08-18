@@ -1,0 +1,26 @@
+FROM node:24-bookworm
+
+ARG PLAYWRIGHT_VERSION=1.62.1
+ENV DEBIAN_FRONTEND=noninteractive \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bzip2 \
+        ca-certificates \
+        curl \
+        git \
+        jq \
+        unzip \
+        zip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
+    && rm -rf /root/.npm/_npx \
+    && chmod -R a+rX /ms-playwright
+
+WORKDIR /workspace
+
+LABEL org.opencontainers.image.source="https://github.com/0honus0/nexus-terminal" \
+      org.opencontainers.image.description="Nexus Terminal E2E runner with Node 24 and preinstalled Playwright Chromium" \
+      org.opencontainers.image.licenses="MIT"

@@ -41,7 +41,9 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
-scripts/
+scripts/*
+!scripts/e2e/
+!scripts/e2e/**
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -133,6 +135,7 @@ dist
 /packages/data
 *.db
 *.db
+!/test/e2e/fixtures/seeded-data/nexus-terminal.db
 *.jpg
 /packages/backend/uploads/backgrounds
 /temp_iterm_schemes

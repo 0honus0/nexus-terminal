@@ -40,7 +40,7 @@ import crypto from 'crypto';
 
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
-import { getDb, getDbInstance } from './database/connection';
+import { getDb, getDbInstance, resetDatabaseForE2E, type E2EDatabaseResetMode } from './database/connection';
 import authRouter from './auth/auth.routes';
 import connectionsRouter from './connections/connections.routes';
 import sftpRouter from './sftp/sftp.routes';
@@ -271,12 +271,13 @@ const startServer = () => {
     if (!fs.existsSync(sessionsPath)) {
         fs.mkdirSync(sessionsPath, { recursive: true });
     }
+    const sessionStore = new FileStore({
+        path: sessionsPath,
+        ttl: 30 * 24 * 60 * 60,
+        // logFn: console.log // 可选：启用详细日志
+    });
     const sessionMiddleware = session({
-        store: new FileStore({
-            path: sessionsPath,
-            ttl: 30 * 24 * 60 * 60,
-            // logFn: console.log // 可选：启用详细日志
-        }),
+        store: sessionStore,
         // 直接从 process.env 读取，initializeEnvironment 已确保其存在
         name: process.env.SESSION_COOKIE_NAME || 'nexus.sid',
         secret: process.env.SESSION_SECRET as string,
@@ -289,6 +290,35 @@ const startServer = () => {
             secure: 'auto',
         }
     });
+
+    if (process.env.NODE_ENV === 'test' && process.env.NEXUS_E2E_RESET_ENABLED === '1') {
+        app.post('/api/v1/__e2e/reset', async (req: Request, res: Response) => {
+            const mode = req.body?.mode as E2EDatabaseResetMode | undefined;
+            if (mode !== 'seed' && mode !== 'empty') {
+                res.status(400).json({ message: 'mode must be "seed" or "empty".' });
+                return;
+            }
+
+            try {
+                await resetDatabaseForE2E(mode);
+                if (!sessionStore.clear) {
+                    throw new Error('Session store does not support clear().');
+                }
+                const clearSessions = sessionStore.clear.bind(sessionStore);
+                await new Promise<void>((resolve, reject) => {
+                    clearSessions((error?: unknown) => {
+                        if (error) reject(error);
+                        else resolve();
+                    });
+                });
+                res.status(204).end();
+            } catch (error: any) {
+                console.error('[E2E Reset] Failed to reset isolated test state:', error);
+                res.status(500).json({ message: error?.message || 'E2E reset failed.' });
+            }
+        });
+    }
+
     app.use(sessionMiddleware);
     // --- 结束会话中间件配置 ---
 

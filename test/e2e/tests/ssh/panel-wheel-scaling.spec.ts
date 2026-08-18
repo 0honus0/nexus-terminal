@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Locator } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,

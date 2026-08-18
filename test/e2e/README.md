@@ -15,7 +15,7 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 - `support/` — shared E2E helpers, test credentials, the test SSH server, and the mirrored log reporter.
 - `logs/` — generated per-test logs. Its directory structure mirrors `tests/` and it is ignored by Git.
 
-The Playwright projects are ordered with dependencies: `auth` runs first, and `http`, `websocket`, `ui`, `ssh`, and `mobile` depend on it. This guarantees that a clean E2E database is initialized through the real first-run setup flow before dependent tests execute.
+The main E2E projects do not depend on `auth` to create shared state. Normal specs start from the committed seeded database, while the first-run setup regression explicitly requests an empty database. This keeps project and spec scheduling independent from first-run setup order.
 
 The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `test/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
 
@@ -30,7 +30,7 @@ tests/ssh/file-manager-context-menu.spec.ts
 logs/ssh/file-manager-context-menu/verifies file manager right-click actions over real SFTP.log
 ```
 
-The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. GitHub Actions uploads `test/e2e/logs/` as the `playwright-e2e-logs` artifact on every run.
+The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Grouped GitHub Actions runs upload one log artifact per group (`playwright-e2e-logs-group-N`).
 
 On GitHub Actions, the mirrored reporter also prints concise live progress to the job log: test start/end, explicit `test.step(...)` start/result, retry number, and duration. Set `E2E_CONSOLE_LOGS=1` to enable the same console output locally without changing the full per-test log files.
 
@@ -39,6 +39,11 @@ On GitHub Actions, the mirrored reporter also prints concise live progress to th
 From the repository root:
 
 ```bash
+npm run test:e2e:seed
+npm run test:e2e:groups:generate -- --workers 4
+npm run test:e2e:groups:check -- --workers 4
+npm run test:e2e:groups:matrix -- --workers 4
+npm run test:e2e:group -- --workers 4 --group 1
 npm run test:e2e
 npm run test:e2e:auth
 npm run test:e2e:http
@@ -49,6 +54,52 @@ npm run test:e2e:mobile
 npm run test:e2e:list
 npm --prefix test/e2e run test:docs
 ```
+
+Full browser E2E validation is expected to run in GitHub Actions. Local commands remain useful for listing tests, refreshing the seed, and focused development checks, but a change that requires complete E2E validation should use the Actions environment where Chromium and its system dependencies are installed consistently.
+
+## Parallel groups
+
+`test/e2e/groups/settings.json` defines the default number of CI group workers. `workers` means independent GitHub Actions runners, not Playwright workers inside one process. Each group still runs Playwright with `workers: 1`; the parallelism comes from running multiple isolated group jobs at the same time.
+
+Generating groups with another worker count creates exactly that many `group-N.json` files:
+
+```bash
+npm run test:e2e:groups:generate -- --workers 3
+npm run test:e2e:groups:check -- --workers 3
+```
+
+The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families such as SSH file-manager, transfer, progress, terminal, connection, and UI security/settings/data. Related specs are kept together when doing so does not create an excessive load imbalance.
+
+`test/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful push run merges them back into the history. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
+
+Rebalancing is intentionally sticky. Existing assignments are retained unless the predicted longest-group improvement reaches the configured percentage threshold or the current longest/shortest gap exceeds the configured duration threshold. With identical specs and timing history, generation is deterministic and produces byte-for-byte stable group files.
+
+The `E2E` workflow accepts an optional `workers` value when manually dispatched. A manual override is ephemeral: each matrix job deterministically generates the requested number of groups from the committed timing history without changing the repository's default. To permanently change the default, update `groups/settings.json`, regenerate the groups, and commit them.
+
+The group generator accepts up to one worker per discovered spec. GitHub-hosted runner concurrency is account-plan scoped, so requesting more workers than the account can run concurrently causes excess group jobs to queue rather than increasing effective parallelism. Keep the repository default conservative unless measured CI results justify a higher value.
+
+Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v1`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
+
+On successful `push` runs, the workflow collects all group timing artifacts, refreshes the rolling history, reruns the default grouping algorithm, and commits the updated `test/e2e/groups/` state back to the triggering branch when it changed. Pull requests and manual worker overrides never write grouping state back to the branch.
+
+## Test environment maintenance
+
+The repository keeps E2E/CI runtime versions in `scripts/e2e/versions.json`. Use the root-level maintenance scripts instead of editing the runner image and workflows independently:
+
+```bash
+# Resolve current upstream stable versions and synchronize the repository.
+npm run test:e2e:env:latest
+
+# Re-apply the already recorded versions without contacting upstream version sources.
+npm run test:e2e:env:sync
+
+# Build and smoke-check the configured image locally; add --push after GHCR login.
+npm run test:e2e:runner:build
+```
+
+`resolve-latest-test-environment.mjs` resolves the latest Node LTS major from the official Node.js release index, the latest stable `@playwright/test` version from npm, and the latest stable release major for the configured official GitHub/Docker actions. `sync-test-environment.mjs` then pins Playwright to that exact version, refreshes the E2E lockfile, synchronizes Node versions used by CI, updates the runner Dockerfile and GHCR image tag, and normalizes those action majors across workflows. OS-level browser dependencies and archive utilities are refreshed naturally when the runner image is rebuilt from its current Debian base.
+
+`.github/workflows/update-e2e-environment.yml` runs this process automatically every Monday and may also be triggered manually with no version inputs. It only builds and pushes a new runner when upstream versions changed; then it pushes `chore/e2e-test-environment`, waits for the full branch E2E workflow to pass, and creates or updates a pull request. The `E2E Runner Image` workflow calls the same root-level build script, so local and CI image construction use one implementation.
 
 `test:docs` is reserved for user-facing feature presentation. It exports full-interface screenshots to `doc/imgs/e2e/`; `.github/workflows/update-functional-screenshots.yml` also uploads them as an Actions artifact and commits refreshed images back to the triggering branch.
 
@@ -76,19 +127,39 @@ The suite intentionally keeps regression tests for previously fixed production i
 - TOTP 2FA setup, login gating, verification, and disable lifecycle;
 - connection update/clone/delete with preserved encrypted credentials and tag associations;
 
-Install the browser once when needed:
+For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:
 
 ```bash
 npm --prefix test/e2e ci
 npm --prefix test/e2e exec -- playwright install chromium
 ```
 
-On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. GitHub Actions performs this automatically.
+On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. Do not treat the AgentDock host as the canonical full-E2E environment; GitHub Actions uses the prebuilt E2E runner image and is the required environment for complete browser E2E evidence.
 
-## Isolation
+## Spec reset baseline
 
 Each run uses `test/e2e/.tmp/backend-data` through `NEXUS_DATA_DIR`. The backend database, generated environment data, and file-backed sessions therefore never touch `packages/backend/data`.
+
+Normal E2E specs use `test/e2e/fixtures/seeded-data/nexus-terminal.db` as their known baseline. The backend exposes the E2E reset endpoint only when both `NODE_ENV=test` and `NEXUS_E2E_RESET_ENABLED=1` are set. At a spec boundary the E2E fixture restores the database, clears file-backed sessions, and resets the isolated SSH test server state. The first-run setup spec uses an empty database instead of the seed.
 
 Vite also uses an E2E-specific cache directory so local dependency-cache permissions do not affect the test server.
 
 Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches, and test-installed `node_modules` are ignored by Git.
+
+## E2E constraints
+
+These rules are part of the test contract and must be preserved when adding, moving, grouping, or optimizing E2E coverage:
+
+- **Every spec must be independently runnable.** A spec must pass when invoked by itself from its declared baseline. It must never require another spec or project to have executed first.
+- **Normal specs start from the seed.** Authentication helpers for normal tests may log in to the seeded administrator, but must not silently create the initial administrator. First-run setup coverage is the explicit exception and must use an empty database.
+- **A spec file is the smallest scheduling unit.** Grouping and load balancing may move whole `*.spec.ts` files between execution groups, but must never split individual tests from one spec across groups.
+- **Business structure and execution grouping are separate.** Tests stay organized under `tests/auth`, `tests/http`, `tests/websocket`, `tests/ui`, `tests/ssh`, and `tests/mobile` according to product behavior. Do not move test files merely to balance CI runtime; group configuration owns execution placement.
+- **Intra-spec serial behavior is allowed only when intentional.** `test.describe.serial(...)` may be used for steps that deliberately share state inside one spec, but no serial relationship may cross a spec boundary.
+- **Do not rely on previous cleanup for correctness.** A test may clean up resources it creates, but the next spec must still be correct if the previous spec failed before its cleanup. The spec reset baseline is the source of isolation.
+- **Reset every shared E2E surface that can leak state.** This includes the SQLite database, file-backed sessions, SSH/SFTP filesystem fixtures, SSH online/offline state, artificial SFTP write delay, archive execution delay/hold flags, and any future shared test-server controls.
+- **Keep the seed reproducible.** Refresh the committed seed through `npm run test:e2e:seed`; do not hand-edit the SQLite file. The seed may contain deterministic test-only credentials and baseline data, but must not contain production secrets, user data, runtime sessions, or machine-specific state.
+- **New specs must be covered exactly once by grouping.** Group validation must reject missing specs, duplicate assignments, and stale paths. Deleted or renamed specs must be removed or reassigned deterministically.
+- **Group generation must be deterministic.** With identical spec inputs and identical timing data, regeneration must produce byte-for-byte stable group configuration. Sort/tie-break by stable keys such as normalized spec path and group id rather than filesystem enumeration order.
+- **Timing noise must not cause constant reshuffling.** Rebalancing should use stabilized historical durations (for example a recent median) and should retain the existing placement when the predicted improvement is insignificant. Prefer understandable affinity between related specs over shaving a negligible amount of runtime.
+- **Rebalancing must not change test semantics.** Timing data controls only which group owns a whole spec. It must never introduce a prerequisite, change the seed mode, alter test data, or change execution behavior inside the spec.
+- **Complete E2E runs belong in GitHub Actions.** When browser E2E evidence is required for a change, run it through the repository Actions workflow instead of depending on the local AgentDock host browser libraries.

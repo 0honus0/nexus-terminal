@@ -10,4 +10,14 @@ const resolvedDataDir = path.resolve(dataDir);
 fs.rmSync(resolvedDataDir, { recursive: true, force: true });
 fs.mkdirSync(resolvedDataDir, { recursive: true });
 
+const seedDb = process.env.NEXUS_E2E_SEED_DB;
+if (seedDb) {
+  const resolvedSeedDb = path.resolve(seedDb);
+  if (!fs.existsSync(resolvedSeedDb)) {
+    throw new Error(`NEXUS_E2E_SEED_DB does not exist: ${resolvedSeedDb}`);
+  }
+  fs.copyFileSync(resolvedSeedDb, path.join(resolvedDataDir, 'nexus-terminal.db'));
+  console.log(`[E2E] Copied seeded database: ${resolvedSeedDb}`);
+}
+
 console.log(`[E2E] Prepared isolated backend data directory: ${resolvedDataDir}`);

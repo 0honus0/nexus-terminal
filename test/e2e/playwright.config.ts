@@ -4,6 +4,12 @@ import path from "node:path";
 const e2eRoot = __dirname;
 const repoRoot = path.resolve(e2eRoot, "../..");
 const testDataDir = path.join(e2eRoot, ".tmp", "backend-data");
+const seedDbPath = path.join(
+  e2eRoot,
+  "fixtures",
+  "seeded-data",
+  "nexus-terminal.db",
+);
 const prepareTestDataScript = path.join(
   e2eRoot,
   "support",
@@ -19,6 +25,8 @@ const backendEnv: Record<string, string> = {
   NODE_ENV: "test",
   PORT: "3001",
   NEXUS_DATA_DIR: testDataDir,
+  NEXUS_E2E_RESET_ENABLED: "1",
+  NEXUS_E2E_SEED_DB: seedDbPath,
   SESSION_COOKIE_NAME: "nexus.e2e.sid",
   SESSION_SECRET:
     "e2e-session-secret-do-not-use-outside-tests-000000000000000000000000",
@@ -61,30 +69,25 @@ export default defineConfig({
     {
       name: "http",
       testMatch: /http\/.*\.spec\.ts/,
-      dependencies: ["auth"],
     },
     {
       name: "websocket",
       testMatch: /websocket\/.*\.spec\.ts/,
-      dependencies: ["auth"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "ui",
       testMatch: /ui\/.*\.spec\.ts/,
-      dependencies: ["auth"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "ssh",
       testMatch: /ssh\/.*\.spec\.ts/,
-      dependencies: ["auth"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "mobile",
       testMatch: /mobile\/.*\.spec\.ts/,
-      dependencies: ["auth"],
       use: { ...devices["Pixel 7"] },
     },
   ],
