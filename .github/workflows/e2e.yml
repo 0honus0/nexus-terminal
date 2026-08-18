@@ -217,7 +217,7 @@ jobs:
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   build-image:
-    name: Build unified image
+    name: Docker deployment smoke
     needs: [environment, runner-image]
     if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
@@ -247,8 +247,13 @@ jobs:
           context: .
           file: Dockerfile
           push: false
+          load: true
+          tags: nexus-terminal:e2e-smoke
           cache-from: type=gha,scope=unified-image
           cache-to: type=gha,mode=max,scope=unified-image
+
+      - name: Run Docker deployment smoke
+        run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke
 
   build-and-ingress:
     needs: [environment, runner-image]

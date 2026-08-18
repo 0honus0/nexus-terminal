@@ -101,6 +101,8 @@ npm run test:e2e:runner:build
 
 `.github/workflows/e2e.yml` starts every run by checking the latest stable test environment. On the default branch it applies available updates in-memory, builds and pushes the corresponding E2E runner image before any E2E jobs start, and passes the same environment patch to the build and test jobs. Pull requests and non-default branches check latest versions but are never rewritten automatically. A weekly schedule keeps this check active even when no source change triggers E2E.
 
+The same workflow validates both deployment modes without duplicating the full suite. The raw test environment runs the complete grouped Playwright suite. In parallel, `Docker deployment smoke` builds the final unified `Dockerfile` image with `load: true`, starts its `backend`, `remote-gateway`, and `frontend` roles on an isolated Docker network with a temporary seeded data directory, then verifies the frontend, proxied status API, WebAuthn ingress, authenticated login, remote-gateway API reachability, and an authenticated WebSocket upgrade through Nginx. This keeps container packaging and production-style proxy wiring covered while avoiding a second copy of all functional E2E cases.
+
 `test:docs` is reserved for user-facing feature presentation. It exports full-interface screenshots to `doc/imgs/e2e/`. When the runner image changed and all unified-image, ingress, and grouped E2E jobs succeed, the E2E workflow regenerates those screenshots and commits the environment plus screenshot refresh together.
 
 The production ingress suite is run separately because it targets a real Nginx endpoint rather than the Vite development server. Set `NEXUS_PRODUCTION_BASE_URL` to the prepared ingress URL and run:
