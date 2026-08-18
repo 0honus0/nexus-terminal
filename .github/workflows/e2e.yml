@@ -3,22 +3,33 @@ name: E2E
 on:
   push:
     paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker/**"
       - "packages/backend/**"
       - "packages/frontend/**"
       - "packages/remote-gateway/**"
       - "test/e2e/**"
       - "scripts/e2e/**"
+      - "build.sh"
       - "package.json"
       - ".github/workflows/e2e.yml"
   pull_request:
     paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "docker/**"
       - "packages/backend/**"
       - "packages/frontend/**"
       - "packages/remote-gateway/**"
       - "test/e2e/**"
       - "scripts/e2e/**"
+      - "build.sh"
       - "package.json"
       - ".github/workflows/e2e.yml"
+  schedule:
+    # Weekly latest test-environment check plus a full E2E run.
+    - cron: "17 3 * * 1"
   workflow_dispatch:
     inputs:
       workers:
@@ -35,8 +46,132 @@ concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
+
 jobs:
+  environment:
+    name: Update E2E environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.state.outputs.changed }}
+      runner_image: ${{ steps.state.outputs.runner_image }}
+      node_version: ${{ steps.state.outputs.node_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up current Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+
+      - name: Resolve latest stable E2E environment
+        id: state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          can_update=false
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]]; then
+            can_update=true
+          fi
+
+          if [[ "$can_update" == "true" ]]; then
+            npm run test:e2e:env:latest
+          else
+            latest="$RUNNER_TEMP/latest-e2e-environment.json"
+            node scripts/e2e/resolve-latest-test-environment.mjs > "$latest"
+            if ! cmp -s scripts/e2e/versions.json "$latest"; then
+              echo "::notice::A newer E2E environment is available; only the default branch applies automatic environment updates."
+              {
+                echo "## Newer E2E environment available"
+                echo
+                echo "This run checks latest versions but does not rewrite a PR or non-default branch."
+                echo
+                echo '```json'
+                cat "$latest"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          changed=false
+          if [[ "$can_update" == "true" ]] && ! git diff --quiet; then
+            changed=true
+            git diff --binary > "$RUNNER_TEMP/e2e-environment.patch"
+          fi
+
+          node_version="$(node -p "require('./scripts/e2e/versions.json').node")"
+          tag="$(node -e 'const v=require("./scripts/e2e/versions.json"); process.stdout.write(`playwright-${v.playwright}-node${v.node}-v${v.runnerRevision}`)')"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "node_version=$node_version" >> "$GITHUB_OUTPUT"
+          echo "runner_image=ghcr.io/${owner}/nexus-terminal-e2e-runner:${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate synchronized environment
+        if: steps.state.outputs.changed == 'true'
+        run: |
+          node --check scripts/e2e/resolve-latest-test-environment.mjs
+          node --check scripts/e2e/sync-test-environment.mjs
+          bash -n scripts/e2e/build-runner-image.sh
+          npm run test:e2e:groups:check
+          git diff --check
+
+      - name: Upload E2E environment patch
+        if: steps.state.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  runner-image:
+    name: Build E2E runner image
+    needs: environment
+    if: ${{ needs.environment.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download E2E environment patch
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
+
+      - name: Set up target Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.environment.outputs.node_version }}.x
+
+      - name: Log in to GHCR
+        shell: bash
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build, smoke-check, and push E2E runner image
+        run: scripts/e2e/build-runner-image.sh --push --image "$E2E_RUNNER_REPOSITORY"
+
   prepare:
+    needs: [environment, runner-image]
+    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       workers: ${{ steps.groups.outputs.workers }}
@@ -44,6 +179,23 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Download E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
+
+      - name: Set up target Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ needs.environment.outputs.node_version }}.x
 
       - name: Resolve and validate E2E groups
         id: groups
@@ -64,17 +216,65 @@ jobs:
           echo "workers=$workers" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
-  build-and-ingress:
+  build-image:
+    name: Build unified image
+    needs: [environment, runner-image]
+    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
+      - name: Download E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build unified image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          cache-from: type=gha,scope=unified-image
+          cache-to: type=gha,mode=max,scope=unified-image
+
+  build-and-ingress:
+    needs: [environment, runner-image]
+    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
+
+      - name: Set up target Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24.x
+          node-version: ${{ needs.environment.outputs.node_version }}.x
           cache: npm
           cache-dependency-path: |
             packages/backend/package-lock.json
@@ -176,11 +376,12 @@ jobs:
           fi
 
   playwright-groups:
-    needs: prepare
+    needs: [environment, runner-image, prepare]
+    if: ${{ always() && needs.environment.result == 'success' && needs.prepare.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
-      image: ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v1
+      image: ${{ needs.environment.outputs.runner_image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ github.token }}
@@ -193,6 +394,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Download E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
       - name: Install E2E runtime dependencies
         shell: bash
@@ -266,9 +479,84 @@ jobs:
             test/e2e/test-results/
           if-no-files-found: ignore
 
+  screenshots:
+    name: Refresh functional screenshots
+    needs: [environment, runner-image, build-image, build-and-ingress, playwright-groups]
+    if: ${{ always() && needs.environment.outputs.changed == 'true' && needs.environment.result == 'success' && needs.runner-image.result == 'success' && needs.build-image.result == 'success' && needs.build-and-ingress.result == 'success' && needs.playwright-groups.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ${{ needs.environment.outputs.runner_image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+      options: --ipc=host
+    steps:
+      - name: Checkout triggering branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Download E2E environment patch
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
+
+      - name: Install screenshot runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm ci --prefix packages/backend &
+          backend_pid=$!
+          npm ci --prefix packages/frontend &
+          frontend_pid=$!
+          npm ci --prefix test/e2e &
+          e2e_pid=$!
+
+          failed=0
+          wait "$backend_pid" || failed=1
+          wait "$frontend_pid" || failed=1
+          wait "$e2e_pid" || failed=1
+          exit "$failed"
+
+      - name: Generate functional screenshots
+        run: npm --prefix test/e2e run test:docs
+
+      - name: Upload generated screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexus-functional-screenshots
+          path: doc/imgs/e2e/*.png
+          if-no-files-found: error
+
+      - name: Commit environment and screenshot refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "E2E environment and functional screenshots are already up to date." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git commit -m "chore(e2e): refresh test environment and screenshots [skip ci]"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
   rebalance:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
-    needs: [prepare, build-and-ingress, playwright-groups]
+    needs: [environment, runner-image, prepare, build-image, build-and-ingress, playwright-groups, screenshots]
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.build-image.result == 'success' && needs.build-and-ingress.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots.result == 'success' || needs.screenshots.result == 'skipped') }}
     permissions:
       actions: read
       contents: write

@@ -53,12 +53,13 @@ async function latestReleaseMajor(repo, token) {
 const current = JSON.parse(fs.readFileSync(versionsPath, 'utf8'));
 const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
 
-const [node, playwright, checkout, setupNode, uploadArtifact, setupQemu, setupBuildx, dockerLogin, dockerBuildPush] = await Promise.all([
+const [node, playwright, checkout, setupNode, uploadArtifact, downloadArtifact, setupQemu, setupBuildx, dockerLogin, dockerBuildPush] = await Promise.all([
   latestNodeLtsMajor(),
   Promise.resolve(latestPlaywrightVersion()),
   latestReleaseMajor('actions/checkout', token),
   latestReleaseMajor('actions/setup-node', token),
   latestReleaseMajor('actions/upload-artifact', token),
+  latestReleaseMajor('actions/download-artifact', token),
   latestReleaseMajor('docker/setup-qemu-action', token),
   latestReleaseMajor('docker/setup-buildx-action', token),
   latestReleaseMajor('docker/login-action', token),
@@ -73,6 +74,7 @@ const resolved = {
     checkout,
     setupNode,
     uploadArtifact,
+    downloadArtifact,
     setupQemu,
     setupBuildx,
     dockerLogin,

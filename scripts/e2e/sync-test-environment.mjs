@@ -61,6 +61,7 @@ function syncActionVersions(actions) {
     ['actions/checkout', actions.checkout],
     ['actions/setup-node', actions.setupNode],
     ['actions/upload-artifact', actions.uploadArtifact],
+    ['actions/download-artifact', actions.downloadArtifact],
     ['docker/setup-qemu-action', actions.setupQemu],
     ['docker/setup-buildx-action', actions.setupBuildx],
     ['docker/login-action', actions.dockerLogin],
@@ -84,8 +85,8 @@ function syncNodeVersions(nodeVersion) {
     const file = `.github/workflows/${name}`;
     const absolute = path.join(repoRoot, file);
     const content = fs.readFileSync(absolute, 'utf8');
-    if (!/node-version:\s*[^\n]+/.test(content)) continue;
-    replaceAllRequired(file, /node-version:\s*[^\n]+/g, `node-version: ${nodeVersion}.x`, 'node-version');
+    if (!/node-version:\s*\d+(?:\.x)?/.test(content)) continue;
+    replaceAllRequired(file, /node-version:\s*\d+(?:\.x)?/g, `node-version: ${nodeVersion}.x`, 'node-version');
   }
 }
 
@@ -111,12 +112,6 @@ function syncRunnerFiles(config) {
   replaceRequired('test/e2e/Dockerfile.runner', /^ARG PLAYWRIGHT_VERSION=[^\n]+/m, `ARG PLAYWRIGHT_VERSION=${config.playwright}`, 'runner Playwright arg');
 
   replaceRequired(
-    '.github/workflows/e2e.yml',
-    /image:\s*ghcr\.io\/0honus0\/nexus-terminal-e2e-runner:[^\s]+/,
-    `image: ghcr.io/0honus0/nexus-terminal-e2e-runner:${tag}`,
-    'E2E runner image',
-  );
-  replaceRequired(
     'test/e2e/README.md',
     /ghcr\.io\/0honus0\/nexus-terminal-e2e-runner:playwright-[^`\s]+/,
     `ghcr.io/0honus0/nexus-terminal-e2e-runner:${tag}`,
@@ -135,6 +130,7 @@ const actionArgMap = {
   checkout: 'checkout',
   'setup-node': 'setupNode',
   'upload-artifact': 'uploadArtifact',
+  'download-artifact': 'downloadArtifact',
   'setup-qemu': 'setupQemu',
   'setup-buildx': 'setupBuildx',
   'docker-login': 'dockerLogin',
