@@ -12,6 +12,7 @@ const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
 const rootDir = path.join(e2eRoot, '.tmp', 'ssh-root');
 const archiveExecHoldPath = path.join(e2eRoot, '.tmp', 'archive-exec-hold.flag');
+const archivePreflightHoldPath = path.join(e2eRoot, '.tmp', 'archive-preflight-hold.flag');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
 const {
   Server,
@@ -539,13 +540,17 @@ function runRemoteCommand(command, stream) {
 
   const executableCommand = remapArchiveExecWorkingDirectory(command);
   const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
+  const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(String(command).trim());
+  const preflightHoldPrefix = isArchivePreflightCommand
+    ? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
+    : '';
   const holdPrefix = isArchiveCommand
     ? `while [ -f ${JSON.stringify(archiveExecHoldPath)} ]; do sleep 0.05; done; `
     : '';
   const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand
     ? `sleep ${archiveExecDelayMs / 1000}; `
     : '';
-  const delayedCommand = `${holdPrefix}${delayPrefix}${executableCommand}`;
+  const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
   const child = spawn('/bin/sh', ['-lc', delayedCommand], {
     cwd: rootDir,
     env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
@@ -655,6 +660,8 @@ const controlServer = http.createServer(async (req, res) => {
       await stopSshServer();
       sftpWriteDelayMs = 0;
       archiveExecDelayMs = 0;
+      await fsp.rm(archiveExecHoldPath, { force: true });
+      await fsp.rm(archivePreflightHoldPath, { force: true });
       await resetRoot();
       await startSshServer();
       res.writeHead(204);
@@ -694,6 +701,15 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ archiveExecDelayMs }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/archive/preflight-hold') {
+      const enabled = ['1', 'true', 'yes'].includes(String(requestUrl.searchParams.get('enabled') || '').toLowerCase());
+      await fsp.mkdir(path.dirname(archivePreflightHoldPath), { recursive: true });
+      if (enabled) await fsp.writeFile(archivePreflightHoldPath, 'hold\n', 'utf8');
+      else await fsp.rm(archivePreflightHoldPath, { force: true });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ enabled }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-hold') {

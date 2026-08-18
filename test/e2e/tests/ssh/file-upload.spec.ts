@@ -349,3 +349,51 @@ test('cancelled upload stays cancelled when the browser transport drops during a
     await cdp.detach();
   }
 });
+
+
+test('cancelled upload cannot be resurrected by a rejected binary send that was already waiting on backpressure', async ({ page, context }) => {
+  await page.addInitScript(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'bufferedAmount');
+    if (!descriptor?.get || descriptor.configurable === false) return;
+    Object.defineProperty(WebSocket.prototype, 'bufferedAmount', {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      get() {
+        const socket = this as WebSocket;
+        if ((globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ && socket.readyState === WebSocket.OPEN) {
+          socket.close(4000, 'e2e buffered send rejection');
+        }
+        if ((globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__) return 64 * 1024 * 1024;
+        return descriptor.get!.call(socket);
+      },
+    });
+  });
+  await openFileManager(page, context);
+  const filename = 'cancelled-inflight-send.bin';
+
+  await page.evaluate(() => { (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = true; });
+  try {
+    await dragLocalFiles(page, [{ name: filename, size: 4 * 1024 * 1024, fill: 0x5e }]);
+    const popup = page.getByTestId('file-upload-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await expect(popup).toContainText(filename);
+    await page.waitForTimeout(250);
+
+    await popup.getByTestId('file-upload-cancel').click();
+    await page.evaluate(() => { (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = true; });
+
+    // cancelUpload schedules removal after three seconds. A stale pump catch must not
+    // overwrite cancelled with paused/error and keep a ghost task alive.
+    await page.waitForTimeout(3_500);
+    await expect(popup).toBeHidden();
+    const response = await fetch(`${E2E_SSH.controlUrl}/files`);
+    expect(response.ok).toBeTruthy();
+    const body = await response.json() as { files: string[] };
+    expect(body.files).not.toContain(filename);
+  } finally {
+    await page.evaluate(() => {
+      (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = false;
+      (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = false;
+    }).catch(() => {});
+  }
+});

@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Locator } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Locator, type Page, type Route } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
@@ -48,6 +48,64 @@ const readScale = async (target: Locator, attribute: 'data-row-scale' | 'data-st
   const value = await target.getAttribute(attribute);
   return Number(value);
 };
+
+
+async function holdFirstSettingsResponse(page: Page, key: string): Promise<{
+  firstStarted: Promise<void>;
+  secondStarted: Promise<void>;
+  releaseFirst: () => void;
+  dispose: () => Promise<void>;
+}> {
+  let firstStartedResolve!: () => void;
+  let secondStartedResolve!: () => void;
+  let releaseFirstResolve!: () => void;
+  const firstStarted = new Promise<void>((resolve) => { firstStartedResolve = resolve; });
+  const secondStarted = new Promise<void>((resolve) => { secondStartedResolve = resolve; });
+  const releaseFirstPromise = new Promise<void>((resolve) => { releaseFirstResolve = resolve; });
+  let matchingRequestCount = 0;
+
+  const handler = async (route: Route) => {
+    const request = route.request();
+    if (request.method() !== 'PUT') {
+      await route.continue();
+      return;
+    }
+    let body: Record<string, unknown> = {};
+    try {
+      body = request.postDataJSON() as Record<string, unknown>;
+    } catch {
+      await route.continue();
+      return;
+    }
+    if (!(key in body)) {
+      await route.continue();
+      return;
+    }
+
+    matchingRequestCount += 1;
+    if (matchingRequestCount === 1) {
+      const backendResponse = await route.fetch();
+      firstStartedResolve();
+      await releaseFirstPromise;
+      await route.fulfill({ response: backendResponse });
+      return;
+    }
+
+    if (matchingRequestCount === 2) secondStartedResolve();
+    await route.continue();
+  };
+
+  await page.route('**/api/v1/settings', handler);
+  return {
+    firstStarted,
+    secondStarted,
+    releaseFirst: () => releaseFirstResolve(),
+    dispose: async () => {
+      releaseFirstResolve();
+      await page.unroute('**/api/v1/settings', handler);
+    },
+  };
+}
 
 test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
@@ -181,4 +239,95 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
   await ctrlWheel(list, 1);
   await page.waitForTimeout(100);
   expect(await readScale(list, 'data-row-scale')).toBe(0.64);
+});
+
+
+test('latest panel scale wins even when an older settings response arrives last', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const settings = await context.request.put('/api/v1/settings', {
+    data: {
+      fileManagerRowSizeMultiplier: '1.0',
+      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
+      quickCommandRowSizeMultiplier: '1.0',
+      statusMonitorScale: '1.0',
+      showQuickCommandTags: 'false',
+    },
+  });
+  expect(settings.ok()).toBeTruthy();
+  await page.addInitScript(() => localStorage.removeItem('nexus_quickCommandRowSizeMultiplier'));
+  await resetTestSshFilesystem();
+  const quickCommandId = await recreateQuickCommand(context.request);
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  await step('Quick Commands ignores the late response from the older scale save', async () => {
+    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+    const list = quickView.locator('.quick-command-list');
+    await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
+    await expect(list).toHaveAttribute('data-row-scale', '1.00');
+
+    const race = await holdFirstSettingsResponse(page, 'quickCommandRowSizeMultiplier');
+    try {
+      await ctrlWheel(list, 100);
+      await race.firstStarted;
+      const firstScale = await readScale(list, 'data-row-scale');
+      await ctrlWheel(list, 100);
+      const latestScale = await readScale(list, 'data-row-scale');
+      expect(latestScale).toBeLessThan(firstScale);
+      await race.secondStarted;
+      await page.waitForTimeout(80);
+      race.releaseFirst();
+      await page.waitForTimeout(120);
+      expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
+    } finally {
+      await race.dispose();
+    }
+  });
+
+  await step('Status Monitor ignores the late response from the older scale save', async () => {
+    const monitor = page.getByTestId('status-monitor').filter({ visible: true }).first();
+    await expect(monitor).toBeVisible();
+    await expect(monitor).toHaveAttribute('data-status-scale', '1.00');
+
+    const race = await holdFirstSettingsResponse(page, 'statusMonitorScale');
+    try {
+      await ctrlWheel(monitor, -100);
+      await race.firstStarted;
+      const firstScale = await readScale(monitor, 'data-status-scale');
+      await ctrlWheel(monitor, -100);
+      const latestScale = await readScale(monitor, 'data-status-scale');
+      expect(latestScale).toBeGreaterThan(firstScale);
+      await race.secondStarted;
+      await page.waitForTimeout(80);
+      race.releaseFirst();
+      await page.waitForTimeout(120);
+      expect(await readScale(monitor, 'data-status-scale')).toBe(latestScale);
+    } finally {
+      await race.dispose();
+    }
+  });
+
+  await slowStep('File Manager ignores the late response from the older row-scale save', async () => {
+    await openConnectedFileManager(page);
+    const list = activeFileManagerList(page);
+    await expect(list).toHaveAttribute('data-row-scale', '1.00');
+
+    const race = await holdFirstSettingsResponse(page, 'fileManagerRowSizeMultiplier');
+    try {
+      await ctrlWheel(list, 100);
+      await race.firstStarted;
+      const firstScale = await readScale(list, 'data-row-scale');
+      await ctrlWheel(list, 100);
+      const latestScale = await readScale(list, 'data-row-scale');
+      expect(latestScale).toBeLessThan(firstScale);
+      await race.secondStarted;
+      await page.waitForTimeout(80);
+      race.releaseFirst();
+      await page.waitForTimeout(120);
+      expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
+    } finally {
+      await race.dispose();
+    }
+  });
 });

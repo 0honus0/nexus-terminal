@@ -342,3 +342,88 @@ test('closing and reopening the file manager preserves an in-flight archive task
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
   }
 });
+
+
+test('a sidebar FileManager can unmount without orphaning its hidden archive task', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
+  expect(originalSidebarResponse.ok()).toBeTruthy();
+  const originalSidebar = await originalSidebarResponse.json() as { left: string[]; right: string[] };
+
+  const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
+    data: { left: originalSidebar.left, right: ['fileManager'] },
+  });
+  expect(sidebarResponse.ok()).toBeTruthy();
+  await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=3000`, { method: 'POST' });
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const sidebarToggle = page.getByTestId('sidebar-pane-fileManager');
+    await sidebarToggle.click();
+    const sidebar = page.getByTestId('right-sidebar-panel');
+    const sidebarList = sidebar.getByTestId('file-manager-list');
+    await expect(sidebarList).toBeVisible();
+    const source = sidebarList.locator('tr[data-filename="archive-source.txt"]');
+    await expect(source).toBeVisible({ timeout: 20_000 });
+
+    await source.click({ button: 'right' });
+    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    await compress.hover();
+    await page.getByText('Compress to zip', { exact: true }).click();
+
+    const popup = page.getByTestId('archive-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await popup.getByTestId('archive-progress-hide').click();
+    await expect(popup).toBeHidden();
+
+    // This closes the sidebar's v-if component, unlike the modal FileManager's v-show close.
+    await sidebarToggle.click();
+    await expect(sidebarList).toHaveCount(0);
+
+    const modal = await openProgressDisplay(page);
+    const task = hiddenTask(modal, 'archive-source.zip');
+    await expect(task).toBeVisible();
+    await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
+    await task.getByTestId('hidden-progress-cancel').click();
+    await expect(task).toBeHidden({ timeout: 10_000 });
+    await closeProgressDisplay(modal);
+    await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 8_000 }).toBe(false);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+    await context.request.put('/api/v1/settings/sidebar', { data: originalSidebar });
+  }
+});
+
+test('archive cancellation remains authoritative while command preflight is stalled beyond the old marker TTL', async ({ page, context }) => {
+  await openFileManager(page, context);
+  await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
+
+  try {
+    await rightClickRow(page, 'archive-source.txt');
+    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    await compress.hover();
+    await page.getByText('Compress to zip', { exact: true }).click();
+
+    const popup = page.getByTestId('archive-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await popup.locator('.stop-button').click();
+    await expect(popup).toBeHidden({ timeout: 10_000 });
+
+    // The production cancellation marker currently expires after 30 seconds. A stalled
+    // preflight must not be allowed to "forget" the user's cancellation after that TTL.
+    await page.waitForTimeout(31_500);
+    await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
+    await page.waitForTimeout(4_000);
+
+    expect(await remoteFileExists('archive-source.zip')).toBe(false);
+    const commandsResponse = await fetch(`${E2E_SSH.controlUrl}/commands`);
+    expect(commandsResponse.ok).toBeTruthy();
+    const commandsBody = await commandsResponse.json() as { commands: string[] };
+    expect(commandsBody.commands.some(command => command.includes('__NEXUS_ARCHIVE_TOTAL__:'))).toBe(false);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
+  }
+});
