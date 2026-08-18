@@ -254,6 +254,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { clampScale, createWheelScaleResolver } from '../utils/wheelScale';
+import { createLatestValueSaver } from '../utils/latestValueSaver';
 
 interface ServerStatus {
   cpuPercent?: number;
@@ -303,8 +304,12 @@ const resolveStatusWheelScale = createWheelScaleResolver({
 });
 const statusMonitorScale = ref(statusMonitorScaleNumber.value);
 const statusScaleSyncLocked = ref(false);
-let statusScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let statusScaleSaveGeneration = 0;
+const statusScaleSaver = createLatestValueSaver<string>({
+  delayMs: 240,
+  save: (scale) => settingsStore.updateSetting('statusMonitorScale', scale),
+  onPendingChange: (pending) => { statusScaleSyncLocked.value = pending; },
+  onError: (error) => console.error('[StatusMonitor] Failed to persist scale:', error),
+});
 
 const statusMonitorScaleStyle = computed(() => {
   const scale = statusMonitorScale.value;
@@ -324,18 +329,7 @@ watch(statusMonitorScaleNumber, (nextScale) => {
 });
 
 const scheduleStatusScaleSave = () => {
-  statusScaleSyncLocked.value = true;
-  const generation = ++statusScaleSaveGeneration;
-  if (statusScaleSaveTimer) clearTimeout(statusScaleSaveTimer);
-  statusScaleSaveTimer = setTimeout(() => {
-    statusScaleSaveTimer = null;
-    const scale = statusMonitorScale.value.toFixed(2);
-    void settingsStore.updateSetting('statusMonitorScale', scale)
-      .catch((error) => console.error('[StatusMonitor] Failed to persist scale:', error))
-      .finally(() => {
-        if (generation === statusScaleSaveGeneration) statusScaleSyncLocked.value = false;
-      });
-  }, 240);
+  statusScaleSaver.schedule(statusMonitorScale.value.toFixed(2));
 };
 
 const handleStatusWheel = (event: WheelEvent) => {
@@ -800,10 +794,7 @@ onActivated(activateStatusComponent);
 onDeactivated(deactivateStatusComponent);
 onBeforeUnmount(deactivateStatusComponent);
 onBeforeUnmount(() => {
-  if (statusScaleSaveTimer) {
-    clearTimeout(statusScaleSaveTimer);
-    statusScaleSaveTimer = null;
-  }
+  statusScaleSaver.dispose({ flush: true });
 });
 
 const copyIpToClipboard = async (ipAddress: string | null) => {

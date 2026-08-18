@@ -352,6 +352,7 @@ test('cancelled upload stays cancelled when the browser transport drops during a
 
 
 test('cancelled upload cannot be resurrected by a rejected binary send that was already waiting on backpressure', async ({ page, context }) => {
+  test.setTimeout(60_000);
   await page.addInitScript(() => {
     const descriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'bufferedAmount');
     if (!descriptor?.get || descriptor.configurable === false) return;

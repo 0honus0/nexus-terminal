@@ -135,13 +135,20 @@ interface ActiveArchiveOperation {
     cancelled: boolean;
 }
 
+interface PendingArchiveOperation {
+    sessionId: string;
+    requestId: string;
+    cancelled: boolean;
+    preflightStream?: ClientChannel;
+}
+
 export class SftpService {
     private clientStates: Map<string, ClientState>; // 使用导入的 ClientState
     private activeUploads: Map<string, ActiveUpload>; // Map<uploadId, ActiveUpload>
     private pendingUploads: Map<string, PendingUpload>;
     private cancelledUploadIds: Set<string>;
     private activeArchives: Map<string, ActiveArchiveOperation>;
-    private cancelledArchiveIds: Set<string>;
+    private pendingArchives: Map<string, PendingArchiveOperation>;
     private cancelledTransferIds: Set<string>;
     private directoryEnsurePromises = new WeakMap<SFTPWrapper, Map<string, Promise<void>>>();
     private preparedUploadBatches: Map<string, PreparedUploadBatch>;
@@ -152,7 +159,7 @@ export class SftpService {
         this.pendingUploads = new Map();
         this.cancelledUploadIds = new Set();
         this.activeArchives = new Map();
-        this.cancelledArchiveIds = new Set();
+        this.pendingArchives = new Map();
         this.cancelledTransferIds = new Set();
         this.preparedUploadBatches = new Map();
     }
@@ -220,6 +227,9 @@ export class SftpService {
             }
         });
         this.activeArchives.forEach((archive) => {
+            if (archive.sessionId === sessionId) cleanupTasks.push(this.cancelArchive(sessionId, archive.requestId, false));
+        });
+        this.pendingArchives.forEach((archive) => {
             if (archive.sessionId === sessionId) cleanupTasks.push(this.cancelArchive(sessionId, archive.requestId, false));
         });
         this.preparedUploadBatches.forEach((batch, prepareId) => {
@@ -1681,17 +1691,28 @@ export class SftpService {
         }
 
         const requiredCommand = format === 'zip' ? 'zip' : 'tar';
+        const pendingArchive: PendingArchiveOperation = { sessionId, requestId, cancelled: false };
+        this.pendingArchives.set(archiveKey, pendingArchive);
         try {
-            if (!await this.checkCommandExists(state, sessionId, requiredCommand)) {
-                this.sendCompressError(state.ws, `命令 '${requiredCommand}' 在服务器上未找到`, requestId, `Command '${requiredCommand}' not found on server.`);
+            if (!await this.checkCommandExists(state, sessionId, requiredCommand, pendingArchive)) {
+                this.pendingArchives.delete(archiveKey);
+                if (!pendingArchive.cancelled) {
+                    this.sendCompressError(state.ws, `命令 '${requiredCommand}' 在服务器上未找到`, requestId, `Command '${requiredCommand}' not found on server.`);
+                }
                 return;
             }
         } catch (checkError: any) {
-            this.sendCompressError(state.ws, `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
+            this.pendingArchives.delete(archiveKey);
+            if (!pendingArchive.cancelled) {
+                this.sendCompressError(state.ws, `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
+            }
             return;
         }
 
-        if (this.cancelledArchiveIds.delete(archiveKey)) return;
+        if (pendingArchive.cancelled) {
+            this.pendingArchives.delete(archiveKey);
+            return;
+        }
 
         const extension = format === 'zip' ? '.zip' : format === 'targz' ? '.tar.gz' : '.tar.bz2';
         const safeRequestId = requestId.replace(/[^A-Za-z0-9_-]/g, '_');
@@ -1701,6 +1722,7 @@ export class SftpService {
         for (const source of sources) {
             const relativePath = pathModule.posix.relative(targetDirectory, source);
             if (relativePath === '..' || relativePath.startsWith('../')) {
+                this.pendingArchives.delete(archiveKey);
                 this.sendCompressError(state.ws, `压缩源路径不在目标目录内: ${source}`, requestId);
                 return;
             }
@@ -1752,11 +1774,12 @@ export class SftpService {
 
         try {
             state.sshClient.exec(command, (err, stream) => {
+                this.pendingArchives.delete(archiveKey);
                 if (err) {
-                    this.sendCompressError(state.ws, `执行压缩命令失败: ${err.message}`, requestId);
+                    if (!pendingArchive.cancelled) this.sendCompressError(state.ws, `执行压缩命令失败: ${err.message}`, requestId);
                     return;
                 }
-                if (this.cancelledArchiveIds.delete(archiveKey)) {
+                if (pendingArchive.cancelled) {
                     void this.stopArchiveChannel(stream)
                         .then(() => this.removeRemoteArchiveWorkspace(sessionId, workspacePath));
                     return;
@@ -1864,8 +1887,9 @@ export class SftpService {
                 });
             });
         } catch (execError: any) {
+            this.pendingArchives.delete(archiveKey);
             void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
-            this.sendCompressError(state.ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
+            if (!pendingArchive.cancelled) this.sendCompressError(state.ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
         }
     }
 
@@ -1873,7 +1897,7 @@ export class SftpService {
         const state = this.clientStates.get(sessionId);
         const archiveKey = `${sessionId}:${requestId}`;
         const operation = this.activeArchives.get(archiveKey);
-        this.cancelledArchiveIds.add(archiveKey);
+        const pending = this.pendingArchives.get(archiveKey);
 
         let cleaned = true;
         if (operation) {
@@ -1884,11 +1908,14 @@ export class SftpService {
             if (operation.workspacePath) {
                 cleaned = await this.removeRemoteArchiveWorkspace(sessionId, operation.workspacePath);
             }
-            this.cancelledArchiveIds.delete(archiveKey);
-        } else {
-            // Cancellation may arrive while command availability is still being checked.
-            // compress() consumes this marker before creating any workspace.
-            setTimeout(() => this.cancelledArchiveIds.delete(archiveKey), 30000);
+        } else if (pending) {
+            // Cancellation remains attached to the actual request until preflight exits.
+            // Do not use a time-based marker: a stalled SSH exec may resume much later.
+            pending.cancelled = true;
+            const preflightStream = pending.preflightStream;
+            if (preflightStream && !preflightStream.destroyed) {
+                try { preflightStream.close(); } catch { preflightStream.destroy(); }
+            }
         }
 
         if (notifyClient && state?.ws.readyState === WebSocket.OPEN) {
@@ -1983,14 +2010,26 @@ export class SftpService {
             return;
         }
 
+        const pendingArchive: PendingArchiveOperation = { sessionId, requestId, cancelled: false };
+        this.pendingArchives.set(archiveKey, pendingArchive);
         try {
-            const commandExists = await this.checkCommandExists(state, sessionId, requiredCommand); // 传递 sessionId
+            const commandExists = await this.checkCommandExists(state, sessionId, requiredCommand, pendingArchive);
             if (!commandExists) {
-                this.sendDecompressError(state.ws, `命令 '${requiredCommand}' 在服务器上未找到`, requestId, `Command '${requiredCommand}' not found on server.`);
+                this.pendingArchives.delete(archiveKey);
+                if (!pendingArchive.cancelled) {
+                    this.sendDecompressError(state.ws, `命令 '${requiredCommand}' 在服务器上未找到`, requestId, `Command '${requiredCommand}' not found on server.`);
+                }
                 return;
             }
         } catch (checkError: any) {
-            this.sendDecompressError(state.ws, `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
+            this.pendingArchives.delete(archiveKey);
+            if (!pendingArchive.cancelled) {
+                this.sendDecompressError(state.ws, `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
+            }
+            return;
+        }
+        if (pendingArchive.cancelled) {
+            this.pendingArchives.delete(archiveKey);
             return;
         }
 
@@ -2041,14 +2080,22 @@ export class SftpService {
             console.log(`[SFTP Decompress ${sessionId}] Executing password-protected ZIP extraction (ID: ${requestId})`);
         }
 
-        if (this.cancelledArchiveIds.delete(archiveKey)) return;
+        if (pendingArchive.cancelled) {
+            this.pendingArchives.delete(archiveKey);
+            return;
+        }
 
         // --- 执行命令 ---
         try {
             state.sshClient.exec(command, (err, stream) => {
+                this.pendingArchives.delete(archiveKey);
                 if (err) {
                     console.error(`[SFTP Decompress ${sessionId}] Failed to start exec for decompress (ID: ${requestId}):`, err);
-                    this.sendDecompressError(state.ws, `执行解压命令失败: ${err.message}`, requestId);
+                    if (!pendingArchive.cancelled) this.sendDecompressError(state.ws, `执行解压命令失败: ${err.message}`, requestId);
+                    return;
+                }
+                if (pendingArchive.cancelled) {
+                    void this.stopArchiveChannel(stream);
                     return;
                 }
 
@@ -2101,13 +2148,6 @@ export class SftpService {
                     cancelled: false,
                 };
                 this.activeArchives.set(archiveKey, operation);
-                if (this.cancelledArchiveIds.delete(archiveKey)) {
-                    operation.cancelled = true;
-                    this.activeArchives.delete(archiveKey);
-                    clearInterval(heartbeatInterval);
-                    void this.stopArchiveChannel(stream);
-                    return;
-                }
 
                 stream.on('data', (data: Buffer) => {
                     // 必须持续消费 stdout，否则大型归档会耗尽 SSH 通道窗口并永久挂起。
@@ -2181,61 +2221,122 @@ export class SftpService {
                  });
             });
         } catch (execError: any) {
+            this.pendingArchives.delete(archiveKey);
             console.error(`[SFTP Decompress ${sessionId}] Decompress command caught unexpected error during exec setup (ID: ${requestId}):`, execError);
-            this.sendDecompressError(state.ws, `执行解压时发生意外错误: ${execError.message}`, requestId);
+            if (!pendingArchive.cancelled) this.sendDecompressError(state.ws, `执行解压时发生意外错误: ${execError.message}`, requestId);
         }
     }
 
     // --- 辅助方法 ---
 
-    /** 检查远程服务器上是否存在指定的命令 */
-    private checkCommandExists(state: ClientState, sessionId: string, commandName: string): Promise<boolean> {
+    /** 检查远程服务器上是否存在指定的命令。每次 exec 都有独立 settle guard 和超时。 */
+    private checkCommandExists(
+        state: ClientState,
+        sessionId: string,
+        commandName: string,
+        pendingArchive?: PendingArchiveOperation,
+    ): Promise<boolean> {
         return new Promise((resolve, reject) => {
             if (!state.sshClient) {
-                return reject(new Error('SSH client is not available.'));
+                reject(new Error('SSH client is not available.'));
+                return;
             }
-            // 优先使用 command -v, 其次 which
             const checkCommands = [`command -v ${commandName}`, `which ${commandName}`];
             let currentCheckIndex = 0;
+            let settled = false;
+
+            const resolveOnce = (value: boolean) => {
+                if (settled) return;
+                settled = true;
+                resolve(value);
+            };
+            const rejectOnce = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                reject(error);
+            };
 
             const tryCommand = () => {
-                if (currentCheckIndex >= checkCommands.length) {
-                    resolve(false); // 所有检查命令都尝试过了，未找到
+                if (settled) return;
+                if (pendingArchive?.cancelled) {
+                    rejectOnce(new Error('ARCHIVE_CANCELLED'));
                     return;
                 }
+                if (currentCheckIndex >= checkCommands.length) {
+                    resolveOnce(false);
+                    return;
+                }
+
                 const checkCmd = checkCommands[currentCheckIndex];
                 console.log(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
-                state.sshClient.exec(checkCmd, (err, stream) => {
-                    if (err) {
-                        console.error(`[SFTP Command Check ${sessionId}] Failed to start exec for "${checkCmd}":`, err);
-                        currentCheckIndex++;
-                        tryCommand(); // 尝试下一个检查命令
+                state.sshClient!.exec(checkCmd, (err, stream) => {
+                    if (settled) {
+                        try { stream?.close(); } catch { /* already closing */ }
                         return;
                     }
+                    if (err) {
+                        console.error(`[SFTP Command Check ${sessionId}] Failed to start exec for "${checkCmd}":`, err);
+                        currentCheckIndex += 1;
+                        tryCommand();
+                        return;
+                    }
+
+                    if (pendingArchive) {
+                        pendingArchive.preflightStream = stream;
+                        if (pendingArchive.cancelled) {
+                            try { stream.close(); } catch { stream.destroy(); }
+                            rejectOnce(new Error('ARCHIVE_CANCELLED'));
+                            return;
+                        }
+                    }
                     let output = '';
-                    stream.on('data', (data: Buffer) => {
-                        output += data.toString();
-                    });
-                    stream.on('close', (code: number | null) => {
+                    let attemptSettled = false;
+                    const clearAttempt = () => {
+                        if (pendingArchive?.preflightStream === stream) pendingArchive.preflightStream = undefined;
+                    };
+                    const timeout = setTimeout(() => {
+                        if (attemptSettled || settled) return;
+                        attemptSettled = true;
+                        clearAttempt();
+                        try { stream.close(); } catch { stream.destroy(); }
+                        rejectOnce(new Error(`Command check timed out for '${commandName}'`));
+                    }, 10_000);
+                    timeout.unref?.();
+
+                    const finishAttempt = (code: number | null | undefined, streamError?: Error) => {
+                        if (attemptSettled || settled) return;
+                        attemptSettled = true;
+                        clearTimeout(timeout);
+                        clearAttempt();
+
+                        if (pendingArchive?.cancelled) {
+                            rejectOnce(new Error('ARCHIVE_CANCELLED'));
+                            return;
+                        }
+                        if (streamError) {
+                            console.error(`[SFTP Command Check ${sessionId}] Stream error for "${checkCmd}":`, streamError);
+                            currentCheckIndex += 1;
+                            tryCommand();
+                            return;
+                        }
                         if (code === 0 && output.trim() !== '') {
                             console.log(`[SFTP Command Check ${sessionId}] Command '${commandName}' found using "${checkCmd}". Output: ${output.trim()}`);
-                            resolve(true);
-                        } else {
-                            console.log(`[SFTP Command Check ${sessionId}] Command '${commandName}' not found with "${checkCmd}" (code: ${code}, output: "${output.trim()}").`);
-                            currentCheckIndex++;
-                            tryCommand(); // 尝试下一个检查命令
+                            resolveOnce(true);
+                            return;
                         }
-                    });
-                    stream.stderr.on('data', (data: Buffer) => {
-                        // console.debug(`[SFTP Command Check ${sessionId}] stderr for "${checkCmd}": ${data.toString()}`);
-                    });
-                    stream.on('error', (streamErr: Error) => {
-                        console.error(`[SFTP Command Check ${sessionId}] Stream error for "${checkCmd}":`, streamErr);
-                        currentCheckIndex++;
-                        tryCommand(); // 尝试下一个检查命令
-                    });
+
+                        console.log(`[SFTP Command Check ${sessionId}] Command '${commandName}' not found with "${checkCmd}" (code: ${code}, output: "${output.trim()}").`);
+                        currentCheckIndex += 1;
+                        tryCommand();
+                    };
+
+                    stream.on('data', (data: Buffer) => { output += data.toString(); });
+                    stream.stderr.on('data', () => { /* consume stderr to avoid channel backpressure */ });
+                    stream.on('close', (code: number | null) => finishAttempt(code));
+                    stream.on('error', (streamError: Error) => finishAttempt(undefined, streamError));
                 });
             };
+
             tryCommand();
         });
     }

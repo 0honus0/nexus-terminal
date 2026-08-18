@@ -548,7 +548,10 @@ export function useFileUploader(
             }
         } catch (error) {
             const failedUpload = uploads[uploadId];
-            if (!failedUpload) return;
+            // cancelUpload removes the transfer state immediately. A send that was already
+            // waiting on WebSocket backpressure may reject afterwards; that stale pump must
+            // never overwrite the user's terminal cancelled state with paused/error.
+            if (!failedUpload || failedUpload.status === 'cancelled' || uploadTransferStates.get(uploadId) !== transfer) return;
 
             if (!wsDeps.value.isConnected.value) {
                 console.warn(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused because the WebSocket disconnected.`);

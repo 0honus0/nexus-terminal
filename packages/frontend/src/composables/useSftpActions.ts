@@ -33,6 +33,7 @@ export interface SftpManagerInstance {
    transferTasks: Readonly<Record<string, FileTransferItem>>;
    transferProgressSourceId: string;
    archiveProgressSourceId: string;
+   hasActiveOperations: Readonly<ComputedRef<boolean>>;
 
    // Methods
    loadDirectory: (path: string, forceRefresh?: boolean) => void;
@@ -54,6 +55,8 @@ export interface SftpManagerInstance {
    cancelArchive: () => void;
    joinPath: (base: string, name: string) => string;
    setInitialLoadDone: (value: boolean) => void;
+   deferCleanupUntilIdle: (cleanup: () => void) => void;
+   resumeLifecycle: () => void;
 
    // Cleanup function
    cleanup: () => void;
@@ -127,6 +130,36 @@ export function createSftpActionsManager(
         archiveName: null,
     });
     const transferTasks = reactive<Record<string, FileTransferItem>>({});
+    const hasActiveOperations = computed(() => (
+        archiveProgress.active || Object.keys(transferTasks).length > 0
+    ));
+    let deferredCleanup: (() => void) | null = null;
+    const stopDeferredCleanupWatch = watch(hasActiveOperations, (active) => {
+        if (active || !deferredCleanup) return;
+        const cleanup = deferredCleanup;
+        deferredCleanup = null;
+        cleanup();
+    });
+
+    const deferCleanupUntilIdle = (cleanup: () => void) => {
+        if (!hasActiveOperations.value) {
+            cleanup();
+            return;
+        }
+        deferredCleanup = cleanup;
+        if (archiveProgress.active) progressCenter.setSourceProviderAttached(archiveProgressSourceId, false);
+        if (Object.keys(transferTasks).length > 0) {
+            progressCenter.setSourceProviderAttached(transferProgressSourceId, false);
+        }
+    };
+
+    const resumeLifecycle = () => {
+        // The same pane/instance was mounted again before its background task finished.
+        // Keep the existing manager, listeners and ProgressCenter source attached.
+        deferredCleanup = null;
+        progressCenter.setSourceProviderAttached(archiveProgressSourceId, true);
+        progressCenter.setSourceProviderAttached(transferProgressSourceId, true);
+    };
 
     const startTransfer = (requestId: string, operation: FileTransferOperation, sourcePaths: string[], crossHost: boolean) => {
         const names = sourcePaths.map(path => path.split('/').filter(Boolean).pop() || path);
@@ -214,6 +247,8 @@ export function createSftpActionsManager(
     // 清理函数，用于注销所有消息处理器
     const cleanup = () => {
         console.log(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
+        deferredCleanup = null;
+        stopDeferredCleanupWatch();
         unregisterCallbacks.forEach(cb => cb());
         unregisterCallbacks.length = 0; // 清空数组
         stopTransferProgressWatch?.();
@@ -732,6 +767,7 @@ export function createSftpActionsManager(
            const resetTimeout = () => {
                clearTimeout(timeoutId);
                timeoutId = setTimeout(() => {
+                   cancelArchive(requestId);
                    cleanupOperation();
                    const errMsg = t('fileManager.errors.compressTimeout');
                    uiNotificationsStore.showError(errMsg);
@@ -894,6 +930,7 @@ export function createSftpActionsManager(
            const resetTimeout = () => {
                clearTimeout(timeoutId);
                timeoutId = setTimeout(() => {
+                   cancelArchive(requestId);
                    cleanupOperation();
                    const errMsg = t('fileManager.errors.decompressTimeout');
                    uiNotificationsStore.showError(errMsg);
@@ -1593,6 +1630,7 @@ export function createSftpActionsManager(
        transferTasks: readonly(transferTasks),
        transferProgressSourceId,
        archiveProgressSourceId,
+       hasActiveOperations,
 
         // Methods
         loadDirectory,
@@ -1618,8 +1656,9 @@ export function createSftpActionsManager(
         // Cleanup function
        currentPath: currentPathRef, // (类型已在接口中定义为 Readonly<Ref>)
        setInitialLoadDone: (value: boolean) => { initialLoadDone.value = value; }, // +++ 暴露设置初始加载状态的方法 +++
+       deferCleanupUntilIdle,
+       resumeLifecycle,
 
-        // Cleanup function
         // Cleanup function
         cleanup,
     };

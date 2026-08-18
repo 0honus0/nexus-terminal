@@ -34,6 +34,8 @@ export const getOrCreateSftpManager = (
         };
         manager = createSftpActionsManager(resolvedSessionId, currentSftpPath, wsDeps, t, instanceId);
         session.sftpManagers.set(instanceId, manager);
+    } else {
+        manager.resumeLifecycle();
     }
     return manager;
 };
@@ -44,9 +46,20 @@ export const removeSftpManager = (sessionId: string, instanceId: string) => {
     if (session) {
         const manager = session.sftpManagers.get(instanceId);
         if (manager) {
-            manager.cleanup();
-            session.sftpManagers.delete(instanceId);
-            console.log(`[SftpManagerActions] 已移除并清理会话 ${resolvedSessionId} 的 SFTP 管理器实例: ${instanceId}`);
+            const finalizeRemoval = () => {
+                const currentSession = sessions.value.get(resolvedSessionId);
+                if (currentSession?.sftpManagers.get(instanceId) !== manager) return;
+                manager.cleanup();
+                currentSession.sftpManagers.delete(instanceId);
+                console.log(`[SftpManagerActions] 已移除并清理会话 ${resolvedSessionId} 的 SFTP 管理器实例: ${instanceId}`);
+            };
+
+            if (manager.hasActiveOperations.value) {
+                console.log(`[SftpManagerActions] 会话 ${resolvedSessionId} 的 SFTP 管理器 ${instanceId} 仍有长任务，延迟清理直到任务结束。`);
+                manager.deferCleanupUntilIdle(finalizeRemoval);
+            } else {
+                finalizeRemoval();
+            }
         }
     }
 };

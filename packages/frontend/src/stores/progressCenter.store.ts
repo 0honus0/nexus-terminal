@@ -154,6 +154,19 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     source.hiddenExplicitly = false;
   };
 
+  const setSourceProviderAttached = (sourceId: string, attached: boolean) => {
+    const source = sources[sourceId];
+    if (!source) return;
+    if (!attached) {
+      // A provider pane can disappear while its session-owned task keeps running. Surface
+      // that task in the global Progress Display without pretending the user hid it.
+      source.hidden = true;
+      return;
+    }
+    // Reattaching a provider restores only automatic hiding. Respect an explicit Hide.
+    if (!source.hiddenExplicitly) source.hidden = false;
+  };
+
   const isSourceHidden = (sourceId: string) => Boolean(sources[sourceId]?.hidden);
 
   const hiddenTasks = computed<RegisteredProgressTask[]>(() => {
@@ -191,6 +204,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     unregisterSource,
     hideSource,
     restoreSource,
+    setSourceProviderAttached,
     isSourceHidden,
     cancelTask,
   };

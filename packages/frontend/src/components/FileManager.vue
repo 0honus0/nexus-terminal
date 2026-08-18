@@ -29,6 +29,7 @@ import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
 import { createWheelScaleResolver } from '../utils/wheelScale';
+import { createLatestValueSaver } from '../utils/latestValueSaver';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
 
 
@@ -245,8 +246,6 @@ const resolveFileManagerWheelScale = createWheelScaleResolver({
   thresholdPx: 72,
 });
 const rowScaleSyncLocked = ref(false);
-let rowScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let rowScaleSaveGeneration = 0;
 const isSyncingPathFromTerminal = ref(false);
 const isChangingTerminalPath = ref(false);
 let silentExecCleanup: (() => void) | null = null;
@@ -1535,27 +1534,32 @@ watch(sortDirection, () => {
 
 
 // --- 保存设置的函数 ---
-const persistLayoutSettings = async (multiplier = rowSizeMultiplier.value) => {
-  const widthsToSave = JSON.parse(JSON.stringify(colWidths.value));
-  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Persisting layout: multiplier=${multiplier}, widths=${JSON.stringify(widthsToSave)}`);
-  await settingsStore.updateFileManagerLayoutSettings(multiplier, widthsToSave);
+type FileManagerLayoutSnapshot = { multiplier: number; widths: Record<string, number> };
+
+const snapshotLayoutSettings = (): FileManagerLayoutSnapshot => ({
+  multiplier: rowSizeMultiplier.value,
+  widths: JSON.parse(JSON.stringify(colWidths.value)),
+});
+
+const persistLayoutSettings = async ({ multiplier, widths }: FileManagerLayoutSnapshot) => {
+  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Persisting layout: multiplier=${multiplier}, widths=${JSON.stringify(widths)}`);
+  await settingsStore.updateFileManagerLayoutSettings(multiplier, widths);
 };
 
+const layoutSettingsSaver = createLatestValueSaver<FileManagerLayoutSnapshot>({
+  delayMs: 240,
+  save: persistLayoutSettings,
+  onPendingChange: (pending) => { rowScaleSyncLocked.value = pending; },
+  onError: (error) => console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to persist layout settings:`, error),
+});
+
 const saveLayoutSettings = () => {
-  void persistLayoutSettings();
+  layoutSettingsSaver.schedule(snapshotLayoutSettings());
+  void layoutSettingsSaver.flush();
 };
 
 const scheduleRowScaleSave = () => {
-  rowScaleSyncLocked.value = true;
-  const generation = ++rowScaleSaveGeneration;
-  if (rowScaleSaveTimer) clearTimeout(rowScaleSaveTimer);
-  rowScaleSaveTimer = setTimeout(() => {
-    rowScaleSaveTimer = null;
-    const multiplier = rowSizeMultiplier.value;
-    void persistLayoutSettings(multiplier).finally(() => {
-      if (generation === rowScaleSaveGeneration) rowScaleSyncLocked.value = false;
-    });
-  }, 240);
+  layoutSettingsSaver.schedule(snapshotLayoutSettings());
 };
 
 // --- 生命周期钩子 ---
@@ -1779,10 +1783,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
  offWorkspaceEvent('ui:restoreProgressDisplay', restoreFloatingProgress);
  clearMobileContextTimer();
- if (rowScaleSaveTimer) {
-   clearTimeout(rowScaleSaveTimer);
-   rowScaleSaveTimer = null;
- }
+ layoutSettingsSaver.dispose({ flush: true });
  cancelPendingPathResolutions();
  closePreview();
  fileListResizeObserver?.disconnect();

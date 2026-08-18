@@ -245,6 +245,7 @@ import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { createWheelScaleResolver } from '../utils/wheelScale';
+import { createLatestValueSaver } from '../utils/latestValueSaver';
 import { useSessionStore } from '../stores/session.store';
 import type { SessionState } from '../stores/session/types'; 
 import { useConnectionsStore } from '../stores/connections.store';
@@ -334,8 +335,12 @@ const resolveQuickCommandWheelScale = createWheelScaleResolver({
   thresholdPx: 64,
 });
 const quickCommandScaleSyncLocked = ref(false);
-let quickCommandScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let quickCommandScaleSaveGeneration = 0;
+const quickCommandScaleSaver = createLatestValueSaver<number>({
+  delayMs: 220,
+  save: (scale) => settingsStore.updateQuickCommandRowSizeMultiplier(scale),
+  onPendingChange: (pending) => { quickCommandScaleSyncLocked.value = pending; },
+  onError: (error) => console.error('[QuickCommandsView] Failed to persist row scale:', error),
+});
 
 watchEffect(() => {
   const storeVal = qcRowSizeMultiplierFromStore.value;
@@ -350,16 +355,7 @@ watchEffect(() => {
 });
 
 const scheduleQuickCommandScaleSave = () => {
-  quickCommandScaleSyncLocked.value = true;
-  const generation = ++quickCommandScaleSaveGeneration;
-  if (quickCommandScaleSaveTimer) clearTimeout(quickCommandScaleSaveTimer);
-  quickCommandScaleSaveTimer = setTimeout(() => {
-    quickCommandScaleSaveTimer = null;
-    const scale = quickCommandRowSizeMultiplier.value;
-    void settingsStore.updateQuickCommandRowSizeMultiplier(scale).finally(() => {
-      if (generation === quickCommandScaleSaveGeneration) quickCommandScaleSyncLocked.value = false;
-    });
-  }, 220);
+  quickCommandScaleSaver.schedule(quickCommandRowSizeMultiplier.value);
 };
 
 const handleWheel = (event: WheelEvent) => {
@@ -428,10 +424,7 @@ onMounted(async () => { // Make onMounted async
 });
 
 onBeforeUnmount(() => {
-  if (quickCommandScaleSaveTimer) {
-    clearTimeout(quickCommandScaleSaveTimer);
-    quickCommandScaleSaveTimer = null;
-  }
+  quickCommandScaleSaver.dispose({ flush: true });
   // +++ 调用保存的注销函数 +++
   if (unregisterFocus) {
     unregisterFocus();

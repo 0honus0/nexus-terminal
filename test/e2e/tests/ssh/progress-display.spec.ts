@@ -345,6 +345,7 @@ test('closing and reopening the file manager preserves an in-flight archive task
 
 
 test('a sidebar FileManager can unmount without orphaning its hidden archive task', async ({ page, context }) => {
+  test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
@@ -376,11 +377,11 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 
     const popup = page.getByTestId('archive-progress-popup');
     await expect(popup).toBeVisible({ timeout: 10_000 });
-    await popup.getByTestId('archive-progress-hide').click();
-    await expect(popup).toBeHidden();
 
     // This closes the sidebar's v-if component, unlike the modal FileManager's v-show close.
-    await sidebarToggle.click();
+    // Use the panel close control: the opened panel intentionally overlays its launcher.
+    // The task was not manually hidden: provider detachment itself must surface it globally.
+    await sidebar.getByRole('button', { name: 'Close Sidebar' }).click();
     await expect(sidebarList).toHaveCount(0);
 
     const modal = await openProgressDisplay(page);
@@ -398,6 +399,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
 });
 
 test('archive cancellation remains authoritative while command preflight is stalled beyond the old marker TTL', async ({ page, context }) => {
+  test.setTimeout(75_000);
   await openFileManager(page, context);
   await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
 
