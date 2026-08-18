@@ -285,6 +285,13 @@ onBeforeUnmount(() => {
    }
    const terminalManager = sessionToCommand.terminalManager as (SshTerminalInstance | undefined);
 
+   // workspace 路由可能早于 SSH shell 真正 ready。首次握手完成前直接忽略所有命令入口，
+   // 避免快捷指令/历史命令等旁路绕过 CommandInputBar 的 disabled 状态。
+   if (terminalManager && !terminalManager.isSshConnected.value && !terminalManager.hasSshConnectedOnce.value) {
+     console.log(`[WorkspaceView] Ignoring command while initial SSH connection is still pending for session ${sessionToCommand.sessionId}.`);
+     return;
+   }
+
    if (terminalManager?.isSshConnected && !terminalManager.isSshConnected.value && command.trim() === '') {
      console.log(`[WorkspaceView] Command bar Enter detected in disconnected session ${sessionToCommand.sessionId}, attempting reconnect...`);
      if (terminalManager.terminalInstance?.value) {
@@ -339,6 +346,13 @@ onBeforeUnmount(() => {
      return;
    }
    const wsStatus = session.wsManager.connectionStatus.value;
+
+   // 初次 SSH 握手期间丢弃终端输入，不把它误判成“断线后的任意键重连”。
+   // 只有至少成功连接过一次后，下面的 reconnectNow 路径才生效。
+   if (!manager.isSshConnected.value && !manager.hasSshConnectedOnce.value) {
+     return;
+   }
+
    // 已标记挂起的会话断开后，SSH 可能已被后端接管。此时输入只能触发挂起恢复，
    // 不能走普通 reconnect，否则会建立一个全新的 SSH 并丢失原终端上下文。
    if (data.length > 0 && wsStatus !== 'connected' && session.isMarkedForSuspend) {

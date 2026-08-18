@@ -52,6 +52,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const inputQueue: Array<{ data: string; sequence: number; bytes: number }> = [];
     const pendingInputBytes = new Map<number, number>();
     const isSshConnected = ref(false); // 跟踪 SSH 连接状态
+    // 仅在当前前端会话生命周期内记录是否至少真正完成过一次 SSH 握手。
+    // 初次连接阶段要屏蔽输入；成功连接后的断线则仍允许“任意键立即重连”。
+    const hasSshConnectedOnce = ref(false);
 
     const outputSize = (data: string | Uint8Array): number => (
         typeof data === 'string' ? outputEncoder.encode(data).length : data.byteLength
@@ -98,6 +101,10 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     };
 
     const sendInputData = (data: string): void => {
+        // SSH 尚未真正建立时不把输入发到后端。初次连接期间由上层直接屏蔽输入；
+        // 已连接后断线的“任意键立即重连”也会在到达这里前被 WorkspaceView 接管。
+        if (!isSshConnected.value) return;
+
         // Normal typing should take the shortest possible path. The backend already
         // accepts unsequenced SSH input, so small interactive writes do not need a
         // round-trip ACK. Large paste/command payloads keep the existing ACK-based
@@ -256,6 +263,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
         console.log(`[会话 ${sessionId}][SSH终端模块] SSH 会话已连接。 Payload:`, payload, 'Full message:', message); // 更详细的日志
         isSshConnected.value = true; // 更新状态
+        hasSshConnectedOnce.value = true;
         // 连接成功后聚焦终端
         terminalInstance.value?.focus();
 
@@ -457,6 +465,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         clearTerminalSearch,
         // --- 暴露状态 ---
         isSshConnected: readonly(isSshConnected), // 暴露 SSH 连接状态 (只读)
+        hasSshConnectedOnce: readonly(hasSshConnectedOnce),
         terminalInstance, // 暴露 terminal 实例，以便 WorkspaceView 可以写入提示信息
     };
 }

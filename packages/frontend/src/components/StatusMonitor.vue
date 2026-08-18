@@ -8,7 +8,7 @@
       'has-history': Boolean(selectedMetric),
       'bg-header': !activeSessionId,
     }"
-    @wheel.ctrl.prevent="handleStatusWheel"
+    @wheel="handleStatusWheel"
   >
     <div v-if="!activeSessionId" class="empty-state">
       <i class="fas fa-plug"></i>
@@ -253,7 +253,7 @@ import { useSessionStore } from '../stores/session.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
-import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
+import { clampScale, createWheelScaleResolver } from '../utils/wheelScale';
 
 interface ServerStatus {
   cpuPercent?: number;
@@ -294,7 +294,13 @@ const { statusMonitorShowIpBoolean, statusMonitorIntervalSecondsNumber, statusMo
 const STATUS_MONITOR_SCALE_MIN = 0.65;
 const STATUS_MONITOR_SCALE_MAX = 1.6;
 const STATUS_MONITOR_SCALE_STEP = 0.1;
-const consumeStatusWheelSteps = createWheelStepAccumulator({ thresholdPx: 72 });
+const resolveStatusWheelScale = createWheelScaleResolver({
+  min: STATUS_MONITOR_SCALE_MIN,
+  max: STATUS_MONITOR_SCALE_MAX,
+  step: STATUS_MONITOR_SCALE_STEP,
+  precision: 2,
+  thresholdPx: 72,
+});
 const statusMonitorScale = ref(statusMonitorScaleNumber.value);
 const statusScaleSyncLocked = ref(false);
 let statusScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -333,16 +339,9 @@ const scheduleStatusScaleSave = () => {
 };
 
 const handleStatusWheel = (event: WheelEvent) => {
-  if (!event.ctrlKey) return;
-  const wheelSteps = consumeStatusWheelSteps(event);
-  if (wheelSteps === 0) return;
-  const nextScale = clampScale(
-    statusMonitorScale.value - wheelSteps * STATUS_MONITOR_SCALE_STEP,
-    STATUS_MONITOR_SCALE_MIN,
-    STATUS_MONITOR_SCALE_MAX,
-  );
-  if (nextScale === statusMonitorScale.value) return;
-  statusMonitorScale.value = Number(nextScale.toFixed(2));
+  const change = resolveStatusWheelScale(event, statusMonitorScale.value);
+  if (!change) return;
+  statusMonitorScale.value = change.next;
   scheduleStatusScaleSave();
 };
 

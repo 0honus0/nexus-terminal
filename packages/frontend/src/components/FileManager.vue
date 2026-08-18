@@ -28,7 +28,7 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
-import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
+import { createWheelScaleResolver } from '../utils/wheelScale';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
 
 
@@ -237,7 +237,13 @@ const rowSizeMultiplier = ref(1.0); // 行大小（字体）乘数, 默认值会
 const FILE_MANAGER_SCALE_MIN = 0.5;
 const FILE_MANAGER_SCALE_MAX = 2;
 const FILE_MANAGER_SCALE_STEP = 0.08;
-const consumeFileManagerWheelSteps = createWheelStepAccumulator({ thresholdPx: 72 });
+const resolveFileManagerWheelScale = createWheelScaleResolver({
+  min: FILE_MANAGER_SCALE_MIN,
+  max: FILE_MANAGER_SCALE_MAX,
+  step: FILE_MANAGER_SCALE_STEP,
+  precision: 2,
+  thresholdPx: 72,
+});
 const rowScaleSyncLocked = ref(false);
 let rowScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let rowScaleSaveGeneration = 0;
@@ -2158,25 +2164,15 @@ const openPopupEditor = () => {
 };
 // --- 行大小调整逻辑 ---
 const handleWheel = (event: WheelEvent) => {
-    if (!event.ctrlKey) return;
-    event.preventDefault();
+    const change = resolveFileManagerWheelScale(event, rowSizeMultiplier.value);
+    if (!change) return;
 
-    const wheelSteps = consumeFileManagerWheelSteps(event);
-    if (wheelSteps === 0) return;
-
-    const oldMultiplier = rowSizeMultiplier.value;
     const oldEstimatedRowHeight = estimatedFileRowHeight.value;
     const container = fileListContainerRef.value;
     const anchoredRow = shouldVirtualizeFileList.value && container
       ? container.scrollTop / oldEstimatedRowHeight
       : null;
-    const nextMultiplier = clampScale(
-      oldMultiplier - wheelSteps * FILE_MANAGER_SCALE_STEP,
-      FILE_MANAGER_SCALE_MIN,
-      FILE_MANAGER_SCALE_MAX,
-    );
-    rowSizeMultiplier.value = Number(nextMultiplier.toFixed(2));
-    if (rowSizeMultiplier.value === oldMultiplier) return;
+    rowSizeMultiplier.value = change.next;
 
     if (anchoredRow !== null && container) {
       void nextTick(() => {

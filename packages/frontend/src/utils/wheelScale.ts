@@ -3,6 +3,22 @@ export interface WheelStepAccumulatorOptions {
   resetAfterMs?: number;
 }
 
+export interface WheelScaleResolverOptions extends WheelStepAccumulatorOptions {
+  min: number;
+  max: number;
+  step: number;
+  precision?: number;
+  requireCtrlKey?: boolean;
+  stopPropagation?: boolean;
+  stopImmediatePropagation?: boolean;
+}
+
+export interface WheelScaleChange {
+  previous: number;
+  next: number;
+  wheelSteps: number;
+}
+
 const wheelDeltaToPixels = (event: WheelEvent): number => {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16;
   if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * Math.max(320, window.innerHeight);
@@ -44,3 +60,42 @@ export const createWheelStepAccumulator = ({
 export const clampScale = (value: number, min: number, max: number): number => (
   Math.min(max, Math.max(min, value))
 );
+
+/**
+ * Shared Ctrl+wheel scaling policy used by terminals, editors and scalable panels.
+ * It owns modifier filtering, native-scroll suppression, noisy-delta accumulation,
+ * direction, bounds and rounding. Callers only apply the returned value and run
+ * component-specific side effects such as fitting, persistence or scroll anchoring.
+ */
+export const createWheelScaleResolver = ({
+  min,
+  max,
+  step,
+  precision = 2,
+  thresholdPx = 72,
+  resetAfterMs = 220,
+  requireCtrlKey = true,
+  stopPropagation = false,
+  stopImmediatePropagation = false,
+}: WheelScaleResolverOptions) => {
+  const consumeWheelSteps = createWheelStepAccumulator({ thresholdPx, resetAfterMs });
+
+  return (event: WheelEvent, current: number): WheelScaleChange | null => {
+    if (requireCtrlKey && !event.ctrlKey) return null;
+
+    // Suppress browser/page zoom or scrolling for every handled Ctrl+wheel event,
+    // including tiny deltas that have not accumulated into a full scale step yet.
+    event.preventDefault();
+    if (stopImmediatePropagation) event.stopImmediatePropagation();
+    else if (stopPropagation) event.stopPropagation();
+
+    const wheelSteps = consumeWheelSteps(event);
+    if (wheelSteps === 0) return null;
+
+    const bounded = clampScale(current - wheelSteps * step, min, max);
+    const next = Number(bounded.toFixed(precision));
+    if (Object.is(next, current)) return null;
+
+    return { previous: current, next, wheelSteps };
+  };
+};

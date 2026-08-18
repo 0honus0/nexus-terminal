@@ -7,7 +7,7 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import * as monaco from '@monaco-editor-api';
 import '@monaco-basic-languages';
 import '@monaco-json-language';
-import { createWheelStepAccumulator } from '../utils/wheelScale';
+import { createWheelScaleResolver } from '../utils/wheelScale';
 
 const FONT_SIZE_STORAGE_KEY = 'monacoEditorFontSize'; // localStorage key
 
@@ -53,7 +53,13 @@ let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let layoutFrame: number | null = null;
 let wheelHandler: ((event: WheelEvent) => void) | null = null;
-const consumeEditorWheelSteps = createWheelStepAccumulator({ thresholdPx: 72 });
+const resolveEditorWheelScale = createWheelScaleResolver({
+  min: 8,
+  max: 40,
+  step: 1,
+  precision: 0,
+  thresholdPx: 72,
+});
 
 const focusEditor = () => editorInstance?.focus();
 
@@ -161,21 +167,16 @@ onMounted(() => {
     if (editorDomNode && editorInstance) {
         // console.log('[MonacoEditor] Adding wheel event listener.');
         wheelHandler = (event: WheelEvent) => {
-            if (!event.ctrlKey || !editorInstance) return;
-            event.preventDefault();
-            const wheelSteps = consumeEditorWheelSteps(event);
-            if (wheelSteps === 0) return;
-
+            if (!editorInstance) return;
             const currentSizeOpt = editorInstance.getOption(monaco.editor.EditorOption.fontSize);
             const currentSize = typeof currentSizeOpt === 'number' ? currentSizeOpt : internalEditorFontSize.value;
-            const newSize = Math.min(40, Math.max(8, currentSize - wheelSteps));
+            const change = resolveEditorWheelScale(event, currentSize);
+            if (!change) return;
 
-            if (newSize !== currentSize) {
-                editorInstance.updateOptions({ fontSize: newSize });
-                localStorage.setItem(FONT_SIZE_STORAGE_KEY, newSize.toString());
-                internalEditorFontSize.value = newSize;
-                emit('update:fontSize', newSize);
-            }
+            editorInstance.updateOptions({ fontSize: change.next });
+            localStorage.setItem(FONT_SIZE_STORAGE_KEY, change.next.toString());
+            internalEditorFontSize.value = change.next;
+            emit('update:fontSize', change.next);
         };
         editorDomNode.addEventListener('wheel', wheelHandler, { passive: false });
     } else {

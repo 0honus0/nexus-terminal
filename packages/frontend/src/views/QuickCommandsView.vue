@@ -78,7 +78,7 @@
         ref="commandListContainerRef"
         tabindex="0"
         :data-row-scale="quickCommandRowSizeMultiplier.toFixed(2)"
-        @wheel.ctrl.prevent="handleWheel"
+        @wheel="handleWheel"
         :style="{ '--qc-row-size-multiplier': quickCommandRowSizeMultiplier }"
         @keydown="handleSearchInputKeydown"
        >
@@ -244,7 +244,7 @@ import AddEditQuickCommandForm from '../components/AddEditQuickCommandForm.vue';
 import { useFocusSwitcherStore } from '../stores/focusSwitcher.store'; 
 import { useSettingsStore } from '../stores/settings.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
-import { clampScale, createWheelStepAccumulator } from '../utils/wheelScale';
+import { createWheelScaleResolver } from '../utils/wheelScale';
 import { useSessionStore } from '../stores/session.store';
 import type { SessionState } from '../stores/session/types'; 
 import { useConnectionsStore } from '../stores/connections.store';
@@ -326,7 +326,13 @@ const quickCommandRowSizeMultiplier = ref(1.0);
 const QUICK_COMMAND_SCALE_MIN = 0.5;
 const QUICK_COMMAND_SCALE_MAX = 2.5;
 const QUICK_COMMAND_SCALE_STEP = 0.12;
-const consumeQuickCommandWheelSteps = createWheelStepAccumulator({ thresholdPx: 64 });
+const resolveQuickCommandWheelScale = createWheelScaleResolver({
+  min: QUICK_COMMAND_SCALE_MIN,
+  max: QUICK_COMMAND_SCALE_MAX,
+  step: QUICK_COMMAND_SCALE_STEP,
+  precision: 2,
+  thresholdPx: 64,
+});
 const quickCommandScaleSyncLocked = ref(false);
 let quickCommandScaleSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let quickCommandScaleSaveGeneration = 0;
@@ -357,19 +363,10 @@ const scheduleQuickCommandScaleSave = () => {
 };
 
 const handleWheel = (event: WheelEvent) => {
-    const wheelSteps = consumeQuickCommandWheelSteps(event);
-    if (wheelSteps === 0) return;
-    const oldMultiplier = quickCommandRowSizeMultiplier.value;
-    const newMultiplier = clampScale(
-      oldMultiplier - wheelSteps * QUICK_COMMAND_SCALE_STEP,
-      QUICK_COMMAND_SCALE_MIN,
-      QUICK_COMMAND_SCALE_MAX,
-    );
-    quickCommandRowSizeMultiplier.value = Number(newMultiplier.toFixed(2));
-
-    if (quickCommandRowSizeMultiplier.value !== oldMultiplier) {
-      scheduleQuickCommandScaleSave();
-    }
+    const change = resolveQuickCommandWheelScale(event, quickCommandRowSizeMultiplier.value);
+    if (!change) return;
+    quickCommandRowSizeMultiplier.value = change.next;
+    scheduleQuickCommandScaleSave();
 };
 
 // 计算属性，仅过滤和排序，不分组

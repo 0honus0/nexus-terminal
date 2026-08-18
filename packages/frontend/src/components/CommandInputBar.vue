@@ -76,6 +76,16 @@ const currentSessionCommandInput = computed({
   }
 });
 
+// 首次 SSH 握手真正完成前禁止命令输入，避免 workspace 已出现但 shell 尚未就绪时
+// 第一条命令被静默丢弃。成功连接过一次后即使断线也不禁用，以保留立即重连入口。
+const isInitialSshConnecting = computed(() => {
+  if (isSearching.value || !activeSessionId.value) return false;
+  const session = sessionStore.sessions.get(activeSessionId.value);
+  const manager = session?.terminalManager;
+  if (!manager) return false;
+  return !manager.isSshConnected.value && !manager.hasSshConnectedOnce.value;
+});
+
 // 命令和终端搜索共用同一个可见输入框，但分别保留各自内容。
 const activeInputValue = computed({
   get: () => isSearching.value ? searchTerm.value : currentSessionCommandInput.value,
@@ -427,7 +437,9 @@ const handleQuickCommandExecute = (command: string) => {
         type="text"
         v-model="activeInputValue"
         :placeholder="isSearching ? t('commandInputBar.searchPlaceholder') : t('commandInputBar.placeholder')"
-        class="command-bar-input command-bar-command-input px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
+        :disabled="isInitialSshConnecting"
+        :aria-disabled="isInitialSshConnecting"
+        class="command-bar-input command-bar-command-input px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
         :class="{ 'command-bar-search-mode': isSearching }"
         ref="commandInputRef"
         :data-focus-id="isSearching ? 'terminalSearch' : 'commandInput'"
