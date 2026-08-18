@@ -3,15 +3,17 @@
   "group": 2,
   "workers": 4,
   "specs": [
-    "tests/ssh/cross-session-transfer.spec.ts",
-    "tests/ssh/file-upload.spec.ts",
-    "tests/ui/audit-log-filtering.spec.ts",
-    "tests/ui/backup-ui.spec.ts",
-    "tests/ui/batch-connection-edit.spec.ts",
-    "tests/ui/notification-delivery.spec.ts",
-    "tests/ui/notification-settings.spec.ts",
-    "tests/ui/proxy-management.spec.ts",
-    "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts"
+    "tests/auth/setup-login.spec.ts",
+    "tests/ssh/command-history-management.spec.ts",
+    "tests/ssh/quick-command-collapsible-search.spec.ts",
+    "tests/ssh/quick-command-management.spec.ts",
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/panel-wheel-scaling.spec.ts",
+    "tests/ssh/terminal-protocol.spec.ts",
+    "tests/ssh/terminal-tools-ui.spec.ts",
+    "tests/ssh/terminal-ui.spec.ts"
   ]
 }

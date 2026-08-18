@@ -3,10 +3,6 @@
   "group": 1,
   "workers": 4,
   "specs": [
-    "tests/mobile/ssh-workspace.spec.ts",
-    "tests/mobile/suspend-resume-ui.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/progress-display.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/progress-display.spec.ts"
   ]
 }
