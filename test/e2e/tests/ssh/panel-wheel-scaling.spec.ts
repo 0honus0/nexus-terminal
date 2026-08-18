@@ -286,7 +286,7 @@ test('File Manager flushes the last wheel scale when its sidebar unmounts before
     await ctrlWheel(list, 100);
     await expect.poll(() => readScale(list, 'data-row-scale')).toBe(0.92);
     // Close immediately, well before the normal 240ms debounce window expires.
-    await sidebar.getByRole('button', { name: 'Close Sidebar' }).click();
+    await sidebar.locator('button[title="Close Sidebar"]').click();
     expect((await persisted).ok()).toBeTruthy();
 
     await sidebarToggle.click();

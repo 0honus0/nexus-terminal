@@ -193,6 +193,46 @@ test('registered copy progress hides and cancels through the shared Progress Dis
   }
 });
 
+
+test('copy cancellation survives an SFTP write stalled beyond the old cancellation TTL', async ({ page, context }) => {
+  test.setTimeout(65_000);
+  await openFileManager(page, context);
+  const sourceName = 'cancel-marker-dir';
+  await fetch(`${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(sourceName)}&size=${32 * 1024}`, { method: 'POST' });
+  await refreshFileManager(page);
+  await expect(row(page, sourceName)).toBeVisible();
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=34000`, { method: 'POST' });
+
+  try {
+    await rightClickRow(page, sourceName);
+    await clickMenuItem(page, 'Copy');
+    await goIntoFolder(page, 'folder-seed');
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'Paste');
+
+    const popup = page.getByTestId('file-transfer-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await popup.getByTestId('file-transfer-progress-hide').click();
+    const modal = await openProgressDisplay(page);
+    const task = hiddenTask(modal, sourceName);
+    await expect(task).toBeVisible();
+    await task.getByTestId('hidden-progress-cancel').click();
+    await closeProgressDisplay(modal);
+
+    // Old code forgot cancellation after 30s. Keep the first write blocked beyond that
+    // boundary, then make all later writes immediate so a resurrected copy is observable.
+    await page.waitForTimeout(32_000);
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    await page.waitForTimeout(4_000);
+
+    const secondFile = await fetch(`${E2E_SSH.controlUrl}/path-exists?path=${encodeURIComponent(`folder-seed/${sourceName}/02-second.bin`)}`);
+    expect(secondFile.ok).toBeTruthy();
+    expect((await secondFile.json() as { exists: boolean }).exists).toBe(false);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});
+
 test('registered archive progress supports hide, restore, and real cancel for compress and decompress', async ({ page, context }) => {
   await openFileManager(page, context);
 
@@ -381,7 +421,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     // This closes the sidebar's v-if component, unlike the modal FileManager's v-show close.
     // Use the panel close control: the opened panel intentionally overlays its launcher.
     // The task was not manually hidden: provider detachment itself must surface it globally.
-    await sidebar.getByRole('button', { name: 'Close Sidebar' }).click();
+    await sidebar.locator('button[title="Close Sidebar"]').click();
     await expect(sidebarList).toHaveCount(0);
 
     const modal = await openProgressDisplay(page);

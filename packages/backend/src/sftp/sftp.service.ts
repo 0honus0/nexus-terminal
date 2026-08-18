@@ -150,6 +150,7 @@ export class SftpService {
     private activeArchives: Map<string, ActiveArchiveOperation>;
     private pendingArchives: Map<string, PendingArchiveOperation>;
     private cancelledTransferIds: Set<string>;
+    private activeTransferKeys: Set<string>;
     private directoryEnsurePromises = new WeakMap<SFTPWrapper, Map<string, Promise<void>>>();
     private preparedUploadBatches: Map<string, PreparedUploadBatch>;
 
@@ -161,6 +162,7 @@ export class SftpService {
         this.activeArchives = new Map();
         this.pendingArchives = new Map();
         this.cancelledTransferIds = new Set();
+        this.activeTransferKeys = new Set();
         this.preparedUploadBatches = new Map();
     }
 
@@ -238,6 +240,9 @@ export class SftpService {
 
         for (const key of [...this.cancelledTransferIds]) {
             if (key.startsWith(`${sessionId}:`)) this.cancelledTransferIds.delete(key);
+        }
+        for (const key of [...this.activeTransferKeys]) {
+            if (key.startsWith(`${sessionId}:`)) this.activeTransferKeys.delete(key);
         }
 
         void Promise.allSettled(cleanupTasks).finally(() => {
@@ -898,8 +903,15 @@ export class SftpService {
     async cancelTransfer(sessionId: string, requestId: string): Promise<void> {
         const state = this.clientStates.get(sessionId);
         const key = this.transferCancellationKey(sessionId, requestId);
+        if (!this.activeTransferKeys.has(key)) {
+            // The task already finished (or never started). Acknowledge the user's request
+            // without leaving a cancellation marker that has no owner to clear it.
+            this.sendTransferCancelled(state, requestId);
+            return;
+        }
+        // Keep cancellation attached to the real transfer lifecycle. A single SFTP read/write
+        // may remain blocked for much longer than 30 seconds; a TTL would let the task resume.
         this.cancelledTransferIds.add(key);
-        setTimeout(() => this.cancelledTransferIds.delete(key), 30_000).unref?.();
         if (state?.ws.readyState === WebSocket.OPEN) {
             state.ws.send(JSON.stringify({
                 type: 'sftp:transfer:cancelling',
@@ -1008,6 +1020,7 @@ export class SftpService {
         const copiedItemsDetails: any[] = []; // Store details of successfully copied items
         let firstError: Error | null = null;
         const transferKey = this.transferCancellationKey(sessionId, requestId);
+        this.activeTransferKeys.add(transferKey);
 
         try {
             const tracker = this.createTransferTracker(sessionId, state, sources, requestId);
@@ -1056,7 +1069,6 @@ export class SftpService {
 
             this.assertTransferNotCancelled(tracker);
             this.finalizeTransferTracker(tracker);
-            this.cancelledTransferIds.delete(transferKey);
 
             // Send success message with details of copied items
             console.log(`[SFTP ${sessionId}] Copy operation completed successfully (ID: ${requestId}). Copied items: ${copiedItemsDetails.length}`);
@@ -1068,7 +1080,6 @@ export class SftpService {
 
         } catch (error: any) {
             const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
-            this.cancelledTransferIds.delete(transferKey);
             if (cancelled) {
                 console.log(`[SFTP ${sessionId}] Copy operation cancelled (ID: ${requestId}).`);
                 this.sendTransferCancelled(state, requestId);
@@ -1076,6 +1087,9 @@ export class SftpService {
             }
             console.error(`[SFTP ${sessionId}] Copy operation failed (ID: ${requestId}):`, error);
             state.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: `复制操作失败: ${error.message}`, requestId: requestId }));
+        } finally {
+            this.activeTransferKeys.delete(transferKey);
+            this.cancelledTransferIds.delete(transferKey);
         }
     }
 
@@ -1109,6 +1123,7 @@ export class SftpService {
         const destinationSftp = destinationState.sftp;
         const copiedItemsDetails: any[] = [];
         const transferKey = this.transferCancellationKey(destinationSessionId, requestId);
+        this.activeTransferKeys.add(transferKey);
 
         try {
             const tracker = this.createTransferTracker(destinationSessionId, destinationState, sources, requestId);
@@ -1141,7 +1156,6 @@ export class SftpService {
 
             this.assertTransferNotCancelled(tracker);
             this.finalizeTransferTracker(tracker);
-            this.cancelledTransferIds.delete(transferKey);
 
             destinationState.ws.send(JSON.stringify({
                 type: 'sftp:copy:success',
@@ -1155,7 +1169,6 @@ export class SftpService {
             }));
         } catch (error: any) {
             const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
-            this.cancelledTransferIds.delete(transferKey);
             if (cancelled) {
                 console.log(`[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Cancelled (ID: ${requestId}).`);
                 this.sendTransferCancelled(destinationState, requestId);
@@ -1163,6 +1176,9 @@ export class SftpService {
             }
             console.error(`[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Failed (ID: ${requestId}):`, error);
             fail(`跨主机复制失败: ${error.message}`);
+        } finally {
+            this.activeTransferKeys.delete(transferKey);
+            this.cancelledTransferIds.delete(transferKey);
         }
     }
 
@@ -1214,6 +1230,7 @@ export class SftpService {
         const movedItemsDetails: any[] = [];
         let firstError: Error | null = null;
         const transferKey = this.transferCancellationKey(sessionId, requestId);
+        this.activeTransferKeys.add(transferKey);
         const tracker: SftpTransferTracker = {
             sessionId,
             state,
@@ -1289,7 +1306,6 @@ export class SftpService {
             }
 
             this.assertTransferNotCancelled(tracker);
-            this.cancelledTransferIds.delete(transferKey);
             console.log(`[SFTP ${sessionId}] Move operation completed successfully (ID: ${requestId}). Moved items: ${movedItemsDetails.length}`);
             state.ws.send(JSON.stringify({
                 type: 'sftp:move:success',
@@ -1299,7 +1315,6 @@ export class SftpService {
 
         } catch (error: any) {
             const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
-            this.cancelledTransferIds.delete(transferKey);
             if (cancelled) {
                 console.log(`[SFTP ${sessionId}] Move operation cancelled (ID: ${requestId}).`);
                 this.sendTransferCancelled(state, requestId);
@@ -1307,6 +1322,9 @@ export class SftpService {
             }
             console.error(`[SFTP ${sessionId}] Move operation failed (ID: ${requestId}):`, error);
             state.ws.send(JSON.stringify({ type: 'sftp:move:error', payload: `移动操作失败: ${error.message}`, requestId: requestId }));
+        } finally {
+            this.activeTransferKeys.delete(transferKey);
+            this.cancelledTransferIds.delete(transferKey);
         }
     }
 

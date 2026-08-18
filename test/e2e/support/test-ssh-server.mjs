@@ -688,7 +688,7 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/write-delay') {
       const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
       sftpWriteDelayMs = Number.isFinite(requestedDelay)
-        ? Math.max(0, Math.min(5000, Math.round(requestedDelay)))
+        ? Math.max(0, Math.min(35_000, Math.round(requestedDelay)))
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpWriteDelayMs }));
@@ -732,6 +732,33 @@ const controlServer = http.createServer(async (req, res) => {
       }
       res.writeHead(204);
       res.end();
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/fixture-directory') {
+      const name = path.basename(requestUrl.searchParams.get('name') || 'copy-cancel-dir');
+      const requestedSize = Number(requestUrl.searchParams.get('size') || `${32 * 1024}`);
+      const size = Number.isFinite(requestedSize) ? Math.max(1, Math.min(1024 * 1024, Math.round(requestedSize))) : 32 * 1024;
+      const targetDir = path.join(rootDir, name);
+      await fsp.rm(targetDir, { recursive: true, force: true });
+      await fsp.mkdir(targetDir, { recursive: true });
+      await fsp.writeFile(path.join(targetDir, '01-first.bin'), Buffer.alloc(size, 0x61));
+      await fsp.writeFile(path.join(targetDir, '02-second.bin'), Buffer.alloc(size, 0x62));
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/path-exists') {
+      const requestedPath = String(requestUrl.searchParams.get('path') || '').replace(/\\/g, '/');
+      const normalized = path.posix.normalize(`/${requestedPath}`).replace(/^\/+/, '');
+      const targetPath = path.resolve(rootDir, normalized);
+      const rootPrefix = `${path.resolve(rootDir)}${path.sep}`;
+      const allowed = targetPath === path.resolve(rootDir) || targetPath.startsWith(rootPrefix);
+      let exists = false;
+      if (allowed) {
+        try { await fsp.access(targetPath); exists = true; } catch { /* absent */ }
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ exists }));
       return;
     }
     if (req.method === 'GET' && requestUrl.pathname === '/files') {
