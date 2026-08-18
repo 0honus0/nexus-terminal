@@ -1105,8 +1105,16 @@ onBeforeUnmount(() => {
         window.clearTimeout(terminalFontSizeSaveTimer);
         terminalFontSizeSaveTimer = null;
     }
-    pendingTerminalFontSize = null;
-    terminalFontSizeSyncLocked.value = false;
+    // Do not discard the last wheel/pinch value when this terminal is destroyed before
+    // the normal debounce fires. If a save is already in flight, its loop will consume the
+    // newest pending value; otherwise flush it immediately. The terminal itself may be gone
+    // by the time the request settles, so flushPendingTerminalFontSizeSave() already guards
+    // the rendered-state reconciliation behind `if (terminal)`.
+    if (pendingTerminalFontSize !== null) {
+        void flushPendingTerminalFontSizeSave();
+    } else if (!terminalFontSizeSaveInFlight) {
+        terminalFontSizeSyncLocked.value = false;
+    }
 
     // Remove touch listeners on unmount
     if (isMobile.value && terminalRef.value) {
