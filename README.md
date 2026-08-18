@@ -15,7 +15,9 @@
 
 ```bash
 mkdir -p nexus-terminal && cd nexus-terminal
+
 wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env}
+
 docker compose up -d
 ```
 
