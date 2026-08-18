@@ -3,17 +3,14 @@
   "group": 1,
   "workers": 4,
   "specs": [
+    "tests/auth/setup-login.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
     "tests/ssh/progress-display.spec.ts",
-    "tests/ssh/docker-manager-ui.spec.ts",
-    "tests/ssh/protocol.spec.ts",
-    "tests/ssh/status-docker-protocol.spec.ts",
-    "tests/ui/captcha-settings.spec.ts",
-    "tests/ui/change-password.spec.ts",
-    "tests/ui/ip-blacklist-settings.spec.ts",
-    "tests/ui/ip-whitelist-settings.spec.ts",
-    "tests/ui/protected-navigation.spec.ts",
-    "tests/ui/session-lifecycle.spec.ts",
-    "tests/ui/ssh-key-management.spec.ts"
+    "tests/ssh/suspend-resume.spec.ts",
+    "tests/ui/notification-delivery.spec.ts",
+    "tests/ui/notification-settings.spec.ts",
+    "tests/ui/proxy-management.spec.ts",
+    "tests/ui/system-settings.spec.ts",
+    "tests/ui/theme-switching.spec.ts"
   ]
 }
