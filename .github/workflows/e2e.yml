@@ -372,7 +372,7 @@ jobs:
   screenshots:
     name: Refresh functional screenshots
     needs: [environment, runner-image, playwright-groups]
-    if: ${{ always() && needs.environment.outputs.changed == 'true' && needs.environment.result == 'success' && needs.runner-image.result == 'success' && needs.playwright-groups.result == 'success' }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.playwright-groups.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -392,12 +392,14 @@ jobs:
           fetch-depth: 0
 
       - name: Download E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
         uses: actions/download-artifact@v8
         with:
           name: e2e-environment-patch
           path: ${{ runner.temp }}/e2e-environment-patch
 
       - name: Apply E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
@@ -440,7 +442,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -u
+          git add -A
           git commit -m "chore(e2e): refresh test environment and screenshots [skip ci]"
           git push origin "HEAD:$GITHUB_REF_NAME"
 
