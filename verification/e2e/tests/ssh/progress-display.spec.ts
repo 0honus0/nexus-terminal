@@ -241,7 +241,8 @@ test('registered archive progress supports hide, restore, and real cancel for co
       await expect(row(page, 'archive-source.txt')).toHaveCount(0);
     });
 
-    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2500`, { method: 'POST' });
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=1`, { method: 'POST' });
     await slowStep('decompress task registers a real cancel callback and does not extract after cancellation', async () => {
       await rightClickRow(page, 'archive-source.zip');
       await clickMenuItem(page, 'Decompress');
@@ -256,9 +257,10 @@ test('registered archive progress supports hide, restore, and real cancel for co
       await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
       await task.getByTestId('hidden-progress-cancel').click();
       await expect(task).toBeHidden({ timeout: 10_000 });
+      await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
       await closeProgressDisplay(modal);
 
-      await page.waitForTimeout(2_800);
+      await page.waitForTimeout(800);
       await expect(row(page, 'archive-source.txt')).toHaveCount(0);
     });
 
@@ -268,6 +270,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
       await closeProgressDisplay(modal);
     });
   } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
   }
 });

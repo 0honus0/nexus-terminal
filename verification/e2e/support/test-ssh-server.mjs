@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
 const rootDir = path.join(e2eRoot, '.tmp', 'ssh-root');
+const archiveExecHoldPath = path.join(e2eRoot, '.tmp', 'archive-exec-hold.flag');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
 const {
   Server,
@@ -165,6 +166,7 @@ async function writeXlsxFixture(destination) {
 }
 
 async function resetRoot() {
+  await fsp.rm(archiveExecHoldPath, { force: true });
   await fsp.rm(rootDir, { recursive: true, force: true });
   await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
@@ -536,9 +538,14 @@ function runRemoteCommand(command, stream) {
   }
 
   const executableCommand = remapArchiveExecWorkingDirectory(command);
-  const delayedCommand = archiveExecDelayMs > 0 && command.includes('__NEXUS_ARCHIVE_TOTAL__:')
-    ? `sleep ${archiveExecDelayMs / 1000}; ${executableCommand}`
-    : executableCommand;
+  const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
+  const holdPrefix = isArchiveCommand
+    ? `while [ -f ${JSON.stringify(archiveExecHoldPath)} ]; do sleep 0.05; done; `
+    : '';
+  const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand
+    ? `sleep ${archiveExecDelayMs / 1000}; `
+    : '';
+  const delayedCommand = `${holdPrefix}${delayPrefix}${executableCommand}`;
   const child = spawn('/bin/sh', ['-lc', delayedCommand], {
     cwd: rootDir,
     env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
@@ -683,6 +690,15 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ archiveExecDelayMs }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-hold') {
+      const enabled = ['1', 'true', 'yes'].includes(String(requestUrl.searchParams.get('enabled') || '').toLowerCase());
+      await fsp.mkdir(path.dirname(archiveExecHoldPath), { recursive: true });
+      if (enabled) await fsp.writeFile(archiveExecHoldPath, 'hold\n', 'utf8');
+      else await fsp.rm(archiveExecHoldPath, { force: true });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ enabled }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
