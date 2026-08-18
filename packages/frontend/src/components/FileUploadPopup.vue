@@ -5,6 +5,9 @@ import type { UploadItem } from '../types/upload.types';
 import { useProgressCenterStore } from '../stores/progressCenter.store';
 
 const POSITION_KEY = 'nexusUploadPopupPosition';
+const SIZE_KEY = 'nexusUploadPopupSize';
+const DEFAULT_SIZE = { width: 440, height: 300 };
+const MIN_SIZE = { width: 340, height: 190 };
 
 const props = withDefaults(defineProps<{
   uploads: Record<string, UploadItem>; // 接收上传任务字典
@@ -30,10 +33,16 @@ const progressCenter = useProgressCenterStore();
 const popupRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
+const resizing = ref(false);
+const popupSize = ref({ ...DEFAULT_SIZE });
 const positionReady = ref(false);
 let dragOffsetX = 0;
 let dragOffsetY = 0;
 let positionRestored = false;
+let resizeStartX = 0;
+let resizeStartY = 0;
+let resizeStartWidth = DEFAULT_SIZE.width;
+let resizeStartHeight = DEFAULT_SIZE.height;
 
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)
@@ -101,7 +110,20 @@ const uploadList = computed(() => Object.values(props.uploads).filter(upload => 
 const popupStyle = computed(() => ({
   left: `${position.value.x}px`,
   top: `${position.value.y}px`,
+  width: `${popupSize.value.width}px`,
+  height: `${popupSize.value.height}px`,
 }));
+
+const clampSizeToViewport = () => {
+  const maxWidth = Math.max(220, window.innerWidth - 16);
+  const maxHeight = Math.max(150, window.innerHeight - 16);
+  const minWidth = Math.min(MIN_SIZE.width, maxWidth);
+  const minHeight = Math.min(MIN_SIZE.height, maxHeight);
+  popupSize.value = {
+    width: Math.min(Math.max(minWidth, popupSize.value.width), maxWidth),
+    height: Math.min(Math.max(minHeight, popupSize.value.height), maxHeight),
+  };
+};
 
 const clampPosition = () => {
   const element = popupRef.value;
@@ -114,12 +136,40 @@ const clampPosition = () => {
   };
 };
 
+const clampLayout = () => {
+  clampSizeToViewport();
+  nextTick(clampPosition);
+};
+
 const savePosition = () => {
   try {
     localStorage.setItem(POSITION_KEY, JSON.stringify(position.value));
   } catch {
     // Drag position persistence is optional.
   }
+};
+
+const saveSize = () => {
+  try {
+    localStorage.setItem(SIZE_KEY, JSON.stringify(popupSize.value));
+  } catch {
+    // Size persistence is optional.
+  }
+};
+
+const restoreSize = () => {
+  try {
+    const saved = localStorage.getItem(SIZE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as { width?: number; height?: number };
+      if (Number.isFinite(parsed.width) && Number.isFinite(parsed.height)) {
+        popupSize.value = { width: parsed.width as number, height: parsed.height as number };
+      }
+    }
+  } catch {
+    popupSize.value = { ...DEFAULT_SIZE };
+  }
+  clampSizeToViewport();
 };
 
 const restorePosition = async () => {
@@ -176,6 +226,44 @@ const startDragging = (event: PointerEvent) => {
   window.addEventListener('pointerup', stopDragging);
 };
 
+const handleResizePointerMove = (event: PointerEvent) => {
+  if (!resizing.value) return;
+  const desiredWidth = resizeStartWidth + event.clientX - resizeStartX;
+  const desiredHeight = resizeStartHeight + event.clientY - resizeStartY;
+  const maxWidth = Math.max(220, window.innerWidth - 16);
+  const maxHeight = Math.max(150, window.innerHeight - 16);
+  const nextWidth = Math.min(Math.max(Math.min(MIN_SIZE.width, maxWidth), desiredWidth), maxWidth);
+  const nextHeight = Math.min(Math.max(Math.min(MIN_SIZE.height, maxHeight), desiredHeight), maxHeight);
+  popupSize.value = { width: nextWidth, height: nextHeight };
+  position.value = {
+    x: Math.max(8, Math.min(position.value.x, window.innerWidth - nextWidth - 8)),
+    y: Math.max(8, Math.min(position.value.y, window.innerHeight - nextHeight - 8)),
+  };
+};
+
+const stopResizing = () => {
+  if (!resizing.value) return;
+  resizing.value = false;
+  document.body.style.userSelect = '';
+  window.removeEventListener('pointermove', handleResizePointerMove);
+  window.removeEventListener('pointerup', stopResizing);
+  saveSize();
+  savePosition();
+};
+
+const startResizing = (event: PointerEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+  resizing.value = true;
+  resizeStartX = event.clientX;
+  resizeStartY = event.clientY;
+  resizeStartWidth = popupSize.value.width;
+  resizeStartHeight = popupSize.value.height;
+  document.body.style.userSelect = 'none';
+  window.addEventListener('pointermove', handleResizePointerMove);
+  window.addEventListener('pointerup', stopResizing);
+};
+
 const handleCancel = (uploadId: string) => {
   emit('cancel-upload', uploadId);
 };
@@ -191,6 +279,7 @@ const hidePopup = () => {
 
 
 watch(() => props.restoreToken, async () => {
+  restoreSize();
   await restorePosition();
   positionReady.value = true;
   await nextTick();
@@ -207,6 +296,7 @@ watch(() => uploadList.value.length, async (count) => {
 
   if (!positionRestored) {
     positionRestored = true;
+    restoreSize();
     await restorePosition();
     positionReady.value = true;
     return;
@@ -219,16 +309,17 @@ watch(() => uploadList.value.length, async (count) => {
 }, { immediate: true });
 
 onMounted(() => {
-  window.addEventListener('resize', clampPosition);
+  window.addEventListener('resize', clampLayout);
   lastSpeedSampleAt = performance.now();
   speedTimer = window.setInterval(sampleTotalUploadSpeed, 500);
 });
 onBeforeUnmount(() => {
   stopDragging();
+  stopResizing();
   if (speedTimer !== null) window.clearInterval(speedTimer);
   speedTimer = null;
   speedSnapshots.clear();
-  window.removeEventListener('resize', clampPosition);
+  window.removeEventListener('resize', clampLayout);
 });
 </script>
 
@@ -238,8 +329,8 @@ onBeforeUnmount(() => {
     v-if="props.visible && !sourceHidden && uploadList.length > 0"
     ref="popupRef"
     data-testid="file-upload-progress-popup"
-    class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-56 overflow-hidden z-[1001] text-sm"
-    :class="{ dragging }"
+    class="upload-popup fixed flex flex-col overflow-hidden border border-border bg-background text-sm shadow-xl z-[1001]"
+    :class="{ dragging, resizing }"
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
     <div class="upload-popup-header border-b border-border px-3 py-2" @pointerdown="startDragging">
@@ -282,7 +373,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
-    <ul class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
+    <ul data-testid="file-upload-list" class="custom-scrollbar m-0 min-h-0 flex-1 list-none overflow-y-auto p-3">
       <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2 last:mb-0">
         <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
         <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" :value="upload.progress" max="100" class="w-20 h-2 flex-shrink-0 [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
@@ -294,20 +385,64 @@ onBeforeUnmount(() => {
         <button v-if="['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)" data-testid="file-upload-cancel" @click="handleCancel(upload.id)" class="ml-auto px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200 flex-shrink-0">{{ t('fileManager.actions.cancel') }}</button>
       </li>
     </ul>
+    <button
+      type="button"
+      data-testid="file-upload-resize-handle"
+      class="upload-popup-resize-handle"
+      :title="t('common.resize', '调整大小')"
+      :aria-label="t('common.resize', '调整大小')"
+      @pointerdown="startResizing"
+    ></button>
   </div>
 </template>
 
 <style scoped>
 .upload-popup {
-  width: min(320px, calc(100vw - 16px));
+  min-width: min(340px, calc(100vw - 16px));
+  min-height: min(190px, calc(100vh - 16px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  border-radius: 10px;
 }
 .upload-popup.dragging {
   cursor: grabbing;
   transition: none;
 }
+.upload-popup.resizing {
+  transition: none;
+}
 .upload-popup-header {
+  flex-shrink: 0;
   cursor: grab;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 10%, transparent), transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 12%, transparent), color-mix(in srgb, var(--header-bg-color) 92%, transparent));
+}
+.upload-popup-resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  cursor: nwse-resize;
+  opacity: 0.55;
+}
+.upload-popup-resize-handle::before,
+.upload-popup-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 1px;
+  background: var(--text-secondary-color, currentColor);
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+.upload-popup-resize-handle::after {
+  right: 6px;
+  bottom: 3px;
+  width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

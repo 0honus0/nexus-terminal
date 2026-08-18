@@ -57,10 +57,12 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
 
   const modal = page.getByTestId('progress-display-modal');
   await expect(modal).toBeVisible();
-  const task = modal.getByTestId('hidden-progress-task').filter({ hasText: taskText });
+  const source = modal.getByTestId('hidden-progress-source').filter({ hasText: taskText });
+  const task = source.getByTestId('hidden-progress-task').filter({ hasText: taskText });
+  await expect(source).toBeVisible();
   await expect(task).toBeVisible();
   await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
-  await task.getByTestId('hidden-progress-restore').click();
+  await source.getByTestId('hidden-progress-restore').click();
   await expect(modal).toBeHidden();
   await expect(popup).toBeVisible();
 }

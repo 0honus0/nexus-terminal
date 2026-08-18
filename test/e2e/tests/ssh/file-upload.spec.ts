@@ -155,10 +155,12 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       await progressDisplay.click();
       const progressModal = page.getByTestId('progress-display-modal');
       await expect(progressModal).toBeVisible();
-      const hiddenTask = progressModal.getByTestId('hidden-progress-task').first();
+      const hiddenSource = progressModal.getByTestId('hidden-progress-source').first();
+      const hiddenTask = hiddenSource.getByTestId('hidden-progress-task').first();
+      await expect(hiddenSource).toBeVisible();
       await expect(hiddenTask).toBeVisible();
       await expect(hiddenTask.getByTestId('hidden-progress-bar')).toBeVisible();
-      await hiddenTask.getByTestId('hidden-progress-restore').click();
+      await hiddenSource.getByTestId('hidden-progress-restore').click();
       await expect(progressModal).toBeHidden();
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
@@ -221,10 +223,10 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
   }
 });
 
-test('upload popup keeps the full speed text and minimize-style Hide action inside the header', async ({ page, context }) => {
+test('upload popup resizes and a hidden batch becomes one scrollable source card', async ({ page, context }) => {
   await openFileManager(page, context);
 
-  const files = Array.from({ length: 4 }, (_, index) => ({
+  const files = Array.from({ length: 8 }, (_, index) => ({
     name: `hide-button-${index + 1}.bin`,
     size: 4 * 1024 * 1024,
     fill: 0x60 + index,
@@ -271,8 +273,42 @@ test('upload popup keeps the full speed text and minimize-style Hide action insi
     expect(hideBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
     expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
 
+    const resizeHandle = popup.getByTestId('file-upload-resize-handle');
+    await expect(resizeHandle).toBeVisible();
+    const resizeBox = await resizeHandle.boundingBox();
+    expect(resizeBox).not.toBeNull();
+    await page.mouse.move(resizeBox!.x + resizeBox!.width / 2, resizeBox!.y + resizeBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resizeBox!.x + 90, resizeBox!.y + 70, { steps: 5 });
+    await page.mouse.up();
+    const resizedPopupBox = await popup.boundingBox();
+    expect(resizedPopupBox).not.toBeNull();
+    expect(resizedPopupBox!.width).toBeGreaterThan(popupBox!.width + 40);
+    expect(resizedPopupBox!.height).toBeGreaterThan(popupBox!.height + 30);
+
     await hideButton.click();
     await expect(popup).toBeHidden();
+
+    await page.getByTestId('transfer-progress-toggle').click();
+    const modal = page.getByTestId('progress-display-modal');
+    await expect(modal).toBeVisible();
+    const hiddenSources = modal.getByTestId('hidden-progress-source');
+    await expect(hiddenSources).toHaveCount(1);
+    const sourceCard = hiddenSources.first();
+    const sourceTasks = sourceCard.getByTestId('hidden-progress-task');
+    await expect(sourceTasks.first()).toBeVisible();
+    expect(await sourceTasks.count()).toBeGreaterThan(1);
+    const listMetrics = await sourceCard.getByTestId('hidden-progress-source-list').evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
+    const cancelAllHidden = sourceCard.getByTestId('hidden-progress-cancel-all');
+    await expect(cancelAllHidden).toBeVisible();
+    await cancelAllHidden.click();
+    await expect(sourceCard).toBeHidden({ timeout: 10_000 });
+    await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+    await modal.getByTestId('progress-display-close').click();
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }

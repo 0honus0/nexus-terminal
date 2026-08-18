@@ -35,6 +35,10 @@ export interface RegisteredProgressTask extends ProgressTaskRegistration {
   sourceLabel?: string;
 }
 
+export interface RegisteredProgressSource extends ProgressSourceRegistration {
+  tasks: RegisteredProgressTask[];
+}
+
 interface ProgressSourceState extends ProgressSourceRegistration {
   hidden: boolean;
   hiddenExplicitly: boolean;
@@ -169,22 +173,33 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
 
   const isSourceHidden = (sourceId: string) => Boolean(sources[sourceId]?.hidden);
 
-  const hiddenTasks = computed<RegisteredProgressTask[]>(() => {
-    const result: RegisteredProgressTask[] = [];
+  const toRegisteredTask = (source: ProgressSourceState, task: ProgressTaskRegistration): RegisteredProgressTask => ({
+    ...task,
+    key: `${source.id}:${task.id}`,
+    sourceId: source.id,
+    sessionId: source.sessionId,
+    sourceLabel: source.label,
+  });
+
+  const hiddenSources = computed<RegisteredProgressSource[]>(() => {
+    const result: RegisteredProgressSource[] = [];
     for (const source of Object.values(sources)) {
       if (!source.hidden) continue;
-      for (const task of Object.values(source.tasks)) {
-        result.push({
-          ...task,
-          key: `${source.id}:${task.id}`,
-          sourceId: source.id,
-          sessionId: source.sessionId,
-          sourceLabel: source.label,
-        });
-      }
+      const tasks = Object.values(source.tasks).map(task => toRegisteredTask(source, task));
+      if (tasks.length === 0) continue;
+      result.push({
+        id: source.id,
+        sessionId: source.sessionId,
+        label: source.label,
+        tasks,
+      });
     }
     return result;
   });
+
+  const hiddenTasks = computed<RegisteredProgressTask[]>(() =>
+    hiddenSources.value.flatMap(source => source.tasks),
+  );
 
   const cancelTask = async (sourceId: string, taskId: string) => {
     const task = sources[sourceId]?.tasks[taskId];
@@ -193,8 +208,18 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     await task.cancel();
   };
 
+  const cancelSource = async (sourceId: string) => {
+    const source = sources[sourceId];
+    if (!source) return;
+    const cancellableTaskIds = Object.values(source.tasks)
+      .filter(task => task.cancel && task.cancellable !== false && task.status !== 'cancelling')
+      .map(task => task.id);
+    await Promise.all(cancellableTaskIds.map(taskId => cancelTask(sourceId, taskId)));
+  };
+
   return {
     sources,
+    hiddenSources,
     hiddenTasks,
     registerSource,
     startTask,
@@ -207,5 +232,6 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     setSourceProviderAttached,
     isSourceHidden,
     cancelTask,
+    cancelSource,
   };
 });

@@ -83,6 +83,10 @@ async function openProgressDisplay(page: Page): Promise<Locator> {
   return modal;
 }
 
+function hiddenSource(modal: Locator, text: string): Locator {
+  return modal.getByTestId('hidden-progress-source').filter({ hasText: text });
+}
+
 function hiddenTask(modal: Locator, text: string): Locator {
   return modal.getByTestId('hidden-progress-task').filter({ hasText: text });
 }
@@ -123,10 +127,12 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
       await expect(task.getByTestId('hidden-progress-percent')).toBeVisible();
       await expect(task.locator('[data-progress-session]')).toHaveCount(0);
-      await expect(task.getByTestId('hidden-progress-restore')).toBeEnabled();
+      const source = hiddenSource(modal, filename);
+      await expect(source).toBeVisible();
+      await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
       await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
 
-      await task.getByTestId('hidden-progress-restore').click();
+      await source.getByTestId('hidden-progress-restore').click();
       const popup = page.getByTestId('file-upload-progress-popup');
       await expect(modal).toBeHidden();
       await expect(popup).toBeVisible();
@@ -255,7 +261,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
       const modal = await openProgressDisplay(page);
       let task = hiddenTask(modal, 'archive-source.zip');
       await expect(task).toContainText('Compress');
-      await task.getByTestId('hidden-progress-restore').click();
+      await hiddenSource(modal, 'archive-source.zip').getByTestId('hidden-progress-restore').click();
       await expect(modal).toBeHidden();
       await expect(popup).toBeVisible();
       await popup.getByTestId('archive-progress-hide').click();

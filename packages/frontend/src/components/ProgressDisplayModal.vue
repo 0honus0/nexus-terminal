@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
-import { useProgressCenterStore, type ProgressTaskKind, type RegisteredProgressTask } from '../stores/progressCenter.store';
+import { useSessionStore } from '../stores/session.store';
+import { useProgressCenterStore, type ProgressTaskKind, type RegisteredProgressSource, type RegisteredProgressTask } from '../stores/progressCenter.store';
 
 interface Props {
   visible: boolean;
@@ -16,8 +17,9 @@ const emit = defineEmits(['update:visible']);
 const { t, locale } = useI18n(); // +++ 解构出 locale +++
 const connectionsStore = useConnectionsStore();
 const uiNotificationsStore = useUiNotificationsStore();
+const sessionStore = useSessionStore();
 const progressCenter = useProgressCenterStore();
-const hiddenProgressTasks = computed(() => progressCenter.hiddenTasks);
+const hiddenProgressSources = computed(() => progressCenter.hiddenSources);
 
 const MODAL_POSITION_KEY = 'nexusTransferProgressModalPosition';
 const modalRef = ref<HTMLElement | null>(null);
@@ -161,9 +163,41 @@ const normalizeRegisteredProgress = (progress?: number | null): number | null =>
   return Math.max(0, Math.min(100, progress));
 };
 
-const restoreRegisteredProgress = (task: RegisteredProgressTask) => {
-  progressCenter.restoreSource(task.sourceId);
+const getProgressSessionLabel = (sessionId?: string): string => {
+  if (!sessionId) return '';
+  return sessionStore.sessions.get(sessionId)?.connectionName?.trim() || sessionId.slice(0, 8);
+};
+
+const getProgressSourceLabel = (source: RegisteredProgressSource): string => {
+  if (source.label === 'upload') return t('fileManager.uploadTasks', '上传任务');
+  if (source.label === 'file-transfer') return t('fileManager.transferTasks', '传输任务');
+  const firstTask = source.tasks[0];
+  return firstTask ? getProgressKindLabel(firstTask.kind) : t('progressCenter.kind.other', '任务');
+};
+
+const getProgressSourceTitle = (source: RegisteredProgressSource): string => {
+  const sessionLabel = getProgressSessionLabel(source.sessionId);
+  const sourceLabel = getProgressSourceLabel(source);
+  return sessionLabel ? `${sessionLabel} · ${sourceLabel}` : sourceLabel;
+};
+
+const getProgressTaskStatusLabel = (task: RegisteredProgressTask): string => {
+  if (!task.status) return '';
+  if (task.status === 'cancelling') return t('progressCenter.cancelling', '取消中');
+  if (task.kind === 'upload') return t(`fileManager.uploadStatus.${task.status}`, task.status);
+  return task.status;
+};
+
+const getSourceCancellableCount = (source: RegisteredProgressSource): number =>
+  source.tasks.filter(task => task.cancellable !== false && task.cancel && task.status !== 'cancelling').length;
+
+const restoreRegisteredProgressSource = (source: RegisteredProgressSource) => {
+  progressCenter.restoreSource(source.id);
   handleClose();
+};
+
+const cancelRegisteredProgressSource = async (source: RegisteredProgressSource) => {
+  await progressCenter.cancelSource(source.id);
 };
 
 const cancelRegisteredProgress = async (task: RegisteredProgressTask) => {
@@ -393,7 +427,7 @@ const handleTaskAction = async (task: TransferTask) => {
   >
     <div
       ref="modalRef"
-      class="transfer-progress-panel fixed bg-background text-foreground rounded-lg shadow-xl border w-full max-w-3xl max-h-[85vh] flex flex-col"
+      class="transfer-progress-panel fixed bg-background text-foreground rounded-lg shadow-xl border w-full max-w-4xl max-h-[85vh] flex flex-col"
       :class="{ dragging: isDraggingModal }"
       :style="[modalStyle, { borderColor: 'var(--border-color)' }]"
     >
@@ -417,56 +451,90 @@ const handleTaskAction = async (task: TransferTask) => {
       <div class="flex-grow overflow-y-auto mb-6 px-6 pr-8 space-y-4 custom-scrollbar">
         <section data-testid="progress-display-hidden-section" class="space-y-3">
           <div class="flex items-center justify-between gap-3">
-            <h4 class="m-0 text-sm font-semibold">{{ t('progressCenter.hiddenTitle', '已隐藏的进度') }}</h4>
-            <span class="text-xs text-text-muted">{{ hiddenProgressTasks.length }}</span>
+            <div>
+              <h4 class="m-0 text-sm font-semibold">{{ t('progressCenter.hiddenTitle', '已隐藏的进度') }}</h4>
+              <p v-if="hiddenProgressSources.length" class="mb-0 mt-0.5 text-[11px] text-text-muted">
+                {{ t('progressCenter.hiddenSourceHint', '每个卡片代表一个隐藏任务，卡片内可滚动查看明细。') }}
+              </p>
+            </div>
+            <span class="shrink-0 rounded-full bg-border/60 px-2 py-0.5 text-xs tabular-nums text-text-muted">{{ hiddenProgressSources.length }}</span>
           </div>
 
-          <div v-if="hiddenProgressTasks.length === 0" data-testid="progress-display-empty" class="rounded border border-dashed border-border px-3 py-5 text-center text-xs text-text-secondary">
+          <div v-if="hiddenProgressSources.length === 0" data-testid="progress-display-empty" class="rounded border border-dashed border-border px-3 py-5 text-center text-xs text-text-secondary">
             {{ t('progressCenter.empty', '当前没有隐藏的进度任务。') }}
           </div>
 
-          <div v-else class="space-y-1.5" data-testid="hidden-progress-list">
+          <div v-else class="hidden-progress-source-grid" data-testid="hidden-progress-list">
             <article
-              v-for="task in hiddenProgressTasks"
-              :key="task.key"
-              data-testid="hidden-progress-task"
-              class="rounded-md border border-border bg-background-alt px-3 py-2"
+              v-for="source in hiddenProgressSources"
+              :key="source.id"
+              data-testid="hidden-progress-source"
+              class="hidden-progress-source-card"
             >
-              <div class="flex min-w-0 items-center gap-2">
-                <span class="shrink-0 rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-medium">{{ getProgressKindLabel(task.kind) }}</span>
-                <strong class="min-w-0 flex-1 truncate text-xs" :title="task.title">{{ task.title }}</strong>
-                <button
-                  type="button"
-                  data-testid="hidden-progress-restore"
-                  class="shrink-0 rounded border border-border px-2 py-0.5 text-[11px] hover:border-primary hover:text-primary"
-                  @click="restoreRegisteredProgress(task)"
-                >
-                  <i class="fas fa-window-restore mr-1"></i>{{ t('common.restore', '还原') }}
-                </button>
-                <button
-                  type="button"
-                  data-testid="hidden-progress-cancel"
-                  class="shrink-0 rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="task.cancellable === false || !task.cancel || task.status === 'cancelling'"
-                  @click="cancelRegisteredProgress(task)"
-                >
-                  <i :class="task.status === 'cancelling' ? 'fas fa-spinner fa-spin mr-1' : 'fas fa-ban mr-1'"></i>
-                  {{ task.status === 'cancelling' ? t('progressCenter.cancelling', '取消中') : t('common.cancel', '取消') }}
-                </button>
+              <div class="hidden-progress-source-header">
+                <div class="min-w-0 flex-1">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <strong class="min-w-0 flex-1 truncate text-sm" :title="getProgressSourceTitle(source)">{{ getProgressSourceTitle(source) }}</strong>
+                    <span class="shrink-0 rounded bg-border/60 px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary">{{ source.tasks.length }}</span>
+                  </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="hidden-progress-restore"
+                    class="rounded border border-border px-2 py-1 text-[11px] hover:border-primary hover:text-primary"
+                    @click="restoreRegisteredProgressSource(source)"
+                  >
+                    <i class="fas fa-window-restore mr-1"></i>{{ t('common.restore', '还原') }}
+                  </button>
+                  <button
+                    v-if="getSourceCancellableCount(source) > 0"
+                    type="button"
+                    data-testid="hidden-progress-cancel-all"
+                    class="rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] text-red-700 hover:bg-red-100"
+                    @click="cancelRegisteredProgressSource(source)"
+                  >
+                    {{ t('fileManager.actions.cancelAll', '全部取消') }} ({{ getSourceCancellableCount(source) }})
+                  </button>
+                </div>
               </div>
 
-              <div class="mt-1.5 flex items-center gap-2">
-                <div data-testid="hidden-progress-bar" class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border">
-                  <div
-                    v-if="normalizeRegisteredProgress(task.progress) !== null"
-                    class="h-full rounded-full bg-primary"
-                    :style="{ width: `${normalizeRegisteredProgress(task.progress)}%` }"
-                  ></div>
-                  <div v-else class="h-full w-1/3 animate-pulse rounded-full bg-primary/60"></div>
+              <div data-testid="hidden-progress-source-list" class="hidden-progress-source-list custom-scrollbar">
+                <div
+                  v-for="task in source.tasks"
+                  :key="task.key"
+                  data-testid="hidden-progress-task"
+                  class="hidden-progress-task-row"
+                >
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="shrink-0 rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-medium">{{ getProgressKindLabel(task.kind) }}</span>
+                    <span class="min-w-0 flex-1 truncate text-xs font-medium" :title="task.title">{{ task.title }}</span>
+                    <span v-if="getProgressTaskStatusLabel(task)" class="shrink-0 text-[10px] text-text-muted">{{ getProgressTaskStatusLabel(task) }}</span>
+                    <button
+                      type="button"
+                      data-testid="hidden-progress-cancel"
+                      class="shrink-0 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="task.cancellable === false || !task.cancel || task.status === 'cancelling'"
+                      @click="cancelRegisteredProgress(task)"
+                    >
+                      {{ task.status === 'cancelling' ? t('progressCenter.cancelling', '取消中') : t('common.cancel', '取消') }}
+                    </button>
+                  </div>
+
+                  <div class="mt-1.5 flex items-center gap-2">
+                    <div data-testid="hidden-progress-bar" class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border">
+                      <div
+                        v-if="normalizeRegisteredProgress(task.progress) !== null"
+                        class="h-full rounded-full bg-primary"
+                        :style="{ width: `${normalizeRegisteredProgress(task.progress)}%` }"
+                      ></div>
+                      <div v-else class="h-full w-1/3 animate-pulse rounded-full bg-primary/60"></div>
+                    </div>
+                    <span data-testid="hidden-progress-percent" class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary">
+                      {{ normalizeRegisteredProgress(task.progress) !== null ? `${normalizeRegisteredProgress(task.progress)?.toFixed(1)}%` : '…' }}
+                    </span>
+                  </div>
                 </div>
-                <span data-testid="hidden-progress-percent" class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary">
-                  {{ normalizeRegisteredProgress(task.progress) !== null ? `${normalizeRegisteredProgress(task.progress)?.toFixed(1)}%` : '…' }}
-                </span>
               </div>
             </article>
           </div>
@@ -599,7 +667,7 @@ const handleTaskAction = async (task: TransferTask) => {
 }
 
 .transfer-progress-panel {
-  width: min(48rem, calc(100vw - 32px));
+  width: min(56rem, calc(100vw - 32px));
   overflow: hidden;
 }
 .transfer-progress-panel.dragging {
@@ -610,6 +678,41 @@ const handleTaskAction = async (task: TransferTask) => {
   cursor: grab;
   border-bottom: 1px solid var(--border-color);
   background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 10%, transparent), transparent);
+}
+
+.hidden-progress-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 430px));
+  gap: 12px;
+  align-items: start;
+}
+.hidden-progress-source-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--app-bg-color) 96%, var(--header-bg-color));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.hidden-progress-source-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  background: color-mix(in srgb, var(--header-bg-color) 88%, transparent);
+}
+.hidden-progress-source-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 10px 7px;
+}
+.hidden-progress-task-row {
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+}
+.hidden-progress-task-row:last-child {
+  border-bottom: 0;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
