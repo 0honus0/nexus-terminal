@@ -431,6 +431,38 @@ jobs:
           path: doc/imgs/e2e/*.png
           if-no-files-found: error
 
+  screenshots-commit:
+    name: Commit functional screenshots
+    needs: [environment, screenshots]
+    if: ${{ always() && needs.screenshots.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout triggering branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Download E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-environment-patch
+          path: ${{ runner.temp }}/e2e-environment-patch
+
+      - name: Apply E2E environment patch
+        if: needs.environment.outputs.changed == 'true'
+        shell: bash
+        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
+
+      - name: Download generated screenshots
+        uses: actions/download-artifact@v8
+        with:
+          name: nexus-functional-screenshots
+          path: doc/imgs/e2e
+
       - name: Commit environment and screenshot refresh
         shell: bash
         run: |
@@ -449,8 +481,8 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   rebalance:
-    needs: [environment, runner-image, prepare, playwright-groups, screenshots]
-    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots.result == 'success' || needs.screenshots.result == 'skipped') }}
+    needs: [environment, runner-image, prepare, playwright-groups, screenshots, screenshots-commit]
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots.result == 'success' || needs.screenshots.result == 'skipped') && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
     permissions:
       actions: read
       contents: write
