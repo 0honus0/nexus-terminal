@@ -221,7 +221,7 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
   }
 });
 
-test('upload popup keeps the minimize-style Hide action visible when batch actions crowd the header', async ({ page, context }) => {
+test('upload popup keeps the full speed text and minimize-style Hide action inside the header', async ({ page, context }) => {
   await openFileManager(page, context);
 
   const files = Array.from({ length: 4 }, (_, index) => ({
@@ -236,24 +236,37 @@ test('upload popup keeps the minimize-style Hide action visible when batch actio
 
     const popup = page.getByTestId('file-upload-progress-popup');
     const uploadSpeed = popup.getByTestId('file-upload-speed');
+    const cancelAll = popup.getByTestId('file-upload-cancel-all');
     const hideButton = popup.getByTestId('file-upload-progress-hide');
     await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
+    await expect(cancelAll).toBeVisible();
     await expect(uploadSpeed).toBeVisible();
     await expect(hideButton).toBeVisible();
     await expect(hideButton.locator('i')).toHaveClass(/fa-minus/);
     await expect(popup.getByTestId('file-upload-progress-minimize')).toHaveCount(0);
 
-    const [popupBox, speedBox, hideBox] = await Promise.all([
+    const [popupBox, speedBox, cancelAllBox, hideBox, speedMetrics] = await Promise.all([
       popup.boundingBox(),
       uploadSpeed.boundingBox(),
+      cancelAll.boundingBox(),
       hideButton.boundingBox(),
+      uploadSpeed.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      })),
     ]);
     expect(popupBox).not.toBeNull();
     expect(speedBox).not.toBeNull();
+    expect(cancelAllBox).not.toBeNull();
     expect(hideBox).not.toBeNull();
-    expect(speedBox!.width).toBeGreaterThanOrEqual(80);
-    expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(hideBox!.x + 1);
+    expect(speedMetrics.scrollWidth).toBeLessThanOrEqual(speedMetrics.clientWidth + 1);
+    expect(speedMetrics.scrollHeight).toBeLessThanOrEqual(speedMetrics.clientHeight + 1);
+    expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
+    expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+    expect(cancelAllBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
+    expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
     expect(hideBox!.width).toBeGreaterThanOrEqual(20);
     expect(hideBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
     expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);

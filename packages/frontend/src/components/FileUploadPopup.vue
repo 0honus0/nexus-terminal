@@ -238,31 +238,15 @@ onBeforeUnmount(() => {
     v-if="props.visible && !sourceHidden && uploadList.length > 0"
     ref="popupRef"
     data-testid="file-upload-progress-popup"
-    class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-48 overflow-hidden z-[1001] text-sm"
+    class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-56 overflow-hidden z-[1001] text-sm"
     :class="{ dragging }"
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
-    <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
-      <h4 class="m-0 min-w-0 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
-        <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
-      </h4>
-      <div class="ml-auto flex min-w-0 items-center gap-1.5">
-        <span
-          v-if="hasUploading"
-          data-testid="file-upload-speed"
-          class="w-28 shrink-0 truncate whitespace-nowrap text-xs tabular-nums text-text-secondary"
-        >
-          {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
-        </span>
-        <button
-          v-if="cancellableCount > 1"
-          type="button"
-          data-testid="file-upload-cancel-all"
-          class="shrink-0 rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
-          @click="handleCancelAll"
-        >
-          {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
-        </button>
+    <div class="upload-popup-header border-b border-border px-3 py-2" @pointerdown="startDragging">
+      <div class="flex min-w-0 items-center gap-2">
+        <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
+          <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
+        </h4>
         <button
           v-if="props.progressSourceId"
           type="button"
@@ -273,6 +257,28 @@ onBeforeUnmount(() => {
           :aria-label="t('progressCenter.hide', '隐藏进度')"
         >
           <i class="fas fa-minus"></i>
+        </button>
+      </div>
+      <div
+        v-if="hasUploading || cancellableCount > 1"
+        data-testid="file-upload-header-meta"
+        class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+      >
+        <span
+          v-if="hasUploading"
+          data-testid="file-upload-speed"
+          class="shrink-0 whitespace-nowrap text-xs tabular-nums text-text-secondary"
+        >
+          {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
+        </span>
+        <button
+          v-if="cancellableCount > 1"
+          type="button"
+          data-testid="file-upload-cancel-all"
+          class="ml-auto shrink-0 rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
+          @click="handleCancelAll"
+        >
+          {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
         </button>
       </div>
     </div>
