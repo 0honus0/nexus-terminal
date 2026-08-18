@@ -114,7 +114,6 @@ export function createSftpActionsManager(
     const transferProgressSourceId = `sftp:${sessionId}:${progressInstanceId}:transfer`;
     const archiveProgressSourceId = `sftp:${sessionId}:${progressInstanceId}:archive`;
     let stopTransferProgressWatch: (() => void) | null = null;
-    let stopArchiveProgressWatch: (() => void) | null = null;
     const initialLoadDone = ref<boolean>(false); // +++ 跟踪此实例是否已完成初始加载 +++
     const archiveProgress = reactive<ArchiveProgressState>({
         active: false,
@@ -218,9 +217,7 @@ export function createSftpActionsManager(
         unregisterCallbacks.forEach(cb => cb());
         unregisterCallbacks.length = 0; // 清空数组
         stopTransferProgressWatch?.();
-        stopArchiveProgressWatch?.();
         stopTransferProgressWatch = null;
-        stopArchiveProgressWatch = null;
         progressCenter.unregisterSource(transferProgressSourceId);
         progressCenter.unregisterSource(archiveProgressSourceId);
     };
@@ -685,6 +682,19 @@ export function createSftpActionsManager(
            const archiveName = `${archiveBaseName}.${format === 'targz' ? 'tar.gz' : (format === 'tarbz2' ? 'tar.bz2' : format)}`;
            const destinationPath = joinPath(parentDir, archiveName);
 
+           progressCenter.startTask(
+               { id: archiveProgressSourceId, sessionId, label: 'archive' },
+               {
+                   id: requestId,
+                   kind: 'compress',
+                   title: archiveName,
+                   progress: null,
+                   status: 'running',
+                   cancellable: true,
+                   cancel: () => cancelArchive(),
+               },
+           );
+
            archiveProgress.active = true;
            archiveProgress.operation = 'compress';
            archiveProgress.requestId = requestId;
@@ -709,6 +719,7 @@ export function createSftpActionsManager(
                unregisterProgress?.();
                unregisterCancelled?.();
                unregisterCommandNotFound?.();
+               progressCenter.finishTask(archiveProgressSourceId, requestId);
                resetArchiveProgress();
            };
            const resetTimeout = () => {
@@ -759,6 +770,10 @@ export function createSftpActionsManager(
                if (typeof progress.totalFiles === 'number') archiveProgress.totalFiles = progress.totalFiles;
                if (typeof progress.percent === 'number') archiveProgress.percent = progress.percent;
                if (progress.currentFile) archiveProgress.currentFile = progress.currentFile;
+               progressCenter.updateTask(archiveProgressSourceId, requestId, {
+                   detail: archiveProgress.currentFile || undefined,
+                   progress: archiveProgress.percent,
+               });
            });
 
            unregisterCancelled = onMessage('sftp:archive:cancelled', (payload: MessagePayload, message: WebSocketMessage) => {
@@ -794,18 +809,22 @@ export function createSftpActionsManager(
        });
    };
 
-   const cancelArchive = () => {
+   function cancelArchive() {
        if (!archiveProgress.active || !archiveProgress.requestId || archiveProgress.cancelling) {
            return;
        }
        archiveProgress.cancelling = true;
        const requestId = archiveProgress.requestId;
+       progressCenter.updateTask(archiveProgressSourceId, requestId, {
+           status: 'cancelling',
+           cancellable: false,
+       });
        sendMessage({
            type: 'sftp:archive:cancel',
            requestId,
            payload: { requestId },
        });
-   };
+   }
 
    const decompressItem = (item: FileListItem, password?: string): Promise<void> => {
        return new Promise((resolve, reject) => {
@@ -818,6 +837,19 @@ export function createSftpActionsManager(
            const sourcePath = joinPath(currentPathRef.value, item.filename);
            const destinationDir = currentPathRef.value;
            const requestId = generateRequestId();
+
+           progressCenter.startTask(
+               { id: archiveProgressSourceId, sessionId, label: 'archive' },
+               {
+                   id: requestId,
+                   kind: 'decompress',
+                   title: item.filename,
+                   progress: null,
+                   status: 'running',
+                   cancellable: true,
+                   cancel: () => cancelArchive(),
+               },
+           );
 
            archiveProgress.active = true;
            archiveProgress.operation = 'decompress';
@@ -843,6 +875,7 @@ export function createSftpActionsManager(
                unregisterProgress?.();
                unregisterCancelled?.();
                unregisterCommandNotFound?.();
+               progressCenter.finishTask(archiveProgressSourceId, requestId);
                resetArchiveProgress();
            };
            const resetTimeout = () => {
@@ -885,6 +918,10 @@ export function createSftpActionsManager(
                if (typeof progress.totalFiles === 'number') archiveProgress.totalFiles = progress.totalFiles;
                if (typeof progress.percent === 'number') archiveProgress.percent = progress.percent;
                if (progress.currentFile) archiveProgress.currentFile = progress.currentFile;
+               progressCenter.updateTask(archiveProgressSourceId, requestId, {
+                   detail: archiveProgress.currentFile || undefined,
+                   progress: archiveProgress.percent,
+               });
            });
 
            unregisterCancelled = onMessage('sftp:archive:cancelled', (payload: MessagePayload, message: WebSocketMessage) => {
@@ -932,27 +969,7 @@ export function createSftpActionsManager(
        );
    };
 
-   const syncArchiveProgressRegistry = () => {
-       const progress = archiveProgress;
-       progressCenter.syncSourceTasks(
-           { id: archiveProgressSourceId, sessionId, label: 'archive' },
-           progress.active && progress.requestId
-               ? [{
-                   id: progress.requestId,
-                   kind: progress.operation === 'compress' ? 'compress' as const : 'decompress' as const,
-                   title: progress.archiveName || (progress.operation === 'compress' ? 'Compress' : 'Decompress'),
-                   detail: progress.currentFile || undefined,
-                   progress: progress.percent,
-                   status: progress.cancelling ? 'cancelling' : 'running',
-                   cancellable: !progress.cancelling,
-                   cancel: () => cancelArchive(),
-               }]
-               : [],
-       );
-   };
-
    stopTransferProgressWatch = watch(transferTasks, syncTransferProgressRegistry, { deep: true, immediate: true });
-   stopArchiveProgressWatch = watch(archiveProgress, syncArchiveProgressRegistry, { deep: true, immediate: true });
 
    // --- Message Handlers ---
 
