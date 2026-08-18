@@ -1,0 +1,47 @@
+name: E2E Runner Image
+
+on:
+  push:
+    paths:
+      - "test/e2e/Dockerfile.runner"
+      - ".github/workflows/e2e-runner-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-e2e-runner
+  TAG: playwright-1.62.1-node24-v1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Log in to GHCR
+        shell: bash
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build E2E runner image
+        run: |
+          docker build \
+            --pull \
+            --build-arg PLAYWRIGHT_VERSION=1.62.1 \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -f test/e2e/Dockerfile.runner \
+            -t "$IMAGE:$TAG" \
+            .
+
+      - name: Smoke-check preinstalled runtime
+        run: |
+          docker run --rm "$IMAGE:$TAG" node --version
+          docker run --rm "$IMAGE:$TAG" sh -lc 'npx -y playwright@1.62.1 --version && test -d "$PLAYWRIGHT_BROWSERS_PATH" && command -v zip && command -v unzip && command -v bzip2'
+
+      - name: Push E2E runner image
+        run: docker push "$IMAGE:$TAG"
