@@ -36,9 +36,10 @@ cleanup() {
   if [[ "$failed" -ne 0 || "$status" -ne 0 ]]; then
     print_logs
   fi
+  docker exec "$backend" sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
   docker rm -f "$frontend" "$backend" "$remote_gateway" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
-  rm -rf "$data_dir" "$cookie_jar"
+  rm -rf "$data_dir" "$cookie_jar" || true
   exit "$status"
 }
 trap cleanup EXIT
