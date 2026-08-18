@@ -257,14 +257,15 @@ onBeforeUnmount(() => {
       <h4 class="m-0 min-w-0 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">
         <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
       </h4>
-      <div class="ml-auto flex items-center gap-2">
-        <span v-if="hasUploading" class="whitespace-nowrap text-xs tabular-nums text-text-secondary">
+      <div class="ml-auto flex min-w-0 items-center gap-1.5">
+        <span v-if="hasUploading" class="max-w-24 truncate whitespace-nowrap text-xs tabular-nums text-text-secondary">
           {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
         </span>
         <button
           v-if="cancellableCount > 1 && !minimized"
           type="button"
-          class="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
+          data-testid="file-upload-cancel-all"
+          class="shrink-0 rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
           @click="handleCancelAll"
         >
           {{ t('fileManager.actions.cancelAll') }} ({{ cancellableCount }})
@@ -273,16 +274,17 @@ onBeforeUnmount(() => {
           v-if="props.progressSourceId"
           type="button"
           data-testid="file-upload-progress-hide"
-          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          class="grid h-6 w-6 shrink-0 place-items-center rounded border border-border/70 bg-header/70 text-text-secondary hover:bg-border hover:text-foreground"
           @click="hidePopup"
           :title="t('progressCenter.hide', '隐藏进度')"
+          :aria-label="t('progressCenter.hide', '隐藏进度')"
         >
           <i class="fas fa-eye-slash"></i>
         </button>
         <button
           type="button"
           data-testid="file-upload-progress-minimize"
-          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
+          class="grid h-6 w-6 shrink-0 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
           @click="toggleMinimized"
           :title="minimized ? t('common.expand') : t('common.minimize')"
         >
@@ -299,7 +301,7 @@ onBeforeUnmount(() => {
         <span v-if="upload.status === 'success' || (upload.status === 'uploading' && upload.progress === 100)" class="text-green-600"> ✅</span>
         <span v-if="upload.status === 'cancelled'" class="text-red-600"> ❌ {{ t('fileManager.uploadStatus.cancelled') }}</span>
         <!-- 只有在可取消状态时显示取消按钮 -->
-        <button v-if="['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)" @click="handleCancel(upload.id)" class="ml-auto px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200 flex-shrink-0">{{ t('fileManager.actions.cancel') }}</button>
+        <button v-if="['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)" data-testid="file-upload-cancel" @click="handleCancel(upload.id)" class="ml-auto px-1.5 py-0.5 text-xs bg-red-100 border border-red-300 text-red-700 cursor-pointer rounded hover:bg-red-200 flex-shrink-0">{{ t('fileManager.actions.cancel') }}</button>
       </li>
     </ul>
   </div>

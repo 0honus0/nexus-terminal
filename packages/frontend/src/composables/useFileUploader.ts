@@ -56,7 +56,12 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 4 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 1 * MiB,
-        wsBufferedBytes: 6 * MiB,
+        // Keep the browser WebSocket queue small. Upload data and file-manager control
+        // messages share one socket, so cancel/refresh JSON frames cannot overtake binary
+        // upload frames that are already buffered by the browser. The larger byte windows
+        // above still provide SFTP ACK pipelining; this limit only bounds browser-side
+        // head-of-line blocking when the user cancels an upload and immediately refreshes.
+        wsBufferedBytes: 512 * KiB,
         maxActiveFiles: 4,
         activeWeightBudget: 8,
     },
@@ -65,7 +70,7 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 2 * MiB,
         batchChunkSize: 128 * KiB,
         batchByteWindow: 512 * KiB,
-        wsBufferedBytes: 3 * MiB,
+        wsBufferedBytes: 256 * KiB,
         maxActiveFiles: 2,
         activeWeightBudget: 8,
     },
@@ -74,7 +79,7 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 8 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 2 * MiB,
-        wsBufferedBytes: 12 * MiB,
+        wsBufferedBytes: 1 * MiB,
         maxActiveFiles: 6,
         activeWeightBudget: 16,
     },
@@ -83,7 +88,7 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 12 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 4 * MiB,
-        wsBufferedBytes: 20 * MiB,
+        wsBufferedBytes: 2 * MiB,
         maxActiveFiles: 10,
         activeWeightBudget: 28,
     },

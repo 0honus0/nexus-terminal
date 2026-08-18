@@ -214,3 +214,85 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
+
+test('upload popup keeps Hide visible when batch actions crowd the header', async ({ page, context }) => {
+  await openFileManager(page, context);
+
+  const files = Array.from({ length: 4 }, (_, index) => ({
+    name: `hide-button-${index + 1}.bin`,
+    size: 4 * 1024 * 1024,
+    fill: 0x60 + index,
+  }));
+
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=220`, { method: 'POST' });
+  try {
+    await dragLocalFiles(page, files);
+
+    const popup = page.getByTestId('file-upload-progress-popup');
+    const hideButton = popup.getByTestId('file-upload-progress-hide');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
+    await expect(hideButton).toBeVisible();
+
+    const [popupBox, hideBox] = await Promise.all([popup.boundingBox(), hideButton.boundingBox()]);
+    expect(popupBox).not.toBeNull();
+    expect(hideBox).not.toBeNull();
+    expect(hideBox!.width).toBeGreaterThanOrEqual(20);
+    expect(hideBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
+    expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+
+    await hideButton.click();
+    await expect(popup).toBeHidden();
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});
+
+test('cancelling a throttled upload keeps immediate file-manager refresh responsive', async ({ page, context }) => {
+  await openFileManager(page, context);
+
+  const refreshMarker = 'refresh-after-upload-cancel.txt';
+  const fixtureResponse = await fetch(
+    `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(refreshMarker)}&size=32`,
+    { method: 'POST' },
+  );
+  expect(fixtureResponse.ok).toBeTruthy();
+  await expect(fileManagerRow(page, refreshMarker)).toBeHidden();
+
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: 256 * 1024,
+  });
+
+  try {
+    await dragLocalFiles(page, [{
+      name: 'cancel-then-refresh.bin',
+      size: 24 * 1024 * 1024,
+      fill: 0x73,
+    }]);
+
+    const popup = page.getByTestId('file-upload-progress-popup');
+    await expect(popup).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+
+    await popup.getByTestId('file-upload-cancel').click();
+    await expect(popup).toBeHidden({ timeout: 2_000 });
+
+    const refreshStartedAt = Date.now();
+    await page.getByTestId('file-manager-modal').locator('button:has(i.fa-sync-alt)').click();
+    await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 5_000 });
+    expect(Date.now() - refreshStartedAt).toBeLessThan(5_000);
+  } finally {
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+    await cdp.detach();
+  }
+});
