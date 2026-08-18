@@ -8,7 +8,7 @@ on:
     paths:
       - "packages/frontend/**"
       - "packages/backend/**"
-      - "verification/e2e/**"
+      - "test/e2e/**"
       - ".github/workflows/update-functional-screenshots.yml"
 
 permissions:
@@ -35,7 +35,7 @@ jobs:
           cache-dependency-path: |
             packages/backend/package-lock.json
             packages/frontend/package-lock.json
-            verification/e2e/package-lock.json
+            test/e2e/package-lock.json
 
       - name: Install backend dependencies
         run: npm ci --prefix packages/backend
@@ -44,14 +44,14 @@ jobs:
         run: npm ci --prefix packages/frontend
 
       - name: Install E2E dependencies
-        run: npm ci --prefix verification/e2e
+        run: npm ci --prefix test/e2e
 
       - name: Install Chromium and system dependencies
-        working-directory: verification/e2e
+        working-directory: test/e2e
         run: npx playwright install --with-deps chromium
 
       - name: Generate functional screenshots
-        run: npm --prefix verification/e2e run test:docs
+        run: npm --prefix test/e2e run test:docs
 
       - name: Upload generated screenshots
         uses: actions/upload-artifact@v7

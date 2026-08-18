@@ -6,7 +6,7 @@ on:
       - "packages/backend/**"
       - "packages/frontend/**"
       - "packages/remote-gateway/**"
-      - "verification/e2e/**"
+      - "test/e2e/**"
       - "package.json"
       - ".github/workflows/e2e.yml"
   pull_request:
@@ -14,7 +14,7 @@ on:
       - "packages/backend/**"
       - "packages/frontend/**"
       - "packages/remote-gateway/**"
-      - "verification/e2e/**"
+      - "test/e2e/**"
       - "package.json"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
             packages/backend/package-lock.json
             packages/frontend/package-lock.json
             packages/remote-gateway/package-lock.json
-            verification/e2e/package-lock.json
+            test/e2e/package-lock.json
 
       - name: Install backend dependencies
         run: npm ci --prefix packages/backend
@@ -49,7 +49,7 @@ jobs:
         run: npm ci --prefix packages/remote-gateway
 
       - name: Install E2E dependencies
-        run: npm ci --prefix verification/e2e
+        run: npm ci --prefix test/e2e
 
       - name: Build backend
         run: npm run build --prefix packages/backend
@@ -134,14 +134,14 @@ jobs:
             exit 1
           fi
 
-          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix verification/e2e run test:ingress; then
+          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix test/e2e run test:ingress; then
             docker logs "$ingress_container" || true
             cat "$backend_log"
             exit 1
           fi
 
       - name: Install Chromium and system dependencies
-        working-directory: verification/e2e
+        working-directory: test/e2e
         run: npx playwright install --with-deps chromium
 
       - name: Install remote archive command dependencies
@@ -155,7 +155,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-e2e-logs
-          path: verification/e2e/logs/
+          path: test/e2e/logs/
           if-no-files-found: ignore
 
       - name: Upload Playwright report
@@ -164,6 +164,6 @@ jobs:
         with:
           name: playwright-e2e-report
           path: |
-            verification/e2e/playwright-report/
-            verification/e2e/test-results/
+            test/e2e/playwright-report/
+            test/e2e/test-results/
           if-no-files-found: ignore

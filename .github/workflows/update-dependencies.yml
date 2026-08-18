@@ -39,7 +39,7 @@ jobs:
             packages/frontend/package-lock.json
             packages/backend/package-lock.json
             packages/remote-gateway/package-lock.json
-            verification/e2e/package-lock.json
+            test/e2e/package-lock.json
 
       - name: Create update branch
         shell: bash
@@ -107,7 +107,7 @@ jobs:
 
       - name: Install E2E dependencies
         if: steps.changes.outputs.changed == 'true'
-        run: npm ci --prefix verification/e2e
+        run: npm ci --prefix test/e2e
 
       - name: Run production ingress WebAuthn E2E
         if: steps.changes.outputs.changed == 'true'
@@ -184,7 +184,7 @@ jobs:
             exit 1
           fi
 
-          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix verification/e2e run test:ingress; then
+          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix test/e2e run test:ingress; then
             docker logs "$ingress_container" || true
             cat "$backend_log"
             exit 1
@@ -192,7 +192,7 @@ jobs:
 
       - name: Install Chromium and system dependencies
         if: steps.changes.outputs.changed == 'true'
-        working-directory: verification/e2e
+        working-directory: test/e2e
         run: npx playwright install --with-deps chromium
 
       - name: Install remote archive command dependencies
@@ -208,7 +208,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: dependency-update-e2e-logs
-          path: verification/e2e/logs/
+          path: test/e2e/logs/
           if-no-files-found: ignore
 
       - name: Upload dependency update Playwright report
@@ -217,8 +217,8 @@ jobs:
         with:
           name: dependency-update-playwright-report
           path: |
-            verification/e2e/playwright-report/
-            verification/e2e/test-results/
+            test/e2e/playwright-report/
+            test/e2e/test-results/
           if-no-files-found: ignore
 
       - name: Commit and push update branch

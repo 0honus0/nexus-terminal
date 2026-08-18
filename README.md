@@ -53,7 +53,7 @@ docker compose up -d
 
 ## 文档
 
-[功能](./doc/FEATURES.md) · [使用](./doc/USAGE.md) · [部署与更新](./doc/DEPLOYMENT.md) · [E2E](./verification/e2e/README.md) · [English](./doc/README_EN.md)
+[功能](./doc/FEATURES.md) · [使用](./doc/USAGE.md) · [部署与更新](./doc/DEPLOYMENT.md) · [E2E](./test/e2e/README.md) · [English](./doc/README_EN.md)
 
 ## License
 

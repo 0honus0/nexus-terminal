@@ -9,14 +9,14 @@
     "build:remote-gateway": "./build.sh local remote-gateway",
     "docker:build": "./build.sh docker",
     "docker:save": "./build.sh docker-save",
-    "test:e2e": "npm --prefix verification/e2e test",
-    "test:e2e:auth": "npm --prefix verification/e2e run test:auth",
-    "test:e2e:http": "npm --prefix verification/e2e run test:http",
-    "test:e2e:websocket": "npm --prefix verification/e2e run test:websocket",
-    "test:e2e:ui": "npm --prefix verification/e2e run test:ui",
-    "test:e2e:ssh": "npm --prefix verification/e2e run test:ssh",
-    "test:e2e:mobile": "npm --prefix verification/e2e run test:mobile",
-    "test:e2e:list": "npm --prefix verification/e2e run test:list"
+    "test:e2e": "npm --prefix test/e2e test",
+    "test:e2e:auth": "npm --prefix test/e2e run test:auth",
+    "test:e2e:http": "npm --prefix test/e2e run test:http",
+    "test:e2e:websocket": "npm --prefix test/e2e run test:websocket",
+    "test:e2e:ui": "npm --prefix test/e2e run test:ui",
+    "test:e2e:ssh": "npm --prefix test/e2e run test:ssh",
+    "test:e2e:mobile": "npm --prefix test/e2e run test:mobile",
+    "test:e2e:list": "npm --prefix test/e2e run test:list"
   },
   "repository": {
     "type": "git",
