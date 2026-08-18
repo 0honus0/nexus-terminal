@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileTransferItem } from '../types/fileTransfer.types';
 import { useProgressCenterStore } from '../stores/progressCenter.store';
@@ -23,7 +23,6 @@ const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSo
 const transferList = computed(() => Object.values(props.transfers));
 const speedSnapshots = new Map<string, number>();
 const totalSpeed = ref(0);
-const minimized = ref(false);
 let speedTimer: number | null = null;
 let lastSampleAt = performance.now();
 
@@ -48,23 +47,12 @@ const currentFilename = (transfer: FileTransferItem) => {
   return transfer.currentFile.split('/').filter(Boolean).pop() || transfer.currentFile;
 };
 
-const toggleMinimized = () => {
-  minimized.value = !minimized.value;
-};
 
 const hidePopup = () => {
   if (!props.progressSourceId) return;
-  minimized.value = false;
   progressCenter.hideSource(props.progressSourceId);
 };
 
-watch(() => props.restoreToken, () => {
-  minimized.value = false;
-});
-
-watch(() => transferList.value.length, (count, previousCount) => {
-  if (count > 0 && !previousCount) minimized.value = false;
-});
 
 const sampleSpeed = () => {
   const now = performance.now();
@@ -128,21 +116,12 @@ onBeforeUnmount(() => {
           @click="hidePopup"
           :title="t('progressCenter.hide', '隐藏进度')"
         >
-          <i class="fas fa-eye-slash"></i>
-        </button>
-        <button
-          type="button"
-          data-testid="file-transfer-progress-minimize"
-          class="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
-          @click="toggleMinimized"
-          :title="minimized ? t('common.expand') : t('common.minimize')"
-        >
-          <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
+          <i class="fas fa-minus"></i>
         </button>
       </div>
     </div>
 
-    <ul v-if="!minimized" class="custom-scrollbar m-0 max-h-52 list-none overflow-y-auto p-3">
+    <ul class="custom-scrollbar m-0 max-h-52 list-none overflow-y-auto p-3">
       <li v-for="transfer in transferList" :key="transfer.id" class="mb-3 last:mb-0">
         <div class="mb-1 flex min-w-0 items-center gap-2 text-xs">
           <span class="min-w-0 flex-1 truncate" :title="transfer.currentFile || transfer.label">

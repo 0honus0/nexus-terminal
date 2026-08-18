@@ -30,7 +30,6 @@ const progressCenter = useProgressCenterStore();
 const popupRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
-const minimized = ref(false);
 const positionReady = ref(false);
 let dragOffsetX = 0;
 let dragOffsetY = 0;
@@ -187,32 +186,22 @@ const handleCancelAll = () => {
 
 const hidePopup = () => {
   if (!props.progressSourceId) return;
-  minimized.value = false;
   progressCenter.hideSource(props.progressSourceId);
 };
 
-const toggleMinimized = async () => {
-  minimized.value = !minimized.value;
-  await nextTick();
-  clampPosition();
-  savePosition();
-};
 
 watch(() => props.restoreToken, async () => {
-  minimized.value = false;
   await restorePosition();
   positionReady.value = true;
   await nextTick();
   clampPosition();
 });
 
-watch(() => uploadList.value.length, async (count, previousCount) => {
+watch(() => uploadList.value.length, async (count) => {
   if (count <= 0) {
     stopDragging();
     return;
   }
-  if (!previousCount) minimized.value = false;
-
   await nextTick();
   if (dragging.value) return;
 
@@ -250,7 +239,7 @@ onBeforeUnmount(() => {
     ref="popupRef"
     data-testid="file-upload-progress-popup"
     class="upload-popup fixed bg-background border border-border rounded-md shadow-md max-w-xs max-h-48 overflow-hidden z-[1001] text-sm"
-    :class="{ dragging, minimized }"
+    :class="{ dragging }"
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >
     <div class="upload-popup-header flex items-center justify-between gap-3 border-b border-border px-3 py-2" @pointerdown="startDragging">
@@ -258,11 +247,15 @@ onBeforeUnmount(() => {
         <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ t('fileManager.uploadTasks') }}
       </h4>
       <div class="ml-auto flex min-w-0 items-center gap-1.5">
-        <span v-if="hasUploading" class="max-w-24 truncate whitespace-nowrap text-xs tabular-nums text-text-secondary">
+        <span
+          v-if="hasUploading"
+          data-testid="file-upload-speed"
+          class="w-28 shrink-0 truncate whitespace-nowrap text-xs tabular-nums text-text-secondary"
+        >
           {{ t('fileManager.uploadSpeed') }} {{ formatTransferRate(totalUploadSpeed) }}
         </span>
         <button
-          v-if="cancellableCount > 1 && !minimized"
+          v-if="cancellableCount > 1"
           type="button"
           data-testid="file-upload-cancel-all"
           class="shrink-0 rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs text-red-700 hover:bg-red-200"
@@ -274,25 +267,16 @@ onBeforeUnmount(() => {
           v-if="props.progressSourceId"
           type="button"
           data-testid="file-upload-progress-hide"
-          class="grid h-6 w-6 shrink-0 place-items-center rounded border border-border/70 bg-header/70 text-text-secondary hover:bg-border hover:text-foreground"
+          class="grid h-6 w-6 shrink-0 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
           @click="hidePopup"
           :title="t('progressCenter.hide', '隐藏进度')"
           :aria-label="t('progressCenter.hide', '隐藏进度')"
         >
-          <i class="fas fa-eye-slash"></i>
-        </button>
-        <button
-          type="button"
-          data-testid="file-upload-progress-minimize"
-          class="grid h-6 w-6 shrink-0 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
-          @click="toggleMinimized"
-          :title="minimized ? t('common.expand') : t('common.minimize')"
-        >
-          <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
+          <i class="fas fa-minus"></i>
         </button>
       </div>
     </div>
-    <ul v-if="!minimized" class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
+    <ul class="custom-scrollbar max-h-36 list-none overflow-y-auto p-3 m-0">
       <li v-for="upload in uploadList" :key="upload.id" class="mb-1.5 text-xs flex items-center flex-wrap gap-2 last:mb-0">
         <span class="flex-grow truncate" :title="upload.filename">{{ upload.filename }} ({{ t(`fileManager.uploadStatus.${upload.status}`) }})</span>
         <progress v-if="(upload.status === 'uploading' && upload.progress < 100) || upload.status === 'pending'" :value="upload.progress" max="100" class="w-20 h-2 flex-shrink-0 [&::-webkit-progress-bar]:rounded-lg [&::-webkit-progress-value]:rounded-lg [&::-webkit-progress-bar]:bg-gray-300 [&::-webkit-progress-value]:bg-blue-600 [&::-moz-progress-bar]:bg-blue-600"></progress>
@@ -311,7 +295,6 @@ onBeforeUnmount(() => {
 .upload-popup {
   width: min(320px, calc(100vw - 16px));
 }
-.upload-popup.minimized { width: min(300px, calc(100vw - 16px)); }
 .upload-popup.dragging {
   cursor: grabbing;
   transition: none;

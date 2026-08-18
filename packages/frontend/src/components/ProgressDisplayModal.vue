@@ -6,7 +6,6 @@ import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useProgressCenterStore, type ProgressTaskKind, type RegisteredProgressTask } from '../stores/progressCenter.store';
-import { useSessionStore } from '../stores/session.store';
 
 interface Props {
   visible: boolean;
@@ -18,7 +17,6 @@ const { t, locale } = useI18n(); // +++ 解构出 locale +++
 const connectionsStore = useConnectionsStore();
 const uiNotificationsStore = useUiNotificationsStore();
 const progressCenter = useProgressCenterStore();
-const sessionStore = useSessionStore();
 const hiddenProgressTasks = computed(() => progressCenter.hiddenTasks);
 
 const MODAL_POSITION_KEY = 'nexusTransferProgressModalPosition';
@@ -139,19 +137,6 @@ const formatTaskTitle = (task: TransferTask): string => {
   return `${sourceServerName} (${fileName} -> ${targetPath})`;
 };
 
-
-const getProgressSessionLabel = (sessionId?: string): string => {
-  if (!sessionId) return t('progressCenter.unknownSession', '未知会话');
-  const session = sessionStore.sessions.get(sessionId);
-  if (!session) return sessionId.slice(0, 8);
-  const baseName = session.connectionName?.trim() || sessionId.slice(0, 8);
-  const matching = [...sessionStore.sessions.values()]
-    .filter(candidate => (candidate.connectionName?.trim() || candidate.sessionId.slice(0, 8)) === baseName)
-    .sort((a, b) => a.createdAt - b.createdAt);
-  if (matching.length <= 1) return baseName;
-  const index = matching.findIndex(candidate => candidate.sessionId === sessionId);
-  return index >= 0 ? `${baseName} #${index + 1}` : baseName;
-};
 
 const getProgressKindLabel = (kind: ProgressTaskKind): string => {
   const keyByKind: Record<ProgressTaskKind, string> = {
@@ -440,55 +425,48 @@ const handleTaskAction = async (task: TransferTask) => {
             {{ t('progressCenter.empty', '当前没有隐藏的进度任务。') }}
           </div>
 
-          <div v-else class="space-y-2" data-testid="hidden-progress-list">
+          <div v-else class="space-y-1.5" data-testid="hidden-progress-list">
             <article
               v-for="task in hiddenProgressTasks"
               :key="task.key"
               data-testid="hidden-progress-task"
-              class="rounded-md border border-border bg-background-alt p-3"
+              class="rounded-md border border-border bg-background-alt px-3 py-2"
             >
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="min-w-0 flex-1">
-                  <div class="mb-1 flex min-w-0 items-center gap-2">
-                    <span class="shrink-0 rounded bg-border/60 px-2 py-0.5 text-[11px] font-medium">{{ getProgressKindLabel(task.kind) }}</span>
-                    <strong class="truncate text-sm" :title="task.title">{{ task.title }}</strong>
-                  </div>
-                  <div data-progress-session class="truncate text-xs text-text-secondary" :title="getProgressSessionLabel(task.sessionId)">
-                    {{ getProgressSessionLabel(task.sessionId) }}
-                  </div>
-                  <div v-if="task.detail" class="mt-1 truncate text-xs text-text-muted" :title="task.detail">{{ task.detail }}</div>
-                </div>
-
-                <div class="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    data-testid="hidden-progress-restore"
-                    class="rounded border border-border px-2.5 py-1 text-xs hover:border-primary hover:text-primary"
-                    @click="restoreRegisteredProgress(task)"
-                  >
-                    <i class="fas fa-window-restore mr-1"></i>{{ t('common.restore', '还原') }}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="hidden-progress-cancel"
-                    class="rounded border border-red-300 bg-red-50 px-2.5 py-1 text-xs text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="task.cancellable === false || !task.cancel || task.status === 'cancelling'"
-                    @click="cancelRegisteredProgress(task)"
-                  >
-                    <i :class="task.status === 'cancelling' ? 'fas fa-spinner fa-spin mr-1' : 'fas fa-ban mr-1'"></i>
-                    {{ task.status === 'cancelling' ? t('progressCenter.cancelling', '取消中') : t('common.cancel', '取消') }}
-                  </button>
-                </div>
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="shrink-0 rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-medium">{{ getProgressKindLabel(task.kind) }}</span>
+                <strong class="min-w-0 flex-1 truncate text-xs" :title="task.title">{{ task.title }}</strong>
+                <button
+                  type="button"
+                  data-testid="hidden-progress-restore"
+                  class="shrink-0 rounded border border-border px-2 py-0.5 text-[11px] hover:border-primary hover:text-primary"
+                  @click="restoreRegisteredProgress(task)"
+                >
+                  <i class="fas fa-window-restore mr-1"></i>{{ t('common.restore', '还原') }}
+                </button>
+                <button
+                  type="button"
+                  data-testid="hidden-progress-cancel"
+                  class="shrink-0 rounded border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="task.cancellable === false || !task.cancel || task.status === 'cancelling'"
+                  @click="cancelRegisteredProgress(task)"
+                >
+                  <i :class="task.status === 'cancelling' ? 'fas fa-spinner fa-spin mr-1' : 'fas fa-ban mr-1'"></i>
+                  {{ task.status === 'cancelling' ? t('progressCenter.cancelling', '取消中') : t('common.cancel', '取消') }}
+                </button>
               </div>
 
-              <div v-if="normalizeRegisteredProgress(task.progress) !== null" class="mt-3">
-                <div class="mb-1 flex justify-between text-[11px] text-text-secondary">
-                  <span>{{ task.status || t('progressCenter.running', '进行中') }}</span>
-                  <span class="tabular-nums">{{ normalizeRegisteredProgress(task.progress)?.toFixed(1) }}%</span>
+              <div class="mt-1.5 flex items-center gap-2">
+                <div data-testid="hidden-progress-bar" class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border">
+                  <div
+                    v-if="normalizeRegisteredProgress(task.progress) !== null"
+                    class="h-full rounded-full bg-primary"
+                    :style="{ width: `${normalizeRegisteredProgress(task.progress)}%` }"
+                  ></div>
+                  <div v-else class="h-full w-1/3 animate-pulse rounded-full bg-primary/60"></div>
                 </div>
-                <div class="h-1.5 overflow-hidden rounded-full bg-border">
-                  <div class="h-full rounded-full bg-primary" :style="{ width: `${normalizeRegisteredProgress(task.progress)}%` }"></div>
-                </div>
+                <span data-testid="hidden-progress-percent" class="w-11 shrink-0 text-right text-[11px] tabular-nums text-text-secondary">
+                  {{ normalizeRegisteredProgress(task.progress) !== null ? `${normalizeRegisteredProgress(task.progress)?.toFixed(1)}%` : '…' }}
+                </span>
               </div>
             </article>
           </div>

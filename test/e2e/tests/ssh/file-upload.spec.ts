@@ -146,16 +146,22 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       await expect(progressPopup.locator('h4')).toContainText('·');
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
-      await progressPopup.getByTestId('file-upload-progress-minimize').click();
-      await expect(progressBody).toBeHidden();
+      await progressPopup.getByTestId('file-upload-progress-hide').click();
+      await expect(progressPopup).toBeHidden();
 
       const progressDisplay = page.getByTestId('transfer-progress-toggle');
       await expect(progressDisplay).toBeVisible();
       await expect(progressDisplay).toHaveAttribute('title', 'Progress Display');
       await progressDisplay.click();
+      const progressModal = page.getByTestId('progress-display-modal');
+      await expect(progressModal).toBeVisible();
+      const hiddenTask = progressModal.getByTestId('hidden-progress-task').first();
+      await expect(hiddenTask).toBeVisible();
+      await expect(hiddenTask.getByTestId('hidden-progress-bar')).toBeVisible();
+      await hiddenTask.getByTestId('hidden-progress-restore').click();
+      await expect(progressModal).toBeHidden();
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
-      await expect(page.getByTestId('transfer-progress-minimize')).toBeVisible();
 
       await expect.poll(
         () => schedulerLogs.some(log => log.includes('profile=probing') && log.includes('activeFiles=2/4')),
@@ -215,7 +221,7 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
   }
 });
 
-test('upload popup keeps Hide visible when batch actions crowd the header', async ({ page, context }) => {
+test('upload popup keeps the minimize-style Hide action visible when batch actions crowd the header', async ({ page, context }) => {
   await openFileManager(page, context);
 
   const files = Array.from({ length: 4 }, (_, index) => ({
@@ -229,14 +235,25 @@ test('upload popup keeps Hide visible when batch actions crowd the header', asyn
     await dragLocalFiles(page, files);
 
     const popup = page.getByTestId('file-upload-progress-popup');
+    const uploadSpeed = popup.getByTestId('file-upload-speed');
     const hideButton = popup.getByTestId('file-upload-progress-hide');
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
+    await expect(uploadSpeed).toBeVisible();
     await expect(hideButton).toBeVisible();
+    await expect(hideButton.locator('i')).toHaveClass(/fa-minus/);
+    await expect(popup.getByTestId('file-upload-progress-minimize')).toHaveCount(0);
 
-    const [popupBox, hideBox] = await Promise.all([popup.boundingBox(), hideButton.boundingBox()]);
+    const [popupBox, speedBox, hideBox] = await Promise.all([
+      popup.boundingBox(),
+      uploadSpeed.boundingBox(),
+      hideButton.boundingBox(),
+    ]);
     expect(popupBox).not.toBeNull();
+    expect(speedBox).not.toBeNull();
     expect(hideBox).not.toBeNull();
+    expect(speedBox!.width).toBeGreaterThanOrEqual(80);
+    expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(hideBox!.x + 1);
     expect(hideBox!.width).toBeGreaterThanOrEqual(20);
     expect(hideBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
     expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);

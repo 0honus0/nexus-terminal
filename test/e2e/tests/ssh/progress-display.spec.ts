@@ -115,12 +115,14 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await expect(popup).toBeHidden();
     });
 
-    await step('Progress Display lists the hidden task with session name and Restore returns the window', async () => {
+    await step('Progress Display lists a compact hidden task with progress and Restore returns the window', async () => {
       const modal = await openProgressDisplay(page);
       const task = hiddenTask(modal, filename);
       await expect(task).toBeVisible();
       await expect(task).toContainText('Upload');
-      await expect(task.locator('[data-progress-session]')).not.toHaveText('');
+      await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
+      await expect(task.getByTestId('hidden-progress-percent')).toBeVisible();
+      await expect(task.locator('[data-progress-session]')).toHaveCount(0);
       await expect(task.getByTestId('hidden-progress-restore')).toBeEnabled();
       await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
 

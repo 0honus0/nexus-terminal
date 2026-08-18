@@ -28,7 +28,6 @@ const getPopupElement = (): HTMLElement | null => {
   const componentElement = candidate && typeof candidate === 'object' ? candidate.$el : null;
   return componentElement instanceof HTMLElement ? componentElement : null;
 };
-const minimized = ref(false);
 const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSourceHidden(props.progressSourceId) : false);
 const position = ref({ x: 16, y: 16 });
 const dragging = ref(false);
@@ -124,19 +123,11 @@ const startDragging = (event: PointerEvent) => {
 
 const hidePopup = () => {
   if (!props.progressSourceId) return;
-  minimized.value = false;
   progressCenter.hideSource(props.progressSourceId);
 };
 
-const toggleMinimized = async () => {
-  minimized.value = !minimized.value;
-  await nextTick();
-  clampPosition();
-  savePosition();
-};
 
 watch(() => props.restoreToken, async () => {
-  minimized.value = false;
   await nextTick();
   restorePosition();
   await nextTick();
@@ -145,7 +136,6 @@ watch(() => props.restoreToken, async () => {
 
 watch(() => props.progress.active, async (active) => {
   if (!active) return;
-  minimized.value = false;
   await nextTick();
   restorePosition();
   await nextTick();
@@ -166,7 +156,7 @@ onBeforeUnmount(() => {
       ref="popupRef"
       data-testid="archive-progress-popup"
       class="archive-progress-card"
-      :class="{ minimized, dragging }"
+      :class="{ dragging }"
       :style="popupStyle"
     >
       <div class="archive-progress-header" @pointerdown="startDragging">
@@ -176,7 +166,7 @@ onBeforeUnmount(() => {
             <div class="truncate font-semibold" :title="props.sessionLabel || undefined">
               <span v-if="props.sessionLabel">{{ props.sessionLabel }} · </span>{{ operationLabel }} {{ progress.archiveName || '...' }}
             </div>
-            <div v-if="!minimized" class="text-[11px] text-text-muted">
+            <div class="text-[11px] text-text-muted">
               {{ progress.cancelling
                 ? t('fileManager.archiveProgress.stopping', '正在停止并清理临时文件...')
                 : t('fileManager.archiveProgress.dragHint', '拖动标题可移动') }}
@@ -186,15 +176,12 @@ onBeforeUnmount(() => {
         <div class="archive-actions">
           <span v-if="progress.percent !== null" class="percent-badge">{{ progress.percent }}%</span>
           <button v-if="props.progressSourceId" type="button" data-testid="archive-progress-hide" class="icon-button" @click="hidePopup" :title="t('progressCenter.hide', '隐藏进度')">
-            <i class="fas fa-eye-slash"></i>
-          </button>
-          <button type="button" data-testid="archive-progress-minimize" class="icon-button" @click="toggleMinimized" :title="minimized ? t('common.expand', '展开') : t('common.minimize', '最小化')">
-            <i :class="minimized ? 'fas fa-chevron-up' : 'fas fa-minus'"></i>
+            <i class="fas fa-minus"></i>
           </button>
         </div>
       </div>
 
-      <div v-if="!minimized" class="archive-progress-body">
+      <div class="archive-progress-body">
         <div v-if="progress.percent !== null" class="space-y-1.5">
           <div class="flex items-center justify-between gap-4 text-xs">
             <span>{{ t('fileManager.archiveProgress.filesProcessedTotal', { count: progress.fileCount, total: progress.totalFiles }) }}</span>
@@ -254,7 +241,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(12px);
 }
-.archive-progress-card.minimized { width: min(320px, calc(100vw - 16px)); }
 .archive-progress-card.dragging { cursor: grabbing; transition: none; }
 .archive-progress-header {
   display: flex;
