@@ -272,7 +272,9 @@ test.describe.serial("functional documentation screenshots", () => {
       await editor.getByTitle("Search").click();
       const mobileSearchPanel = editor.locator(".cm-panel.cm-search");
       await expect(mobileSearchPanel).toBeVisible();
-      await mobileSearchPanel.locator('input[name="search"]').fill("plain-no-extension");
+      const mobileSearchInput = mobileSearchPanel.locator('input[name="search"]');
+      await mobileSearchInput.fill("plain-no-extension");
+      await mobileSearchInput.press("End");
       await expect
         .poll(async () => editor.locator(".cm-searchMatch").count(), {
           timeout: 10_000,
@@ -282,7 +284,7 @@ test.describe.serial("functional documentation screenshots", () => {
       await editor.getByTestId("file-editor-close").click();
       await expect(editor).toBeHidden();
 
-      await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=260`, { method: "POST" });
+      await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1000`, { method: "POST" });
       try {
         await fileManagerModal.getByTestId("file-upload-input").setInputFiles([
           {

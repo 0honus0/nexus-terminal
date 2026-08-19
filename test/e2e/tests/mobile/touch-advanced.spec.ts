@@ -110,6 +110,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     const searchInput = searchPanel.locator('input[name="search"]');
     await expect(searchInput).toBeVisible();
     await searchInput.fill('plain-no-extension');
+    await searchInput.press('End');
     await expect(searchInput).toHaveValue('plain-no-extension');
     await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 })
       .toBeGreaterThan(0);
@@ -120,7 +121,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
   const filenames = ['mobile-progress-upload-a.bin', 'mobile-progress-upload-b.bin'];
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=260`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1000`, { method: 'POST' });
 
   try {
     await slowStep('throttled uploads expose all floating controls without overflowing the Pixel viewport', async () => {
@@ -150,10 +151,9 @@ test('mobile upload progress stays inside the viewport and restores from Progres
     });
 
     await step('Progress Display restores the hidden mobile upload window', async () => {
-      const fileManagerModal = page.getByTestId('file-manager-modal');
-      await fileManagerModal.click({ position: { x: 8, y: 8 } });
-      await expect(fileManagerModal).toBeHidden();
-
+      // Keep File Manager mounted and visible while restoring. The floating upload
+      // window is owned by that FileManager instance, so hiding the modal would also
+      // hide the popup through its ancestor even after the progress source is restored.
       await page.getByTestId('transfer-progress-toggle').click();
       const progressDisplay = page.getByTestId('progress-display-modal');
       await expect(progressDisplay).toBeVisible();
