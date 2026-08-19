@@ -51,7 +51,8 @@ import {
     handleSftpUploadPrepare,
     handleSftpUploadStart,
     handleSftpUploadChunk,
-    handleSftpUploadCancel
+    handleSftpUploadCancel,
+    handleSftpUploadCancelAll
 } from './handlers/sftp.handler';
 import {
     acknowledgeTerminalOutput,
@@ -148,6 +149,56 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
         if (isRdpProxy) {
             handleRdpProxyConnection(ws, request);
+        } else if (request.isUploadTransport) {
+            const uploadSessionId = request.uploadSessionId;
+            const state = uploadSessionId ? clientStates.get(uploadSessionId) : undefined;
+            if (!uploadSessionId || !state || state.ws.userId !== ws.userId) {
+                console.warn(`WebSocket: 拒绝上传数据通道绑定，用户 ${ws.username} 无权访问会话 ${uploadSessionId || '(missing)'}。`);
+                ws.close(1008, 'Invalid upload session');
+                return;
+            }
+
+            ws.sessionId = uploadSessionId;
+            if (state.uploadWs && state.uploadWs !== ws && state.uploadWs.readyState === WebSocket.OPEN) {
+                state.uploadWs.close(1000, 'Upload transport replaced');
+            }
+            state.uploadWs = ws;
+            console.log(`WebSocket: 会话 ${uploadSessionId} 的独立上传数据通道已连接。`);
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'sftp:upload:transport:ready', payload: { sessionId: uploadSessionId } }));
+            }
+
+            ws.on('message', async (message: RawData, isBinary: boolean) => {
+                ws.isAlive = true;
+                if (!isBinary) {
+                    console.warn(`WebSocket: 上传数据通道 ${uploadSessionId} 收到非二进制消息，已拒绝。`);
+                    ws.close(1003, 'Upload transport accepts binary frames only');
+                    return;
+                }
+                try {
+                    await handleSftpUploadChunk(ws, parseBinaryUploadChunk(message));
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error(`WebSocket: 上传数据通道 ${uploadSessionId} 的二进制消息无效: ${errorMessage}`);
+                    if (state.ws.readyState === WebSocket.OPEN) {
+                        state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { message: errorMessage } }));
+                    }
+                    ws.close(1003, 'Invalid upload frame');
+                }
+            });
+
+            const detachUploadTransport = () => {
+                const currentState = clientStates.get(uploadSessionId);
+                if (currentState?.uploadWs === ws) currentState.uploadWs = undefined;
+            };
+            ws.on('close', (code, reason) => {
+                detachUploadTransport();
+                console.log(`WebSocket: 会话 ${uploadSessionId} 的上传数据通道已断开。代码: ${code}, 原因: ${reason.toString()}`);
+            });
+            ws.on('error', (error) => {
+                detachUploadTransport();
+                console.error(`WebSocket: 会话 ${uploadSessionId} 的上传数据通道发生错误:`, error);
+            });
         } else {
             // Standard SSH/SFTP/Docker connection
             ws.on('message', async (message: RawData, isBinary: boolean) => {
@@ -265,6 +316,9 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                             break;
                         case 'sftp:upload:cancel':
                             await handleSftpUploadCancel(ws, payload);
+                            break;
+                        case 'sftp:upload:cancel-all':
+                            await handleSftpUploadCancelAll(ws, payload);
                             break;
 
                         // --- SSH Suspend Cases ---

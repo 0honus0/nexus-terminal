@@ -258,6 +258,21 @@ export async function handleSftpUploadChunk(ws: AuthenticatedWebSocket, payload:
     );
 }
 
+export async function handleSftpUploadCancelAll(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
+    const sessionId = ws.sessionId;
+    const state = sessionId ? clientStates.get(sessionId) : undefined;
+    if (!sessionId || !state) return;
+
+    const uploadIds = payload?.uploadIds;
+    if (!Array.isArray(uploadIds) || uploadIds.some((id: unknown) => typeof id !== 'string')) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { message: 'uploadIds 参数无效' } }));
+        }
+        return;
+    }
+    await sftpService.cancelUploads(sessionId, uploadIds);
+}
+
 export async function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
     const sessionId = ws.sessionId;
     const state = sessionId ? clientStates.get(sessionId) : undefined;

@@ -13,6 +13,7 @@ import { useProgressCenterStore } from '../stores/progressCenter.store';
 export interface WebSocketDependencies {
     sendMessage: (message: WebSocketMessage) => void;
     sendBinaryMessage: (frame: ArrayBuffer, maxBufferedBytes?: number) => Promise<void>;
+    sendUploadBinaryMessage: (frame: ArrayBuffer, maxBufferedBytes?: number, signal?: AbortSignal) => Promise<void>;
     onMessage: (type: string, handler: MessageHandler) => () => void;
     isConnected: ComputedRef<boolean>;
     isSftpReady: Readonly<Ref<boolean>>;

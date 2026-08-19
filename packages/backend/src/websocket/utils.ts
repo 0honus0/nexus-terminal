@@ -88,6 +88,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
             state.pendingDirectoryChange = undefined;
         }
         disposeTerminalTransport(state);
+        if (state.uploadWs && state.uploadWs.readyState !== 3) {
+            try { state.uploadWs.close(1000, 'Main session closed'); } catch { /* ignore upload transport close error */ }
+        }
+        state.uploadWs = undefined;
         // 1. 停止状态轮询 (如果存在)
         if (statusMonitorService) statusMonitorService.clearSession(sessionId);
 

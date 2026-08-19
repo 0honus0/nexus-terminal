@@ -109,6 +109,7 @@ interface ActiveUpload {
     nextChunkIndex: number;
     receivedLastChunk: boolean;
     stream: WriteStream;
+    sftp: SFTPWrapper;
     sessionId: string; // Link back to the session for cleanup
     relativePath?: string;
     drainPromise?: Promise<void> | null; // +++ For managing drain event listeners +++
@@ -118,6 +119,7 @@ interface PendingUpload {
     sessionId: string;
     remotePath: string;
     temporaryPath: string;
+    sftp: SFTPWrapper;
 }
 
 interface PreparedUploadBatch {
@@ -209,6 +211,52 @@ export class SftpService {
         });
     }
 
+    /** Lazily open a second SFTP subsystem dedicated to upload I/O.
+     * File-manager control operations keep using state.sftp, so slow remote writes,
+     * stream backpressure, and temporary-file cleanup cannot head-of-line block readdir. */
+    async ensureUploadSftpSession(sessionId: string): Promise<SFTPWrapper> {
+        const state = this.clientStates.get(sessionId);
+        if (!state?.sshClient) throw new Error('SSH 会话未就绪');
+        if (state.uploadSftp) return state.uploadSftp;
+        if (state.uploadSftpInitPromise) return state.uploadSftpInitPromise;
+
+        let initPromise: Promise<SFTPWrapper>;
+        initPromise = new Promise<SFTPWrapper>((resolve, reject) => {
+            state.sshClient.sftp((err, sftpInstance) => {
+                if (err) {
+                    console.error(`[SFTP Upload] 为会话 ${sessionId} 初始化独立上传 SFTP channel 失败:`, err);
+                    reject(err);
+                    return;
+                }
+                const currentState = this.clientStates.get(sessionId);
+                if (!currentState || currentState !== state) {
+                    try { sftpInstance.end(); } catch { /* session vanished during setup */ }
+                    reject(new Error('SSH 会话已结束'));
+                    return;
+                }
+
+                state.uploadSftp = sftpInstance;
+                const detach = () => {
+                    if (state.uploadSftp === sftpInstance) state.uploadSftp = undefined;
+                };
+                sftpInstance.on('end', detach);
+                sftpInstance.on('close', detach);
+                sftpInstance.on('error', (error: Error) => {
+                    console.error(`[SFTP Upload] 会话 ${sessionId} 的独立上传 SFTP channel 出错:`, error);
+                    detach();
+                });
+                console.log(`[SFTP Upload] 会话 ${sessionId} 的独立上传 SFTP channel 已就绪。`);
+                resolve(sftpInstance);
+            });
+        });
+        state.uploadSftpInitPromise = initPromise;
+        try {
+            return await initPromise;
+        } finally {
+            if (state.uploadSftpInitPromise === initPromise) state.uploadSftpInitPromise = undefined;
+        }
+    }
+
     /**
      * 清理 SFTP 会话
      * @param sessionId 会话 ID
@@ -217,6 +265,7 @@ export class SftpService {
         const state = this.clientStates.get(sessionId);
         if (!state) return;
         const sftp = state.sftp;
+        const uploadSftp = state.uploadSftp;
         const cleanupTasks: Promise<unknown>[] = [];
 
         this.activeUploads.forEach((upload, uploadId) => {
@@ -225,7 +274,7 @@ export class SftpService {
         this.pendingUploads.forEach((upload, uploadId) => {
             if (upload.sessionId === sessionId) {
                 this.cancelledUploadIds.add(uploadId);
-                cleanupTasks.push(this.removeRemoteUploadFile(sessionId, upload.temporaryPath));
+                cleanupTasks.push(this.removeRemoteUploadFile(sessionId, upload.temporaryPath, upload.sftp));
             }
         });
         this.activeArchives.forEach((archive) => {
@@ -246,8 +295,11 @@ export class SftpService {
         }
 
         void Promise.allSettled(cleanupTasks).finally(() => {
-            if (sftp) sftp.end();
+            if (uploadSftp) { try { uploadSftp.end(); } catch { /* ignore */ } }
+            if (sftp) { try { sftp.end(); } catch { /* ignore */ } }
+            if (state.uploadSftp === uploadSftp) state.uploadSftp = undefined;
             if (state.sftp === sftp) state.sftp = undefined;
+            state.uploadSftpInitPromise = undefined;
         });
     }
 
@@ -2533,7 +2585,8 @@ export class SftpService {
         directories: string[],
     ): Promise<{ preparedDirectories: number }> {
         const state = this.clientStates.get(sessionId);
-        if (!state?.sftp) throw new Error('SFTP 会话未就绪');
+        if (!state) throw new Error('SSH 会话未就绪');
+        const uploadSftp = await this.ensureUploadSftpSession(sessionId);
         if (!prepareId || prepareId.length > 512) throw new Error('上传准备任务 ID 无效');
         if (!Array.isArray(directories) || directories.length > 20000) {
             throw new Error('上传目录列表无效或数量过多');
@@ -2550,7 +2603,7 @@ export class SftpService {
         // Create the base path once, then parallelize by independent first-level branches.
         // Directories inside the same branch are created sequentially so concurrent mkdir
         // requests never race on one shared branch root.
-        await this.ensureDirectoryExists(state.sftp, normalizedBasePath);
+        await this.ensureDirectoryExists(uploadSftp, normalizedBasePath);
 
         const branchDirectories = new Map<string, string[]>();
         for (const directory of fullDirectories) {
@@ -2575,7 +2628,7 @@ export class SftpService {
             while (nextBranchIndex < branches.length) {
                 const branch = branches[nextBranchIndex++];
                 for (const directory of branch) {
-                    await this.ensureDirectoryExists(state.sftp!, directory);
+                    await this.ensureDirectoryExists(uploadSftp, directory);
                 }
             }
         }));
@@ -2600,9 +2653,19 @@ export class SftpService {
         conflictPolicy: 'ask' | 'overwrite' | 'skip' = 'ask',
     ): Promise<void> {
         const state = this.clientStates.get(sessionId);
-        if (!state || !state.sftp) {
-            console.warn(`[SFTP Upload ${uploadId}] SFTP not ready for session ${sessionId}.`);
-            state?.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: 'SFTP 会话未就绪' } }));
+        if (!state) {
+            console.warn(`[SFTP Upload ${uploadId}] SSH session not ready for ${sessionId}.`);
+            return;
+        }
+        let uploadSftp: SFTPWrapper;
+        try {
+            uploadSftp = await this.ensureUploadSftpSession(sessionId);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`[SFTP Upload ${uploadId}] Upload SFTP channel unavailable for session ${sessionId}:`, error);
+            if (state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `上传通道初始化失败: ${message}` } }));
+            }
             return;
         }
         if (this.activeUploads.has(uploadId) || this.pendingUploads.has(uploadId)) {
@@ -2636,7 +2699,7 @@ export class SftpService {
 
         const destinationExists = conflictPolicy === 'overwrite'
             ? false
-            : await this.remotePathExists(state.sftp, normalizedRemotePath);
+            : await this.remotePathExists(uploadSftp, normalizedRemotePath);
         if (destinationExists && conflictPolicy === 'ask') {
             if (state.ws.readyState === WebSocket.OPEN) {
                 state.ws.send(JSON.stringify({
@@ -2664,23 +2727,23 @@ export class SftpService {
         }
 
         const temporaryPath = pathModule.posix.join(targetDirectory, `.nexus-upload-${uploadId}.part`);
-        this.pendingUploads.set(uploadId, { sessionId, remotePath: normalizedRemotePath, temporaryPath });
+        this.pendingUploads.set(uploadId, { sessionId, remotePath: normalizedRemotePath, temporaryPath, sftp: uploadSftp });
 
         const stopIfCancelled = async (): Promise<boolean> => {
             if (!this.cancelledUploadIds.has(uploadId)) return false;
-            await this.removeRemoteUploadFile(sessionId, temporaryPath);
+            await this.removeRemoteUploadFile(sessionId, temporaryPath, uploadSftp);
             return true;
         };
 
         try {
             // Prepared batches create their complete directory tree before uploads start.
             // Keep the legacy fallback for older clients that do not send a prepareId.
-            if (!directoryWasPrepared) await this.ensureDirectoryExists(state.sftp, targetDirectory);
+            if (!directoryWasPrepared) await this.ensureDirectoryExists(uploadSftp, targetDirectory);
             if (await stopIfCancelled()) return;
 
             // createWriteStream already creates/truncates the temporary file. Avoiding a
             // separate open+close probe removes two SFTP round trips for every small file.
-            const stream = state.sftp.createWriteStream(temporaryPath, {
+            const stream = uploadSftp.createWriteStream(temporaryPath, {
                 highWaterMark: UPLOAD_WRITE_HIGH_WATER_MARK,
             });
             const uploadState: ActiveUpload = {
@@ -2692,6 +2755,7 @@ export class SftpService {
                 nextChunkIndex: 0,
                 receivedLastChunk: false,
                 stream,
+                sftp: uploadSftp,
                 sessionId,
                 relativePath,
                 drainPromise: null,
@@ -2741,7 +2805,7 @@ export class SftpService {
                     })
                     .catch(async (error: Error) => {
                         console.error(`[SFTP Upload ${uploadId}] Failed to finalize ${finalState.remotePath}:`, error);
-                        await this.removeRemoteUploadFile(sessionId, finalState.temporaryPath);
+                        await this.removeRemoteUploadFile(sessionId, finalState.temporaryPath, finalState.sftp);
                         if (state.ws.readyState === WebSocket.OPEN) {
                             state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `完成上传失败: ${error.message}` } }));
                         }
@@ -2755,7 +2819,7 @@ export class SftpService {
             state.ws.send(JSON.stringify({ type: 'sftp:upload:ready', payload: { uploadId } }));
         } catch (error: any) {
             console.error(`[SFTP Upload ${uploadId}] Error starting upload for ${remotePath}:`, error);
-            await this.removeRemoteUploadFile(sessionId, temporaryPath);
+            await this.removeRemoteUploadFile(sessionId, temporaryPath, uploadSftp);
             if (!this.cancelledUploadIds.has(uploadId) && state.ws.readyState === WebSocket.OPEN) {
                 state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `开始上传时出错: ${error.message}` } }));
             }
@@ -2778,9 +2842,9 @@ export class SftpService {
         const state = this.clientStates.get(sessionId);
         const uploadState = this.activeUploads.get(uploadId);
 
-        if (!state?.sftp) {
-            console.warn(`[SFTP Upload ${uploadId}] Received binary chunk ${chunkIndex}, but session ${sessionId} or SFTP is invalid.`);
-            void this.cancelUploadInternal(uploadId, 'Session or SFTP invalid');
+        if (!state) {
+            console.warn(`[SFTP Upload ${uploadId}] Received binary chunk ${chunkIndex}, but session ${sessionId} is invalid.`);
+            void this.cancelUploadInternal(uploadId, 'Session invalid');
             return;
         }
         if (!uploadState) {
@@ -2912,6 +2976,12 @@ export class SftpService {
         }
     }
 
+    /** Cancel a user-selected upload set with one control-plane request. */
+    async cancelUploads(sessionId: string, uploadIds: string[]): Promise<void> {
+        const uniqueIds = [...new Set(uploadIds)].filter(id => typeof id === 'string' && id.length > 0).slice(0, 20000);
+        await Promise.all(uniqueIds.map(uploadId => this.cancelUpload(sessionId, uploadId)));
+    }
+
     /** Stop an active stream and remove only its private temporary file. */
     private async cancelUploadInternal(uploadId: string, reason: string, triggeringError?: unknown): Promise<void> {
         const uploadState = this.activeUploads.get(uploadId);
@@ -2941,26 +3011,27 @@ export class SftpService {
             });
         }
 
-        await this.removeRemoteUploadFile(uploadState.sessionId, uploadState.temporaryPath);
+        await this.removeRemoteUploadFile(uploadState.sessionId, uploadState.temporaryPath, uploadState.sftp);
         this.cancelledUploadIds.delete(uploadId);
     }
 
     /** Validate the completed part and atomically replace the destination where supported. */
     private async finalizeUploadedFile(_uploadId: string, uploadState: ActiveUpload): Promise<Stats> {
         const state = this.clientStates.get(uploadState.sessionId);
-        if (!state?.sftp) throw new Error('SFTP 会话已断开');
+        if (!state) throw new Error('SSH 会话已断开');
+        const uploadSftp = uploadState.sftp;
 
-        const partStats = await this.getStats(state.sftp, uploadState.temporaryPath);
+        const partStats = await this.getStats(uploadSftp, uploadState.temporaryPath);
         if (partStats.size !== uploadState.totalSize) {
             throw new Error(`临时文件大小 (${partStats.size}) 与预期 (${uploadState.totalSize}) 不一致`);
         }
 
         await this.replaceRemoteUploadFile(
-            state.sftp,
+            uploadSftp,
             uploadState.temporaryPath,
             uploadState.remotePath,
         );
-        return this.getStats(state.sftp, uploadState.remotePath);
+        return this.getStats(uploadSftp, uploadState.remotePath);
     }
 
     /** Prefer OpenSSH POSIX rename. The fallback keeps the old destination as a backup
@@ -3091,12 +3162,13 @@ export class SftpService {
         return false;
     }
 
-    private async removeRemoteUploadFile(sessionId: string, remotePath: string): Promise<boolean> {
+    private async removeRemoteUploadFile(sessionId: string, remotePath: string, preferredSftp?: SFTPWrapper): Promise<boolean> {
         for (let attempt = 1; attempt <= 3; attempt++) {
             const state = this.clientStates.get(sessionId);
-            if (!state?.sftp) return false;
+            const uploadSftp = preferredSftp ?? state?.uploadSftp ?? state?.sftp;
+            if (!uploadSftp) return false;
             try {
-                await this.unlinkSftpPath(state.sftp, remotePath, true);
+                await this.unlinkSftpPath(uploadSftp, remotePath, true);
                 return true;
             } catch (error) {
                 if (attempt === 3) {

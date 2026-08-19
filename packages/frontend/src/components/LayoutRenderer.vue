@@ -225,6 +225,7 @@ const componentProps = computed(() => {
          wsDeps: { // 恢复 wsDeps
            sendMessage: currentActiveSession.wsManager.sendMessage,
            sendBinaryMessage: currentActiveSession.wsManager.sendBinaryMessage,
+           sendUploadBinaryMessage: currentActiveSession.wsManager.sendUploadBinaryMessage,
            onMessage: currentActiveSession.wsManager.onMessage,
            isConnected: currentActiveSession.wsManager.isConnected, // 恢复 isConnected
            isSftpReady: currentActiveSession.wsManager.isSftpReady // 恢复 isSftpReady
@@ -316,6 +317,7 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
          wsDeps: { // 恢复 wsDeps
            sendMessage: activeSession.value.wsManager.sendMessage,
            sendBinaryMessage: activeSession.value.wsManager.sendBinaryMessage,
+           sendUploadBinaryMessage: activeSession.value.wsManager.sendUploadBinaryMessage,
            onMessage: activeSession.value.wsManager.onMessage,
            isConnected: activeSession.value.wsManager.isConnected, // 直接传递 ref
            isSftpReady: activeSession.value.wsManager.isSftpReady  // 直接传递 ref

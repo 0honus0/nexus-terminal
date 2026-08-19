@@ -26,6 +26,7 @@ export interface ProgressSourceRegistration {
   id: string;
   sessionId?: string;
   label?: string;
+  cancelAll?: () => void | Promise<void>;
 }
 
 export interface RegisteredProgressTask extends ProgressTaskRegistration {
@@ -61,6 +62,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     if (existing) {
       existing.sessionId = registration.sessionId;
       existing.label = registration.label;
+      existing.cancelAll = registration.cancelAll;
       return existing;
     }
 
@@ -211,10 +213,16 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
   const cancelSource = async (sourceId: string) => {
     const source = sources[sourceId];
     if (!source) return;
-    const cancellableTaskIds = Object.values(source.tasks)
-      .filter(task => task.cancel && task.cancellable !== false && task.status !== 'cancelling')
-      .map(task => task.id);
-    await Promise.all(cancellableTaskIds.map(taskId => cancelTask(sourceId, taskId)));
+    const cancellableTasks = Object.values(source.tasks)
+      .filter(task => task.cancel && task.cancellable !== false && task.status !== 'cancelling');
+    if (cancellableTasks.length === 0) return;
+
+    if (source.cancelAll) {
+      for (const task of cancellableTasks) task.status = 'cancelling';
+      await source.cancelAll();
+      return;
+    }
+    await Promise.all(cancellableTasks.map(task => cancelTask(sourceId, task.id)));
   };
 
   return {

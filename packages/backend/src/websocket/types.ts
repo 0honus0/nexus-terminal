@@ -6,6 +6,8 @@ import type { StringDecoder } from 'string_decoder';
 export interface WebSocketRequest extends Request {
     clientIpAddress: string;
     isRdpProxy: boolean;
+    isUploadTransport?: boolean;
+    uploadSessionId?: string;
     rdpToken?: string;
     rdpWidth?: string;
     rdpHeight?: string;
@@ -23,11 +25,14 @@ export interface AuthenticatedWebSocket extends WebSocket {
 // 中心化的客户端状态接口 (统一版本)
 export interface ClientState { // 导出以便 Service 可以导入
     ws: AuthenticatedWebSocket;
+    uploadWs?: AuthenticatedWebSocket;
     sshClient: Client;
     sshShellStream?: ClientChannel;
     dbConnectionId: number;
     connectionName?: string; // 连接名称字段
     sftp?: SFTPWrapper; //  sftp 实例 (由 SftpService 管理)
+    uploadSftp?: SFTPWrapper; // 上传专用 SFTP channel，避免写入阻塞文件管理器控制操作
+    uploadSftpInitPromise?: Promise<SFTPWrapper>;
     statusIntervalId?: NodeJS.Timeout; // 状态轮询 ID (由 StatusMonitorService 管理)
     ipAddress?: string; //  IP 地址字段
     isShellReady?: boolean; // 标记 Shell 是否已准备好处理输入和调整大小

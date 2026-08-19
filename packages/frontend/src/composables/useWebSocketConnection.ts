@@ -51,6 +51,18 @@ export function createWebSocketConnectionManager(
     let lastUrl = ''; // 保存上次连接的 URL
     let intentionalDisconnect = false; // 标记是否为用户主动断开
     let lastTerminalFrameSequence: number | null = null;
+    let backendSessionId = instanceSessionId;
+    let uploadWs: WebSocket | null = null;
+    let uploadWsConnectPromise: Promise<WebSocket> | null = null;
+
+    const closeUploadTransport = (reason = 'Upload transport reset') => {
+        const socket = uploadWs;
+        uploadWs = null;
+        uploadWsConnectPromise = null;
+        if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+            try { socket.close(1000, reason); } catch { /* ignore close errors */ }
+        }
+    };
 
 
     /**
@@ -136,6 +148,7 @@ export function createWebSocketConnectionManager(
      */
     const connect = (url: string) => {
         lastUrl = url; // 保存 URL 以便重连
+        closeUploadTransport('Main transport reconnecting');
         intentionalDisconnect = false; // 重置主动断开标记
         if (reconnectTimeoutId) {
             clearTimeout(reconnectTimeoutId); // 清除可能存在的重连定时器
@@ -288,6 +301,10 @@ export function createWebSocketConnectionManager(
 
                     // --- 更新此实例的连接状态 ---
                     if (message.type === 'ssh:connected') {
+                        const connectedSessionId = typeof message.payload?.sessionId === 'string'
+                            ? message.payload.sessionId.trim()
+                            : '';
+                        if (connectedSessionId) backendSessionId = connectedSessionId;
                         hasConnectedOnce = true;
                         reconnectAttempts = 0; // SSH 真正恢复后再重置退避计数
                         if (connectionStatus.value !== 'connected') {
@@ -347,6 +364,7 @@ export function createWebSocketConnectionManager(
             };
 
             ws.value.onclose = (event) => {
+                closeUploadTransport('Main transport closed');
                 // 只有在非错误状态下才更新为 disconnected
                 if (connectionStatus.value !== 'error' && connectionStatus.value !== 'disconnected') { // Avoid redundant sets or overriding 'error'
                     connectionStatus.value = 'disconnected';
@@ -393,6 +411,7 @@ export function createWebSocketConnectionManager(
      */
     const disconnect = () => {
         intentionalDisconnect = true; // 标记为主动断开
+        closeUploadTransport('Main session disconnected');
         if (reconnectTimeoutId) {
             clearTimeout(reconnectTimeoutId); // 清除重连定时器
             reconnectTimeoutId = null;
@@ -430,11 +449,109 @@ export function createWebSocketConnectionManager(
         }
     };
 
+    const ensureUploadTransport = async (): Promise<WebSocket> => {
+        if (uploadWs?.readyState === WebSocket.OPEN) return uploadWs;
+        if (uploadWsConnectPromise) return uploadWsConnectPromise;
+        if (connectionStatus.value !== 'connected' || !lastUrl || !backendSessionId) {
+            throw new Error('主 WebSocket 尚未就绪，无法建立上传数据通道');
+        }
+
+        const uploadUrl = new URL(lastUrl);
+        uploadUrl.pathname = '/ws/upload';
+        uploadUrl.search = '';
+        uploadUrl.searchParams.set('sessionId', backendSessionId);
+        const socket = new WebSocket(uploadUrl.toString());
+        socket.binaryType = 'arraybuffer';
+        uploadWs = socket;
+
+        let connectPromise: Promise<WebSocket>;
+        connectPromise = new Promise<WebSocket>((resolve, reject) => {
+            let settled = false;
+            const settleReject = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                reject(error);
+            };
+            const timeoutId = window.setTimeout(() => {
+                settleReject(new Error('上传数据通道握手超时'));
+                try { socket.close(1000, 'Upload transport handshake timeout'); } catch { /* ignore */ }
+            }, 5000);
+
+            socket.onmessage = (event) => {
+                if (typeof event.data !== 'string') return;
+                try {
+                    const message = JSON.parse(event.data) as WebSocketMessage;
+                    if (message.type !== 'sftp:upload:transport:ready') return;
+                    if (settled) return;
+                    settled = true;
+                    window.clearTimeout(timeoutId);
+                    resolve(socket);
+                } catch (error) {
+                    console.warn(`[WebSocket ${instanceSessionId}] 无法解析上传通道握手消息:`, error);
+                }
+            };
+            socket.onerror = () => {
+                window.clearTimeout(timeoutId);
+                settleReject(new Error('上传数据通道连接失败'));
+            };
+            socket.onclose = (event) => {
+                window.clearTimeout(timeoutId);
+                if (uploadWs === socket) uploadWs = null;
+                settleReject(new Error(`上传数据通道已关闭 (${event.code})`));
+            };
+        });
+        uploadWsConnectPromise = connectPromise;
+        try {
+            return await connectPromise;
+        } finally {
+            if (uploadWsConnectPromise === connectPromise) uploadWsConnectPromise = null;
+        }
+    };
+
+    const waitForUploadBackpressure = (signal?: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new DOMException('Upload send aborted', 'AbortError'));
+            return;
+        }
+        const timeoutId = window.setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+        }, 16);
+        const onAbort = () => {
+            window.clearTimeout(timeoutId);
+            signal?.removeEventListener('abort', onAbort);
+            reject(new DOMException('Upload send aborted', 'AbortError'));
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+    });
+
+    /** Send upload payloads on a dedicated WebSocket so control JSON on the main socket
+     * (cancel, readdir, terminal input) can never sit behind queued file bytes. */
+    const sendUploadBinaryMessage = async (
+        frame: ArrayBuffer,
+        maxBufferedBytes = 8 * 1024 * 1024,
+        signal?: AbortSignal,
+    ): Promise<void> => {
+        if (signal?.aborted) throw new DOMException('Upload send aborted', 'AbortError');
+        const socket = await ensureUploadTransport();
+        const highWaterMark = Math.max(frame.byteLength, maxBufferedBytes);
+        while (
+            socket === uploadWs
+            && socket.readyState === WebSocket.OPEN
+            && socket.bufferedAmount + frame.byteLength > highWaterMark
+        ) {
+            await waitForUploadBackpressure(signal);
+        }
+        if (signal?.aborted) throw new DOMException('Upload send aborted', 'AbortError');
+        if (socket !== uploadWs || socket.readyState !== WebSocket.OPEN) {
+            throw new Error('上传数据通道在等待发送缓冲区时已断开');
+        }
+        socket.send(frame);
+    };
+
     /**
      * Send an already encoded binary protocol frame without JSON/base64 wrapping.
-     * Wait for the browser send queue to drain before adding more upload data. Without
-     * this guard, several concurrent uploads can grow bufferedAmount until the proxy or
-     * browser closes the socket and triggers a reconnect.
+     * Kept for non-upload binary callers; file upload uses sendUploadBinaryMessage.
      */
     const sendBinaryMessage = async (
         frame: ArrayBuffer,
@@ -512,6 +629,7 @@ export function createWebSocketConnectionManager(
         disconnect,
         sendMessage,
         sendBinaryMessage,
+        sendUploadBinaryMessage,
         onMessage,
     };
 }

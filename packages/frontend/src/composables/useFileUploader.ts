@@ -56,11 +56,9 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 4 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 1 * MiB,
-        // Keep the browser WebSocket queue small. Upload data and file-manager control
-        // messages share one socket, so cancel/refresh JSON frames cannot overtake binary
-        // upload frames that are already buffered by the browser. The larger byte windows
-        // above still provide SFTP ACK pipelining; this limit only bounds browser-side
-        // head-of-line blocking when the user cancels an upload and immediately refreshes.
+        // The upload transport now has its own WebSocket. Keep its browser queue bounded
+        // anyway so cancellation can stop producing bytes quickly and upload memory remains
+        // predictable on slow links. File-manager control traffic is isolated on the main socket.
         wsBufferedBytes: 512 * KiB,
         maxActiveFiles: 4,
         activeWeightBudget: 8,
@@ -112,6 +110,7 @@ interface UploadTransferState {
     sentChunks: Map<number, SentUploadChunk>;
     pumping: boolean;
     startRequestSent: boolean;
+    abortController: AbortController;
     conflictPolicyOverride?: UploadConflictDecision;
 }
 
@@ -370,6 +369,8 @@ export function useFileUploader(
     };
 
     const resetTransferForRestart = (transfer: UploadTransferState) => {
+        transfer.abortController.abort();
+        transfer.abortController = new AbortController();
         transfer.offset = 0;
         transfer.nextChunkIndex = 0;
         transfer.inFlight = 0;
@@ -503,9 +504,10 @@ export function useFileUploader(
         try {
             if (transfer.file.size === 0 && transfer.offset === 0 && transfer.inFlight === 0) {
                 const tuning = getTransferTuning(transfer);
-                await wsDeps.value.sendBinaryMessage(
+                await wsDeps.value.sendUploadBinaryMessage(
                     encodeUploadChunkFrame(uploadId, 0, true, new ArrayBuffer(0)),
                     tuning.wsBufferedBytes,
+                    transfer.abortController.signal,
                 );
                 const sentAt = performance.now();
                 transfer.inFlight = 1;
@@ -534,9 +536,10 @@ export function useFileUploader(
                 const chunkIndex = transfer.nextChunkIndex;
                 const nextOffset = transfer.offset + slice.size;
                 const isLast = nextOffset >= transfer.file.size;
-                await wsDeps.value.sendBinaryMessage(
+                await wsDeps.value.sendUploadBinaryMessage(
                     encodeUploadChunkFrame(uploadId, chunkIndex, isLast, chunk),
                     tuning.wsBufferedBytes,
+                    transfer.abortController.signal,
                 );
                 const sentAt = performance.now();
                 markUploadDataSent(sentAt);
@@ -678,6 +681,7 @@ export function useFileUploader(
                 sentChunks: new Map(),
                 pumping: false,
                 startRequestSent: false,
+                abortController: new AbortController(),
             });
         }
 
@@ -688,16 +692,18 @@ export function useFileUploader(
         startFileUploadBatch([{ file, relativePath }]);
     };
 
-    const cancelUpload = (uploadId: string, notifyBackend = true) => {
+    const cancelUpload = (uploadId: string, notifyBackend = true, drainQueue = true) => {
         const upload = uploads[uploadId];
         if (upload && ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)) {
             console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
             upload.status = 'cancelled'; // 立即更新状态
             removeConflictFromQueue(uploadId);
+            const transfer = uploadTransferStates.get(uploadId);
+            transfer?.abortController.abort();
             removeUploadFromBatch(uploadId);
             uploadTransferStates.delete(uploadId);
             releaseUploadSlot(uploadId);
-            drainUploadStartQueue();
+            if (drainQueue) drainUploadStartQueue();
 
             if (notifyBackend && wsDeps.value.isConnected.value) {
                 wsDeps.value.sendMessage({ type: 'sftp:upload:cancel', payload: { uploadId } });
@@ -716,7 +722,11 @@ export function useFileUploader(
         const cancellableIds = Object.values(uploads)
             .filter(upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status))
             .map(upload => upload.id);
-        cancellableIds.forEach(uploadId => cancelUpload(uploadId, true));
+        cancellableIds.forEach(uploadId => cancelUpload(uploadId, false, false));
+        if (cancellableIds.length && wsDeps.value.isConnected.value) {
+            wsDeps.value.sendMessage({ type: 'sftp:upload:cancel-all', payload: { uploadIds: cancellableIds } });
+        }
+        drainUploadStartQueue();
     };
 
     const uploadProgressSourceId = computed(() => `upload:${sessionIdForLog.value}:${progressInstanceId}`);
@@ -729,7 +739,7 @@ export function useFileUploader(
             registeredUploadProgressSourceId = sourceId;
         }
         progressCenter.syncSourceTasks(
-            { id: sourceId, sessionId: sessionIdForLog.value, label: 'upload' },
+            { id: sourceId, sessionId: sessionIdForLog.value, label: 'upload', cancelAll: cancelAllUploads },
             Object.values(uploads)
                 .filter(upload => {
                     const effectivelyComplete = upload.status === 'success'

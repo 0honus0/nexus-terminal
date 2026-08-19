@@ -58,7 +58,7 @@ export function initializeUpgradeHandler(
     server.on('upgrade', async (request: WebSocketRequest, socket, head) => {
         const parsedUrl = url.parse(request.url || '', true); // Parse URL and query string
         const pathname = parsedUrl.pathname;
-        const allowedPaths = new Set(['/ws', '/ws/', '/rdp-proxy', '/ws/rdp-proxy']);
+        const allowedPaths = new Set(['/ws', '/ws/', '/ws/upload', '/ws/upload/', '/rdp-proxy', '/ws/rdp-proxy']);
         if (!pathname || !allowedPaths.has(pathname)) {
             socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
             socket.destroy();
@@ -119,6 +119,27 @@ export function initializeUpgradeHandler(
                     request.rdpDpi = dpi;
                     wss.emit('connection', extWs, request);
                 });
+            } else if (pathname === '/ws/upload' || pathname === '/ws/upload/') {
+                const uploadSessionId = typeof parsedUrl.query.sessionId === 'string'
+                    ? parsedUrl.query.sessionId.trim()
+                    : '';
+                if (!/^[A-Za-z0-9_-]{8,128}$/.test(uploadSessionId)) {
+                    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+                    socket.destroy();
+                    return;
+                }
+
+                console.log(`WebSocket: Handling upload transport upgrade for user ${request.session.username}, session ${uploadSessionId}`);
+                wss.handleUpgrade(request, socket, head, (ws) => {
+                    const extWs = ws as AuthenticatedWebSocket;
+                    extWs.userId = request.session.userId;
+                    extWs.username = request.session.username;
+                    request.clientIpAddress = ipAddress;
+                    request.isRdpProxy = false;
+                    request.isUploadTransport = true;
+                    request.uploadSessionId = uploadSessionId;
+                    wss.emit('connection', extWs, request);
+                });
             } else {
                 // 默认路径 (SSH, SFTP, Docker etc.) - 按原逻辑处理
                 console.log(`WebSocket: Handling standard upgrade for user ${request.session.username}`);
@@ -128,6 +149,7 @@ export function initializeUpgradeHandler(
                     extWs.username = request.session.username;
                     request.clientIpAddress = ipAddress;
                     request.isRdpProxy = false; // 标记为非 RDP 代理连接
+                    request.isUploadTransport = false;
                     wss.emit('connection', extWs, request);
                 });
             }
