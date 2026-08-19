@@ -258,6 +258,10 @@ test.describe.serial("functional documentation screenshots", () => {
       await touchContextMenu.getByText("Refresh", { exact: true }).click();
       await expect(touchContextMenu).toBeHidden();
 
+      // A completed mobile long press intentionally suppresses the next file-row click
+      // so the touch release cannot accidentally open a file. Consume that guard on
+      // the same row before continuing the screenshot sequence.
+      await archiveRow.click();
       await fileManagerRow(page, "plainfile").click();
       const editor = page.getByTestId("file-editor-overlay");
       await expect(editor).toBeVisible({ timeout: 20_000 });
