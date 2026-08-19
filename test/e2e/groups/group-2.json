@@ -3,6 +3,7 @@
   "group": 2,
   "workers": 4,
   "specs": [
+    "tests/auth/setup-login.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
