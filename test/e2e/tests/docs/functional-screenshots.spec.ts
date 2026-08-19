@@ -222,6 +222,42 @@ test.describe.serial("functional documentation screenshots", () => {
       const fileManagerModal = page.getByTestId("file-manager-modal");
       await saveViewportScreenshot(page, "mobile-file-manager.png");
 
+      const archiveRow = fileManagerRow(page, "archive-source.txt");
+      const archiveBox = await archiveRow.boundingBox();
+      expect(archiveBox).not.toBeNull();
+      const archivePoint = {
+        x: archiveBox!.x + archiveBox!.width / 2,
+        y: archiveBox!.y + archiveBox!.height / 2,
+      };
+      await archiveRow.dispatchEvent("pointerdown", {
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: archivePoint.x,
+        clientY: archivePoint.y,
+      });
+      await page.waitForTimeout(620);
+      await archiveRow.dispatchEvent("pointerup", {
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+        button: 0,
+        buttons: 0,
+        clientX: archivePoint.x,
+        clientY: archivePoint.y,
+      });
+      const touchContextMenu = page.getByTestId("file-manager-context-menu");
+      await expect(touchContextMenu).toBeVisible();
+      await expect(
+        touchContextMenu.getByText("Compress to zip", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByTestId("file-manager-context-submenu")).toHaveCount(0);
+      await saveViewportScreenshot(page, "mobile-context-menu.png");
+      await touchContextMenu.getByText("Refresh", { exact: true }).click();
+      await expect(touchContextMenu).toBeHidden();
+
       await fileManagerRow(page, "plainfile").click();
       const editor = page.getByTestId("file-editor-overlay");
       await expect(editor).toBeVisible({ timeout: 20_000 });
@@ -232,8 +268,38 @@ test.describe.serial("functional documentation screenshots", () => {
         })
         .toContain("plain-no-extension");
       await saveViewportScreenshot(page, "mobile-file-editor.png");
+
+      await editor.getByTitle("Search").click();
+      const mobileSearchPanel = editor.locator(".cm-panel.cm-search");
+      await expect(mobileSearchPanel).toBeVisible();
+      await mobileSearchPanel.locator('input[name="search"]').fill("plain-no-extension");
+      await expect
+        .poll(async () => editor.locator(".cm-searchMatch").count(), {
+          timeout: 10_000,
+        })
+        .toBeGreaterThan(0);
+      await saveViewportScreenshot(page, "mobile-editor-search.png");
       await editor.getByTestId("file-editor-close").click();
       await expect(editor).toBeHidden();
+
+      await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=260`, { method: "POST" });
+      try {
+        await fileManagerModal.getByTestId("file-upload-input").setInputFiles({
+          name: "mobile-screenshot-upload.bin",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.alloc(12 * 1024 * 1024, 0x4d),
+        });
+        const mobileUploadPopup = page.getByTestId("file-upload-progress-popup");
+        await expect(mobileUploadPopup).toBeVisible({ timeout: 10_000 });
+        await expect(mobileUploadPopup.getByTestId("file-upload-speed")).toBeVisible();
+        await expect(mobileUploadPopup.getByTestId("file-upload-cancel-all")).toBeVisible();
+        await page.waitForTimeout(500);
+        await saveViewportScreenshot(page, "mobile-upload-progress.png");
+        await mobileUploadPopup.getByTestId("file-upload-cancel-all").click();
+        await expect(mobileUploadPopup).toBeHidden({ timeout: 10_000 });
+      } finally {
+        await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: "POST" });
+      }
 
       await fileManagerModal.click({ position: { x: 8, y: 8 } });
       await expect(fileManagerModal).toBeHidden();

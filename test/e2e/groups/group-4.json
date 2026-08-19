@@ -3,10 +3,10 @@
   "group": 4,
   "workers": 4,
   "specs": [
-    "tests/ssh/command-history-management.spec.ts",
-    "tests/ssh/quick-command-collapsible-search.spec.ts",
-    "tests/ssh/quick-command-management.spec.ts",
-    "tests/ssh/quick-command-tags-variables.spec.ts",
+    "tests/mobile/ssh-workspace.spec.ts",
+    "tests/mobile/suspend-resume-ui.spec.ts",
+    "tests/mobile/touch-advanced.spec.ts",
+    "tests/mobile/touch-workflows.spec.ts",
     "tests/ssh/connection-edit-delete.spec.ts",
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
@@ -17,8 +17,6 @@
     "tests/ssh/file-preview-editor.spec.ts",
     "tests/ssh/docker-manager-ui.spec.ts",
     "tests/ssh/protocol.spec.ts",
-    "tests/ssh/status-docker-protocol.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts"
+    "tests/ssh/status-docker-protocol.spec.ts"
   ]
 }
