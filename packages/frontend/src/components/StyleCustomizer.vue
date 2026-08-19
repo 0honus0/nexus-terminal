@@ -154,6 +154,7 @@ onMounted(() => {
             {{ t('styleCustomizer.uiStyles') }}
           </button>
           <button
+            data-testid="style-customizer-terminal-tab"
             @click="currentTab = 'terminal'"
             :class="[
               'block w-auto md:w-full px-3 py-2 md:py-[0.7rem] mb-0 md:mb-2 mx-1 md:mx-0 text-center md:text-left bg-transparent border border-transparent rounded cursor-pointer text-foreground text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out hover:bg-black/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-text-secondary',

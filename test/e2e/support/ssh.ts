@@ -69,6 +69,10 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page).toHaveURL(/\/workspace$/);
+  // Reaching the workspace route only means the session UI was created. Wait until the
+  // initial SSH handshake has completed so callers cannot race the product's intentional
+  // command-input guard and silently lose their first terminal action.
+  await expect(page.getByTestId('command-input')).toBeEnabled({ timeout: 20_000 });
 }
 
 export function activeFileManagerList(page: Page): Locator {

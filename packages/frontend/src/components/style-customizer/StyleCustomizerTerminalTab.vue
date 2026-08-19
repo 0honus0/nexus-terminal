@@ -487,7 +487,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
 </script>
 
 <template>
-  <section v-if="!isEditingTheme">
+  <section v-if="!isEditingTheme" data-testid="terminal-style-settings">
     <h3 class="mt-0 border-b border-border pb-2 mb-4 text-lg font-semibold text-foreground">{{ t('styleCustomizer.terminalStyles') }}</h3>
     
     <div class="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-start md:items-center gap-2 md:gap-3 mb-3">
@@ -611,12 +611,13 @@ watch(() => props.isEditingTheme, (isEditing) => {
     </div>
 
     <div class="mt-4 mb-6 flex gap-2 flex-wrap items-center pb-4 border-b border-dashed border-border">
-        <button @click="handleAddNewTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">{{ t('styleCustomizer.addNewTheme') }}</button>
+        <button data-testid="terminal-theme-add" @click="handleAddNewTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">{{ t('styleCustomizer.addNewTheme') }}</button>
     </div>
      
      <div class="mb-4">
           <input
               type="text"
+              data-testid="terminal-theme-search"
               v-model="themeSearchTerm"
               :placeholder="t('styleCustomizer.searchThemePlaceholder', '搜索主题名称...')"
               class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -628,6 +629,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
              {{ t('styleCustomizer.noThemesFound', 'No matching themes found') }}
          </li>
          <li v-else v-for="(theme, index) in filteredAndSortedThemes" :key="theme._id"
+            :data-testid="`terminal-theme-row-${theme._id}`"
             :class="[
               'block md:grid md:grid-cols-[1fr_auto] items-center px-3 py-2.5 text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out gap-2',
               index < filteredAndSortedThemes.length - 1 ? 'border-b border-border' : '',
@@ -638,6 +640,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
              <span class="block md:col-start-1 md:col-end-2 overflow-hidden text-ellipsis whitespace-nowrap mb-2 md:mb-0" :class="theme._id === activeTerminalThemeId?.toString() ? 'font-bold text-button-text' : 'text-foreground'" :title="theme.name">{{ theme.name }}</span>
              <div class="flex md:col-start-2 md:col-end-3 flex-shrink-0 gap-2 justify-start md:justify-end flex-wrap"> 
                   <button
+                      data-testid="terminal-theme-apply"
                       @click="handleApplyTheme(theme)"
                       :disabled="theme._id === activeTerminalThemeId?.toString()"
                       :title="t('styleCustomizer.applyThemeTooltip', 'Apply this theme')"
@@ -648,13 +651,13 @@ watch(() => props.isEditingTheme, (isEditing) => {
                   >
                       {{ t('styleCustomizer.applyButton', 'Apply') }}
                  </button>
-                <button @click="handleEditTheme(theme)" :title="theme.isPreset ? t('styleCustomizer.editAsCopy', 'Edit as Copy') : t('common.edit')"
+                <button data-testid="terminal-theme-edit" @click="handleEditTheme(theme)" :title="theme.isPreset ? t('styleCustomizer.editAsCopy', 'Edit as Copy') : t('common.edit')"
                    :class="[
                      'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
                      theme._id === activeTerminalThemeId?.toString() ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50' : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary'
                    ]"
                 >{{ t('common.edit') }}</button>
-                <button @click="handleDeleteTheme(theme)" :disabled="theme.isPreset" :title="theme.isPreset ? t('styleCustomizer.cannotDeletePreset', 'Cannot delete preset theme') : t('common.delete')"
+                <button data-testid="terminal-theme-delete" @click="handleDeleteTheme(theme)" :disabled="theme.isPreset" :title="theme.isPreset ? t('styleCustomizer.cannotDeletePreset', 'Cannot delete preset theme') : t('common.delete')"
                    :class="[
                      'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
                      theme._id === activeTerminalThemeId?.toString() ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50' : 'bg-error/10 text-error border-error/30 hover:bg-error/20'
@@ -665,12 +668,12 @@ watch(() => props.isEditingTheme, (isEditing) => {
      </ul>
   </section>
 
-  <section v-if="isEditingTheme && editingTheme">
+  <section v-if="isEditingTheme && editingTheme" data-testid="terminal-theme-editor">
       <h3 class="mt-0 border-b border-border pb-2 mb-4 text-lg font-semibold text-foreground">{{ editingTheme._id ? t('styleCustomizer.editThemeTitle') : t('styleCustomizer.newThemeTitle') }}</h3>
        <p v-if="saveThemeError" class="text-error-text bg-error/10 border border-error/30 px-3 py-2 rounded text-sm mb-3">{{ saveThemeError }}</p>
       <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-start md:items-center gap-2 mb-2">
           <label for="editingThemeName" class="text-left text-foreground text-sm font-medium overflow-hidden text-ellipsis block w-full mb-1 md:mb-0">{{ t('styleCustomizer.themeName') }}:</label>
-          <input type="text" id="editingThemeName" v-model="editingTheme.name" required class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+          <input type="text" id="editingThemeName" data-testid="terminal-theme-name" v-model="editingTheme.name" required class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
       </div>
 
        <hr class="my-4 md:my-8 border-border">
@@ -711,6 +714,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
          <label for="terminalThemeTextarea" class="sr-only">{{ t('styleCustomizer.terminalThemeJsonEditorTitle') }}</label>
          <textarea
            id="terminalThemeTextarea"
+           data-testid="terminal-theme-json"
            v-model="editableTerminalThemeString"
            @blur="handleTerminalThemeStringChange"
            rows="10"
@@ -721,8 +725,8 @@ watch(() => props.isEditingTheme, (isEditing) => {
       </div>
        <p v-if="terminalThemeParseError" class="text-error-text bg-error/10 border border-error/30 px-3 py-2 rounded text-sm mt-2">{{ terminalThemeParseError }}</p>
   <div class="mt-4 flex justify-end gap-2 pt-4 border-t border-border">
-       <button @click="handleCancelEditingTheme" class="px-4 md:px-5 py-2 rounded font-bold border border-border bg-header text-foreground hover:bg-border disabled:opacity-60 disabled:cursor-not-allowed text-sm md:text-base">{{ t('common.cancel') }}</button> 
-       <button @click="handleSaveEditingTheme" class="px-4 md:px-5 py-2 rounded font-bold border border-button bg-button text-button-text hover:bg-button-hover hover:border-button-hover disabled:opacity-60 disabled:cursor-not-allowed text-sm md:text-base">{{ t('common.save') }}</button> 
+       <button data-testid="terminal-theme-cancel" @click="handleCancelEditingTheme" class="px-4 md:px-5 py-2 rounded font-bold border border-border bg-header text-foreground hover:bg-border disabled:opacity-60 disabled:cursor-not-allowed text-sm md:text-base">{{ t('common.cancel') }}</button>
+       <button data-testid="terminal-theme-save" @click="handleSaveEditingTheme" class="px-4 md:px-5 py-2 rounded font-bold border border-button bg-button text-button-text hover:bg-button-hover hover:border-button-hover disabled:opacity-60 disabled:cursor-not-allowed text-sm md:text-base">{{ t('common.save') }}</button>
    </div>
   </section>
 </template>

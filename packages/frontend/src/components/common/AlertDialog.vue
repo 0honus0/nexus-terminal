@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from 'vue';
-import { useI18n } from 'vue-i18n';
 
 interface Props {
   visible: boolean;
@@ -12,7 +11,6 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits(['ok', 'update:visible']);
 
-const { t } = useI18n();
 
 const dialogVisible = ref(props.visible);
 
@@ -79,7 +77,7 @@ onBeforeUnmount(() => {
             type="button"
             class="px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-background-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center bg-primary hover:bg-primary-hover focus:ring-primary"
           >
-            {{ props.okText || t('common.ok', '确定') }}
+            {{ props.okText || 'OK' }}
           </button>
         </div>
       </div>

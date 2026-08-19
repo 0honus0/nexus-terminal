@@ -518,6 +518,7 @@ const handleConnectAllFilteredConnections = async () => {
 
           <input
             type="text"
+            data-testid="connections-search"
             v-model="searchQuery"
             :placeholder="t('dashboard.searchConnectionsPlaceholder', '搜索连接...')"
             class="h-8 px-3 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-48"
@@ -587,18 +588,21 @@ const handleConnectAllFilteredConnections = async () => {
       <!-- Batch Action Buttons -->
       <div v-if="isBatchEditMode" class="px-4 py-2 border-b border-border bg-card flex flex-wrap items-center gap-2">
         <button
+          data-testid="batch-select-all"
           @click="selectAllConnections"
           class="px-3 py-1.5 text-sm bg-transparent text-text-secondary border border-border rounded-md shadow-sm hover:bg-border hover:text-foreground focus:outline-none transition duration-150 ease-in-out"
         >
           {{ t('connections.batchEdit.selectAll', '全选') }} ({{ selectedConnectionIdsForBatch.size }})
         </button>
         <button
+          data-testid="batch-deselect-all"
           @click="deselectAllConnections"
           class="px-3 py-1.5 text-sm bg-transparent text-text-secondary border border-border rounded-md shadow-sm hover:bg-border hover:text-foreground focus:outline-none transition duration-150 ease-in-out"
         >
           {{ t('connections.batchEdit.deselectAll', '取消全选') }}
         </button>
         <button
+          data-testid="batch-invert-selection"
           @click="invertSelection"
           class="px-3 py-1.5 text-sm bg-transparent text-text-secondary border border-border rounded-md shadow-sm hover:bg-border hover:text-foreground focus:outline-none transition duration-150 ease-in-out"
         >
@@ -614,6 +618,7 @@ const handleConnectAllFilteredConnections = async () => {
           {{ t('connections.batchEdit.editSelected', '编辑选中') }}
         </button>
         <button
+          data-testid="batch-delete-selected"
           @click="handleBatchDeleteConnections"
           :disabled="selectedConnectionIdsForBatch.size === 0 || isDeletingSelectedConnections"
           class="px-4 py-1.5 text-sm bg-red-600 text-white rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center"

@@ -176,7 +176,7 @@ const handleDeleteTagGlobally = (tagToDelete: GenericTag) => {
   <div class="relative w-full">
     <div class="flex flex-wrap items-center gap-1 p-1.5 border border-border rounded cursor-text bg-background" @click="inputRef?.focus()">
        <div class="inline-flex flex-wrap gap-1">
-          <span v-for="tag in selectedTags" :key="tag.id" class="inline-flex items-center bg-background-alt text-foreground text-sm px-2 py-0.5 rounded whitespace-nowrap border border-border">
+          <span v-for="tag in selectedTags" :key="tag.id" data-testid="tag-chip" :data-tag-id="tag.id" class="inline-flex items-center bg-background-alt text-foreground text-sm px-2 py-0.5 rounded whitespace-nowrap border border-border">
             {{ tag.name }}
             <button
               type="button"
@@ -198,6 +198,7 @@ const handleDeleteTagGlobally = (tagToDelete: GenericTag) => {
        </div>
       <input
         ref="inputRef"
+        data-testid="tag-input-text"
         type="text"
         class="flex-grow border-none outline-none p-0.5 text-sm min-w-[100px] bg-transparent"
         v-model="inputValue"

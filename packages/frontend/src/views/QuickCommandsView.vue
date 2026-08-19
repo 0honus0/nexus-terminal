@@ -87,6 +87,7 @@
                 <div v-for="groupData in filteredAndGroupedCommands" :key="groupData.groupName" class="mb-1 last:mb-0">
                     <!-- Group Header - Modified for inline editing -->
                     <div
+                        :data-testid="groupData.tagId === null ? 'quick-command-group-untagged' : `quick-command-group-${groupData.tagId}`"
                         class="quick-command-group-header group font-semibold flex items-center text-foreground rounded-md hover:bg-header/80 transition-colors duration-150"
                         :class="[
                           { 'cursor-pointer': editingTagId !== (groupData.tagId === null ? 'untagged' : groupData.tagId) },
@@ -105,6 +106,7 @@
                             :key="groupData.tagId === null ? 'untagged-input' : `tag-input-${groupData.tagId}`"
                             :ref="(el) => setTagInputRef(el, groupData.tagId === null ? 'untagged' : groupData.tagId)"
                             type="text"
+                            data-testid="quick-command-group-rename-input"
                             v-model="editedTagName"
                             class="bg-input border border-primary rounded px-1 py-0 w-full"
                             @blur="finishEditingTag"
@@ -115,6 +117,7 @@
                         <!-- Display State -->
                         <span
                             v-else
+                            data-testid="quick-command-group-name"
                             class="inline-block overflow-hidden text-ellipsis whitespace-nowrap"
                             :class="{ 'cursor-pointer hover:underline': true }"
                             :title="t('quickCommands.tags.clickToEditTag', '点击编辑标签')"

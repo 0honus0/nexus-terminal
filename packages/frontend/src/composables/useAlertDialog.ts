@@ -47,11 +47,8 @@ export function useAlertDialog() {
           }),
       });
 
-      // Mount an app with i18n instance
-      const i18n = useI18n();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (app._context.provides as any).i18n = i18n;
-
+      // The caller already resolves localized strings through the parent app's i18n context.
+      // Keep the transient alert app self-contained instead of calling useI18n() outside setup.
       app.mount(container);
     });
   };

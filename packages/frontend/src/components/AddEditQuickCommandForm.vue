@@ -20,12 +20,14 @@
             <div v-for="(variable, index) in localVariables" :key="variable.id" class="p-2.5 border border-border/40 rounded-lg bg-input/30 space-y-2">
               <input
                 type="text"
+                :data-testid="`quick-command-variable-name-${index}`"
                 v-model="variable.name"
                 :placeholder="t('quickCommands.form.variableNamePlaceholder', '变量名')"
                 class="w-full px-3 py-1.5 border border-border/50 rounded-md bg-input text-foreground text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary"
               />
               <textarea
                 v-model="variable.value"
+                :data-testid="`quick-command-variable-value-${index}`"
                 :placeholder="t('quickCommands.form.variableValuePlaceholder', '变量值')"
                 rows="2"
                 class="w-full px-3 py-1.5 border border-border/50 rounded-md bg-input text-foreground text-xs resize-y min-h-[40px] shadow-sm focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary"
@@ -39,7 +41,7 @@
               </button>
             </div>
           </div>
-          <button type="button" @click="addVariable" class="mt-3 w-full py-2 px-4 border border-primary/50 text-primary text-sm rounded-md hover:bg-primary/10 transition-colors duration-150">
+          <button type="button" data-testid="quick-command-variable-add" @click="addVariable" class="mt-3 w-full py-2 px-4 border border-primary/50 text-primary text-sm rounded-md hover:bg-primary/10 transition-colors duration-150">
             {{ t('quickCommands.form.addVariable', '+ 添加变量') }}
           </button>
         </div>
@@ -92,7 +94,7 @@
             <!-- 次要/取消按钮 -->
             <button type="button" @click="closeForm" class="py-2 px-5 rounded-lg text-sm font-medium transition-colors duration-150 bg-background border border-border/50 text-text-secondary hover:bg-border hover:text-foreground mr-3">{{ t('common.cancel', '取消') }}</button>
             <!-- 执行按钮 -->
-            <button type="button" @click="handleExecute" class="py-2 px-5 rounded-lg text-sm font-semibold transition-colors duration-150 bg-[var(--color-success)] text-white border-none shadow-md  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-success)] mr-3">
+            <button type="button" data-testid="quick-command-execute" @click="handleExecute" class="py-2 px-5 rounded-lg text-sm font-semibold transition-colors duration-150 bg-[var(--color-success)] text-white border-none shadow-md  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-success)] mr-3">
               {{ t('quickCommands.form.execute', '执行') }}
             </button>
             <!-- 主要/提交按钮 -->
