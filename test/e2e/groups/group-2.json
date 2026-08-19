@@ -3,20 +3,23 @@
   "group": 2,
   "workers": 4,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
-    "tests/ssh/connection-edit-delete.spec.ts",
-    "tests/ssh/connection-list-search.spec.ts",
-    "tests/ssh/connection.spec.ts",
-    "tests/ssh/reconnect-ui.spec.ts",
+    "tests/ssh/file-manager-context-menu.spec.ts",
+    "tests/ssh/file-manager-menu-readiness.spec.ts",
+    "tests/ssh/file-manager-navigation.spec.ts",
+    "tests/ssh/file-preview-editor.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/panel-wheel-scaling.spec.ts",
-    "tests/ssh/terminal-protocol.spec.ts",
-    "tests/ssh/terminal-tools-ui.spec.ts",
-    "tests/ssh/terminal-ui.spec.ts",
+    "tests/ui/audit-log-filtering.spec.ts",
+    "tests/ui/backup-ui.spec.ts",
+    "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/connection-create.spec.ts",
+    "tests/ui/connection-non-ssh-bulk.spec.ts",
+    "tests/ui/custom-terminal-theme.spec.ts",
+    "tests/ui/dashboard-workflows.spec.ts",
     "tests/ui/notification-delivery.spec.ts",
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts"
+    "tests/ui/theme-switching.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
