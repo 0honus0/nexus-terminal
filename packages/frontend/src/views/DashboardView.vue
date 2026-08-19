@@ -284,13 +284,13 @@ const handleConnectionModified = async () => {
 </script>
 
 <template>
-  <div class="p-4 md:p-6 lg:p-8 bg-background text-foreground">
+  <div data-testid="dashboard-view" class="p-4 md:p-6 lg:p-8 bg-background text-foreground">
     <h1 class="text-2xl font-semibold mb-6">{{ t('nav.dashboard') }}</h1>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-start">
 
       <!-- Connection List -->
-      <div class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
+      <div data-testid="dashboard-connections" class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
         <div class="px-4 py-3 border-b border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <h2 class="text-lg font-medium flex-shrink-0">{{ t('dashboard.connectionList', '连接列表') }} ({{ filteredAndSortedConnections.length }})</h2>
           <div class="w-full sm:w-auto flex flex-wrap sm:flex-nowrap items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
@@ -298,6 +298,7 @@ const handleConnectionModified = async () => {
             <input
               type="text"
               v-model="searchQuery"
+              data-testid="dashboard-connection-search"
               :placeholder="t('dashboard.searchConnectionsPlaceholder', '搜索连接...')"
               class="h-8 px-3 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-48"
             />
@@ -305,6 +306,7 @@ const handleConnectionModified = async () => {
              <!-- Tag Filter Dropdown -->
              <select
                 v-model="selectedTagId"
+                data-testid="dashboard-tag-filter"
                 class="h-8 px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-no-repeat bg-right pr-8"
                 style="background-image: url('data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%236c757d\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3e%3c/svg%3e'); background-position: right 0.5rem center; background-size: 16px 12px;"
                 aria-label="Filter connections by tag"
@@ -321,6 +323,7 @@ const handleConnectionModified = async () => {
              <!-- Sort By Dropdown -->
              <select
                 v-model="localSortBy"
+                data-testid="dashboard-sort-by"
                 class="h-8 px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-no-repeat bg-right pr-8"
                 style="background-image: url('data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%236c757d\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3e%3c/svg%3e'); background-position: right 0.5rem center; background-size: 16px 12px;"
                 aria-label="Sort connections by"
@@ -333,6 +336,7 @@ const handleConnectionModified = async () => {
               <!-- Sort Order Button -->
               <button
                 @click="toggleSortOrder"
+                data-testid="dashboard-sort-order"
                 class="h-8 px-1.5 py-1 border border-border rounded hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center"
                 :aria-label="isAscending ? t('common.sortAscending') : t('common.sortDescending')"
                 :title="isAscending ? t('common.sortAscending') : t('common.sortDescending')"
@@ -351,7 +355,7 @@ const handleConnectionModified = async () => {
           <div v-if="isLoadingConnections && filteredAndSortedConnections.length === 0" class="text-center text-text-secondary">{{ t('common.loading') }}</div>
           <ul v-else-if="filteredAndSortedConnections.length > 0" class="space-y-3">
             <!-- Iterate over filteredAndSortedConnections -->
-            <li v-for="conn in filteredAndSortedConnections" :key="conn.id" class="flex items-center justify-between p-3 bg-header/50 border border-border/50 rounded transition duration-150 ease-in-out">
+            <li v-for="conn in filteredAndSortedConnections" :key="conn.id" :data-testid="`dashboard-connection-row-${conn.id}`" class="flex items-center justify-between p-3 bg-header/50 border border-border/50 rounded transition duration-150 ease-in-out">
               <div class="flex-grow mr-4 overflow-hidden">
                 <span class="font-medium block truncate flex items-center" :title="conn.name || ''">
                   <i :class="['fas', conn.type === 'VNC' ? 'fa-plug' : (conn.type === 'RDP' ? 'fa-desktop' : 'fa-server'), 'mr-2 w-4 text-center text-text-secondary']"></i>
@@ -391,7 +395,7 @@ const handleConnectionModified = async () => {
       </div>
 
       <!-- Recent Activity -->
-      <div class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
+      <div data-testid="dashboard-recent-activity" class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
         <div class="px-4 py-3 border-b border-border">
           <h2 class="text-lg font-medium">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
         </div>
@@ -410,7 +414,7 @@ const handleConnectionModified = async () => {
           <div v-else class="text-center text-text-secondary">{{ t('dashboard.noRecentActivity', '没有最近活动记录') }}</div>
         </div>
         <div class="px-4 py-3 border-t border-border text-right">
-          <RouterLink :to="{ name: 'AuditLogs' }" class="text-sm text-link hover:text-link-hover hover:underline">
+          <RouterLink data-testid="dashboard-audit-link" :to="{ name: 'AuditLogs' }" class="text-sm text-link hover:text-link-hover hover:underline">
             {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }}
           </RouterLink>
         </div>

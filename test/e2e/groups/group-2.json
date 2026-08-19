@@ -4,11 +4,6 @@
   "workers": 4,
   "specs": [
     "tests/auth/setup-login.spec.ts",
-    "tests/http/auth-2fa.spec.ts",
-    "tests/http/auth-api.spec.ts",
-    "tests/http/backup.spec.ts",
-    "tests/http/connections-tags.spec.ts",
-    "tests/http/quick-commands-audit.spec.ts",
     "tests/mobile/ssh-workspace.spec.ts",
     "tests/mobile/suspend-resume-ui.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
@@ -18,6 +13,7 @@
     "tests/ssh/file-manager-menu-readiness.spec.ts",
     "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts"
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
