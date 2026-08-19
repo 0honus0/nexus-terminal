@@ -170,7 +170,7 @@ test.describe.serial("functional documentation screenshots", () => {
     }
   });
 
-  test("captures the mobile SSH workspace with a real mobile browser context", async ({
+  test("captures mobile SSH touch workflows with a real mobile browser context", async ({
     browser,
   }) => {
     const context = await browser.newContext({ ...devices["Pixel 7"] });
@@ -198,6 +198,55 @@ test.describe.serial("functional documentation screenshots", () => {
         })
         .toContain("Nexus mobile SSH");
       await saveViewportScreenshot(page, "mobile-workspace.png");
+
+      await commandBar.locator("button:has(i.fa-bolt)").click();
+      const quickCommands = page.getByTestId("quick-commands-view");
+      await expect(quickCommands).toBeVisible();
+      await expect(quickCommands.getByTestId("quick-command-add")).toBeVisible();
+      await saveViewportScreenshot(page, "mobile-quick-commands.png");
+      await page.keyboard.press("Escape");
+      await expect(quickCommands).toBeHidden();
+
+      await page.getByTestId("open-status-monitor-button").click();
+      const statusModal = page.getByTestId("status-monitor-modal");
+      await expect(statusModal).toBeVisible();
+      await expect(statusModal.getByTestId("status-monitor")).toContainText(
+        "Nexus Virtual CPU",
+        { timeout: 15_000 },
+      );
+      await saveViewportScreenshot(page, "mobile-status-monitor.png");
+      await statusModal.locator("button").first().click();
+      await expect(statusModal).toBeHidden();
+
+      await openConnectedFileManager(page);
+      const fileManagerModal = page.getByTestId("file-manager-modal");
+      await saveViewportScreenshot(page, "mobile-file-manager.png");
+
+      await fileManagerRow(page, "plainfile").click();
+      const editor = page.getByTestId("file-editor-overlay");
+      await expect(editor).toBeVisible({ timeout: 20_000 });
+      await expect(editor.locator(".codemirror-mobile-editor-container")).toBeVisible();
+      await expect
+        .poll(async () => editor.locator(".cm-content").innerText(), {
+          timeout: 15_000,
+        })
+        .toContain("plain-no-extension");
+      await saveViewportScreenshot(page, "mobile-file-editor.png");
+      await editor.getByTestId("file-editor-close").click();
+      await expect(editor).toBeHidden();
+
+      await fileManagerModal.click({ position: { x: 8, y: 8 } });
+      await expect(fileManagerModal).toBeHidden();
+
+      await commandBar.locator("button:has(i.fa-keyboard)").click();
+      const virtualKeyboard = page.locator(
+        ".mobile-virtual-keyboard.virtual-keyboard-bar",
+      );
+      await expect(virtualKeyboard).toBeVisible();
+      await expect(
+        virtualKeyboard.getByRole("button", { name: "Ctrl", exact: true }),
+      ).toBeVisible();
+      await saveViewportScreenshot(page, "mobile-virtual-keyboard.png");
     } finally {
       await context.close();
     }

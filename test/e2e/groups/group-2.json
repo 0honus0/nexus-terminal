@@ -15,11 +15,13 @@
     "tests/ui/connection-non-ssh-bulk.spec.ts",
     "tests/ui/custom-terminal-theme.spec.ts",
     "tests/ui/dashboard-workflows.spec.ts",
-    "tests/ui/notification-delivery.spec.ts",
-    "tests/ui/notification-settings.spec.ts",
-    "tests/ui/proxy-management.spec.ts",
-    "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts",
+    "tests/ui/captcha-settings.spec.ts",
+    "tests/ui/change-password.spec.ts",
+    "tests/ui/ip-blacklist-settings.spec.ts",
+    "tests/ui/ip-whitelist-settings.spec.ts",
+    "tests/ui/protected-navigation.spec.ts",
+    "tests/ui/session-lifecycle.spec.ts",
+    "tests/ui/ssh-key-management.spec.ts",
     "tests/websocket/authenticated-session.spec.ts"
   ]
 }
