@@ -56,10 +56,10 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 4 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 1 * MiB,
-        // The upload transport now has its own WebSocket. Keep its browser queue bounded
-        // anyway so cancellation can stop producing bytes quickly and upload memory remains
-        // predictable on slow links. File-manager control traffic is isolated on the main socket.
-        wsBufferedBytes: 512 * KiB,
+        // Upload bytes use a dedicated WebSocket, so this queue no longer affects file-manager
+        // responsiveness. Keep a moderate buffer to sustain throughput without leaving a large
+        // amount of already-enqueued data to drain after cancellation on slower links.
+        wsBufferedBytes: 2 * MiB,
         maxActiveFiles: 4,
         activeWeightBudget: 8,
     },
@@ -68,7 +68,7 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 2 * MiB,
         batchChunkSize: 128 * KiB,
         batchByteWindow: 512 * KiB,
-        wsBufferedBytes: 256 * KiB,
+        wsBufferedBytes: 1 * MiB,
         maxActiveFiles: 2,
         activeWeightBudget: 8,
     },
@@ -77,7 +77,7 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 8 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 2 * MiB,
-        wsBufferedBytes: 1 * MiB,
+        wsBufferedBytes: 4 * MiB,
         maxActiveFiles: 6,
         activeWeightBudget: 16,
     },
@@ -86,7 +86,7 @@ const UPLOAD_TUNING: Record<UploadNetworkProfile, UploadTuning> = {
         singleByteWindow: 12 * MiB,
         batchChunkSize: 256 * KiB,
         batchByteWindow: 4 * MiB,
-        wsBufferedBytes: 2 * MiB,
+        wsBufferedBytes: 8 * MiB,
         maxActiveFiles: 10,
         activeWeightBudget: 28,
     },

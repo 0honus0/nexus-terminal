@@ -341,7 +341,24 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
   }
 });
 
-test('cancel all uses an isolated upload transport and immediate file-manager refresh stays responsive', async ({ page, context }) => {
+test('cancel all stays responsive with a buffered isolated upload transport', async ({ page, context }) => {
+  await page.addInitScript(() => {
+    const originalSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function patchedSend(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+      originalSend.call(this, data);
+      try {
+        if (new URL(this.url).pathname !== '/ws/upload') return;
+        const state = globalThis as typeof globalThis & { __NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__?: number };
+        state.__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ = Math.max(
+          state.__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ ?? 0,
+          this.bufferedAmount,
+        );
+      } catch {
+        // Ignore malformed/empty URLs while instrumenting browser sockets for this test.
+      }
+    };
+  });
+
   await openFileManager(page, context);
 
   const uploadSocketUrls: string[] = [];
@@ -380,7 +397,16 @@ test('cancel all uses an isolated upload transport and immediate file-manager re
       () => uploadSocketUrls.some(socketUrl => new URL(socketUrl).pathname === '/ws/upload'),
       { timeout: 5_000 },
     ).toBe(true);
-    await page.waitForTimeout(500);
+
+    // Prove this regression is exercising a browser upload backlog larger than the old
+    // 512 KiB responsiveness cap. Control traffic must stay responsive even when the
+    // dedicated upload transport has substantially more data already queued.
+    await expect.poll(
+      () => page.evaluate(() => (globalThis as typeof globalThis & {
+        __NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__?: number;
+      }).__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ ?? 0),
+      { timeout: 5_000 },
+    ).toBeGreaterThan(512 * 1024);
 
     await popup.getByTestId('file-upload-cancel-all').click();
     await expect(popup).toBeHidden({ timeout: 2_000 });
