@@ -8,6 +8,7 @@
     "tests/ssh/docker-manager-ui.spec.ts",
     "tests/ssh/protocol.spec.ts",
     "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts",
     "tests/ui/captcha-settings.spec.ts",
     "tests/ui/change-password.spec.ts",
     "tests/ui/ip-blacklist-settings.spec.ts",

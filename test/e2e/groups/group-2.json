@@ -18,7 +18,6 @@
     "tests/ssh/file-manager-menu-readiness.spec.ts",
     "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/progress-display-baseline.spec.ts"
   ]
 }
