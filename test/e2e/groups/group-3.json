@@ -3,12 +3,6 @@
   "group": 3,
   "workers": 4,
   "specs": [
-    "tests/http/auth-2fa.spec.ts",
-    "tests/http/auth-api.spec.ts",
-    "tests/http/backup.spec.ts",
-    "tests/http/connections-tags.spec.ts",
-    "tests/http/quick-commands-audit.spec.ts",
-    "tests/http/terminal-themes.spec.ts",
     "tests/ssh/cross-session-transfer.spec.ts",
     "tests/ssh/file-upload.spec.ts",
     "tests/ssh/suspend-resume.spec.ts",
@@ -23,6 +17,7 @@
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts"
+    "tests/ui/theme-switching.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
