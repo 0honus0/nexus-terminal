@@ -38,15 +38,15 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   });
 });
 
-test('mobile virtual keyboard Ctrl modifier reaches the live SSH terminal', async ({ page, context }) => {
+test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
 
   const commandBar = page.getByTestId('command-input-bar');
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
 
-  await step('start a foreground program, then open the compact mobile keyboard and arm Ctrl', async () => {
-    await commandInput.fill('cat');
+  await step('start a one-byte remote reader, then open the compact mobile keyboard and arm Ctrl', async () => {
+    await commandInput.fill("byte=$(dd bs=1 count=1 2>/dev/null | od -An -t u1); printf 'CTRL_BYTE=%s\\n' \"$byte\"");
     await commandInput.press('Enter');
 
     const keyboardButton = commandBar.locator('button:has(i.fa-keyboard)');
@@ -60,15 +60,12 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH terminal', asyn
     await expect(ctrl).toHaveClass(/bg-primary/);
   });
 
-  await slowStep('Ctrl+C interrupts the foreground program and the next shell command executes normally', async () => {
+  await slowStep('Ctrl+C delivers ASCII ETX and consumes the one-shot modifier', async () => {
     await commandInput.press('c');
 
     const ctrl = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar').getByRole('button', { name: 'Ctrl', exact: true });
     await expect(ctrl).not.toHaveClass(/bg-primary/);
-
-    await commandInput.fill('echo $((17 * 19))');
-    await commandInput.press('Enter');
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('323');
+    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toMatch(/CTRL_BYTE=\s*3/);
   });
 });
 
