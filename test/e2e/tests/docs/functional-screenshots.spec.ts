@@ -284,11 +284,18 @@ test.describe.serial("functional documentation screenshots", () => {
 
       await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=260`, { method: "POST" });
       try {
-        await fileManagerModal.getByTestId("file-upload-input").setInputFiles({
-          name: "mobile-screenshot-upload.bin",
-          mimeType: "application/octet-stream",
-          buffer: Buffer.alloc(12 * 1024 * 1024, 0x4d),
-        });
+        await fileManagerModal.getByTestId("file-upload-input").setInputFiles([
+          {
+            name: "mobile-screenshot-upload-a.bin",
+            mimeType: "application/octet-stream",
+            buffer: Buffer.alloc(8 * 1024 * 1024, 0x4d),
+          },
+          {
+            name: "mobile-screenshot-upload-b.bin",
+            mimeType: "application/octet-stream",
+            buffer: Buffer.alloc(8 * 1024 * 1024, 0x4e),
+          },
+        ]);
         const mobileUploadPopup = page.getByTestId("file-upload-progress-popup");
         await expect(mobileUploadPopup).toBeVisible({ timeout: 10_000 });
         await expect(mobileUploadPopup.getByTestId("file-upload-speed")).toBeVisible();

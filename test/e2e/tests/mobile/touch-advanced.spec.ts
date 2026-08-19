@@ -93,13 +93,13 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
-  await slowStep('single tap opens README in the mobile editor', async () => {
-    await fileManagerRow(page, 'README-e2e.md').click();
+  await slowStep('single tap opens a plain remote file in the mobile editor', async () => {
+    await fileManagerRow(page, 'plainfile').click();
     const editor = page.getByTestId('file-editor-overlay');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
-      .toContain('Nexus Markdown E2E');
+      .toContain('plain-no-extension');
   });
 
   await step('Search opens CodeMirror search UI and decorates the matching text', async () => {
@@ -109,8 +109,8 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     await expect(searchPanel).toBeVisible();
     const searchInput = searchPanel.locator('input[name="search"]');
     await expect(searchInput).toBeVisible();
-    await searchInput.fill('Nexus Markdown E2E');
-    await expect(searchInput).toHaveValue('Nexus Markdown E2E');
+    await searchInput.fill('plain-no-extension');
+    await expect(searchInput).toHaveValue('plain-no-extension');
     await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 })
       .toBeGreaterThan(0);
   });
@@ -119,21 +119,22 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
-  const filename = 'mobile-progress-upload.bin';
+  const filenames = ['mobile-progress-upload-a.bin', 'mobile-progress-upload-b.bin'];
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=260`, { method: 'POST' });
 
   try {
-    await slowStep('a throttled upload exposes all floating controls without overflowing the Pixel viewport', async () => {
+    await slowStep('throttled uploads expose all floating controls without overflowing the Pixel viewport', async () => {
       const fileInput = page.getByTestId('file-manager-modal').getByTestId('file-upload-input');
-      await fileInput.setInputFiles({
-        name: filename,
+      await fileInput.setInputFiles(filenames.map((name, index) => ({
+        name,
         mimeType: 'application/octet-stream',
-        buffer: Buffer.alloc(12 * 1024 * 1024, 0x5a),
-      });
+        buffer: Buffer.alloc(8 * 1024 * 1024, 0x5a + index),
+      })));
 
       const popup = page.getByTestId('file-upload-progress-popup');
       await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup).toContainText(filename);
+      await expect(popup).toContainText(filenames[0]);
+      await expect(popup).toContainText(filenames[1]);
       await expect(popup.getByTestId('file-upload-speed')).toBeVisible();
       await expect(popup.getByTestId('file-upload-progress-hide')).toBeVisible();
       await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
@@ -156,7 +157,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await page.getByTestId('transfer-progress-toggle').click();
       const progressDisplay = page.getByTestId('progress-display-modal');
       await expect(progressDisplay).toBeVisible();
-      const source = progressDisplay.getByTestId('hidden-progress-source').filter({ hasText: filename });
+      const source = progressDisplay.getByTestId('hidden-progress-source').filter({ hasText: filenames[0] });
       await expect(source).toBeVisible();
       await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
 
