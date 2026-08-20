@@ -5,7 +5,9 @@
   "specs": [
     "tests/ssh/cross-session-transfer.spec.ts",
     "tests/ssh/file-upload.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/backup-ui.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",
@@ -17,7 +19,6 @@
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts"
+    "tests/ui/theme-switching.spec.ts"
   ]
 }

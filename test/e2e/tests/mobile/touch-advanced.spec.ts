@@ -117,6 +117,154 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   });
 });
 
+test('mobile Markdown preview edits and saves through CodeMirror', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+  const filename = 'README-e2e.md';
+
+  await slowStep('single tap keeps Markdown preview-first behavior on mobile', async () => {
+    await fileManagerRow(page, filename).click();
+    const preview = page.getByRole('dialog', { name: filename });
+    await expect(preview).toBeVisible({ timeout: 20_000 });
+    await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
+    await expect(preview.locator('strong')).toHaveText('preview-ok');
+    await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
+  });
+
+  await slowStep('Edit switches the preview to mobile CodeMirror and Save persists real SFTP bytes', async () => {
+    const preview = page.getByRole('dialog', { name: filename });
+    await preview.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(preview).toBeHidden();
+
+    const editor = page.getByTestId('file-editor-overlay');
+    await expect(editor).toBeVisible({ timeout: 20_000 });
+    await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
+    await expect(editor.locator('.monaco-editor')).toHaveCount(0);
+
+    const content = editor.locator('.cm-content');
+    await expect.poll(async () => content.innerText(), { timeout: 15_000 }).toContain('Nexus Markdown E2E');
+    await content.click();
+    await content.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+    await page.keyboard.insertText('# Mobile Markdown E2E\n\n**mobile-save-ok**\n');
+    await expect.poll(async () => content.innerText()).toContain('Mobile Markdown E2E');
+
+    await editor.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(editor).toContainText('Save successful', { timeout: 15_000 });
+
+    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
+    expect(remoteRead.ok).toBeTruthy();
+    const body = await remoteRead.json() as { base64: string };
+    expect(Buffer.from(body.base64, 'base64').toString('utf8'))
+      .toBe('# Mobile Markdown E2E\n\n**mobile-save-ok**\n');
+
+    await editor.getByTestId('file-editor-close').click();
+    await expect(editor).toBeHidden();
+  });
+
+  await step('reopening the file renders the just-saved Markdown preview', async () => {
+    await fileManagerRow(page, filename).click();
+    const preview = page.getByRole('dialog', { name: filename });
+    await expect(preview.getByRole('heading', { name: 'Mobile Markdown E2E' })).toBeVisible({ timeout: 20_000 });
+    await expect(preview.locator('strong')).toHaveText('mobile-save-ok');
+  });
+});
+
+test('mobile virtual keyboard sends modified navigation escape sequences and consumes modifiers', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+
+  const commandBar = page.getByTestId('command-input-bar');
+  const commandInput = page.getByTestId('command-input');
+  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+  await commandBar.locator('button:has(i.fa-keyboard)').click();
+  const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
+  await expect(keyboard).toBeVisible();
+
+  await slowStep('Alt+Left sends the xterm Alt cursor sequence and clears Alt after one key', async () => {
+    await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'ALT_LEFT_BYTES=%s\\n' \"$bytes\"");
+    await commandInput.press('Enter');
+
+    const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
+    await alt.click();
+    await expect(alt).toHaveClass(/bg-primary/);
+    await keyboard.getByRole('button', { name: '←', exact: true }).click();
+    await expect(alt).not.toHaveClass(/bg-primary/);
+    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+      .toMatch(/ALT_LEFT_BYTES=\s*27\s+91\s+49\s+59\s+51\s+68/);
+  });
+
+  await slowStep('Ctrl+Alt+Del sends the modified Delete sequence and clears both modifiers', async () => {
+    await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'CTRL_ALT_DEL_BYTES=%s\\n' \"$bytes\"");
+    await commandInput.press('Enter');
+
+    const ctrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
+    const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
+    await ctrl.click();
+    await alt.click();
+    await expect(ctrl).toHaveClass(/bg-primary/);
+    await expect(alt).toHaveClass(/bg-primary/);
+    await keyboard.getByRole('button', { name: 'Del', exact: true }).click();
+    await expect(ctrl).not.toHaveClass(/bg-primary/);
+    await expect(alt).not.toHaveClass(/bg-primary/);
+    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+      .toMatch(/CTRL_ALT_DEL_BYTES=\s*27\s+91\s+51\s+59\s+55\s+126/);
+  });
+});
+
+test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+  const filename = 'preview.xlsx';
+
+  await slowStep('single tap opens the spreadsheet preview with both sheet tabs visible', async () => {
+    await fileManagerRow(page, filename).click();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    const preview = dialog.getByTestId('spreadsheet-preview');
+    const tabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    await expect(preview).toBeVisible();
+    await expect(tabs).toBeVisible();
+    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
+    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
+
+    const [panelBox, tabsBox, viewport] = await Promise.all([
+      dialog.locator('section').boundingBox(),
+      tabs.boundingBox(),
+      Promise.resolve(page.viewportSize()),
+    ]);
+    expect(panelBox).toBeTruthy();
+    expect(tabsBox).toBeTruthy();
+    expect(viewport).toBeTruthy();
+    expectBoxInsideViewport(panelBox!, viewport!);
+    expectBoxInsideViewport(tabsBox!, viewport!);
+  });
+
+  await step('tapping the second sheet replaces the narrow-grid content and resets scroll offsets', async () => {
+    const dialog = page.getByRole('dialog', { name: filename });
+    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    const dimensions = await scroller.evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+    }));
+    expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+    expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+
+    await scroller.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
+    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+  });
+});
+
 test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);

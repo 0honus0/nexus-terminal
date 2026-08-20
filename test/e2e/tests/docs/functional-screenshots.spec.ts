@@ -222,6 +222,28 @@ test.describe.serial("functional documentation screenshots", () => {
       const fileManagerModal = page.getByTestId("file-manager-modal");
       await saveViewportScreenshot(page, "mobile-file-manager.png");
 
+      await fileManagerRow(page, "README-e2e.md").click();
+      const markdownPreview = page.getByRole("dialog", { name: "README-e2e.md" });
+      await expect(markdownPreview).toBeVisible({ timeout: 20_000 });
+      await expect(
+        markdownPreview.getByRole("heading", { name: "Nexus Markdown E2E" }),
+      ).toBeVisible();
+      await saveViewportScreenshot(page, "mobile-markdown-preview.png");
+      await markdownPreview.getByRole("button", { name: "Close preview" }).click();
+      await expect(markdownPreview).toBeHidden();
+
+      await fileManagerRow(page, "preview.xlsx").click();
+      const spreadsheetPreview = page.getByRole("dialog", { name: "preview.xlsx" });
+      await expect(spreadsheetPreview).toBeVisible({ timeout: 20_000 });
+      await expect(spreadsheetPreview.getByTestId("spreadsheet-sheet-tabs")).toBeVisible();
+      await spreadsheetPreview.getByTestId("spreadsheet-sheet-1").click();
+      await expect(
+        spreadsheetPreview.getByText("Second Sheet E2E", { exact: true }),
+      ).toBeVisible();
+      await saveViewportScreenshot(page, "mobile-spreadsheet-preview.png");
+      await spreadsheetPreview.getByRole("button", { name: "Close preview" }).click();
+      await expect(spreadsheetPreview).toBeHidden();
+
       const archiveRow = fileManagerRow(page, "archive-source.txt");
       const archiveBox = await archiveRow.boundingBox();
       expect(archiveBox).not.toBeNull();
@@ -326,6 +348,20 @@ test.describe.serial("functional documentation screenshots", () => {
         virtualKeyboard.getByRole("button", { name: "Ctrl", exact: true }),
       ).toBeVisible();
       await saveViewportScreenshot(page, "mobile-virtual-keyboard.png");
+
+      const virtualCtrl = virtualKeyboard.getByRole("button", {
+        name: "Ctrl",
+        exact: true,
+      });
+      const virtualAlt = virtualKeyboard.getByRole("button", {
+        name: "Alt",
+        exact: true,
+      });
+      await virtualCtrl.click();
+      await virtualAlt.click();
+      await expect(virtualCtrl).toHaveClass(/bg-primary/);
+      await expect(virtualAlt).toHaveClass(/bg-primary/);
+      await saveViewportScreenshot(page, "mobile-virtual-modifiers.png");
     } finally {
       await context.close();
     }
