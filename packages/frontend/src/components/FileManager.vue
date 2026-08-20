@@ -1239,8 +1239,8 @@ const {
   // 修改：传递 manager 的 fileList 和 currentPath ref (保持 computed)
   fileList: computed(() => currentSftpManager.value?.fileList.value ?? []),
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
-  isConnected: props.wsDeps.isConnected,
-  isSftpReady: props.wsDeps.isSftpReady,
+  isConnected: computed(() => props.wsDeps.isConnected.value),
+  isSftpReady: computed(() => props.wsDeps.isSftpReady.value),
   clipboardState: readonly(clipboardState), // +++ 传递剪贴板状态 (只读) +++
   t,
   // --- 传递回调函数 ---
