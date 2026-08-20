@@ -7,6 +7,8 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
+  openInlineProgressDisplay,
+  reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
@@ -51,12 +53,7 @@ async function refreshFileManager(page: Page): Promise<void> {
 }
 
 async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, taskText: string): Promise<void> {
-  const progressDisplay = page.getByTestId('transfer-progress-toggle');
-  await expect(progressDisplay).toHaveAttribute('title', 'Progress Display');
-  await progressDisplay.click();
-
-  const modal = page.getByTestId('progress-display-modal');
-  await expect(modal).toBeVisible();
+  const modal = await openInlineProgressDisplay(page);
   const source = modal.getByTestId('hidden-progress-source').filter({ hasText: taskText });
   const task = source.getByTestId('hidden-progress-task').filter({ hasText: taskText });
   await expect(source).toBeVisible();
@@ -64,6 +61,7 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
   await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
   await source.getByTestId('hidden-progress-restore').click();
   await expect(modal).toBeHidden();
+  await reopenConnectedFileManager(page);
   await expect(popup).toBeVisible();
 }
 

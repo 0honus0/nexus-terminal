@@ -295,8 +295,11 @@ const definedMigrations: Migration[] = [
             ALTER TABLE quick_commands ADD COLUMN variables TEXT NULL;
         `
     },
+    // Migration IDs 11-18 were used by historical releases. They may already
+    // exist in long-lived databases even though those migrations have since
+    // been folded into the current base schema. Never reuse those IDs.
     {
-        id: 11,
+        id: 19,
         name: 'Add RDP options column to connections table',
         check: async (db: Database): Promise<boolean> => {
             const columnAlreadyExists = await columnExists(db, 'connections', 'rdp_options');

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "group": 6,
+  "workers": 8,
+  "specs": [
+    "tests/ssh/cross-session-transfer.spec.ts",
+    "tests/ssh/file-upload.spec.ts"
+  ]
+}

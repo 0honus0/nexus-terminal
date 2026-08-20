@@ -6,6 +6,8 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
+  openInlineProgressDisplay,
+  reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
@@ -327,12 +329,9 @@ test('mobile upload progress stays inside the viewport and restores from Progres
     });
 
     await step('Progress Display restores the hidden mobile upload window', async () => {
-      // Keep File Manager mounted and visible while restoring. The floating upload
-      // window is owned by that FileManager instance, so hiding the modal would also
-      // hide the popup through its ancestor even after the progress source is restored.
-      await page.getByTestId('transfer-progress-toggle').click();
-      const progressDisplay = page.getByTestId('progress-display-modal');
-      await expect(progressDisplay).toBeVisible();
+      // Progress Display is normal workspace layout now, so close the File Manager
+      // before using it. The FileManager instance remains mounted via v-show.
+      const progressDisplay = await openInlineProgressDisplay(page);
       const source = progressDisplay.getByTestId('hidden-progress-source').filter({ hasText: filenames[0] });
       await expect(source).toBeVisible();
       await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
@@ -345,6 +344,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 
       await source.getByTestId('hidden-progress-restore').click();
       await expect(progressDisplay).toBeHidden();
+      await reopenConnectedFileManager(page);
       const popup = page.getByTestId('file-upload-progress-popup');
       await expect(popup).toBeVisible();
       await popup.getByTestId('file-upload-cancel-all').click();

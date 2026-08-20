@@ -383,6 +383,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- +++ 使用 :class 绑定来条件化样式，包括高度 (修正 props 引用) +++ -->
+  <div class="terminal-tab-shell flex-shrink-0">
   <div data-testid="terminal-tab-bar" :class="['flex bg-header border border-border overflow-hidden',
                { 'rounded-t-md mx-2 mt-2': !props.isMobile }, // Desktop margins/rounding - Use props.isMobile
                props.isMobile ? 'h-8' : 'h-10' // Mobile height h-8, Desktop h-10 - Use props.isMobile
@@ -451,7 +452,7 @@ onBeforeUnmount(() => {
         <!-- 全局进度显示入口：打开任务详情并恢复已最小化的悬浮进度 -->
         <button
                 data-testid="transfer-progress-toggle"
-                class="relative z-[60] flex items-center justify-center px-3 h-full border-l border-border bg-header text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
+                class="relative flex items-center justify-center px-3 h-full border-l border-border bg-header text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
                 @click="showProgressDisplay"
                 :title="t('terminalTabBar.progressDisplay', '进度显示')">
           <i class="fas fa-tasks text-sm"></i>
@@ -491,7 +492,8 @@ onBeforeUnmount(() => {
       @menu-action="handleContextMenuAction"
       @close="closeContextMenu"
     />
-    <!-- 传输进度模态框 -->
-    <ProgressDisplayModal v-model:visible="showTransferProgressModal" />
+  </div>
+  <!-- 进度总览属于正常布局，不再作为 fixed 浮窗覆盖工作区/RDP。 -->
+  <ProgressDisplayModal v-model:visible="showTransferProgressModal" />
   </div>
 </template>

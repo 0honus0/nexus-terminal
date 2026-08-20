@@ -1,28 +1,12 @@
 {
   "version": 1,
   "group": 2,
-  "workers": 4,
+  "workers": 8,
   "specs": [
     "tests/ssh/connection-edit-delete.spec.ts",
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
     "tests/ssh/reconnect-ui.spec.ts",
-    "tests/ssh/file-manager-context-menu.spec.ts",
-    "tests/ssh/file-manager-menu-readiness.spec.ts",
-    "tests/ssh/file-manager-navigation.spec.ts",
-    "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/docker-manager-ui.spec.ts",
-    "tests/ssh/protocol.spec.ts",
-    "tests/ssh/status-docker-protocol.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
-    "tests/ui/audit-log-filtering.spec.ts",
-    "tests/ui/backup-ui.spec.ts",
-    "tests/ui/batch-connection-edit.spec.ts",
-    "tests/ui/connection-create.spec.ts",
-    "tests/ui/connection-non-ssh-bulk.spec.ts",
-    "tests/ui/custom-terminal-theme.spec.ts",
-    "tests/ui/dashboard-workflows.spec.ts",
-    "tests/ui/rdp-remoteapp-fullscreen.spec.ts"
+    "tests/ssh/progress-display-copy-cancel.spec.ts"
   ]
 }

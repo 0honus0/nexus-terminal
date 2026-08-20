@@ -7,6 +7,8 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
+  openInlineProgressDisplay,
+  reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
@@ -156,12 +158,7 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       await progressPopup.getByTestId('file-upload-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 
-      const progressDisplay = page.getByTestId('transfer-progress-toggle');
-      await expect(progressDisplay).toBeVisible();
-      await expect(progressDisplay).toHaveAttribute('title', 'Progress Display');
-      await progressDisplay.click();
-      const progressModal = page.getByTestId('progress-display-modal');
-      await expect(progressModal).toBeVisible();
+      const progressModal = await openInlineProgressDisplay(page);
       const hiddenSource = progressModal.getByTestId('hidden-progress-source').first();
       const hiddenTask = hiddenSource.getByTestId('hidden-progress-task').first();
       await expect(hiddenSource).toBeVisible();
@@ -169,6 +166,7 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       await expect(hiddenTask.getByTestId('hidden-progress-bar')).toBeVisible();
       await hiddenSource.getByTestId('hidden-progress-restore').click();
       await expect(progressModal).toBeHidden();
+      await reopenConnectedFileManager(page);
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
 
@@ -316,9 +314,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await hideButton.click();
     await expect(popup).toBeHidden();
 
-    await page.getByTestId('transfer-progress-toggle').click();
-    const modal = page.getByTestId('progress-display-modal');
-    await expect(modal).toBeVisible();
+    const modal = await openInlineProgressDisplay(page);
     const hiddenSources = modal.getByTestId('hidden-progress-source');
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
@@ -480,9 +476,7 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     await popup.getByTestId('file-upload-progress-hide').click();
     await expect(popup).toBeHidden();
 
-    await page.getByTestId('transfer-progress-toggle').click();
-    const modal = page.getByTestId('progress-display-modal');
-    await expect(modal).toBeVisible();
+    const modal = await openInlineProgressDisplay(page);
     const sourceCard = modal.getByTestId('hidden-progress-source').filter({ hasText: 'upload' }).first();
     await expect(sourceCard).toBeVisible();
     await expect(sourceCard.getByTestId('hidden-progress-task').first()).toBeVisible();
@@ -490,6 +484,7 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     await sourceCard.getByTestId('hidden-progress-cancel-all').click();
     await expect(sourceCard).toBeHidden({ timeout: 2_000 });
     await modal.getByTestId('progress-display-close').click();
+    await reopenConnectedFileManager(page);
 
     const refreshStartedAt = Date.now();
     await page.getByTestId('file-manager-modal').locator('button:has(i.fa-sync-alt)').click();

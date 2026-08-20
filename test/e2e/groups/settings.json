@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "workers": 4,
+  "workers": 8,
   "timingWindow": 5,
   "defaultSpecDurationMs": 5000,
   "familyWholeTargetRatio": 1.2,

@@ -1,6 +1,6 @@
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import apiClient from '../utils/apiClient';
 import { useConnectionsStore } from '../stores/connections.store';
@@ -20,93 +20,6 @@ const uiNotificationsStore = useUiNotificationsStore();
 const sessionStore = useSessionStore();
 const progressCenter = useProgressCenterStore();
 const hiddenProgressSources = computed(() => progressCenter.hiddenSources);
-
-const MODAL_POSITION_KEY = 'nexusTransferProgressModalPosition';
-const modalRef = ref<HTMLElement | null>(null);
-const modalPosition = ref({ x: 0, y: 0 });
-const isDraggingModal = ref(false);
-let modalDragOffsetX = 0;
-let modalDragOffsetY = 0;
-
-const modalStyle = computed(() => ({
-  left: `${modalPosition.value.x}px`,
-  top: `${modalPosition.value.y}px`,
-}));
-
-const clampModalPosition = () => {
-  const element = modalRef.value;
-  if (!element) return;
-  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
-  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
-  modalPosition.value = {
-    x: Math.min(Math.max(8, modalPosition.value.x), maxX),
-    y: Math.min(Math.max(8, modalPosition.value.y), maxY),
-  };
-};
-
-const saveModalPosition = () => {
-  try {
-    localStorage.setItem(MODAL_POSITION_KEY, JSON.stringify(modalPosition.value));
-  } catch {
-    // Position persistence is optional.
-  }
-};
-
-const restoreModalPosition = async () => {
-  try {
-    const saved = localStorage.getItem(MODAL_POSITION_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as { x?: number; y?: number };
-      if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
-        modalPosition.value = { x: parsed.x as number, y: parsed.y as number };
-        await nextTick();
-        clampModalPosition();
-        return;
-      }
-    }
-  } catch {
-    // Ignore malformed storage.
-  }
-
-  await nextTick();
-  const element = modalRef.value;
-  if (element) {
-    modalPosition.value = {
-      x: Math.max(8, (window.innerWidth - element.offsetWidth) / 2),
-      y: Math.max(8, (window.innerHeight - element.offsetHeight) / 2),
-    };
-  }
-};
-
-const handleModalPointerMove = (event: PointerEvent) => {
-  if (!isDraggingModal.value) return;
-  modalPosition.value = {
-    x: event.clientX - modalDragOffsetX,
-    y: event.clientY - modalDragOffsetY,
-  };
-  clampModalPosition();
-};
-
-const stopModalDragging = () => {
-  if (!isDraggingModal.value) return;
-  isDraggingModal.value = false;
-  document.body.style.userSelect = '';
-  window.removeEventListener('pointermove', handleModalPointerMove);
-  window.removeEventListener('pointerup', stopModalDragging);
-  saveModalPosition();
-};
-
-const startModalDragging = (event: PointerEvent) => {
-  if ((event.target as HTMLElement).closest('button')) return;
-  const rect = modalRef.value?.getBoundingClientRect();
-  if (!rect) return;
-  isDraggingModal.value = true;
-  modalDragOffsetX = event.clientX - rect.left;
-  modalDragOffsetY = event.clientY - rect.top;
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', handleModalPointerMove);
-  window.addEventListener('pointerup', stopModalDragging);
-};
 
 // Helper function to get connection name by ID
 // 注意: 此函数假设 'connectionsStore.connections' 是一个包含连接对象的数组，
@@ -313,9 +226,7 @@ const formatDate = (dateInput: string | Date): string => {
 };
 
 onMounted(() => {
-  window.addEventListener('resize', clampModalPosition);
   if (props.visible) {
-    void restoreModalPosition();
     fetchTransferTasks();
     if (pollingIntervalId.value === null) {
        pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
@@ -324,8 +235,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  stopModalDragging();
-  window.removeEventListener('resize', clampModalPosition);
   if (pollingIntervalId.value !== null) {
     clearInterval(pollingIntervalId.value);
     pollingIntervalId.value = null;
@@ -335,7 +244,6 @@ onUnmounted(() => {
 watch(() => props.visible, (newVisible) => {
   // internalVisible.value = newVisible; // 由下面的watch处理
   if (newVisible) {
-    void restoreModalPosition();
     fetchTransferTasks(); // 模态框可见时立即获取一次数据
     if (pollingIntervalId.value === null) { // 只有在没有定时器时才启动
       pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
@@ -354,7 +262,6 @@ const internalVisible = ref(props.visible);
 // 监听 props.visible 的变化来更新 internalVisible
 watch(() => props.visible, (newVisibleValue) => {
   internalVisible.value = newVisibleValue;
-  if (newVisibleValue) void restoreModalPosition();
 }, { immediate: true }); // 确保初始状态同步
 
 // 监听 internalVisible 的变化来 emit update:visible
@@ -419,20 +326,15 @@ const handleTaskAction = async (task: TransferTask) => {
 </script>
 
 <template>
-  <div
+  <section
     v-if="internalVisible"
     data-testid="progress-display-modal"
-    class="fixed inset-0 bg-overlay z-[70] p-4"
-    @click.self="handleClose"
+    data-progress-display-placement="inline"
+    class="progress-display-inline flex-shrink-0 border-x border-b border-border bg-background text-foreground"
   >
-    <div
-      ref="modalRef"
-      class="transfer-progress-panel fixed bg-background text-foreground rounded-lg shadow-xl border w-full max-w-4xl max-h-[85vh] flex flex-col"
-      :class="{ dragging: isDraggingModal }"
-      :style="[modalStyle, { borderColor: 'var(--border-color)' }]"
-    >
+    <div class="transfer-progress-panel mx-auto flex w-full max-w-6xl flex-col overflow-hidden">
       <!-- Header -->
-      <div class="transfer-progress-header relative flex-shrink-0 px-6 py-4" @pointerdown="startModalDragging">
+      <div class="transfer-progress-header relative flex-shrink-0 px-6 py-3">
         <h3 class="m-0 text-center text-xl font-semibold">
           {{ t('progressCenter.title', '进度显示') }}
         </h3>
@@ -658,24 +560,21 @@ const handleTaskAction = async (task: TransferTask) => {
         </button>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.bg-overlay {
-  background-color: rgba(0, 0, 0, 0.6); /* Slightly darker overlay */
-}
-
-.transfer-progress-panel {
-  width: min(56rem, calc(100vw - 32px));
+.progress-display-inline {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  max-height: min(48vh, 34rem);
   overflow: hidden;
 }
-.transfer-progress-panel.dragging {
-  cursor: grabbing;
-  transition: none;
+.transfer-progress-panel {
+  max-height: min(48vh, 34rem);
 }
 .transfer-progress-header {
-  cursor: grab;
   border-bottom: 1px solid var(--border-color);
   background: linear-gradient(135deg, color-mix(in srgb, var(--link-active-color, #007bff) 10%, transparent), transparent);
 }

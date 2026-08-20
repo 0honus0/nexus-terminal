@@ -857,7 +857,7 @@ const closeFileManagerModal = () => {
       <div class="bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border">
         <div class="flex justify-between items-center p-3 border-b border-border flex-shrink-0 bg-header">
           <h2 class="text-lg font-semibold text-foreground">{{ t('fileManager.modalTitle', '文件管理器') }} ({{ currentFileManagerSessionId ? (sessionStore.sessions.get(currentFileManagerSessionId)?.connectionName || currentFileManagerSessionId) : '未知会话' }})</h2>
-          <button @click="closeFileManagerModal" class="text-text-secondary hover:text-foreground transition-colors">
+          <button data-testid="file-manager-modal-close" @click="closeFileManagerModal" class="text-text-secondary hover:text-foreground transition-colors">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>

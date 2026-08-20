@@ -90,3 +90,40 @@ export async function openConnectedFileManager(page: Page): Promise<void> {
   await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
   await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
 }
+
+export async function closeConnectedFileManager(page: Page): Promise<void> {
+  const modal = page.getByTestId('file-manager-modal');
+  await expect(modal).toBeVisible();
+  await modal.getByTestId('file-manager-modal-close').click();
+  await expect(modal).toBeHidden();
+}
+
+export async function reopenConnectedFileManager(page: Page): Promise<void> {
+  const openButton = page.getByTestId('open-file-manager-button');
+  await expect(openButton).toBeVisible({ timeout: 20_000 });
+  await openButton.click();
+  const modal = page.getByTestId('file-manager-modal');
+  await expect(modal).toBeVisible();
+  await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
+}
+
+
+export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
+  const fileManagerModal = page.getByTestId('file-manager-modal');
+  if (await fileManagerModal.isVisible()) {
+    await closeConnectedFileManager(page);
+  }
+
+  const toggle = page.getByTestId('transfer-progress-toggle');
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+
+  const display = page.getByTestId('progress-display-modal');
+  await expect(display).toBeVisible();
+  await expect(display).toHaveAttribute('data-progress-display-placement', 'inline');
+  await expect.poll(() => display.evaluate(element => ({
+    position: window.getComputedStyle(element).position,
+    zIndex: window.getComputedStyle(element).zIndex,
+  }))).toEqual({ position: 'static', zIndex: 'auto' });
+  return display;
+}

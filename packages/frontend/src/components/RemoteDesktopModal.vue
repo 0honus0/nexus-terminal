@@ -82,6 +82,13 @@ const handleFullscreenChange = () => {
   nextTick(sendRemoteDisplaySize);
 };
 
+const handleFullscreenKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !isBrowserFullscreen.value || !document.fullscreenElement) return;
+  void document.exitFullscreen().catch(error => {
+    console.warn('[RDP Modal] Failed to exit browser fullscreen with Escape:', error);
+  });
+};
+
 const toggleBrowserFullscreen = async () => {
   if (!modalPanelRef.value) return;
   try {
@@ -561,6 +568,7 @@ watchEffect(() => {
   
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange);
+  window.addEventListener('keydown', handleFullscreenKeydown, true);
   if (rdpContainerRef.value && typeof ResizeObserver !== 'undefined') {
     displayResizeObserver = new ResizeObserver(() => sendRemoteDisplaySize());
     displayResizeObserver.observe(rdpContainerRef.value);
@@ -585,6 +593,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  window.removeEventListener('keydown', handleFullscreenKeydown, true);
   displayResizeObserver?.disconnect();
   displayResizeObserver = null;
   if (sendSizeAnimationFrame !== null) {
@@ -700,9 +709,12 @@ const stopResize = () => {
       data-testid="remote-desktop-panel"
       v-show="!isMinimized"
       :style="computedModalStyle"
-      class="bg-background text-foreground rounded-lg shadow-xl flex flex-col overflow-hidden border border-border pointer-events-auto relative"
+      :class="[
+        'rdp-panel bg-background text-foreground flex flex-col overflow-hidden pointer-events-auto relative',
+        isBrowserFullscreen ? 'rdp-panel-fullscreen rounded-none border-0 shadow-none bg-black' : 'rounded-lg border border-border shadow-xl'
+      ]"
     >
-      <div class="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
+      <div v-show="!isBrowserFullscreen" data-testid="rdp-window-header" class="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
         <h3 class="text-base font-semibold truncate">
           <i class="fas fa-desktop mr-2 text-text-secondary"></i>
           {{ t('remoteDesktopModal.title') }} - {{ props.connection?.name || props.connection?.host || t('remoteDesktopModal.titlePlaceholder') }}
@@ -760,7 +772,7 @@ const stopResize = () => {
          </div>
       </div>
 
-       <div class="p-2 border-t border-border flex-shrink-0 text-xs text-text-secondary bg-header flex items-center justify-end">
+       <div v-show="!isBrowserFullscreen" data-testid="rdp-window-footer" class="p-2 border-t border-border flex-shrink-0 text-xs text-text-secondary bg-header flex items-center justify-end">
          <div class="flex items-center space-x-2 flex-wrap gap-y-1">
             <label for="modal-width" class="text-xs ml-2">{{ t('common.width') }}:</label>
             <input
@@ -804,9 +816,27 @@ const stopResize = () => {
  </div>
 </template>
 <style scoped>
+.rdp-panel:fullscreen,
+.rdp-panel-fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #000;
+}
+
 .rdp-display-container {
   overflow: hidden;
   position: relative;
+}
+
+.rdp-panel-fullscreen .rdp-display-container {
+  width: 100vw;
+  height: 100vh;
 }
 
 .rdp-display-container :deep(div) {

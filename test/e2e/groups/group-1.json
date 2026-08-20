@@ -1,8 +1,15 @@
 {
   "version": 1,
   "group": 1,
-  "workers": 4,
+  "workers": 8,
   "specs": [
-    "tests/ssh/progress-display.spec.ts"
+    "tests/ssh/progress-display-archive.spec.ts",
+    "tests/ui/captcha-settings.spec.ts",
+    "tests/ui/change-password.spec.ts",
+    "tests/ui/ip-blacklist-settings.spec.ts",
+    "tests/ui/ip-whitelist-settings.spec.ts",
+    "tests/ui/protected-navigation.spec.ts",
+    "tests/ui/session-lifecycle.spec.ts",
+    "tests/ui/ssh-key-management.spec.ts"
   ]
 }

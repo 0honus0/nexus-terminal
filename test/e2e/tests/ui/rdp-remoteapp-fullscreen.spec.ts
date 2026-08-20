@@ -129,17 +129,46 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       });
     });
 
-    await step('one click expands the RDP panel to browser fullscreen and restores it', async () => {
-      await page.goto('/');
-      const row = page.getByTestId(`dashboard-connection-row-${connectionId}`);
-      await expect(row).toBeVisible();
-      await row.getByRole('button', { name: /connect/i }).click();
+    await step('Progress Display stays in normal layout and RDP always renders above it', async () => {
+      await page.goto('/workspace');
+      const progressToggle = page.getByTestId('transfer-progress-toggle');
+      await expect(progressToggle).toBeVisible();
+      await progressToggle.click();
+
+      const progressDisplay = page.getByTestId('progress-display-modal');
+      await expect(progressDisplay).toBeVisible();
+      await expect(progressDisplay).toHaveAttribute('data-progress-display-placement', 'inline');
+      await expect.poll(() => progressDisplay.evaluate(element => ({
+        position: window.getComputedStyle(element).position,
+        zIndex: window.getComputedStyle(element).zIndex,
+      }))).toEqual({ position: 'static', zIndex: 'auto' });
+
+      await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
+      const connectionList = page.getByTestId('workspace-connection-list');
+      await expect(connectionList).toBeVisible();
+      await connectionList.getByText(CONNECTION_NAME, { exact: true }).first().click();
 
       const modal = page.getByTestId('remote-desktop-modal');
+      await expect(modal).toBeVisible();
+      await expect(progressDisplay).toBeVisible();
+      await expect.poll(async () => {
+        const box = await modal.boundingBox();
+        if (!box) return false;
+        return modal.evaluate((element, point) => {
+          const top = document.elementFromPoint(point.x, point.y);
+          return Boolean(top && element.contains(top));
+        }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      }).toBe(true);
+    });
+
+    await step('browser fullscreen is borderless, hides Nexus chrome, and Escape restores the window', async () => {
       const panel = page.getByTestId('remote-desktop-panel');
       const fullscreen = page.getByTestId('rdp-browser-fullscreen');
-      await expect(modal).toBeVisible();
+      const header = page.getByTestId('rdp-window-header');
+      const footer = page.getByTestId('rdp-window-footer');
       await expect(fullscreen).toBeVisible();
+      await expect(header).toBeVisible();
+      await expect(footer).toBeVisible();
 
       const normalBox = await panel.boundingBox();
       expect(normalBox).toBeTruthy();
@@ -148,13 +177,27 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 
       await fullscreen.click();
       await expect.poll(() => panel.evaluate(element => document.fullscreenElement === element)).toBe(true);
+      await expect(header).toBeHidden();
+      await expect(footer).toBeHidden();
       const fullscreenBox = await panel.boundingBox();
       expect(fullscreenBox).toBeTruthy();
+      expect(Math.abs(fullscreenBox!.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(fullscreenBox!.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(fullscreenBox!.width - viewport!.width)).toBeLessThanOrEqual(1);
       expect(Math.abs(fullscreenBox!.height - viewport!.height)).toBeLessThanOrEqual(1);
+      await expect.poll(() => panel.evaluate(element => {
+        const style = window.getComputedStyle(element);
+        return {
+          borderTopWidth: style.borderTopWidth,
+          borderRadius: style.borderRadius,
+          boxShadow: style.boxShadow,
+        };
+      })).toEqual({ borderTopWidth: '0px', borderRadius: '0px', boxShadow: 'none' });
 
-      await fullscreen.click();
+      await page.keyboard.press('Escape');
       await expect.poll(() => panel.evaluate(element => document.fullscreenElement === element)).toBe(false);
+      await expect(header).toBeVisible();
+      await expect(footer).toBeVisible();
       const restoredBox = await panel.boundingBox();
       expect(restoredBox).toBeTruthy();
       expect(restoredBox!.width).toBeLessThan(viewport!.width);
