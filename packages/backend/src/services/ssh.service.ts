@@ -198,6 +198,18 @@ const _setupSshClientListenersAndConnect = (
                 client.removeListener('error', eventHandlers.error);
                 client.removeListener('close', eventHandlers.close);
 
+                // Interactive terminal traffic is mostly tiny writes. Disable Nagle on the
+                // SSH transport so keystrokes are not intermittently held while TCP waits
+                // for a delayed ACK. This applies to direct, proxied, and jump-host clients
+                // because they all pass through this setup helper.
+                try {
+                    client.setNoDelay(true);
+                } catch (noDelayError) {
+                    // A custom stream may not expose a usable TCP no-delay control. The SSH
+                    // session is still valid in that case, so keep the connection usable.
+                    console.warn(`${logPrefix} Unable to enable TCP no-delay:`, noDelayError);
+                }
+
                 // The transport and authentication are complete. Do not hold the interactive
                 // shell path behind a best-effort analytics/database write.
                 resolve(client);

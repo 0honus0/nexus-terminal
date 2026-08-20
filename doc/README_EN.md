@@ -1,223 +1,62 @@
-![banner.png](https://lsky.tuyu.me/i/2025/04/30/681209e053db7.png)
-
----
-
 <div align="center">
 
-[![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](https://github.com/0honus0/nexus-terminal/blob/main/LICENSE)
+<h1>Nexus Terminal</h1>
+
+[![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url]
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](../LICENSE)
+
+[中文](../README.md) | [English](./README_EN.md)
 
 [docker-url]: https://github.com/0honus0/nexus-terminal/pkgs/container/nexus-terminal
 
 </div>
 
-
-
-## 📖 Overview
-
-**Nexus Terminal** is a modern, feature-rich web-based SSH / RDP / VNC client dedicated to providing a highly customizable remote connection experience.
-
-## ✨ Features
-
-*   Manage SSH and SFTP connections with multiple tabs
-*   Support remote access to desktops via RDP/VNC protocol
-*   Utilizes Monaco Editor for online file editing
-*   Integrated multi-factor login security mechanisms, including human verification (hCaptcha, Google reCAPTCHA) and two-factor authentication (2FA)
-*   Highly customizable interface themes and layout styles
-*   Built-in simple Docker container management panel for easy container operations
-*   Supports IP whitelisting and blacklisting, with automatic banning for abnormal access
-*   Notification system (e.g., login reminders, anomaly alerts)
-*   Audit logs for comprehensive recording of user behavior and system changes
-*   Lightweight Node.js-based backend with low resource consumption
-*   Built-in heartbeat keep-alive mechanism to ensure stable connections
-*   Focus Switcher: Allows switching between input components on the page, supporting customizable switching order and hotkeys.
-
-## 📸 Screenshots
-
-
-
-|                            Login Interface                            |
-|:-------------------------------------------------------------:|
-| ![Login_en.png](https://lsky.tuyu.me/i/2025/04/30/68123e4016788.png) |
-
----
-
-|                            Terminal Interface                             |
-|:-------------------------------------------------------------:|
-| ![workspace_en.png](https://lsky.tuyu.me/i/2025/04/30/68123e410d34f.png) |
-
-
-
----
-
-
-
-|                          Style Settings                            |                          Layout Settings                            |                          Settings Panel                            |
-|:-------------------------------------------------------------:|:-------------------------------------------------------------:|:-------------------------------------------------------------:|
-| ![ui_en.png](https://lsky.tuyu.me/i/2025/04/30/68123e40570cc.png) | ![layout_en.png](https://lsky.tuyu.me/i/2025/04/30/68123e4122276.png) | ![settings_en.png](https://lsky.tuyu.me/i/2025/04/30/68123e4036cd6.png) |
-
-## 🖥️ Desktop Client
-
-> Removed web-specific features such as various login verifications and session suspension.
-
-https://github.com/0honus0/nexus-terminal/releases/latest
-
-## 🚀 Quick Start
-
-### 1️⃣ Configure Environment
-
-> Published images support AMD64 and ARM64. ARM64 deployments need the `guacd` image adjustment described below.
-
-Create a new folder
-```bash
-mkdir ./nexus-terminal && cd ./nexus-terminal
-```
-
----
-
-Download the [**docker-compose.yml**](https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/docker-compose.yml) and [**.env**](https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/.env) files from the repository to your current directory.
-
+## Quick Start
 
 ```bash
-wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/.env -O .env
-```
+mkdir -p nexus-terminal && cd nexus-terminal
 
-The frontend, backend, and remote gateway now share the single `ghcr.io/0honus0/nexus-terminal` image. Compose still runs three isolated containers with the existing service names and internal addresses, while Docker downloads and stores the image layers only once.
+wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env}
 
-> ⚠️ **Note:**
->
-> * On **ARM64**, set `GUACD_IMAGE=guacamole/guacd:1.6.0-RC1` in `.env`.
-> * The current publication workflow targets only `linux/amd64` and `linux/arm64`; ARMv7 images are no longer published.
-
-#### How environment variables take effect
-
-* The root `.env` file is automatically used by Docker Compose for `${VARIABLE}` interpolation and is passed to the backend and remote gateway through `env_file`.
-* Values explicitly declared under `environment` in `docker-compose.yml` override `env_file`; same-name shell variables used when invoking Compose take precedence for those `${VARIABLE}` substitutions. Custom variables not listed in Compose are still passed to the Node services through `.env` and `env_file`.
-* On first startup, the backend generates `ENCRYPTION_KEY`, `SESSION_SECRET`, and the internal remote-desktop gateway shared secret in the permission-restricted persistent `./data/.env` file. No migration is needed when upgrading to the unified image, but the whole `data` directory must be backed up.
-* `VITE_*` variables are frontend build-time settings. Changing them in the runtime `.env` file cannot rewrite the already generated static assets. The default same-origin API setup does not require `VITE_API_BASE_URL`. For a custom source build, run `VITE_API_BASE_URL=https://api.example.com ./build.sh docker`.
-* After changing runtime `.env`, run `docker compose up -d --force-recreate` so the containers are recreated with the new configuration.
-
-Configure nginx
-```conf
-location / {
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header Range $http_range;
-    proxy_set_header If-Range $http_if_range;
-    proxy_redirect off;
-    proxy_pass http://127.0.0.1:18111;
-}
-```
-
-Configure IPv6 for Docker (optional — you can skip this if you don't use IPv6 to connect to the server).
-
-Add the following content to `/etc/docker/daemon.json`:
-```json
-{
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00::/80",
-  "ip6tables": true,
-  "experimental": true
-}
-```
-Then restart the Docker service:
-```
-sudo systemctl restart docker
-```
-
-### 2️⃣ Start the Service
-
-```bash
 docker compose up -d
 ```
 
-### 3️⃣ Update
+Open `http://localhost:18111` · [Deployment & updates](./DEPLOYMENT.md)
 
-A Compose deployment does not require the source repository. To update the unified image, run:
+## Features
 
-```bash
-docker compose pull
-docker compose up -d --remove-orphans
-```
+A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions, file management, online editing, remote desktops, security controls, mobile support, and interface customization.
 
-All three Nexus Terminal containers reference the same image, so Docker reuses the layers instead of storing three copies.
+## Screenshots
 
-### 4️⃣ Build the Unified Image from Source
+### SSH Terminal
 
-```bash
-git clone https://github.com/0honus0/nexus-terminal.git
-cd nexus-terminal
-./build.sh docker
-```
+<p align="center">
+  <img src="./imgs/e2e/ssh-terminal.png" alt="SSH terminal" width="100%">
+</p>
 
-The default image is `ghcr.io/0honus0/nexus-terminal:latest`. Override the repository and tag when needed:
+### File Management & Online Editing
 
-```bash
-NEXUS_IMAGE_REPOSITORY=local/nexus-terminal NEXUS_IMAGE_TAG=dev ./build.sh docker
-```
+<p align="center">
+  <img src="./imgs/e2e/file-manager-editor.png" alt="File management and online editing" width="100%">
+</p>
 
-Set the same values in `.env`, then run `docker compose up -d`.
-## 📚 Usage Guide
+### Theme Customization
 
-### Suspend Session Component
+<p align="center">
+  <img src="./imgs/e2e/theme-customization.png" alt="Theme customization" width="100%">
+</p>
 
-You can right-click in the SSH tab to select "Suspend Session" (long-press on mobile). Once suspended, even if the web connection is lost, the backend will automatically take over and keep the SSH connection active. You can resume the session at any time via the panel. This ensures that tasks such as compilation or long-running processes won’t be interrupted due to network issues.
+### Mobile
 
+<p align="center">
+  <img src="./imgs/e2e/mobile-workspace.png" alt="Mobile workspace" width="360">
+</p>
 
-### Command Input Component
+## Documentation
 
-1.  **Tab Switching**: When the command input box has focus, use `Alt + ↑/↓` to switch between SSH session tabs, and `Alt + ←/→` to switch between text editor tabs.
-2.  **Command Sync** (needs to be enabled in settings): When enabled, text entered in the command input box will be synchronized in real-time to the selected target input source. Use the `↑/↓` keys to select menu command items, then press `Enter` to send the selected command.
+[Features](./FEATURES.md) · [Usage](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [E2E](../test/e2e/README.md) · [中文](../README.md)
 
-### File Manager Component
+## License
 
-1.  **Quick File Selection**: When the file search box has focus, you can use the `↑/↓` keys to quickly select files.
-2.  **Drag and Drop Upload**: Supports dragging files or folders from outside the browser for uploading. **Note:** When uploading a large number of files or deeply nested folders, it is recommended to compress them first to avoid browser freezes.
-3.  **Internal Drag and Drop**: You can directly drag and drop files or folders within the file manager to move them.
-4.  **Multiple Selection**: Hold down the `Ctrl` or `Shift` key to select multiple files or folders.
-5.  **Context Menu**: Provides common file operations such as copy, paste, cut, delete, rename, and modify permissions.
-
-### Command History Component
-
-1.  **View Full Command**: When a historical command is too long and truncated, hover the mouse over the command to view the complete instruction content.
-
-### Terminal Component
-
-1. Press **Ctrl + Shift + C** to copy, and **Ctrl + Shift + V** to paste.
-
-
-### General Operations
-
-1.  **Zoom**: In the terminal, file manager, text editor components, and quick command view, you can use `Ctrl + mouse wheel` to zoom.
-2. **Sidebar**: The expanded sidebar can have its width adjusted by dragging.
-3. **Tab Bar**: Right-clicking on the SSH tab bar or the file manager tab bar will open a context menu with the following options: Close, Close Tabs to the Left, Close Other Tabs, and Close Tabs to the Right.
-4. **Tab Group Fold Bar**: You can directly click on the tab name in the view to rename the tab.
-5. **Automatic Reconnection**: When the connection is lost, you can press Enter in the command input box or terminal, or click the same SSH connection in the connection list to trigger automatic reconnection.
-
-### Others
-
-
-1. **On mobile devices, you can zoom in or out on the terminal font using a two-finger gesture.**
-2. To enable Passkey login, set the `RP_ID` and `RP_ORIGIN` environment variables in the `.env` file.
-
-
-
-## ⚠️ Notes
-
-1.  **Dual File Managers**: You can add two file manager components in the layout (experimental feature, may be unstable).
-2.  **Multiple Text Editors**: The functionality to add multiple text editors in the same layout has not yet been implemented.
-3. The published unified image currently targets AMD64 and ARM64. ARMv7 is no longer included.
-4. For data backup, back up the entire **data** folder, including `data/.env`. The project does not provide an automatic backup service.
-
-
-## 💐 Acknowledgements
-
-* The preset theme schemes are based on the excellent [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) project.
-
-## 📄 License
-
-This project is licensed under the [GPL-3.0](LICENSE) license. See the [LICENSE](LICENSE) file for details.
+[GPL-3.0](../LICENSE)
