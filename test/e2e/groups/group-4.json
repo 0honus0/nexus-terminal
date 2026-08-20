@@ -3,18 +3,7 @@
   "group": 4,
   "workers": 8,
   "specs": [
-    "tests/http/auth-2fa.spec.ts",
-    "tests/http/auth-api.spec.ts",
-    "tests/http/backup.spec.ts",
-    "tests/http/connections-tags.spec.ts",
-    "tests/http/database-migrations.spec.ts",
-    "tests/http/quick-commands-audit.spec.ts",
-    "tests/http/rdp-remoteapp.spec.ts",
-    "tests/http/terminal-themes.spec.ts",
     "tests/ssh/progress-display-upload-copy.spec.ts",
-    "tests/ssh/docker-manager-ui.spec.ts",
-    "tests/ssh/protocol.spec.ts",
-    "tests/ssh/status-docker-protocol.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/backup-ui.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",
@@ -22,6 +11,11 @@
     "tests/ui/connection-non-ssh-bulk.spec.ts",
     "tests/ui/custom-terminal-theme.spec.ts",
     "tests/ui/dashboard-workflows.spec.ts",
-    "tests/ui/rdp-remoteapp-fullscreen.spec.ts"
+    "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
+    "tests/ui/notification-delivery.spec.ts",
+    "tests/ui/notification-settings.spec.ts",
+    "tests/ui/proxy-management.spec.ts",
+    "tests/ui/system-settings.spec.ts",
+    "tests/ui/theme-switching.spec.ts"
   ]
 }
