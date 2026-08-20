@@ -9,6 +9,19 @@ import '@monaco-basic-languages';
 import '@monaco-json-language';
 import { createWheelScaleResolver } from '../utils/wheelScale';
 
+const monacoGlobal = self as typeof self & {
+  MonacoEnvironment: { getWorker(workerId: string, label: string): Worker };
+};
+
+monacoGlobal.MonacoEnvironment = {
+  getWorker(_workerId: string, label: string) {
+    if (label === 'json') {
+      return new Worker(new URL('../workers/monaco-json.worker.js', import.meta.url), { type: 'module' });
+    }
+    return new Worker(new URL('../workers/monaco-editor.worker.js', import.meta.url), { type: 'module' });
+  },
+};
+
 const FONT_SIZE_STORAGE_KEY = 'monacoEditorFontSize'; // localStorage key
 
 const props = defineProps({

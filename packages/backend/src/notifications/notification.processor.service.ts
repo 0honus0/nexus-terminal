@@ -103,7 +103,7 @@ class NotificationProcessorService extends EventEmitter {
              console.warn(`[NotificationProcessor] 在初始化完成前收到测试事件。跳过处理。`);
              return;
          }
-        console.log(`[NotificationProcessor] 收到测试事件`, payload);
+        console.log('[NotificationProcessor] 收到测试事件');
         const { testTargetConfig, testTargetChannelType } = payload.details || {};
 
         if (!testTargetConfig || !testTargetChannelType) {

@@ -139,12 +139,8 @@ const closeForm = () => {
   editingSetting.value = null;
 };
 
-// TODO: Implement save logic when form component is ready
-const handleSave = (savedSetting: NotificationSetting) => {
-  console.log('Setting saved:', savedSetting);
+const handleSave = (_savedSetting: NotificationSetting) => {
   closeForm();
-  // The store should have updated the list automatically after add/update
-  // Optionally, you could force a refresh if needed: store.fetchSettings();
 };
 
 </script>

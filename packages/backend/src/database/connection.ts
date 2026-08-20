@@ -39,7 +39,7 @@ export const runDb = async (db: Database, sql: string, params: any[] = []): Prom
             changes: Number(result.changes),
         };
     } catch (error: any) {
-        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${error.message}`);
+        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
         throw error;
     }
 };
@@ -48,7 +48,7 @@ export const getDb = async <T = any>(db: Database, sql: string, params: any[] = 
     try {
         return db.prepare(sql).get(...normalizeParams(params)) as T | undefined;
     } catch (error: any) {
-        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${error.message}`);
+        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
         throw error;
     }
 };
@@ -57,7 +57,7 @@ export const allDb = async <T = any>(db: Database, sql: string, params: any[] = 
     try {
         return db.prepare(sql).all(...normalizeParams(params)) as T[];
     } catch (error: any) {
-        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${error.message}`);
+        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
         throw error;
     }
 };

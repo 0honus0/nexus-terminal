@@ -194,7 +194,6 @@ export const findFullConnectionById = async (id: number): Promise<FullConnection
   */
 // Update input type to reflect FullConnectionData now has 'type' and 'jump_chain'
 export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'>): Promise<number> => {
-    console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
     const now = Math.floor(Date.now() / 1000);
     const sql = `
         INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, rdp_options, created_at, updated_at)
@@ -202,7 +201,6 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
     
     const jumpChainStringified = (data.jump_chain && data.jump_chain.length > 0) ? JSON.stringify(data.jump_chain) : null;
     const rdpOptionsStringified = data.rdp_options ? JSON.stringify(data.rdp_options) : null;
-    console.log(`[Repository:createConnection] jump_chain input: ${JSON.stringify(data.jump_chain)}, stringified to: ${jumpChainStringified}`);
 
     const params = [
         data.name ?? null,
@@ -217,8 +215,6 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
         rdpOptionsStringified,
         now, now
     ];
-    console.log('[Repository:createConnection] SQL:', sql);
-    console.log('[Repository:createConnection] Params:', JSON.stringify(params, null, 2));
     try {
         const db = await getDbInstance();
         const result = await runDb(db, sql, params);
@@ -237,7 +233,6 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
  */
 // Update input type to reflect FullConnectionData now has 'type' and 'jump_chain'
 export const updateConnection = async (id: number, data: Partial<Omit<FullConnectionData, 'id' | 'created_at' | 'last_connected_at' | 'tag_ids'>>): Promise<boolean> => {
-    console.log(`[Repository:updateConnection] Received data for ID ${id}:`, JSON.stringify(data, null, 2));
     const fieldsToUpdate: { [key: string]: any } = { ...data };
     const params: any[] = [];
 
@@ -256,7 +251,6 @@ export const updateConnection = async (id: number, data: Partial<Omit<FullConnec
         if (K === 'jump_chain') {
             const jumpChainValue = value as number[] | null;
             const jumpChainStringified = (jumpChainValue && jumpChainValue.length > 0) ? JSON.stringify(jumpChainValue) : null;
-            console.log(`[Repository:updateConnection] jump_chain input for ID ${id}: ${JSON.stringify(jumpChainValue)}, stringified to: ${jumpChainStringified}`);
             params.push(jumpChainStringified);
         } else if (K === 'rdp_options') {
             params.push(value ? JSON.stringify(value) : null);
@@ -272,8 +266,6 @@ export const updateConnection = async (id: number, data: Partial<Omit<FullConnec
 
     params.push(id);
     const sql = `UPDATE connections SET ${setClauses} WHERE id = ?`;
-    console.log(`[Repository:updateConnection] SQL for ID ${id}:`, sql);
-    console.log(`[Repository:updateConnection] Params for ID ${id}:`, JSON.stringify(params, null, 2));
 
     try {
         const db = await getDbInstance();

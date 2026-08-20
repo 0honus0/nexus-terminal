@@ -542,39 +542,6 @@ export const listAllHtmlThemes = async (): Promise<Array<{ name: string, type: '
     }
 };
 
-
-// --- 现有本地 HTML 主题函数调整/重命名 ---
-// 为了兼容现有的 appearance.store.ts 调用，暂时保留这些导出名，但内部调用新的对应函数。
-// 建议后续步骤修改 appearance.store.ts 去调用新的、更明确的函数名 (e.g., listPresetHtmlThemes, createUserCustomHtmlTheme).
-
-/**
- * @deprecated Use createUserCustomHtmlTheme instead. This function now creates a USER CUSTOM theme.
- *             The 'local' in its name is misleading under the new system.
- */
-export const createLocalHtmlPreset = async (themeName: string, content: string): Promise<void> => {
-    console.warn("[AppearanceService] createLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using createUserCustomHtmlTheme.");
-    return createUserCustomHtmlTheme(themeName, content);
-};
-
-/**
- * @deprecated Use updateUserCustomHtmlTheme instead. This function now updates a USER CUSTOM theme.
- *             The 'local' in its name is misleading under the new system.
- */
-export const updateLocalHtmlPreset = async (themeName: string, content: string): Promise<void> => {
-    console.warn("[AppearanceService] updateLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using updateUserCustomHtmlTheme.");
-    return updateUserCustomHtmlTheme(themeName, content);
-};
-
-/**
- * @deprecated Use deleteUserCustomHtmlTheme instead. This function now deletes a USER CUSTOM theme.
- *             The 'local' in its name is misleading under the new system.
- */
-export const deleteLocalHtmlPreset = async (themeName: string): Promise<void> => {
-    console.warn("[AppearanceService] deleteLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using deleteUserCustomHtmlTheme.");
-    return deleteUserCustomHtmlTheme(themeName);
-};
-
-
 // -- 远程 GitHub HTML 主题管理 --
 
 /**

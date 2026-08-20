@@ -90,18 +90,14 @@ const normalizeRdpOptions = (options: RdpConnectionOptions | null | undefined): 
  * 获取所有连接（包含标签）
  */
 export const getAllConnections = async (): Promise<ConnectionWithTags[]> => {
-    // Repository now returns ConnectionWithTags including 'type'
-    // Explicit type assertion to ensure compatibility
-    return ConnectionRepository.findAllConnectionsWithTags() as Promise<ConnectionWithTags[]>;
+    return ConnectionRepository.findAllConnectionsWithTags();
 };
 
 /**
  * 根据 ID 获取单个连接（包含标签）
  */
 export const getConnectionById = async (id: number): Promise<ConnectionWithTags | null> => {
-    // Repository now returns ConnectionWithTags including 'type'
-    // Explicit type assertion to ensure compatibility
-    return ConnectionRepository.findConnectionByIdWithTags(id) as Promise<ConnectionWithTags | null>;
+    return ConnectionRepository.findConnectionByIdWithTags(id);
 };
 
 /**
@@ -110,14 +106,6 @@ export const getConnectionById = async (id: number): Promise<ConnectionWithTags 
 export const createConnection = async (input: CreateConnectionInput): Promise<ConnectionWithTags> => {
     // +++ Define a local type alias for clarity, including ssh_key_id +++
     type ConnectionDataForRepo = Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'> & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
-
-    const safeInputForLog = {
-        ...input,
-        password: input.password ? '[REDACTED]' : input.password,
-        private_key: input.private_key ? '[REDACTED]' : input.private_key,
-        passphrase: input.passphrase ? '[REDACTED]' : input.passphrase,
-    };
-    console.log('[Service:createConnection] Received input:', JSON.stringify(safeInputForLog, null, 2));
 
     // 0. 处理和验证 jump_chain
     const processedJumpChain = await _validateAndProcessJumpChain(input.jump_chain, input.proxy_id);
@@ -241,16 +229,8 @@ notes: input.notes ?? null, // Add notes field
         jump_chain: processedJumpChain,
         rdp_options: connectionType === 'RDP' ? normalizeRdpOptions(input.rdp_options) : null,
     };
-    // Remove ssh_key_id property if it's null before logging/saving if repository expects exact type match without optional nulls
-    const finalConnectionData = { ...connectionData };
-    if (finalConnectionData.ssh_key_id === null) {
-        delete (finalConnectionData as any).ssh_key_id; // Adjust based on repository function signature if needed
-    }
-    console.log('[Service:createConnection] Data being passed to ConnectionRepository.createConnection:', JSON.stringify(finalConnectionData, null, 2)); // Log data before saving
-
     // 4. 在仓库中创建连接记录
-    // Pass the potentially modified finalConnectionData
-    const newConnectionId = await ConnectionRepository.createConnection(finalConnectionData as Omit<ConnectionRepository.FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'>);
+    const newConnectionId = await ConnectionRepository.createConnection(connectionData);
 
     // 5. 处理标签
     const tagIds = input.tag_ids?.filter(id => typeof id === 'number' && id > 0) ?? [];
@@ -452,7 +432,6 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
     let updatedFieldsForAudit: string[] = []; // 跟踪审计日志的字段
     if (hasNonTagChanges) {
         updatedFieldsForAudit = Object.keys(dataToUpdate); // 在更新调用之前获取字段
-        console.log(`[Service:updateConnection] Data being passed to ConnectionRepository.updateConnection for ID ${id}:`, JSON.stringify(dataToUpdate, null, 2)); // ADD THIS LOG
         const updated = await ConnectionRepository.updateConnection(id, dataToUpdate);
         if (!updated) {
             // 如果 findFullConnectionById 成功，则不应发生这种情况，但这是良好的实践

@@ -1,13 +1,9 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { createRequire } from 'node:module';
-import type monacoEditorPlugin from 'vite-plugin-monaco-editor';
-import tailwindcss from '@tailwindcss/vite'
+import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 
-const require = createRequire(import.meta.url);
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
-const monacoEditorPluginModule: { default: typeof monacoEditorPlugin } = require('vite-plugin-monaco-editor');
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -17,14 +13,13 @@ export default defineConfig({
       '@monaco-editor-api': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.api.js'),
       '@monaco-basic-languages': resolveLocalModule('./node_modules/monaco-editor/esm/vs/basic-languages/monaco.contribution.js'),
       '@monaco-json-language': resolveLocalModule('./node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js'),
+      '@monaco-editor-worker': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.worker.js'),
+      '@monaco-json-worker': resolveLocalModule('./node_modules/monaco-editor/esm/vs/language/json/json.worker.js'),
     },
   },
   plugins: [
     vue(),
     tailwindcss(),
-    monacoEditorPluginModule.default({
-      languageWorkers: ['editorWorkerService'],
-    })
   ],
   build: {
     // Monaco and its language workers are intentionally emitted as large,
