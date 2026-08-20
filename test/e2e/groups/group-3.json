@@ -3,7 +3,6 @@
   "group": 3,
   "workers": 4,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
     "tests/ssh/cross-session-transfer.spec.ts",
     "tests/ssh/file-upload.spec.ts",
     "tests/ssh/suspend-resume.spec.ts",
@@ -18,6 +17,7 @@
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts"
+    "tests/ui/theme-switching.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
