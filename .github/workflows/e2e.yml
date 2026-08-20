@@ -304,28 +304,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          npm ci --prefix packages/backend &
-          backend_pid=$!
-          npm ci --prefix packages/frontend &
-          frontend_pid=$!
-          npm ci --prefix test/e2e &
-          e2e_pid=$!
-
-          failed=0
-          if ! wait "$backend_pid"; then
-            echo "::error::Backend npm ci failed"
-            failed=1
-          fi
-          if ! wait "$frontend_pid"; then
-            echo "::error::Frontend npm ci failed"
-            failed=1
-          fi
-          if ! wait "$e2e_pid"; then
-            echo "::error::E2E npm ci failed"
-            failed=1
-          fi
-
-          exit "$failed"
+          # Install sequentially. The runner image is shared by the container job and
+          # running three npm ci processes in parallel can saturate disk/network
+          # resources and leave matrix jobs apparently stuck in the first step.
+          npm ci --prefix packages/backend
+          npm ci --prefix packages/frontend
+          npm ci --prefix test/e2e
 
       - name: Verify preinstalled Playwright runtime
         run: |
