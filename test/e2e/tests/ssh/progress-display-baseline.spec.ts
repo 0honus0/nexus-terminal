@@ -67,6 +67,13 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
   await expect(popup).toBeVisible();
 }
 
+async function expectPopupBelowApplicationModals(popup: Locator): Promise<void> {
+  await expect.poll(() => popup.evaluate((element) => {
+    const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+    return Number.isFinite(zIndex) ? zIndex : 0;
+  })).toBeLessThan(50);
+}
+
 test('existing copy progress popup hides and restores through Progress Display', async ({ page, context }) => {
   await openFileManager(page, context);
 
@@ -88,6 +95,7 @@ test('existing copy progress popup hides and restores through Progress Display',
       await expect(popup).toBeVisible({ timeout: 10_000 });
       await expect(popup.locator('h4')).toContainText('·');
       await expect(popup).toContainText(sourceName);
+      await expectPopupBelowApplicationModals(popup);
     });
 
     await step('the minimize-style action hides the popup and Progress Display restores it', async () => {
@@ -121,6 +129,7 @@ test('existing archive progress popup hides and restores through Progress Displa
       const popup = page.getByTestId('archive-progress-popup');
       await expect(popup).toBeVisible({ timeout: 10_000 });
       await expect(popup).toContainText('archive-source.zip');
+      await expectPopupBelowApplicationModals(popup);
     });
 
     await step('the minimize-style action hides the archive popup and Progress Display restores it', async () => {

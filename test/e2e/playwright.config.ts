@@ -34,6 +34,8 @@ const backendEnv: Record<string, string> = {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   REMOTE_GATEWAY_SHARED_SECRET:
     "e2e-remote-gateway-shared-secret-do-not-use-outside-tests",
+  DEPLOYMENT_MODE: "local",
+  REMOTE_GATEWAY_API_BASE_LOCAL: "http://127.0.0.1:29090",
 };
 
 export default defineConfig({
@@ -92,6 +94,15 @@ export default defineConfig({
     },
   ],
   webServer: [
+    {
+      command: "node support/test-remote-gateway-server.mjs",
+      cwd: e2eRoot,
+      url: "http://127.0.0.1:29090/health",
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
     {
       command: "node support/test-ssh-server.mjs",
       cwd: e2eRoot,

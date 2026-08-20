@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
     v-if="props.visible && !sourceHidden && uploadList.length > 0"
     ref="popupRef"
     data-testid="file-upload-progress-popup"
-    class="upload-popup fixed flex flex-col overflow-hidden border border-border bg-background text-sm shadow-xl z-[1001]"
+    class="upload-popup fixed z-40 flex flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
     :class="{ dragging, resizing }"
     :style="[popupStyle, { visibility: positionReady ? 'visible' : 'hidden' }]"
   >

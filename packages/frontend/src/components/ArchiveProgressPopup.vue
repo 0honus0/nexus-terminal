@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .archive-progress-card {
   position: fixed;
-  z-index: 1001;
+  z-index: 40;
   width: min(390px, calc(100vw - 16px));
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border-color) 75%, var(--link-active-color, #007bff));

@@ -53,8 +53,17 @@ export const getRemoteDesktopToken = async (
         connectionConfig.username = connection.username || ''; // RDP 通常需要用户名
         connectionConfig.password = decryptedPassword || ''; // RDP 通常需要密码
         connectionConfig.dpi = dpi || '96';
+        // Allow Guacamole's existing client.sendSize() calls to update the remote
+        // Windows desktop instead of merely resizing the local canvas.
+        connectionConfig.resizeMethod = 'display-update';
         connectionConfig.security = (connection as any).rdp_security || 'any';
         connectionConfig.ignoreCert = String((connection as any).rdp_ignore_cert ?? true);
+        const rdpOptions = connection.rdp_options;
+        if (rdpOptions?.remote_app) {
+            connectionConfig.remoteApp = `||${rdpOptions.remote_app.replace(/^\|\|/, '')}`;
+            if (rdpOptions.remote_app_dir) connectionConfig.remoteAppDir = rdpOptions.remote_app_dir;
+            if (rdpOptions.remote_app_args) connectionConfig.remoteAppArgs = rdpOptions.remote_app_args;
+        }
     } else if (protocol === 'vnc') {
         connectionConfig.password = decryptedPassword || ''; // VNC 通常需要密码
         if (connection.username) { // VNC 用户名是可选的

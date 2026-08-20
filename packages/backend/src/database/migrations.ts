@@ -294,6 +294,17 @@ const definedMigrations: Migration[] = [
         sql: `
             ALTER TABLE quick_commands ADD COLUMN variables TEXT NULL;
         `
+    },
+    {
+        id: 11,
+        name: 'Add RDP options column to connections table',
+        check: async (db: Database): Promise<boolean> => {
+            const columnAlreadyExists = await columnExists(db, 'connections', 'rdp_options');
+            return !columnAlreadyExists;
+        },
+        sql: `
+            ALTER TABLE connections ADD COLUMN rdp_options TEXT NULL;
+        `
     }
 ];
 

@@ -58,6 +58,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     tag_ids: [] as number[],
     notes: '',
     vncPassword: '',
+    rdpRemoteAppEnabled: false,
+    rdpRemoteApp: '',
+    rdpRemoteAppDir: '',
+    rdpRemoteAppArgs: '',
   };
   const formData = reactive({ ...initialFormData });
 
@@ -116,6 +120,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           console.log('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
           console.log('[Debug] watch connectionToEdit - formData.jump_chain initialized:', formData.jump_chain);
           formData.notes = newVal.notes ?? '';
+          formData.rdpRemoteAppEnabled = Boolean(newVal.rdp_options?.remote_app);
+          formData.rdpRemoteApp = newVal.rdp_options?.remote_app ?? '';
+          formData.rdpRemoteAppDir = newVal.rdp_options?.remote_app_dir ?? '';
+          formData.rdpRemoteAppArgs = newVal.rdp_options?.remote_app_args ?? '';
           formData.tag_ids = newVal.tag_ids ? [...newVal.tag_ids] : [];
 
           if (newVal.type === 'SSH' && newVal.auth_method === 'key') {
@@ -149,6 +157,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
          formData.selected_ssh_key_id = null;
          formData.notes = '';
          formData.vncPassword = '';
+         formData.rdpRemoteAppEnabled = false;
+         formData.rdpRemoteApp = '';
+         formData.rdpRemoteAppDir = '';
+         formData.rdpRemoteAppArgs = '';
          formData.jump_chain = null; 
          formData.proxy_type = null;
          console.log('[Debug] watch connectionToEdit - formData.jump_chain reset');
@@ -612,6 +624,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
             uiNotificationsStore.showError(t('connections.form.errorPasswordRequired'));
             return;
         }
+        if (formData.rdpRemoteAppEnabled && !formData.rdpRemoteApp.trim()) {
+            uiNotificationsStore.showError(t('connections.form.errorRemoteAppAliasRequired', '启用 RemoteApp 时必须填写 RemoteApp 别名。'));
+            return;
+        }
     } else if (formData.type === 'VNC') {
         if (!isEditMode.value && !formData.vncPassword && !formData.host.includes('~')) {
             uiNotificationsStore.showError(t('connections.form.errorVncPasswordRequired', 'VNC 密码是必填项。'));
@@ -670,6 +686,11 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                     }
                 } else if (formData.type === 'RDP') {
                     dataForThisIp.password = formData.password;
+                    dataForThisIp.rdp_options = formData.rdpRemoteAppEnabled ? {
+                        remote_app: formData.rdpRemoteApp,
+                        remote_app_dir: formData.rdpRemoteAppDir || null,
+                        remote_app_args: formData.rdpRemoteAppArgs || null,
+                    } : null;
                     delete dataForThisIp.auth_method;
                 } else if (formData.type === 'VNC') {
                     dataForThisIp.password = formData.vncPassword;
@@ -738,6 +759,11 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         }
     } else if (formData.type === 'RDP') {
         if (formData.password) dataToSend.password = formData.password;
+        dataToSend.rdp_options = formData.rdpRemoteAppEnabled ? {
+            remote_app: formData.rdpRemoteApp,
+            remote_app_dir: formData.rdpRemoteAppDir || null,
+            remote_app_args: formData.rdpRemoteAppArgs || null,
+        } : null;
         delete dataToSend.auth_method;
     } else if (formData.type === 'VNC') {
         if (formData.vncPassword) dataToSend.password = formData.vncPassword;

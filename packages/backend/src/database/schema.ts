@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS connections (
     ssh_key_id INTEGER NULL, 
 notes TEXT NULL,
 jump_chain TEXT NULL,
+rdp_options TEXT NULL,
 proxy_type TEXT NULL, 
 created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),

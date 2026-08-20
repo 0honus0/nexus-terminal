@@ -152,7 +152,10 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         return;
     }
 
-    const { hostname, port, username, password, width, height, dpi, security, ignoreCert } = connectionConfig;
+    const {
+        hostname, port, username, password, width, height, dpi, security, ignoreCert,
+        resizeMethod, remoteApp, remoteAppDir, remoteAppArgs,
+    } = connectionConfig;
 
     const normalizedHostname = typeof hostname === 'string' ? hostname.trim() : '';
     const normalizedPort = Number(port);
@@ -199,6 +202,46 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         settings.security = normalizedSecurity;
         settings['ignore-cert'] = String(ignoreCert ?? true); // RDP 特有
         settings.dpi = String(dpi || '96'); // RDP 特有
+
+        const normalizedResizeMethod = String(resizeMethod || 'display-update');
+        if (!['display-update', 'reconnect'].includes(normalizedResizeMethod)) {
+            res.status(400).json({ error: '无效的 RDP resize-method 参数。' });
+            return;
+        }
+        settings['resize-method'] = normalizedResizeMethod;
+
+        const validateOptionalRdpString = (value: unknown, maxLength: number): string | null => {
+            if (value === undefined || value === null || value === '') return null;
+            if (typeof value !== 'string') return null;
+            const normalized = value.trim();
+            if (!normalized || normalized.length > maxLength || /[\0\r\n]/.test(normalized)) return null;
+            return normalized;
+        };
+        const normalizedRemoteApp = validateOptionalRdpString(remoteApp, 258);
+        if (remoteApp !== undefined && remoteApp !== null && remoteApp !== '' && !normalizedRemoteApp) {
+            res.status(400).json({ error: '无效的 RemoteApp 别名。' });
+            return;
+        }
+        if (normalizedRemoteApp) {
+            if (!normalizedRemoteApp.startsWith('||')) {
+                res.status(400).json({ error: 'RemoteApp 别名必须使用 || 前缀。' });
+                return;
+            }
+            settings['remote-app'] = normalizedRemoteApp;
+
+            const normalizedRemoteAppDir = validateOptionalRdpString(remoteAppDir, 1024);
+            const normalizedRemoteAppArgs = validateOptionalRdpString(remoteAppArgs, 4096);
+            if (remoteAppDir !== undefined && remoteAppDir !== null && remoteAppDir !== '' && !normalizedRemoteAppDir) {
+                res.status(400).json({ error: '无效的 RemoteApp 工作目录。' });
+                return;
+            }
+            if (remoteAppArgs !== undefined && remoteAppArgs !== null && remoteAppArgs !== '' && !normalizedRemoteAppArgs) {
+                res.status(400).json({ error: '无效的 RemoteApp 参数。' });
+                return;
+            }
+            if (normalizedRemoteAppDir) settings['remote-app-dir'] = normalizedRemoteAppDir;
+            if (normalizedRemoteAppArgs) settings['remote-app-args'] = normalizedRemoteAppArgs;
+        }
     } else if (protocol === 'vnc') {
         if (typeof password === 'undefined') {
             res.status(400).json({ error: 'VNC 连接缺少 password' });

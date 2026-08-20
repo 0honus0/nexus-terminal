@@ -28,6 +28,7 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 
 const rdpDisplayRef = ref<HTMLDivElement | null>(null);
 const rdpContainerRef = ref<HTMLDivElement | null>(null);
+const modalPanelRef = ref<HTMLDivElement | null>(null);
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 const guacClient = ref<Client | null>(null);
 const connectionStatus = ref<ConnectionStatus>('disconnected');
@@ -41,6 +42,9 @@ const keyboard = ref<Keyboard | null>(null);
 const mouse = ref<Mouse | null>(null);
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
+const isBrowserFullscreen = ref(false);
+let displayResizeObserver: ResizeObserver | null = null;
+let sendSizeAnimationFrame: number | null = null;
 
 const tempInputWidth = ref<number | string>(desiredModalWidth.value);
 const tempInputHeight = ref<number | string>(desiredModalHeight.value);
@@ -56,6 +60,40 @@ let hasDragged = false;
 
 const MIN_MODAL_WIDTH = 1024;
 const MIN_MODAL_HEIGHT = 768;
+
+const sendRemoteDisplaySize = () => {
+  if (sendSizeAnimationFrame !== null) {
+    window.cancelAnimationFrame(sendSizeAnimationFrame);
+  }
+  sendSizeAnimationFrame = window.requestAnimationFrame(() => {
+    sendSizeAnimationFrame = null;
+    if (!guacClient.value || connectionStatus.value !== 'connected' || !rdpContainerRef.value) return;
+    const rawWidth = Math.round(rdpContainerRef.value.clientWidth);
+    const rawHeight = Math.round(rdpContainerRef.value.clientHeight);
+    // v-show collapses the panel to 0x0 while minimized. Do not shrink the
+    // remote Windows desktop merely because the local RDP window is hidden.
+    if (rawWidth <= 0 || rawHeight <= 0) return;
+    guacClient.value.sendSize(Math.max(100, rawWidth), Math.max(100, rawHeight));
+  });
+};
+
+const handleFullscreenChange = () => {
+  isBrowserFullscreen.value = document.fullscreenElement === modalPanelRef.value;
+  nextTick(sendRemoteDisplaySize);
+};
+
+const toggleBrowserFullscreen = async () => {
+  if (!modalPanelRef.value) return;
+  try {
+    if (document.fullscreenElement === modalPanelRef.value) {
+      await document.exitFullscreen();
+    } else {
+      await modalPanelRef.value.requestFullscreen();
+    }
+  } catch (error) {
+    console.warn('[RDP Modal] Browser fullscreen request failed:', error);
+  }
+};
 
 // 开发环境由 Vite、部署环境由 Nginx 统一代理 /ws，避免 localhost 部署时误连未暴露的后端端口。
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -148,6 +186,7 @@ const handleConnection = async () => {
             if (displayEl && typeof displayEl.focus === 'function') {
               displayEl.focus();
             }
+            sendRemoteDisplaySize();
           });
           setTimeout(() => { // z-index fix for canvas
             nextTick(() => {
@@ -437,7 +476,14 @@ const disconnectGuacamole = () => {
 };
 
 
-const closeModal = () => {
+const closeModal = async () => {
+  if (document.fullscreenElement === modalPanelRef.value) {
+    try {
+      await document.exitFullscreen();
+    } catch (error) {
+      console.warn('[RDP Modal] Failed to exit fullscreen while closing:', error);
+    }
+  }
   disconnectGuacamole();
   emit('close');
 };
@@ -514,6 +560,11 @@ watchEffect(() => {
  });
   
 onMounted(() => {
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
+  if (rdpContainerRef.value && typeof ResizeObserver !== 'undefined') {
+    displayResizeObserver = new ResizeObserver(() => sendRemoteDisplaySize());
+    displayResizeObserver.observe(rdpContainerRef.value);
+  }
   if (Number(tempInputWidth.value) !== desiredModalWidth.value) {
     tempInputWidth.value = desiredModalWidth.value;
   }
@@ -533,6 +584,13 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  displayResizeObserver?.disconnect();
+  displayResizeObserver = null;
+  if (sendSizeAnimationFrame !== null) {
+    window.cancelAnimationFrame(sendSizeAnimationFrame);
+    sendSizeAnimationFrame = null;
+  }
   disconnectGuacamole(); // 这里已经调用了 removeInputListeners
   document.removeEventListener('mousemove', onRestoreButtonMouseMove);
   document.removeEventListener('mouseup', onRestoreButtonMouseUp);
@@ -559,6 +617,13 @@ watch(() => props.connection, (newConnection, oldConnection) => {
 // 直接使用所需的模态框尺寸作为样式
 const computedModalStyle = computed(() => {
 
+  if (isBrowserFullscreen.value) {
+    return {
+      width: '100vw',
+      height: '100vh',
+    };
+  }
+
   // 在此处为实际模态框样式应用最小约束
   const actualWidth = Math.min(Math.max(MIN_MODAL_WIDTH, desiredModalWidth.value), maxAllowedWidth.value);
   const actualHeight = Math.min(Math.max(MIN_MODAL_HEIGHT, desiredModalHeight.value), maxAllowedHeight.value);
@@ -569,21 +634,7 @@ const computedModalStyle = computed(() => {
 });
 
 // Watch for modal size changes to update Guacamole client
-watchEffect(() => {
-  const currentStyle = computedModalStyle.value; // Dependency
-  if (guacClient.value && connectionStatus.value === 'connected' && rdpContainerRef.value) {
-    nextTick(() => {
-      if (rdpContainerRef.value && guacClient.value) {
-        const displayWidth = rdpContainerRef.value.offsetWidth;
-        const displayHeight = rdpContainerRef.value.offsetHeight;
-        if (displayWidth > 0 && displayHeight > 0) {
-          // console.log(`[RDP Modal] Resizing Guacamole display to: ${displayWidth}x${displayHeight} due to style change.`);
-          guacClient.value.sendSize(displayWidth, displayHeight);
-        }
-      }
-    });
-  }
-});
+watch(computedModalStyle, () => nextTick(sendRemoteDisplaySize));
 
 const initResize = (event: MouseEvent) => {
   isResizing.value = true;
@@ -625,8 +676,10 @@ const stopResize = () => {
 </script>
 <template>
   <div
+    data-testid="remote-desktop-modal"
     :class="[
-      'fixed inset-0 z-50 flex items-center justify-center p-4',
+      'fixed inset-0 z-50 flex items-center justify-center',
+      isBrowserFullscreen ? 'p-0' : 'p-4',
       isMinimized ? '' : 'bg-overlay',
       isMinimized ? 'pointer-events-none' : '' // 允许恢复按钮接收事件
     ]"
@@ -643,6 +696,8 @@ const stopResize = () => {
       <i class="fas fa-window-restore fa-lg"></i>
     </button>
     <div
+      ref="modalPanelRef"
+      data-testid="remote-desktop-panel"
       v-show="!isMinimized"
       :style="computedModalStyle"
       class="bg-background text-foreground rounded-lg shadow-xl flex flex-col overflow-hidden border border-border pointer-events-auto relative"
@@ -662,6 +717,14 @@ const stopResize = () => {
                   }">
               {{ t('remoteDesktopModal.status.' + connectionStatus) }}
             </span>
+            <button
+                data-testid="rdp-browser-fullscreen"
+                @click="toggleBrowserFullscreen"
+                class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 rounded hover:bg-hover"
+                :title="isBrowserFullscreen ? t('common.exitFullscreen', '退出全屏') : t('common.fullscreen', '网页全屏')"
+            >
+                <i :class="isBrowserFullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'"></i>
+            </button>
             <button
                 @click="minimizeModal"
                 class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 rounded hover:bg-hover"
@@ -732,6 +795,7 @@ const stopResize = () => {
        </div>
        <!-- Resize Handle -->
        <div
+         v-if="!isBrowserFullscreen"
          class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 bg-transparent hover:bg-primary-dark hover:bg-opacity-30"
          title="Resize"
          @mousedown.stop="initResize"

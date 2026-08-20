@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, type Ref, type PropType } from 'vue';
+import { computed, ref, watch, type Ref, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import TagInput from './TagInput.vue';
 import type { ProxyInfo } from '../stores/proxies.store';
@@ -17,6 +17,10 @@ const props = defineProps({
       proxy_type?: 'proxy' | 'jump' | null;
       tag_ids: number[];
       notes: string;
+      rdpRemoteAppEnabled: boolean;
+      rdpRemoteApp: string;
+      rdpRemoteAppDir: string;
+      rdpRemoteAppArgs: string;
     }>,
     required: true
   },
@@ -41,6 +45,11 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const remoteAppEnabled = ref(props.formData.rdpRemoteAppEnabled);
+
+watch(() => props.formData.rdpRemoteAppEnabled, (enabled) => {
+  remoteAppEnabled.value = enabled;
+});
 
 
 const handleCreateTagEvent = (tagName: string) => {
@@ -55,6 +64,12 @@ const setConnectionMode = (mode: 'proxy' | 'jump') => {
   if (props.advancedConnectionMode === mode) return; // Access directly
   emit('update:advancedConnectionMode', mode);
 
+};
+
+const toggleRemoteApp = () => {
+  const enabled = !remoteAppEnabled.value;
+  remoteAppEnabled.value = enabled;
+  props.formData.rdpRemoteAppEnabled = enabled;
 };
 
 
@@ -142,6 +157,77 @@ const getAvailableJumpHostsForIndex = (currentIndex: number): ConnectionInfo[] =
       </button>
        <div v-if="props.connections.filter(c => c.type === 'SSH' && (!props.isEditMode || c.id !== props.formData.id)).length === 0" class="text-xs text-warning-foreground p-2 bg-warning/20 rounded-md">
         {{ t('connections.form.noAvailableSshConnectionsForJump', '没有可用的SSH连接作为跳板机。请先创建一些SSH连接。') }}
+      </div>
+    </div>
+
+    <div v-if="props.formData.type === 'RDP'" data-testid="rdp-advanced-options" class="space-y-3 rounded-md border border-border/70 bg-background/50 p-3">
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="remoteAppEnabled ? 'true' : 'false'"
+        data-testid="rdp-remote-app-toggle"
+        class="flex w-full items-center justify-between gap-3 rounded-md px-1 py-1 text-left text-sm font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        @click="toggleRemoteApp"
+      >
+        <span>{{ t('connections.form.remoteAppEnabled', '启动 RemoteApp') }}</span>
+        <span
+          aria-hidden="true"
+          class="relative h-5 w-9 shrink-0 rounded-full border border-border transition-colors"
+          :class="remoteAppEnabled ? 'bg-primary' : 'bg-border/60'"
+        >
+          <span
+            class="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-transform"
+            :class="remoteAppEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'"
+          ></span>
+        </span>
+      </button>
+      <p class="m-0 text-xs text-text-secondary">
+        {{ t('connections.form.remoteAppHint', '仅在 Windows 服务器已发布 RemoteApp 时启用；普通 RDP 连接无需配置。') }}
+      </p>
+
+      <div v-if="remoteAppEnabled" data-testid="rdp-remote-app-fields" class="space-y-3">
+        <div>
+          <label for="rdp-remote-app" class="block text-sm font-medium text-text-secondary mb-1">
+            {{ t('connections.form.remoteAppAlias', 'RemoteApp 别名') }}
+          </label>
+          <input
+            id="rdp-remote-app"
+            v-model="props.formData.rdpRemoteApp"
+            data-testid="rdp-remote-app-alias"
+            type="text"
+            autocomplete="off"
+            class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            :placeholder="t('connections.form.remoteAppAliasPlaceholder', '例如 notepad（无需输入 ||）')"
+          />
+        </div>
+        <div>
+          <label for="rdp-remote-app-dir" class="block text-sm font-medium text-text-secondary mb-1">
+            {{ t('connections.form.remoteAppDir', '工作目录') }} ({{ t('connections.form.optional') }})
+          </label>
+          <input
+            id="rdp-remote-app-dir"
+            v-model="props.formData.rdpRemoteAppDir"
+            data-testid="rdp-remote-app-dir"
+            type="text"
+            autocomplete="off"
+            class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="C:\Work"
+          />
+        </div>
+        <div>
+          <label for="rdp-remote-app-args" class="block text-sm font-medium text-text-secondary mb-1">
+            {{ t('connections.form.remoteAppArgs', '启动参数') }} ({{ t('connections.form.optional') }})
+          </label>
+          <input
+            id="rdp-remote-app-args"
+            v-model="props.formData.rdpRemoteAppArgs"
+            data-testid="rdp-remote-app-args"
+            type="text"
+            autocomplete="off"
+            class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            :placeholder="t('connections.form.remoteAppArgsPlaceholder', '例如 /A')"
+          />
+        </div>
       </div>
     </div>
 

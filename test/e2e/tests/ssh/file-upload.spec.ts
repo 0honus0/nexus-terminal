@@ -147,6 +147,12 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       await expect(progressPopup.locator('h4')).toContainText('·');
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
+
+      await expect.poll(() => progressPopup.evaluate((element) => {
+        const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+        return Number.isFinite(zIndex) ? zIndex : 0;
+      })).toBeLessThan(50);
+
       await progressPopup.getByTestId('file-upload-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 

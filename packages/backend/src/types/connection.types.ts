@@ -1,3 +1,9 @@
+export interface RdpConnectionOptions {
+    remote_app?: string | null;
+    remote_app_dir?: string | null;
+    remote_app_args?: string | null;
+}
+
 export interface ConnectionBase {
     id: number;
     name: string | null;
@@ -13,6 +19,7 @@ export interface ConnectionBase {
     last_connected_at: number | null;
 notes?: string | null;
     jump_chain: number[] | null;
+    rdp_options?: RdpConnectionOptions | null;
 }
 
 export interface ConnectionWithTags extends ConnectionBase {
@@ -36,6 +43,7 @@ export interface CreateConnectionInput {
     tag_ids?: number[];
 notes?: string | null;
     jump_chain?: number[] | null;
+    rdp_options?: RdpConnectionOptions | null;
 }
 
 
@@ -55,6 +63,7 @@ export interface UpdateConnectionInput {
 notes?: string | null;
     tag_ids?: number[];
     jump_chain?: number[] | null;
+    rdp_options?: RdpConnectionOptions | null;
 }
 
 
@@ -77,6 +86,7 @@ notes: string | null;
     updated_at: number;
     last_connected_at: number | null;
     jump_chain: number[] | null;
+    rdp_options?: RdpConnectionOptions | null;
 }
 
 export interface DecryptedConnectionCredentials {

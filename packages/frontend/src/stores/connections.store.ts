@@ -20,6 +20,11 @@ export interface ConnectionInfo {
 notes?: string | null;
     vncPassword?: string; // VNC specific password
     jump_chain?: number[] | null;
+    rdp_options?: {
+        remote_app?: string | null;
+        remote_app_dir?: string | null;
+        remote_app_args?: string | null;
+    } | null;
 }
 
 // 定义 Store State 的接口
@@ -103,6 +108,7 @@ export const useConnectionsStore = defineStore('connections', {
             proxy_type?: 'proxy' | 'jump' | null; 
             tag_ids?: number[]; // 允许传入 tag_ids
             jump_chain?: number[] | null;
+            rdp_options?: ConnectionInfo['rdp_options'];
         }) {
             this.isLoading = true;
             this.error = null;
@@ -129,7 +135,7 @@ export const useConnectionsStore = defineStore('connections', {
         // 更新连接 Action
         // 更新参数类型以包含 proxy_id 和 tag_ids
         // Update parameter type to include 'type' and VNC fields
-        async updateConnection(connectionId: number, updatedData: Partial<Omit<ConnectionInfo, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { type?: 'SSH' | 'RDP' | 'VNC'; password?: string; private_key?: string; passphrase?: string; vncPassword?: string; proxy_id?: number | null; proxy_type?: 'proxy' | 'jump' | null; tag_ids?: number[]; jump_chain?: number[] | null; }>) {
+        async updateConnection(connectionId: number, updatedData: Partial<Omit<ConnectionInfo, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { type?: 'SSH' | 'RDP' | 'VNC'; password?: string; private_key?: string; passphrase?: string; vncPassword?: string; proxy_id?: number | null; proxy_type?: 'proxy' | 'jump' | null; tag_ids?: number[]; jump_chain?: number[] | null; rdp_options?: ConnectionInfo['rdp_options']; }>) {
             this.isLoading = true;
             this.error = null;
             try {

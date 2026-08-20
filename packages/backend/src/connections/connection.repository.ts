@@ -1,5 +1,6 @@
 import type { Database } from '../database/connection';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import type { RdpConnectionOptions } from '../types/connection.types';
 
 
 // Define Connection 类型 (可以从 controller 或 types 文件导入，暂时在此定义)
@@ -19,13 +20,15 @@ interface ConnectionBase {
     last_connected_at: number | null;
     ssh_key_id?: number | null;
 notes?: string | null;
+    rdp_options?: RdpConnectionOptions | null;
 //    jump_chain: number[] | null; // <-- REMOVE from ConnectionBase
 }
 
 // ConnectionWithTagsRow implicitly includes 'type' and 'ssh_key_id' via ConnectionBase
-interface ConnectionWithTagsRow extends ConnectionBase { // This will no longer cause error if ConnectionBase has no jump_chain
+interface ConnectionWithTagsRow extends Omit<ConnectionBase, 'rdp_options'> {
     tag_ids_str: string | null;
     jump_chain: string | null; // Stored as JSON string in DB
+    rdp_options: string | null; // Stored as JSON string in DB
 }
 
 // ConnectionWithTags implicitly includes 'type' and 'ssh_key_id' via ConnectionBase
@@ -48,9 +51,10 @@ notes?: string | null;
 
 
 
-interface FullConnectionDbRow extends Omit<FullConnectionData, 'jump_chain' | 'tag_ids'> { // Omit service layer type, and tag_ids (not directly on connections table)
+interface FullConnectionDbRow extends Omit<FullConnectionData, 'jump_chain' | 'rdp_options' | 'tag_ids'> { // Omit service layer type, and tag_ids (not directly on connections table)
     ssh_key_id?: number | null; 
     jump_chain: string | null; // Stored as JSON string in DB
+    rdp_options: string | null; // Stored as JSON string in DB
     proxy_type?: 'proxy' | 'jump' | null; // 连接本身的 proxy_type, from c.proxy_type
     proxy_db_id: number | null;
     proxy_name: string | null;
@@ -70,7 +74,7 @@ interface FullConnectionDbRow extends Omit<FullConnectionData, 'jump_chain' | 't
 export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]> => {
     const sql = `
         SELECT
-            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, -- +++ Select ssh_key_id, notes, jump_chain AND proxy_type +++
+            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, c.rdp_options,
             c.created_at, c.updated_at, c.last_connected_at,
             GROUP_CONCAT(ct.tag_id) as tag_ids_str
          FROM connections c
@@ -81,11 +85,12 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
         const db = await getDbInstance();
         const rows = await allDb<ConnectionWithTagsRow>(db, sql);
         return rows.map(row => {
-            const { jump_chain: jumpChainStr, ...restOfRow } = row;
+            const { jump_chain: jumpChainStr, rdp_options: rdpOptionsStr, ...restOfRow } = row;
             return {
                 ...restOfRow,
                 tag_ids: row.tag_ids_str ? row.tag_ids_str.split(',').map(Number).filter(id => !isNaN(id)) : [],
-                jump_chain: jumpChainStr ? JSON.parse(jumpChainStr) as number[] : null
+                jump_chain: jumpChainStr ? JSON.parse(jumpChainStr) as number[] : null,
+                rdp_options: rdpOptionsStr ? JSON.parse(rdpOptionsStr) as RdpConnectionOptions : null
             } as ConnectionWithTags;
         });
     } catch (err: any) {
@@ -100,7 +105,7 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
 export const findConnectionByIdWithTags = async (id: number): Promise<ConnectionWithTags | null> => {
     const sql = `
         SELECT
-            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, -- +++ Select ssh_key_id, notes, jump_chain AND proxy_type +++
+            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method, c.proxy_id, c.proxy_type, c.ssh_key_id, c.notes, c.jump_chain, c.rdp_options,
             c.created_at, c.updated_at, c.last_connected_at,
             GROUP_CONCAT(ct.tag_id) as tag_ids_str
          FROM connections c
@@ -111,11 +116,12 @@ export const findConnectionByIdWithTags = async (id: number): Promise<Connection
         const db = await getDbInstance();
         const row = await getDbRow<ConnectionWithTagsRow>(db, sql, [id]);
         if (row && typeof row.id !== 'undefined') {
-            const { jump_chain: jumpChainStr, ...restOfRow } = row;
+            const { jump_chain: jumpChainStr, rdp_options: rdpOptionsStr, ...restOfRow } = row;
             return {
                 ...restOfRow,
                 tag_ids: row.tag_ids_str ? row.tag_ids_str.split(',').map(Number).filter(id => !isNaN(id)) : [],
-                jump_chain: jumpChainStr ? JSON.parse(jumpChainStr) as number[] : null
+                jump_chain: jumpChainStr ? JSON.parse(jumpChainStr) as number[] : null,
+                rdp_options: rdpOptionsStr ? JSON.parse(rdpOptionsStr) as RdpConnectionOptions : null
             } as ConnectionWithTags;
         } else {
             return null;
@@ -155,15 +161,16 @@ export const findFullConnectionById = async (id: number): Promise<FullConnection
   * 根据名称查找连接 (用于检查名称是否重复)
   */
  export const findConnectionByName = async (name: string): Promise<ConnectionBase | null> => {
-     const sql = `SELECT id, name, type, host, port, username, auth_method, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, created_at, updated_at, last_connected_at FROM connections WHERE name = ?`; // Added jump_chain and proxy_type
+     const sql = `SELECT id, name, type, host, port, username, auth_method, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, rdp_options, created_at, updated_at, last_connected_at FROM connections WHERE name = ?`; // Added jump_chain and proxy_type
      try {
          const db = await getDbInstance();
          // Cast to ConnectionWithTagsRow to read jump_chain as string, then parse. It will now also have proxy_type
          const row = await getDbRow<ConnectionWithTagsRow>(db, sql, [name]);
          if (row) {
-             const { jump_chain: jumpChainStr, tag_ids_str, ...restOfRow } = row; // Exclude tag_ids_str as well for ConnectionBase
+             const { jump_chain: jumpChainStr, rdp_options: rdpOptionsStr, tag_ids_str, ...restOfRow } = row; // Exclude tag_ids_str as well for ConnectionBase
              return {
                  ...restOfRow,
+                 rdp_options: rdpOptionsStr ? JSON.parse(rdpOptionsStr) as RdpConnectionOptions : null,
                  // ConnectionBase does not have jump_chain, so we don't add it here.
                  // If we need jump_chain for findConnectionByName and the result type is ConnectionBase,
                  // then ConnectionBase itself needs jump_chain: number[] | null.
@@ -190,10 +197,11 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
     console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
     const now = Math.floor(Date.now() / 1000);
     const sql = `
-        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, created_at, updated_at) -- +++ Add ssh_key_id, notes, jump_chain AND proxy_type columns +++
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`; // +++ Add placeholders for ssh_key_id, notes, jump_chain AND proxy_type +++
+        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, ssh_key_id, notes, jump_chain, rdp_options, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     const jumpChainStringified = (data.jump_chain && data.jump_chain.length > 0) ? JSON.stringify(data.jump_chain) : null;
+    const rdpOptionsStringified = data.rdp_options ? JSON.stringify(data.rdp_options) : null;
     console.log(`[Repository:createConnection] jump_chain input: ${JSON.stringify(data.jump_chain)}, stringified to: ${jumpChainStringified}`);
 
     const params = [
@@ -206,6 +214,7 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
         data.ssh_key_id ?? null, // +++ Add ssh_key_id parameter +++
         data.notes ?? null, // Add notes parameter
         jumpChainStringified, // Use the stringified jump_chain
+        rdpOptionsStringified,
         now, now
     ];
     console.log('[Repository:createConnection] SQL:', sql);
@@ -249,6 +258,8 @@ export const updateConnection = async (id: number, data: Partial<Omit<FullConnec
             const jumpChainStringified = (jumpChainValue && jumpChainValue.length > 0) ? JSON.stringify(jumpChainValue) : null;
             console.log(`[Repository:updateConnection] jump_chain input for ID ${id}: ${JSON.stringify(jumpChainValue)}, stringified to: ${jumpChainStringified}`);
             params.push(jumpChainStringified);
+        } else if (K === 'rdp_options') {
+            params.push(value ? JSON.stringify(value) : null);
         } else {
             params.push(value ?? null);
         }

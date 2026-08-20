@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
   <div
     v-if="props.visible && !sourceHidden && transferList.length"
     data-testid="file-transfer-progress-popup"
-    class="fixed bottom-4 right-4 z-[1002] w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-md border border-border bg-background text-sm shadow-lg"
+    class="fixed bottom-4 right-4 z-40 w-[min(340px,calc(100vw-32px))] overflow-hidden rounded-md border border-border bg-background text-sm shadow-lg"
   >
     <div class="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
       <h4 class="m-0 truncate text-sm font-semibold" :title="props.sessionLabel || undefined">

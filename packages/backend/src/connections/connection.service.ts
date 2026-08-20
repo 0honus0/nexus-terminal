@@ -8,7 +8,8 @@ import {
     CreateConnectionInput,
     UpdateConnectionInput,
     FullConnectionData,
-    ConnectionWithTags as ConnectionWithTagsType // Alias to avoid conflict with variable name
+    ConnectionWithTags as ConnectionWithTagsType, // Alias to avoid conflict with variable name
+    RdpConnectionOptions,
 } from '../types/connection.types';
 
 export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateConnectionInput };
@@ -53,6 +54,37 @@ const _validateAndProcessJumpChain = async (
 
 
 const auditLogService = new AuditLogService(); 
+
+const normalizeRdpOptions = (options: RdpConnectionOptions | null | undefined): RdpConnectionOptions | null => {
+    if (!options) return null;
+    if (typeof options !== 'object' || Array.isArray(options)) {
+        throw new Error('RDP 高级选项格式无效。');
+    }
+
+    const remoteAppRaw = typeof options.remote_app === 'string' ? options.remote_app.trim() : '';
+    const remoteApp = remoteAppRaw.replace(/^\|\|/, '').trim();
+    if (!remoteApp) return null;
+    if (remoteApp.length > 256 || /[\0\r\n]/.test(remoteApp)) {
+        throw new Error('RemoteApp 别名格式无效。');
+    }
+
+    const normalizeOptional = (value: unknown, maxLength: number, fieldName: string): string | null => {
+        if (value === undefined || value === null || value === '') return null;
+        if (typeof value !== 'string') throw new Error(`${fieldName} 格式无效。`);
+        const normalized = value.trim();
+        if (!normalized) return null;
+        if (normalized.length > maxLength || /[\0\r\n]/.test(normalized)) {
+            throw new Error(`${fieldName} 格式无效。`);
+        }
+        return normalized;
+    };
+
+    return {
+        remote_app: remoteApp,
+        remote_app_dir: normalizeOptional(options.remote_app_dir, 1024, 'RemoteApp 工作目录'),
+        remote_app_args: normalizeOptional(options.remote_app_args, 4096, 'RemoteApp 参数'),
+    };
+};
 
 /**
  * 获取所有连接（包含标签）
@@ -207,6 +239,7 @@ notes: input.notes ?? null, // Add notes field
         proxy_id: input.proxy_id ?? null, // 直接使用输入的 proxy_id
         proxy_type: input.proxy_type ?? null, // 新增 proxy_type
         jump_chain: processedJumpChain,
+        rdp_options: connectionType === 'RDP' ? normalizeRdpOptions(input.rdp_options) : null,
     };
     // Remove ssh_key_id property if it's null before logging/saving if repository expects exact type match without optional nulls
     const finalConnectionData = { ...connectionData };
@@ -290,6 +323,11 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
     // proxy_id 的处理已移至 jump_chain 逻辑块中
     // if (input.proxy_id !== undefined) dataToUpdate.proxy_id = input.proxy_id;
     if (input.proxy_type !== undefined) dataToUpdate.proxy_type = input.proxy_type; // 新增 proxy_type 更新
+    if (input.rdp_options !== undefined) {
+        dataToUpdate.rdp_options = targetType === 'RDP' ? normalizeRdpOptions(input.rdp_options) : null;
+    } else if (targetType !== 'RDP' && currentFullConnection.type === 'RDP') {
+        dataToUpdate.rdp_options = null;
+    }
     // Handle ssh_key_id update (can be set to null or a new ID)
     if (input.ssh_key_id !== undefined) dataToUpdate.ssh_key_id = input.ssh_key_id;
 
@@ -482,6 +520,9 @@ export const getConnectionWithDecryptedCredentials = async (
         encrypted_private_key: fullConnectionDbRow.encrypted_private_key ?? null, // May be null if using ssh_key_id
         encrypted_passphrase: fullConnectionDbRow.encrypted_passphrase ?? null, // May be null if using ssh_key_id
         ssh_key_id: fullConnectionDbRow.ssh_key_id ?? null, // +++ Include ssh_key_id +++
+        rdp_options: fullConnectionDbRow.rdp_options
+            ? JSON.parse(fullConnectionDbRow.rdp_options) as RdpConnectionOptions
+            : null,
         // Ensure other fields match FullConnectionData if necessary
     } as FullConnectionData & { ssh_key_id: number | null }; // Type assertion
 
@@ -586,9 +627,9 @@ export const cloneConnection = async (originalId: number, newName: string): Prom
         proxy_type: originalFullConnection.proxy_type ?? null, // 新增 proxy_type 复制
         notes: originalFullConnection.notes ?? null, // 确保 notes 被复制
         jump_chain: originalFullConnection.jump_chain ? JSON.parse(originalFullConnection.jump_chain) as number[] : null, // 复制并解析 jump_chain
-        // 移除不存在的 RDP 字段复制
-        // ...(originalFullConnection.rdp_security && { rdp_security: originalFullConnection.rdp_security }),
-        // ...(originalFullConnection.rdp_ignore_cert !== undefined && { rdp_ignore_cert: originalFullConnection.rdp_ignore_cert }),
+        rdp_options: originalFullConnection.rdp_options
+            ? JSON.parse(originalFullConnection.rdp_options) as RdpConnectionOptions
+            : null,
     };
 
     // 4. 创建新连接记录

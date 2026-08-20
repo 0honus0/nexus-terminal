@@ -121,8 +121,8 @@ const hasTerminalVisualBackground = computed(() => (
 
 const resolveTerminalTheme = (theme: ITheme): ITheme => (
   hasTerminalVisualBackground.value
-    ? { ...theme, background: 'rgba(0, 0, 0, 0)' }
-    : theme
+    ? { ...theme, background: 'rgba(0, 0, 0, 0)', cursor: '#ffffff', cursorAccent: '#000000' }
+    : { ...theme, cursor: '#ffffff', cursorAccent: '#000000' }
 );
  
 const isTerminalDomReady = ref(false);
@@ -715,7 +715,6 @@ onMounted(() => {
   // xterm 挂载到 terminalRef (内部容器)
   if (terminalRef.value) {
     terminal = new Terminal({
-      cursorBlink: true,
       fontSize: currentTerminalFontSize.value, 
       fontFamily: currentTerminalFontFamily.value, // 使用 store 中的字体设置
       rows: 24, // 初始行数
@@ -725,6 +724,10 @@ onMounted(() => {
       scrollback: getScrollbackValue(terminalScrollbackLimitNumber.value), //  Use setting from store
       scrollOnUserInput: true, // 输入时滚动到底部
       ...props.options, // 合并外部传入的选项
+      // Keep the interactive caret stable and high-contrast across themes.
+      cursorBlink: false,
+      cursorStyle: 'block',
+      cursorInactiveStyle: 'block',
       // 背景透明属于应用级约束，不能被会话 options 覆盖。
       allowTransparency: true,
       theme: resolveTerminalTheme(effectiveTerminalTheme.value),

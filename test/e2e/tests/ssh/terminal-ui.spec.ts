@@ -33,6 +33,25 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     expect(box!.height).toBeGreaterThan(100);
   });
 
+  await step('terminal cursor is a fixed white block without blink animation', async () => {
+    await terminal.click();
+    const cursor = terminal.locator('.xterm-cursor.xterm-cursor-block').first();
+    await expect(cursor).toBeVisible();
+    await expect(cursor).not.toHaveClass(/xterm-cursor-blink/);
+    await expect.poll(() => cursor.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        backgroundColor: style.backgroundColor,
+        color: style.color,
+        animationName: style.animationName,
+      };
+    })).toEqual({
+      backgroundColor: 'rgb(255, 255, 255)',
+      color: 'rgb(0, 0, 0)',
+      animationName: 'none',
+    });
+  });
+
   await step('global transfer progress can minimize and restore from the toolbar', async () => {
     const transferToggle = page.getByTestId('transfer-progress-toggle');
     await transferToggle.click();
