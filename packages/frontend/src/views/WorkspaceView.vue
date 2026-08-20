@@ -11,7 +11,7 @@ import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
 import CommandInputBar from '../components/CommandInputBar.vue'; 
 import VirtualKeyboard from '../components/VirtualKeyboard.vue';
-import FileManager from '../components/FileManager.vue'; 
+import FileManagerModal, { type FileManagerModalEntry } from '../components/FileManagerModal.vue';
 import { useSessionStore } from '../stores/session.store';
 import type { SessionTabInfoWithStatus, SshTerminalInstance } from '../stores/session/types';
 import { useSettingsStore } from '../stores/settings.store';
@@ -127,12 +127,7 @@ const subscribeWorkspaceEvent = <K extends keyof WorkspaceEventPayloads>(
 
 // --- 文件管理器模态框状态 ---
 const showFileManagerModal = ref(false);
-const fileManagerPropsMap = shallowRef<Map<string, {
-  sessionId: string;
-  instanceId: string;
-  dbConnectionId: string;
-  wsDeps: WebSocketDependencies;
-}>>(new Map());
+const fileManagerPropsMap = shallowRef<Map<string, FileManagerModalEntry>>(new Map());
 const currentFileManagerSessionId = ref<string | null>(null);
 
 // --- 处理全局键盘事件 ---
@@ -852,31 +847,14 @@ const closeFileManagerModal = () => {
     <!-- RDP Modal is now rendered in App.vue -->
     <!-- VNC Modal is now rendered in App.vue -->
 
-    <!-- FileManager Modal Container -->
-    <div data-testid="file-manager-modal" v-show="showFileManagerModal && currentFileManagerSessionId && fileManagerPropsMap.get(currentFileManagerSessionId)" class="fixed inset-0 flex items-center justify-center z-50 p-4" :style="{ backgroundColor: 'var(--overlay-bg-color)' }" @click.self="closeFileManagerModal">
-      <div class="bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border">
-        <div class="flex justify-between items-center p-3 border-b border-border flex-shrink-0 bg-header">
-          <h2 class="text-lg font-semibold text-foreground">{{ t('fileManager.modalTitle', '文件管理器') }} ({{ currentFileManagerSessionId ? (sessionStore.sessions.get(currentFileManagerSessionId)?.connectionName || currentFileManagerSessionId) : '未知会话' }})</h2>
-          <button data-testid="file-manager-modal-close" @click="closeFileManagerModal" class="text-text-secondary hover:text-foreground transition-colors">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        <div class="flex-grow overflow-hidden">
-          <template v-for="propsData in fileManagerPropsMap.values()" :key="`${propsData.sessionId}-${isMobile}`">
-            <div v-show="propsData.sessionId === currentFileManagerSessionId" class="h-full">
-              <FileManager
-                :session-id="propsData.sessionId"
-                :instance-id="propsData.instanceId"
-                :db-connection-id="propsData.dbConnectionId"
-                :ws-deps="propsData.wsDeps"
-                :is-mobile="isMobile"
-                class="h-full"
-              />
-            </div>
-          </template>
-        </div>
-      </div>
-    </div>
+    <!-- FileManager owns its overlay shell; Workspace only supplies session state. -->
+    <FileManagerModal
+      :visible="showFileManagerModal"
+      :current-session-id="currentFileManagerSessionId"
+      :entries="fileManagerPropsMap"
+      :is-mobile="isMobile"
+      @close="closeFileManagerModal"
+    />
 
   </div>
 </template>

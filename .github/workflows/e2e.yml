@@ -342,6 +342,7 @@ jobs:
           node test/e2e/support/groups.mjs check --workers "$E2E_GROUP_WORKERS"
 
       - name: Run E2E group ${{ matrix.group }} of ${{ needs.prepare.outputs.workers }}
+        timeout-minutes: 16
         run: node test/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
 
       - name: Upload inline functional screenshots

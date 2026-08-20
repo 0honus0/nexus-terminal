@@ -6,7 +6,7 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
-  openInlineProgressDisplay,
+  openMobileProgressDisplay,
   reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
@@ -329,9 +329,9 @@ test('mobile upload progress stays inside the viewport and restores from Progres
     });
 
     await step('Progress Display restores the hidden mobile upload window', async () => {
-      // Progress Display is normal workspace layout now, so close the File Manager
-      // before using it. The FileManager instance remains mounted via v-show.
-      const progressDisplay = await openInlineProgressDisplay(page);
+      // Close File Manager so the workspace toggle is accessible. The FileManager
+      // instance remains mounted via v-show while Progress Display opens as an overlay.
+      const progressDisplay = await openMobileProgressDisplay(page);
       const source = progressDisplay.getByTestId('hidden-progress-source').filter({ hasText: filenames[0] });
       await expect(source).toBeVisible();
       await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();

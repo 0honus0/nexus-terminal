@@ -6,6 +6,9 @@ import { useConnectionsStore } from '../stores/connections.store';
 import Guacamole from 'guacamole-common-js';
 import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
+import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
+import { useResizeHandle } from '@/foundation/interaction/useResizeHandle';
+import { useDraggablePosition } from '@/foundation/interaction/useDraggablePosition';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -14,11 +17,28 @@ const props = defineProps<{
   connection: ConnectionInfo | null;
 }>();
 
+const MODAL_SETTING_SAVE_DELAY = 500;
+
 const emit = defineEmits(['close']);
 
-let saveWidthTimeout: ReturnType<typeof setTimeout> | null = null;
-let saveHeightTimeout: ReturnType<typeof setTimeout> | null = null;
-const DEBOUNCE_DELAY = 500; // ms
+const modalWidthSaver = createLatestValueSaver<string>({
+  delayMs: MODAL_SETTING_SAVE_DELAY,
+  save: async (value) => {
+    if (value === settingsStore.settings.vncModalWidth) return;
+    await settingsStore.updateSetting('vncModalWidth', value);
+    console.log(`[VNC Modal] Saved width to store: ${value}`);
+  },
+  onError: (error) => console.error('[VNC Modal] Failed to save width:', error),
+});
+const modalHeightSaver = createLatestValueSaver<string>({
+  delayMs: MODAL_SETTING_SAVE_DELAY,
+  save: async (value) => {
+    if (value === settingsStore.settings.vncModalHeight) return;
+    await settingsStore.updateSetting('vncModalHeight', value);
+    console.log(`[VNC Modal] Saved height to store: ${value}`);
+  },
+  onError: (error) => console.error('[VNC Modal] Failed to save height:', error),
+});
 
 const MODAL_CONTAINER_PADDING = 32; 
 const maxAllowedWidth = computed(() => window.innerWidth - MODAL_CONTAINER_PADDING);
@@ -29,11 +49,6 @@ const vncContainerRef = ref<HTMLDivElement | null>(null);
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 const guacClient = ref<Client | null>(null);
 const connectionStatus = ref<ConnectionStatus>('disconnected');
-const isResizing = ref(false);
-const resizeStartX = ref(0);
-const resizeStartY = ref(0);
-const initialModalWidthForResize = ref(0);
-const initialModalHeightForResize = ref(0);
 const statusMessage = ref('');
 const vncPasteInputText = ref('');
 
@@ -93,11 +108,7 @@ const tempInputHeight = ref<number | string>(desiredModalHeight.value);
 const isKeyboardDisabledForInput = ref(false);
 const isMinimized = ref(false);
 const restoreButtonRef = ref<HTMLButtonElement | null>(null);
-const isDraggingRestoreButton = ref(false);
 const restoreButtonPosition = ref({ x: 16, y: window.innerHeight / 2 - 25 }); // 16px from left, vertically centered (25 is half of button height 50px)
-let dragOffsetX = 0;
-let dragOffsetY = 0;
-let hasDragged = false;
 
 // 开发环境由 Vite、部署环境由 Nginx 统一代理 /ws。
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -349,47 +360,21 @@ const restoreModal = () => {
   isMinimized.value = false;
 };
 
-const onRestoreButtonMouseDown = (event: MouseEvent) => {
-  if (!restoreButtonRef.value) return;
-  hasDragged = false; // Reset drag flag
-  isDraggingRestoreButton.value = true;
-  dragOffsetX = event.clientX - restoreButtonRef.value.getBoundingClientRect().left;
-  dragOffsetY = event.clientY - restoreButtonRef.value.getBoundingClientRect().top;
-  // Prevent text selection while dragging
-  event.preventDefault();
-  document.addEventListener('mousemove', onRestoreButtonMouseMove);
-  document.addEventListener('mouseup', onRestoreButtonMouseUp);
-};
-
-const onRestoreButtonMouseMove = (event: MouseEvent) => {
-  if (!isDraggingRestoreButton.value) return;
-  hasDragged = true; // Set drag flag if mouse moves
-  let newX = event.clientX - dragOffsetX;
-  let newY = event.clientY - dragOffsetY;
-
-  // Constrain movement within viewport
-  const buttonWidth = 50; // As defined in style
-  const buttonHeight = 50; // As defined in style
-  newX = Math.max(0, Math.min(newX, window.innerWidth - buttonWidth));
-  newY = Math.max(0, Math.min(newY, window.innerHeight - buttonHeight));
-
-  restoreButtonPosition.value = { x: newX, y: newY };
-};
-
-const onRestoreButtonMouseUp = () => {
-  isDraggingRestoreButton.value = false;
-  document.removeEventListener('mousemove', onRestoreButtonMouseMove);
-  document.removeEventListener('mouseup', onRestoreButtonMouseUp);
-  // Click event will fire after mouseup. If we dragged, we don't want click to restore.
-  // The handleClickRestoreButton will check hasDragged.
-};
+const {
+  didDrag: restoreButtonDragged,
+  startDragging: startRestoreButtonDrag,
+} = useDraggablePosition({
+  position: restoreButtonPosition,
+  getElement: () => restoreButtonRef.value,
+  constrain: (position, element) => ({
+    x: Math.max(0, Math.min(position.x, window.innerWidth - element.offsetWidth)),
+    y: Math.max(0, Math.min(position.y, window.innerHeight - element.offsetHeight)),
+  }),
+});
 
 const handleClickRestoreButton = () => {
-  if (!hasDragged) {
-    restoreModal();
-  }
-  // Reset for next interaction
-  hasDragged = false;
+  if (!restoreButtonDragged.value) restoreModal();
+  restoreButtonDragged.value = false;
 };
 
 const disconnectGuacamole = () => {
@@ -418,16 +403,10 @@ const closeModal = () => {
 const handleWidthInputBlur = () => {
   const currentValue = Number(tempInputWidth.value) || MIN_MODAL_WIDTH;
   const validatedValue = Math.min(Math.max(MIN_MODAL_WIDTH, currentValue), maxAllowedWidth.value);
-  
-  desiredModalWidth.value = validatedValue; 
-  tempInputWidth.value = validatedValue;
 
-  if (saveWidthTimeout) clearTimeout(saveWidthTimeout);
-  saveWidthTimeout = setTimeout(() => {
-    if (String(validatedValue) !== settingsStore.settings.vncModalWidth) {
-      settingsStore.updateSetting('vncModalWidth', String(validatedValue));
-    }
-  }, DEBOUNCE_DELAY);
+  desiredModalWidth.value = validatedValue;
+  tempInputWidth.value = validatedValue;
+  modalWidthSaver.schedule(String(validatedValue));
   enableVncKeyboard();
 };
 
@@ -435,15 +414,9 @@ const handleHeightInputBlur = () => {
   const currentValue = Number(tempInputHeight.value) || MIN_MODAL_HEIGHT;
   const validatedValue = Math.min(Math.max(MIN_MODAL_HEIGHT, currentValue), maxAllowedHeight.value);
 
-  desiredModalHeight.value = validatedValue; 
+  desiredModalHeight.value = validatedValue;
   tempInputHeight.value = validatedValue;
-
-  if (saveHeightTimeout) clearTimeout(saveHeightTimeout);
-  saveHeightTimeout = setTimeout(() => {
-    if (String(validatedValue) !== settingsStore.settings.vncModalHeight) {
-      settingsStore.updateSetting('vncModalHeight', String(validatedValue));
-    }
-  }, DEBOUNCE_DELAY);
+  modalHeightSaver.schedule(String(validatedValue));
   enableVncKeyboard();
 };
 
@@ -476,14 +449,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  modalWidthSaver.dispose({ flush: true });
+  modalHeightSaver.dispose({ flush: true });
   disconnectGuacamole();
-  document.removeEventListener('mousemove', onRestoreButtonMouseMove);
-  document.removeEventListener('mouseup', onRestoreButtonMouseUp);
-  // Clean up resize listeners if component is unmounted while resizing
-  if (isResizing.value) {
-    document.removeEventListener('mousemove', doResize);
-    document.removeEventListener('mouseup', stopResize);
-  }
 });
 
 watch(() => props.connection, (newConnection, oldConnection) => {
@@ -527,46 +495,14 @@ watchEffect(() => {
   }
 });
 
-const initResize = (event: MouseEvent) => {
-  isResizing.value = true;
-  resizeStartX.value = event.clientX;
-  resizeStartY.value = event.clientY;
-  initialModalWidthForResize.value = desiredModalWidth.value;
-  initialModalHeightForResize.value = desiredModalHeight.value;
-
-  document.addEventListener('mousemove', doResize);
-  document.addEventListener('mouseup', stopResize);
-  event.preventDefault(); // Prevent text selection or other default browser actions
-};
-
-const doResize = (event: MouseEvent) => {
-  if (!isResizing.value) return;
-
-  const deltaX = event.clientX - resizeStartX.value;
-  const deltaY = event.clientY - resizeStartY.value;
-
-  let newWidth = initialModalWidthForResize.value + deltaX;
-  let newHeight = initialModalHeightForResize.value + deltaY;
-
-  // Apply minimum size constraints
-  newWidth = Math.max(MIN_MODAL_WIDTH, newWidth);
-  newHeight = Math.max(MIN_MODAL_HEIGHT, newHeight);
-
-  // Apply maximum screen size constraints
-  newWidth = Math.min(newWidth, maxAllowedWidth.value);
-  newHeight = Math.min(newHeight, maxAllowedHeight.value);
-
-  desiredModalWidth.value = newWidth;
-  desiredModalHeight.value = newHeight;
-};
-
-const stopResize = () => {
-  if (!isResizing.value) return;
-  isResizing.value = false;
-  document.removeEventListener('mousemove', doResize);
-  document.removeEventListener('mouseup', stopResize);
-  // The existing watchEffect for computedModalStyle will handle Guacamole resize
-};
+const { startResize: initResize } = useResizeHandle({
+  width: desiredModalWidth,
+  height: desiredModalHeight,
+  minWidth: MIN_MODAL_WIDTH,
+  minHeight: MIN_MODAL_HEIGHT,
+  maxWidth: () => maxAllowedWidth.value,
+  maxHeight: () => maxAllowedHeight.value,
+});
 
 </script>
 <template>
@@ -580,7 +516,7 @@ const stopResize = () => {
      <button
         ref="restoreButtonRef"
         v-if="isMinimized"
-        @mousedown="onRestoreButtonMouseDown"
+        @pointerdown="startRestoreButtonDrag"
         @click="handleClickRestoreButton"
         :style="{ left: `${restoreButtonPosition.x}px`, top: `${restoreButtonPosition.y}px`, width: '50px', height: '50px' }"
         class="fixed z-[100] flex items-center justify-center bg-primary text-white rounded-full shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 pointer-events-auto cursor-grab active:cursor-grabbing"
@@ -702,7 +638,7 @@ const stopResize = () => {
        <div
            class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 bg-transparent hover:bg-primary-dark hover:bg-opacity-30"
            title="Resize"
-           @mousedown.stop="initResize"
+           @pointerdown.stop="initResize"
        ></div>
    </div>
  </div>

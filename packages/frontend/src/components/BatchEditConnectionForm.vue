@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, watch, computed, PropType, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ConnectionInfo } from '../stores/connections.store';
@@ -205,14 +206,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="internalVisible"
-      data-testid="batch-edit-modal"
-      class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"
-      @click.self="handleCancel"
-    >
-      <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-xl max-h-[90vh] flex flex-col">
+  <OverlayPanel
+    :visible="internalVisible"
+    teleport
+    panel-class="max-w-xl max-h-[90vh] flex flex-col p-6"
+    data-testid="batch-edit-modal"
+    @close="handleCancel"
+  >
         <h3 class="text-xl font-semibold text-center mb-6 flex-shrink-0">
           {{ t('connections.batchEdit.title', '批量编辑连接') }} ({{ props.connectionIds.length }} {{ t('connections.batchEdit.selectedItems', '项') }})
         </h3>
@@ -332,7 +332,5 @@ onMounted(() => {
             {{ t('common.save', '保存') }}
           </button>
         </div>
-      </div>
-    </div>
-  </Teleport>
+  </OverlayPanel>
 </template>

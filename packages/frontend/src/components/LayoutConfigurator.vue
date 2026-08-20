@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, computed, watch, type Ref, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useLayoutStore, type LayoutNode, type PaneName } from '../stores/layout.store';
@@ -378,7 +379,13 @@ const handleAvailablePaneDragEnd = (event: any) => {
 </script>
 
 <template>
-  <div v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-center z-[1000]" @click.self="closeDialog">
+  <OverlayPanel
+    :visible="isVisible"
+    :z-index="1000"
+    :surface="false"
+    overlay-class="!p-0"
+    @close="closeDialog"
+  >
     <div ref="dialogRef" class="bg-background text-foreground rounded-lg shadow-xl w-auto h-auto min-w-[800px] min-h-[600px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-auto relative pointer-events-auto cursor-default">
 
       <header class="flex justify-between items-center p-4 border-b border-border bg-header">
@@ -540,7 +547,7 @@ const handleAvailablePaneDragEnd = (event: any) => {
         </button>
       </footer>
     </div>
-  </div>
+  </OverlayPanel>
 </template>
 
 <style>

@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import WorkspaceConnectionListComponent from './WorkspaceConnectionList.vue';
 import TabBarContextMenu from './TabBarContextMenu.vue';
 import ProgressDisplayModal from './ProgressDisplayModal.vue';
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { useSessionStore } from '../stores/session.store';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import { useLayoutStore, type PaneName } from '../stores/layout.store';
@@ -464,8 +465,11 @@ onBeforeUnmount(() => {
         </button>
     </div>
     <!-- Connection List Popup -->
-    <div v-if="showConnectionListPopup" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4" @click.self="togglePopup">
-      <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-md max-h-[80vh] flex flex-col relative">
+    <OverlayPanel
+      :visible="showConnectionListPopup"
+      panel-class="max-w-md max-h-[80vh] flex flex-col p-6"
+      @close="togglePopup"
+    >
         <button class="absolute top-2 right-2 p-1 text-text-secondary hover:text-foreground" @click="togglePopup">
            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -481,8 +485,7 @@ onBeforeUnmount(() => {
               class="popup-connection-list"
             />
         </div>
-      </div>
-    </div>
+    </OverlayPanel>
     <!-- +++ Context Menu Instance (Ensure it's present) +++ -->
     <TabBarContextMenu
       :visible="contextMenuVisible"
@@ -493,7 +496,7 @@ onBeforeUnmount(() => {
       @close="closeContextMenu"
     />
   </div>
-  <!-- 进度总览属于正常布局，不再作为 fixed 浮窗覆盖工作区/RDP。 -->
-  <ProgressDisplayModal v-model:visible="showTransferProgressModal" />
+  <!-- 桌面端保持内联进度总览；移动端由组件 Teleport 为顶层悬浮层。 -->
+  <ProgressDisplayModal v-model:visible="showTransferProgressModal" :is-mobile="props.isMobile" />
   </div>
 </template>

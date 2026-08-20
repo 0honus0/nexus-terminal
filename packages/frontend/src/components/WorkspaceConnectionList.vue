@@ -989,12 +989,10 @@ const cancelEditingTag = () => {
       </div>
     </teleport>
 
-   <teleport to="body">
-     <ManageTagConnectionsModal
-       :tag-info="tagToManage"
-       v-model:visible="showManageTagModal"
-       @saved="handleManageTagModalSaved"
-     />
-   </teleport>
+   <ManageTagConnectionsModal
+     :tag-info="tagToManage"
+     v-model:visible="showManageTagModal"
+     @saved="handleManageTagModalSaved"
+   />
  </div>
 </template>

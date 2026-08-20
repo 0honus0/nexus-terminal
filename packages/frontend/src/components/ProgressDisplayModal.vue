@@ -7,9 +7,11 @@ import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useSessionStore } from '../stores/session.store';
 import { useProgressCenterStore, type ProgressTaskKind, type RegisteredProgressSource, type RegisteredProgressTask } from '../stores/progressCenter.store';
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 
 interface Props {
   visible: boolean;
+  isMobile?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -326,15 +328,31 @@ const handleTaskAction = async (task: TransferTask) => {
 </script>
 
 <template>
+  <OverlayPanel
+    :visible="internalVisible"
+    :overlay="Boolean(props.isMobile)"
+    :teleport="Boolean(props.isMobile)"
+    :z-index="1100"
+    overlay-class="p-3 overscroll-contain"
+    panel-class="max-w-[44rem] h-[min(84dvh,46rem)] max-h-[calc(100dvh-1.5rem)] overflow-hidden rounded-xl shadow-2xl"
+    panel-test-id="progress-display-dialog"
+    data-testid="progress-display-overlay"
+    @close="handleClose"
+  >
   <section
     v-if="internalVisible"
     data-testid="progress-display-modal"
-    data-progress-display-placement="inline"
-    class="progress-display-inline flex-shrink-0 border-x border-b border-border bg-background text-foreground"
+    :data-progress-display-placement="props.isMobile ? 'overlay' : 'inline'"
+    :class="[
+      'text-foreground',
+      props.isMobile
+        ? 'progress-display-mobile h-full bg-background'
+        : 'progress-display-inline flex-shrink-0 border-x border-b border-border bg-background',
+    ]"
   >
-    <div class="transfer-progress-panel mx-auto flex w-full max-w-6xl flex-col overflow-hidden">
+    <div class="transfer-progress-panel mx-auto flex w-full max-w-6xl flex-col overflow-hidden bg-background">
       <!-- Header -->
-      <div class="transfer-progress-header relative flex-shrink-0 px-6 py-3">
+      <div class="transfer-progress-header relative flex-shrink-0 px-4 py-3 sm:px-6">
         <h3 class="m-0 text-center text-xl font-semibold">
           {{ t('progressCenter.title', '进度显示') }}
         </h3>
@@ -343,14 +361,14 @@ const handleTaskAction = async (task: TransferTask) => {
           data-testid="transfer-progress-minimize"
           class="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded text-text-secondary hover:bg-border/60 hover:text-foreground"
           @click.stop="handleClose"
-          :title="t('common.minimize', '最小化')"
+          :title="t('progressCenter.hide', '隐藏进度')"
         >
           <i class="fas fa-minus"></i>
         </button>
       </div>
 
       <!-- Content Area -->
-      <div class="flex-grow overflow-y-auto mb-6 px-6 pr-8 space-y-4 custom-scrollbar">
+      <div class="flex-grow overflow-y-auto mb-4 px-4 pr-4 space-y-4 custom-scrollbar sm:mb-6 sm:px-6 sm:pr-8">
         <section data-testid="progress-display-hidden-section" class="space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -550,7 +568,7 @@ const handleTaskAction = async (task: TransferTask) => {
       </div>
 
       <!-- Footer -->
-      <div class="flex justify-end items-center px-6 py-4 mt-auto flex-shrink-0 border-t" :style="{ borderTopColor: 'var(--border-color)' }">
+      <div class="flex justify-end items-center px-4 py-4 mt-auto flex-shrink-0 border-t sm:px-6" :style="{ borderTopColor: 'var(--border-color)' }">
         <button
           data-testid="progress-display-close"
           @click="handleClose"
@@ -561,6 +579,7 @@ const handleTaskAction = async (task: TransferTask) => {
       </div>
     </div>
   </section>
+  </OverlayPanel>
 </template>
 
 <style scoped>
@@ -571,8 +590,20 @@ const handleTaskAction = async (task: TransferTask) => {
   max-height: min(48vh, 34rem);
   overflow: hidden;
 }
-.transfer-progress-panel {
+.progress-display-inline .transfer-progress-panel {
   max-height: min(48vh, 34rem);
+}
+.progress-display-mobile,
+.progress-display-mobile .transfer-progress-panel {
+  height: 100%;
+  max-height: none;
+}
+
+@media (max-width: 640px) {
+  .progress-display-mobile .hidden-progress-source-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
 }
 .transfer-progress-header {
   border-bottom: 1px solid var(--border-color);

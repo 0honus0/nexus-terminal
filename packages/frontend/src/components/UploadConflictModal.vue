@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { UploadConflictDecision, UploadConflictPrompt } from '../composables/useFileUploader';
@@ -28,14 +29,16 @@ const resolve = (decision: UploadConflictDecision) => {
 </script>
 
 <template>
-  <div
-    v-if="conflict"
+  <OverlayPanel
+    :visible="Boolean(conflict)"
+    :z-index="1200"
+    :close-on-backdrop="false"
+    panel-class="max-w-md p-5"
     data-testid="upload-conflict-modal"
-    class="fixed inset-0 z-[1200] flex items-center justify-center bg-overlay p-4"
     role="dialog"
-    aria-modal="true"
+    :aria-modal="true"
   >
-    <div class="w-full max-w-md rounded-lg border border-border bg-background p-5 text-foreground shadow-xl">
+    <template v-if="conflict">
       <div class="mb-4 flex items-start gap-3">
         <i class="fas fa-triangle-exclamation mt-1 text-warning" aria-hidden="true"></i>
         <div class="min-w-0">
@@ -85,6 +88,6 @@ const resolve = (decision: UploadConflictDecision) => {
           {{ t('fileManager.uploadConflict.overwrite', 'Overwrite') }}
         </button>
       </div>
-    </div>
-  </div>
+    </template>
+  </OverlayPanel>
 </template>

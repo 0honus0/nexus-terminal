@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
@@ -153,12 +154,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    v-if="internalVisible"
-    class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"
-    @click.self="handleCancel"
+  <OverlayPanel
+    :visible="internalVisible"
+    teleport
+    panel-class="max-w-2xl max-h-[90vh] flex flex-col p-6"
+    @close="handleCancel"
   >
-    <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[90vh] flex flex-col">
       <!-- Header -->
       <h3 class="text-xl font-semibold text-center mb-6 flex-shrink-0">
         {{ t('workspaceConnectionList.manageTags.title') }} - {{ props.tagInfo?.name }}
@@ -251,6 +252,5 @@ onMounted(() => {
           {{ t('common.save') }}
         </button>
       </div>
-    </div>
-  </div>
+  </OverlayPanel>
 </template>

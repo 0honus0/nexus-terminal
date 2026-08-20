@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, reactive, watch, computed, onMounted } from 'vue'; // 添加 onMounted
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
@@ -126,8 +127,12 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div data-testid="proxy-form" class="fixed inset-0 bg-overlay flex justify-center items-center z-50"> <!-- Use bg-overlay for the overlay -->
-    <div class="bg-background text-foreground p-8 rounded-lg shadow-xl border border-border min-w-[350px] max-w-lg"> <!-- Form Panel with Tailwind -->
+  <OverlayPanel
+    :close-on-backdrop="false"
+    overlay-class="!p-0"
+    panel-class="min-w-[350px] max-w-lg p-8"
+    data-testid="proxy-form"
+  >
       <h3 class="text-lg font-semibold text-center mb-6">{{ formTitle }}</h3> <!-- Title with Tailwind -->
       <form @submit.prevent="handleSubmit" class="space-y-4"> <!-- Form with spacing -->
         <div> <!-- Form Group -->
@@ -187,8 +192,7 @@ const handleSubmit = async () => {
           </button>
         </div>
       </form>
-    </div>
-  </div>
+  </OverlayPanel>
 </template>
 
 <style scoped>

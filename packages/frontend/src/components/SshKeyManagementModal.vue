@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, reactive, onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSshKeysStore, SshKeyBasicInfo, SshKeyInput } from '../stores/sshKeys.store';
@@ -131,8 +132,11 @@ const cancelForm = () => {
 </script>
 
 <template>
-    <div data-testid="ssh-key-management-modal" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4">
-        <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-3xl max-h-[80vh] flex flex-col">
+    <OverlayPanel
+        :close-on-backdrop="false"
+        panel-class="max-w-3xl max-h-[80vh] flex flex-col p-6"
+        data-testid="ssh-key-management-modal"
+    >
 
             <!-- Main Modal Content -->
             <div v-if="!isAddEditFormVisible" class="flex flex-col h-full">
@@ -233,6 +237,5 @@ const cancelForm = () => {
                 </div>
             </div>
 
-        </div>
-    </div>
+    </OverlayPanel>
 </template>
