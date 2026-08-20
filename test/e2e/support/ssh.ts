@@ -108,7 +108,12 @@ export async function reopenConnectedFileManager(page: Page): Promise<void> {
 }
 
 
-export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
+async function openProgressDisplay(
+  page: Page,
+  placement: 'inline' | 'overlay',
+  layoutTestId: 'progress-display-modal' | 'progress-display-overlay',
+  expectedLayout: { position: 'static' | 'fixed'; zIndex: 'auto' | '1100' },
+): Promise<Locator> {
   const fileManagerModal = page.getByTestId('file-manager-modal');
   if (await fileManagerModal.isVisible()) {
     await closeConnectedFileManager(page);
@@ -120,10 +125,28 @@ export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
 
   const display = page.getByTestId('progress-display-modal');
   await expect(display).toBeVisible();
-  await expect(display).toHaveAttribute('data-progress-display-placement', 'inline');
-  await expect.poll(() => display.evaluate(element => ({
+  await expect(display).toHaveAttribute('data-progress-display-placement', placement);
+  await expect.poll(() => page.getByTestId(layoutTestId).evaluate(element => ({
     position: window.getComputedStyle(element).position,
     zIndex: window.getComputedStyle(element).zIndex,
-  }))).toEqual({ position: 'static', zIndex: 'auto' });
+  }))).toEqual(expectedLayout);
   return display;
+}
+
+export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
+  return openProgressDisplay(
+    page,
+    'inline',
+    'progress-display-modal',
+    { position: 'static', zIndex: 'auto' },
+  );
+}
+
+export async function openMobileProgressDisplay(page: Page): Promise<Locator> {
+  return openProgressDisplay(
+    page,
+    'overlay',
+    'progress-display-overlay',
+    { position: 'fixed', zIndex: '1100' },
+  );
 }
