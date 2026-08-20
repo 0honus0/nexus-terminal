@@ -3,13 +3,6 @@
   "group": 2,
   "workers": 4,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
-    "tests/http/auth-2fa.spec.ts",
-    "tests/http/auth-api.spec.ts",
-    "tests/http/backup.spec.ts",
-    "tests/http/connections-tags.spec.ts",
-    "tests/http/quick-commands-audit.spec.ts",
-    "tests/http/terminal-themes.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
@@ -18,10 +11,13 @@
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
     "tests/ssh/reconnect-ui.spec.ts",
-    "tests/ssh/file-manager-context-menu.spec.ts",
-    "tests/ssh/file-manager-menu-readiness.spec.ts",
-    "tests/ssh/file-manager-navigation.spec.ts",
-    "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts"
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/panel-wheel-scaling.spec.ts",
+    "tests/ssh/terminal-protocol.spec.ts",
+    "tests/ssh/terminal-tools-ui.spec.ts",
+    "tests/ssh/terminal-ui.spec.ts"
   ]
 }
