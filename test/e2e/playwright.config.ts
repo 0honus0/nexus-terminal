@@ -15,6 +15,7 @@ const prepareTestDataScript = path.join(
   "support",
   "prepare-test-data.mjs",
 );
+const isCI = Boolean(process.env.CI);
 
 const backendEnv: Record<string, string> = {
   ...Object.fromEntries(
@@ -42,10 +43,11 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
-  timeout: 0,
+  retries: isCI ? 1 : 0,
+  globalTimeout: isCI ? 15 * 60_000 : 0,
+  timeout: isCI ? 120_000 : 0,
   expect: { timeout: 10_000 },
-  reporter: process.env.CI
+  reporter: isCI
     ? [
         ["./support/mirrored-log-reporter.ts"],
         ["github"],
@@ -57,6 +59,8 @@ export default defineConfig({
         ["html", { open: "never" }],
       ],
   use: {
+    actionTimeout: isCI ? 15_000 : 0,
+    navigationTimeout: isCI ? 30_000 : 0,
     baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

@@ -10,6 +10,7 @@ export default defineConfig({
   cacheDir: process.env.NEXUS_VITE_CACHE_DIR || undefined,
   resolve: {
     alias: {
+      '@': resolveLocalModule('./src'),
       '@monaco-editor-api': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.api.js'),
       '@monaco-basic-languages': resolveLocalModule('./node_modules/monaco-editor/esm/vs/basic-languages/monaco.contribution.js'),
       '@monaco-json-language': resolveLocalModule('./node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js'),

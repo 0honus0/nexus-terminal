@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -376,7 +376,7 @@ function matrix(args) {
   }));
 }
 
-function runGroup(args) {
+async function runGroup(args) {
   const specs = discoverSpecs();
   const settings = loadSettings();
   const workers = resolveWorkers(args, settings, specs.length);
@@ -389,11 +389,13 @@ function runGroup(args) {
   const group = readJson(path.join(groupsRoot, `group-${groupId}.json`));
   const timingsOutput = path.join(e2eRoot, '.tmp', `spec-timings-group-${groupId}.json`);
   console.log(`[E2E groups] running group-${groupId}/${workers} with ${group.specs.length} specs`);
-  const result = spawnSync(
+  const detached = process.platform !== 'win32';
+  const child = spawn(
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
     ['playwright', 'test', ...group.specs],
     {
       cwd: e2eRoot,
+      detached,
       env: {
         ...process.env,
         E2E_GROUP_ID: String(groupId),
@@ -403,7 +405,43 @@ function runGroup(args) {
       stdio: 'inherit',
     },
   );
-  process.exitCode = result.status ?? 1;
+
+  let receivedSignal;
+  let forceKillTimer;
+  const killChildTree = (signal) => {
+    try {
+      if (detached && child.pid) process.kill(-child.pid, signal);
+      else child.kill(signal);
+    } catch (error) {
+      if (error?.code !== 'ESRCH') throw error;
+    }
+  };
+  const forwardSignal = (signal) => {
+    if (receivedSignal) return;
+    receivedSignal = signal;
+    killChildTree(signal);
+    forceKillTimer = setTimeout(() => killChildTree('SIGKILL'), 5_000);
+    forceKillTimer.unref();
+  };
+  const handleSigint = () => forwardSignal('SIGINT');
+  const handleSigterm = () => forwardSignal('SIGTERM');
+  process.once('SIGINT', handleSigint);
+  process.once('SIGTERM', handleSigterm);
+
+  const result = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve({ code, signal }));
+  }).finally(() => {
+    if (forceKillTimer) clearTimeout(forceKillTimer);
+    process.removeListener('SIGINT', handleSigint);
+    process.removeListener('SIGTERM', handleSigterm);
+  });
+
+  const signalNumber = {
+    SIGINT: 2,
+    SIGTERM: 15,
+  }[receivedSignal ?? result.signal];
+  process.exitCode = signalNumber ? 128 + signalNumber : (result.code ?? 1);
 }
 
 function collectJsonFiles(root) {
@@ -476,7 +514,7 @@ try {
     case 'generate': generate(args); break;
     case 'check': check(args); break;
     case 'matrix': matrix(args); break;
-    case 'run': runGroup(args); break;
+    case 'run': await runGroup(args); break;
     case 'update-timings': updateTimings(args); break;
     default: help();
   }
