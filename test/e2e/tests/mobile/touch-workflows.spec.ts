@@ -30,7 +30,9 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
     await quickCommandsButton.click();
 
     const quickCommands = page.getByTestId('quick-commands-view');
+    const quickDialog = page.getByTestId('quick-commands-dialog');
     await expect(quickCommands).toBeVisible();
+    await expect(quickDialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
     await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
     await expect(quickCommands.locator('[data-testid="quick-command-search-toggle"], [data-testid="quick-command-search"]').first()).toBeVisible();
     await captureFunctionalScreenshot(page, 'mobile-quick-commands.png');
@@ -48,12 +50,50 @@ test('mobile progress display floats above the workspace and closes from its ove
   const display = page.getByTestId('progress-display-modal');
   const dialog = page.getByTestId('progress-display-dialog');
 
+  await step('progress display uses the same standard modal shell as quick commands', async () => {
+    const commandBar = page.getByTestId('command-input-bar');
+    const quickCommandsButton = commandBar.locator('button:has(i.fa-bolt)');
+    await quickCommandsButton.click();
+    const quickDialog = page.getByTestId('quick-commands-dialog');
+    await expect(quickDialog).toBeVisible();
+    const quickShell = await quickDialog.evaluate(element => {
+      const style = window.getComputedStyle(element);
+      return {
+        maxWidth: style.maxWidth,
+        maxHeight: style.maxHeight,
+        padding: style.padding,
+        borderRadius: style.borderRadius,
+        boxShadow: style.boxShadow,
+      };
+    });
+    await page.keyboard.press('Escape');
+    await expect(quickDialog).toBeHidden();
+
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(dialog).toBeVisible();
+    const progressShell = await dialog.evaluate(element => {
+      const style = window.getComputedStyle(element);
+      return {
+        maxWidth: style.maxWidth,
+        maxHeight: style.maxHeight,
+        padding: style.padding,
+        borderRadius: style.borderRadius,
+        boxShadow: style.boxShadow,
+      };
+    });
+    expect(progressShell).toEqual(quickShell);
+    await display.getByTestId('progress-display-close').click();
+    await expect(display).toBeHidden();
+  });
+
   await step('progress display opens as a bounded top-level overlay instead of resizing the terminal', async () => {
     await expect(toggle).toBeVisible();
     await toggle.click();
 
     await expect(display).toBeVisible();
     await expect(display).toHaveAttribute('data-progress-display-placement', 'overlay');
+    await expect(dialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
     await expect.poll(() => overlay.evaluate((element) => ({
       position: window.getComputedStyle(element).position,
       zIndex: window.getComputedStyle(element).zIndex,
@@ -69,6 +109,7 @@ test('mobile progress display floats above the workspace and closes from its ove
     expect(dialogBox!.height).toBeLessThanOrEqual(viewport!.height - 16);
     await expect(page.getByTestId('terminal')).toBeVisible();
     await expect(page.getByTestId('command-input-bar')).toBeVisible();
+    await captureFunctionalScreenshot(page, 'mobile-progress-display.png');
   });
 
   await step('tapping the dimmed blank area closes the progress overlay', async () => {

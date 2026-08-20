@@ -333,8 +333,7 @@ const handleTaskAction = async (task: TransferTask) => {
     :overlay="Boolean(props.isMobile)"
     :teleport="Boolean(props.isMobile)"
     :z-index="1100"
-    overlay-class="p-3 overscroll-contain"
-    panel-class="max-w-[44rem] h-[min(84dvh,46rem)] max-h-[calc(100dvh-1.5rem)] overflow-hidden rounded-xl shadow-2xl"
+    preset="standard-modal"
     panel-test-id="progress-display-dialog"
     data-testid="progress-display-overlay"
     @close="handleClose"
@@ -346,14 +345,14 @@ const handleTaskAction = async (task: TransferTask) => {
     :class="[
       'text-foreground',
       props.isMobile
-        ? 'progress-display-mobile h-full bg-background'
+        ? 'progress-display-mobile flex min-h-0 flex-col overflow-hidden bg-background'
         : 'progress-display-inline flex-shrink-0 border-x border-b border-border bg-background',
     ]"
   >
-    <div class="transfer-progress-panel mx-auto flex w-full max-w-6xl flex-col overflow-hidden bg-background">
+    <div class="transfer-progress-panel mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden bg-background">
       <!-- Header -->
       <div class="transfer-progress-header relative flex-shrink-0 px-4 py-3 sm:px-6">
-        <h3 class="m-0 text-center text-xl font-semibold">
+        <h3 class="m-0 text-center text-lg font-semibold">
           {{ t('progressCenter.title', '进度显示') }}
         </h3>
         <button
@@ -368,7 +367,7 @@ const handleTaskAction = async (task: TransferTask) => {
       </div>
 
       <!-- Content Area -->
-      <div class="flex-grow overflow-y-auto mb-4 px-4 pr-4 space-y-4 custom-scrollbar sm:mb-6 sm:px-6 sm:pr-8">
+      <div class="min-h-0 flex-grow overflow-y-auto mb-4 px-4 pr-4 space-y-4 custom-scrollbar sm:mb-6 sm:px-6 sm:pr-8">
         <section data-testid="progress-display-hidden-section" class="space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div>
@@ -593,12 +592,6 @@ const handleTaskAction = async (task: TransferTask) => {
 .progress-display-inline .transfer-progress-panel {
   max-height: min(48vh, 34rem);
 }
-.progress-display-mobile,
-.progress-display-mobile .transfer-progress-panel {
-  height: 100%;
-  max-height: none;
-}
-
 @media (max-width: 640px) {
   .progress-display-mobile .hidden-progress-source-header {
     align-items: flex-start;

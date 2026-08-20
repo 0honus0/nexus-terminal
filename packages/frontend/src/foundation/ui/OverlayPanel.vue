@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(defineProps<{
@@ -12,6 +14,7 @@ const props = withDefaults(defineProps<{
   overlayClass?: string;
   panelClass?: string;
   panelTestId?: string;
+  preset?: 'default' | 'standard-modal';
   surface?: boolean;
   role?: string;
   ariaModal?: boolean;
@@ -28,6 +31,7 @@ const props = withDefaults(defineProps<{
   overlayClass: '',
   panelClass: '',
   panelTestId: undefined,
+  preset: 'default',
   surface: true,
   role: undefined,
   ariaModal: undefined,
@@ -36,6 +40,12 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (event: 'close'): void;
 }>();
+
+const panelPresetClass = computed(() => (
+  props.preset === 'standard-modal'
+    ? 'max-w-lg max-h-[85dvh] min-h-0 flex flex-col overflow-hidden p-4'
+    : ''
+));
 
 const handleBackdropClick = () => {
   if (props.closeOnBackdrop && props.backdropTrigger === 'click') emit('close');
@@ -63,8 +73,9 @@ const handleBackdropMouseDown = () => {
       <div
         v-if="props.surface"
         :data-testid="props.panelTestId"
+        :data-overlay-panel-preset="props.preset"
         class="relative w-full rounded-lg border border-border bg-background text-foreground shadow-xl"
-        :class="props.panelClass"
+        :class="[panelPresetClass, props.panelClass]"
         :role="props.role"
         :aria-modal="props.ariaModal"
         :aria-label="props.ariaLabel"

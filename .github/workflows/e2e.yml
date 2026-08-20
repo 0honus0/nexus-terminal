@@ -56,6 +56,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       changed: ${{ steps.state.outputs.changed }}
+      screenshots_requested: ${{ steps.state.outputs.screenshots_requested }}
       runner_image: ${{ steps.state.outputs.runner_image }}
       node_version: ${{ steps.state.outputs.node_version }}
     steps:
@@ -108,11 +109,23 @@ jobs:
             git diff --binary > "$RUNNER_TEMP/e2e-environment.patch"
           fi
 
+          screenshots_requested=false
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            screenshots_requested=true
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            before_sha="${{ github.event.before }}"
+            if [[ -n "$before_sha" && ! "$before_sha" =~ ^0+$ ]] \
+              && ! git diff --quiet "$before_sha" "$GITHUB_SHA" -- test/e2e/support/functional-screenshot-manifest.json; then
+              screenshots_requested=true
+            fi
+          fi
+
           node_version="$(node -p "require('./scripts/e2e/versions.json').node")"
           tag="$(node -e 'const v=require("./scripts/e2e/versions.json"); process.stdout.write(`playwright-${v.playwright}-node${v.node}-v${v.runnerRevision}`)')"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "screenshots_requested=$screenshots_requested" >> "$GITHUB_OUTPUT"
           echo "node_version=$node_version" >> "$GITHUB_OUTPUT"
           echo "runner_image=ghcr.io/${owner}/nexus-terminal-e2e-runner:${tag}" >> "$GITHUB_OUTPUT"
 
@@ -281,7 +294,7 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       E2E_GROUP_WORKERS: ${{ needs.prepare.outputs.workers }}
-      E2E_CAPTURE_SCREENSHOTS: ${{ (github.event_name == 'workflow_dispatch' || needs.environment.outputs.changed == 'true') && '1' || '0' }}
+      E2E_CAPTURE_SCREENSHOTS: ${{ (needs.environment.outputs.screenshots_requested == 'true' || needs.environment.outputs.changed == 'true') && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
     steps:
       - name: Checkout repository
@@ -384,7 +397,7 @@ jobs:
   screenshots-commit:
     name: Commit functional screenshots
     needs: [environment, playwright-groups]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && needs.playwright-groups.result == 'success' }}
+    if: ${{ always() && (needs.environment.outputs.screenshots_requested == 'true' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && needs.playwright-groups.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read

@@ -59,7 +59,8 @@ onMounted(() => {
 <template>
   <OverlayPanel
     :visible="isVisible"
-    panel-class="max-w-lg max-h-[85vh] flex flex-col p-4"
+    preset="standard-modal"
+    panel-test-id="quick-commands-dialog"
     @close="closeModal"
   >
     <!-- Close Button -->
