@@ -7,6 +7,7 @@ import {
   removeNamedSshConnections,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
 test('adds, tests, and connects to a real SSH server', async ({ page, context }) => {
@@ -53,6 +54,19 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
     const row = page.getByText(E2E_SSH.name, { exact: true }).first().locator('xpath=ancestor::li');
     await row.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page).toHaveURL(/\/workspace$/);
+
+    if (functionalScreenshotsEnabled()) {
+      const terminal = page.getByTestId('terminal');
+      const commandInput = page.getByTestId('command-input');
+      await expect(terminal).toBeVisible({ timeout: 20_000 });
+      await commandInput.fill('clear');
+      await commandInput.press('Enter');
+      await commandInput.fill("printf 'Nexus Terminal documentation screenshot\\n'");
+      await commandInput.press('Enter');
+      await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+        .toContain('Nexus Terminal documentation screenshot');
+      await captureFunctionalScreenshot(page, 'ssh-terminal.png', { viewport: { width: 1440, height: 900 } });
+    }
 
     const fileManagerButton = page.getByTestId('open-file-manager-button');
     await expect(fileManagerButton).toBeVisible({ timeout: 20_000 });

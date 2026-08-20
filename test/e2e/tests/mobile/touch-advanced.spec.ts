@@ -9,6 +9,7 @@ import {
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
+import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
 async function connectMobileSsh(
@@ -81,6 +82,7 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
       await expect(menu.getByText(label, { exact: true })).toBeVisible();
     }
     await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
+    await captureFunctionalScreenshot(page, 'mobile-context-menu.png');
   });
 
   await slowStep('tapping the flattened ZIP action writes the archive over SFTP', async () => {
@@ -114,6 +116,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     await expect(searchInput).toHaveValue('plain-no-extension');
     await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 })
       .toBeGreaterThan(0);
+    await captureFunctionalScreenshot(page, 'mobile-editor-search.png');
   });
 });
 
@@ -129,6 +132,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(preview.locator('strong')).toHaveText('preview-ok');
     await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
+    await captureFunctionalScreenshot(page, 'mobile-markdown-preview.png');
   });
 
   await slowStep('Edit switches the preview to mobile CodeMirror and Save persists real SFTP bytes', async () => {
@@ -178,6 +182,28 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
   await commandBar.locator('button:has(i.fa-keyboard)').click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
+
+  if (functionalScreenshotsEnabled()) {
+    await commandInput.fill('clear');
+    await commandInput.press('Enter');
+    await commandInput.fill("printf 'Nexus mobile virtual keyboard\\n'");
+    await commandInput.press('Enter');
+    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+      .toContain('Nexus mobile virtual keyboard');
+    await captureFunctionalScreenshot(page, 'mobile-virtual-keyboard.png');
+
+    const screenshotCtrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
+    const screenshotAlt = keyboard.getByRole('button', { name: 'Alt', exact: true });
+    await screenshotCtrl.click();
+    await screenshotAlt.click();
+    await expect(screenshotCtrl).toHaveClass(/bg-primary/);
+    await expect(screenshotAlt).toHaveClass(/bg-primary/);
+    await captureFunctionalScreenshot(page, 'mobile-virtual-modifiers.png');
+    await screenshotCtrl.click();
+    await screenshotAlt.click();
+    await expect(screenshotCtrl).not.toHaveClass(/bg-primary/);
+    await expect(screenshotAlt).not.toHaveClass(/bg-primary/);
+  }
 
   await slowStep('Alt+Left sends the xterm Alt cursor sequence and clears Alt after one key', async () => {
     await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'ALT_LEFT_BYTES=%s\\n' \"$bytes\"");
@@ -262,6 +288,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+    await captureFunctionalScreenshot(page, 'mobile-spreadsheet-preview.png');
   });
 });
 
@@ -293,6 +320,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       expect(popupBox).toBeTruthy();
       expect(viewport).toBeTruthy();
       expectBoxInsideViewport(popupBox!, viewport!);
+      await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
       await popup.getByTestId('file-upload-progress-hide').click();
       await expect(popup).toBeHidden();

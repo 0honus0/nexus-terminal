@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
@@ -21,12 +22,18 @@ async function resetCaptcha(request: import('@playwright/test').APIRequestContex
 test('CAPTCHA settings UI enables a provider, persists public configuration, and disables it again', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await resetCaptcha(context.request);
+  const language = await context.request.put('/api/v1/settings', {
+    data: { language: 'en-US', timezone: 'UTC' },
+  });
+  expect(language.ok()).toBeTruthy();
 
   try {
     await page.goto('/settings');
     await page.getByTestId('settings-tab-security').click();
     const captcha = page.getByTestId('captcha-settings');
     await expect(captcha).toBeVisible();
+    await expect(page.getByTestId('change-password-settings')).toBeVisible();
+    await captureFunctionalScreenshot(page, 'security-settings.png', { viewport: { width: 1440, height: 900 } });
 
     await step('enable hCaptcha and save provider keys through the UI', async () => {
       await captcha.getByTestId('captcha-enabled').check();

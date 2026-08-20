@@ -8,6 +8,7 @@ import {
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
 async function connectMobileSsh(page: Parameters<typeof connectTestSshFromConnectionsPage>[0], request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
@@ -32,6 +33,7 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
     await expect(quickCommands).toBeVisible();
     await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
     await expect(quickCommands.locator('[data-testid="quick-command-search-toggle"], [data-testid="quick-command-search"]').first()).toBeVisible();
+    await captureFunctionalScreenshot(page, 'mobile-quick-commands.png');
 
     await page.keyboard.press('Escape');
     await expect(quickCommands).toBeHidden();
@@ -119,6 +121,7 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
     await expect(editor.getByTitle('Search')).toBeVisible();
     await expect.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 }).toContain('plain-no-extension');
+    await captureFunctionalScreenshot(page, 'mobile-file-editor.png');
 
     const viewport = page.viewportSize();
     const popupBox = await editor.locator('.editor-popup').boundingBox();

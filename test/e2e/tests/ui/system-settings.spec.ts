@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 
 const TARGET_TIMEZONE = 'Asia/Shanghai';
@@ -24,6 +25,7 @@ test('system settings persist timezone and language changes through the UI', asy
     await page.getByTestId('settings-tab-system').click();
     await expect(page.locator('#languageSelect')).toBeVisible();
     await expect(page.locator('#timezoneSelect')).toBeVisible();
+    await captureFunctionalScreenshot(page, 'system-settings.png', { viewport: { width: 1440, height: 900 } });
 
     await step('save a timezone through the system settings form', async () => {
       const timezone = page.locator('#timezoneSelect');

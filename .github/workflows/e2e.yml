@@ -281,6 +281,8 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       E2E_GROUP_WORKERS: ${{ needs.prepare.outputs.workers }}
+      E2E_CAPTURE_SCREENSHOTS: ${{ (github.event_name == 'workflow_dispatch' || needs.environment.outputs.changed == 'true') && '1' || '0' }}
+      E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -342,6 +344,15 @@ jobs:
       - name: Run E2E group ${{ matrix.group }} of ${{ needs.prepare.outputs.workers }}
         run: node test/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
 
+      - name: Upload inline functional screenshots
+        if: ${{ always() && env.E2E_CAPTURE_SCREENSHOTS == '1' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: functional-screenshots-group-${{ matrix.group }}
+          path: test/e2e/.tmp/functional-screenshots/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload group timings
         if: always()
         uses: actions/upload-artifact@v7
@@ -369,21 +380,14 @@ jobs:
             test/e2e/test-results/
           if-no-files-found: ignore
 
-  screenshots:
-    name: Refresh functional screenshots
-    needs: [environment, runner-image, playwright-groups]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.playwright-groups.result == 'success' }}
+  screenshots-commit:
+    name: Commit functional screenshots
+    needs: [environment, playwright-groups]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.environment.outputs.changed == 'true') && needs.environment.result == 'success' && needs.playwright-groups.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     permissions:
+      actions: read
       contents: write
-      packages: read
-    container:
-      image: ${{ needs.environment.outputs.runner_image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ github.token }}
-      options: --ipc=host
     steps:
       - name: Checkout triggering branch
         uses: actions/checkout@v7
@@ -403,65 +407,21 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
-      - name: Install screenshot runtime dependencies
+      - name: Download inline functional screenshots
+        uses: actions/download-artifact@v8
+        with:
+          pattern: functional-screenshots-group-*
+          path: test/e2e/.tmp/functional-screenshots-merged
+          merge-multiple: true
+
+      - name: Verify and stage functional screenshots
         shell: bash
         run: |
           set -euo pipefail
-
-          npm ci --prefix packages/backend &
-          backend_pid=$!
-          npm ci --prefix packages/frontend &
-          frontend_pid=$!
-          npm ci --prefix test/e2e &
-          e2e_pid=$!
-
-          failed=0
-          wait "$backend_pid" || failed=1
-          wait "$frontend_pid" || failed=1
-          wait "$e2e_pid" || failed=1
-          exit "$failed"
-
-      - name: Generate functional screenshots
-        run: npm --prefix test/e2e run test:docs
-
-      - name: Upload generated screenshots
-        uses: actions/upload-artifact@v7
-        with:
-          name: nexus-functional-screenshots
-          path: doc/imgs/e2e/*.png
-          if-no-files-found: error
-
-  screenshots-commit:
-    name: Commit functional screenshots
-    needs: [environment, screenshots]
-    if: ${{ always() && needs.screenshots.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout triggering branch
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0
-
-      - name: Download E2E environment patch
-        if: needs.environment.outputs.changed == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: e2e-environment-patch
-          path: ${{ runner.temp }}/e2e-environment-patch
-
-      - name: Apply E2E environment patch
-        if: needs.environment.outputs.changed == 'true'
-        shell: bash
-        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
-
-      - name: Download generated screenshots
-        uses: actions/download-artifact@v8
-        with:
-          name: nexus-functional-screenshots
-          path: doc/imgs/e2e
+          screenshot_root="test/e2e/.tmp/functional-screenshots-merged"
+          node test/e2e/support/verify-functional-screenshots.mjs "$screenshot_root"
+          mkdir -p doc/imgs/e2e
+          cp "$screenshot_root"/*.png doc/imgs/e2e/
 
       - name: Commit environment and screenshot refresh
         shell: bash
@@ -481,8 +441,8 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   rebalance:
-    needs: [environment, runner-image, prepare, playwright-groups, screenshots, screenshots-commit]
-    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots.result == 'success' || needs.screenshots.result == 'skipped') && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
+    needs: [environment, runner-image, prepare, playwright-groups, screenshots-commit]
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
     permissions:
       actions: read
       contents: write

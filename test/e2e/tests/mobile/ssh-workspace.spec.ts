@@ -8,6 +8,7 @@ import {
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
 test('mobile SSH workspace keeps terminal space and exposes touch-only tools', async ({ page, context }) => {
@@ -29,6 +30,17 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     expect(terminalBox!.height).toBeGreaterThan(180);
     expect(commandBarBox!.height).toBeLessThan(100);
     expect(commandBarBox!.height).toBeLessThan(terminalBox!.height / 2);
+
+    if (functionalScreenshotsEnabled()) {
+      const commandInput = page.getByTestId('command-input');
+      await commandInput.fill('clear');
+      await commandInput.press('Enter');
+      await commandInput.fill("printf 'Nexus mobile SSH\\n'");
+      await commandInput.press('Enter');
+      await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+        .toContain('Nexus mobile SSH');
+      await captureFunctionalScreenshot(page, 'mobile-workspace.png');
+    }
   });
 
   await slowStep('mobile status monitor opens and receives live SSH status samples', async () => {
@@ -37,12 +49,14 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     await expect(modal).toBeVisible();
     await expect(modal.getByTestId('status-monitor')).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
     await expect(modal.getByTestId('status-monitor')).toContainText('CPU');
+    await captureFunctionalScreenshot(page, 'mobile-status-monitor.png');
     await modal.locator('button').first().click();
     await expect(modal).toBeHidden();
   });
 
   await slowStep('long press on a remote file opens the touch context menu', async () => {
     await openConnectedFileManager(page);
+    await captureFunctionalScreenshot(page, 'mobile-file-manager.png');
     const file = fileManagerRow(page, 'seed.txt');
     const box = await file.boundingBox();
     expect(box).toBeTruthy();

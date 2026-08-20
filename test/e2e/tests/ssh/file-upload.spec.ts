@@ -10,6 +10,7 @@ import {
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
 interface DragFileDescriptor {
@@ -282,6 +283,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
       'file-upload-progress-hide',
       'file-upload-cancel-all',
     ]);
+    await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
     const progressBars = popup.getByTestId('file-upload-progress-bar');
     await expect(progressBars.first()).toBeVisible();
     const progressBarBoxes = await progressBars.evaluateAll(elements => elements.map(element => {
@@ -332,6 +334,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
     const cancelAllHidden = sourceCard.getByTestId('hidden-progress-cancel-all');
     await expect(cancelAllHidden).toBeVisible();
+    await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', { viewport: { width: 1440, height: 900 } });
     await cancelAllHidden.click();
     await expect(sourceCard).toBeHidden({ timeout: 10_000 });
     await expect(modal.getByTestId('progress-display-empty')).toBeVisible();

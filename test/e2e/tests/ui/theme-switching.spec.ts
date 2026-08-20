@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 
 async function appBackground(page: import('@playwright/test').Page): Promise<string> {
@@ -18,6 +19,7 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
     await expect(customizer).toBeVisible();
     await customizer.getByTestId('theme-dark-mode').click();
     await expect.poll(() => appBackground(page)).toBe('#212529');
+    await captureFunctionalScreenshot(page, 'theme-customization.png', { viewport: { width: 1440, height: 900 } });
 
     const response = await context.request.get('/api/v1/appearance');
     expect(response.ok()).toBeTruthy();

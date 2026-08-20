@@ -9,6 +9,7 @@ import {
   openConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
@@ -39,6 +40,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(editor).toContainText('plainfile');
     const viewLines = editor.locator('.monaco-editor .view-lines');
     await expect.poll(async () => await viewLines.innerText()).toContain('plain-no-extension');
+    await captureFunctionalScreenshot(page, 'file-manager-editor.png', { viewport: { width: 1440, height: 900 } });
   });
 
   await step('editor popup resize keeps Monaco visible and usable', async () => {
