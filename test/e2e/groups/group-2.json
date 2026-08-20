@@ -3,6 +3,7 @@
   "group": 2,
   "workers": 4,
   "specs": [
+    "tests/auth/setup-login.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
@@ -21,9 +22,6 @@
     "tests/ssh/file-manager-menu-readiness.spec.ts",
     "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/docker-manager-ui.spec.ts",
-    "tests/ssh/protocol.spec.ts",
-    "tests/ssh/status-docker-protocol.spec.ts"
+    "tests/ssh/progress-display-baseline.spec.ts"
   ]
 }

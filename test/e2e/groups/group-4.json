@@ -3,21 +3,20 @@
   "group": 4,
   "workers": 4,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
     "tests/mobile/ssh-workspace.spec.ts",
     "tests/mobile/suspend-resume-ui.spec.ts",
+    "tests/mobile/terminal-touch.spec.ts",
     "tests/mobile/touch-advanced.spec.ts",
     "tests/mobile/touch-workflows.spec.ts",
     "tests/ssh/panel-wheel-scaling.spec.ts",
     "tests/ssh/terminal-protocol.spec.ts",
     "tests/ssh/terminal-tools-ui.spec.ts",
     "tests/ssh/terminal-ui.spec.ts",
-    "tests/ui/captcha-settings.spec.ts",
-    "tests/ui/change-password.spec.ts",
-    "tests/ui/ip-blacklist-settings.spec.ts",
-    "tests/ui/ip-whitelist-settings.spec.ts",
-    "tests/ui/protected-navigation.spec.ts",
-    "tests/ui/session-lifecycle.spec.ts",
-    "tests/ui/ssh-key-management.spec.ts"
+    "tests/ui/notification-delivery.spec.ts",
+    "tests/ui/notification-settings.spec.ts",
+    "tests/ui/proxy-management.spec.ts",
+    "tests/ui/system-settings.spec.ts",
+    "tests/ui/theme-switching.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
