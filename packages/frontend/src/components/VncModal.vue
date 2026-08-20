@@ -507,6 +507,7 @@ const { startResize: initResize } = useResizeHandle({
 </script>
 <template>
   <div
+    data-testid="vnc-modal"
     :class="[
       'fixed inset-0 z-50 flex items-center justify-center p-4',
       isMinimized ? '' : 'bg-overlay',
@@ -515,6 +516,7 @@ const { startResize: initResize } = useResizeHandle({
   >
      <button
         ref="restoreButtonRef"
+        data-testid="vnc-window-restore"
         v-if="isMinimized"
         @pointerdown="startRestoreButtonDrag"
         @click="handleClickRestoreButton"
@@ -525,6 +527,7 @@ const { startResize: initResize } = useResizeHandle({
         <i class="fas fa-window-restore fa-lg"></i>
       </button>
      <div
+        data-testid="vnc-panel"
         v-show="!isMinimized"
         :style="computedModalStyle"
         class="bg-background text-foreground rounded-lg shadow-xl flex flex-col overflow-hidden border border-border pointer-events-auto relative"
@@ -545,6 +548,7 @@ const { startResize: initResize } = useResizeHandle({
               {{ t('remoteDesktopModal.status.' + connectionStatus) }}
             </span>
             <button
+                data-testid="vnc-window-minimize"
                 @click="minimizeModal"
                 class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 rounded hover:bg-hover"
                 :title="t('common.minimize')"
@@ -552,6 +556,7 @@ const { startResize: initResize } = useResizeHandle({
                 <i class="fas fa-window-minimize fa-sm"></i>
             </button>
              <button
+                data-testid="vnc-window-close"
                 @click="closeModal"
                 class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 rounded hover:bg-hover"
                 :title="t('common.close')"
@@ -636,6 +641,7 @@ const { startResize: initResize } = useResizeHandle({
        </div>
        <!-- Resize Handle -->
        <div
+           data-testid="vnc-window-resize"
            class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 bg-transparent hover:bg-primary-dark hover:bg-opacity-30"
            title="Resize"
            @pointerdown.stop="initResize"

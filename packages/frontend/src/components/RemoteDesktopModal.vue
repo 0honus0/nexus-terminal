@@ -630,6 +630,7 @@ const { startResize: initResize } = useResizeHandle({
   >
     <button
       ref="restoreButtonRef"
+      data-testid="rdp-window-restore"
       v-if="isMinimized"
       @pointerdown="startRestoreButtonDrag"
       @click="handleClickRestoreButton"
@@ -673,6 +674,7 @@ const { startResize: initResize } = useResizeHandle({
                 <i :class="isBrowserFullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'"></i>
             </button>
             <button
+                data-testid="rdp-window-minimize"
                 @click="minimizeModal"
                 class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 rounded hover:bg-hover"
                 :title="t('common.minimize')"
@@ -680,6 +682,7 @@ const { startResize: initResize } = useResizeHandle({
                 <i class="fas fa-window-minimize fa-sm"></i>
             </button>
              <button
+                data-testid="rdp-window-close"
                 @click="closeModal"
                 class="text-text-secondary hover:text-foreground transition-colors duration-150 p-1 rounded hover:bg-hover"
                 :title="t('common.close')"
@@ -743,6 +746,7 @@ const { startResize: initResize } = useResizeHandle({
        <!-- Resize Handle -->
        <div
          v-if="!isBrowserFullscreen"
+         data-testid="rdp-window-resize"
          class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 bg-transparent hover:bg-primary-dark hover:bg-opacity-30"
          title="Resize"
          @pointerdown.stop="initResize"

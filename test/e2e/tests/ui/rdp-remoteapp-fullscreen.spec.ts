@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 
@@ -204,5 +204,196 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
     });
   } finally {
     await cleanupConnection(context.request);
+  }
+});
+
+const POINTER_RDP_NAME = 'E2E RDP Pointer Interactions';
+const POINTER_VNC_NAME = 'E2E VNC Pointer Interactions';
+
+async function createRemoteConnection(
+  request: APIRequestContext,
+  type: 'RDP' | 'VNC',
+  name: string,
+  host: string,
+  port: number,
+): Promise<number> {
+  const response = await request.post('/api/v1/connections', {
+    data: {
+      type,
+      name,
+      host,
+      port,
+      username: `${type.toLowerCase()}-pointer-user`,
+      password: `${type.toLowerCase()}-pointer-password`,
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return (await response.json() as { connection: { id: number } }).connection.id;
+}
+
+async function openRemoteConnection(page: Page, name: string, modalTestId: string): Promise<void> {
+  await page.goto('/workspace');
+  await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
+  const connectionList = page.getByTestId('workspace-connection-list');
+  await expect(connectionList).toBeVisible();
+  await connectionList.getByText(name, { exact: true }).first().click();
+  await expect(page.getByTestId(modalTestId)).toBeVisible();
+}
+
+async function dragBy(page: Page, testId: string, deltaX: number, deltaY: number): Promise<void> {
+  const target = page.getByTestId(testId);
+  const box = await target.boundingBox();
+  expect(box).toBeTruthy();
+  const startX = box!.x + box!.width / 2;
+  const startY = box!.y + box!.height / 2;
+  const pointerId = 7;
+
+  // Dispatch pointer-only input so this fails if the shared interaction regresses back
+  // to mouse-specific listeners. A pen pointer also covers the non-mouse path explicitly.
+  await target.dispatchEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    pointerId,
+    pointerType: 'pen',
+    isPrimary: true,
+    button: 0,
+    buttons: 1,
+    clientX: startX,
+    clientY: startY,
+  });
+  await page.evaluate(({ x, y, id }) => {
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: id,
+      pointerType: 'pen',
+      isPrimary: true,
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+    }));
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: id,
+      pointerType: 'pen',
+      isPrimary: true,
+      button: 0,
+      buttons: 0,
+      clientX: x,
+      clientY: y,
+    }));
+  }, { x: startX + deltaX, y: startY + deltaY, id: pointerId });
+}
+
+async function exercisePointerWindow(
+  page: Page,
+  ids: {
+    panel: string;
+    resize: string;
+    minimize: string;
+    restore: string;
+  },
+): Promise<void> {
+  const panel = page.getByTestId(ids.panel);
+  await expect(panel).toBeVisible();
+
+  const initialPanelBox = await panel.boundingBox();
+  expect(initialPanelBox).toBeTruthy();
+  await dragBy(page, ids.resize, 120, 90);
+  await expect.poll(async () => panel.boundingBox()).not.toBeNull();
+  const resizedPanelBox = await panel.boundingBox();
+  expect(resizedPanelBox).toBeTruthy();
+  expect(resizedPanelBox!.width).toBeGreaterThan(initialPanelBox!.width + 60);
+  expect(resizedPanelBox!.height).toBeGreaterThan(initialPanelBox!.height + 40);
+
+  await page.getByTestId(ids.minimize).click();
+  await expect(panel).toBeHidden();
+  const restore = page.getByTestId(ids.restore);
+  await expect(restore).toBeVisible();
+  const initialRestoreBox = await restore.boundingBox();
+  expect(initialRestoreBox).toBeTruthy();
+
+  await dragBy(page, ids.restore, 140, 80);
+  await expect(panel).toBeHidden();
+  const movedRestoreBox = await restore.boundingBox();
+  expect(movedRestoreBox).toBeTruthy();
+  expect(movedRestoreBox!.x).toBeGreaterThan(initialRestoreBox!.x + 80);
+  expect(movedRestoreBox!.y).toBeGreaterThan(initialRestoreBox!.y + 40);
+
+  // Browsers normally emit a click after a pointer drag on the same moving button.
+  // That click must be swallowed once, while the next intentional click restores it.
+  await restore.dispatchEvent('click');
+  await expect(panel).toBeHidden();
+  await restore.click();
+  await expect(panel).toBeVisible();
+  await expect(restore).toBeHidden();
+}
+
+test('RDP pointer resize and restore-button dragging preserve minimized window behavior', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  expect((await context.request.put('/api/v1/settings', {
+    data: {
+      language: 'en-US',
+      rdpModalWidth: '1024',
+      rdpModalHeight: '768',
+    },
+  })).ok()).toBeTruthy();
+  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
+
+  const connectionId = await createRemoteConnection(
+    context.request,
+    'RDP',
+    POINTER_RDP_NAME,
+    '192.0.2.91',
+    3389,
+  );
+  try {
+    await openRemoteConnection(page, POINTER_RDP_NAME, 'remote-desktop-modal');
+    await exercisePointerWindow(page, {
+      panel: 'remote-desktop-panel',
+      resize: 'rdp-window-resize',
+      minimize: 'rdp-window-minimize',
+      restore: 'rdp-window-restore',
+    });
+    await page.getByTestId('rdp-window-close').click();
+    await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
+  } finally {
+    await context.request.delete(`/api/v1/connections/${connectionId}`);
+  }
+});
+
+test('VNC pointer resize and restore-button dragging share the same window semantics', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  expect((await context.request.put('/api/v1/settings', {
+    data: {
+      language: 'en-US',
+      vncModalWidth: '900',
+      vncModalHeight: '650',
+    },
+  })).ok()).toBeTruthy();
+  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
+
+  const connectionId = await createRemoteConnection(
+    context.request,
+    'VNC',
+    POINTER_VNC_NAME,
+    '192.0.2.92',
+    5901,
+  );
+  try {
+    await openRemoteConnection(page, POINTER_VNC_NAME, 'vnc-modal');
+    await exercisePointerWindow(page, {
+      panel: 'vnc-panel',
+      resize: 'vnc-window-resize',
+      minimize: 'vnc-window-minimize',
+      restore: 'vnc-window-restore',
+    });
+    await page.getByTestId('vnc-window-close').click();
+    await expect(page.getByTestId('vnc-modal')).toHaveCount(0);
+  } finally {
+    await context.request.delete(`/api/v1/connections/${connectionId}`);
   }
 });
