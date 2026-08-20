@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import {
   computed,
   nextTick,
@@ -140,18 +141,16 @@ onUnmounted(() => document.removeEventListener("keydown", handleGlobalKeydown));
 </script>
 
 <template>
-  <div
-    v-if="isVisible"
+  <OverlayPanel
+    :visible="isVisible"
+    :z-index="1100"
+    panel-class="max-w-md p-5"
     data-testid="archive-password-modal"
     :data-mode="mode || ''"
-    class="fixed inset-0 bg-overlay flex items-center justify-center z-[1100] p-4"
     role="dialog"
-    aria-modal="true"
-    @click.self="close"
+    :aria-modal="true"
+    @close="close"
   >
-    <div
-      class="w-full max-w-md bg-background text-foreground border border-border rounded-lg shadow-xl p-5"
-    >
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
           <h3 class="text-lg font-semibold">{{ title }}</h3>
@@ -249,6 +248,5 @@ onUnmounted(() => document.removeEventListener("keydown", handleGlobalKeydown));
           }}
         </button>
       </div>
-    </div>
-  </div>
+  </OverlayPanel>
 </template>

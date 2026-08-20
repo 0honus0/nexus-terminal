@@ -1,10 +1,9 @@
 <template>
-  <div
-    v-if="visible"
-    class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"
-    @click.self="handleCancel"
+  <OverlayPanel
+    :visible="visible"
+    panel-class="max-w-2xl max-h-[90vh] flex flex-col p-6"
+    @close="handleCancel"
   >
-    <div class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[90vh] flex flex-col">
       <!-- Header -->
       <div class="flex justify-between items-center pb-4 mb-4 border-b border-border flex-shrink-0">
         <h3 class="text-xl font-semibold">
@@ -148,11 +147,11 @@
           {{ t('sendFilesModal.sendButton') }}
         </button>
       </div>
-    </div>
-  </div>
+  </OverlayPanel>
 </template>
 
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';

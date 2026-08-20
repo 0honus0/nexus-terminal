@@ -40,6 +40,57 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   });
 });
 
+test('mobile progress display floats above the workspace and closes from its overlay controls', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+
+  const toggle = page.getByTestId('transfer-progress-toggle');
+  const overlay = page.getByTestId('progress-display-overlay');
+  const display = page.getByTestId('progress-display-modal');
+  const dialog = page.getByTestId('progress-display-dialog');
+
+  await step('progress display opens as a bounded top-level overlay instead of resizing the terminal', async () => {
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+
+    await expect(display).toBeVisible();
+    await expect(display).toHaveAttribute('data-progress-display-placement', 'overlay');
+    await expect.poll(() => overlay.evaluate((element) => ({
+      position: window.getComputedStyle(element).position,
+      zIndex: window.getComputedStyle(element).zIndex,
+    }))).toEqual({ position: 'fixed', zIndex: '1100' });
+
+    const viewport = page.viewportSize();
+    const dialogBox = await dialog.boundingBox();
+    expect(viewport).toBeTruthy();
+    expect(dialogBox).toBeTruthy();
+    expect(dialogBox!.x).toBeGreaterThanOrEqual(8);
+    expect(dialogBox!.y).toBeGreaterThanOrEqual(8);
+    expect(dialogBox!.width).toBeLessThanOrEqual(viewport!.width - 16);
+    expect(dialogBox!.height).toBeLessThanOrEqual(viewport!.height - 16);
+    await expect(page.getByTestId('terminal')).toBeVisible();
+    await expect(page.getByTestId('command-input-bar')).toBeVisible();
+  });
+
+  await step('tapping the dimmed blank area closes the progress overlay', async () => {
+    await overlay.click({ position: { x: 3, y: 3 } });
+    await expect(display).toBeHidden();
+  });
+
+  await step('the explicit hide button remains available', async () => {
+    await toggle.click();
+    await expect(display).toBeVisible();
+    await display.getByTestId('transfer-progress-minimize').click();
+    await expect(display).toBeHidden();
+  });
+
+  await step('the footer close button still closes the overlay', async () => {
+    await toggle.click();
+    await expect(display).toBeVisible();
+    await display.getByTestId('progress-display-close').click();
+    await expect(display).toBeHidden();
+  });
+});
+
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
 

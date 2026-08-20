@@ -13,7 +13,8 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { serializeTerminalSnapshot } from '../utils/terminalSnapshot';
 import '@xterm/xterm/css/xterm.css';
 import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // +++ Import subscriber and off
-import { createWheelScaleResolver } from '../utils/wheelScale';
+import { createWheelScaleResolver } from '@/foundation/interaction/wheelScale';
+import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
 
 
 // 定义 props 和 emits
@@ -43,9 +44,6 @@ let scrollListenerDisposable: IDisposable | null = null;
 let backgroundColorOscDisposable: IDisposable | null = null;
 let backgroundColorResetOscDisposable: IDisposable | null = null;
 let terminalWheelHandler: ((event: WheelEvent) => void) | null = null;
-let terminalFontSizeSaveTimer: number | null = null;
-let terminalFontSizeSaveInFlight = false;
-let pendingTerminalFontSize: number | null = null;
 const terminalFontSizeSyncLocked = ref(false);
 const resolveTerminalWheelScale = createWheelScaleResolver({
   min: 8,
@@ -195,57 +193,32 @@ const fitAndEmitResizeNow = (term: Terminal) => {
     }
 };
 
-// Ctrl+wheel / pinch 会先即时更新 xterm，再异步持久化字号。
-// 保存期间锁住 store -> xterm 的反向同步，并串行提交最新值，避免旧响应把字号“弹回去”。
-const flushPendingTerminalFontSizeSave = async () => {
-  if (terminalFontSizeSaveInFlight || pendingTerminalFontSize === null) return;
-  terminalFontSizeSaveInFlight = true;
-
-  try {
-    while (pendingTerminalFontSize !== null) {
-      const size = pendingTerminalFontSize;
-      pendingTerminalFontSize = null;
-      try {
-        if (isMobile.value) {
-          await appearanceStore.setTerminalFontSizeMobile(size);
-          console.log(`[Terminal ${props.sessionId}] MOBILE font size saved: ${size}`);
-        } else {
-          await appearanceStore.setTerminalFontSize(size);
-          console.log(`[Terminal ${props.sessionId}] DESKTOP font size saved: ${size}`);
-        }
-      } catch (error) {
-        console.error(`[Terminal ${props.sessionId}] Font size save failed:`, error);
-      }
+// Ctrl+wheel / pinch 会先即时更新 xterm，再由 foundation saver 串行持久化最新字号。
+const terminalFontSizeSaver = createLatestValueSaver<number>({
+  delayMs: 500,
+  save: async (size) => {
+    if (isMobile.value) {
+      await appearanceStore.setTerminalFontSizeMobile(size);
+      console.log(`[Terminal ${props.sessionId}] MOBILE font size saved: ${size}`);
+    } else {
+      await appearanceStore.setTerminalFontSize(size);
+      console.log(`[Terminal ${props.sessionId}] DESKTOP font size saved: ${size}`);
     }
-  } finally {
-    terminalFontSizeSaveInFlight = false;
-    if (pendingTerminalFontSize === null && terminalFontSizeSaveTimer === null) {
-      terminalFontSizeSyncLocked.value = false;
-      if (terminal) {
-        const persistedSize = currentTerminalFontSize.value;
-        const renderedSize = terminal.options.fontSize ?? renderedTerminalFontSize.value;
-        if (persistedSize !== renderedSize) {
-          terminal.options.fontSize = persistedSize;
-          renderedTerminalFontSize.value = persistedSize;
-          fitAndEmitResizeNow(terminal);
-        }
-      }
+  },
+  onPendingChange: (pending) => {
+    terminalFontSizeSyncLocked.value = pending;
+    if (pending || !terminal) return;
+
+    const persistedSize = currentTerminalFontSize.value;
+    const renderedSize = terminal.options.fontSize ?? renderedTerminalFontSize.value;
+    if (persistedSize !== renderedSize) {
+      terminal.options.fontSize = persistedSize;
+      renderedTerminalFontSize.value = persistedSize;
+      fitAndEmitResizeNow(terminal);
     }
-  }
-};
-
-const debouncedSaveFontSize = (size: number) => {
-  pendingTerminalFontSize = size;
-  terminalFontSizeSyncLocked.value = true;
-
-  // 已有请求在途时不启动并发保存；请求完成后会直接消费最新 pending 值。
-  if (terminalFontSizeSaveInFlight) return;
-  if (terminalFontSizeSaveTimer !== null) window.clearTimeout(terminalFontSizeSaveTimer);
-  terminalFontSizeSaveTimer = window.setTimeout(() => {
-    terminalFontSizeSaveTimer = null;
-    void flushPendingTerminalFontSizeSave();
-  }, 500);
-};
+  },
+  onError: (error) => console.error(`[Terminal ${props.sessionId}] Font size save failed:`, error),
+});
 
 //  Helper function to convert setting value to xterm scrollback value
 const getScrollbackValue = (limit: number): number => {
@@ -681,7 +654,7 @@ const handleTouchMove = (event: TouchEvent) => {
         terminal.options.fontSize = newSize;
         renderedTerminalFontSize.value = newSize;
         fitAndEmitResizeNow(terminal);
-        debouncedSaveFontSize(newSize); // 使用新的区分设备的保存函数
+        terminalFontSizeSaver.schedule(newSize);
       }
     }
   }
@@ -1030,7 +1003,7 @@ onMounted(() => {
         terminal.options.fontSize = change.next;
         renderedTerminalFontSize.value = change.next;
         fitAndEmitResizeNow(terminal);
-        debouncedSaveFontSize(change.next);
+        terminalFontSizeSaver.schedule(change.next);
       };
       terminalRef.value.addEventListener('wheel', terminalWheelHandler, { passive: false, capture: true });
     }
@@ -1104,20 +1077,8 @@ onBeforeUnmount(() => {
         terminalRef.value.removeEventListener('wheel', terminalWheelHandler, true);
         terminalWheelHandler = null;
     }
-    if (terminalFontSizeSaveTimer !== null) {
-        window.clearTimeout(terminalFontSizeSaveTimer);
-        terminalFontSizeSaveTimer = null;
-    }
-    // Do not discard the last wheel/pinch value when this terminal is destroyed before
-    // the normal debounce fires. If a save is already in flight, its loop will consume the
-    // newest pending value; otherwise flush it immediately. The terminal itself may be gone
-    // by the time the request settles, so flushPendingTerminalFontSizeSave() already guards
-    // the rendered-state reconciliation behind `if (terminal)`.
-    if (pendingTerminalFontSize !== null) {
-        void flushPendingTerminalFontSizeSave();
-    } else if (!terminalFontSizeSaveInFlight) {
-        terminalFontSizeSyncLocked.value = false;
-    }
+    // Preserve the last wheel/pinch value if the terminal unmounts during the debounce window.
+    terminalFontSizeSaver.dispose({ flush: true });
 
     // Remove touch listeners on unmount
     if (isMobile.value && terminalRef.value) {

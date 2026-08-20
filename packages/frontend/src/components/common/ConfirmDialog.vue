@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 
 interface Props {
   visible: boolean;
@@ -61,18 +62,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <teleport to="body">
-    <div
-      v-if="dialogVisible"
-      class="fixed inset-0 z-[9999] flex items-center justify-center bg-overlay p-4"
-      @mousedown.self="handleCancel"
-    >
-      <div
-        class="bg-background text-foreground p-5 rounded-lg shadow-xl border border-border w-full max-w-md flex flex-col"
-        role="dialog"
-        aria-modal="true"
-        :aria-labelledby="props.title"
-      >
+  <OverlayPanel
+    :visible="dialogVisible"
+    teleport
+    :z-index="9999"
+    backdrop-trigger="mousedown"
+    panel-class="max-w-md flex flex-col p-5"
+    role="dialog"
+    :aria-modal="true"
+    :aria-labelledby="props.title"
+    @close="handleCancel"
+  >
         <h3 class="text-xl font-semibold mb-4 text-center flex-shrink-0" :id="props.title">
           {{ props.title }}
         </h3>
@@ -120,7 +120,5 @@ onBeforeUnmount(() => {
             {{ props.confirmText || t('common.confirm', '确认') }}
           </button>
         </div>
-      </div>
-    </div>
-  </teleport>
+  </OverlayPanel>
 </template>

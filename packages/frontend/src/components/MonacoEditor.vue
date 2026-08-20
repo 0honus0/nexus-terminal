@@ -7,7 +7,7 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import * as monaco from '@monaco-editor-api';
 import '@monaco-basic-languages';
 import '@monaco-json-language';
-import { createWheelScaleResolver } from '../utils/wheelScale';
+import { createWheelScaleResolver } from '@/foundation/interaction/wheelScale';
 
 const monacoGlobal = self as typeof self & {
   MonacoEnvironment: { getWorker(workerId: string, label: string): Worker };

@@ -8,6 +8,9 @@ import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'g
 import { isAxiosError } from 'axios';
 import apiClient from '../utils/apiClient';
 import type { ConnectionInfo } from '../stores/connections.store';
+import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
+import { useResizeHandle } from '@/foundation/interaction/useResizeHandle';
+import { useDraggablePosition } from '@/foundation/interaction/useDraggablePosition';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -16,11 +19,28 @@ const props = defineProps<{
   connection: ConnectionInfo | null;
 }>();
 
+const MODAL_SETTING_SAVE_DELAY = 500;
+
 const emit = defineEmits(['close']);
 
-let saveWidthTimeout: ReturnType<typeof setTimeout> | null = null;
-let saveHeightTimeout: ReturnType<typeof setTimeout> | null = null;
-const DEBOUNCE_DELAY = 500; // ms
+const modalWidthSaver = createLatestValueSaver<string>({
+  delayMs: MODAL_SETTING_SAVE_DELAY,
+  save: async (value) => {
+    if (value === settingsStore.settings.rdpModalWidth) return;
+    await settingsStore.updateSetting('rdpModalWidth', value);
+    console.log(`[RDP Modal] Saved width to store: ${value}`);
+  },
+  onError: (error) => console.error('[RDP Modal] Failed to save width:', error),
+});
+const modalHeightSaver = createLatestValueSaver<string>({
+  delayMs: MODAL_SETTING_SAVE_DELAY,
+  save: async (value) => {
+    if (value === settingsStore.settings.rdpModalHeight) return;
+    await settingsStore.updateSetting('rdpModalHeight', value);
+    console.log(`[RDP Modal] Saved height to store: ${value}`);
+  },
+  onError: (error) => console.error('[RDP Modal] Failed to save height:', error),
+});
 
 const MODAL_CONTAINER_PADDING = 32; 
 const maxAllowedWidth = computed(() => window.innerWidth - MODAL_CONTAINER_PADDING);
@@ -32,11 +52,6 @@ const modalPanelRef = ref<HTMLDivElement | null>(null);
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 const guacClient = ref<Client | null>(null);
 const connectionStatus = ref<ConnectionStatus>('disconnected');
-const isResizing = ref(false);
-const resizeStartX = ref(0);
-const resizeStartY = ref(0);
-const initialModalWidthForResize = ref(0); 
-const initialModalHeightForResize = ref(0); 
 const statusMessage = ref('');
 const keyboard = ref<Keyboard | null>(null);
 const mouse = ref<Mouse | null>(null);
@@ -52,11 +67,7 @@ const tempInputHeight = ref<number | string>(desiredModalHeight.value);
 const isKeyboardDisabledForInput = ref(false); // 标记键盘是否因输入框聚焦而禁用
 const isMinimized = ref(false);
 const restoreButtonRef = ref<HTMLButtonElement | null>(null);
-const isDraggingRestoreButton = ref(false);
 const restoreButtonPosition = ref({ x: 16, y: window.innerHeight / 2 - 25 }); // 16px from left, vertically centered
-let dragOffsetX = 0;
-let dragOffsetY = 0;
-let hasDragged = false; 
 
 const MIN_MODAL_WIDTH = 1024;
 const MIN_MODAL_HEIGHT = 768;
@@ -423,45 +434,21 @@ const restoreModal = () => {
   isMinimized.value = false;
 };
 
-const onRestoreButtonMouseDown = (event: MouseEvent) => {
-  if (!restoreButtonRef.value) return;
-  hasDragged = false; // 重置拖拽标志
-  isDraggingRestoreButton.value = true;
-  dragOffsetX = event.clientX - restoreButtonRef.value.getBoundingClientRect().left;
-  dragOffsetY = event.clientY - restoreButtonRef.value.getBoundingClientRect().top;
-  event.preventDefault();
-  document.addEventListener('mousemove', onRestoreButtonMouseMove);
-  document.addEventListener('mouseup', onRestoreButtonMouseUp);
-};
-
-const onRestoreButtonMouseMove = (event: MouseEvent) => {
-  if (!isDraggingRestoreButton.value) return;
-  hasDragged = true; // 如果鼠标移动则设置拖拽标志
-  let newX = event.clientX - dragOffsetX;
-  let newY = event.clientY - dragOffsetY;
-
-  const buttonWidth = 50;
-  const buttonHeight = 50;
-  newX = Math.max(0, Math.min(newX, window.innerWidth - buttonWidth));
-  newY = Math.max(0, Math.min(newY, window.innerHeight - buttonHeight));
-
-  restoreButtonPosition.value = { x: newX, y: newY };
-};
-
-const onRestoreButtonMouseUp = () => {
-  isDraggingRestoreButton.value = false;
-  document.removeEventListener('mousemove', onRestoreButtonMouseMove);
-  document.removeEventListener('mouseup', onRestoreButtonMouseUp);
-  // click 事件会在 mouseup 后触发。如果我们拖拽了，我们不希望 click 事件恢复模态框。
-  // handleClickRestoreButton 会检查 hasDragged。
-};
+const {
+  didDrag: restoreButtonDragged,
+  startDragging: startRestoreButtonDrag,
+} = useDraggablePosition({
+  position: restoreButtonPosition,
+  getElement: () => restoreButtonRef.value,
+  constrain: (position, element) => ({
+    x: Math.max(0, Math.min(position.x, window.innerWidth - element.offsetWidth)),
+    y: Math.max(0, Math.min(position.y, window.innerHeight - element.offsetHeight)),
+  }),
+});
 
 const handleClickRestoreButton = () => {
-  if (!hasDragged) {
-    restoreModal();
-  }
-  // 为下一次交互重置
-  hasDragged = false;
+  if (!restoreButtonDragged.value) restoreModal();
+  restoreButtonDragged.value = false;
 };
 
 const disconnectGuacamole = () => {
@@ -498,19 +485,10 @@ const closeModal = async () => {
 const handleWidthInputBlur = () => {
   const currentValue = Number(tempInputWidth.value) || MIN_MODAL_WIDTH;
   const validatedValue = Math.min(Math.max(MIN_MODAL_WIDTH, currentValue), maxAllowedWidth.value);
-  
-  desiredModalWidth.value = validatedValue; 
-  tempInputWidth.value = validatedValue;    
 
-  if (saveWidthTimeout) clearTimeout(saveWidthTimeout);
-  saveWidthTimeout = setTimeout(() => {
-    if (String(validatedValue) !== settingsStore.settings.rdpModalWidth) {
-      settingsStore.updateSetting('rdpModalWidth', String(validatedValue));
-      console.log(`[RDP Modal] Saved width to store: ${validatedValue}`);
-    } else {
-      console.log(`[RDP Modal] Debounced save - width ${validatedValue} matches store value. Skipped redundant save.`);
-    }
-  }, DEBOUNCE_DELAY);
+  desiredModalWidth.value = validatedValue;
+  tempInputWidth.value = validatedValue;
+  modalWidthSaver.schedule(String(validatedValue));
   enableRdpKeyboard();
 };
 
@@ -518,21 +496,11 @@ const handleHeightInputBlur = () => {
   const currentValue = Number(tempInputHeight.value) || MIN_MODAL_HEIGHT;
   const validatedValue = Math.min(Math.max(MIN_MODAL_HEIGHT, currentValue), maxAllowedHeight.value);
 
-  desiredModalHeight.value = validatedValue; 
-  tempInputHeight.value = validatedValue;     
-
-  if (saveHeightTimeout) clearTimeout(saveHeightTimeout);
-  saveHeightTimeout = setTimeout(() => {
-    if (String(validatedValue) !== settingsStore.settings.rdpModalHeight) {
-      settingsStore.updateSetting('rdpModalHeight', String(validatedValue));
-      console.log(`[RDP Modal] Saved height to store: ${validatedValue}`);
-    } else {
-      console.log(`[RDP Modal] Debounced save - height ${validatedValue} matches store value. Skipped redundant save.`);
-    }
-  }, DEBOUNCE_DELAY);
+  desiredModalHeight.value = validatedValue;
+  tempInputHeight.value = validatedValue;
+  modalHeightSaver.schedule(String(validatedValue));
   enableRdpKeyboard();
 };
-
 
 watch(desiredModalWidth, (newVal) => {
   if (Number(tempInputWidth.value) !== newVal) {
@@ -592,6 +560,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  modalWidthSaver.dispose({ flush: true });
+  modalHeightSaver.dispose({ flush: true });
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   window.removeEventListener('keydown', handleFullscreenKeydown, true);
   displayResizeObserver?.disconnect();
@@ -601,13 +571,6 @@ onUnmounted(() => {
     sendSizeAnimationFrame = null;
   }
   disconnectGuacamole(); // 这里已经调用了 removeInputListeners
-  document.removeEventListener('mousemove', onRestoreButtonMouseMove);
-  document.removeEventListener('mouseup', onRestoreButtonMouseUp);
-  // Clean up resize listeners if component is unmounted while resizing
-  if (isResizing.value) {
-    document.removeEventListener('mousemove', doResize);
-    document.removeEventListener('mouseup', stopResize);
-  }
 });
 
 watch(() => props.connection, (newConnection, oldConnection) => {
@@ -645,42 +608,14 @@ const computedModalStyle = computed(() => {
 // Watch for modal size changes to update Guacamole client
 watch(computedModalStyle, () => nextTick(sendRemoteDisplaySize));
 
-const initResize = (event: MouseEvent) => {
-  isResizing.value = true;
-  resizeStartX.value = event.clientX;
-  resizeStartY.value = event.clientY;
-  initialModalWidthForResize.value = desiredModalWidth.value;
-  initialModalHeightForResize.value = desiredModalHeight.value;
-
-  document.addEventListener('mousemove', doResize);
-  document.addEventListener('mouseup', stopResize);
-  event.preventDefault();
-};
-
-const doResize = (event: MouseEvent) => {
-  if (!isResizing.value) return;
-
-  const deltaX = event.clientX - resizeStartX.value;
-  const deltaY = event.clientY - resizeStartY.value;
-
-  let newWidth = initialModalWidthForResize.value + deltaX;
-  let newHeight = initialModalHeightForResize.value + deltaY;
-
-
-  newWidth = Math.min(Math.max(MIN_MODAL_WIDTH, newWidth), maxAllowedWidth.value);
-  newHeight = Math.min(Math.max(MIN_MODAL_HEIGHT, newHeight), maxAllowedHeight.value);
-
-  desiredModalWidth.value = newWidth;
-  desiredModalHeight.value = newHeight;
-};
-
-const stopResize = () => {
-  if (!isResizing.value) return;
-  isResizing.value = false;
-  document.removeEventListener('mousemove', doResize);
-  document.removeEventListener('mouseup', stopResize);
-  // Guacamole size update is handled by the watchEffect above
-};
+const { startResize: initResize } = useResizeHandle({
+  width: desiredModalWidth,
+  height: desiredModalHeight,
+  minWidth: MIN_MODAL_WIDTH,
+  minHeight: MIN_MODAL_HEIGHT,
+  maxWidth: () => maxAllowedWidth.value,
+  maxHeight: () => maxAllowedHeight.value,
+});
 
 </script>
 <template>
@@ -696,7 +631,7 @@ const stopResize = () => {
     <button
       ref="restoreButtonRef"
       v-if="isMinimized"
-      @mousedown="onRestoreButtonMouseDown"
+      @pointerdown="startRestoreButtonDrag"
       @click="handleClickRestoreButton"
       :style="{ left: `${restoreButtonPosition.x}px`, top: `${restoreButtonPosition.y}px`, width: '50px', height: '50px' }"
       class="fixed z-[100] flex items-center justify-center bg-primary text-white rounded-full shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 pointer-events-auto cursor-grab active:cursor-grabbing"
@@ -810,7 +745,7 @@ const stopResize = () => {
          v-if="!isBrowserFullscreen"
          class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-10 bg-transparent hover:bg-primary-dark hover:bg-opacity-30"
          title="Resize"
-         @mousedown.stop="initResize"
+         @pointerdown.stop="initResize"
        ></div>
    </div>
  </div>

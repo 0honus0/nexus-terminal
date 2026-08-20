@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, watch, computed, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useFavoritePathsStore, type FavoritePathItem } from '../stores/favoritePaths.store';
@@ -92,12 +93,12 @@ const closeModal = () => {
 </script>
 
 <template>
-  <div 
-    v-if="isVisible" 
-    class="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--overlay-bg-color)]"
-    @click.self="closeModal"
+  <OverlayPanel
+    :visible="isVisible"
+    :z-index="60"
+    panel-class="max-w-md flex flex-col p-6"
+    @close="closeModal"
   >
-    <div class="bg-background text-foreground shadow-xl rounded-lg w-full max-w-md flex flex-col overflow-hidden m-4 p-6">
       <!-- Header -->
       <h2 class="m-0 mb-6 text-center text-xl font-semibold">
         {{ isEditMode ? t('favoritePaths.addEditForm.editTitle', 'Edit Favorite Path') : t('favoritePaths.addEditForm.addTitle', 'Add New Favorite Path') }}
@@ -159,8 +160,7 @@ const closeModal = () => {
           {{ isLoading ? t('common.saving', 'Saving...') : t('common.save', 'Save') }}
         </button>
       </div>
-    </div>
-  </div>
+  </OverlayPanel>
 </template>
 
 <style scoped>

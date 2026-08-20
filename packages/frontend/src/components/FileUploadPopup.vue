@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import type { UploadItem } from '../types/upload.types';
 import { useProgressCenterStore } from '../stores/progressCenter.store';
+import { useDraggablePosition } from '@/foundation/interaction/useDraggablePosition';
+import { useResizeHandle } from '@/foundation/interaction/useResizeHandle';
 
 const POSITION_KEY = 'nexusUploadPopupPosition';
 const SIZE_KEY = 'nexusUploadPopupSize';
@@ -32,17 +34,9 @@ const progressCenter = useProgressCenterStore();
 
 const popupRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 16, y: 16 });
-const dragging = ref(false);
-const resizing = ref(false);
 const popupSize = ref({ ...DEFAULT_SIZE });
 const positionReady = ref(false);
-let dragOffsetX = 0;
-let dragOffsetY = 0;
 let positionRestored = false;
-let resizeStartX = 0;
-let resizeStartY = 0;
-let resizeStartWidth = DEFAULT_SIZE.width;
-let resizeStartHeight = DEFAULT_SIZE.height;
 
 const cancellableCount = computed(() => Object.values(props.uploads).filter(
   upload => ['pending', 'uploading', 'paused', 'conflict'].includes(upload.status)
@@ -125,15 +119,19 @@ const clampSizeToViewport = () => {
   };
 };
 
+const constrainPosition = (candidate: { x: number; y: number }, element: HTMLElement) => {
+  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
+  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
+  return {
+    x: Math.min(Math.max(8, candidate.x), maxX),
+    y: Math.min(Math.max(8, candidate.y), maxY),
+  };
+};
+
 const clampPosition = () => {
   const element = popupRef.value;
   if (!element) return;
-  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
-  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
-  position.value = {
-    x: Math.min(Math.max(8, position.value.x), maxX),
-    y: Math.min(Math.max(8, position.value.y), maxY),
-  };
+  position.value = constrainPosition(position.value, element);
 };
 
 const clampLayout = () => {
@@ -198,71 +196,40 @@ const restorePosition = async () => {
   }
 };
 
-const handlePointerMove = (event: PointerEvent) => {
-  if (!dragging.value) return;
-  position.value = { x: event.clientX - dragOffsetX, y: event.clientY - dragOffsetY };
-  clampPosition();
-};
+const { dragging, startDragging, stopDragging } = useDraggablePosition({
+  position,
+  getElement: () => popupRef.value,
+  constrain: (candidate, element) => constrainPosition(candidate, element),
+  canStart: (event) => !(event.target as HTMLElement).closest('button'),
+  onEnd: savePosition,
+});
 
-const stopDragging = () => {
-  if (!dragging.value) return;
-  dragging.value = false;
-  document.body.style.userSelect = '';
-  window.removeEventListener('pointermove', handlePointerMove);
-  window.removeEventListener('pointerup', stopDragging);
-  savePosition();
-};
-
-const startDragging = (event: PointerEvent) => {
-  if ((event.target as HTMLElement).closest('button')) return;
-  const rect = popupRef.value?.getBoundingClientRect();
-  if (!rect) return;
-  event.preventDefault();
-  dragging.value = true;
-  dragOffsetX = event.clientX - rect.left;
-  dragOffsetY = event.clientY - rect.top;
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', handlePointerMove);
-  window.addEventListener('pointerup', stopDragging);
-};
-
-const handleResizePointerMove = (event: PointerEvent) => {
-  if (!resizing.value) return;
-  const desiredWidth = resizeStartWidth + event.clientX - resizeStartX;
-  const desiredHeight = resizeStartHeight + event.clientY - resizeStartY;
-  const maxWidth = Math.max(220, window.innerWidth - 16);
-  const maxHeight = Math.max(150, window.innerHeight - 16);
-  const nextWidth = Math.min(Math.max(Math.min(MIN_SIZE.width, maxWidth), desiredWidth), maxWidth);
-  const nextHeight = Math.min(Math.max(Math.min(MIN_SIZE.height, maxHeight), desiredHeight), maxHeight);
-  popupSize.value = { width: nextWidth, height: nextHeight };
-  position.value = {
-    x: Math.max(8, Math.min(position.value.x, window.innerWidth - nextWidth - 8)),
-    y: Math.max(8, Math.min(position.value.y, window.innerHeight - nextHeight - 8)),
-  };
-};
-
-const stopResizing = () => {
-  if (!resizing.value) return;
-  resizing.value = false;
-  document.body.style.userSelect = '';
-  window.removeEventListener('pointermove', handleResizePointerMove);
-  window.removeEventListener('pointerup', stopResizing);
-  saveSize();
-  savePosition();
-};
-
-const startResizing = (event: PointerEvent) => {
-  event.preventDefault();
-  event.stopPropagation();
-  resizing.value = true;
-  resizeStartX = event.clientX;
-  resizeStartY = event.clientY;
-  resizeStartWidth = popupSize.value.width;
-  resizeStartHeight = popupSize.value.height;
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', handleResizePointerMove);
-  window.addEventListener('pointerup', stopResizing);
-};
+const popupWidth = computed({
+  get: () => popupSize.value.width,
+  set: (width: number) => { popupSize.value = { ...popupSize.value, width }; },
+});
+const popupHeight = computed({
+  get: () => popupSize.value.height,
+  set: (height: number) => { popupSize.value = { ...popupSize.value, height }; },
+});
+const { isResizing: resizing, startResize: startResizing } = useResizeHandle({
+  width: popupWidth,
+  height: popupHeight,
+  minWidth: MIN_SIZE.width,
+  minHeight: MIN_SIZE.height,
+  maxWidth: () => Math.max(220, window.innerWidth - 16),
+  maxHeight: () => Math.max(150, window.innerHeight - 16),
+  onMove: ({ width, height }) => {
+    position.value = {
+      x: Math.max(8, Math.min(position.value.x, window.innerWidth - width - 8)),
+      y: Math.max(8, Math.min(position.value.y, window.innerHeight - height - 8)),
+    };
+  },
+  onEnd: () => {
+    saveSize();
+    savePosition();
+  },
+});
 
 const handleCancel = (uploadId: string) => {
   emit('cancel-upload', uploadId);
@@ -314,8 +281,6 @@ onMounted(() => {
   speedTimer = window.setInterval(sampleTotalUploadSpeed, 500);
 });
 onBeforeUnmount(() => {
-  stopDragging();
-  stopResizing();
   if (speedTimer !== null) window.clearInterval(speedTimer);
   speedTimer = null;
   speedSnapshots.clear();
@@ -388,7 +353,7 @@ onBeforeUnmount(() => {
       class="upload-popup-resize-handle"
       :title="t('common.resize', '调整大小')"
       :aria-label="t('common.resize', '调整大小')"
-      @pointerdown="startResizing"
+      @pointerdown.stop="startResizing"
     ></button>
   </div>
 </template>

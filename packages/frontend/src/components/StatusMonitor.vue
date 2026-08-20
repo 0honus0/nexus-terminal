@@ -253,8 +253,8 @@ import { useSessionStore } from '../stores/session.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
-import { clampScale, createWheelScaleResolver } from '../utils/wheelScale';
-import { createLatestValueSaver } from '../utils/latestValueSaver';
+import { clampScale, createWheelScaleResolver } from '@/foundation/interaction/wheelScale';
+import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
 
 interface ServerStatus {
   cpuPercent?: number;

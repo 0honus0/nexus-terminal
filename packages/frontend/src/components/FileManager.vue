@@ -28,8 +28,8 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
-import { createWheelScaleResolver } from '../utils/wheelScale';
-import { createLatestValueSaver } from '../utils/latestValueSaver';
+import { createWheelScaleResolver } from '@/foundation/interaction/wheelScale';
+import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
 
 

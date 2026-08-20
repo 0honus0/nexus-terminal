@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, onMounted, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAppearanceStore } from '../../stores/appearance.store';
@@ -650,8 +651,12 @@ const filteredRemoteHtmlPresets = computed(() => {
 
 
     <!-- Preset Editor (Modal or Inline) - Simplified for now -->
-    <div v-if="showPresetEditor" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" @click.self="showPresetEditor = false">
-      <div class="bg-background p-6 rounded-lg shadow-xl w-full max-w-lg">
+    <OverlayPanel
+      :visible="showPresetEditor"
+      overlay-class="!bg-black/50"
+      panel-class="max-w-lg p-6"
+      @close="showPresetEditor = false"
+    >
         <div class="mb-4">
           <label for="presetName" class="block text-sm font-medium text-foreground mb-1">{{ t('styleCustomizer.presetName') }}</label>
           <input
@@ -676,7 +681,6 @@ const filteredRemoteHtmlPresets = computed(() => {
           <button @click="showPresetEditor = false" class="px-4 py-2 text-sm border border-border rounded bg-header hover:bg-border transition">{{ t('common.cancel') }}</button>
           <button @click="handleSaveLocalPreset" class="px-4 py-2 text-sm rounded bg-primary text-white hover:bg-primary/90 transition">{{ t('common.save') }}</button>
         </div>
-      </div>
-    </div>
+    </OverlayPanel>
   </section>
 </template>

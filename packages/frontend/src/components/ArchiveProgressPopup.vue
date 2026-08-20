@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import type { ArchiveProgressState } from '../types/sftp.types';
 import { useProgressCenterStore } from '../stores/progressCenter.store';
+import { useDraggablePosition } from '@/foundation/interaction/useDraggablePosition';
 
 const POSITION_KEY = 'nexusArchiveProgressPosition';
 const props = withDefaults(defineProps<{
@@ -30,9 +31,6 @@ const getPopupElement = (): HTMLElement | null => {
 };
 const sourceHidden = computed(() => props.progressSourceId ? progressCenter.isSourceHidden(props.progressSourceId) : false);
 const position = ref({ x: 16, y: 16 });
-const dragging = ref(false);
-let dragOffsetX = 0;
-let dragOffsetY = 0;
 
 const operationLabel = computed(() => props.progress.operation === 'compress'
   ? t('fileManager.contextMenu.compress')
@@ -54,15 +52,19 @@ const popupStyle = computed(() => ({
   top: `${position.value.y}px`,
 }));
 
+const constrainPosition = (candidate: { x: number; y: number }, element: HTMLElement) => {
+  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
+  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
+  return {
+    x: Math.min(Math.max(8, candidate.x), maxX),
+    y: Math.min(Math.max(8, candidate.y), maxY),
+  };
+};
+
 const clampPosition = () => {
   const element = getPopupElement();
   if (!element) return;
-  const maxX = Math.max(8, window.innerWidth - element.offsetWidth - 8);
-  const maxY = Math.max(8, window.innerHeight - element.offsetHeight - 8);
-  position.value = {
-    x: Math.min(Math.max(8, position.value.x), maxX),
-    y: Math.min(Math.max(8, position.value.y), maxY),
-  };
+  position.value = constrainPosition(position.value, element);
 };
 
 const savePosition = () => {
@@ -94,32 +96,13 @@ const restorePosition = () => {
   });
 };
 
-const handlePointerMove = (event: PointerEvent) => {
-  if (!dragging.value) return;
-  position.value = { x: event.clientX - dragOffsetX, y: event.clientY - dragOffsetY };
-  clampPosition();
-};
-
-const stopDragging = () => {
-  if (!dragging.value) return;
-  dragging.value = false;
-  document.body.style.userSelect = '';
-  window.removeEventListener('pointermove', handlePointerMove);
-  window.removeEventListener('pointerup', stopDragging);
-  savePosition();
-};
-
-const startDragging = (event: PointerEvent) => {
-  if ((event.target as HTMLElement).closest('button')) return;
-  const rect = getPopupElement()?.getBoundingClientRect();
-  if (!rect) return;
-  dragging.value = true;
-  dragOffsetX = event.clientX - rect.left;
-  dragOffsetY = event.clientY - rect.top;
-  document.body.style.userSelect = 'none';
-  window.addEventListener('pointermove', handlePointerMove);
-  window.addEventListener('pointerup', stopDragging);
-};
+const { dragging, startDragging } = useDraggablePosition({
+  position,
+  getElement: getPopupElement,
+  constrain: (candidate, element) => constrainPosition(candidate, element),
+  canStart: (event) => !(event.target as HTMLElement).closest('button'),
+  onEnd: savePosition,
+});
 
 const hidePopup = () => {
   if (!props.progressSourceId) return;
@@ -144,7 +127,6 @@ watch(() => props.progress.active, async (active) => {
 
 onMounted(() => window.addEventListener('resize', clampPosition));
 onBeforeUnmount(() => {
-  stopDragging();
   window.removeEventListener('resize', clampPosition);
 });
 </script>

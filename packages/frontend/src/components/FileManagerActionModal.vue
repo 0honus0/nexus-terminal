@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { ref, computed, watch, type PropType, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../types/sftp.types';
@@ -188,8 +189,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="isVisible" data-testid="file-manager-action-modal" :data-action-type="actionType || ''" class="fixed inset-0 bg-overlay flex justify-center items-center z-[100] p-4" @click.self="closeModal">
-    <div class="bg-background text-foreground p-5 rounded-lg shadow-xl border border-border w-full max-w-md flex flex-col relative">
+  <OverlayPanel
+    :visible="isVisible"
+    :z-index="100"
+    panel-class="max-w-md flex flex-col p-5"
+    data-testid="file-manager-action-modal"
+    :data-action-type="actionType || ''"
+    @close="closeModal"
+  >
       <!-- Close Button -->
       <button class="absolute top-3 right-3 p-1 text-text-secondary hover:text-foreground z-10" @click="closeModal" :title="t('fileManager.modals.buttons.close', 'Close')">
          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -250,8 +257,7 @@ onUnmounted(() => {
           {{ confirmButtonText }}
         </button>
       </div>
-    </div>
-  </div>
+  </OverlayPanel>
 </template>
 
 <style scoped>

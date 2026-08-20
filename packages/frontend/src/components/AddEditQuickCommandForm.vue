@@ -1,5 +1,10 @@
 <template>
-  <div data-testid="quick-command-form" class="fixed inset-0 bg-overlay flex justify-center items-center z-50">
+  <OverlayPanel
+    :surface="false"
+    :close-on-backdrop="false"
+    overlay-class="!p-0"
+    data-testid="quick-command-form"
+  >
     <div
       ref="modalContentRef"
       class="bg-background text-foreground p-6 rounded-xl border border-border/50 shadow-2xl flex flex-col"
@@ -105,12 +110,12 @@
         </form>
       </div>
     </div>
-  </div>
+  </OverlayPanel>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue';
-import { useResizable } from '../composables/useResizable';
+import { useResizable } from '@/foundation/interaction/useResizable';
 import { useI18n } from 'vue-i18n';
 import { useQuickCommandsStore, type QuickCommandFE } from '../stores/quickCommands.store';
 import { useQuickCommandTagsStore } from '../stores/quickCommandTags.store';
@@ -118,6 +123,7 @@ import { useSessionStore } from '../stores/session.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store'; 
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents'; 
 import TagInput from './TagInput.vue';
+import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useAlertDialog } from '../composables/useAlertDialog'; 
 
