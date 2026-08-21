@@ -1143,7 +1143,7 @@ const handleEncryptedCompress = (items: FileListItem[]) => {
 
 const getArchivePasswordErrorMessage = (error: Error): string => {
   if (error.name === 'INVALID_PASSWORD') {
-    return t('fileManager.archivePassword.wrongPassword', 'Incorrect ZIP password. Try again.');
+    return t('fileManager.archivePassword.wrongPassword', 'Incorrect zip password. Try again.');
   }
   if (error.name === 'PASSWORD_TOO_LONG') {
     return t('fileManager.archivePassword.tooLong', { max: 128 });

@@ -349,7 +349,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await passwordInput.fill('wrong-password');
     await submit.click();
     await expect(passwordModal).toBeVisible({ timeout: 30_000 });
-    await expect(passwordModal.getByTestId('archive-password-error')).toContainText('Incorrect ZIP password');
+    await expect(passwordModal.getByTestId('archive-password-error')).toContainText('Incorrect zip password');
 
     await passwordInput.fill(specialPassword);
     await submit.click();

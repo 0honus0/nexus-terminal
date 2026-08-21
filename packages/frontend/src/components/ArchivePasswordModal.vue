@@ -51,18 +51,18 @@ const title = computed(() =>
   props.mode === "decompress"
     ? t(
         "fileManager.archivePassword.decompressTitle",
-        "Extract password-protected ZIP",
+        "Extract password-protected zip",
       )
     : t(
         "fileManager.archivePassword.compressTitle",
-        "Create password-protected ZIP",
+        "Create password-protected zip",
       ),
 );
 
 const description = computed(() =>
   props.mode === "decompress"
     ? t("fileManager.archivePassword.decompressDescription", {
-        name: props.archiveName || "ZIP",
+        name: props.archiveName || "zip",
       })
     : t("fileManager.archivePassword.compressDescription", {
         count: props.itemCount,
@@ -220,7 +220,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleGlobalKeydown));
           {{
             t(
               "fileManager.archivePassword.compatibilityNotice",
-              "Uses the remote zip/unzip command’s traditional ZIP password protection (ZipCrypto). It is widely compatible but is not strong AES encryption. The password is not saved by Nexus Terminal.",
+              "Uses the remote zip/unzip command’s traditional zip password protection (ZipCrypto). It is widely compatible but is not strong AES encryption. The password is not saved by Nexus Terminal.",
             )
           }}
         </p>
@@ -244,7 +244,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleGlobalKeydown));
           {{
             mode === "decompress"
               ? t("fileManager.archivePassword.extract", "Extract")
-              : t("fileManager.archivePassword.create", "Create ZIP")
+              : t("fileManager.archivePassword.create", "Create zip")
           }}
         </button>
       </div>
