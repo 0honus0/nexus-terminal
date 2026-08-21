@@ -18,6 +18,7 @@ export interface AppearanceSettings {
   terminalBackgroundOverlayOpacity?: number; // 终端背景蒙版透明度 (0-1)
   terminal_custom_html?: string | null; // 终端自定义 HTML
   remoteHtmlPresetsUrl?: string | null; // 远程 HTML 主题仓库链接
+  windowThemeColor?: string; // PWA/独立应用窗口标题栏颜色
 
   // 文字描边
   terminalTextStrokeEnabled?: boolean;

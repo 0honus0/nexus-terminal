@@ -943,7 +943,17 @@
     "appearance": {
       "title": "Appearance Settings",
       "description": "Customize the visual theme and background of the application.",
-      "customizeButton": "Customize Appearance"
+      "customizeButton": "Customize Appearance",
+      "windowThemeColor": {
+        "title": "Window Title Bar Color",
+        "description": "Controls the top title bar color when Nexus Terminal is installed as a standalone Chrome app. Changes apply immediately and persist across launches.",
+        "label": "Title bar color",
+        "save": "Save",
+        "reset": "Reset to default",
+        "saved": "Window title bar color saved.",
+        "invalid": "Enter a valid hex color such as #343A40.",
+        "saveFailed": "Failed to save the window title bar color."
+      }
     },
     "autoCopyOnSelect": {
       "title": "Terminal Auto Copy",

@@ -28,6 +28,15 @@ const isDarkColor = (color: string): boolean => {
     return (red * 299 + green * 587 + blue * 114) / 1000 < 128;
 };
 
+const DEFAULT_WINDOW_THEME_COLOR = '#343A40';
+
+const normalizeWindowThemeColor = (color: string | undefined | null): string => {
+    const value = color?.trim();
+    return value && /^#[0-9a-f]{6}$/i.test(value)
+        ? value.toUpperCase()
+        : DEFAULT_WINDOW_THEME_COLOR;
+};
+
 const normalizeUiTheme = (theme: Record<string, string>): Record<string, string> => {
     const normalized = { ...defaultUiTheme, ...theme };
     const dark = isDarkColor(normalized['--app-bg-color'] || '#ffffff');
@@ -84,6 +93,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
     // 当前激活的终端主题 ID
     const activeTerminalThemeId = computed(() => appearanceSettings.value.activeTerminalThemeId);
+    const currentWindowThemeColor = computed<string>(() => {
+        return normalizeWindowThemeColor(appearanceSettings.value.windowThemeColor);
+    });
 
     // 当前应用的终端主题对象 (ITheme)
     const currentTerminalTheme = computed<ITheme>(() => {
@@ -235,6 +247,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
  
             // 应用加载的 UI 主题
             applyUiTheme(currentUiTheme.value);
+            applyWindowThemeColor(currentWindowThemeColor.value);
             // 应用背景
             applyPageBackground();
             // 终端主题将由 Terminal 组件根据 activeTerminalThemeId 自动应用
@@ -247,6 +260,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             allTerminalThemes.value = []; // 清空 allTerminalThemes
             initialAppearanceDataLoaded.value = false; // +++ 设置为 false 表示数据加载失败
             applyUiTheme(defaultUiTheme);
+            applyWindowThemeColor(DEFAULT_WINDOW_THEME_COLOR);
             applyPageBackground(); // 应用默认背景（可能为空）
         } finally {
             isLoading.value = false;
@@ -281,6 +295,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
             // 如果 UI 主题或背景更新，重新应用
             if (updates.customUiTheme !== undefined) applyUiTheme(currentUiTheme.value);
+            if (updates.windowThemeColor !== undefined) applyWindowThemeColor(currentWindowThemeColor.value);
             if (updates.pageBackgroundImage !== undefined) applyPageBackground(); // 移除 pageBackgroundOpacity 检查
             // 终端相关设置由 Terminal 组件监听应用
             // 注意：terminalBackgroundEnabled 的应用逻辑在 Terminal 组件中处理
@@ -844,6 +859,17 @@ export const useAppearanceStore = defineStore('appearance', () => {
         }
     }
 
+    function applyWindowThemeColor(color: string) {
+        const normalizedColor = normalizeWindowThemeColor(color);
+        let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+        if (!meta) {
+            meta = document.createElement('meta');
+            meta.name = 'theme-color';
+            document.head.appendChild(meta);
+        }
+        meta.content = normalizedColor;
+    }
+
     /**
      * 应用页面背景设置到 body 元素
      */
@@ -907,6 +933,10 @@ export const useAppearanceStore = defineStore('appearance', () => {
         applyUiTheme(newTheme);
     }, { deep: true, immediate: true }); // 添加 immediate: true 确保初始加载时应用默认主题
 
+    watch(currentWindowThemeColor, (color) => {
+        applyWindowThemeColor(color);
+    }, { immediate: true });
+
     // 监听页面背景变化并应用
     watch(pageBackgroundImage, () => { // 只监听图片变化
         applyPageBackground();
@@ -924,6 +954,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
         previewTerminalThemeData, 
         currentUiTheme,
         activeTerminalThemeId,
+        currentWindowThemeColor,
         currentTerminalTheme,     
         effectiveTerminalTheme,   
         currentTerminalFontFamily,

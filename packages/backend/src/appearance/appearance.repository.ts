@@ -81,6 +81,9 @@ let terminalTextStrokeEnabledFound = false;
             case 'remote_html_presets_url':
                 settings.remoteHtmlPresetsUrl = row.value || null; // 如果为空字符串，则视为 null
                 break;
+            case 'windowThemeColor':
+                settings.windowThemeColor = row.value;
+                break;
 case 'terminalTextStrokeEnabled':
                 settings.terminalTextStrokeEnabled = row.value === 'true';
                 terminalTextStrokeEnabledFound = true;
@@ -138,6 +141,7 @@ case 'terminalTextStrokeEnabled':
             : defaults.terminalBackgroundOverlayOpacity, // 否则使用默认值
        terminal_custom_html: settings.terminal_custom_html ?? defaults.terminal_custom_html,
        remoteHtmlPresetsUrl: settings.remoteHtmlPresetsUrl ?? defaults.remoteHtmlPresetsUrl,
+       windowThemeColor: settings.windowThemeColor ?? defaults.windowThemeColor,
         terminalTextStrokeEnabled: terminalTextStrokeEnabledFound
             ? settings.terminalTextStrokeEnabled
             : defaults.terminalTextStrokeEnabled,
@@ -184,6 +188,7 @@ const getDefaultAppearanceSettings = (): Omit<AppearanceSettings, '_id'> => {
         terminalBackgroundOverlayOpacity: 0.5, // 默认蒙版透明度
        terminal_custom_html: '', // 默认自定义 HTML 为空字符串
        remoteHtmlPresetsUrl: null, // 默认远程 HTML 预设 URL 为 null
+        windowThemeColor: '#343A40', // 默认使用与深色窗口边框接近的中性颜色
         // 终端文本描边设置默认值
         terminalTextStrokeEnabled: false,
         terminalTextStrokeWidth: 1,
@@ -226,6 +231,7 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
         { key: 'terminalBackgroundOverlayOpacity', value: defaults.terminalBackgroundOverlayOpacity },
         { key: 'terminal_custom_html', value: defaults.terminal_custom_html },
         { key: 'remoteHtmlPresetsUrl', value: defaults.remoteHtmlPresetsUrl },
+        { key: 'windowThemeColor', value: defaults.windowThemeColor },
         { key: 'terminalTextStrokeEnabled', value: defaults.terminalTextStrokeEnabled },
         { key: 'terminalTextStrokeWidth', value: defaults.terminalTextStrokeWidth },
         { key: 'terminalTextStrokeColor', value: defaults.terminalTextStrokeColor },
@@ -341,6 +347,16 @@ export const updateAppearanceSettings = async (settingsDto: UpdateAppearanceDto)
              console.error(`[AppearanceRepo] 验证主题 ID ${settingsDto.activeTerminalThemeId} 时出错:`, validationError.message);
              throw new Error(`验证主题 ID 失败: ${validationError.message}`);
         }
+    }
+    if (settingsDto.windowThemeColor !== undefined) {
+        const color = settingsDto.windowThemeColor;
+        if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color.trim())) {
+            throw new Error('窗口标题栏颜色必须是 #RRGGBB 格式');
+        }
+        settingsDto = {
+            ...settingsDto,
+            windowThemeColor: color.trim().toUpperCase(),
+        };
     }
     // ... 其他验证 ...
 

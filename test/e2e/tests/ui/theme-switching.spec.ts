@@ -7,6 +7,53 @@ async function appBackground(page: import('@playwright/test').Page): Promise<str
   return page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim());
 }
 
+async function documentThemeColor(page: import('@playwright/test').Page): Promise<string | null> {
+  return page.locator('meta[name="theme-color"]').getAttribute('content');
+}
+
+test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+  expect(language.ok()).toBeTruthy();
+
+  const originalResponse = await context.request.get('/api/v1/appearance');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = await originalResponse.json() as { windowThemeColor?: string };
+  const targetColor = '#1F2937';
+
+  try {
+    await page.goto('/settings');
+    await page.getByTestId('settings-tab-appearance').click();
+
+    const input = page.getByTestId('window-theme-color-input');
+    await expect(input).toBeVisible();
+    await input.fill(targetColor);
+
+    const savePromise = page.waitForResponse((response) =>
+      response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+    );
+    await page.getByTestId('window-theme-color-save').click();
+    expect((await savePromise).ok()).toBeTruthy();
+
+    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+    await expect(page.getByTestId('window-theme-color-saved')).toBeVisible();
+
+    const persisted = await context.request.get('/api/v1/appearance');
+    expect(persisted.ok()).toBeTruthy();
+    expect((await persisted.json() as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByTestId('settings-tab-appearance').click();
+    await expect(page.getByTestId('window-theme-color-input')).toHaveValue(targetColor);
+    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+  } finally {
+    const restore = await context.request.put('/api/v1/appearance', {
+      data: { windowThemeColor: original.windowThemeColor ?? '#343A40' },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
+
 test('UI theme switches to dark mode, persists across reload, and resets to default', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });

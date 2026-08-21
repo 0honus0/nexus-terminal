@@ -938,7 +938,17 @@
     "appearance": {
       "title": "外观设置",
       "description": "自定义应用程序的视觉主题和背景。",
-      "customizeButton": "自定义外观"
+      "customizeButton": "自定义外观",
+      "windowThemeColor": {
+        "title": "窗口标题栏颜色",
+        "description": "设置 Chrome 安装为独立应用后最上方窗口标题栏的颜色。修改后会立即更新，并在下次启动时继续使用。",
+        "label": "标题栏颜色",
+        "save": "保存",
+        "reset": "恢复默认",
+        "saved": "窗口标题栏颜色已保存。",
+        "invalid": "请输入有效的十六进制颜色，例如 #343A40。",
+        "saveFailed": "保存窗口标题栏颜色失败。"
+      }
     },
     "autoCopyOnSelect": {
       "title": "终端自动复制",
