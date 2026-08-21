@@ -93,8 +93,15 @@ const {
 // const popupIsModified = computed(() => popupContent.value !== popupOriginalContent.value);
 
 // --- 弹窗尺寸和拖拽状态 ---
-const popupWidthPx = ref(window.innerWidth * 0.75); // 初始宽度 75vw (像素)
-const popupHeightPx = ref(window.innerHeight * 0.85); // 初始高度 85vh (像素)
+// 桌面端弹窗尺寸只保存在当前浏览器，避免手机端/另一台设备覆盖桌面偏好。
+const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus_fileEditorDesktopPopupSize';
+const defaultDesktopPopupSize = () => ({
+    width: window.innerWidth * 0.75,
+    height: window.innerHeight * 0.85,
+});
+const initialDesktopPopupSize = defaultDesktopPopupSize();
+const popupWidthPx = ref(initialDesktopPopupSize.width);
+const popupHeightPx = ref(initialDesktopPopupSize.height);
 const isResizing = ref(false);
 const suppressBackdropClick = ref(false);
 let suppressBackdropClickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -106,6 +113,38 @@ const minWidth = 400; // 最小宽度
 const minHeight = 300;
 const maxPopupWidth = () => Math.max(minWidth, window.innerWidth - 24);
 const maxPopupHeight = () => Math.max(minHeight, window.innerHeight - 24);
+const restoreDesktopPopupSize = () => {
+    if (props.isMobile) return;
+    try {
+        const raw = localStorage.getItem(DESKTOP_POPUP_SIZE_STORAGE_KEY);
+        if (!raw) {
+            const fallback = defaultDesktopPopupSize();
+            popupWidthPx.value = fallback.width;
+            popupHeightPx.value = fallback.height;
+            return;
+        }
+        const parsed = JSON.parse(raw) as { width?: unknown; height?: unknown };
+        if (typeof parsed.width === 'number' && Number.isFinite(parsed.width) && parsed.width > 0) {
+            popupWidthPx.value = parsed.width;
+        }
+        if (typeof parsed.height === 'number' && Number.isFinite(parsed.height) && parsed.height > 0) {
+            popupHeightPx.value = parsed.height;
+        }
+    } catch (error) {
+        console.warn('[FileEditorOverlay] Failed to restore desktop popup size:', error);
+    }
+};
+const persistDesktopPopupSize = () => {
+    if (props.isMobile) return;
+    try {
+        localStorage.setItem(DESKTOP_POPUP_SIZE_STORAGE_KEY, JSON.stringify({
+            width: Math.round(popupWidthPx.value),
+            height: Math.round(popupHeightPx.value),
+        }));
+    } catch (error) {
+        console.warn('[FileEditorOverlay] Failed to persist desktop popup size:', error);
+    }
+};
 const scheduleEditorLayout = () => {
     if (editorLayoutFrame !== null) cancelAnimationFrame(editorLayoutFrame);
     editorLayoutFrame = requestAnimationFrame(() => {
@@ -114,6 +153,11 @@ const scheduleEditorLayout = () => {
     });
 };
 const clampPopupSize = () => {
+    // 移动端始终由 100vw × 100vh 控制，不能把移动端 viewport 写回桌面尺寸状态。
+    if (props.isMobile) {
+        scheduleEditorLayout();
+        return;
+    }
     popupWidthPx.value = Math.min(Math.max(minWidth, popupWidthPx.value), maxPopupWidth());
     popupHeightPx.value = Math.min(Math.max(minHeight, popupHeightPx.value), maxPopupHeight());
     scheduleEditorLayout();
@@ -526,6 +570,7 @@ const handleCloseButton = () => {
 
 // --- 拖拽调整大小逻辑 ---
 const startResize = (event: MouseEvent) => {
+    if (props.isMobile) return;
     if (suppressBackdropClickTimer !== null) {
         clearTimeout(suppressBackdropClickTimer);
         suppressBackdropClickTimer = null;
@@ -561,6 +606,7 @@ const stopResize = () => {
         document.removeEventListener('mouseup', stopResize);
         document.body.style.cursor = ''; // 恢复默认光标
         document.body.style.userSelect = ''; // 恢复文本选择
+        persistDesktopPopupSize();
 
         // click 会在 mouseup 之后触发；延迟到下一轮事件循环再恢复遮罩点击。
         suppressBackdropClickTimer = setTimeout(() => {
@@ -583,6 +629,7 @@ watch(popupTrigger, () => {
 
     isVisible.value = true;
     void nextTick(() => {
+        restoreDesktopPopupSize();
         clampPopupSize();
         scheduleEditorLayout();
     });
@@ -735,7 +782,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 添加拖拽手柄 -->
-      <div data-testid="file-editor-resize-handle" class="resize-handle" @mousedown.stop.prevent="startResize" @click.stop.prevent></div>
+      <div v-if="!props.isMobile" data-testid="file-editor-resize-handle" class="resize-handle" @mousedown.stop.prevent="startResize" @click.stop.prevent></div>
 
     </div> <!-- 关闭 editor-popup -->
   </div> <!-- 关闭 editor-overlay-backdrop -->

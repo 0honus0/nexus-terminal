@@ -14,6 +14,8 @@ import {
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
+const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus_fileEditorDesktopPopupSize';
+
 async function connectMobileSsh(
   page: Page,
   request: Parameters<typeof loginAsInitialAdmin>[0],
@@ -97,11 +99,26 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
-  await slowStep('single tap opens a plain remote file in the mobile editor', async () => {
+  await slowStep('single tap opens a full-screen mobile editor without touching desktop popup size', async () => {
+    const desktopSize = JSON.stringify({ width: 1111, height: 777 });
+    await page.evaluate(([popupSizeKey, value]) => {
+      localStorage.setItem(popupSizeKey, value);
+    }, [DESKTOP_POPUP_SIZE_STORAGE_KEY, desktopSize]);
+
     await fileManagerRow(page, 'plainfile').click();
     const editor = page.getByTestId('file-editor-overlay');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
+    await expect(editor.getByTestId('file-editor-resize-handle')).toHaveCount(0);
+    const popup = editor.locator('.editor-popup');
+    const popupBox = await popup.boundingBox();
+    const viewport = page.viewportSize();
+    expect(popupBox).toBeTruthy();
+    expect(viewport).toBeTruthy();
+    expect(Math.abs(popupBox!.width - viewport!.width)).toBeLessThanOrEqual(2);
+    expect(Math.abs(popupBox!.height - viewport!.height)).toBeLessThanOrEqual(2);
+    expect(await page.evaluate((popupSizeKey) => localStorage.getItem(popupSizeKey), DESKTOP_POPUP_SIZE_STORAGE_KEY))
+      .toBe(desktopSize);
     await expect.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
       .toContain('plain-no-extension');
   });

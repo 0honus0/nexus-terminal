@@ -13,6 +13,7 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step, slowStep } from '../../support/steps';
 
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
+const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus_fileEditorDesktopPopupSize';
 
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
   await target.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
@@ -31,7 +32,10 @@ test('file previews and text editor protect historical file-opening regressions'
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
-  await page.evaluate(() => localStorage.removeItem('monacoEditorFontSize'));
+  await page.evaluate((popupSizeKey) => {
+    localStorage.removeItem('monacoEditorFontSize');
+    localStorage.removeItem(popupSizeKey);
+  }, DESKTOP_POPUP_SIZE_STORAGE_KEY);
 
   await step('extensionless text opens with its real remote content', async () => {
     await row(page, 'plainfile').dblclick();
@@ -60,6 +64,26 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(after!.width).toBeGreaterThan(before!.width + 50);
     expect(after!.height).toBeGreaterThan(before!.height + 40);
     await expect(editor.locator('.monaco-editor')).toBeVisible();
+
+    const persisted = await page.evaluate((popupSizeKey) => {
+      const raw = localStorage.getItem(popupSizeKey);
+      return raw ? JSON.parse(raw) as { width: number; height: number } : null;
+    }, DESKTOP_POPUP_SIZE_STORAGE_KEY);
+    expect(persisted).toBeTruthy();
+    expect(persisted!.width).toBeCloseTo(after!.width, 0);
+    expect(persisted!.height).toBeCloseTo(after!.height, 0);
+
+    await editor.getByTestId('file-editor-close').click();
+    await expect(editor).toBeHidden();
+    await page.evaluate((popupSizeKey) => {
+      localStorage.setItem(popupSizeKey, JSON.stringify({ width: 780, height: 520 }));
+    }, DESKTOP_POPUP_SIZE_STORAGE_KEY);
+    await row(page, 'plainfile').dblclick();
+    await expect(editor).toBeVisible();
+    const restored = await popup.boundingBox();
+    expect(restored).toBeTruthy();
+    expect(restored!.width).toBeCloseTo(780, 0);
+    expect(restored!.height).toBeCloseTo(520, 0);
   });
 
   await step('editor Ctrl+wheel filters tiny opposing deltas instead of jittering font size', async () => {
