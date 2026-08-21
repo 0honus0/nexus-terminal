@@ -78,7 +78,7 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
       'Compress to zip',
       'Compress to tar.gz',
       'Compress to tar.bz2',
-      'Password-protected ZIP...',
+      'Compress to zip with password...',
       'Send to...',
     ]) {
       await expect(menu.getByText(label, { exact: true })).toBeVisible();

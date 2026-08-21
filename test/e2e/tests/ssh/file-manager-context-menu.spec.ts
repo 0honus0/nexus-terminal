@@ -313,7 +313,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
     await expect(compress).toBeVisible();
     await compress.hover();
-    await page.getByText('Password-protected ZIP...', { exact: true }).click();
+    await page.getByText('Compress to zip with password...', { exact: true }).click();
 
     const passwordModal = page.getByTestId('archive-password-modal');
     const passwordInput = passwordModal.getByTestId('archive-password-input');
