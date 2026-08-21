@@ -20,7 +20,7 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitNumber,
     fileManagerShowDeleteConfirmationBoolean,
     terminalEnableRightClickPasteBoolean,
-    showPopupFileManagerBoolean, 
+    showPopupFileManagerBoolean,
     statusMonitorShowIpBoolean,
   } = storeToRefs(settingsStore);
 
@@ -137,7 +137,8 @@ export function useWorkspaceSettings() {
       workspaceSidebarPersistentSuccess.value = true;
     } catch (error: any) {
       console.error('更新侧边栏固定设置失败:', error);
-      workspaceSidebarPersistentMessage.value = error.message || t('settings.workspace.error.sidebarPersistentSaveFailed');
+      workspaceSidebarPersistentMessage.value =
+        error.message || t('settings.workspace.error.sidebarPersistentSaveFailed');
       workspaceSidebarPersistentSuccess.value = false;
     } finally {
       workspaceSidebarPersistentLoading.value = false;
@@ -160,7 +161,8 @@ export function useWorkspaceSettings() {
       commandInputSyncSuccess.value = true;
     } catch (error: any) {
       console.error('更新命令输入同步目标失败:', error);
-      commandInputSyncMessage.value = error.message || t('settings.commandInputSync.error.saveFailed', '保存同步目标失败');
+      commandInputSyncMessage.value =
+        error.message || t('settings.commandInputSync.error.saveFailed', '保存同步目标失败');
       commandInputSyncSuccess.value = false;
     } finally {
       commandInputSyncLoading.value = false;
@@ -179,11 +181,15 @@ export function useWorkspaceSettings() {
     showConnectionTagsSuccess.value = false;
     try {
       await settingsStore.updateSetting('showConnectionTags', showConnectionTagsLocal.value);
-      showConnectionTagsMessage.value = t('settings.workspace.success.showConnectionTagsSaved', '连接标签显示设置已保存');
+      showConnectionTagsMessage.value = t(
+        'settings.workspace.success.showConnectionTagsSaved',
+        '连接标签显示设置已保存',
+      );
       showConnectionTagsSuccess.value = true;
     } catch (error: any) {
       console.error('更新显示连接标签设置失败:', error);
-      showConnectionTagsMessage.value = error.message || t('settings.workspace.error.showConnectionTagsSaveFailed', '保存连接标签显示设置失败');
+      showConnectionTagsMessage.value =
+        error.message || t('settings.workspace.error.showConnectionTagsSaveFailed', '保存连接标签显示设置失败');
       showConnectionTagsSuccess.value = false;
     } finally {
       showConnectionTagsLoading.value = false;
@@ -202,11 +208,15 @@ export function useWorkspaceSettings() {
     showQuickCommandTagsSuccess.value = false;
     try {
       await settingsStore.updateSetting('showQuickCommandTags', showQuickCommandTagsLocal.value);
-      showQuickCommandTagsMessage.value = t('settings.workspace.success.showQuickCommandTagsSaved', '快捷指令标签显示设置已保存');
+      showQuickCommandTagsMessage.value = t(
+        'settings.workspace.success.showQuickCommandTagsSaved',
+        '快捷指令标签显示设置已保存',
+      );
       showQuickCommandTagsSuccess.value = true;
     } catch (error: any) {
       console.error('更新显示快捷指令标签设置失败:', error);
-      showQuickCommandTagsMessage.value = error.message || t('settings.workspace.error.showQuickCommandTagsSaveFailed', '保存快捷指令标签显示设置失败');
+      showQuickCommandTagsMessage.value =
+        error.message || t('settings.workspace.error.showQuickCommandTagsSaveFailed', '保存快捷指令标签显示设置失败');
       showQuickCommandTagsSuccess.value = false;
     } finally {
       showQuickCommandTagsLoading.value = false;
@@ -235,10 +245,9 @@ export function useWorkspaceSettings() {
       quickCommandsCollapsibleSearchSuccess.value = true;
     } catch (error: any) {
       console.error('更新快捷指令搜索框显示方式失败:', error);
-      quickCommandsCollapsibleSearchMessage.value = error.message || t(
-        'settings.workspace.error.quickCommandsCollapsibleSearchSaveFailed',
-        '保存快捷指令搜索框显示方式失败',
-      );
+      quickCommandsCollapsibleSearchMessage.value =
+        error.message ||
+        t('settings.workspace.error.quickCommandsCollapsibleSearchSaveFailed', '保存快捷指令搜索框显示方式失败');
       quickCommandsCollapsibleSearchSuccess.value = false;
     } finally {
       quickCommandsCollapsibleSearchLoading.value = false;
@@ -257,16 +266,21 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitSuccess.value = false;
     try {
       const limitValue = terminalScrollbackLimitLocal.value;
-      if (limitValue !== null && limitValue !== undefined && (isNaN(limitValue) || !Number.isInteger(limitValue) || limitValue < 0 || limitValue > 100000)) {
+      if (
+        limitValue !== null &&
+        limitValue !== undefined &&
+        (isNaN(limitValue) || !Number.isInteger(limitValue) || limitValue < 0 || limitValue > 100000)
+      ) {
         throw new Error(t('settings.terminalScrollback.error.invalidInput', '请输入 0–100000 之间的整数。'));
       }
-      const valueToSave = (limitValue === null || limitValue === undefined) ? '5000' : String(limitValue);
+      const valueToSave = limitValue === null || limitValue === undefined ? '5000' : String(limitValue);
       await settingsStore.updateSetting('terminalScrollbackLimit', valueToSave);
       terminalScrollbackLimitMessage.value = t('settings.terminalScrollback.success.saved', '终端回滚行数设置已保存。');
       terminalScrollbackLimitSuccess.value = true;
     } catch (error: any) {
       console.error('更新终端回滚行数设置失败:', error);
-      terminalScrollbackLimitMessage.value = error.message || t('settings.terminalScrollback.error.saveFailed', '保存终端回滚行数设置失败。');
+      terminalScrollbackLimitMessage.value =
+        error.message || t('settings.terminalScrollback.error.saveFailed', '保存终端回滚行数设置失败。');
       terminalScrollbackLimitSuccess.value = false;
     } finally {
       terminalScrollbackLimitLoading.value = false;
@@ -286,11 +300,15 @@ export function useWorkspaceSettings() {
     try {
       const valueToSave = fileManagerShowDeleteConfirmationLocal.value ? 'true' : 'false';
       await settingsStore.updateSetting('fileManagerShowDeleteConfirmation', valueToSave);
-      fileManagerShowDeleteConfirmationMessage.value = t('settings.workspace.fileManagerDeleteConfirmSuccess', '文件管理器删除确认设置已保存。');
+      fileManagerShowDeleteConfirmationMessage.value = t(
+        'settings.workspace.fileManagerDeleteConfirmSuccess',
+        '文件管理器删除确认设置已保存。',
+      );
       fileManagerShowDeleteConfirmationSuccess.value = true;
     } catch (error: any) {
       console.error('更新文件管理器删除确认设置失败:', error);
-      fileManagerShowDeleteConfirmationMessage.value = error.message || t('settings.workspace.fileManagerDeleteConfirmError', '保存文件管理器删除确认设置失败。');
+      fileManagerShowDeleteConfirmationMessage.value =
+        error.message || t('settings.workspace.fileManagerDeleteConfirmError', '保存文件管理器删除确认设置失败。');
       fileManagerShowDeleteConfirmationSuccess.value = false;
     } finally {
       fileManagerShowDeleteConfirmationLoading.value = false;
@@ -310,11 +328,15 @@ export function useWorkspaceSettings() {
     try {
       const valueToSave = terminalEnableRightClickPasteLocal.value ? 'true' : 'false';
       await settingsStore.updateSetting('terminalEnableRightClickPaste', valueToSave);
-      terminalEnableRightClickPasteMessage.value = t('settings.workspace.terminalRightClickPasteSuccess', '终端右键粘贴设置已保存。');
+      terminalEnableRightClickPasteMessage.value = t(
+        'settings.workspace.terminalRightClickPasteSuccess',
+        '终端右键粘贴设置已保存。',
+      );
       terminalEnableRightClickPasteSuccess.value = true;
     } catch (error: any) {
       console.error('更新终端右键粘贴设置失败:', error);
-      terminalEnableRightClickPasteMessage.value = error.message || t('settings.workspace.terminalRightClickPasteError', '保存终端右键粘贴设置失败。');
+      terminalEnableRightClickPasteMessage.value =
+        error.message || t('settings.workspace.terminalRightClickPasteError', '保存终端右键粘贴设置失败。');
       terminalEnableRightClickPasteSuccess.value = false;
     } finally {
       terminalEnableRightClickPasteLoading.value = false;
@@ -362,7 +384,9 @@ export function useWorkspaceSettings() {
       statusMonitorShowIpSuccess.value = true;
     } catch (error: any) {
       console.error('Failed to update status monitor IP display setting:', error);
-      statusMonitorShowIpMessage.value = error.message || t('settings.statusMonitorShowIp.error.saveFailed', 'Failed to save status monitor IP display setting.'); //  需要添加相应的i18n键
+      statusMonitorShowIpMessage.value =
+        error.message ||
+        t('settings.statusMonitorShowIp.error.saveFailed', 'Failed to save status monitor IP display setting.'); //  需要添加相应的i18n键
       statusMonitorShowIpSuccess.value = false;
     } finally {
       statusMonitorShowIpLoading.value = false;
@@ -370,21 +394,104 @@ export function useWorkspaceSettings() {
   };
 
   // Watchers to sync local state with store state
-  watch(showPopupFileEditorBoolean, (newValue) => { popupEditorEnabled.value = newValue; }, { immediate: true });
-  watch(clearFileEditorTabsOnCloseBoolean, (newValue) => { clearEditorTabsOnCloseEnabled.value = newValue; }, { immediate: true });
-  watch(shareFileEditorTabsBoolean, (newValue) => { shareTabsEnabled.value = newValue; }, { immediate: true });
-  watch(autoCopyOnSelectBoolean, (newValue) => { autoCopyEnabled.value = newValue; }, { immediate: true });
-  watch(workspaceSidebarPersistentBoolean, (newValue) => { workspaceSidebarPersistentEnabled.value = newValue; }, { immediate: true });
-  watch(commandInputSyncTarget, (newValue) => { commandInputSyncTargetLocal.value = newValue; }, { immediate: true });
-  watch(showConnectionTagsBoolean, (newValue) => { showConnectionTagsLocal.value = newValue; }, { immediate: true });
-  watch(showQuickCommandTagsBoolean, (newValue) => { showQuickCommandTagsLocal.value = newValue; }, { immediate: true });
-  watch(quickCommandsCollapsibleSearchBoolean, (newValue) => { quickCommandsCollapsibleSearchLocal.value = newValue; }, { immediate: true });
-  watch(terminalScrollbackLimitNumber, (newValue) => { terminalScrollbackLimitLocal.value = newValue; }, { immediate: true });
-  watch(fileManagerShowDeleteConfirmationBoolean, (newValue) => { fileManagerShowDeleteConfirmationLocal.value = newValue; }, { immediate: true });
-  watch(terminalEnableRightClickPasteBoolean, (newValue) => { terminalEnableRightClickPasteLocal.value = newValue; }, { immediate: true });
-  watch(showPopupFileManagerBoolean, (newValue) => { showPopupFileManagerLocal.value = newValue; }, { immediate: true }); // +++ Watch for popup file manager +++
-  watch(statusMonitorShowIpBoolean, (newValue) => { statusMonitorShowIpEnabled.value = newValue; }, { immediate: true });
-
+  watch(
+    showPopupFileEditorBoolean,
+    (newValue) => {
+      popupEditorEnabled.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    clearFileEditorTabsOnCloseBoolean,
+    (newValue) => {
+      clearEditorTabsOnCloseEnabled.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    shareFileEditorTabsBoolean,
+    (newValue) => {
+      shareTabsEnabled.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    autoCopyOnSelectBoolean,
+    (newValue) => {
+      autoCopyEnabled.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    workspaceSidebarPersistentBoolean,
+    (newValue) => {
+      workspaceSidebarPersistentEnabled.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    commandInputSyncTarget,
+    (newValue) => {
+      commandInputSyncTargetLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    showConnectionTagsBoolean,
+    (newValue) => {
+      showConnectionTagsLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    showQuickCommandTagsBoolean,
+    (newValue) => {
+      showQuickCommandTagsLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    quickCommandsCollapsibleSearchBoolean,
+    (newValue) => {
+      quickCommandsCollapsibleSearchLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    terminalScrollbackLimitNumber,
+    (newValue) => {
+      terminalScrollbackLimitLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    fileManagerShowDeleteConfirmationBoolean,
+    (newValue) => {
+      fileManagerShowDeleteConfirmationLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    terminalEnableRightClickPasteBoolean,
+    (newValue) => {
+      terminalEnableRightClickPasteLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    showPopupFileManagerBoolean,
+    (newValue) => {
+      showPopupFileManagerLocal.value = newValue;
+    },
+    { immediate: true },
+  ); // +++ Watch for popup file manager +++
+  watch(
+    statusMonitorShowIpBoolean,
+    (newValue) => {
+      statusMonitorShowIpEnabled.value = newValue;
+    },
+    { immediate: true },
+  );
 
   return {
     popupEditorEnabled,
@@ -453,11 +560,11 @@ export function useWorkspaceSettings() {
     fileManagerShowDeleteConfirmationSuccess,
     handleUpdateFileManagerDeleteConfirmation,
 
-    terminalEnableRightClickPasteLocal, 
-    terminalEnableRightClickPasteLoading, 
-    terminalEnableRightClickPasteMessage, 
-    terminalEnableRightClickPasteSuccess, 
-    handleUpdateTerminalRightClickPasteSetting, 
+    terminalEnableRightClickPasteLocal,
+    terminalEnableRightClickPasteLoading,
+    terminalEnableRightClickPasteMessage,
+    terminalEnableRightClickPasteSuccess,
+    handleUpdateTerminalRightClickPasteSetting,
 
     // Popup File Manager
     showPopupFileManagerLocal,

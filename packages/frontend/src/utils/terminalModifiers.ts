@@ -26,10 +26,7 @@ const toCtrlSequence = (character: string): string | null => {
 };
 
 /** Convert one phone/hardware keyboard character using sticky terminal modifiers. */
-export const applyTerminalModifiers = (
-  input: string,
-  modifiers: TerminalModifierState,
-): string | null => {
+export const applyTerminalModifiers = (input: string, modifiers: TerminalModifierState): string | null => {
   if (!modifiers.ctrl && !modifiers.alt) return null;
   if (Array.from(input).length !== 1) return null;
 

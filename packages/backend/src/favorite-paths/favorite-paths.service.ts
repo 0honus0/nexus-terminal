@@ -11,13 +11,13 @@ export type FavoritePathSortBy = 'name' | 'last_used_at';
  * @returns 返回添加记录的 ID
  */
 export const addFavoritePath = async (name: string | null, path: string): Promise<number> => {
-    if (!path || path.trim().length === 0) {
-        throw new Error('路径内容不能为空');
-    }
-    // 如果 name 是空字符串，则视为 null
-    const finalName = name && name.trim().length > 0 ? name.trim() : null;
-    const favoritePathId = await FavoritePathsRepository.addFavoritePath(finalName, path.trim());
-    return favoritePathId;
+  if (!path || path.trim().length === 0) {
+    throw new Error('路径内容不能为空');
+  }
+  // 如果 name 是空字符串，则视为 null
+  const finalName = name && name.trim().length > 0 ? name.trim() : null;
+  const favoritePathId = await FavoritePathsRepository.addFavoritePath(finalName, path.trim());
+  return favoritePathId;
 };
 
 /**
@@ -28,12 +28,12 @@ export const addFavoritePath = async (name: string | null, path: string): Promis
  * @returns 返回是否成功更新 (更新行数 > 0)
  */
 export const updateFavoritePath = async (id: number, name: string | null, path: string): Promise<boolean> => {
-    if (!path || path.trim().length === 0) {
-        throw new Error('路径内容不能为空');
-    }
-    const finalName = name && name.trim().length > 0 ? name.trim() : null;
-    const pathUpdated = await FavoritePathsRepository.updateFavoritePath(id, finalName, path.trim());
-    return pathUpdated;
+  if (!path || path.trim().length === 0) {
+    throw new Error('路径内容不能为空');
+  }
+  const finalName = name && name.trim().length > 0 ? name.trim() : null;
+  const pathUpdated = await FavoritePathsRepository.updateFavoritePath(id, finalName, path.trim());
+  return pathUpdated;
 };
 
 /**
@@ -42,8 +42,8 @@ export const updateFavoritePath = async (id: number, name: string | null, path: 
  * @returns 返回是否成功删除 (删除行数 > 0)
  */
 export const deleteFavoritePath = async (id: number): Promise<boolean> => {
-    const changes = await FavoritePathsRepository.deleteFavoritePath(id);
-    return changes;
+  const changes = await FavoritePathsRepository.deleteFavoritePath(id);
+  return changes;
 };
 
 /**
@@ -52,7 +52,7 @@ export const deleteFavoritePath = async (id: number): Promise<boolean> => {
  * @returns 返回排序后的收藏路径数组
  */
 export const getAllFavoritePaths = async (sortBy: FavoritePathSortBy = 'name'): Promise<FavoritePath[]> => {
-    return FavoritePathsRepository.getAllFavoritePaths(sortBy);
+  return FavoritePathsRepository.getAllFavoritePaths(sortBy);
 };
 
 /**
@@ -61,8 +61,8 @@ export const getAllFavoritePaths = async (sortBy: FavoritePathSortBy = 'name'): 
  * @returns Promise<boolean> - 操作是否成功
  */
 export const updateFavoritePathLastUsed = async (id: number): Promise<boolean> => {
-    // 未来可能在这里添加额外的业务逻辑或验证
-    return FavoritePathsRepository.updateFavoritePathLastUsedAt(id);
+  // 未来可能在这里添加额外的业务逻辑或验证
+  return FavoritePathsRepository.updateFavoritePathLastUsedAt(id);
 };
 
 /**
@@ -71,5 +71,5 @@ export const updateFavoritePathLastUsed = async (id: number): Promise<boolean> =
  * @returns 返回找到的收藏路径，或 undefined
  */
 export const getFavoritePathById = async (id: number): Promise<FavoritePath | undefined> => {
-    return FavoritePathsRepository.findFavoritePathById(id);
+  return FavoritePathsRepository.findFavoritePathById(id);
 };

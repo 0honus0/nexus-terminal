@@ -4,15 +4,14 @@ export const releaseRepository = RELEASE_REPOSITORY;
 export const releaseRepositoryUrl = `https://github.com/${RELEASE_REPOSITORY}`;
 export const latestReleaseApiUrl = `https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/latest`;
 
-export const getReleaseUrl = (tag: string) =>
-  `${releaseRepositoryUrl}/releases/tag/${encodeURIComponent(tag)}`;
+export const getReleaseUrl = (tag: string) => `${releaseRepositoryUrl}/releases/tag/${encodeURIComponent(tag)}`;
 
 const parseVersion = (version: string) => {
   const normalized = version.trim().replace(/^v/i, '').split('+', 1)[0];
   const [core, prerelease = ''] = normalized.split('-', 2);
   const coreParts = core.split('.');
 
-  if (coreParts.length === 0 || coreParts.some(part => !/^\d+$/.test(part))) {
+  if (coreParts.length === 0 || coreParts.some((part) => !/^\d+$/.test(part))) {
     return null;
   }
 

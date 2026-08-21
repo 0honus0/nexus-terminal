@@ -30,12 +30,11 @@ export function useConfirmDialog() {
       message: message,
     });
   };
-  
+
   // Expose setLoading if needed directly from composable
   const setLoading = (isLoading: boolean) => {
     dialogStore.setLoading(isLoading);
   };
-
 
   return {
     showConfirmDialog,

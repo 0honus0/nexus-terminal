@@ -20,7 +20,7 @@ import {
   listUserPasskeysHandler,
   deleteUserPasskeyHandler,
   updateUserPasskeyNameHandler, // 更新 Passkey 名称的处理器
-  checkHasPasskeys
+  checkHasPasskeys,
 } from './auth.controller';
 import { isAuthenticated } from './auth.middleware';
 import { ipBlacklistCheckMiddleware } from './ipBlacklistCheck.middleware';
@@ -71,7 +71,6 @@ router.post('/passkey/register', isAuthenticated, verifyPasskeyRegistrationHandl
 // POST /api/v1/auth/passkey/authentication-options - 生成 Passkey 认证选项 (公开或半公开，取决于是否提供了用户名)
 router.post('/passkey/authentication-options', generatePasskeyAuthenticationOptionsHandler);
 
-
 // POST /api/v1/auth/passkey/authenticate - 验证 Passkey 并登录用户 (公开)
 router.post('/passkey/authenticate', ipBlacklistCheckMiddleware, verifyPasskeyAuthenticationHandler);
 
@@ -87,10 +86,8 @@ router.delete('/user/passkeys/:credentialID', isAuthenticated, deleteUserPasskey
 
 // PUT /api/v1/auth/user/passkeys/:credentialID/name - 更新当前用户指定的 Passkey 名称 (需要认证)
 router.put('/user/passkeys/:credentialID/name', isAuthenticated, updateUserPasskeyNameHandler);
- 
- 
+
 // POST /api/v1/auth/logout - 用户登出接口 (公开访问)
 router.post('/logout', logout);
-
 
 export default router;

@@ -60,9 +60,7 @@ export const createWheelStepAccumulator = ({
   };
 };
 
-export const clampScale = (value: number, min: number, max: number): number => (
-  Math.min(max, Math.max(min, value))
-);
+export const clampScale = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 /**
  * Shared Ctrl+wheel scaling policy used by terminals, editors and scalable panels.

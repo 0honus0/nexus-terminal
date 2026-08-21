@@ -19,10 +19,7 @@ export const spreadsheetPreviewProvider: FilePreviewProvider = {
   },
 
   async load(_file, context) {
-    const [{ parseXlsxPreview }, response] = await Promise.all([
-      import('../xlsxPreviewParser'),
-      context.fetchInline(),
-    ]);
+    const [{ parseXlsxPreview }, response] = await Promise.all([import('../xlsxPreviewParser'), context.fetchInline()]);
     const buffer = await response.arrayBuffer();
     const sheets = await parseXlsxPreview(buffer, {
       maxRows: MAX_PREVIEW_ROWS,

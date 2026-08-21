@@ -12,15 +12,10 @@ interface UseResizableOptions {
 
 type Edge = 'right' | 'bottom' | 'left' | 'top' | 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | null;
 
-const isResizableElement = (value: unknown): value is HTMLElement => (
-  value instanceof HTMLElement
-  && typeof value.getBoundingClientRect === 'function'
-);
+const isResizableElement = (value: unknown): value is HTMLElement =>
+  value instanceof HTMLElement && typeof value.getBoundingClientRect === 'function';
 
-export function useResizable(
-  elementRef: Ref<HTMLElement | null>,
-  options: UseResizableOptions = {}
-) {
+export function useResizable(elementRef: Ref<HTMLElement | null>, options: UseResizableOptions = {}) {
   const {
     minWidth = 100, // Default min width
     minHeight = 100, // Default min height
@@ -57,10 +52,10 @@ export function useResizable(
     if (onLeft) return 'left';
     if (onBottom) return 'bottom';
     if (onTop) return 'top';
-    
+
     return null;
   };
-  
+
   const updateCursorStyle = (el: HTMLElement, edge: Edge) => {
     if (edge === 'left' || edge === 'right') el.style.cursor = 'ew-resize';
     else if (edge === 'top' || edge === 'bottom') el.style.cursor = 'ns-resize';

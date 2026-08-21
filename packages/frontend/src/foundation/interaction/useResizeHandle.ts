@@ -23,9 +23,8 @@ export function useResizeHandle(options: ResizeHandleOptions) {
   let startHeight = 0;
   let activePointerId: number | null = null;
 
-  const clamp = (value: number, min: number, max?: number) => (
-    Math.min(Math.max(min, value), max ?? Number.POSITIVE_INFINITY)
-  );
+  const clamp = (value: number, min: number, max?: number) =>
+    Math.min(Math.max(min, value), max ?? Number.POSITIVE_INFINITY);
 
   const handlePointerMove = (event: PointerEvent) => {
     if (!isResizing.value || (activePointerId !== null && event.pointerId !== activePointerId)) return;

@@ -1,6 +1,6 @@
 import express from 'express';
 import * as themeController from './terminal-theme.controller';
-import { isAuthenticated } from '../auth/auth.middleware'; 
+import { isAuthenticated } from '../auth/auth.middleware';
 
 const router = express.Router();
 
@@ -27,6 +27,5 @@ router.post('/import', themeController.uploadMiddleware.single('themeFile'), the
 
 // GET /api/v1/terminal-themes/:id/export - 导出主题
 router.get('/:id/export', themeController.exportThemeController);
-
 
 export default router;

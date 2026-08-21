@@ -12,16 +12,17 @@ export default defineConfig({
     alias: {
       '@': resolveLocalModule('./src'),
       '@monaco-editor-api': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.api.js'),
-      '@monaco-basic-languages': resolveLocalModule('./node_modules/monaco-editor/esm/vs/basic-languages/monaco.contribution.js'),
-      '@monaco-json-language': resolveLocalModule('./node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js'),
+      '@monaco-basic-languages': resolveLocalModule(
+        './node_modules/monaco-editor/esm/vs/basic-languages/monaco.contribution.js',
+      ),
+      '@monaco-json-language': resolveLocalModule(
+        './node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js',
+      ),
       '@monaco-editor-worker': resolveLocalModule('./node_modules/monaco-editor/esm/vs/editor/editor.worker.js'),
       '@monaco-json-worker': resolveLocalModule('./node_modules/monaco-editor/esm/vs/language/json/json.worker.js'),
     },
   },
-  plugins: [
-    vue(),
-    tailwindcss(),
-  ],
+  plugins: [vue(), tailwindcss()],
   build: {
     // Monaco and its language workers are intentionally emitted as large,
     // independently cached chunks. The default 500 kB threshold reports these
@@ -48,7 +49,7 @@ export default defineConfig({
         ws: true,
         // 保留浏览器访问前端时的 Host，供后端进行同源 WebSocket 校验。
         changeOrigin: false,
-      }
-    }
-  }
-})
+      },
+    },
+  },
+});

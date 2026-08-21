@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* Tailwind Theme Variables Mapping */
 @theme inline {
@@ -41,22 +41,22 @@
 /* 全局样式和 CSS 变量定义 */
 :root {
   /* 基础颜色 */
-  --app-bg-color: #ffffff;       /* 应用背景色 */
-  --text-color: #333333;         /* 主要文字颜色 */
+  --app-bg-color: #ffffff; /* 应用背景色 */
+  --text-color: #333333; /* 主要文字颜色 */
   --text-color-secondary: #666666; /* 次要文字颜色 */
-  --border-color: #cccccc;       /* 边框颜色 */
-  --link-color: #333;            /* 链接颜色 */
-  --link-hover-color: #0056b3;   /* 链接悬停颜色 */
-  --link-active-color: #007bff;   /* 激活链接/主题色 */
+  --border-color: #cccccc; /* 边框颜色 */
+  --link-color: #333; /* 链接颜色 */
+  --link-hover-color: #0056b3; /* 链接悬停颜色 */
+  --link-active-color: #007bff; /* 激活链接/主题色 */
   --link-active-bg-color: #e0e0ff; /* 激活链接背景色 (类似 indigo-50) */
   --nav-item-active-bg-color: var(--link-active-bg-color); /* 导航选中项背景色, 默认同激活链接背景 */
 
   /* 组件颜色 */
-  --header-bg-color: #f0f0f0;     /* 头部背景色 */
-  --footer-bg-color: #f0f0f0;     /* 底部背景色 */
-  --button-bg-color: #007bff;     /* 按钮背景色 */
-  --button-text-color: #ffffff;   /* 按钮文字颜色 */
-  --button-hover-bg-color: #0056b3;/* 按钮悬停背景色 */
+  --header-bg-color: #f0f0f0; /* 头部背景色 */
+  --footer-bg-color: #f0f0f0; /* 底部背景色 */
+  --button-bg-color: #007bff; /* 按钮背景色 */
+  --button-text-color: #ffffff; /* 按钮文字颜色 */
+  --button-hover-bg-color: #0056b3; /* 按钮悬停背景色 */
   --icon-color: var(--text-color-secondary); /* 图标颜色 */
   --icon-hover-color: var(--link-hover-color); /* 图标悬停颜色 */
   --split-line-color: var(--border-color); /* 分割线颜色 */
@@ -74,17 +74,17 @@
   /* Status Colors */
   --color-success: #28a745; /* Green */
   --color-warning: #ffc107; /* Yellow */
-  --color-error: #dc3545;   /* Red */
+  --color-error: #dc3545; /* Red */
   --color-success-text: #ffffff; /* White text for green bg */
   --color-warning-text: #212529; /* Dark text for yellow bg */
-  --color-error-text: #ffffff;   /* White text for red bg */
+  --color-error-text: #ffffff; /* White text for red bg */
 
   /* 字体 */
   --font-family-sans-serif: sans-serif; /* 默认字体 */
 
   /* 其他 */
-  --base-padding: 1rem;          /* 基础内边距 */
-  --base-margin: 0.5rem;         /* 基础外边距 */
+  --base-padding: 1rem; /* 基础内边距 */
+  --base-margin: 0.5rem; /* 基础外边距 */
 }
 
 /* 应用基础样式 */
@@ -105,13 +105,18 @@ a {
 /* Removed global a:hover underline rule to avoid conflicts with Tailwind utilities */
 
 /* 全局图标样式 */
-i, .fas, .far, .fab { /* 根据你使用的图标库调整选择器 */
+i,
+.fas,
+.far,
+.fab {
+  /* 根据你使用的图标库调整选择器 */
   color: var(--icon-color);
   transition: color 0.2s ease;
 }
 a:hover i, a:hover .fas, a:hover .far, a:hover .fab, /* 链接内的图标 */
 button:hover i, button:hover .fas, button:hover .far, button:hover .fab, /* 按钮内的图标 */
-.icon-interactive:hover i, .icon-interactive:hover .fas, .icon-interactive:hover .far, .icon-interactive:hover .fab { /* 可交互图标容器 */
+.icon-interactive:hover i, .icon-interactive:hover .fas, .icon-interactive:hover .far, .icon-interactive:hover .fab {
+  /* 可交互图标容器 */
   color: var(--icon-hover-color);
 }
 /* 全局分割线样式 */
@@ -121,13 +126,13 @@ hr {
   margin: var(--base-margin) 0;
 }
 
-
 /* 可以添加更多全局样式规则 */
 
 /* 为历史记录和快捷命令列表设置字体 */
 /* 注意：这里的选择器可能需要根据实际组件结构调整 */
 .command-history-item,
-.quick-command-item { /* 假设这些是列表项的类名 */
+.quick-command-item {
+  /* 假设这些是列表项的类名 */
   font-family: var(--font-family-sans-serif);
 }
 
@@ -138,7 +143,7 @@ hr {
 
 /* Override splitpanes default theme pane background */
 .splitpanes.default-theme .splitpanes__pane {
-    background-color: var(--app-bg-color) !important;
+  background-color: var(--app-bg-color) !important;
 }
 
 /* Style the splitpane splitter */
@@ -190,30 +195,34 @@ hr {
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
 textarea,
 select {
-    background-color: var(--input-bg-color);
-    color: var(--input-text-color);
+  background-color: var(--input-bg-color);
+  color: var(--input-text-color);
 }
 
 input::placeholder,
 textarea::placeholder {
-    color: var(--input-placeholder-color);
-    opacity: 1;
+  color: var(--input-placeholder-color);
+  opacity: 1;
 }
 
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):disabled,
 textarea:disabled,
 select:disabled {
-    background-color: var(--input-disabled-bg-color) !important;
-    color: var(--input-disabled-text-color) !important;
-    -webkit-text-fill-color: var(--input-disabled-text-color);
-    border-color: var(--input-disabled-border-color) !important;
-    opacity: 1 !important;
+  background-color: var(--input-disabled-bg-color) !important;
+  color: var(--input-disabled-text-color) !important;
+  -webkit-text-fill-color: var(--input-disabled-text-color);
+  border-color: var(--input-disabled-border-color) !important;
+  opacity: 1 !important;
 }
 
-input:focus, textarea:focus, select:focus {
-    border-color: var(--input-focus-border-color) !important; /* Use new variable, !important might be needed depending on specificity */
-    outline: 0;
-    box-shadow: 0 0 0 3px rgba(var(--input-focus-glow-rgb), 0.2) !important; /* Use new variable, !important might be needed */
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(
+    --input-focus-border-color
+  ) !important; /* Use new variable, !important might be needed depending on specificity */
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(var(--input-focus-glow-rgb), 0.2) !important; /* Use new variable, !important might be needed */
 }
 
 /* Ensure icons inside primary buttons are white */

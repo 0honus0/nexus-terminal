@@ -9,7 +9,6 @@ const backupUpload = multer({
   limits: { fileSize: 512 * 1024 * 1024 },
 });
 
-
 // GET /api/v1/settings/captcha - 获取公共 CAPTCHA 配置 (不含密钥)
 router.get('/captcha', settingsController.getCaptchaConfig);
 
@@ -50,7 +49,6 @@ router.get('/ip-blacklist', settingsController.getIpBlacklist);
 // DELETE /api/v1/settings/ip-blacklist/:ip - 从黑名单中删除指定 IP (需要认证)
 router.delete('/ip-blacklist/:ip', settingsController.deleteIpFromBlacklist);
 
-
 // +++ 终端选中自动复制路由 +++
 // GET /api/v1/settings/auto-copy-on-select - 获取设置
 router.get('/auto-copy-on-select', settingsController.getAutoCopyOnSelect);
@@ -82,13 +80,13 @@ router.get('/export-connections', settingsController.exportAllConnections);
 // 完整备份：导出时验证当前密码；导入时同实例自动解密，跨实例使用导出密码。
 router.post('/backup/export', settingsController.exportFullBackup);
 router.post('/backup/import', backupUpload.single('backupFile'), settingsController.importFullBackup);
- 
+
 // +++ 显示状态监视器IP地址路由 +++
 // GET /api/v1/settings/show-status-monitor-ip-address - 获取设置
 router.get('/show-status-monitor-ip-address', settingsController.getShowStatusMonitorIpAddress);
 // PUT /api/v1/settings/show-status-monitor-ip-address - 更新设置
 router.put('/show-status-monitor-ip-address', settingsController.setShowStatusMonitorIpAddress);
- 
+
 export default router;
 
 // +++ CAPTCHA 配置路由 (需要认证更新) +++

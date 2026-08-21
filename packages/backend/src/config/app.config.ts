@@ -18,9 +18,13 @@ interface AppConfig {
 const DEFAULT_RP_ID = 'localhost';
 const DEFAULT_RP_ORIGIN = 'http://localhost:5173';
 
-const parseCsvEnvValue = (value: string | undefined): string[] => value
-  ? value.split(',').map(item => item.trim()).filter(Boolean)
-  : [];
+const parseCsvEnvValue = (value: string | undefined): string[] =>
+  value
+    ? value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 
 const normalizeOrigin = (origin: string): string | undefined => {
   try {
@@ -58,9 +62,7 @@ const buildPasskeyRpConfigs = (): PasskeyRpConfig[] => {
     return [{ rpId: rpId.toLowerCase(), rpOrigin: normalizedOrigin }];
   });
 
-  return configs.length > 0
-    ? configs
-    : [{ rpId: DEFAULT_RP_ID, rpOrigin: DEFAULT_RP_ORIGIN }];
+  return configs.length > 0 ? configs : [{ rpId: DEFAULT_RP_ID, rpOrigin: DEFAULT_RP_ORIGIN }];
 };
 
 const passkeyRpConfigs = buildPasskeyRpConfigs();
@@ -77,7 +79,7 @@ export const getPasskeyRelatedOriginsForRpId = (rpId: string): string[] => {
   const normalizedRpId = rpId.toLowerCase();
   const origins = new Set<string>();
 
-  config.passkeyRpConfigs.forEach(item => {
+  config.passkeyRpConfigs.forEach((item) => {
     if (item.rpId.toLowerCase() !== normalizedRpId) return;
     const hostname = getHostnameFromOrigin(item.rpOrigin);
     if (!hostname || hostname === normalizedRpId || hostname.endsWith(`.${normalizedRpId}`)) return;

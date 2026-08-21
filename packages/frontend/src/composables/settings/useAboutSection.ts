@@ -14,11 +14,8 @@ export function useAboutSection() {
   const versionCheckError = ref<string | null>(null);
 
   const isUpdateAvailable = computed(() => {
-    return latestVersion.value
-      ? isNewerRelease(latestVersion.value, appVersion.value)
-      : false;
+    return latestVersion.value ? isNewerRelease(latestVersion.value, appVersion.value) : false;
   });
-
 
   const checkLatestVersion = async () => {
     isCheckingVersion.value = true;

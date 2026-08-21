@@ -10,35 +10,23 @@ const sshSuspendController = new SshSuspendController();
 router.get(
   '/suspended-sessions',
   isAuthenticated, // 取消注释：添加认证中间件
-  sshSuspendController.getSuspendedSshSessions
+  sshSuspendController.getSuspendedSshSessions,
 );
 
 // Route to terminate an active 'hanging' suspended session and remove its entry
-router.delete(
-  '/terminate/:suspendSessionId',
-  isAuthenticated,
-  sshSuspendController.terminateAndRemoveSession
-);
+router.delete('/terminate/:suspendSessionId', isAuthenticated, sshSuspendController.terminateAndRemoveSession);
 
 // Route to remove an already 'disconnected_by_backend' suspended session entry
-router.delete(
-  '/entry/:suspendSessionId',
-  isAuthenticated,
-  sshSuspendController.removeSessionEntry
-);
+router.delete('/entry/:suspendSessionId', isAuthenticated, sshSuspendController.removeSessionEntry);
 
 // Route to edit a suspended session's custom name
 router.put(
   '/name/:suspendSessionId',
   isAuthenticated,
-  sshSuspendController.editSessionNameHttp // 新的控制器方法
+  sshSuspendController.editSessionNameHttp, // 新的控制器方法
 );
 
 // Route to export the log of a suspended session
-router.get(
-  '/log/:suspendSessionId',
-  isAuthenticated,
-  sshSuspendController.exportSessionLog
-);
+router.get('/log/:suspendSessionId', isAuthenticated, sshSuspendController.exportSessionLog);
 
 export default router;

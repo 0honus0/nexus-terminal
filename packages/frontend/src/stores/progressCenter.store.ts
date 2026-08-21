@@ -2,14 +2,7 @@ import { computed, reactive } from 'vue';
 import { defineStore } from 'pinia';
 
 export type ProgressTaskKind =
-  | 'upload'
-  | 'download'
-  | 'copy'
-  | 'move'
-  | 'compress'
-  | 'decompress'
-  | 'transfer'
-  | 'other';
+  'upload' | 'download' | 'copy' | 'move' | 'compress' | 'decompress' | 'transfer' | 'other';
 
 export interface ProgressTaskRegistration {
   id: string;
@@ -80,14 +73,11 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     ensureSource(registration);
   };
 
-  const syncSourceTasks = (
-    registration: ProgressSourceRegistration,
-    tasks: ProgressTaskRegistration[],
-  ) => {
+  const syncSourceTasks = (registration: ProgressSourceRegistration, tasks: ProgressTaskRegistration[]) => {
     const source = ensureSource(registration);
     const previousIds = new Set(Object.keys(source.tasks));
-    const nextIds = new Set(tasks.map(task => task.id));
-    const hasNewTask = tasks.some(task => !previousIds.has(task.id));
+    const nextIds = new Set(tasks.map((task) => task.id));
+    const hasNewTask = tasks.some((task) => !previousIds.has(task.id));
 
     for (const id of previousIds) {
       if (!nextIds.has(id)) delete source.tasks[id];
@@ -112,21 +102,14 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     }
   };
 
-  const startTask = (
-    registration: ProgressSourceRegistration,
-    task: ProgressTaskRegistration,
-  ) => {
+  const startTask = (registration: ProgressSourceRegistration, task: ProgressTaskRegistration) => {
     const source = ensureSource(registration);
     source.tasks[task.id] = task;
     source.hidden = false;
     source.hiddenExplicitly = false;
   };
 
-  const updateTask = (
-    sourceId: string,
-    taskId: string,
-    patch: Partial<Omit<ProgressTaskRegistration, 'id'>>,
-  ) => {
+  const updateTask = (sourceId: string, taskId: string, patch: Partial<Omit<ProgressTaskRegistration, 'id'>>) => {
     const task = sources[sourceId]?.tasks[taskId];
     if (!task) return;
     Object.assign(task, patch);
@@ -187,7 +170,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     const result: RegisteredProgressSource[] = [];
     for (const source of Object.values(sources)) {
       if (!source.hidden) continue;
-      const tasks = Object.values(source.tasks).map(task => toRegisteredTask(source, task));
+      const tasks = Object.values(source.tasks).map((task) => toRegisteredTask(source, task));
       if (tasks.length === 0) continue;
       result.push({
         id: source.id,
@@ -199,9 +182,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
     return result;
   });
 
-  const hiddenTasks = computed<RegisteredProgressTask[]>(() =>
-    hiddenSources.value.flatMap(source => source.tasks),
-  );
+  const hiddenTasks = computed<RegisteredProgressTask[]>(() => hiddenSources.value.flatMap((source) => source.tasks));
 
   const cancelTask = async (sourceId: string, taskId: string) => {
     const task = sources[sourceId]?.tasks[taskId];
@@ -213,8 +194,9 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
   const cancelSource = async (sourceId: string) => {
     const source = sources[sourceId];
     if (!source) return;
-    const cancellableTasks = Object.values(source.tasks)
-      .filter(task => task.cancel && task.cancellable !== false && task.status !== 'cancelling');
+    const cancellableTasks = Object.values(source.tasks).filter(
+      (task) => task.cancel && task.cancellable !== false && task.status !== 'cancelling',
+    );
     if (cancellableTasks.length === 0) return;
 
     if (source.cancelAll) {
@@ -222,7 +204,7 @@ export const useProgressCenterStore = defineStore('progressCenter', () => {
       await source.cancelAll();
       return;
     }
-    await Promise.all(cancellableTasks.map(task => cancelTask(sourceId, task.id)));
+    await Promise.all(cancellableTasks.map((task) => cancelTask(sourceId, task.id)));
   };
 
   return {

@@ -11,12 +11,15 @@ const SAFE_LOG_IDENTIFIER = /^[A-Za-z0-9_-]{1,128}$/;
  * TemporaryLogStorageService负责管理临时日志文件的原子化读、写、删除及轮替操作。
  */
 export class TemporaryLogStorageService {
-  private readonly writers = new Map<string, {
-    tail: Promise<void>;
-    size?: number;
-    revision: number;
-    error?: unknown;
-  }>();
+  private readonly writers = new Map<
+    string,
+    {
+      tail: Promise<void>;
+      size?: number;
+      revision: number;
+      error?: unknown;
+    }
+  >();
 
   constructor() {
     void this.ensureLogDirectoryExists();
@@ -59,10 +62,12 @@ export class TemporaryLogStorageService {
   private enqueue(suspendSessionId: string, operation: (writer: { size?: number }) => Promise<void>): Promise<void> {
     const writer = this.getWriter(suspendSessionId);
     writer.revision += 1;
-    const result = writer.tail.then(() => operation(writer)).catch(error => {
-      writer.error = error;
-      throw error;
-    });
+    const result = writer.tail
+      .then(() => operation(writer))
+      .catch((error) => {
+        writer.error = error;
+        throw error;
+      });
     writer.tail = result.catch(() => undefined);
     return result;
   }
@@ -77,7 +82,7 @@ export class TemporaryLogStorageService {
     const filePath = this.getLogFilePath(suspendSessionId);
     const chunk = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
     if (chunk.length === 0) return;
-    return this.enqueue(suspendSessionId, async writer => {
+    return this.enqueue(suspendSessionId, async (writer) => {
       try {
         await this.ensureLogDirectoryExists();
         if (writer.size === undefined) {
@@ -89,9 +94,8 @@ export class TemporaryLogStorageService {
           }
         }
 
-        const retainedChunk = chunk.length > MAX_LOG_SIZE_BYTES
-          ? chunk.subarray(chunk.length - MAX_LOG_SIZE_BYTES)
-          : chunk;
+        const retainedChunk =
+          chunk.length > MAX_LOG_SIZE_BYTES ? chunk.subarray(chunk.length - MAX_LOG_SIZE_BYTES) : chunk;
         if (writer.size + retainedChunk.length > MAX_LOG_SIZE_BYTES) {
           console.log(`日志文件 '${filePath}' 达到 ${MAX_LOG_SIZE_BYTES / (1024 * 1024)}MB，执行轮替。`);
           await fs.writeFile(filePath, retainedChunk, { mode: 0o600 });
@@ -136,7 +140,7 @@ export class TemporaryLogStorageService {
   async deleteLog(suspendSessionId: string): Promise<void> {
     const filePath = this.getLogFilePath(suspendSessionId);
     const writer = this.getWriter(suspendSessionId);
-    const deletion = this.enqueue(suspendSessionId, async currentWriter => {
+    const deletion = this.enqueue(suspendSessionId, async (currentWriter) => {
       try {
         await fs.unlink(filePath);
         currentWriter.size = 0;
@@ -163,8 +167,8 @@ export class TemporaryLogStorageService {
       await this.ensureLogDirectoryExists();
       const files = await fs.readdir(LOG_DIRECTORY);
       return files
-        .filter(file => file.endsWith('.log') && SAFE_LOG_IDENTIFIER.test(file.replace(/\.log$/, '')))
-        .map(file => file.replace(/\.log$/, ''));
+        .filter((file) => file.endsWith('.log') && SAFE_LOG_IDENTIFIER.test(file.replace(/\.log$/, '')))
+        .map((file) => file.replace(/\.log$/, ''));
     } catch (error) {
       console.error(`列出日志目录 '${LOG_DIRECTORY}' 中的文件失败:`, error);
       return []; // 发生错误时返回空数组

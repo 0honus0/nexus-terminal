@@ -22,7 +22,7 @@ export const defaultXtermTheme: ITheme = {
   brightBlue: '#3b8eea',
   brightMagenta: '#d670d6',
   brightCyan: '#29b8db',
-  brightWhite: '#e5e5e5'
+  brightWhite: '#e5e5e5',
 };
 
 // 默认 UI 主题 (CSS 变量)
@@ -35,8 +35,8 @@ export const defaultUiTheme: Record<string, string> = {
   '--link-color': '#8E44AD', // 现代紫色 (Amethyst 变种)
   '--link-hover-color': '#B180E0', // 现代紫色 - 悬停 (更亮)
   '--link-active-color': '#A06CD5', // 现代紫色 - 激活 (基础)
-  '--link-active-bg-color': '#F3EBFB', /* 现代紫色 - 激活背景 (非常浅) */
-  '--nav-item-active-bg-color': 'var(--link-active-bg-color)', /* Added */
+  '--link-active-bg-color': '#F3EBFB' /* 现代紫色 - 激活背景 (非常浅) */,
+  '--nav-item-active-bg-color': 'var(--link-active-bg-color)' /* Added */,
   '--header-bg-color': '#f0f0f0',
   '--footer-bg-color': '#f0f0f0',
   '--button-bg-color': '#A06CD5', // 现代紫色 - 激活 (基础)
@@ -44,17 +44,17 @@ export const defaultUiTheme: Record<string, string> = {
   '--button-hover-bg-color': '#8E44AD', // 现代紫色 - 悬停 (稍暗)
   '--icon-color': 'var(--text-color-secondary)', // 图标颜色
   '--icon-hover-color': 'var(--link-hover-color)', // 图标悬停颜色 (自动更新)
-  '--split-line-color': 'var(--border-color)', /* 分割线颜色 */
-  '--split-line-hover-color': 'var(--border-color)', /* 分割线悬停颜色 */
+  '--split-line-color': 'var(--border-color)' /* 分割线颜色 */,
+  '--split-line-hover-color': 'var(--border-color)' /* 分割线悬停颜色 */,
   '--input-bg-color': '#ffffff',
   '--input-text-color': 'var(--text-color)',
   '--input-placeholder-color': 'var(--text-color-secondary)',
   '--input-disabled-bg-color': '#f3f4f6',
   '--input-disabled-text-color': '#6b7280',
   '--input-disabled-border-color': '#d1d5db',
-  '--input-focus-border-color': 'var(--link-active-color)', /* 输入框聚焦边框颜色 (自动更新) */
-  '--input-focus-glow': 'var(--link-active-color)', /* 输入框聚焦光晕值 (自动更新) */
-  '--overlay-bg-color': 'rgba(0, 0, 0, 0.6)', /* Added Overlay Background - 恢复 rgba 以支持透明度 */
+  '--input-focus-border-color': 'var(--link-active-color)' /* 输入框聚焦边框颜色 (自动更新) */,
+  '--input-focus-glow': 'var(--link-active-color)' /* 输入框聚焦光晕值 (自动更新) */,
+  '--overlay-bg-color': 'rgba(0, 0, 0, 0.6)' /* Added Overlay Background - 恢复 rgba 以支持透明度 */,
   '--font-family-sans-serif': 'sans-serif',
   '--base-padding': '1rem',
   '--base-margin': '0.5rem',

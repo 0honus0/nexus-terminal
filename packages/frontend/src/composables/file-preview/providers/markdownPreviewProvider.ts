@@ -17,10 +17,7 @@ export const markdownPreviewProvider: FilePreviewProvider = {
   },
 
   async load(_file, context) {
-    const [{ default: DOMPurify }, { marked }] = await Promise.all([
-      import('dompurify'),
-      import('marked'),
-    ]);
+    const [{ default: DOMPurify }, { marked }] = await Promise.all([import('dompurify'), import('marked')]);
     const response = await context.fetchInline();
     const source = await response.text();
     const rendered = await marked.parse(source, {

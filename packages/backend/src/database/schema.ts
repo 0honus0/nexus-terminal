@@ -18,8 +18,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 `;
 
-
-
 // Passkeys table definition
 export const createPasskeysTableSQL = `
 CREATE TABLE IF NOT EXISTS passkeys (
@@ -193,8 +191,6 @@ CREATE TABLE IF NOT EXISTS quick_command_tag_associations (
     FOREIGN KEY (tag_id) REFERENCES quick_command_tags(id) ON DELETE CASCADE
 );
 `;
-
-
 
 // 从 database.ts 移动过来的，保持一致性
 export const createTerminalThemesTableSQL = `

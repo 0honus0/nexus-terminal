@@ -9,7 +9,9 @@ const extractErrorMessage = async (error: unknown, fallback: string): Promise<st
       try {
         const parsed = JSON.parse(await data.text());
         if (typeof parsed?.message === 'string') return parsed.message;
-      } catch { /* ignore malformed error response */ }
+      } catch {
+        /* ignore malformed error response */
+      }
     }
     if (typeof data === 'string') return data;
     if (typeof data?.message === 'string') return data.message;
@@ -35,12 +37,16 @@ export function useDataBackup() {
     exportMessage.value = '';
     exportSuccess.value = false;
     try {
-      const response = await apiClient.post('/settings/backup/export', {
-        password: exportPassword.value,
-      }, {
-        responseType: 'blob',
-        timeout: 120_000,
-      });
+      const response = await apiClient.post(
+        '/settings/backup/export',
+        {
+          password: exportPassword.value,
+        },
+        {
+          responseType: 'blob',
+          timeout: 120_000,
+        },
+      );
 
       let filename = 'nexus-terminal-backup.nexus-backup';
       const disposition = response.headers['content-disposition'];

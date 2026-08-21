@@ -20,7 +20,9 @@ for (const path in localeModules) {
 
 // 检查是否成功加载了任何语言文件
 if (availableLocales.length === 0) {
-  console.error("[i18n] No language files found in './locales/'. Please ensure language files exist and the path is correct.");
+  console.error(
+    "[i18n] No language files found in './locales/'. Please ensure language files exist and the path is correct.",
+  );
 }
 
 // 类型推断 (基于第一个加载的语言文件，假设所有文件结构一致)
@@ -58,8 +60,8 @@ const getInitialLocale = (): string => {
   //    或者如果我们未来添加了通用的 'zh' 文件
   const navigatorLangPart = navigatorLocale?.split('-')[0];
   if (navigatorLangPart && availableLocales.includes(navigatorLangPart)) {
-      console.log(`[i18n] Using locale based on navigator language part: ${navigatorLangPart}`);
-      return navigatorLangPart;
+    console.log(`[i18n] Using locale based on navigator language part: ${navigatorLangPart}`);
+    return navigatorLangPart;
   }
 
   // 4. 最后回退到默认语言
@@ -67,8 +69,8 @@ const getInitialLocale = (): string => {
   return defaultLng;
 };
 
-
-const i18n = createI18n<[MessageSchema], string>({ // 使用 string 作为 locale 类型，因为它是动态的
+const i18n = createI18n<[MessageSchema], string>({
+  // 使用 string 作为 locale 类型，因为它是动态的
   legacy: false, // 必须设置为 false 才能在 Composition API 中使用 useI18n
   locale: getInitialLocale(), // 使用计算得到的初始语言
   fallbackLocale: defaultLng, // 如果当前语言缺少某个 key，则回退到默认语言
@@ -89,16 +91,16 @@ export const setLocale = (lang: string) => {
   if (availableLocales.includes(lang)) {
     const currentLocale = globalComposer.locale.value;
     if (currentLocale !== lang) {
-        globalComposer.locale.value = lang; // 更新 locale
-        console.log(`[i18n] Successfully updated global locale from "${currentLocale}" to "${lang}".`);
-        try {
-          localStorage.setItem(localStorageKey, lang); // 持久化到 localStorage
-          console.log(`[i18n] Locale "${lang}" saved to localStorage.`);
-        } catch (e) {
-          console.error('[i18n] Failed to save locale to localStorage:', e);
-        }
+      globalComposer.locale.value = lang; // 更新 locale
+      console.log(`[i18n] Successfully updated global locale from "${currentLocale}" to "${lang}".`);
+      try {
+        localStorage.setItem(localStorageKey, lang); // 持久化到 localStorage
+        console.log(`[i18n] Locale "${lang}" saved to localStorage.`);
+      } catch (e) {
+        console.error('[i18n] Failed to save locale to localStorage:', e);
+      }
     } else {
-        console.log(`[i18n] Locale is already "${lang}". No update needed.`);
+      console.log(`[i18n] Locale is already "${lang}". No update needed.`);
     }
   } else {
     console.warn(`[i18n] Locale "${lang}" is not available. Available locales: ${availableLocales.join(', ')}`);

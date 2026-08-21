@@ -7,7 +7,6 @@ const auditController = new AuditController();
 
 router.use(isAuthenticated);
 
-
 router.get('/', auditController.getAuditLogs);
 
 export default router;

@@ -1,7 +1,7 @@
-import { ref, nextTick, type Ref, type ComponentPublicInstance } from 'vue'; 
-import type { FileListItem } from '../../types/sftp.types'; 
-import { type useI18n } from 'vue-i18n'; 
-import type FileManagerContextMenu from '../../components/FileManagerContextMenu.vue'; 
+import { ref, nextTick, type Ref, type ComponentPublicInstance } from 'vue';
+import type { FileListItem } from '../../types/sftp.types';
+import { type useI18n } from 'vue-i18n';
+import type FileManagerContextMenu from '../../components/FileManagerContextMenu.vue';
 
 // 定义菜单项类型 (可以根据需要扩展)
 export interface ContextMenuItem {
@@ -59,9 +59,8 @@ export interface UseFileManagerContextMenuOptions {
 const SUPPORTED_ARCHIVE_EXTENSIONS = ['.zip', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2'];
 function isSupportedArchive(filename: string): boolean {
   const lowerCaseFilename = filename.toLowerCase();
-  return SUPPORTED_ARCHIVE_EXTENSIONS.some(ext => lowerCaseFilename.endsWith(ext));
+  return SUPPORTED_ARCHIVE_EXTENSIONS.some((ext) => lowerCaseFilename.endsWith(ext));
 }
-
 
 export function useFileManagerContextMenu(options: UseFileManagerContextMenuOptions) {
   const {
@@ -112,15 +111,21 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     const targetItem = item || null;
 
     // Adjust selection based on right-click target (逻辑保持不变)
-    if (targetItem && !event.ctrlKey && !event.metaKey && !event.shiftKey && !selectedItems.value.has(targetItem.filename)) {
-        selectedItems.value.clear();
-        selectedItems.value.add(targetItem.filename);
-        // 使用传入的 fileList ref
-        const index = fileList.value.findIndex((f: FileListItem) => f.filename === targetItem.filename); // 添加类型
-        lastClickedIndex.value = index;
+    if (
+      targetItem &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey &&
+      !selectedItems.value.has(targetItem.filename)
+    ) {
+      selectedItems.value.clear();
+      selectedItems.value.add(targetItem.filename);
+      // 使用传入的 fileList ref
+      const index = fileList.value.findIndex((f: FileListItem) => f.filename === targetItem.filename); // 添加类型
+      lastClickedIndex.value = index;
     } else if (!targetItem) {
-        selectedItems.value.clear();
-        lastClickedIndex.value = -1;
+      selectedItems.value.clear();
+      lastClickedIndex.value = -1;
     }
 
     contextTargetItem.value = targetItem;
@@ -130,151 +135,211 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
     // Build context menu items (使用传入的回调)
     if (selectionSize > 1 && clickedItemIsSelected) {
-        // Multi-selection menu
-        const selectedFileItems = Array.from(selectedItems.value)
-            .map(filename => fileList.value.find(f => f.filename === filename))
-            .filter((item): item is FileListItem => !!item); // 过滤掉未找到的项并确保类型
+      // Multi-selection menu
+      const selectedFileItems = Array.from(selectedItems.value)
+        .map((filename) => fileList.value.find((f) => f.filename === filename))
+        .filter((item): item is FileListItem => !!item); // 过滤掉未找到的项并确保类型
 
-        const allFilesSelected = selectedFileItems.length === selectionSize
-            && selectedFileItems.every(item => item.attrs.isFile || item.attrs.isSymbolicLink);
+      const allFilesSelected =
+        selectedFileItems.length === selectionSize &&
+        selectedFileItems.every((item) => item.attrs.isFile || item.attrs.isSymbolicLink);
 
-        menu = [
-            // 调整顺序：剪切、复制优先
-            { label: t('fileManager.actions.cut'), action: onCut, disabled: sftpUnavailable },
-            { label: t('fileManager.actions.copy'), action: onCopy, disabled: sftpUnavailable },
-        ];
+      menu = [
+        // 调整顺序：剪切、复制优先
+        { label: t('fileManager.actions.cut'), action: onCut, disabled: sftpUnavailable },
+        { label: t('fileManager.actions.copy'), action: onCopy, disabled: sftpUnavailable },
+      ];
 
-        // --- 多选下载 ---
-        // 多选时暂时禁用文件夹下载，只允许下载文件
-        // 如果需要支持多选文件夹下载或混合下载，需要更复杂的逻辑和后端支持（例如打包成 zip）
-        // 目前仅在 allFilesSelected 为 true 时启用多文件下载
-         if (allFilesSelected) {
-             menu.push({ label: t('fileManager.actions.downloadMultiple', { count: selectionSize }), action: () => onDownload(selectedFileItems), disabled: sftpUnavailable });
-         }
-
-
-        // --- 多选压缩 ---
+      // --- 多选下载 ---
+      // 多选时暂时禁用文件夹下载，只允许下载文件
+      // 如果需要支持多选文件夹下载或混合下载，需要更复杂的逻辑和后端支持（例如打包成 zip）
+      // 目前仅在 allFilesSelected 为 true 时启用多文件下载
+      if (allFilesSelected) {
         menu.push({
-            label: t('fileManager.contextMenu.compress'),
-            submenu: [
-                { label: t('fileManager.contextMenu.compressZip'), action: () => onCompressRequest(selectedFileItems, 'zip'), disabled: sftpUnavailable },
-                { label: t('fileManager.contextMenu.compressEncryptedZip'), action: () => onEncryptedCompressRequest(selectedFileItems), disabled: sftpUnavailable },
-                { label: t('fileManager.contextMenu.compressTarGz'), action: () => onCompressRequest(selectedFileItems, 'targz'), disabled: sftpUnavailable },
-                { label: t('fileManager.contextMenu.compressTarBz2'), action: () => onCompressRequest(selectedFileItems, 'tarbz2'), disabled: sftpUnavailable }
-            ]
+          label: t('fileManager.actions.downloadMultiple', { count: selectionSize }),
+          action: () => onDownload(selectedFileItems),
+          disabled: sftpUnavailable,
         });
-        menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
+      }
 
+      // --- 多选压缩 ---
+      menu.push({
+        label: t('fileManager.contextMenu.compress'),
+        submenu: [
+          {
+            label: t('fileManager.contextMenu.compressZip'),
+            action: () => onCompressRequest(selectedFileItems, 'zip'),
+            disabled: sftpUnavailable,
+          },
+          {
+            label: t('fileManager.contextMenu.compressEncryptedZip'),
+            action: () => onEncryptedCompressRequest(selectedFileItems),
+            disabled: sftpUnavailable,
+          },
+          {
+            label: t('fileManager.contextMenu.compressTarGz'),
+            action: () => onCompressRequest(selectedFileItems, 'targz'),
+            disabled: sftpUnavailable,
+          },
+          {
+            label: t('fileManager.contextMenu.compressTarBz2'),
+            action: () => onCompressRequest(selectedFileItems, 'tarbz2'),
+            disabled: sftpUnavailable,
+          },
+        ],
+      });
+      menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
 
-
-       menu.push(
-             // --- 分隔符 (视觉) ---
-            { label: t('fileManager.actions.deleteMultiple', { count: selectionSize }), action: onDelete, disabled: sftpUnavailable },
-            // --- 分隔符 (视觉) ---
-            { label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable }
-        );
+      menu.push(
+        // --- 分隔符 (视觉) ---
+        {
+          label: t('fileManager.actions.deleteMultiple', { count: selectionSize }),
+          action: onDelete,
+          disabled: sftpUnavailable,
+        },
+        // --- 分隔符 (视觉) ---
+        { label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable },
+      );
     } else if (targetItem && targetItem.filename !== '..') {
-        // Single item (not '..') menu
-        menu = [];
+      // Single item (not '..') menu
+      menu = [];
 
-        if (onOpenAsText && canOpenAsText?.(targetItem)) {
-            menu.push({
-                label: t('fileManager.actions.openAsText', 'Open as text'),
-                action: () => onOpenAsText(targetItem),
-                disabled: sftpUnavailable,
-            });
-        }
-
-        // --- 修改：区分文件和文件夹下载 ---
-        if (targetItem.attrs.isFile || targetItem.attrs.isSymbolicLink) {
-            menu.push({ label: t('fileManager.actions.download', { name: targetItem.filename }), action: () => onDownload([targetItem]), disabled: sftpUnavailable }); // 文件下载
-        } else if (targetItem.attrs.isDirectory) {
-            menu.push({ label: t('fileManager.actions.downloadFolder', { name: targetItem.filename }), action: () => onDownloadDirectory(targetItem), disabled: sftpUnavailable }); // 文件夹下载
-        }
-        
-
-
-        // 2. 剪切、复制、粘贴 (粘贴 - 如果是文件夹)
-        menu.push({ label: t('fileManager.actions.cut'), action: onCut, disabled: sftpUnavailable });
-        menu.push({ label: t('fileManager.actions.copy'), action: onCopy, disabled: sftpUnavailable });
-        if (targetItem.attrs.isDirectory) {
-             menu.push({ label: t('fileManager.actions.paste'), action: onPaste, disabled: pasteUnavailable });
-        }
-       // +++ 添加复制路径菜单项 +++
-       if (onCopyPath) {
-         menu.push({ label: t('fileManager.actions.copyPath', 'Copy Path'), action: () => onCopyPath(targetItem), disabled: sftpUnavailable });
-       }
-
-        // --- 分隔符 (视觉) ---
-        // The invalid object literal was here and is now removed.
-        // The separator below handles the division correctly.
-
-        // Ensure separator is pushed separately and correctly
-        menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
-
-
-        // 3. 删除、重命名
-        menu.push({ label: t('fileManager.actions.delete'), action: onDelete, disabled: sftpUnavailable });
-        menu.push({ label: t('fileManager.actions.rename'), action: () => onRename(targetItem), disabled: sftpUnavailable });
-
-        // --- 分隔符 (视觉) ---
-        // Ensure separator is pushed separately and correctly
-        menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
-
-        // --- 压缩 & 解压 ---
-        const isDecompressibleArchive = targetItem.attrs.isFile && isSupportedArchive(targetItem.filename);
-
-        // 添加压缩选项作为二级菜单
+      if (onOpenAsText && canOpenAsText?.(targetItem)) {
         menu.push({
-            label: t('fileManager.contextMenu.compress'),
-            submenu: [
-                { label: t('fileManager.contextMenu.compressZip'), action: () => onCompressRequest([targetItem], 'zip'), disabled: sftpUnavailable },
-                { label: t('fileManager.contextMenu.compressEncryptedZip'), action: () => onEncryptedCompressRequest([targetItem]), disabled: sftpUnavailable },
-                { label: t('fileManager.contextMenu.compressTarGz'), action: () => onCompressRequest([targetItem], 'targz'), disabled: sftpUnavailable },
-                { label: t('fileManager.contextMenu.compressTarBz2'), action: () => onCompressRequest([targetItem], 'tarbz2'), disabled: sftpUnavailable }
-            ]
+          label: t('fileManager.actions.openAsText', 'Open as text'),
+          action: () => onOpenAsText(targetItem),
+          disabled: sftpUnavailable,
         });
+      }
 
-        // 只有在支持解压的文件上才显示解压选项
-        if (isDecompressibleArchive) {
-            menu.push({ label: t('fileManager.contextMenu.decompress'), action: () => onDecompressRequest(targetItem), disabled: sftpUnavailable });
-        }
+      // --- 修改：区分文件和文件夹下载 ---
+      if (targetItem.attrs.isFile || targetItem.attrs.isSymbolicLink) {
+        menu.push({
+          label: t('fileManager.actions.download', { name: targetItem.filename }),
+          action: () => onDownload([targetItem]),
+          disabled: sftpUnavailable,
+        }); // 文件下载
+      } else if (targetItem.attrs.isDirectory) {
+        menu.push({
+          label: t('fileManager.actions.downloadFolder', { name: targetItem.filename }),
+          action: () => onDownloadDirectory(targetItem),
+          disabled: sftpUnavailable,
+        }); // 文件夹下载
+      }
 
-        // --- 分隔符 (视觉) ---
-        menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
+      // 2. 剪切、复制、粘贴 (粘贴 - 如果是文件夹)
+      menu.push({ label: t('fileManager.actions.cut'), action: onCut, disabled: sftpUnavailable });
+      menu.push({ label: t('fileManager.actions.copy'), action: onCopy, disabled: sftpUnavailable });
+      if (targetItem.attrs.isDirectory) {
+        menu.push({ label: t('fileManager.actions.paste'), action: onPaste, disabled: pasteUnavailable });
+      }
+      // +++ 添加复制路径菜单项 +++
+      if (onCopyPath) {
+        menu.push({
+          label: t('fileManager.actions.copyPath', 'Copy Path'),
+          action: () => onCopyPath(targetItem),
+          disabled: sftpUnavailable,
+        });
+      }
 
-        // --- 分隔符 (视觉) ---
+      // --- 分隔符 (视觉) ---
+      // The invalid object literal was here and is now removed.
+      // The separator below handles the division correctly.
 
-        // 4. 新建、上传 (这些更像空白处操作，但保留)
-        menu.push({ label: t('fileManager.actions.newFolder'), action: onNewFolder, disabled: sftpUnavailable });
-        menu.push({ label: t('fileManager.actions.newFile'), action: onNewFile, disabled: sftpUnavailable });
-        menu.push({ label: t('fileManager.actions.upload'), action: onUpload, disabled: sftpUnavailable }); // 上传放在新建之后
+      // Ensure separator is pushed separately and correctly
+      menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
 
-        // --- 分隔符 (视觉) ---
+      // 3. 删除、重命名
+      menu.push({ label: t('fileManager.actions.delete'), action: onDelete, disabled: sftpUnavailable });
+      menu.push({
+        label: t('fileManager.actions.rename'),
+        action: () => onRename(targetItem),
+        disabled: sftpUnavailable,
+      });
 
-        // 5. 权限、刷新
-        menu.push({ label: t('fileManager.actions.changePermissions'), action: () => onChangePermissions(targetItem), disabled: sftpUnavailable });
-        menu.push({ label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable });
+      // --- 分隔符 (视觉) ---
+      // Ensure separator is pushed separately and correctly
+      menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
+
+      // --- 压缩 & 解压 ---
+      const isDecompressibleArchive = targetItem.attrs.isFile && isSupportedArchive(targetItem.filename);
+
+      // 添加压缩选项作为二级菜单
+      menu.push({
+        label: t('fileManager.contextMenu.compress'),
+        submenu: [
+          {
+            label: t('fileManager.contextMenu.compressZip'),
+            action: () => onCompressRequest([targetItem], 'zip'),
+            disabled: sftpUnavailable,
+          },
+          {
+            label: t('fileManager.contextMenu.compressEncryptedZip'),
+            action: () => onEncryptedCompressRequest([targetItem]),
+            disabled: sftpUnavailable,
+          },
+          {
+            label: t('fileManager.contextMenu.compressTarGz'),
+            action: () => onCompressRequest([targetItem], 'targz'),
+            disabled: sftpUnavailable,
+          },
+          {
+            label: t('fileManager.contextMenu.compressTarBz2'),
+            action: () => onCompressRequest([targetItem], 'tarbz2'),
+            disabled: sftpUnavailable,
+          },
+        ],
+      });
+
+      // 只有在支持解压的文件上才显示解压选项
+      if (isDecompressibleArchive) {
+        menu.push({
+          label: t('fileManager.contextMenu.decompress'),
+          action: () => onDecompressRequest(targetItem),
+          disabled: sftpUnavailable,
+        });
+      }
+
+      // --- 分隔符 (视觉) ---
+      menu.push({ label: '', action: () => {}, disabled: true, separator: true }); // Separator
+
+      // --- 分隔符 (视觉) ---
+
+      // 4. 新建、上传 (这些更像空白处操作，但保留)
+      menu.push({ label: t('fileManager.actions.newFolder'), action: onNewFolder, disabled: sftpUnavailable });
+      menu.push({ label: t('fileManager.actions.newFile'), action: onNewFile, disabled: sftpUnavailable });
+      menu.push({ label: t('fileManager.actions.upload'), action: onUpload, disabled: sftpUnavailable }); // 上传放在新建之后
+
+      // --- 分隔符 (视觉) ---
+
+      // 5. 权限、刷新
+      menu.push({
+        label: t('fileManager.actions.changePermissions'),
+        action: () => onChangePermissions(targetItem),
+        disabled: sftpUnavailable,
+      });
+      menu.push({ label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable });
     } else if (!targetItem) {
-        // Right-click on empty space menu
-        menu = [
-            // 1. 粘贴
-            { label: t('fileManager.actions.paste'), action: onPaste, disabled: pasteUnavailable },
-            // --- 分隔符 (视觉) ---
-            // 2. 新建、上传
-            { label: t('fileManager.actions.newFolder'), action: onNewFolder, disabled: sftpUnavailable },
-            { label: t('fileManager.actions.newFile'), action: onNewFile, disabled: sftpUnavailable },
-            { label: t('fileManager.actions.upload'), action: onUpload, disabled: sftpUnavailable },
-            // --- 分隔符 (视觉) ---
-            // 3. 刷新
-            { label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable },
-        ];
-    } else { // Clicked on '..'
-        menu = [
-             // +++ 粘贴 (可以粘贴到上级目录) +++
-            { label: t('fileManager.actions.paste'), action: onPaste, disabled: pasteUnavailable },
-            { label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable }
-        ];
+      // Right-click on empty space menu
+      menu = [
+        // 1. 粘贴
+        { label: t('fileManager.actions.paste'), action: onPaste, disabled: pasteUnavailable },
+        // --- 分隔符 (视觉) ---
+        // 2. 新建、上传
+        { label: t('fileManager.actions.newFolder'), action: onNewFolder, disabled: sftpUnavailable },
+        { label: t('fileManager.actions.newFile'), action: onNewFile, disabled: sftpUnavailable },
+        { label: t('fileManager.actions.upload'), action: onUpload, disabled: sftpUnavailable },
+        // --- 分隔符 (视觉) ---
+        // 3. 刷新
+        { label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable },
+      ];
+    } else {
+      // Clicked on '..'
+      menu = [
+        // +++ 粘贴 (可以粘贴到上级目录) +++
+        { label: t('fileManager.actions.paste'), action: onPaste, disabled: pasteUnavailable },
+        { label: t('fileManager.actions.refresh'), action: onRefresh, disabled: sftpUnavailable },
+      ];
     }
 
     const shortcutByLabel = new Map<string, string>([
@@ -286,11 +351,12 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
       [t('fileManager.actions.newFolder'), 'Ctrl+Shift+N'],
       [t('fileManager.actions.refresh'), 'F5'],
     ]);
-    const applyShortcutHints = (items: ContextMenuItem[]): ContextMenuItem[] => items.map(menuItem => ({
-      ...menuItem,
-      shortcut: menuItem.shortcut || shortcutByLabel.get(menuItem.label),
-      submenu: menuItem.submenu ? applyShortcutHints(menuItem.submenu) : undefined,
-    }));
+    const applyShortcutHints = (items: ContextMenuItem[]): ContextMenuItem[] =>
+      items.map((menuItem) => ({
+        ...menuItem,
+        shortcut: menuItem.shortcut || shortcutByLabel.get(menuItem.label),
+        submenu: menuItem.submenu ? applyShortcutHints(menuItem.submenu) : undefined,
+      }));
     contextMenuItems.value = applyShortcutHints(menu);
 
     // Set initial position based on click event
@@ -299,44 +365,46 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
     // Use nextTick to allow the DOM to update and the menu to render
     nextTick(() => {
-        const componentElement = contextMenuRef.value?.$el;
-        const menuElement = componentElement instanceof HTMLElement ? componentElement : null;
-        if (menuElement && contextMenuVisible.value) {
-            const menuRect = menuElement.getBoundingClientRect();
-            const menuWidth = menuRect.width;
-            const menuHeight = menuRect.height;
+      const componentElement = contextMenuRef.value?.$el;
+      const menuElement = componentElement instanceof HTMLElement ? componentElement : null;
+      if (menuElement && contextMenuVisible.value) {
+        const menuRect = menuElement.getBoundingClientRect();
+        const menuWidth = menuRect.width;
+        const menuHeight = menuRect.height;
 
-            let finalX = contextMenuPosition.value.x;
-            let finalY = contextMenuPosition.value.y;
+        let finalX = contextMenuPosition.value.x;
+        let finalY = contextMenuPosition.value.y;
 
-            // Adjust horizontally if needed
-            if (finalX + menuWidth > window.innerWidth) {
-                finalX = window.innerWidth - menuWidth - 5;
-            }
-
-            // Adjust vertically if needed
-            if (finalY + menuHeight > window.innerHeight) {
-                finalY = window.innerHeight - menuHeight - 5;
-            }
-
-            // Ensure menu doesn't go off-screen top or left
-            finalX = Math.max(5, finalX);
-            finalY = Math.max(5, finalY);
-
-            // Update the position state if adjustments were made
-            if (finalX !== contextMenuPosition.value.x || finalY !== contextMenuPosition.value.y) {
-                 console.log(`[useFileManagerContextMenu] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
-                 contextMenuPosition.value = { x: finalX, y: finalY };
-            }
-
-            // Add global listener to hide menu *after* positioning
-            document.removeEventListener('click', hideContextMenu, { capture: true });
-            document.addEventListener('click', hideContextMenu, { capture: true, once: true });
-        } else {
-             // Fallback listener if measurement fails
-             document.removeEventListener('click', hideContextMenu, { capture: true });
-             document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+        // Adjust horizontally if needed
+        if (finalX + menuWidth > window.innerWidth) {
+          finalX = window.innerWidth - menuWidth - 5;
         }
+
+        // Adjust vertically if needed
+        if (finalY + menuHeight > window.innerHeight) {
+          finalY = window.innerHeight - menuHeight - 5;
+        }
+
+        // Ensure menu doesn't go off-screen top or left
+        finalX = Math.max(5, finalX);
+        finalY = Math.max(5, finalY);
+
+        // Update the position state if adjustments were made
+        if (finalX !== contextMenuPosition.value.x || finalY !== contextMenuPosition.value.y) {
+          console.log(
+            `[useFileManagerContextMenu] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`,
+          );
+          contextMenuPosition.value = { x: finalX, y: finalY };
+        }
+
+        // Add global listener to hide menu *after* positioning
+        document.removeEventListener('click', hideContextMenu, { capture: true });
+        document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+      } else {
+        // Fallback listener if measurement fails
+        document.removeEventListener('click', hideContextMenu, { capture: true });
+        document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+      }
     });
   };
 

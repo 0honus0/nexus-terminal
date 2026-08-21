@@ -61,10 +61,13 @@ export function createLatestValueSaver<T>(options: LatestValueSaverOptions<T>): 
 
     if (saveInFlight) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void flush();
-    }, Math.max(0, options.delayMs));
+    timer = setTimeout(
+      () => {
+        timer = null;
+        void flush();
+      },
+      Math.max(0, options.delayMs),
+    );
   };
 
   const dispose = ({ flush: shouldFlush = false }: { flush?: boolean } = {}): void => {

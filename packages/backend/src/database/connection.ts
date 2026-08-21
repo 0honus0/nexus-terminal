@@ -5,25 +5,25 @@ import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations';
 
 const dbDir = process.env.NEXUS_DATA_DIR
-    ? path.resolve(process.env.NEXUS_DATA_DIR)
-    : path.join(__dirname, '..', '..', 'data');
+  ? path.resolve(process.env.NEXUS_DATA_DIR)
+  : path.join(__dirname, '..', '..', 'data');
 const dbFilename = 'nexus-terminal.db';
 const dbPath = path.join(dbDir, dbFilename);
 
 if (!fs.existsSync(dbDir)) {
-    try {
-        fs.mkdirSync(dbDir, { recursive: true });
-    } catch (mkdirErr: any) {
-        console.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErr.message);
-        throw new Error(`创建数据库目录失败: ${mkdirErr.message}`);
-    }
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+  } catch (mkdirErr: any) {
+    console.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErr.message);
+    throw new Error(`创建数据库目录失败: ${mkdirErr.message}`);
+  }
 }
 
 export type Database = DatabaseSync;
 
 export interface RunResult {
-    lastID: number;
-    changes: number;
+  lastID: number;
+  changes: number;
 }
 
 let dbInstancePromise: Promise<Database> | null = null;
@@ -32,149 +32,147 @@ let dbResetPromise: Promise<void> | null = null;
 const normalizeParams = (params: any[]): SQLInputValue[] => params as SQLInputValue[];
 
 export const runDb = async (db: Database, sql: string, params: any[] = []): Promise<RunResult> => {
-    try {
-        const result = db.prepare(sql).run(...normalizeParams(params));
-        return {
-            lastID: Number(result.lastInsertRowid),
-            changes: Number(result.changes),
-        };
-    } catch (error: any) {
-        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
-        throw error;
-    }
+  try {
+    const result = db.prepare(sql).run(...normalizeParams(params));
+    return {
+      lastID: Number(result.lastInsertRowid),
+      changes: Number(result.changes),
+    };
+  } catch (error: any) {
+    console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
+    throw error;
+  }
 };
 
 export const getDb = async <T = any>(db: Database, sql: string, params: any[] = []): Promise<T | undefined> => {
-    try {
-        return db.prepare(sql).get(...normalizeParams(params)) as T | undefined;
-    } catch (error: any) {
-        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
-        throw error;
-    }
+  try {
+    return db.prepare(sql).get(...normalizeParams(params)) as T | undefined;
+  } catch (error: any) {
+    console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
+    throw error;
+  }
 };
 
 export const allDb = async <T = any>(db: Database, sql: string, params: any[] = []): Promise<T[]> => {
-    try {
-        return db.prepare(sql).all(...normalizeParams(params)) as T[];
-    } catch (error: any) {
-        console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
-        throw error;
-    }
+  try {
+    return db.prepare(sql).all(...normalizeParams(params)) as T[];
+  } catch (error: any) {
+    console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 错误: ${error.message}`);
+    throw error;
+  }
 };
 
 const runDatabaseInitializations = async (db: Database): Promise<void> => {
-    try {
-        await runDb(db, 'PRAGMA foreign_keys = ON;');
-        for (const tableDef of tableDefinitions) {
-            db.exec(tableDef.sql);
-            if (tableDef.init) {
-                await tableDef.init(db);
-            }
-        }
-    } catch (error) {
-        console.error('[DB Init] 数据库初始化序列失败:', error);
-        throw error;
+  try {
+    await runDb(db, 'PRAGMA foreign_keys = ON;');
+    for (const tableDef of tableDefinitions) {
+      db.exec(tableDef.sql);
+      if (tableDef.init) {
+        await tableDef.init(db);
+      }
     }
+  } catch (error) {
+    console.error('[DB Init] 数据库初始化序列失败:', error);
+    throw error;
+  }
 };
 
 const ensureDbInstance = (): Promise<Database> => {
-    if (!dbInstancePromise) {
-        dbInstancePromise = (async () => {
-            let db: Database | null = null;
-            try {
-                db = new DatabaseSync(dbPath);
-                await runDatabaseInitializations(db);
-                await runMigrations(db);
-                console.log('[数据库] 初始化和迁移完成。');
-                return db;
-            } catch (error: any) {
-                dbInstancePromise = null;
-                if (db) {
-                    try {
-                        db.close();
-                    } catch (closeError: any) {
-                        console.error('[数据库] 初始化失败后关闭连接时出错:', closeError.message);
-                    }
-                }
-                console.error(`[数据库连接] 打开或初始化数据库文件 ${dbPath} 时出错:`, error.message);
-                throw error;
-            }
-        })();
-    }
-    return dbInstancePromise;
+  if (!dbInstancePromise) {
+    dbInstancePromise = (async () => {
+      let db: Database | null = null;
+      try {
+        db = new DatabaseSync(dbPath);
+        await runDatabaseInitializations(db);
+        await runMigrations(db);
+        console.log('[数据库] 初始化和迁移完成。');
+        return db;
+      } catch (error: any) {
+        dbInstancePromise = null;
+        if (db) {
+          try {
+            db.close();
+          } catch (closeError: any) {
+            console.error('[数据库] 初始化失败后关闭连接时出错:', closeError.message);
+          }
+        }
+        console.error(`[数据库连接] 打开或初始化数据库文件 ${dbPath} 时出错:`, error.message);
+        throw error;
+      }
+    })();
+  }
+  return dbInstancePromise;
 };
 
 export const getDbInstance = async (): Promise<Database> => {
-    if (dbResetPromise) {
-        await dbResetPromise;
-    }
-    return ensureDbInstance();
+  if (dbResetPromise) {
+    await dbResetPromise;
+  }
+  return ensureDbInstance();
 };
 
 export const closeDbInstance = async (): Promise<void> => {
-    const pending = dbInstancePromise;
-    dbInstancePromise = null;
-    if (!pending) return;
+  const pending = dbInstancePromise;
+  dbInstancePromise = null;
+  if (!pending) return;
 
-    const db = await pending;
-    db.close();
+  const db = await pending;
+  db.close();
 };
 
 export type E2EDatabaseResetMode = 'seed' | 'empty';
 
 export const resetDatabaseForE2E = async (mode: E2EDatabaseResetMode): Promise<void> => {
-    if (process.env.NODE_ENV !== 'test' || process.env.NEXUS_E2E_RESET_ENABLED !== '1') {
-        throw new Error('E2E database reset is disabled.');
+  if (process.env.NODE_ENV !== 'test' || process.env.NEXUS_E2E_RESET_ENABLED !== '1') {
+    throw new Error('E2E database reset is disabled.');
+  }
+
+  if (dbResetPromise) {
+    await dbResetPromise;
+  }
+
+  const resetTask = (async () => {
+    await closeDbInstance();
+
+    for (const suffix of ['', '-wal', '-shm']) {
+      fs.rmSync(`${dbPath}${suffix}`, { force: true });
     }
 
-    if (dbResetPromise) {
-        await dbResetPromise;
+    if (mode === 'seed') {
+      const seedPath = process.env.NEXUS_E2E_SEED_DB ? path.resolve(process.env.NEXUS_E2E_SEED_DB) : undefined;
+      if (!seedPath || !fs.existsSync(seedPath)) {
+        throw new Error(`E2E seed database not found: ${seedPath || '<unset>'}`);
+      }
+      fs.copyFileSync(seedPath, dbPath);
     }
 
-    const resetTask = (async () => {
-        await closeDbInstance();
+    await ensureDbInstance();
+  })();
 
-        for (const suffix of ['', '-wal', '-shm']) {
-            fs.rmSync(`${dbPath}${suffix}`, { force: true });
-        }
-
-        if (mode === 'seed') {
-            const seedPath = process.env.NEXUS_E2E_SEED_DB
-                ? path.resolve(process.env.NEXUS_E2E_SEED_DB)
-                : undefined;
-            if (!seedPath || !fs.existsSync(seedPath)) {
-                throw new Error(`E2E seed database not found: ${seedPath || '<unset>'}`);
-            }
-            fs.copyFileSync(seedPath, dbPath);
-        }
-
-        await ensureDbInstance();
-    })();
-
-    dbResetPromise = resetTask;
-    try {
-        await resetTask;
-    } finally {
-        if (dbResetPromise === resetTask) {
-            dbResetPromise = null;
-        }
+  dbResetPromise = resetTask;
+  try {
+    await resetTask;
+  } finally {
+    if (dbResetPromise === resetTask) {
+      dbResetPromise = null;
     }
+  }
 };
 
 process.on('SIGINT', async () => {
-    if (!dbInstancePromise) {
-        console.log('[DB] 收到 SIGINT，但数据库连接从未初始化或已失败。');
-        process.exit(0);
-    }
+  if (!dbInstancePromise) {
+    console.log('[DB] 收到 SIGINT，但数据库连接从未初始化或已失败。');
+    process.exit(0);
+  }
 
-    console.log('[DB] 收到 SIGINT，尝试关闭数据库连接...');
-    try {
-        const db = await dbInstancePromise;
-        db.close();
-        console.log('[DB] 数据库连接已关闭。');
-        process.exit(0);
-    } catch (error: any) {
-        console.error('[DB] 关闭数据库时出错:', error.message);
-        process.exit(1);
-    }
+  console.log('[DB] 收到 SIGINT，尝试关闭数据库连接...');
+  try {
+    const db = await dbInstancePromise;
+    db.close();
+    console.log('[DB] 数据库连接已关闭。');
+    process.exit(0);
+  } catch (error: any) {
+    console.error('[DB] 关闭数据库时出错:', error.message);
+    process.exit(1);
+  }
 });

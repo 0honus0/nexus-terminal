@@ -109,10 +109,7 @@ const encryptAesGcm = (plaintext: Buffer, key: Buffer): CipherPayload => {
 const decryptAesGcm = (payload: CipherPayload, key: Buffer): Buffer => {
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(payload.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(payload.tag, 'base64'));
-  return Buffer.concat([
-    decipher.update(Buffer.from(payload.ciphertext, 'base64')),
-    decipher.final(),
-  ]);
+  return Buffer.concat([decipher.update(Buffer.from(payload.ciphertext, 'base64')), decipher.final()]);
 };
 
 const deriveInstanceWrappingKey = (): Buffer => {
@@ -123,9 +120,8 @@ const deriveInstanceWrappingKey = (): Buffer => {
   return crypto.createHash('sha256').update(`nexus-backup-instance:${instanceSecret}`).digest();
 };
 
-const derivePasswordWrappingKey = (password: string, salt: Buffer, iterations: number): Buffer => (
-  crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256')
-);
+const derivePasswordWrappingKey = (password: string, salt: Buffer, iterations: number): Buffer =>
+  crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256');
 
 const tableExists = async (tableName: string): Promise<boolean> => {
   const db = await getDbInstance();
@@ -134,7 +130,7 @@ const tableExists = async (tableName: string): Promise<boolean> => {
 };
 
 const exportTableRows = async (tableName: string): Promise<Record<string, unknown>[]> => {
-  if (!await tableExists(tableName)) return [];
+  if (!(await tableExists(tableName))) return [];
   const db = await getDbInstance();
   const rows = await allDb<Record<string, unknown>>(db, `SELECT * FROM "${tableName}"`);
   const sensitiveColumns = SENSITIVE_COLUMNS[tableName] ?? [];
@@ -146,9 +142,8 @@ const exportTableRows = async (tableName: string): Promise<Record<string, unknow
     const plaintext: Record<string, string | null> = {};
     for (const column of sensitiveColumns) {
       const encryptedValue = row[column];
-      plaintext[column] = typeof encryptedValue === 'string' && encryptedValue.length > 0
-        ? decrypt(encryptedValue)
-        : null;
+      plaintext[column] =
+        typeof encryptedValue === 'string' && encryptedValue.length > 0 ? decrypt(encryptedValue) : null;
       row[column] = null;
     }
     row.__backup_plaintext = plaintext;
@@ -238,20 +233,23 @@ const parseBackupEnvelope = (backupBuffer: Buffer): BackupEnvelope => {
     throw new Error('备份文件版本不受支持。');
   }
   if (
-    envelope.passwordKdf?.algorithm !== 'pbkdf2-sha256'
-    || envelope.passwordKdf.iterations !== PBKDF2_ITERATIONS
-    || typeof envelope.passwordKdf.salt !== 'string'
-    || envelope.passwordKdf.salt.length === 0
-    || !isCipherPayload(envelope.instanceWrappedKey)
-    || !isCipherPayload(envelope.passwordWrappedKey)
-    || !isCipherPayload(envelope.payload)
+    envelope.passwordKdf?.algorithm !== 'pbkdf2-sha256' ||
+    envelope.passwordKdf.iterations !== PBKDF2_ITERATIONS ||
+    typeof envelope.passwordKdf.salt !== 'string' ||
+    envelope.passwordKdf.salt.length === 0 ||
+    !isCipherPayload(envelope.instanceWrappedKey) ||
+    !isCipherPayload(envelope.passwordWrappedKey) ||
+    !isCipherPayload(envelope.payload)
   ) {
     throw new Error('备份文件加密参数无效。');
   }
   return envelope;
 };
 
-const decryptBackupPayload = (envelope: BackupEnvelope, password?: string): { payload: BackupPayload; usedPassword: boolean } => {
+const decryptBackupPayload = (
+  envelope: BackupEnvelope,
+  password?: string,
+): { payload: BackupPayload; usedPassword: boolean } => {
   let dataKey: Buffer | null = null;
   let usedPassword = false;
 
@@ -289,16 +287,16 @@ const prepareRowForImport = (tableName: string, sourceRow: Record<string, unknow
   if (plaintext && typeof plaintext === 'object' && !Array.isArray(plaintext)) {
     for (const column of SENSITIVE_COLUMNS[tableName] ?? []) {
       const plainValue = (plaintext as Record<string, unknown>)[column];
-      row[column] = typeof plainValue === 'string' && plainValue.length > 0
-        ? encrypt(plainValue)
-        : null;
+      row[column] = typeof plainValue === 'string' && plainValue.length > 0 ? encrypt(plainValue) : null;
     }
   }
 
   return row;
 };
 
-const restoreTables = async (tables: Record<string, Record<string, unknown>[]>): Promise<{ tableCount: number; rowCount: number }> => {
+const restoreTables = async (
+  tables: Record<string, Record<string, unknown>[]>,
+): Promise<{ tableCount: number; rowCount: number }> => {
   const db = await getDbInstance();
   let transactionStarted = false;
   let tableCount = 0;
@@ -314,7 +312,7 @@ const restoreTables = async (tables: Record<string, Record<string, unknown>[]>):
     }
 
     for (const tableName of BACKUP_TABLES) {
-      if (!await tableExists(tableName)) continue;
+      if (!(await tableExists(tableName))) continue;
       const targetColumns = new Set(
         (db.prepare(`PRAGMA table_info("${tableName}")`).all() as Array<{ name: string }>).map((column) => column.name),
       );
@@ -338,7 +336,11 @@ const restoreTables = async (tables: Record<string, Record<string, unknown>[]>):
     return { tableCount, rowCount };
   } catch (error) {
     if (transactionStarted) {
-      try { db.exec('ROLLBACK;'); } catch { /* preserve original error */ }
+      try {
+        db.exec('ROLLBACK;');
+      } catch {
+        /* preserve original error */
+      }
     }
     throw error;
   } finally {

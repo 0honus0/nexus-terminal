@@ -1,12 +1,6 @@
 import { Router } from 'express';
 import { isAuthenticated } from '../auth/auth.middleware';
-import {
-    getSshKeyNames,
-    createSshKey,
-    getDecryptedSshKey,
-    updateSshKey,
-    deleteSshKey
-} from './ssh_keys.controller';
+import { getSshKeyNames, createSshKey, getDecryptedSshKey, updateSshKey, deleteSshKey } from './ssh_keys.controller';
 
 const router = Router();
 

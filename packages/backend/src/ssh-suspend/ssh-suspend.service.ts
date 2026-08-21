@@ -41,7 +41,8 @@ export class SshSuspendService extends EventEmitter {
    * @param userId 用户ID。
    * @returns 该用户的 Map<suspendSessionId, SuspendSessionDetails>。
    */
-  private getUserSessions(userId: number): Map<string, SuspendSessionDetails> { // userId: string -> number
+  private getUserSessions(userId: number): Map<string, SuspendSessionDetails> {
+    // userId: string -> number
     if (!this.suspendedSessions.has(userId)) {
       this.suspendedSessions.set(userId, new Map<string, SuspendSessionDetails>());
     }
@@ -81,19 +82,33 @@ export class SshSuspendService extends EventEmitter {
       shellIntegrationReady,
       shellAtPrompt,
     } = details;
-    console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Called for userId=${userId}, originalSessionId=${originalSessionId}`);
+    console.log(
+      `[SshSuspendService DEBUG] takeOverMarkedSession: Called for userId=${userId}, originalSessionId=${originalSessionId}`,
+    );
 
     // 检查 SSH client 和 channel 是否仍然可用
     // ClientChannel 有 readable 和 writable, Client 本身没有直接的此类属性
     // 如果 channel 不可读写，通常意味着底层连接有问题。
-    console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Checking channel for originalSessionId=${originalSessionId}. Readable: ${channel?.readable}, Writable: ${channel?.writable}`);
+    console.log(
+      `[SshSuspendService DEBUG] takeOverMarkedSession: Checking channel for originalSessionId=${originalSessionId}. Readable: ${channel?.readable}, Writable: ${channel?.writable}`,
+    );
     if (!channel || !channel.readable || !channel.writable) {
-        console.warn(`[SshSuspendService WARN] takeOverMarkedSession: userId=${userId}, originalSessionId=${originalSessionId}. SSH channel is not usable. readable=${channel?.readable}, writable=${channel?.writable}. Cannot take over.`);
-        // 确保如果 SSH 连接已经关闭，日志文件仍然保留，但不创建挂起条目。
-        // SshSuspendService 不会管理这个“已经断开”的会话，但日志保留供用户清理。
-        try { channel?.end(); } catch (e) { /* ignore */ }
-        try { sshClient?.end(); } catch (e) { /* ignore */ }
-        return null; // 无法接管
+      console.warn(
+        `[SshSuspendService WARN] takeOverMarkedSession: userId=${userId}, originalSessionId=${originalSessionId}. SSH channel is not usable. readable=${channel?.readable}, writable=${channel?.writable}. Cannot take over.`,
+      );
+      // 确保如果 SSH 连接已经关闭，日志文件仍然保留，但不创建挂起条目。
+      // SshSuspendService 不会管理这个“已经断开”的会话，但日志保留供用户清理。
+      try {
+        channel?.end();
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        sshClient?.end();
+      } catch (e) {
+        /* ignore */
+      }
+      return null; // 无法接管
     }
 
     const suspendSessionId = uuidv4();
@@ -126,7 +141,9 @@ export class SshSuspendService extends EventEmitter {
     };
 
     userSessions.set(suspendSessionId, sessionDetails);
-    console.log(`[SshSuspendService INFO] takeOverMarkedSession: userId=${userId}, originalSessionId=${originalSessionId} taken over. New suspendSessionId=${suspendSessionId}, initial status=${sessionDetails.backendSshStatus}. Log identifier=${logIdentifier}`);
+    console.log(
+      `[SshSuspendService INFO] takeOverMarkedSession: userId=${userId}, originalSessionId=${originalSessionId} taken over. New suspendSessionId=${suspendSessionId}, initial status=${sessionDetails.backendSshStatus}. Log identifier=${logIdentifier}`,
+    );
 
     await this.logStorageService.ensureLogDirectoryExists();
     this.attachSuspendedSessionListeners(userSessions, suspendSessionId, sessionDetails);
@@ -145,7 +162,7 @@ export class SshSuspendService extends EventEmitter {
     channel.on('data', (data: Buffer) => {
       const current = userSessions.get(suspendSessionId);
       if (current?.backendSshStatus !== 'hanging' || current.resumeInProgress) return;
-      void this.logStorageService.writeToLog(tempLogPath, data).catch(error => {
+      void this.logStorageService.writeToLog(tempLogPath, data).catch((error) => {
         console.error(`[SshSuspendService] 写入挂起日志失败 (${suspendSessionId}/${tempLogPath}):`, error);
       });
     });
@@ -170,7 +187,7 @@ export class SshSuspendService extends EventEmitter {
     sshClient.on('error', () => terminate('client errored'));
     sshClient.on('end', () => terminate('client ended'));
   }
-  
+
   private removeChannelListeners(channel: Channel, sshClient: Client): void {
     channel.removeAllListeners('data');
     channel.removeAllListeners('close');
@@ -277,18 +294,23 @@ export class SshSuspendService extends EventEmitter {
    * @param suspendSessionId 要终止的挂起会话ID。
    * @returns Promise<boolean> 操作是否成功。
    */
-  async terminateSuspendedSession(userId: number, suspendSessionId: string): Promise<boolean> { // userId: string -> number
+  async terminateSuspendedSession(userId: number, suspendSessionId: string): Promise<boolean> {
+    // userId: string -> number
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
     if (!session || session.backendSshStatus !== 'hanging') {
-      console.warn(`[用户: ${userId}] 尝试终止的会话 ${suspendSessionId} 不存在或不是活跃状态 (${session?.backendSshStatus})。`);
+      console.warn(
+        `[用户: ${userId}] 尝试终止的会话 ${suspendSessionId} 不存在或不是活跃状态 (${session?.backendSshStatus})。`,
+      );
       // 如果会话已断开，但记录还在，也应该能被“终止”（即移除）
-      if(session && session.backendSshStatus === 'disconnected_by_backend'){
+      if (session && session.backendSshStatus === 'disconnected_by_backend') {
         const logPathToDelete = session.tempLogPath; // 获取正确的日志路径
         userSessions.delete(suspendSessionId);
         await this.logStorageService.deleteLog(logPathToDelete);
-        console.log(`[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} (日志: ${logPathToDelete}) 已通过终止操作移除。`);
+        console.log(
+          `[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} (日志: ${logPathToDelete}) 已通过终止操作移除。`,
+        );
         return true;
       }
       return false;
@@ -306,12 +328,14 @@ export class SshSuspendService extends EventEmitter {
     } catch (e) {
       console.warn(`[用户: ${userId}, 会话: ${suspendSessionId}] 关闭sshClient时出错:`, e);
     }
-    
+
     const logPathToFinallyDelete = session.tempLogPath; // 获取正确的日志路径
     userSessions.delete(suspendSessionId);
     await this.logStorageService.deleteLog(logPathToFinallyDelete);
 
-    console.log(`[用户: ${userId}] 活跃的挂起会话 ${suspendSessionId} (日志: ${logPathToFinallyDelete}) 已成功终止并移除。`);
+    console.log(
+      `[用户: ${userId}] 活跃的挂起会话 ${suspendSessionId} (日志: ${logPathToFinallyDelete}) 已成功终止并移除。`,
+    );
     return true;
   }
 
@@ -321,7 +345,8 @@ export class SshSuspendService extends EventEmitter {
    * @param suspendSessionId 要移除的挂起会话ID。
    * @returns Promise<boolean> 操作是否成功。
    */
-  async removeDisconnectedSessionEntry(userId: number, suspendSessionId: string): Promise<boolean> { // userId: string -> number
+  async removeDisconnectedSessionEntry(userId: number, suspendSessionId: string): Promise<boolean> {
+    // userId: string -> number
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
@@ -337,18 +362,20 @@ export class SshSuspendService extends EventEmitter {
 
     // 如果会话在内存中（不论状态），则删除
     userSessions.delete(suspendSessionId);
-    
+
     // 总是尝试删除日志文件，因为它可能对应一个已不在内存中的断开会话
     try {
       const logPathToRemove = session.tempLogPath;
       await this.logStorageService.deleteLog(logPathToRemove);
-      console.log(`[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} 的日志 (标识: ${logPathToRemove}) 已删除。`);
+      console.log(
+        `[用户: ${userId}] 已断开的挂起会话条目 ${suspendSessionId} 的日志 (标识: ${logPathToRemove}) 已删除。`,
+      );
       return true;
     } catch (error) {
       console.error(`[用户: ${userId}] 删除会话 ${suspendSessionId} 的日志文件失败:`, error);
       // 即便日志删除失败，如果内存条目已删，也算部分成功。但严格来说应返回false。
       // 如果 session 不在内存中，但日志删除成功，也算成功。
-      return false; 
+      return false;
     }
   }
 
@@ -360,7 +387,8 @@ export class SshSuspendService extends EventEmitter {
    * @param newCustomName 新的自定义名称。
    * @returns Promise<boolean> 操作是否成功。
    */
-  async editSuspendedSessionName(userId: number, suspendSessionId: string, newCustomName: string): Promise<boolean> { // userId: string -> number
+  async editSuspendedSessionName(userId: number, suspendSessionId: string, newCustomName: string): Promise<boolean> {
+    // userId: string -> number
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
@@ -382,7 +410,8 @@ export class SshSuspendService extends EventEmitter {
    * @param userId 用户ID。
    * @param suspendSessionId 发生断开的会话ID。
    */
-  public handleUnexpectedDisconnection(userId: number, suspendSessionId: string): void { // userId: string -> number
+  public handleUnexpectedDisconnection(userId: number, suspendSessionId: string): void {
+    // userId: string -> number
     const userSessions = this.getUserSessions(userId);
     const session = userSessions.get(suspendSessionId);
 
@@ -392,11 +421,11 @@ export class SshSuspendService extends EventEmitter {
       session.disconnectionTimestamp = new Date().toISOString();
       this.removeChannelListeners(session.channel, session.sshClient); // 移除监听器
       console.log(`[用户: ${userId}] 会话 ${suspendSessionId} 状态更新为 'disconnected_by_backend'。原因: ${reason}`);
-      
+
       this.emit('sessionAutoTerminated', {
         userId: session.userId,
         suspendSessionId,
-        reason
+        reason,
       });
       // 确保所有已缓冲的日志已尝试写入 (通常由 'data' 事件处理，这里是最终状态确认)
     }
@@ -409,7 +438,10 @@ export class SshSuspendService extends EventEmitter {
    * @param suspendSessionId 要导出日志的挂起会话ID。
    * @returns Promise<{ content: string, filename: string } | null> 日志内容和建议的文件名，如果会话不符合条件或读取失败则返回null。
    */
-  async getSessionLogStream(userId: number, suspendSessionId: string): Promise<{
+  async getSessionLogStream(
+    userId: number,
+    suspendSessionId: string,
+  ): Promise<{
     stream: NodeJS.ReadableStream;
     filename: string;
   } | null> {
@@ -425,11 +457,11 @@ export class SshSuspendService extends EventEmitter {
     }
 
     if (!session.tempLogPath) {
-        return null;
+      return null;
     }
 
     try {
-      const baseName = session.customSuspendName || session.connectionName || suspendSessionId.substring(0,8);
+      const baseName = session.customSuspendName || session.connectionName || suspendSessionId.substring(0, 8);
       const safeBaseName = baseName.replace(/[^\w.-]/g, '_'); // 替换掉不安全字符为空格或下划线
       const timestamp = new Date(session.suspendStartTime).toISOString().replace(/[:.]/g, '-');
       // tempLogPath 通常是 originalSessionId

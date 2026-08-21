@@ -17,8 +17,7 @@ export function useAlertDialog() {
     return new Promise((resolve) => {
       const { title, message, okText, onOk } = options;
 
-      const
-        container = document.createElement('div');
+      const container = document.createElement('div');
       document.body.appendChild(container);
 
       const app = createApp({

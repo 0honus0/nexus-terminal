@@ -6,7 +6,6 @@ import { DockerService, DockerCommand } from './docker.service';
 const dockerService = new DockerService();
 
 export class DockerController {
-
   /**
    * 处理获取 Docker 容器状态的请求 (GET /docker/status)
    */
@@ -35,8 +34,8 @@ export class DockerController {
     // 验证 command 是否是允许的类型
     const allowedCommands: DockerCommand[] = ['start', 'stop', 'restart', 'remove'];
     if (!command || !allowedCommands.includes(command)) {
-       res.status(400).json({ message: `Invalid command. Must be one of: ${allowedCommands.join(', ')}.` });
-       return;
+      res.status(400).json({ message: `Invalid command. Must be one of: ${allowedCommands.join(', ')}.` });
+      return;
     }
 
     try {
@@ -46,15 +45,18 @@ export class DockerController {
       res.status(200).json({ message: `Command '${command}' executed successfully for container ${containerId}.` });
       // 或者 res.status(204).send();
     } catch (error: any) {
-       // 根据错误类型返回不同的状态码
-       if (error.message.includes('Docker is not available')) {
-           res.status(503).json({ message: error.message }); // Service Unavailable
-       } else if (error.message.includes('Invalid container ID') || error.message.includes('Unsupported Docker command')) {
-           res.status(400).json({ message: error.message }); // Bad Request
-       } else {
-           // 其他执行错误，可能是 Docker 守护进程错误等
-           res.status(500).json({ message: error.message || 'Failed to execute Docker command.' }); // Internal Server Error
-       }
+      // 根据错误类型返回不同的状态码
+      if (error.message.includes('Docker is not available')) {
+        res.status(503).json({ message: error.message }); // Service Unavailable
+      } else if (
+        error.message.includes('Invalid container ID') ||
+        error.message.includes('Unsupported Docker command')
+      ) {
+        res.status(400).json({ message: error.message }); // Bad Request
+      } else {
+        // 其他执行错误，可能是 Docker 守护进程错误等
+        res.status(500).json({ message: error.message || 'Failed to execute Docker command.' }); // Internal Server Error
+      }
     }
   }
 }

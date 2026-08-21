@@ -1,10 +1,7 @@
-
-
 import { defineStore } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useConnectionsStore, type ConnectionInfo } from './connections.store';
-
 
 import {
   sessions,
@@ -13,32 +10,21 @@ import {
   rdpConnectionInfo,
   isVncModalOpen,
   vncConnectionInfo,
-  
   suspendedSshSessions,
   isLoadingSuspendedSessions,
   resolveSessionId,
 } from './session/state';
 
-
-import {
-  sessionTabs,
-  sessionTabsWithStatus,
-  activeSession,
-} from './session/getters';
-
+import { sessionTabs, sessionTabsWithStatus, activeSession } from './session/getters';
 
 import * as sessionActions from './session/actions/sessionActions';
 import * as editorActions from './session/actions/editorActions';
 import * as sftpManagerActions from './session/actions/sftpManagerActions';
 import * as modalActions from './session/actions/modalActions';
 import * as commandInputActions from './session/actions/commandInputActions';
-import * as sshSuspendActions from './session/actions/sshSuspendActions'; 
-
+import * as sshSuspendActions from './session/actions/sshSuspendActions';
 
 import type { FileInfo } from './fileEditor.store';
-
-
-
 
 export const useSessionStore = defineStore('session', () => {
   // --- 依赖 ---
@@ -64,7 +50,7 @@ export const useSessionStore = defineStore('session', () => {
       connectionsStore,
       router,
       openRdpModalAction: openRdpModal, // 传递包装后的 action
-      openVncModalAction: openVncModal,   // 传递包装后的 action
+      openVncModalAction: openVncModal, // 传递包装后的 action
       t,
     });
   const handleOpenNewSession = (connectionId: number | string) =>
@@ -106,7 +92,6 @@ export const useSessionStore = defineStore('session', () => {
   // Command Input Actions
   const updateSessionCommandInput = (sessionId: string, content: string) =>
     commandInputActions.updateSessionCommandInput(resolveSessionId(sessionId), content);
-
 
   return {
     // State (直接从 state 模块导出，Pinia 会处理)

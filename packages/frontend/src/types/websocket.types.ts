@@ -7,19 +7,19 @@ export type MessagePayload = any;
 
 // WebSocket 消息结构接口
 export interface WebSocketMessage {
-    type: string; // 消息类型
-    payload?: MessagePayload; // 消息负载
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [key: string]: any; // 允许其他属性，如 requestId, encoding 等
+  type: string; // 消息类型
+  payload?: MessagePayload; // 消息负载
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any; // 允许其他属性，如 requestId, encoding 等
 }
 
 // 消息处理器函数类型
 export type MessageHandler = (payload: MessagePayload, message: WebSocketMessage) => void; // 恢复 message 参数为必需
 export interface SftpUploadProgressPayload {
-    uploadId: string; // 虽然 uploadId 在 WebSocketMessage 顶层，payload 里也包含以明确关联
-    bytesWritten: number;
-    totalSize: number;
-    progress: number; // 0-100
+  uploadId: string; // 虽然 uploadId 在 WebSocketMessage 顶层，payload 里也包含以明确关联
+  bytesWritten: number;
+  totalSize: number;
+  progress: number; // 0-100
 }
 export interface SftpUploadProgressMessage extends WebSocketMessage {
   type: 'sftp:upload:progress';
@@ -72,7 +72,7 @@ export interface SshMarkedForSuspendAckPayload {
   error?: string;
 }
 
-export interface SshUnmarkedForSuspendAckPayload { 
+export interface SshUnmarkedForSuspendAckPayload {
   sessionId: string;
   success: boolean;
   error?: string;
@@ -162,7 +162,7 @@ export interface SshMarkForSuspendReqMessage extends WebSocketMessage {
   payload: SshMarkForSuspendReqPayload;
 }
 
-export interface SshUnmarkForSuspendReqMessage extends WebSocketMessage { 
+export interface SshUnmarkForSuspendReqMessage extends WebSocketMessage {
   type: 'SSH_UNMARK_FOR_SUSPEND';
   payload: SshUnmarkForSuspendReqPayload;
 }
@@ -227,11 +227,11 @@ export type SshSuspendC2SMessage =
   | SshSuspendRemoveEntryReqMessage
   | SshSuspendEditNameReqMessage
   | SshMarkForSuspendReqMessage
-  | SshUnmarkForSuspendReqMessage; 
+  | SshUnmarkForSuspendReqMessage;
 
 export type SshSuspendS2CMessage =
   | SshMarkedForSuspendAckMessage
-  | SshUnmarkedForSuspendAckMessage 
+  | SshUnmarkedForSuspendAckMessage
   | SshSuspendStartedRespMessage
   | SshSuspendListResponseMessage
   | SshSuspendResumedNotifMessage

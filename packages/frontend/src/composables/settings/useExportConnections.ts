@@ -48,18 +48,20 @@ export function useExportConnections() {
       console.error('导出连接失败:', error);
       let message = t('settings.exportConnections.error', '导出连接时发生错误。');
       if (isAxiosError(error) && error.response && error.response.data) {
-          if (error.response.data instanceof Blob && error.response.data.type === 'application/json') {
-              try {
-                  const errorJson = JSON.parse(await error.response.data.text());
-                  message = errorJson.message || message;
-              } catch (e) { /* Blob not valid JSON */ }
-          } else if (typeof error.response.data === 'string') {
-              message = error.response.data;
-          } else if (error.response.data && typeof error.response.data.message === 'string') {
-              message = error.response.data.message;
+        if (error.response.data instanceof Blob && error.response.data.type === 'application/json') {
+          try {
+            const errorJson = JSON.parse(await error.response.data.text());
+            message = errorJson.message || message;
+          } catch (e) {
+            /* Blob not valid JSON */
           }
+        } else if (typeof error.response.data === 'string') {
+          message = error.response.data;
+        } else if (error.response.data && typeof error.response.data.message === 'string') {
+          message = error.response.data.message;
+        }
       } else if (error.message) {
-          message = error.message;
+        message = error.message;
       }
       exportConnectionsMessage.value = message;
       exportConnectionsSuccess.value = false;

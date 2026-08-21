@@ -29,21 +29,20 @@ function base64UrlToUint8Array(base64urlString: string): Uint8Array {
   try {
     return Buffer.from(base64, 'base64');
   } catch (e) {
-    console.error("Failed to decode base64url string to Buffer:", base64urlString, e);
-    throw new Error("Invalid base64url string for Buffer conversion");
+    console.error('Failed to decode base64url string to Buffer:', base64urlString, e);
+    throw new Error('Invalid base64url string for Buffer conversion');
   }
 }
 
 export class PasskeyService {
   constructor(
     private passkeyRepo: typeof passkeyRepository,
-    private userRepo: typeof userRepository
+    private userRepo: typeof userRepository,
   ) {}
 
   private resolveRpConfig(requestOrigin?: string): PasskeyRpConfig {
-    const configs = config.passkeyRpConfigs.length > 0
-      ? config.passkeyRpConfigs
-      : [{ rpId: config.rpId, rpOrigin: config.rpOrigin }];
+    const configs =
+      config.passkeyRpConfigs.length > 0 ? config.passkeyRpConfigs : [{ rpId: config.rpId, rpOrigin: config.rpOrigin }];
 
     if (!requestOrigin) return configs[0];
 
@@ -54,7 +53,7 @@ export class PasskeyService {
       throw new Error('Invalid passkey origin.');
     }
 
-    const matchedConfig = configs.find(item => item.rpOrigin === normalizedOrigin);
+    const matchedConfig = configs.find((item) => item.rpOrigin === normalizedOrigin);
     if (!matchedConfig) throw new Error('Passkey origin is not configured.');
     return matchedConfig;
   }
@@ -67,11 +66,12 @@ export class PasskeyService {
 
     const existingPasskeys = await this.passkeyRepo.getPasskeysByUserId(userId);
 
-    const excludeCredentials: {id: string, type: 'public-key', transports?: AuthenticatorTransportFuture[]}[] = existingPasskeys.map(pk => ({
-      id: pk.credential_id,
-      type: 'public-key',
-      transports: pk.transports ? JSON.parse(pk.transports) as AuthenticatorTransportFuture[] : undefined,
-    }));
+    const excludeCredentials: { id: string; type: 'public-key'; transports?: AuthenticatorTransportFuture[] }[] =
+      existingPasskeys.map((pk) => ({
+        id: pk.credential_id,
+        type: 'public-key',
+        transports: pk.transports ? (JSON.parse(pk.transports) as AuthenticatorTransportFuture[]) : undefined,
+      }));
 
     const rpConfig = this.resolveRpConfig(requestOrigin);
     const options: GenerateRegistrationOptionsOpts = {
@@ -98,15 +98,15 @@ export class PasskeyService {
     registrationResponseJSON: RegistrationResponseJSON,
     expectedChallenge: string,
     userHandleFromClient: string,
-    requestOrigin?: string
+    requestOrigin?: string,
   ): Promise<VerifiedRegistrationResponse & { newPasskeyToSave?: NewPasskey }> {
     const userId = parseInt(userHandleFromClient, 10);
     if (isNaN(userId)) {
-        throw new Error('Invalid user handle provided.');
+      throw new Error('Invalid user handle provided.');
     }
     const user = await this.userRepo.findUserById(userId);
     if (!user) {
-        throw new Error('User not found for the provided handle.');
+      throw new Error('User not found for the provided handle.');
     }
 
     if (!registrationResponseJSON.id) {
@@ -127,7 +127,7 @@ export class PasskeyService {
 
     if (verification.verified && verification.registrationInfo) {
       const { credential, credentialBackedUp } = verification.registrationInfo;
-      
+
       const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
 
       const newPasskeyEntry: NewPasskey = {
@@ -144,16 +144,17 @@ export class PasskeyService {
   }
 
   async generateAuthenticationOptions(username?: string, requestOrigin?: string) {
-    let allowCredentials: {id: string, type: 'public-key', transports?: AuthenticatorTransportFuture[]}[] | undefined = undefined;
+    let allowCredentials:
+      { id: string; type: 'public-key'; transports?: AuthenticatorTransportFuture[] }[] | undefined = undefined;
 
     if (username) {
       const user = await this.userRepo.findUserByUsername(username);
       if (user) {
         const userPasskeys = await this.passkeyRepo.getPasskeysByUserId(user.id);
-        allowCredentials = userPasskeys.map(pk => ({
+        allowCredentials = userPasskeys.map((pk) => ({
           id: pk.credential_id,
           type: 'public-key',
-          transports: pk.transports ? JSON.parse(pk.transports) as AuthenticatorTransportFuture[] : undefined,
+          transports: pk.transports ? (JSON.parse(pk.transports) as AuthenticatorTransportFuture[]) : undefined,
         }));
       }
     }
@@ -173,9 +174,8 @@ export class PasskeyService {
   async verifyAuthentication(
     authenticationResponseJSON: AuthenticationResponseJSON,
     expectedChallenge: string,
-    requestOrigin?: string
-  ): Promise<VerifiedAuthenticationResponse & { passkey?: Passkey, userId?: number }> {
-    
+    requestOrigin?: string,
+  ): Promise<VerifiedAuthenticationResponse & { passkey?: Passkey; userId?: number }> {
     // Decode and check authenticatorData length
     if (authenticationResponseJSON.response && authenticationResponseJSON.response.authenticatorData) {
       try {
@@ -184,7 +184,10 @@ export class PasskeyService {
           // console.warn(`[PasskeyService] WARNING: Decoded authenticatorData length (${authenticatorDataBytes.length} bytes) is less than the expected minimum of 37 bytes. This may lead to CBOR parsing errors and subsequent failures (e.g., 'cannot read counter').`);
         }
       } catch (error: unknown) {
-        console.error('[PasskeyService] Error decoding authenticatorData from client response:', error instanceof Error ? error.message : String(error));
+        console.error(
+          '[PasskeyService] Error decoding authenticatorData from client response:',
+          error instanceof Error ? error.message : String(error),
+        );
         // Potentially re-throw or handle as a critical error, as this is unexpected.
       }
     } else {
@@ -193,8 +196,8 @@ export class PasskeyService {
 
     const credentialIdFromResponse = authenticationResponseJSON.id;
     if (!credentialIdFromResponse) {
-        console.error('[PasskeyService] Credential ID missing from authentication response.');
-        throw new Error('Credential ID missing from authentication response.');
+      console.error('[PasskeyService] Credential ID missing from authentication response.');
+      throw new Error('Credential ID missing from authentication response.');
     }
 
     const passkey = await this.passkeyRepo.getPasskeyByCredentialId(credentialIdFromResponse);
@@ -205,19 +208,27 @@ export class PasskeyService {
 
     let authenticatorPublicKey: Uint8Array<ArrayBuffer>;
     try {
-        const pkBuffer = Buffer.from(passkey.public_key, 'base64');
-        authenticatorPublicKey = Uint8Array.from(pkBuffer);
+      const pkBuffer = Buffer.from(passkey.public_key, 'base64');
+      authenticatorPublicKey = Uint8Array.from(pkBuffer);
     } catch (error: unknown) {
-        console.error('[PasskeyService] Error decoding public_key to Uint8Array:', passkey.public_key, error instanceof Error ? error.message : String(error));
-        throw new Error('Failed to decode public_key.');
+      console.error(
+        '[PasskeyService] Error decoding public_key to Uint8Array:',
+        passkey.public_key,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw new Error('Failed to decode public_key.');
     }
-    
+
     let authenticatorTransports: AuthenticatorTransportFuture[] | undefined;
     try {
-        authenticatorTransports = passkey.transports ? JSON.parse(passkey.transports) : undefined;
+      authenticatorTransports = passkey.transports ? JSON.parse(passkey.transports) : undefined;
     } catch (error: unknown) {
-        console.error('[PasskeyService] Error parsing transports JSON:', passkey.transports, error instanceof Error ? error.message : String(error));
-        authenticatorTransports = undefined;
+      console.error(
+        '[PasskeyService] Error parsing transports JSON:',
+        passkey.transports,
+        error instanceof Error ? error.message : String(error),
+      );
+      authenticatorTransports = undefined;
     }
 
     const credential = {
@@ -251,7 +262,7 @@ export class PasskeyService {
   async listPasskeysByUserId(userId: number): Promise<Partial<Passkey>[]> {
     const passkeys = await this.passkeyRepo.getPasskeysByUserId(userId);
     // 只返回部分信息以避免泄露敏感数据
-    return passkeys.map(pk => ({
+    return passkeys.map((pk) => ({
       credential_id: pk.credential_id,
       created_at: pk.created_at,
       last_used_at: pk.last_used_at,
@@ -301,5 +312,5 @@ export class PasskeyService {
     }
   }
 }
- 
+
 export const passkeyService = new PasskeyService(passkeyRepository, userRepository);

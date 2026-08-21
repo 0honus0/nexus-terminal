@@ -53,8 +53,11 @@ export function useDataManagement() {
           try {
             const errorJson = JSON.parse(await error.response.data.text());
             message = errorJson.message || message;
-          } catch (e) { /* Blob not valid JSON */ }
-        } else if (typeof error.response.data === 'string' && error.response.data.length < 200) { // Avoid overly long string errors
+          } catch (e) {
+            /* Blob not valid JSON */
+          }
+        } else if (typeof error.response.data === 'string' && error.response.data.length < 200) {
+          // Avoid overly long string errors
           message = error.response.data;
         } else if (error.response.data && typeof error.response.data.message === 'string') {
           message = error.response.data.message;

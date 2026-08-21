@@ -15,7 +15,6 @@ export type WorkspaceEventPayloads = {
   'terminal:scrollToBottomRequest': { sessionId: string };
   'terminal:stabilizedResize': { sessionId: string; width: number; height: number }; // 用于传递稳定后的尺寸
 
-
   // Editor Events
   'editor:closeTab': { tabId: string };
   'editor:activateTab': { tabId: string };
@@ -26,7 +25,7 @@ export type WorkspaceEventPayloads = {
   'editor:closeTabsToRight': { tabId: string };
   'editor:closeTabsToLeft': { tabId: string };
   'editor:updateScrollPosition': { tabId: string; scrollTop: number; scrollLeft: number };
- 
+
   // Connection Events
   'connection:connect': { connectionId: number }; // 来自 WorkspaceConnectionList 或其他地方
   'connection:openNewSession': { connectionId: number }; // 来自 WorkspaceConnectionList
@@ -50,7 +49,18 @@ export type WorkspaceEventPayloads = {
   'ui:openLayoutConfigurator': void;
   'ui:openTransferProgressModal': void; // 请求打开文件传输进度模态框
   'ui:restoreProgressDisplay': void; // 统一恢复已最小化的悬浮进度显示
-  'ui:openSidebarPane': { pane: 'statusMonitor' | 'fileManager' | 'connections' | 'editor' | 'commandHistory' | 'quickCommands' | 'dockerManager' | 'suspendedSshSessions'; side?: 'left' | 'right' };
+  'ui:openSidebarPane': {
+    pane:
+      | 'statusMonitor'
+      | 'fileManager'
+      | 'connections'
+      | 'editor'
+      | 'commandHistory'
+      | 'quickCommands'
+      | 'dockerManager'
+      | 'suspendedSshSessions';
+    side?: 'left' | 'right';
+  };
   // 'ui:toggleVirtualKeyboard': void; // 如果决定迁移 CommandInputBar 的这个事件
   'fileManager:openModalRequest': { sessionId: string }; // 请求打开文件管理器模态框
 

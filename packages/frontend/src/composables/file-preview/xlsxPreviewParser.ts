@@ -93,11 +93,7 @@ const readZipEntry = async (
   throw new Error(`Unsupported XLSX compression method ${entry.compression}.`);
 };
 
-const readXml = async (
-  buffer: ArrayBuffer,
-  entries: Map<string, ZipEntry>,
-  name: string,
-): Promise<Document | null> => {
+const readXml = async (buffer: ArrayBuffer, entries: Map<string, ZipEntry>, name: string): Promise<Document | null> => {
   const data = await readZipEntry(buffer, entries, name);
   if (!data) return null;
 
@@ -144,7 +140,9 @@ const parseDimension = (document: Document): { rows: number; columns: number } |
 
 const getTextContent = (element: Element | null): string => {
   if (!element) return '';
-  return Array.from(element.querySelectorAll('t')).map((node) => node.textContent ?? '').join('');
+  return Array.from(element.querySelectorAll('t'))
+    .map((node) => node.textContent ?? '')
+    .join('');
 };
 
 const parseSharedStrings = (document: Document | null): string[] => {
@@ -236,8 +234,9 @@ export const parseXlsxPreview = async (
 
   for (const sheet of Array.from(workbook.querySelectorAll('sheets > sheet'))) {
     const name = sheet.getAttribute('name') ?? `Sheet ${sheets.length + 1}`;
-    const relationshipId = sheet.getAttribute('r:id')
-      ?? sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+    const relationshipId =
+      sheet.getAttribute('r:id') ??
+      sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
     if (!relationshipId) continue;
 
     const worksheetPath = relationshipTargets.get(relationshipId);

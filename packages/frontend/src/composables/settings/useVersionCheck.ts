@@ -12,9 +12,7 @@ export function useVersionCheck() {
   const versionCheckError = ref<string | null>(null);
 
   const isUpdateAvailable = computed(() => {
-    return latestVersion.value
-      ? isNewerRelease(latestVersion.value, appVersion.value)
-      : false;
+    return latestVersion.value ? isNewerRelease(latestVersion.value, appVersion.value) : false;
   });
 
   const checkLatestVersion = async () => {
@@ -33,7 +31,7 @@ export function useVersionCheck() {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         versionCheckError.value = t('settings.about.error.noReleases');
       } else if (axios.isAxiosError(error) && error.response?.status === 403) {
-         versionCheckError.value = t('settings.about.error.rateLimit');
+        versionCheckError.value = t('settings.about.error.rateLimit');
       } else {
         versionCheckError.value = t('settings.about.error.checkFailed');
       }
