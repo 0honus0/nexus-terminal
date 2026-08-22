@@ -11,6 +11,11 @@ import type { ConnectionInfo } from '../stores/connections.store';
 import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
 import { useResizeHandle } from '@/foundation/interaction/useResizeHandle';
 import { useDraggablePosition } from '@/foundation/interaction/useDraggablePosition';
+import {
+  attachRemoteTouchInput,
+  type RemoteTouchInput,
+  type RemoteTouchMode,
+} from '@/foundation/interaction/remoteTouchInput';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -20,6 +25,17 @@ const props = defineProps<{
 }>();
 
 const MODAL_SETTING_SAVE_DELAY = 500;
+const REMOTE_TOUCH_MODE_STORAGE_KEY = 'nexus.rdp.touch-mode';
+
+const readRemoteTouchMode = (): RemoteTouchMode => {
+  try {
+    return window.localStorage.getItem(REMOTE_TOUCH_MODE_STORAGE_KEY) === 'touchpad'
+      ? 'touchpad'
+      : 'direct';
+  } catch {
+    return 'direct';
+  }
+};
 
 const emit = defineEmits(['close']);
 
@@ -55,6 +71,9 @@ const connectionStatus = ref<ConnectionStatus>('disconnected');
 const statusMessage = ref('');
 const keyboard = ref<Keyboard | null>(null);
 const mouse = ref<Mouse | null>(null);
+let remoteTouchInput: RemoteTouchInput | null = null;
+const hasTouchInput = navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
+const remoteTouchMode = ref<RemoteTouchMode>(readRemoteTouchMode());
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
 const isBrowserFullscreen = ref(false);
@@ -269,6 +288,31 @@ const trySyncClipboardOnDisplayFocus = async () => {
   }
 };
 
+const bindRemoteTouchInput = (displayEl: HTMLElement) => {
+  remoteTouchInput?.destroy();
+  remoteTouchInput = null;
+  if (!guacClient.value) return;
+  remoteTouchInput = attachRemoteTouchInput(
+    displayEl,
+    guacClient.value,
+    remoteTouchMode.value,
+  );
+};
+
+const setRemoteTouchMode = (mode: RemoteTouchMode) => {
+  if (remoteTouchMode.value === mode) return;
+  remoteTouchMode.value = mode;
+  try {
+    window.localStorage.setItem(REMOTE_TOUCH_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Storage may be unavailable in private browsing. The in-memory choice still applies.
+  }
+
+  if (connectionStatus.value !== 'connected') return;
+  const displayEl = guacClient.value?.getDisplay()?.getElement();
+  if (displayEl) bindRemoteTouchInput(displayEl);
+};
+
 const setupInputListeners = () => {
     if (!guacClient.value || !rdpDisplayRef.value) return;
     try {
@@ -329,6 +373,8 @@ const setupInputListeners = () => {
 
         mouse.value.onEach(['mousedown', 'mouseup', 'mousemove'], forwardMouseEvent);
 
+        bindRemoteTouchInput(displayEl);
+
         keyboard.value = new Guacamole.Keyboard(displayEl); // 将监听器附加到 RDP 显示元素
 
         keyboard.value.onkeydown = (keysym: number) => {
@@ -386,6 +432,9 @@ const removeInputListeners = () => {
              console.warn("Could not reset cursor or remove listeners on display element during listener removal:", e);
         }
     }
+
+    remoteTouchInput?.destroy();
+    remoteTouchInput = null;
 
     // 清理 Guacamole 的键盘和鼠标对象
     if (keyboard.value) {
@@ -710,8 +759,48 @@ const { startResize: initResize } = useResizeHandle({
          </div>
       </div>
 
-       <div v-show="!isBrowserFullscreen" data-testid="rdp-window-footer" class="p-2 border-t border-border flex-shrink-0 text-xs text-text-secondary bg-header flex items-center justify-end">
-         <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+       <div v-show="!isBrowserFullscreen" data-testid="rdp-window-footer" class="p-2 border-t border-border flex-shrink-0 text-xs text-text-secondary bg-header flex items-center justify-between gap-2 flex-wrap">
+         <div v-if="hasTouchInput" class="flex min-w-0 flex-col gap-1">
+           <div class="flex items-center gap-1.5">
+             <span class="shrink-0 text-[11px] text-text-muted">
+               {{ t('remoteDesktopModal.touchModeLabel') }}
+             </span>
+             <div
+               class="inline-flex overflow-hidden rounded border border-border"
+               role="group"
+               :aria-label="t('remoteDesktopModal.touchModeLabel')"
+             >
+               <button
+                 type="button"
+                 data-testid="rdp-touch-mode-direct"
+                 class="px-2 py-1 text-[11px] transition-colors"
+                 :class="remoteTouchMode === 'direct' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-hover'"
+                 :aria-pressed="remoteTouchMode === 'direct'"
+                 :title="t('remoteDesktopModal.touchHintDirect')"
+                 @click="setRemoteTouchMode('direct')"
+               >
+                 <i class="fas fa-hand-pointer mr-1" aria-hidden="true"></i>
+                 {{ t('remoteDesktopModal.touchModeDirect') }}
+               </button>
+               <button
+                 type="button"
+                 data-testid="rdp-touch-mode-touchpad"
+                 class="border-l border-border px-2 py-1 text-[11px] transition-colors"
+                 :class="remoteTouchMode === 'touchpad' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-hover'"
+                 :aria-pressed="remoteTouchMode === 'touchpad'"
+                 :title="t('remoteDesktopModal.touchHintTouchpad')"
+                 @click="setRemoteTouchMode('touchpad')"
+               >
+                 <i class="fas fa-arrows-up-down-left-right mr-1" aria-hidden="true"></i>
+                 {{ t('remoteDesktopModal.touchModeTouchpad') }}
+               </button>
+             </div>
+           </div>
+           <span data-testid="rdp-touch-hint" class="text-[10px] leading-tight text-text-muted">
+             {{ t(remoteTouchMode === 'direct' ? 'remoteDesktopModal.touchHintDirect' : 'remoteDesktopModal.touchHintTouchpad') }}
+           </span>
+         </div>
+         <div class="flex items-center space-x-2 flex-wrap gap-y-1 ml-auto">
             <label for="modal-width" class="text-xs ml-2">{{ t('common.width') }}:</label>
             <input
               id="modal-width"

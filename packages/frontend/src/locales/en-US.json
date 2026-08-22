@@ -1330,7 +1330,12 @@
       "noConnection": "No connection information provided.",
       "tokenError": "Failed to retrieve token"
     },
-    "reconnectTooltip": "Reconnect to the remote desktop"
+    "reconnectTooltip": "Reconnect to the remote desktop",
+    "touchModeLabel": "Touch",
+    "touchModeDirect": "Direct",
+    "touchModeTouchpad": "Touchpad",
+    "touchHintDirect": "Tap: left click · Hold: right click · Double-tap and drag: drag",
+    "touchHintTouchpad": "One finger: move · Tap: left click · Two-finger tap: right click · Two-finger swipe: scroll"
   },
   "vncModal": {
     "title": "VNC Session",

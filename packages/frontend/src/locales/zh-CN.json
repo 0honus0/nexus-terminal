@@ -1334,7 +1334,12 @@
       "noConnection": "未提供连接信息。",
       "tokenError": "获取令牌失败"
     },
-    "reconnectTooltip": "重新连接到远程桌面"
+    "reconnectTooltip": "重新连接到远程桌面",
+    "touchModeLabel": "触控",
+    "touchModeDirect": "直触",
+    "touchModeTouchpad": "触控板",
+    "touchHintDirect": "点按：左键 · 长按：右键 · 双击后拖动：拖拽",
+    "touchHintTouchpad": "单指：移动鼠标 · 点按：左键 · 双指点按：右键 · 双指滑动：滚轮"
   },
   "vncModal": {
     "title": "VNC 会话",

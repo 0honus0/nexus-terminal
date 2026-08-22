@@ -823,6 +823,11 @@
       "tunnelError": "トンネルエラー"
     },
     "reconnectTooltip": "リモートデスクトップに再接続",
+    "touchModeLabel": "タッチ",
+    "touchModeDirect": "直接操作",
+    "touchModeTouchpad": "タッチパッド",
+    "touchHintDirect": "タップ：左クリック · 長押し：右クリック · ダブルタップ後にドラッグ：ドラッグ",
+    "touchHintTouchpad": "1本指：ポインター移動 · タップ：左クリック · 2本指タップ：右クリック · 2本指スワイプ：スクロール",
     "status": {
       "connected": "接続済み",
       "connecting": "接続中...",

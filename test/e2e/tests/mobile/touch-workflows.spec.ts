@@ -20,6 +20,262 @@ async function connectMobileSsh(page: Parameters<typeof connectTestSshFromConnec
   await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
 }
 
+test('remote touch supports switchable direct and touchpad Guacamole input', async ({ page }) => {
+  await page.goto('/login');
+
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/foundation/interaction/remoteTouchInput.ts';
+    const { attachRemoteTouchInput } = await import(/* @vite-ignore */ modulePath);
+    const calls: Array<{
+      x: number;
+      y: number;
+      left: boolean;
+      right: boolean;
+      up: boolean;
+      down: boolean;
+      applyDisplayScale: boolean;
+    }> = [];
+    let cursorShowCount = 0;
+
+    const target = document.createElement('div');
+    Object.assign(target.style, {
+      position: 'fixed',
+      left: '20px',
+      top: '30px',
+      width: '200px',
+      height: '120px',
+    });
+    document.body.appendChild(target);
+
+    const fakeClient = {
+      getDisplay: () => ({
+        showCursor: () => {
+          cursorShowCount += 1;
+        },
+      }),
+      sendMouseState: (state, applyDisplayScale = false) => {
+        calls.push({
+          x: state.x,
+          y: state.y,
+          left: state.left,
+          right: state.right,
+          up: state.up,
+          down: state.down,
+          applyDisplayScale,
+        });
+      },
+    };
+    const input = attachRemoteTouchInput(target, fakeClient);
+
+    const touch = (identifier: number, clientX: number, clientY: number, force: number) => new Touch({
+      identifier,
+      target,
+      clientX,
+      clientY,
+      pageX: clientX,
+      pageY: clientY,
+      screenX: clientX,
+      screenY: clientY,
+      radiusX: 8,
+      radiusY: 8,
+      rotationAngle: 0,
+      force,
+    });
+    const dispatch = (type: 'touchstart' | 'touchmove' | 'touchend', active: Touch[], changed: Touch[]) => {
+      target.dispatchEvent(new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: active,
+        targetTouches: active,
+        changedTouches: changed,
+      }));
+    };
+    const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+
+    const tapTouch = touch(1, 80, 90, 0.5);
+    dispatch('touchstart', [tapTouch], [tapTouch]);
+    dispatch('touchend', [], [touch(1, 80, 90, 0)]);
+    await wait(300);
+    const tapCalls = calls.slice();
+
+    const holdTouch = touch(2, 130, 110, 0.5);
+    dispatch('touchstart', [holdTouch], [holdTouch]);
+    await wait(550);
+    dispatch('touchend', [], [touch(2, 130, 110, 0)]);
+    const holdCalls = calls.slice(tapCalls.length);
+
+    const dragCallStart = calls.length;
+    const firstDragTap = touch(3, 90, 100, 0.5);
+    dispatch('touchstart', [firstDragTap], [firstDragTap]);
+    dispatch('touchend', [], [touch(3, 90, 100, 0)]);
+    await wait(100);
+    const secondDragTouch = touch(4, 90, 100, 0.5);
+    dispatch('touchstart', [secondDragTouch], [secondDragTouch]);
+    const movedDragTouch = touch(4, 150, 120, 0.5);
+    dispatch('touchmove', [movedDragTouch], [movedDragTouch]);
+    dispatch('touchend', [], [touch(4, 150, 120, 0)]);
+    await wait(300);
+    const dragCalls = calls.slice(dragCallStart);
+    const allCalls = calls.slice();
+
+    const touchActionWhileAttached = target.style.touchAction;
+    input.destroy();
+    const callCountAfterDestroy = calls.length;
+
+    const ignoredTouch = touch(5, 60, 70, 0.5);
+    dispatch('touchstart', [ignoredTouch], [ignoredTouch]);
+    dispatch('touchend', [], [touch(5, 60, 70, 0)]);
+    await wait(300);
+    const stoppedAfterDestroy = calls.length === callCountAfterDestroy;
+
+    const touchpadCallStart = calls.length;
+    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad');
+
+    const moveStart = touch(6, 70, 70, 0.5);
+    dispatch('touchstart', [moveStart], [moveStart]);
+    const moveEnd = touch(6, 135, 105, 0.5);
+    dispatch('touchmove', [moveEnd], [moveEnd]);
+    dispatch('touchend', [], [touch(6, 135, 105, 0)]);
+
+    const rightTouches = [
+      touch(7, 80, 80, 0.5),
+      touch(8, 120, 80, 0.5),
+    ];
+    dispatch('touchstart', rightTouches, rightTouches);
+    dispatch('touchend', [], [
+      touch(7, 80, 80, 0),
+      touch(8, 120, 80, 0),
+    ]);
+    await wait(300);
+
+    const scrollStart = [
+      touch(9, 85, 80, 0.5),
+      touch(10, 125, 80, 0.5),
+    ];
+    dispatch('touchstart', scrollStart, scrollStart);
+    const scrollEnd = [
+      touch(9, 85, 180, 0.5),
+      touch(10, 125, 180, 0.5),
+    ];
+    dispatch('touchmove', scrollEnd, scrollEnd);
+    dispatch('touchend', [], [
+      touch(9, 85, 180, 0),
+      touch(10, 125, 180, 0),
+    ]);
+    const touchpadCalls = calls.slice(touchpadCallStart);
+    const touchpadMode = touchpadInput.mode;
+    touchpadInput.destroy();
+    target.remove();
+
+    return {
+      directMode: input.mode,
+      touchpadMode,
+      touchActionWhileAttached,
+      touchActionAfterDestroy: target.style.touchAction,
+      cursorShowCount,
+      allScaled: [...allCalls, ...touchpadCalls].every(call => call.applyDisplayScale),
+      tapPressedLeft: tapCalls.some(call => call.left),
+      tapReleasedLeft: tapCalls.some(call => !call.left),
+      holdPressedRight: holdCalls.some(call => call.right),
+      holdReleasedRight: holdCalls.some((call, index) => index > 0 && !call.right),
+      dragMovedWhilePressed: dragCalls.some(call => call.left && call.x >= 120),
+      dragReleasedLeft: dragCalls.some((call, index) => index > 0 && !call.left),
+      stoppedAfterDestroy,
+      touchpadMovedPointer: touchpadCalls.some(call => call.x > 0 && !call.left && !call.right),
+      touchpadPressedRight: touchpadCalls.some(call => call.right),
+      touchpadScrolled: touchpadCalls.some(call => call.up || call.down),
+    };
+  });
+
+  expect(result).toEqual({
+    directMode: 'direct',
+    touchpadMode: 'touchpad',
+    touchActionWhileAttached: 'none',
+    touchActionAfterDestroy: '',
+    cursorShowCount: expect.any(Number),
+    allScaled: true,
+    tapPressedLeft: true,
+    tapReleasedLeft: true,
+    holdPressedRight: true,
+    holdReleasedRight: true,
+    dragMovedWhilePressed: true,
+    dragReleasedLeft: true,
+    stoppedAfterDestroy: true,
+    touchpadMovedPointer: true,
+    touchpadPressedRight: true,
+    touchpadScrolled: true,
+  });
+  expect(result.cursorShowCount).toBeGreaterThan(0);
+});
+
+test('mobile RDP touch mode toggle persists without reconnecting the session', async ({ page, context }) => {
+  const connectionName = 'E2E Mobile RDP Touch Modes';
+  const storageKey = 'nexus.rdp.touch-mode';
+
+  await loginAsInitialAdmin(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+
+  const existingResponse = await context.request.get('/api/v1/connections');
+  expect(existingResponse.ok()).toBeTruthy();
+  const existingConnections = await existingResponse.json() as Array<{ id: number; name?: string }>;
+  for (const connection of existingConnections.filter(item => item.name === connectionName)) {
+    expect((await context.request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+  }
+
+  const createResponse = await context.request.post('/api/v1/connections', {
+    data: {
+      type: 'RDP',
+      name: connectionName,
+      host: '192.0.2.93',
+      port: 3389,
+      username: 'mobile-touch-e2e-user',
+      password: 'mobile-touch-e2e-password',
+    },
+  });
+  expect(createResponse.status(), await createResponse.text()).toBe(201);
+  const connectionId = (await createResponse.json() as { connection: { id: number } }).connection.id;
+
+  const openConnection = async () => {
+    await page.goto('/workspace');
+    await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
+    const connectionList = page.getByTestId('workspace-connection-list');
+    await expect(connectionList).toBeVisible();
+    await connectionList.getByText(connectionName, { exact: true }).first().click();
+    await expect(page.getByTestId('remote-desktop-modal')).toBeVisible();
+  };
+
+  try {
+    await page.goto('/login');
+    await page.evaluate(key => window.localStorage.removeItem(key), storageKey);
+    await openConnection();
+
+    const directMode = page.getByTestId('rdp-touch-mode-direct');
+    const touchpadMode = page.getByTestId('rdp-touch-mode-touchpad');
+    const hint = page.getByTestId('rdp-touch-hint');
+
+    await expect(directMode).toBeVisible();
+    await expect(directMode).toHaveAttribute('aria-pressed', 'true');
+    await expect(touchpadMode).toHaveAttribute('aria-pressed', 'false');
+    await expect(hint).toContainText('Tap: left click');
+
+    await touchpadMode.click();
+    await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
+    await expect(directMode).toHaveAttribute('aria-pressed', 'false');
+    await expect(hint).toContainText('One finger: move');
+    await expect.poll(() => page.evaluate(key => window.localStorage.getItem(key), storageKey)).toBe('touchpad');
+
+    await page.getByTestId('rdp-window-close').click();
+    await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
+    await openConnection();
+
+    await expect(page.getByTestId('rdp-touch-mode-touchpad')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('rdp-touch-mode-direct').click();
+    await expect.poll(() => page.evaluate(key => window.localStorage.getItem(key), storageKey)).toBe('direct');
+  } finally {
+    await context.request.delete(`/api/v1/connections/${connectionId}`);
+  }
+});
+
 test('mobile command bar opens the touch-only quick commands surface', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
 
