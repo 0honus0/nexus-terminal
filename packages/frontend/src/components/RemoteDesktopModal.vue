@@ -329,13 +329,21 @@ const createMobileKeyboardInput = () => {
     pointerEvents: 'none',
   });
 
+  let isComposing = false;
   const clearValueAfterInput = () => {
+    if (isComposing) return;
     queueMicrotask(() => {
       if (mobileKeyboardInput === input) input.value = '';
     });
   };
+  input.addEventListener('compositionstart', () => {
+    isComposing = true;
+  });
+  input.addEventListener('compositionend', () => {
+    isComposing = false;
+    clearValueAfterInput();
+  });
   input.addEventListener('input', clearValueAfterInput);
-  input.addEventListener('compositionend', clearValueAfterInput);
   input.addEventListener('focus', trySyncClipboardOnDisplayFocus);
   rdpContainerRef.value.appendChild(input);
   mobileKeyboardInput = input;
