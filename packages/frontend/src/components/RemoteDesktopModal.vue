@@ -72,6 +72,7 @@ const statusMessage = ref('');
 const keyboard = ref<Keyboard | null>(null);
 const mouse = ref<Mouse | null>(null);
 let remoteTouchInput: RemoteTouchInput | null = null;
+let mobileKeyboardInput: HTMLTextAreaElement | null = null;
 const hasTouchInput = navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
 const remoteTouchMode = ref<RemoteTouchMode>(readRemoteTouchMode());
 const desiredModalWidth = ref(1064);
@@ -288,6 +289,59 @@ const trySyncClipboardOnDisplayFocus = async () => {
   }
 };
 
+const removeMobileKeyboardInput = () => {
+  mobileKeyboardInput?.remove();
+  mobileKeyboardInput = null;
+};
+
+const focusMobileKeyboard = () => {
+  if (!hasTouchInput || !mobileKeyboardInput || connectionStatus.value !== 'connected') return;
+
+  mobileKeyboardInput.value = '';
+  mobileKeyboardInput.focus({ preventScroll: true });
+  mobileKeyboardInput.click();
+  mobileKeyboardInput.select();
+};
+
+const createMobileKeyboardInput = () => {
+  removeMobileKeyboardInput();
+  if (!hasTouchInput || !rdpContainerRef.value) return null;
+
+  const input = document.createElement('textarea');
+  input.dataset.testid = 'rdp-mobile-keyboard-input';
+  input.setAttribute('aria-label', t('remoteDesktopModal.mobileKeyboardInputLabel'));
+  input.setAttribute('inputmode', 'text');
+  input.setAttribute('enterkeyhint', 'enter');
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('autocapitalize', 'off');
+  input.setAttribute('spellcheck', 'false');
+  input.tabIndex = -1;
+  Object.assign(input.style, {
+    position: 'fixed',
+    left: '0',
+    bottom: '0',
+    width: '1px',
+    height: '1px',
+    padding: '0',
+    border: '0',
+    opacity: '0',
+    fontSize: '16px',
+    pointerEvents: 'none',
+  });
+
+  const clearValueAfterInput = () => {
+    queueMicrotask(() => {
+      if (mobileKeyboardInput === input) input.value = '';
+    });
+  };
+  input.addEventListener('input', clearValueAfterInput);
+  input.addEventListener('compositionend', clearValueAfterInput);
+  input.addEventListener('focus', trySyncClipboardOnDisplayFocus);
+  rdpContainerRef.value.appendChild(input);
+  mobileKeyboardInput = input;
+  return input;
+};
+
 const bindRemoteTouchInput = (displayEl: HTMLElement) => {
   remoteTouchInput?.destroy();
   remoteTouchInput = null;
@@ -296,6 +350,7 @@ const bindRemoteTouchInput = (displayEl: HTMLElement) => {
     displayEl,
     guacClient.value,
     remoteTouchMode.value,
+    { onTap: focusMobileKeyboard },
   );
 };
 
@@ -327,8 +382,11 @@ const setupInputListeners = () => {
             activeElement.blur();
             console.log('[RDP Modal] Blurred input field on RDP display click.');
           }
-          // Ensure the RDP display element gets focus when clicked
-          if (displayEl && typeof displayEl.focus === 'function') {
+          // Mobile browsers only open the system keyboard for a focused text
+          // control. Keep desktop behavior unchanged.
+          if (hasTouchInput) {
+            focusMobileKeyboard();
+          } else if (displayEl && typeof displayEl.focus === 'function') {
             displayEl.focus();
           }
         };
@@ -376,6 +434,8 @@ const setupInputListeners = () => {
         bindRemoteTouchInput(displayEl);
 
         keyboard.value = new Guacamole.Keyboard(displayEl); // 将监听器附加到 RDP 显示元素
+        const mobileInput = createMobileKeyboardInput();
+        if (mobileInput) keyboard.value.listenTo(mobileInput);
 
         keyboard.value.onkeydown = (keysym: number) => {
             // 仅当输入框未聚焦时发送按键事件
@@ -435,6 +495,7 @@ const removeInputListeners = () => {
 
     remoteTouchInput?.destroy();
     remoteTouchInput = null;
+    removeMobileKeyboardInput();
 
     // 清理 Guacamole 的键盘和鼠标对象
     if (keyboard.value) {
@@ -742,7 +803,7 @@ const { startResize: initResize } = useResizeHandle({
       </div>
 
       <div ref="rdpContainerRef" class="relative bg-black overflow-hidden flex-1">
-        <div ref="rdpDisplayRef" class="rdp-display-container w-full h-full">
+        <div ref="rdpDisplayRef" data-testid="rdp-display-container" class="rdp-display-container w-full h-full">
         </div>
          <div v-if="connectionStatus === 'connecting' || connectionStatus === 'error'"
               class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white p-4 z-10">

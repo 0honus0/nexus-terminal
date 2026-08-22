@@ -36,6 +36,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       applyDisplayScale: boolean;
     }> = [];
     let cursorShowCount = 0;
+    let keyboardTapCount = 0;
 
     const target = document.createElement('div');
     Object.assign(target.style, {
@@ -46,6 +47,14 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       height: '120px',
     });
     document.body.appendChild(target);
+
+    const keyboardSink = document.createElement('textarea');
+    keyboardSink.dataset.testid = 'e2e-mobile-keyboard-sink';
+    document.body.appendChild(keyboardSink);
+    const focusKeyboard = () => {
+      keyboardTapCount += 1;
+      keyboardSink.focus();
+    };
 
     const fakeClient = {
       getDisplay: () => ({
@@ -65,7 +74,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
         });
       },
     };
-    const input = attachRemoteTouchInput(target, fakeClient);
+    const input = attachRemoteTouchInput(target, fakeClient, 'direct', { onTap: focusKeyboard });
 
     const touch = (identifier: number, clientX: number, clientY: number, force: number) => new Touch({
       identifier,
@@ -97,12 +106,14 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(1, 80, 90, 0)]);
     await wait(300);
     const tapCalls = calls.slice();
+    const directTapFocusedKeyboard = document.activeElement === keyboardSink && keyboardTapCount === 1;
 
     const holdTouch = touch(2, 130, 110, 0.5);
     dispatch('touchstart', [holdTouch], [holdTouch]);
     await wait(550);
     dispatch('touchend', [], [touch(2, 130, 110, 0)]);
     const holdCalls = calls.slice(tapCalls.length);
+    const holdSkippedKeyboard = keyboardTapCount === 1;
 
     const dragCallStart = calls.length;
     const firstDragTap = touch(3, 90, 100, 0.5);
@@ -116,6 +127,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(4, 150, 120, 0)]);
     await wait(300);
     const dragCalls = calls.slice(dragCallStart);
+    const dragMoveDidNotAddExtraKeyboard = keyboardTapCount === 2;
     const allCalls = calls.slice();
 
     const touchActionWhileAttached = target.style.touchAction;
@@ -127,15 +139,26 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(5, 60, 70, 0)]);
     await wait(300);
     const stoppedAfterDestroy = calls.length === callCountAfterDestroy;
+    const keyboardStoppedAfterDestroy = keyboardTapCount === 2;
 
     const touchpadCallStart = calls.length;
-    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad');
+    const touchpadInput = attachRemoteTouchInput(
+      target,
+      fakeClient,
+      'touchpad',
+      { onTap: focusKeyboard },
+    );
 
     const moveStart = touch(6, 70, 70, 0.5);
     dispatch('touchstart', [moveStart], [moveStart]);
     const moveEnd = touch(6, 135, 105, 0.5);
     dispatch('touchmove', [moveEnd], [moveEnd]);
     dispatch('touchend', [], [touch(6, 135, 105, 0)]);
+
+    const touchpadTap = touch(11, 100, 90, 0.5);
+    dispatch('touchstart', [touchpadTap], [touchpadTap]);
+    dispatch('touchend', [], [touch(11, 100, 90, 0)]);
+    const touchpadTapFocusedKeyboard = document.activeElement === keyboardSink && keyboardTapCount === 3;
 
     const rightTouches = [
       touch(7, 80, 80, 0.5),
@@ -163,9 +186,11 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       touch(10, 125, 180, 0),
     ]);
     const touchpadCalls = calls.slice(touchpadCallStart);
+    const multiTouchSkippedKeyboard = keyboardTapCount === 3;
     const touchpadMode = touchpadInput.mode;
     touchpadInput.destroy();
     target.remove();
+    keyboardSink.remove();
 
     return {
       directMode: input.mode,
@@ -176,6 +201,12 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
       allScaled: [...allCalls, ...touchpadCalls].every(call => call.applyDisplayScale),
       tapPressedLeft: tapCalls.some(call => call.left),
       tapReleasedLeft: tapCalls.some(call => !call.left),
+      directTapFocusedKeyboard,
+      holdSkippedKeyboard,
+      dragMoveDidNotAddExtraKeyboard,
+      keyboardStoppedAfterDestroy,
+      touchpadTapFocusedKeyboard,
+      multiTouchSkippedKeyboard,
       holdPressedRight: holdCalls.some(call => call.right),
       holdReleasedRight: holdCalls.some((call, index) => index > 0 && !call.right),
       dragMovedWhilePressed: dragCalls.some(call => call.left && call.x >= 120),
@@ -196,6 +227,12 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     allScaled: true,
     tapPressedLeft: true,
     tapReleasedLeft: true,
+    directTapFocusedKeyboard: true,
+    holdSkippedKeyboard: true,
+    dragMoveDidNotAddExtraKeyboard: true,
+    keyboardStoppedAfterDestroy: true,
+    touchpadTapFocusedKeyboard: true,
+    multiTouchSkippedKeyboard: true,
     holdPressedRight: true,
     holdReleasedRight: true,
     dragMovedWhilePressed: true,
@@ -256,7 +293,7 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await expect(directMode).toBeVisible();
     await expect(directMode).toHaveAttribute('aria-pressed', 'true');
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'false');
-    await expect(hint).toContainText('Tap: left click');
+    await expect(hint).toContainText('Tap: click + keyboard');
 
     await touchpadMode.click();
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
