@@ -515,7 +515,17 @@
       "spreadsheet": "电子表格",
       "worksheet": "工作表",
       "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",
-      "spreadsheetLimited": "当前显示 {displayedRows}/{totalRows} 行、{displayedColumns}/{totalColumns} 列。其余数据未在预览中显示，原始文件内容没有缺失或改变。"
+      "spreadsheetLimited": "当前显示 {displayedRows}/{totalRows} 行、{displayedColumns}/{totalColumns} 列。其余数据未在预览中显示，原始文件内容没有缺失或改变。",
+      "pdfMeta": "PDF · {pages} 页",
+      "pdfPreviousPage": "上一页",
+      "pdfNextPage": "下一页",
+      "pdfCurrentPage": "当前页",
+      "pdfZoomOut": "缩小",
+      "pdfZoomIn": "放大",
+      "pdfFitWidth": "适应宽度",
+      "pdfThumbnails": "页面",
+      "pdfOutline": "目录",
+      "pdfNoOutline": "此 PDF 未包含文档目录。"
     },
     "headers": {
       "type": "类型",

@@ -443,7 +443,17 @@
       "spreadsheet": "スプレッドシート",
       "worksheet": "ワークシート",
       "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",
-      "spreadsheetLimited": "現在 {totalRows} 行中 {displayedRows} 行、{totalColumns} 列中 {displayedColumns} 列を表示しています。追加データはプレビューに表示されていませんが、元のファイルは欠落・変更していません。"
+      "spreadsheetLimited": "現在 {totalRows} 行中 {displayedRows} 行、{totalColumns} 列中 {displayedColumns} 列を表示しています。追加データはプレビューに表示されていませんが、元のファイルは欠落・変更していません。",
+      "pdfMeta": "PDF · {pages} ページ",
+      "pdfPreviousPage": "前のページ",
+      "pdfNextPage": "次のページ",
+      "pdfCurrentPage": "現在のページ",
+      "pdfZoomOut": "縮小",
+      "pdfZoomIn": "拡大",
+      "pdfFitWidth": "幅に合わせる",
+      "pdfThumbnails": "ページ",
+      "pdfOutline": "目次",
+      "pdfNoOutline": "この PDF には文書の目次が含まれていません。"
     },
     "currentPath": "現在のパス",
     "dropFilesHere": "ファイルをここにドラッグ＆ドロップしてアップロード",
