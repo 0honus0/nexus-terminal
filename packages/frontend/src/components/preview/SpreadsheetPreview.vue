@@ -9,6 +9,11 @@ interface SpreadsheetSheet {
   rows: unknown[][];
   totalRows: number;
   totalColumns: number;
+  displayedRows: number;
+  displayedColumns: number;
+  startRow: number;
+  columnWidths: Array<number | null>;
+  rowHeights: Array<number | null>;
 }
 
 const props = defineProps<{
@@ -25,6 +30,10 @@ const activeIndex = ref(0);
 const previewRootRef = ref<HTMLElement | null>(null);
 const scrollContainerRef = ref<HTMLElement | null>(null);
 const activeSheet = computed(() => props.sheets[activeIndex.value] ?? props.sheets[0]);
+const isTruncated = computed(() => Boolean(activeSheet.value && (
+  activeSheet.value.displayedRows < activeSheet.value.totalRows ||
+  activeSheet.value.displayedColumns < activeSheet.value.totalColumns
+)));
 const subtitle = computed(() => activeSheet.value
   ? t('fileManager.preview.spreadsheetMeta', {
       sheet: activeSheet.value.name,
@@ -99,14 +108,21 @@ onMounted(() => window.setTimeout(focusPreview, 0));
       >
         <table class="spreadsheet-preview min-w-full border-separate border-spacing-0 text-xs">
           <tbody>
-            <tr v-for="(row, rowIndex) in activeSheet.rows" :key="rowIndex">
+            <tr
+              v-for="(row, rowIndex) in activeSheet.rows"
+              :key="rowIndex"
+              :style="activeSheet.rowHeights[rowIndex] ? { height: `${activeSheet.rowHeights[rowIndex]}px` } : undefined"
+            >
               <th class="sticky left-0 z-10 w-12 min-w-12 border-b border-r border-border bg-header px-2 py-1.5 text-right font-normal text-text-secondary">
-                {{ rowIndex + 1 }}
+                {{ activeSheet.startRow + rowIndex + 1 }}
               </th>
               <td
                 v-for="(cell, columnIndex) in row"
                 :key="columnIndex"
                 class="max-w-80 whitespace-pre-wrap border-b border-r border-border px-2 py-1.5 align-top"
+                :style="activeSheet.columnWidths[columnIndex]
+                  ? { width: `${activeSheet.columnWidths[columnIndex]}px`, minWidth: `${activeSheet.columnWidths[columnIndex]}px` }
+                  : undefined"
                 :title="formatCell(cell)"
               >
                 {{ formatCell(cell) }}
@@ -116,12 +132,16 @@ onMounted(() => window.setTimeout(focusPreview, 0));
         </table>
 
         <div
-          v-if="activeSheet.rows.length < activeSheet.totalRows || (activeSheet.rows[0]?.length ?? 0) < activeSheet.totalColumns"
+          v-if="isTruncated"
+          data-testid="spreadsheet-preview-limit-notice"
+          role="status"
           class="sticky bottom-0 border-t border-border bg-header/95 px-4 py-2 text-xs text-text-secondary backdrop-blur"
         >
           {{ t('fileManager.preview.spreadsheetLimited', {
-            rows: activeSheet.rows.length,
-            columns: activeSheet.rows[0]?.length ?? 0,
+            displayedRows: activeSheet.displayedRows,
+            totalRows: activeSheet.totalRows,
+            displayedColumns: activeSheet.displayedColumns,
+            totalColumns: activeSheet.totalColumns,
           }) }}
         </div>
       </div>

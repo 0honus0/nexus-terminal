@@ -269,6 +269,8 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
     [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),
     timezone: 'UTC', // 时区默认值
     terminalScrollbackLimit: '5000', // 终端回滚行数默认值
+    spreadsheetPreviewMaxRows: '500', // 表格预览最大行数
+    spreadsheetPreviewMaxColumns: '100', // 表格预览最大列数
     terminalEnableRightClickPaste: 'true', // 终端右键粘贴默认值
   };
   const nowSeconds = Math.floor(Date.now() / 1000);

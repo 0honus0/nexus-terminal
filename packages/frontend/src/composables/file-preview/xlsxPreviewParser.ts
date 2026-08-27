@@ -1,209 +1,124 @@
+import { read, utils, type CellObject, type ColInfo, type RowInfo, type WorkSheet } from 'xlsx';
+
 export interface ParsedSpreadsheetSheet {
   name: string;
   rows: unknown[][];
   totalRows: number;
   totalColumns: number;
+  displayedRows: number;
+  displayedColumns: number;
+  startRow: number;
+  columnWidths: Array<number | null>;
+  rowHeights: Array<number | null>;
 }
 
-interface ZipEntry {
-  compression: number;
-  compressedSize: number;
-  localHeaderOffset: number;
-}
+const MIN_COLUMN_WIDTH_PX = 48;
+const MAX_COLUMN_WIDTH_PX = 480;
+const MIN_ROW_HEIGHT_PX = 20;
+const MAX_ROW_HEIGHT_PX = 240;
 
-const textDecoder = new TextDecoder('utf-8');
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-const uint16 = (view: DataView, offset: number) => view.getUint16(offset, true);
-const uint32 = (view: DataView, offset: number) => view.getUint32(offset, true);
-
-const findEndOfCentralDirectory = (view: DataView): number => {
-  const minimumOffset = Math.max(0, view.byteLength - 0xffff - 22);
-  for (let offset = view.byteLength - 22; offset >= minimumOffset; offset -= 1) {
-    if (uint32(view, offset) === 0x06054b50) return offset;
+const decodeRange = (reference?: string) => {
+  if (!reference) return null;
+  try {
+    return utils.decode_range(reference);
+  } catch {
+    return null;
   }
-  throw new Error('Invalid XLSX archive: end-of-central-directory record not found.');
 };
 
-const parseZipDirectory = (buffer: ArrayBuffer): Map<string, ZipEntry> => {
-  const view = new DataView(buffer);
-  const bytes = new Uint8Array(buffer);
-  const eocdOffset = findEndOfCentralDirectory(view);
-  const entryCount = uint16(view, eocdOffset + 10);
-  let offset = uint32(view, eocdOffset + 16);
-  const entries = new Map<string, ZipEntry>();
-
-  for (let index = 0; index < entryCount; index += 1) {
-    if (uint32(view, offset) !== 0x02014b50) {
-      throw new Error('Invalid XLSX archive: central-directory entry is malformed.');
-    }
-
-    const compression = uint16(view, offset + 10);
-    const compressedSize = uint32(view, offset + 20);
-    const fileNameLength = uint16(view, offset + 28);
-    const extraLength = uint16(view, offset + 30);
-    const commentLength = uint16(view, offset + 32);
-    const localHeaderOffset = uint32(view, offset + 42);
-    const fileName = textDecoder.decode(bytes.subarray(offset + 46, offset + 46 + fileNameLength));
-
-    entries.set(fileName, {
-      compression,
-      compressedSize,
-      localHeaderOffset,
-    });
-
-    offset += 46 + fileNameLength + extraLength + commentLength;
-  }
-
-  return entries;
+const formatCell = (cell: CellObject | undefined): unknown => {
+  if (!cell || cell.t === 'z') return '';
+  if (typeof cell.w === 'string') return cell.w;
+  return cell.v ?? '';
 };
 
-const inflateRaw = async (data: Uint8Array): Promise<Uint8Array> => {
-  if (typeof DecompressionStream === 'undefined') {
-    throw new Error('This browser does not support XLSX decompression.');
-  }
-
-  const copy = new Uint8Array(data.byteLength);
-  copy.set(data);
-  const stream = new Blob([copy.buffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+const columnWidthPx = (info: ColInfo | undefined): number | null => {
+  if (!info || info.hidden) return null;
+  const width =
+    typeof info.wpx === 'number' ? info.wpx
+      : typeof info.wch === 'number' ? (info.wch * 7) + 12
+        : typeof info.width === 'number' ? (info.width * 7) + 12
+          : null;
+  if (width === null || !Number.isFinite(width) || width <= 0) return null;
+  return Math.round(clamp(width, MIN_COLUMN_WIDTH_PX, MAX_COLUMN_WIDTH_PX));
 };
 
-const readZipEntry = async (
-  buffer: ArrayBuffer,
-  entries: Map<string, ZipEntry>,
+const rowHeightPx = (info: RowInfo | undefined): number | null => {
+  if (!info || info.hidden) return null;
+  const height =
+    typeof info.hpx === 'number' ? info.hpx
+      : typeof info.hpt === 'number' ? info.hpt * (96 / 72)
+        : null;
+  if (height === null || !Number.isFinite(height) || height <= 0) return null;
+  return Math.round(clamp(height, MIN_ROW_HEIGHT_PX, MAX_ROW_HEIGHT_PX));
+};
+
+const parseSheet = (
   name: string,
-): Promise<Uint8Array | null> => {
-  const entry = entries.get(name);
-  if (!entry) return null;
-
-  const view = new DataView(buffer);
-  const bytes = new Uint8Array(buffer);
-  const offset = entry.localHeaderOffset;
-  if (uint32(view, offset) !== 0x04034b50) {
-    throw new Error(`Invalid XLSX archive: local header for ${name} is malformed.`);
-  }
-
-  const fileNameLength = uint16(view, offset + 26);
-  const extraLength = uint16(view, offset + 28);
-  const dataOffset = offset + 30 + fileNameLength + extraLength;
-  const compressed = bytes.subarray(dataOffset, dataOffset + entry.compressedSize);
-
-  if (entry.compression === 0) return new Uint8Array(compressed);
-  if (entry.compression === 8) return inflateRaw(compressed);
-  throw new Error(`Unsupported XLSX compression method ${entry.compression}.`);
-};
-
-const readXml = async (buffer: ArrayBuffer, entries: Map<string, ZipEntry>, name: string): Promise<Document | null> => {
-  const data = await readZipEntry(buffer, entries, name);
-  if (!data) return null;
-
-  const xml = new DOMParser().parseFromString(textDecoder.decode(data), 'application/xml');
-  if (xml.querySelector('parsererror')) {
-    throw new Error(`Invalid XLSX XML in ${name}.`);
-  }
-  return xml;
-};
-
-const normalizeWorkbookTarget = (target: string): string => {
-  const cleanTarget = target.replace(/^\//, '');
-  const segments = (cleanTarget.startsWith('xl/') ? cleanTarget : `xl/${cleanTarget}`).split('/');
-  const normalized: string[] = [];
-  for (const segment of segments) {
-    if (!segment || segment === '.') continue;
-    if (segment === '..') normalized.pop();
-    else normalized.push(segment);
-  }
-  return normalized.join('/');
-};
-
-const columnIndexFromReference = (reference: string): number => {
-  const match = reference.match(/^([A-Z]+)/i);
-  if (!match) return 0;
-  let result = 0;
-  for (const char of match[1].toUpperCase()) {
-    result = result * 26 + char.charCodeAt(0) - 64;
-  }
-  return Math.max(0, result - 1);
-};
-
-const parseDimension = (document: Document): { rows: number; columns: number } | null => {
-  const ref = document.querySelector('dimension')?.getAttribute('ref');
-  if (!ref) return null;
-  const end = ref.split(':').at(-1);
-  if (!end) return null;
-  const rowMatch = end.match(/(\d+)$/);
-  return {
-    rows: rowMatch ? Number(rowMatch[1]) : 0,
-    columns: columnIndexFromReference(end) + 1,
-  };
-};
-
-const getTextContent = (element: Element | null): string => {
-  if (!element) return '';
-  return Array.from(element.querySelectorAll('t'))
-    .map((node) => node.textContent ?? '')
-    .join('');
-};
-
-const parseSharedStrings = (document: Document | null): string[] => {
-  if (!document) return [];
-  return Array.from(document.querySelectorAll('si')).map((item) => getTextContent(item));
-};
-
-const parseCellValue = (cell: Element, sharedStrings: string[]): unknown => {
-  const type = cell.getAttribute('t');
-  if (type === 'inlineStr') return getTextContent(cell.querySelector('is'));
-
-  const raw = cell.querySelector('v')?.textContent ?? '';
-  if (type === 's') return sharedStrings[Number(raw)] ?? '';
-  if (type === 'b') return raw === '1';
-  if (type === 'str' || type === 'e' || type === 'd') return raw;
-  if (raw === '') return '';
-
-  const numeric = Number(raw);
-  return Number.isFinite(numeric) ? numeric : raw;
-};
-
-const parseWorksheet = (
-  document: Document,
-  sharedStrings: string[],
+  worksheet: WorkSheet,
   maxRows: number,
   maxColumns: number,
-): { rows: unknown[][]; totalRows: number; totalColumns: number } => {
-  const dimension = parseDimension(document);
-  const rows: unknown[][] = [];
-  let observedRows = 0;
-  let observedColumns = 0;
+): ParsedSpreadsheetSheet => {
+  // With sheetRows enabled, SheetJS stores the truncated range in !ref and the
+  // original self-reported worksheet range in !fullref. XLSX files provide this
+  // metadata, which lets the preview disclose the real dimensions even when only
+  // the first rows are parsed.
+  const fullRange = decodeRange(worksheet['!fullref'] as string | undefined) ?? decodeRange(worksheet['!ref']);
+  const parsedRange = decodeRange(worksheet['!ref']) ?? fullRange;
 
-  for (const rowElement of Array.from(document.querySelectorAll('sheetData > row'))) {
-    const rowNumber = Number(rowElement.getAttribute('r')) || observedRows + 1;
-    observedRows = Math.max(observedRows, rowNumber);
-    if (rowNumber > maxRows) continue;
-
-    const row: unknown[] = [];
-    for (const cell of Array.from(rowElement.querySelectorAll(':scope > c'))) {
-      const reference = cell.getAttribute('r') ?? 'A1';
-      const columnIndex = columnIndexFromReference(reference);
-      observedColumns = Math.max(observedColumns, columnIndex + 1);
-      if (columnIndex >= maxColumns) continue;
-      row[columnIndex] = parseCellValue(cell, sharedStrings);
-    }
-
-    const targetLength = Math.min(
-      Math.max(row.length, Math.min(dimension?.columns ?? observedColumns, maxColumns)),
-      maxColumns,
-    );
-    while (row.length < targetLength) row.push('');
-    rows[rowNumber - 1] = row;
+  if (!fullRange || !parsedRange) {
+    return {
+      name,
+      rows: [],
+      totalRows: 0,
+      totalColumns: 0,
+      displayedRows: 0,
+      displayedColumns: 0,
+      startRow: 0,
+      columnWidths: [],
+      rowHeights: [],
+    };
   }
 
-  const visibleRows = Math.min(Math.max(rows.length, Math.min(dimension?.rows ?? observedRows, maxRows)), maxRows);
-  while (rows.length < visibleRows) rows.push([]);
+  const totalRows = Math.max(0, fullRange.e.r - fullRange.s.r + 1);
+  const totalColumns = Math.max(0, fullRange.e.c - fullRange.s.c + 1);
+  const parsedRows = Math.max(0, parsedRange.e.r - fullRange.s.r + 1);
+  const displayedRows = Math.min(totalRows, maxRows, parsedRows);
+  const displayedColumns = Math.min(totalColumns, maxColumns);
+  const denseData = worksheet['!data'] ?? [];
+  const rows: unknown[][] = [];
+
+  for (let rowOffset = 0; rowOffset < displayedRows; rowOffset += 1) {
+    const sourceRow = fullRange.s.r + rowOffset;
+    const row: unknown[] = [];
+    for (let columnOffset = 0; columnOffset < displayedColumns; columnOffset += 1) {
+      const sourceColumn = fullRange.s.c + columnOffset;
+      row.push(formatCell(denseData[sourceRow]?.[sourceColumn]));
+    }
+    rows.push(row);
+  }
+
+  const columnInfo = worksheet['!cols'] ?? [];
+  const rowInfo = worksheet['!rows'] ?? [];
+  const columnWidths = Array.from({ length: displayedColumns }, (_, offset) => (
+    columnWidthPx(columnInfo[fullRange.s.c + offset])
+  ));
+  const rowHeights = Array.from({ length: displayedRows }, (_, offset) => (
+    rowHeightPx(rowInfo[fullRange.s.r + offset])
+  ));
 
   return {
+    name,
     rows,
-    totalRows: Math.max(dimension?.rows ?? 0, observedRows),
-    totalColumns: Math.max(dimension?.columns ?? 0, observedColumns),
+    totalRows,
+    totalColumns,
+    displayedRows,
+    displayedColumns,
+    startRow: fullRange.s.r,
+    columnWidths,
+    rowHeights,
   };
 };
 
@@ -211,44 +126,23 @@ export const parseXlsxPreview = async (
   buffer: ArrayBuffer,
   options: { maxRows: number; maxColumns: number },
 ): Promise<ParsedSpreadsheetSheet[]> => {
-  const entries = parseZipDirectory(buffer);
-  const [workbook, relationships, sharedStringsDocument] = await Promise.all([
-    readXml(buffer, entries, 'xl/workbook.xml'),
-    readXml(buffer, entries, 'xl/_rels/workbook.xml.rels'),
-    readXml(buffer, entries, 'xl/sharedStrings.xml'),
-  ]);
+  const workbook = read(buffer, {
+    type: 'array',
+    dense: true,
+    sheetRows: options.maxRows,
+    cellStyles: true,
+    cellDates: true,
+    cellHTML: false,
+    cellFormula: false,
+    cellText: true,
+  });
 
-  if (!workbook || !relationships) {
-    throw new Error('Invalid XLSX file: workbook metadata is missing.');
-  }
-
-  const relationshipTargets = new Map<string, string>();
-  for (const relationship of Array.from(relationships.querySelectorAll('Relationship'))) {
-    const id = relationship.getAttribute('Id');
-    const target = relationship.getAttribute('Target');
-    if (id && target) relationshipTargets.set(id, normalizeWorkbookTarget(target));
-  }
-
-  const sharedStrings = parseSharedStrings(sharedStringsDocument);
-  const sheets: ParsedSpreadsheetSheet[] = [];
-
-  for (const sheet of Array.from(workbook.querySelectorAll('sheets > sheet'))) {
-    const name = sheet.getAttribute('name') ?? `Sheet ${sheets.length + 1}`;
-    const relationshipId =
-      sheet.getAttribute('r:id') ??
-      sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
-    if (!relationshipId) continue;
-
-    const worksheetPath = relationshipTargets.get(relationshipId);
-    if (!worksheetPath) continue;
-    const worksheet = await readXml(buffer, entries, worksheetPath);
-    if (!worksheet) continue;
-
-    sheets.push({
-      name,
-      ...parseWorksheet(worksheet, sharedStrings, options.maxRows, options.maxColumns),
-    });
-  }
+  const sheets = workbook.SheetNames
+    .map((name) => {
+      const worksheet = workbook.Sheets[name];
+      return worksheet ? parseSheet(name, worksheet, options.maxRows, options.maxColumns) : null;
+    })
+    .filter((sheet): sheet is ParsedSpreadsheetSheet => sheet !== null);
 
   if (sheets.length === 0) {
     throw new Error('Invalid XLSX file: no worksheets were found.');

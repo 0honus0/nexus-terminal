@@ -514,7 +514,7 @@
       "spreadsheet": "Spreadsheet",
       "worksheet": "Worksheet",
       "spreadsheetMeta": "{sheet} · {rows} rows × {columns} columns",
-      "spreadsheetLimited": "Preview is limited to {rows} rows and {columns} columns for performance."
+      "spreadsheetLimited": "Showing {displayedRows} of {totalRows} rows and {displayedColumns} of {totalColumns} columns. Additional data is not shown in this preview; the original file is unchanged."
     },
     "headers": {
       "type": "Type",
@@ -1024,6 +1024,16 @@
       "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
       "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
       "quickCommandsCollapsibleSearchDescription": "Disabled by default. When enabled, the Quick Commands panel shows a search button until you click it to expand the search box.",
+      "spreadsheetPreviewLimits": {
+        "title": "Spreadsheet Preview Limits",
+        "rowsLabel": "Maximum rows",
+        "columnsLabel": "Maximum columns",
+        "hint": "Higher limits use more browser memory. If a worksheet is larger, the preview clearly indicates that additional rows or columns are not shown.",
+        "saved": "Spreadsheet preview limits saved.",
+        "saveFailed": "Failed to save spreadsheet preview limits.",
+        "invalidRows": "Rows must be an integer between 10 and 2000.",
+        "invalidColumns": "Columns must be an integer between 5 and 200."
+      },
       "fileManagerDeleteConfirmTitle": "File Manager Delete Confirmation",
       "fileManagerShowDeleteConfirmationLabel": "Show confirmation dialog when deleting files or folders",
       "fileManagerDeleteConfirmSuccess": "File manager delete confirmation setting saved.",

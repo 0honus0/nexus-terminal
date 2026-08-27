@@ -18,6 +18,8 @@ export function useWorkspaceSettings() {
     showQuickCommandTagsBoolean,
     quickCommandsCollapsibleSearchBoolean,
     terminalScrollbackLimitNumber,
+    spreadsheetPreviewMaxRowsNumber,
+    spreadsheetPreviewMaxColumnsNumber,
     fileManagerShowDeleteConfirmationBoolean,
     terminalEnableRightClickPasteBoolean,
     showPopupFileManagerBoolean,
@@ -287,6 +289,47 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- Spreadsheet Preview Limits ---
+  const spreadsheetPreviewMaxRowsLocal = ref(500);
+  const spreadsheetPreviewMaxColumnsLocal = ref(100);
+  const spreadsheetPreviewLimitsLoading = ref(false);
+  const spreadsheetPreviewLimitsMessage = ref('');
+  const spreadsheetPreviewLimitsSuccess = ref(false);
+
+  const handleUpdateSpreadsheetPreviewLimits = async () => {
+    spreadsheetPreviewLimitsLoading.value = true;
+    spreadsheetPreviewLimitsMessage.value = '';
+    spreadsheetPreviewLimitsSuccess.value = false;
+    try {
+      const rows = spreadsheetPreviewMaxRowsLocal.value;
+      const columns = spreadsheetPreviewMaxColumnsLocal.value;
+      if (!Number.isInteger(rows) || rows < 10 || rows > 2000) {
+        throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidRows', 'Rows must be an integer between 10 and 2000.'));
+      }
+      if (!Number.isInteger(columns) || columns < 5 || columns > 200) {
+        throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidColumns', 'Columns must be an integer between 5 and 200.'));
+      }
+      await settingsStore.updateMultipleSettings({
+        spreadsheetPreviewMaxRows: String(rows),
+        spreadsheetPreviewMaxColumns: String(columns),
+      });
+      spreadsheetPreviewLimitsMessage.value = t(
+        'settings.workspace.spreadsheetPreviewLimits.saved',
+        'Spreadsheet preview limits saved.',
+      );
+      spreadsheetPreviewLimitsSuccess.value = true;
+    } catch (error: any) {
+      console.error('Failed to update spreadsheet preview limits:', error);
+      spreadsheetPreviewLimitsMessage.value = error.message || t(
+        'settings.workspace.spreadsheetPreviewLimits.saveFailed',
+        'Failed to save spreadsheet preview limits.',
+      );
+      spreadsheetPreviewLimitsSuccess.value = false;
+    } finally {
+      spreadsheetPreviewLimitsLoading.value = false;
+    }
+  };
+
   // --- File Manager Delete Confirmation ---
   const fileManagerShowDeleteConfirmationLocal = ref(true);
   const fileManagerShowDeleteConfirmationLoading = ref(false);
@@ -465,6 +508,20 @@ export function useWorkspaceSettings() {
     { immediate: true },
   );
   watch(
+    spreadsheetPreviewMaxRowsNumber,
+    (newValue) => {
+      spreadsheetPreviewMaxRowsLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    spreadsheetPreviewMaxColumnsNumber,
+    (newValue) => {
+      spreadsheetPreviewMaxColumnsLocal.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
     fileManagerShowDeleteConfirmationBoolean,
     (newValue) => {
       fileManagerShowDeleteConfirmationLocal.value = newValue;
@@ -553,6 +610,13 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitMessage,
     terminalScrollbackLimitSuccess,
     handleUpdateTerminalScrollbackLimit,
+
+    spreadsheetPreviewMaxRowsLocal,
+    spreadsheetPreviewMaxColumnsLocal,
+    spreadsheetPreviewLimitsLoading,
+    spreadsheetPreviewLimitsMessage,
+    spreadsheetPreviewLimitsSuccess,
+    handleUpdateSpreadsheetPreviewLimits,
 
     fileManagerShowDeleteConfirmationLocal,
     fileManagerShowDeleteConfirmationLoading,
