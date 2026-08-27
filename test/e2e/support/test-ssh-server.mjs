@@ -210,6 +210,57 @@ async function writeXlsxFixture(destination) {
   });
 }
 
+async function writePdfFixture(destination) {
+  const escapePdfText = (value) => value.replace(/([\\()])/g, '\\$1');
+  const streamObject = (content) => {
+    const length = Buffer.byteLength(content, 'latin1');
+    return `<< /Length ${length} >>\nstream\n${content}\nendstream`;
+  };
+  const pageStream = (title, body) => streamObject(
+    'BT\n'
+    + '/F1 26 Tf\n'
+    + `72 700 Td (${escapePdfText(title)}) Tj\n`
+    + '/F1 14 Tf\n'
+    + `0 -44 Td (${escapePdfText(body)}) Tj\n`
+    + 'ET',
+  );
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R /Outlines 10 0 R /PageMode /UseOutlines >>',
+    '<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 7 0 R >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 8 0 R >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 9 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    pageStream('Nexus PDF E2E', 'Introduction page'),
+    pageStream('Second Chapter', 'Outline navigation target'),
+    pageStream('Details', 'Nested outline target'),
+    '<< /Type /Outlines /First 11 0 R /Last 12 0 R /Count 3 >>',
+    '<< /Title (Introduction) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit] >>',
+    '<< /Title (Second Chapter) /Parent 10 0 R /Prev 11 0 R /First 13 0 R /Last 13 0 R /Count 1 /Dest [4 0 R /Fit] >>',
+    '<< /Title (Details) /Parent 12 0 R /Dest [5 0 R /Fit] >>',
+  ];
+
+  let pdf = '%PDF-1.7\n%âãÏÓ\n';
+  const offsets = [0];
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'));
+    pdf += `${index + 1} 0 obj\n${objects[index]}\nendobj\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += 'trailer\n';
+  pdf += `<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+  pdf += `startxref\n${xrefOffset}\n%%EOF\n`;
+
+  await fsp.writeFile(destination, Buffer.from(pdf, 'latin1'));
+}
+
 function crc32(buffer) {
   let crc = 0xffffffff;
   for (const byte of buffer) {
@@ -320,6 +371,7 @@ async function resetRoot() {
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=', 'base64'),
   );
   await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
+  await writePdfFixture(path.join(rootDir, 'preview.pdf'));
   await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
   await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);

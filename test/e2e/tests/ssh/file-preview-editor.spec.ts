@@ -196,6 +196,44 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByTestId('file-editor-close').click();
   });
 
+  await slowStep('PDF.js preview renders pages, thumbnails, outline navigation, and zoom controls', async () => {
+    const filename = 'preview.pdf';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+
+    const preview = dialog.getByTestId('pdf-preview');
+    await expect(preview).toBeVisible();
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+
+    const firstPage = dialog.getByTestId('pdf-page-1');
+    await expect(firstPage).toBeVisible();
+    await expect.poll(() => firstPage.locator('canvas').evaluate((canvas: HTMLCanvasElement) => canvas.width))
+      .toBeGreaterThan(0);
+
+    await dialog.getByTestId('pdf-sidebar-outline-tab').click();
+    const outline = dialog.getByTestId('pdf-outline');
+    await expect(outline.getByText('Introduction', { exact: true })).toBeVisible();
+    await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
+    await expect(outline.getByText('Details', { exact: true })).toBeVisible();
+    await outline.getByText('Second Chapter', { exact: true }).click();
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+
+    await dialog.getByTestId('pdf-sidebar-thumbnails-tab').click();
+    await expect(dialog.getByTestId('pdf-thumbnail-1')).toBeVisible();
+    await expect(dialog.getByTestId('pdf-thumbnail-2')).toBeVisible();
+    await expect(dialog.getByTestId('pdf-thumbnail-3')).toBeVisible();
+
+    const zoom = dialog.getByTestId('pdf-zoom-label');
+    const beforeZoom = await zoom.textContent();
+    await dialog.getByTestId('pdf-zoom-in').click();
+    await expect(zoom).not.toHaveText(beforeZoom ?? '');
+    await dialog.getByTestId('pdf-fit-width').click();
+    await expect(dialog.getByTestId('pdf-fit-width')).toHaveAttribute('aria-pressed', 'true');
+
+    await closePreview(page, filename);
+  });
+
   await slowStep('XLSX preview supports bottom sheet tabs and keyboard scrolling in both directions', async () => {
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
