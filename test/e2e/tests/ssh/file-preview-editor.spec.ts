@@ -242,3 +242,73 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 });
+
+test('spreadsheet preview limits are configurable and clearly disclose truncated data', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = await originalResponse.json() as Record<string, string | undefined>;
+  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+
+  try {
+    await step('workspace settings persists smaller spreadsheet preview row and column limits', async () => {
+      await page.goto('/settings');
+      await page.getByTestId('settings-tab-workspace').click();
+      const setting = page.getByTestId('spreadsheet-preview-limit-setting');
+      await expect(setting).toBeVisible();
+
+      const rowLimit = setting.getByTestId('spreadsheet-preview-row-limit');
+      const columnLimit = setting.getByTestId('spreadsheet-preview-column-limit');
+      await rowLimit.fill('12');
+      await columnLimit.fill('6');
+
+      const responsePromise = page.waitForResponse((response) => (
+        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT'
+      ));
+      await setting.getByTestId('spreadsheet-preview-limit-save').click();
+      expect((await responsePromise).ok()).toBeTruthy();
+
+      await expect.poll(async () => {
+        const persisted = await context.request.get('/api/v1/settings');
+        const body = await persisted.json() as Record<string, string>;
+        return [body.spreadsheetPreviewMaxRows, body.spreadsheetPreviewMaxColumns];
+      }).toEqual(['12', '6']);
+    });
+
+    await slowStep('truncated XLSX preview identifies the real dimensions and the displayed limits', async () => {
+      await connectTestSshFromConnectionsPage(page, connectionId);
+      await openConnectedFileManager(page);
+      const filename = 'preview.xlsx';
+      await row(page, filename).dblclick();
+      const dialog = page.getByRole('dialog', { name: filename });
+      await expect(dialog).toBeVisible({ timeout: 20_000 });
+
+      const notice = dialog.getByTestId('spreadsheet-preview-limit-notice');
+      await expect(notice).toBeVisible();
+      await expect(notice).toContainText('12');
+      await expect(notice).toContainText('40');
+      await expect(notice).toContainText('6');
+      await expect(notice).toContainText('16');
+      await expect(notice).toContainText(/not shown|additional data/i);
+
+      await expect(dialog.getByText('E2E-F12', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('E2E-G1', { exact: true })).toHaveCount(0);
+      await expect(dialog.getByText('E2E-A13', { exact: true })).toHaveCount(0);
+      await closePreview(page, filename);
+    });
+  } finally {
+    const restore: Record<string, string> = { language: original.language ?? 'en-US' };
+    if (original.spreadsheetPreviewMaxRows !== undefined) {
+      restore.spreadsheetPreviewMaxRows = original.spreadsheetPreviewMaxRows;
+    }
+    if (original.spreadsheetPreviewMaxColumns !== undefined) {
+      restore.spreadsheetPreviewMaxColumns = original.spreadsheetPreviewMaxColumns;
+    }
+    expect((await context.request.put('/api/v1/settings', { data: restore })).ok()).toBeTruthy();
+  }
+});
