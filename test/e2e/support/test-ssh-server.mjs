@@ -258,6 +258,14 @@ async function resetRoot() {
   await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
   await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
+  await fsp.mkdir(path.join(rootDir, 'deleted-cwd'), { recursive: true });
+  await fsp.writeFile(path.join(rootDir, 'deleted-cwd', 'inside.txt'), 'deleted-cwd-e2e\n', 'utf8');
+  await fsp.mkdir(path.join(rootDir, '特殊 空格\'"$#`()[]{}!&;=,+测试'), { recursive: true });
+  await fsp.writeFile(
+    path.join(rootDir, '特殊 空格\'"$#`()[]{}!&;=,+测试', 'inside.txt'),
+    'special-path-e2e\n',
+    'utf8',
+  );
   await fsp.writeFile(path.join(rootDir, 'folder-seed', 'nested.txt'), 'nested\n', 'utf8');
   await fsp.mkdir(path.join(rootDir, 'cross-target'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'cross-copy.txt'), 'cross-copy-body\n', 'utf8');
@@ -820,6 +828,19 @@ const controlServer = http.createServer(async (req, res) => {
       await fsp.mkdir(targetDir, { recursive: true });
       await fsp.writeFile(path.join(targetDir, '01-first.bin'), Buffer.alloc(size, 0x61));
       await fsp.writeFile(path.join(targetDir, '02-second.bin'), Buffer.alloc(size, 0x62));
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/remove-path') {
+      const requestedPath = String(requestUrl.searchParams.get('path') || '');
+      const targetPath = resolveRemotePath(requestedPath);
+      if (targetPath === path.resolve(rootDir)) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Refusing to remove the E2E root directory' }));
+        return;
+      }
+      await fsp.rm(targetPath, { recursive: true, force: true });
       res.writeHead(204);
       res.end();
       return;
