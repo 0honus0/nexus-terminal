@@ -239,6 +239,55 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
   }
 });
 
+test('ZIP Unicode Path entries extract Chinese filenames instead of #U escapes', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const session = await openSshSession(request, connectionId, `archive-unicode-${crypto.randomUUID()}`);
+
+  try {
+    await waitForSftpReady(session.socket);
+    const requestId = `archive-unicode-${crypto.randomUUID()}`;
+    const responsePromise = waitForJson(
+      session.socket,
+      (message) => message.requestId === requestId
+        && ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
+      30_000,
+    );
+    sendJson(session.socket, {
+      type: 'sftp:decompress',
+      requestId,
+      payload: { source: '/中文解压测试.zip' },
+    });
+    const response = await responsePromise;
+    test.skip(response.type === 'sftp:command_not_found', 'unzip is not installed in this test environment');
+    expect(response.type).toBe('sftp:decompress:success');
+
+    const extracted = await requestJson(
+      session.socket,
+      'sftp:readfile',
+      { path: '/中文解压测试', encoding: 'utf8' },
+      'sftp:readfile:success',
+      'sftp:readfile:error',
+    );
+    expect(Buffer.from(String(extracted.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
+      .toContain('unicode-path-e2e');
+
+    const root = await requestJson(
+      session.socket,
+      'sftp:readdir',
+      { path: '/' },
+      'sftp:readdir:success',
+      'sftp:readdir:error',
+    );
+    const filenames = (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename);
+    expect(filenames).toContain('中文解压测试');
+    expect(filenames).not.toContain('#U4e2d#U6587#U89e3#U538b#U6d4b#U8bd5');
+  } finally {
+    await closeWebSocket(session.socket);
+  }
+});
+
 test('password-protected ZIP validates passwords and preserves the normal decompress flow', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();

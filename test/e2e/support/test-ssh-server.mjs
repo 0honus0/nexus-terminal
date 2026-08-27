@@ -166,6 +166,82 @@ async function writeXlsxFixture(destination) {
   });
 }
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+async function writeUnicodePathZipFixture(destination, unicodeName) {
+  const legacyName = Buffer.from('legacy-name', 'ascii');
+  const unicodeNameBytes = Buffer.from(unicodeName, 'utf8');
+  const content = Buffer.from('unicode-path-e2e\n', 'utf8');
+
+  // Info-ZIP Unicode Path extra field (0x7075): version + CRC32 of the
+  // legacy filename + the authoritative UTF-8 filename. With LC_ALL=C,
+  // unzip 6.00 renders this filename as #Uxxxx; UTF-8 locales restore it.
+  const unicodePathData = Buffer.alloc(1 + 4 + unicodeNameBytes.length);
+  unicodePathData[0] = 1;
+  unicodePathData.writeUInt32LE(crc32(legacyName), 1);
+  unicodeNameBytes.copy(unicodePathData, 5);
+  const unicodePathExtra = Buffer.alloc(4 + unicodePathData.length);
+  unicodePathExtra.writeUInt16LE(0x7075, 0);
+  unicodePathExtra.writeUInt16LE(unicodePathData.length, 2);
+  unicodePathData.copy(unicodePathExtra, 4);
+
+  const contentCrc = crc32(content);
+  const localHeader = Buffer.alloc(30);
+  localHeader.writeUInt32LE(0x04034b50, 0);
+  localHeader.writeUInt16LE(20, 4);
+  localHeader.writeUInt16LE(0, 6);
+  localHeader.writeUInt16LE(0, 8);
+  localHeader.writeUInt16LE(0, 10);
+  localHeader.writeUInt16LE(0, 12);
+  localHeader.writeUInt32LE(contentCrc, 14);
+  localHeader.writeUInt32LE(content.length, 18);
+  localHeader.writeUInt32LE(content.length, 22);
+  localHeader.writeUInt16LE(legacyName.length, 26);
+  localHeader.writeUInt16LE(unicodePathExtra.length, 28);
+
+  const centralHeader = Buffer.alloc(46);
+  centralHeader.writeUInt32LE(0x02014b50, 0);
+  centralHeader.writeUInt16LE(20, 4);
+  centralHeader.writeUInt16LE(20, 6);
+  centralHeader.writeUInt16LE(0, 8);
+  centralHeader.writeUInt16LE(0, 10);
+  centralHeader.writeUInt16LE(0, 12);
+  centralHeader.writeUInt16LE(0, 14);
+  centralHeader.writeUInt32LE(contentCrc, 16);
+  centralHeader.writeUInt32LE(content.length, 20);
+  centralHeader.writeUInt32LE(content.length, 24);
+  centralHeader.writeUInt16LE(legacyName.length, 28);
+  centralHeader.writeUInt16LE(unicodePathExtra.length, 30);
+  centralHeader.writeUInt16LE(0, 32);
+  centralHeader.writeUInt16LE(0, 34);
+  centralHeader.writeUInt16LE(0, 36);
+  centralHeader.writeUInt32LE(0, 38);
+  centralHeader.writeUInt32LE(0, 42);
+
+  const localRecord = Buffer.concat([localHeader, legacyName, unicodePathExtra, content]);
+  const centralRecord = Buffer.concat([centralHeader, legacyName, unicodePathExtra]);
+  const endOfCentralDirectory = Buffer.alloc(22);
+  endOfCentralDirectory.writeUInt32LE(0x06054b50, 0);
+  endOfCentralDirectory.writeUInt16LE(0, 4);
+  endOfCentralDirectory.writeUInt16LE(0, 6);
+  endOfCentralDirectory.writeUInt16LE(1, 8);
+  endOfCentralDirectory.writeUInt16LE(1, 10);
+  endOfCentralDirectory.writeUInt32LE(centralRecord.length, 12);
+  endOfCentralDirectory.writeUInt32LE(localRecord.length, 16);
+  endOfCentralDirectory.writeUInt16LE(0, 20);
+
+  await fsp.writeFile(destination, Buffer.concat([localRecord, centralRecord, endOfCentralDirectory]));
+}
+
 async function resetRoot() {
   await fsp.rm(archiveExecHoldPath, { force: true });
   await fsp.rm(rootDir, { recursive: true, force: true });
@@ -181,6 +257,7 @@ async function resetRoot() {
   await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
+  await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
   await fsp.writeFile(path.join(rootDir, 'folder-seed', 'nested.txt'), 'nested\n', 'utf8');
   await fsp.mkdir(path.join(rootDir, 'cross-target'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'cross-copy.txt'), 'cross-copy-body\n', 'utf8');
