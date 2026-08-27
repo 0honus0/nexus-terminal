@@ -92,6 +92,9 @@ const parentDirectoryPath = (path: string): string => {
 
 const isMissingPathError = (message: string): boolean => /(?:ENOENT|no such file|not found)/i.test(message);
 
+// Keep directory operations aligned with the backend SSH connection readyTimeout.
+const SSH_OPERATION_TIMEOUT_MS = 20_000;
+
 // Helper function
 const sortFiles = (a: FileListItem, b: FileListItem): number => {
   if (a.attrs.isDirectory && !b.attrs.isDirectory) return -1;
@@ -465,7 +468,7 @@ export function createSftpActionsManager(
       isLoading.value = false;
       directoryLoadTimeout = null;
       uiNotificationsStore.showError(t('fileManager.errors.loadDirectoryTimeout', 'Timed out while loading directory.'));
-    }, 30_000);
+    }, SSH_OPERATION_TIMEOUT_MS);
     sendMessage({ type: 'sftp:readdir', requestId: requestId, payload: { path } });
   };
 
