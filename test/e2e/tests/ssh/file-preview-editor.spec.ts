@@ -218,6 +218,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(outline.getByText('Details', { exact: true })).toBeVisible();
     await outline.getByText('Second Chapter', { exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await captureFunctionalScreenshot(page, 'file-manager-pdf-preview.png', { viewport: { width: 1440, height: 900 } });
 
     await dialog.getByTestId('pdf-sidebar-thumbnails-tab').click();
     await expect(dialog.getByTestId('pdf-thumbnail-1')).toBeVisible();
@@ -248,6 +249,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(sheetTabs).toBeVisible();
     await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
     await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
+    await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-preview.png', { viewport: { width: 1440, height: 900 } });
 
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
