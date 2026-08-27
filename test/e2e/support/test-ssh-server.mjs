@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
 const rootDir = path.join(e2eRoot, '.tmp', 'ssh-root');
+const shellRcPath = path.join(e2eRoot, '.tmp', 'ssh-bashrc');
 const archiveExecHoldPath = path.join(e2eRoot, '.tmp', 'archive-exec-hold.flag');
 const archivePreflightHoldPath = path.join(e2eRoot, '.tmp', 'archive-preflight-hold.flag');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
@@ -32,6 +33,36 @@ const executedCommands = [];
 const receivedWebhooks = [];
 const activeSshClients = new Set();
 let sshServerOnline = false;
+
+const virtualShellPrelude = `
+cd() {
+  if [ "$#" -eq 1 ] && [[ "$1" == /* ]] && [[ "$1" != "$NEXUS_E2E_ROOT"* ]]; then
+    builtin cd "$NEXUS_E2E_ROOT$1"
+  else
+    builtin cd "$@"
+  fi
+}
+pwd() {
+  local p
+  p=$(builtin pwd "$@") || return $?
+  case "$p" in
+    "$NEXUS_E2E_ROOT") printf '/\\n' ;;
+    "$NEXUS_E2E_ROOT"/*) printf '%s\\n' "\${p:\${#NEXUS_E2E_ROOT}}" ;;
+    *) printf '%s\\n' "$p" ;;
+  esac
+}
+readlink() {
+  local p status
+  p=$(command readlink "$@")
+  status=$?
+  [ "$status" -eq 0 ] || return "$status"
+  case "$p" in
+    "$NEXUS_E2E_ROOT") printf '/\\n' ;;
+    "$NEXUS_E2E_ROOT"/*) printf '%s\\n' "\${p:\${#NEXUS_E2E_ROOT}}" ;;
+    *) printf '%s\\n' "$p" ;;
+  esac
+}
+`;
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
@@ -246,6 +277,7 @@ async function resetRoot() {
   await fsp.rm(archiveExecHoldPath, { force: true });
   await fsp.rm(rootDir, { recursive: true, force: true });
   await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
+  await fsp.writeFile(shellRcPath, `${virtualShellPrelude}\nPS1='nexus-e2e$ '\nPROMPT_COMMAND=''\n`, 'utf8');
   await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'refresh-e2e.txt'), 'refresh-original\n', 'utf8');
@@ -636,9 +668,9 @@ function runRemoteCommand(command, stream) {
     ? `sleep ${archiveExecDelayMs / 1000}; `
     : '';
   const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
-  const child = spawn('/bin/sh', ['-lc', delayedCommand], {
+  const child = spawn('/bin/bash', ['-lc', `${virtualShellPrelude}\n${delayedCommand}`], {
     cwd: rootDir,
-    env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
+    env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk) => stream.write(chunk));
@@ -653,12 +685,13 @@ function runRemoteCommand(command, stream) {
 
 function attachShell(session, accept) {
   const stream = accept();
-  const child = spawn('/bin/bash', ['--noprofile', '--norc', '-i'], {
+  const child = spawn('/bin/bash', ['--noprofile', '--rcfile', shellRcPath, '-i'], {
     cwd: rootDir,
     env: {
       ...process.env,
       HOME: rootDir,
       TERM: 'xterm-256color',
+      NEXUS_E2E_ROOT: rootDir,
       PS1: 'nexus-e2e$ ',
       PROMPT_COMMAND: '',
     },
