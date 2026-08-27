@@ -18,7 +18,7 @@ export function useWorkspaceSettings() {
     showQuickCommandTagsBoolean,
     quickCommandsCollapsibleSearchBoolean,
     terminalScrollbackLimitNumber,
-    spreadsheetPreviewMaxRowsNumber,
+    spreadsheetPreviewRowsPerPageNumber,
     spreadsheetPreviewMaxColumnsNumber,
     fileManagerShowDeleteConfirmationBoolean,
     terminalEnableRightClickPasteBoolean,
@@ -289,44 +289,44 @@ export function useWorkspaceSettings() {
     }
   };
 
-  // --- Spreadsheet Preview Limits ---
-  const spreadsheetPreviewMaxRowsLocal = ref(500);
+  // --- Spreadsheet Preview Pagination ---
+  const spreadsheetPreviewRowsPerPageLocal = ref(500);
   const spreadsheetPreviewMaxColumnsLocal = ref(100);
-  const spreadsheetPreviewLimitsLoading = ref(false);
-  const spreadsheetPreviewLimitsMessage = ref('');
-  const spreadsheetPreviewLimitsSuccess = ref(false);
+  const spreadsheetPreviewPaginationLoading = ref(false);
+  const spreadsheetPreviewPaginationMessage = ref('');
+  const spreadsheetPreviewPaginationSuccess = ref(false);
 
-  const handleUpdateSpreadsheetPreviewLimits = async () => {
-    spreadsheetPreviewLimitsLoading.value = true;
-    spreadsheetPreviewLimitsMessage.value = '';
-    spreadsheetPreviewLimitsSuccess.value = false;
+  const handleUpdateSpreadsheetPreviewPagination = async () => {
+    spreadsheetPreviewPaginationLoading.value = true;
+    spreadsheetPreviewPaginationMessage.value = '';
+    spreadsheetPreviewPaginationSuccess.value = false;
     try {
-      const rows = spreadsheetPreviewMaxRowsLocal.value;
+      const rowsPerPage = spreadsheetPreviewRowsPerPageLocal.value;
       const columns = spreadsheetPreviewMaxColumnsLocal.value;
-      if (!Number.isInteger(rows) || rows < 10 || rows > 2000) {
-        throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidRows', 'Rows must be an integer between 10 and 2000.'));
+      if (!Number.isInteger(rowsPerPage) || rowsPerPage < 10 || rowsPerPage > 2000) {
+        throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidRows', 'Rows per page must be an integer between 10 and 2000.'));
       }
       if (!Number.isInteger(columns) || columns < 5 || columns > 200) {
         throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidColumns', 'Columns must be an integer between 5 and 200.'));
       }
       await settingsStore.updateMultipleSettings({
-        spreadsheetPreviewMaxRows: String(rows),
+        spreadsheetPreviewRowsPerPage: String(rowsPerPage),
         spreadsheetPreviewMaxColumns: String(columns),
       });
-      spreadsheetPreviewLimitsMessage.value = t(
+      spreadsheetPreviewPaginationMessage.value = t(
         'settings.workspace.spreadsheetPreviewLimits.saved',
-        'Spreadsheet preview limits saved.',
+        'Spreadsheet preview settings saved.',
       );
-      spreadsheetPreviewLimitsSuccess.value = true;
+      spreadsheetPreviewPaginationSuccess.value = true;
     } catch (error: any) {
-      console.error('Failed to update spreadsheet preview limits:', error);
-      spreadsheetPreviewLimitsMessage.value = error.message || t(
+      console.error('Failed to update spreadsheet preview pagination:', error);
+      spreadsheetPreviewPaginationMessage.value = error.message || t(
         'settings.workspace.spreadsheetPreviewLimits.saveFailed',
-        'Failed to save spreadsheet preview limits.',
+        'Failed to save spreadsheet preview settings.',
       );
-      spreadsheetPreviewLimitsSuccess.value = false;
+      spreadsheetPreviewPaginationSuccess.value = false;
     } finally {
-      spreadsheetPreviewLimitsLoading.value = false;
+      spreadsheetPreviewPaginationLoading.value = false;
     }
   };
 
@@ -508,9 +508,9 @@ export function useWorkspaceSettings() {
     { immediate: true },
   );
   watch(
-    spreadsheetPreviewMaxRowsNumber,
+    spreadsheetPreviewRowsPerPageNumber,
     (newValue) => {
-      spreadsheetPreviewMaxRowsLocal.value = newValue;
+      spreadsheetPreviewRowsPerPageLocal.value = newValue;
     },
     { immediate: true },
   );
@@ -611,12 +611,12 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitSuccess,
     handleUpdateTerminalScrollbackLimit,
 
-    spreadsheetPreviewMaxRowsLocal,
+    spreadsheetPreviewRowsPerPageLocal,
     spreadsheetPreviewMaxColumnsLocal,
-    spreadsheetPreviewLimitsLoading,
-    spreadsheetPreviewLimitsMessage,
-    spreadsheetPreviewLimitsSuccess,
-    handleUpdateSpreadsheetPreviewLimits,
+    spreadsheetPreviewPaginationLoading,
+    spreadsheetPreviewPaginationMessage,
+    spreadsheetPreviewPaginationSuccess,
+    handleUpdateSpreadsheetPreviewPagination,
 
     fileManagerShowDeleteConfirmationLocal,
     fileManagerShowDeleteConfirmationLoading,

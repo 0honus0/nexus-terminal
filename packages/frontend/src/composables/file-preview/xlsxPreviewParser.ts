@@ -1,15 +1,19 @@
 import { read, utils, type CellObject, type ColInfo, type RowInfo, type WorkSheet } from 'xlsx';
 
+export interface ParsedSpreadsheetPage {
+  rows: unknown[][];
+  displayedRows: number;
+  startRow: number;
+  rowHeights: Array<number | null>;
+}
+
 export interface ParsedSpreadsheetSheet {
   name: string;
-  rows: unknown[][];
   totalRows: number;
   totalColumns: number;
-  displayedRows: number;
   displayedColumns: number;
-  startRow: number;
   columnWidths: Array<number | null>;
-  rowHeights: Array<number | null>;
+  getPage(pageIndex: number, rowsPerPage: number): ParsedSpreadsheetPage;
 }
 
 const MIN_COLUMN_WIDTH_PX = 48;
@@ -55,81 +59,91 @@ const rowHeightPx = (info: RowInfo | undefined): number | null => {
   return Math.round(clamp(height, MIN_ROW_HEIGHT_PX, MAX_ROW_HEIGHT_PX));
 };
 
+const emptyPage = (): ParsedSpreadsheetPage => ({
+  rows: [],
+  displayedRows: 0,
+  startRow: 0,
+  rowHeights: [],
+});
+
 const parseSheet = (
   name: string,
   worksheet: WorkSheet,
-  maxRows: number,
   maxColumns: number,
 ): ParsedSpreadsheetSheet => {
-  // With sheetRows enabled, SheetJS stores the truncated range in !ref and the
-  // original self-reported worksheet range in !fullref. XLSX files provide this
-  // metadata, which lets the preview disclose the real dimensions even when only
-  // the first rows are parsed.
-  const fullRange = decodeRange(worksheet['!fullref'] as string | undefined) ?? decodeRange(worksheet['!ref']);
-  const parsedRange = decodeRange(worksheet['!ref']) ?? fullRange;
+  const fullRange = decodeRange(worksheet['!ref']);
 
-  if (!fullRange || !parsedRange) {
+  if (!fullRange) {
     return {
       name,
-      rows: [],
       totalRows: 0,
       totalColumns: 0,
-      displayedRows: 0,
       displayedColumns: 0,
-      startRow: 0,
       columnWidths: [],
-      rowHeights: [],
+      getPage: emptyPage,
     };
   }
 
   const totalRows = Math.max(0, fullRange.e.r - fullRange.s.r + 1);
   const totalColumns = Math.max(0, fullRange.e.c - fullRange.s.c + 1);
-  const parsedRows = Math.max(0, parsedRange.e.r - fullRange.s.r + 1);
-  const displayedRows = Math.min(totalRows, maxRows, parsedRows);
   const displayedColumns = Math.min(totalColumns, maxColumns);
   const denseData = worksheet['!data'] ?? [];
-  const rows: unknown[][] = [];
-
-  for (let rowOffset = 0; rowOffset < displayedRows; rowOffset += 1) {
-    const sourceRow = fullRange.s.r + rowOffset;
-    const row: unknown[] = [];
-    for (let columnOffset = 0; columnOffset < displayedColumns; columnOffset += 1) {
-      const sourceColumn = fullRange.s.c + columnOffset;
-      row.push(formatCell(denseData[sourceRow]?.[sourceColumn]));
-    }
-    rows.push(row);
-  }
-
   const columnInfo = worksheet['!cols'] ?? [];
   const rowInfo = worksheet['!rows'] ?? [];
   const columnWidths = Array.from({ length: displayedColumns }, (_, offset) => (
     columnWidthPx(columnInfo[fullRange.s.c + offset])
   ));
-  const rowHeights = Array.from({ length: displayedRows }, (_, offset) => (
-    rowHeightPx(rowInfo[fullRange.s.r + offset])
-  ));
+
+  const getPage = (pageIndex: number, rowsPerPage: number): ParsedSpreadsheetPage => {
+    if (totalRows === 0) return emptyPage();
+
+    const safeRowsPerPage = Math.max(1, Math.floor(rowsPerPage));
+    const pageCount = Math.max(1, Math.ceil(totalRows / safeRowsPerPage));
+    const safePageIndex = Math.min(pageCount - 1, Math.max(0, Math.floor(pageIndex)));
+    const rowOffset = safePageIndex * safeRowsPerPage;
+    const displayedRows = Math.min(safeRowsPerPage, totalRows - rowOffset);
+    const startRow = fullRange.s.r + rowOffset;
+    const rows: unknown[][] = [];
+
+    for (let rowOffsetInPage = 0; rowOffsetInPage < displayedRows; rowOffsetInPage += 1) {
+      const sourceRow = startRow + rowOffsetInPage;
+      const row: unknown[] = [];
+      for (let columnOffset = 0; columnOffset < displayedColumns; columnOffset += 1) {
+        const sourceColumn = fullRange.s.c + columnOffset;
+        row.push(formatCell(denseData[sourceRow]?.[sourceColumn]));
+      }
+      rows.push(row);
+    }
+
+    const rowHeights = Array.from({ length: displayedRows }, (_, offset) => (
+      rowHeightPx(rowInfo[startRow + offset])
+    ));
+
+    return {
+      rows,
+      displayedRows,
+      startRow,
+      rowHeights,
+    };
+  };
 
   return {
     name,
-    rows,
     totalRows,
     totalColumns,
-    displayedRows,
     displayedColumns,
-    startRow: fullRange.s.r,
     columnWidths,
-    rowHeights,
+    getPage,
   };
 };
 
 export const parseXlsxPreview = async (
   buffer: ArrayBuffer,
-  options: { maxRows: number; maxColumns: number },
+  options: { maxColumns: number },
 ): Promise<ParsedSpreadsheetSheet[]> => {
   const workbook = read(buffer, {
     type: 'array',
     dense: true,
-    sheetRows: options.maxRows,
     cellStyles: true,
     cellDates: true,
     cellHTML: false,
@@ -140,7 +154,7 @@ export const parseXlsxPreview = async (
   const sheets = workbook.SheetNames
     .map((name) => {
       const worksheet = workbook.Sheets[name];
-      return worksheet ? parseSheet(name, worksheet, options.maxRows, options.maxColumns) : null;
+      return worksheet ? parseSheet(name, worksheet, options.maxColumns) : null;
     })
     .filter((sheet): sheet is ParsedSpreadsheetSheet => sheet !== null);
 

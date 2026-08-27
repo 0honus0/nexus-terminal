@@ -62,7 +62,8 @@ interface SettingsState {
   showQuickCommandTags?: string; // 'true' or 'false'
   layoutLocked?: string; // 'true' or 'false' - NEW: 布局锁定状态
   terminalScrollbackLimit?: string; // 终端回滚行数上限（0 使用默认 5000，最大 100000）
-  spreadsheetPreviewMaxRows?: string; // 表格预览最大行数（10–2000）
+  spreadsheetPreviewMaxRows?: string; // 旧版表格预览最大行数（兼容迁移）
+  spreadsheetPreviewRowsPerPage?: string; // 表格预览每页行数（10–2000）
   spreadsheetPreviewMaxColumns?: string; // 表格预览最大列数（5–200）
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
@@ -322,8 +323,8 @@ export const useSettingsStore = defineStore('settings', () => {
           `[SettingsStore] terminalScrollbackLimit not found, set to default: ${settings.value.terminalScrollbackLimit}`,
         );
       }
-      if (settings.value.spreadsheetPreviewMaxRows === undefined) {
-        settings.value.spreadsheetPreviewMaxRows = '500';
+      if (settings.value.spreadsheetPreviewRowsPerPage === undefined) {
+        settings.value.spreadsheetPreviewRowsPerPage = settings.value.spreadsheetPreviewMaxRows ?? '500';
       }
       if (settings.value.spreadsheetPreviewMaxColumns === undefined) {
         settings.value.spreadsheetPreviewMaxColumns = '100';
@@ -500,6 +501,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'layoutLocked',
       'terminalScrollbackLimit',
       'spreadsheetPreviewMaxRows',
+      'spreadsheetPreviewRowsPerPage',
       'spreadsheetPreviewMaxColumns',
       'fileManagerShowDeleteConfirmation',
       'terminalEnableRightClickPaste',
@@ -630,6 +632,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'layoutLocked',
       'terminalScrollbackLimit',
       'spreadsheetPreviewMaxRows',
+      'spreadsheetPreviewRowsPerPage',
       'spreadsheetPreviewMaxColumns',
       'fileManagerShowDeleteConfirmation',
       'terminalEnableRightClickPaste',
@@ -973,8 +976,8 @@ export const useSettingsStore = defineStore('settings', () => {
     return Math.min(val, 100000);
   });
 
-  const spreadsheetPreviewMaxRowsNumber = computed(() => {
-    const parsed = Number(settings.value.spreadsheetPreviewMaxRows ?? '500');
+  const spreadsheetPreviewRowsPerPageNumber = computed(() => {
+    const parsed = Number(settings.value.spreadsheetPreviewRowsPerPage ?? settings.value.spreadsheetPreviewMaxRows ?? '500');
     return Number.isInteger(parsed) ? Math.min(2000, Math.max(10, parsed)) : 500;
   });
 
@@ -1064,7 +1067,7 @@ export const useSettingsStore = defineStore('settings', () => {
     //  Expose layout locked getter
     layoutLockedBoolean,
     terminalScrollbackLimitNumber, //  Expose terminal scrollback limit getter
-    spreadsheetPreviewMaxRowsNumber,
+    spreadsheetPreviewRowsPerPageNumber,
     spreadsheetPreviewMaxColumnsNumber,
     fileManagerShowDeleteConfirmationBoolean, //  Expose file manager delete confirmation getter
     terminalEnableRightClickPasteBoolean, //  Expose terminal right click paste getter

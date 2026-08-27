@@ -243,6 +243,18 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
     recaptchaSecretKey: '',
   };
 
+  const legacySpreadsheetPreviewRows = await getDbRow<{ value: string }>(
+    db,
+    'SELECT value FROM settings WHERE key = ?',
+    ['spreadsheetPreviewMaxRows'],
+  );
+  const legacyRowsPerPage = Number(legacySpreadsheetPreviewRows?.value);
+  const spreadsheetRowsPerPageDefault = Number.isInteger(legacyRowsPerPage)
+    && legacyRowsPerPage >= 10
+    && legacyRowsPerPage <= 2000
+    ? String(legacyRowsPerPage)
+    : '500';
+
   const defaultSettings: Record<string, string> = {
     ipWhitelistEnabled: 'false',
     ipWhitelist: '',
@@ -269,7 +281,7 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
     [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),
     timezone: 'UTC', // 时区默认值
     terminalScrollbackLimit: '5000', // 终端回滚行数默认值
-    spreadsheetPreviewMaxRows: '500', // 表格预览最大行数
+    spreadsheetPreviewRowsPerPage: spreadsheetRowsPerPageDefault, // 表格预览每页行数（兼容旧最大行数配置）
     spreadsheetPreviewMaxColumns: '100', // 表格预览最大列数
     terminalEnableRightClickPaste: 'true', // 终端右键粘贴默认值
   };
