@@ -306,11 +306,15 @@ onBeforeUnmount(() => {
         class="min-h-0 flex-1 overflow-auto bg-black/15 p-6"
       >
         <div class="flex min-h-full min-w-full items-start justify-center">
-          <canvas
-            ref="mainCanvasRef"
+          <div
             :data-testid="`pdf-page-${currentPage}`"
             class="bg-white shadow-xl"
-          />
+          >
+            <canvas
+              ref="mainCanvasRef"
+              class="block bg-white"
+            />
+          </div>
         </div>
       </main>
     </div>
