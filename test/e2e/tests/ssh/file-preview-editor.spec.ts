@@ -304,7 +304,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 
       const rowsPerPage = setting.getByTestId('spreadsheet-preview-rows-per-page');
       const columnLimit = setting.getByTestId('spreadsheet-preview-column-limit');
-      await rowsPerPage.fill('12');
+      await rowsPerPage.fill('24');
       await columnLimit.fill('6');
 
       const responsePromise = page.waitForResponse((response) => (
@@ -317,7 +317,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
         const persisted = await context.request.get('/api/v1/settings');
         const body = await persisted.json() as Record<string, string>;
         return [body.spreadsheetPreviewRowsPerPage, body.spreadsheetPreviewMaxColumns];
-      }).toEqual(['12', '6']);
+      }).toEqual(['24', '6']);
     });
 
     await slowStep('XLSX pagination shows every row page by page while retaining the column safety limit', async () => {
@@ -331,26 +331,31 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       const pager = dialog.getByTestId('spreadsheet-pagination');
       await expect(pager).toBeVisible();
       await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
-      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('4');
+      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
       await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('1');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('12');
+      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('24');
       await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('40');
 
-      await expect(dialog.getByText('E2E-F12', { exact: true })).toBeVisible();
-      await expect(dialog.getByText('E2E-A13', { exact: true })).toHaveCount(0);
+      await expect(dialog.getByText('E2E-F24', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('E2E-A25', { exact: true })).toHaveCount(0);
       await expect(dialog.getByText('E2E-G1', { exact: true })).toHaveCount(0);
+      await expect(dialog.getByTestId('spreadsheet-placeholder-row')).toHaveCount(0);
+      await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-pagination.png', { viewport: { width: 1440, height: 900 } });
 
       await dialog.getByTestId('spreadsheet-next-page').click();
       await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('2');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('13');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('24');
-      await expect(dialog.getByText('E2E-A13', { exact: true })).toBeVisible();
-      await expect(dialog.getByText('E2E-F24', { exact: true })).toBeVisible();
-      await expect(dialog.getByText('E2E-A12', { exact: true })).toHaveCount(0);
-      await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-pagination.png', { viewport: { width: 1440, height: 900 } });
+      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('25');
+      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('40');
+      await expect(dialog.getByText('E2E-A25', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('E2E-F40', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('E2E-A24', { exact: true })).toHaveCount(0);
+      await expect(dialog.getByTestId('spreadsheet-placeholder-row')).toHaveCount(8);
+      await expect(dialog.getByTestId('spreadsheet-placeholder-row').first()).toHaveAttribute('aria-hidden', 'true');
+      await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-placeholder-rows.png', { viewport: { width: 1440, height: 900 } });
 
       await dialog.getByTestId('spreadsheet-previous-page').click();
       await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
+      await expect(dialog.getByTestId('spreadsheet-placeholder-row')).toHaveCount(0);
       await closePreview(page, filename);
     });
   } finally {
