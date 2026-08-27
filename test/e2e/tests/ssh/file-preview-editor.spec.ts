@@ -340,6 +340,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       await expect(dialog.getByText('E2E-A25', { exact: true })).toHaveCount(0);
       await expect(dialog.getByText('E2E-G1', { exact: true })).toHaveCount(0);
       await expect(dialog.getByTestId('spreadsheet-placeholder-row')).toHaveCount(0);
+      await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-pagination.png', { viewport: { width: 1440, height: 900 } });
 
       await dialog.getByTestId('spreadsheet-next-page').click();
       await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('2');

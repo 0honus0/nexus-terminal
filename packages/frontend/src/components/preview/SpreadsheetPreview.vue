@@ -49,6 +49,9 @@ const pageRangeStart = computed(() => activePage.value && activePage.value.displ
 const pageRangeEnd = computed(() => activePage.value
   ? activePage.value.startRow + activePage.value.displayedRows
   : 0);
+const placeholderRowCount = computed(() => activePage.value
+  ? Math.max(0, props.rowsPerPage - activePage.value.displayedRows)
+  : 0);
 const subtitle = computed(() => activeSheet.value
   ? t('fileManager.preview.spreadsheetMeta', {
       sheet: activeSheet.value.name,
@@ -170,6 +173,25 @@ onMounted(() => window.setTimeout(focusPreview, 0));
                 :title="formatCell(cell)"
               >
                 {{ formatCell(cell) }}
+              </td>
+            </tr>
+            <tr
+              v-for="placeholderIndex in placeholderRowCount"
+              :key="`placeholder-${currentPage}-${placeholderIndex}`"
+              data-testid="spreadsheet-placeholder-row"
+              aria-hidden="true"
+              class="h-7 select-none pointer-events-none"
+            >
+              <th class="sticky left-0 z-10 w-12 min-w-12 border-b border-r border-border bg-header px-2 py-1.5" />
+              <td
+                v-for="columnIndex in activeSheet.displayedColumns"
+                :key="columnIndex"
+                class="border-b border-r border-border px-2 py-1.5"
+                :style="activeSheet.columnWidths[columnIndex - 1]
+                  ? { width: `${activeSheet.columnWidths[columnIndex - 1]}px`, minWidth: `${activeSheet.columnWidths[columnIndex - 1]}px` }
+                  : undefined"
+              >
+                &nbsp;
               </td>
             </tr>
           </tbody>
