@@ -112,7 +112,8 @@ export const settingsController = {
         'ipBlacklistEnabled', // <-- 添加 IP 黑名单启用键
         'layoutLocked', // +++ 布局锁定键 +++
         'terminalScrollbackLimit', // 终端回滚行数键
-        'spreadsheetPreviewMaxRows', // 表格预览最大行数
+        'spreadsheetPreviewMaxRows', // 旧版表格预览最大行数（兼容旧客户端）
+        'spreadsheetPreviewRowsPerPage', // 表格预览每页行数
         'spreadsheetPreviewMaxColumns', // 表格预览最大列数
         'fileManagerShowDeleteConfirmation', // 文件管理器删除确认键
         'terminalEnableRightClickPaste', // 终端右键粘贴键
@@ -128,6 +129,7 @@ export const settingsController = {
 
       const boundedIntegerSettings: Record<string, { min: number; max: number }> = {
         spreadsheetPreviewMaxRows: { min: 10, max: 2000 },
+        spreadsheetPreviewRowsPerPage: { min: 10, max: 2000 },
         spreadsheetPreviewMaxColumns: { min: 5, max: 200 },
       };
       for (const [key, bounds] of Object.entries(boundedIntegerSettings)) {

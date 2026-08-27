@@ -22,12 +22,14 @@ export const spreadsheetPreviewProvider: FilePreviewProvider = {
     const [{ parseXlsxPreview }, response] = await Promise.all([import('../xlsxPreviewParser'), context.fetchInline()]);
     const buffer = await response.arrayBuffer();
     const sheets = await parseXlsxPreview(buffer, {
-      maxRows: settingsStore.spreadsheetPreviewMaxRowsNumber,
       maxColumns: settingsStore.spreadsheetPreviewMaxColumnsNumber,
     });
 
     return {
-      componentProps: { sheets },
+      componentProps: {
+        sheets,
+        rowsPerPage: settingsStore.spreadsheetPreviewRowsPerPageNumber,
+      },
     };
   },
 };

@@ -236,19 +236,19 @@
          </form>
       </div>
       <hr class="border-border/50">
-      <!-- Spreadsheet Preview Limits -->
-      <div class="settings-section-content" data-testid="spreadsheet-preview-limit-setting">
-        <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.workspace.spreadsheetPreviewLimits.title', 'Spreadsheet preview limits') }}</h3>
-        <form @submit.prevent="handleUpdateSpreadsheetPreviewLimits" class="space-y-4">
+      <!-- Spreadsheet Preview Pagination -->
+      <div class="settings-section-content" data-testid="spreadsheet-preview-pagination-setting">
+        <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.workspace.spreadsheetPreviewLimits.title', 'Spreadsheet preview') }}</h3>
+        <form @submit.prevent="handleUpdateSpreadsheetPreviewPagination" class="space-y-4">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label for="spreadsheetPreviewMaxRows" class="block text-sm font-medium text-text-secondary mb-1">
-                {{ t('settings.workspace.spreadsheetPreviewLimits.rowsLabel', 'Maximum rows') }}
+              <label for="spreadsheetPreviewRowsPerPage" class="block text-sm font-medium text-text-secondary mb-1">
+                {{ t('settings.workspace.spreadsheetPreviewLimits.rowsLabel', 'Rows per page') }}
               </label>
               <input
-                id="spreadsheetPreviewMaxRows"
-                data-testid="spreadsheet-preview-row-limit"
-                v-model.number="spreadsheetPreviewMaxRowsLocal"
+                id="spreadsheetPreviewRowsPerPage"
+                data-testid="spreadsheet-preview-rows-per-page"
+                v-model.number="spreadsheetPreviewRowsPerPageLocal"
                 type="number"
                 min="10"
                 max="2000"
@@ -275,19 +275,19 @@
             </div>
           </div>
           <p class="text-xs text-text-secondary">
-            {{ t('settings.workspace.spreadsheetPreviewLimits.hint', 'Higher limits use more browser memory. When a file is larger than these limits, the preview will clearly indicate that additional rows or columns are not shown.') }}
+            {{ t('settings.workspace.spreadsheetPreviewLimits.hint', 'Rows are paged so the full worksheet remains available. Higher page sizes and column limits use more browser memory.') }}
           </p>
           <div class="flex items-center justify-between">
             <button
               type="submit"
-              data-testid="spreadsheet-preview-limit-save"
-              :disabled="spreadsheetPreviewLimitsLoading"
+              data-testid="spreadsheet-preview-pagination-save"
+              :disabled="spreadsheetPreviewPaginationLoading"
               class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
             >
               {{ t('common.save') }}
             </button>
-            <p v-if="spreadsheetPreviewLimitsMessage" :class="['text-sm', spreadsheetPreviewLimitsSuccess ? 'text-success' : 'text-error']">
-              {{ spreadsheetPreviewLimitsMessage }}
+            <p v-if="spreadsheetPreviewPaginationMessage" :class="['text-sm', spreadsheetPreviewPaginationSuccess ? 'text-success' : 'text-error']">
+              {{ spreadsheetPreviewPaginationMessage }}
             </p>
           </div>
         </form>
@@ -499,12 +499,12 @@ const {
   terminalScrollbackLimitMessage,
   terminalScrollbackLimitSuccess,
   handleUpdateTerminalScrollbackLimit,
-  spreadsheetPreviewMaxRowsLocal,
+  spreadsheetPreviewRowsPerPageLocal,
   spreadsheetPreviewMaxColumnsLocal,
-  spreadsheetPreviewLimitsLoading,
-  spreadsheetPreviewLimitsMessage,
-  spreadsheetPreviewLimitsSuccess,
-  handleUpdateSpreadsheetPreviewLimits,
+  spreadsheetPreviewPaginationLoading,
+  spreadsheetPreviewPaginationMessage,
+  spreadsheetPreviewPaginationSuccess,
+  handleUpdateSpreadsheetPreviewPagination,
   fileManagerShowDeleteConfirmationLocal,
   fileManagerShowDeleteConfirmationMessage,
   fileManagerShowDeleteConfirmationSuccess,
