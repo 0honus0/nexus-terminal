@@ -443,7 +443,7 @@
       "spreadsheet": "スプレッドシート",
       "worksheet": "ワークシート",
       "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",
-      "spreadsheetLimited": "パフォーマンスのため、プレビューは最大 {rows} 行、{columns} 列まで表示します。"
+      "spreadsheetLimited": "現在 {totalRows} 行中 {displayedRows} 行、{totalColumns} 列中 {displayedColumns} 列を表示しています。追加データはプレビューに表示されていませんが、元のファイルは欠落・変更していません。"
     },
     "currentPath": "現在のパス",
     "dropFilesHere": "ファイルをここにドラッグ＆ドロップしてアップロード",
@@ -1235,6 +1235,16 @@
       "quickCommandsCollapsibleSearchTitle": "クイックコマンド検索",
       "quickCommandsCollapsibleSearchLabel": "検索ボックスを既定で検索ボタンに折りたたむ",
       "quickCommandsCollapsibleSearchDescription": "既定では無効です。有効にすると、クイックコマンドパネルには検索ボタンだけが表示され、クリックすると検索ボックスが展開されます。",
+      "spreadsheetPreviewLimits": {
+        "title": "スプレッドシートプレビュー上限",
+        "rowsLabel": "最大行数",
+        "columnsLabel": "最大列数",
+        "hint": "上限を増やすとブラウザーのメモリ使用量が増えます。ワークシートが上限を超える場合、未表示の行または列があることを明確に表示します。",
+        "saved": "スプレッドシートプレビュー上限を保存しました。",
+        "saveFailed": "スプレッドシートプレビュー上限の保存に失敗しました。",
+        "invalidRows": "行数は 10～2000 の整数で指定してください。",
+        "invalidColumns": "列数は 5～200 の整数で指定してください。"
+      },
       "fileManagerDeleteConfirmTitle": "ファイルマネージャー削除確認",
       "fileManagerShowDeleteConfirmationLabel": "ファイルまたはフォルダーを削除する際に確認ダイアログを表示する",
       "fileManagerDeleteConfirmSuccess": "ファイルマネージャーの削除確認設定を保存しました。",

@@ -515,7 +515,7 @@
       "spreadsheet": "电子表格",
       "worksheet": "工作表",
       "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",
-      "spreadsheetLimited": "为保证性能，预览最多显示 {rows} 行和 {columns} 列。"
+      "spreadsheetLimited": "当前显示 {displayedRows}/{totalRows} 行、{displayedColumns}/{totalColumns} 列。其余数据未在预览中显示，原始文件内容没有缺失或改变。"
     },
     "headers": {
       "type": "类型",
@@ -1020,6 +1020,16 @@
       "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
       "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
       "quickCommandsCollapsibleSearchDescription": "默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。",
+      "spreadsheetPreviewLimits": {
+        "title": "电子表格预览上限",
+        "rowsLabel": "最大预览行数",
+        "columnsLabel": "最大预览列数",
+        "hint": "提高上限会占用更多浏览器内存。工作表超过上限时，预览会明确提示还有未显示的行或列。",
+        "saved": "电子表格预览上限已保存。",
+        "saveFailed": "保存电子表格预览上限失败。",
+        "invalidRows": "行数必须是 10–2000 之间的整数。",
+        "invalidColumns": "列数必须是 5–200 之间的整数。"
+      },
       "fileManagerDeleteConfirmTitle": "文件管理器删除确认",
       "fileManagerShowDeleteConfirmationLabel": "删除文件或文件夹时显示确认提示框",
       "fileManagerDeleteConfirmSuccess": "文件管理器删除确认设置已保存。",

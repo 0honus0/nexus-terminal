@@ -1,9 +1,8 @@
 import SpreadsheetPreview from '../../../components/preview/SpreadsheetPreview.vue';
+import { useSettingsStore } from '../../../stores/settings.store';
 import type { FilePreviewProvider } from '../types';
 
 const spreadsheetPattern = /\.xlsx$/i;
-const MAX_PREVIEW_ROWS = 500;
-const MAX_PREVIEW_COLUMNS = 100;
 
 export const spreadsheetPreviewProvider: FilePreviewProvider = {
   id: 'spreadsheet',
@@ -19,11 +18,12 @@ export const spreadsheetPreviewProvider: FilePreviewProvider = {
   },
 
   async load(_file, context) {
+    const settingsStore = useSettingsStore();
     const [{ parseXlsxPreview }, response] = await Promise.all([import('../xlsxPreviewParser'), context.fetchInline()]);
     const buffer = await response.arrayBuffer();
     const sheets = await parseXlsxPreview(buffer, {
-      maxRows: MAX_PREVIEW_ROWS,
-      maxColumns: MAX_PREVIEW_COLUMNS,
+      maxRows: settingsStore.spreadsheetPreviewMaxRowsNumber,
+      maxColumns: settingsStore.spreadsheetPreviewMaxColumnsNumber,
     });
 
     return {

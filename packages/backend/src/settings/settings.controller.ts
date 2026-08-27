@@ -112,6 +112,8 @@ export const settingsController = {
         'ipBlacklistEnabled', // <-- 添加 IP 黑名单启用键
         'layoutLocked', // +++ 布局锁定键 +++
         'terminalScrollbackLimit', // 终端回滚行数键
+        'spreadsheetPreviewMaxRows', // 表格预览最大行数
+        'spreadsheetPreviewMaxColumns', // 表格预览最大列数
         'fileManagerShowDeleteConfirmation', // 文件管理器删除确认键
         'terminalEnableRightClickPaste', // 终端右键粘贴键
         'showStatusMonitorIpAddress', // 添加状态监视器IP显示键 (与服务层和前端统一)
@@ -121,6 +123,21 @@ export const settingsController = {
       for (const key in settingsToUpdate) {
         if (allowedSettingsKeys.includes(key)) {
           filteredSettings[key] = settingsToUpdate[key];
+        }
+      }
+
+      const boundedIntegerSettings: Record<string, { min: number; max: number }> = {
+        spreadsheetPreviewMaxRows: { min: 10, max: 2000 },
+        spreadsheetPreviewMaxColumns: { min: 5, max: 200 },
+      };
+      for (const [key, bounds] of Object.entries(boundedIntegerSettings)) {
+        if (!(key in filteredSettings)) continue;
+        const parsed = Number(filteredSettings[key]);
+        if (!Number.isInteger(parsed) || parsed < bounds.min || parsed > bounds.max) {
+          res.status(400).json({
+            message: `设置 ${key} 必须是 ${bounds.min}–${bounds.max} 之间的整数`,
+          });
+          return;
         }
       }
 

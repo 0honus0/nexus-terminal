@@ -235,6 +235,63 @@
            </div>
          </form>
       </div>
+      <hr class="border-border/50">
+      <!-- Spreadsheet Preview Limits -->
+      <div class="settings-section-content" data-testid="spreadsheet-preview-limit-setting">
+        <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.workspace.spreadsheetPreviewLimits.title', 'Spreadsheet preview limits') }}</h3>
+        <form @submit.prevent="handleUpdateSpreadsheetPreviewLimits" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="spreadsheetPreviewMaxRows" class="block text-sm font-medium text-text-secondary mb-1">
+                {{ t('settings.workspace.spreadsheetPreviewLimits.rowsLabel', 'Maximum rows') }}
+              </label>
+              <input
+                id="spreadsheetPreviewMaxRows"
+                data-testid="spreadsheet-preview-row-limit"
+                v-model.number="spreadsheetPreviewMaxRowsLocal"
+                type="number"
+                min="10"
+                max="2000"
+                step="1"
+                required
+                class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              >
+            </div>
+            <div>
+              <label for="spreadsheetPreviewMaxColumns" class="block text-sm font-medium text-text-secondary mb-1">
+                {{ t('settings.workspace.spreadsheetPreviewLimits.columnsLabel', 'Maximum columns') }}
+              </label>
+              <input
+                id="spreadsheetPreviewMaxColumns"
+                data-testid="spreadsheet-preview-column-limit"
+                v-model.number="spreadsheetPreviewMaxColumnsLocal"
+                type="number"
+                min="5"
+                max="200"
+                step="1"
+                required
+                class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              >
+            </div>
+          </div>
+          <p class="text-xs text-text-secondary">
+            {{ t('settings.workspace.spreadsheetPreviewLimits.hint', 'Higher limits use more browser memory. When a file is larger than these limits, the preview will clearly indicate that additional rows or columns are not shown.') }}
+          </p>
+          <div class="flex items-center justify-between">
+            <button
+              type="submit"
+              data-testid="spreadsheet-preview-limit-save"
+              :disabled="spreadsheetPreviewLimitsLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"
+            >
+              {{ t('common.save') }}
+            </button>
+            <p v-if="spreadsheetPreviewLimitsMessage" :class="['text-sm', spreadsheetPreviewLimitsSuccess ? 'text-success' : 'text-error']">
+              {{ spreadsheetPreviewLimitsMessage }}
+            </p>
+          </div>
+        </form>
+      </div>
       <hr class="border-border/50"> 
      <!-- File Manager Delete Confirmation -->
      <div class="settings-section-content">
@@ -442,6 +499,12 @@ const {
   terminalScrollbackLimitMessage,
   terminalScrollbackLimitSuccess,
   handleUpdateTerminalScrollbackLimit,
+  spreadsheetPreviewMaxRowsLocal,
+  spreadsheetPreviewMaxColumnsLocal,
+  spreadsheetPreviewLimitsLoading,
+  spreadsheetPreviewLimitsMessage,
+  spreadsheetPreviewLimitsSuccess,
+  handleUpdateSpreadsheetPreviewLimits,
   fileManagerShowDeleteConfirmationLocal,
   fileManagerShowDeleteConfirmationMessage,
   fileManagerShowDeleteConfirmationSuccess,

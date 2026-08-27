@@ -62,6 +62,8 @@ interface SettingsState {
   showQuickCommandTags?: string; // 'true' or 'false'
   layoutLocked?: string; // 'true' or 'false' - NEW: 布局锁定状态
   terminalScrollbackLimit?: string; // 终端回滚行数上限（0 使用默认 5000，最大 100000）
+  spreadsheetPreviewMaxRows?: string; // 表格预览最大行数（10–2000）
+  spreadsheetPreviewMaxColumns?: string; // 表格预览最大列数（5–200）
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
   showStatusMonitorIpAddress?: string; // 'true' or 'false' - 状态监视器显示IP地址
@@ -320,6 +322,12 @@ export const useSettingsStore = defineStore('settings', () => {
           `[SettingsStore] terminalScrollbackLimit not found, set to default: ${settings.value.terminalScrollbackLimit}`,
         );
       }
+      if (settings.value.spreadsheetPreviewMaxRows === undefined) {
+        settings.value.spreadsheetPreviewMaxRows = '500';
+      }
+      if (settings.value.spreadsheetPreviewMaxColumns === undefined) {
+        settings.value.spreadsheetPreviewMaxColumns = '100';
+      }
       //  File Manager Delete Confirmation default
       if (settings.value.fileManagerShowDeleteConfirmation === undefined) {
         settings.value.fileManagerShowDeleteConfirmation = 'true'; // 默认显示删除确认
@@ -491,6 +499,8 @@ export const useSettingsStore = defineStore('settings', () => {
       'showQuickCommandTags',
       'layoutLocked',
       'terminalScrollbackLimit',
+      'spreadsheetPreviewMaxRows',
+      'spreadsheetPreviewMaxColumns',
       'fileManagerShowDeleteConfirmation',
       'terminalEnableRightClickPaste',
       'showStatusMonitorIpAddress',
@@ -619,6 +629,8 @@ export const useSettingsStore = defineStore('settings', () => {
       'showQuickCommandTags',
       'layoutLocked',
       'terminalScrollbackLimit',
+      'spreadsheetPreviewMaxRows',
+      'spreadsheetPreviewMaxColumns',
       'fileManagerShowDeleteConfirmation',
       'terminalEnableRightClickPaste',
       'showStatusMonitorIpAddress',
@@ -961,6 +973,16 @@ export const useSettingsStore = defineStore('settings', () => {
     return Math.min(val, 100000);
   });
 
+  const spreadsheetPreviewMaxRowsNumber = computed(() => {
+    const parsed = Number(settings.value.spreadsheetPreviewMaxRows ?? '500');
+    return Number.isInteger(parsed) ? Math.min(2000, Math.max(10, parsed)) : 500;
+  });
+
+  const spreadsheetPreviewMaxColumnsNumber = computed(() => {
+    const parsed = Number(settings.value.spreadsheetPreviewMaxColumns ?? '100');
+    return Number.isInteger(parsed) ? Math.min(200, Math.max(5, parsed)) : 100;
+  });
+
   //  Getter for File Manager delete confirmation, returning boolean
   const fileManagerShowDeleteConfirmationBoolean = computed(() => {
     return settings.value.fileManagerShowDeleteConfirmation !== 'false'; // Default to true
@@ -1042,6 +1064,8 @@ export const useSettingsStore = defineStore('settings', () => {
     //  Expose layout locked getter
     layoutLockedBoolean,
     terminalScrollbackLimitNumber, //  Expose terminal scrollback limit getter
+    spreadsheetPreviewMaxRowsNumber,
+    spreadsheetPreviewMaxColumnsNumber,
     fileManagerShowDeleteConfirmationBoolean, //  Expose file manager delete confirmation getter
     terminalEnableRightClickPasteBoolean, //  Expose terminal right click paste getter
     statusMonitorShowIpBoolean, // 暴露状态监视器显示IP getter
