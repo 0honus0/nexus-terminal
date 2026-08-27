@@ -3,11 +3,7 @@
   "group": 7,
   "workers": 8,
   "specs": [
-    "tests/mobile/ssh-workspace.spec.ts",
-    "tests/mobile/suspend-resume-ui.spec.ts",
-    "tests/mobile/terminal-touch.spec.ts",
-    "tests/mobile/touch-advanced.spec.ts",
-    "tests/mobile/touch-workflows.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/cross-session-transfer.spec.ts",
+    "tests/ssh/file-upload.spec.ts"
   ]
 }

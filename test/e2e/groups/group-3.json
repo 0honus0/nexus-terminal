@@ -7,6 +7,6 @@
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
-    "tests/ssh/progress-display-copy-cancel.spec.ts"
+    "tests/ssh/progress-display-archive-cancel.spec.ts"
   ]
 }
