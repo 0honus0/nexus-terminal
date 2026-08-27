@@ -514,7 +514,17 @@
       "spreadsheet": "Spreadsheet",
       "worksheet": "Worksheet",
       "spreadsheetMeta": "{sheet} · {rows} rows × {columns} columns",
-      "spreadsheetLimited": "Showing {displayedRows} of {totalRows} rows and {displayedColumns} of {totalColumns} columns. Additional data is not shown in this preview; the original file is unchanged."
+      "spreadsheetLimited": "Showing {displayedRows} of {totalRows} rows and {displayedColumns} of {totalColumns} columns. Additional data is not shown in this preview; the original file is unchanged.",
+      "pdfMeta": "PDF · {pages} pages",
+      "pdfPreviousPage": "Previous page",
+      "pdfNextPage": "Next page",
+      "pdfCurrentPage": "Current page",
+      "pdfZoomOut": "Zoom out",
+      "pdfZoomIn": "Zoom in",
+      "pdfFitWidth": "Fit width",
+      "pdfThumbnails": "Pages",
+      "pdfOutline": "Outline",
+      "pdfNoOutline": "This PDF does not contain a document outline."
     },
     "headers": {
       "type": "Type",

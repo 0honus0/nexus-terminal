@@ -1,6 +1,7 @@
 import { registerFilePreviewProvider } from './registry';
 import { imagePreviewProvider } from './providers/imagePreviewProvider';
 import { markdownPreviewProvider } from './providers/markdownPreviewProvider';
+import { pdfPreviewProvider } from './providers/pdfPreviewProvider';
 import { spreadsheetPreviewProvider } from './providers/spreadsheetPreviewProvider';
 
 let initialized = false;
@@ -13,6 +14,7 @@ export function initFilePreviewProviders() {
 
   registerFilePreviewProvider(imagePreviewProvider);
   registerFilePreviewProvider(markdownPreviewProvider);
+  registerFilePreviewProvider(pdfPreviewProvider);
   registerFilePreviewProvider(spreadsheetPreviewProvider);
   initialized = true;
 }
