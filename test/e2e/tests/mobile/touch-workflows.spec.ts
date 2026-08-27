@@ -245,6 +245,36 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
   expect(result.cursorShowCount).toBeGreaterThan(0);
 });
 
+test('mobile keyboard sink preserves IME composition before clearing input', async ({ page }) => {
+  await page.goto('/login');
+
+  const result = await page.evaluate(() => {
+    const input = document.createElement('textarea');
+    document.body.appendChild(input);
+    let composing = false;
+    const clearValue = () => {
+      if (!composing) input.value = '';
+    };
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionend', () => {
+      composing = false;
+      clearValue();
+    });
+    input.addEventListener('input', clearValue);
+    input.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.value = '你';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '你' }));
+    const preservedDuringComposition = input.value === '你';
+    input.dispatchEvent(new CompositionEvent('compositionend'));
+    const clearedAfterComposition = input.value === '';
+    input.remove();
+    return { preservedDuringComposition, clearedAfterComposition };
+  });
+
+  expect(result.preservedDuringComposition).toBe(true);
+  expect(result.clearedAfterComposition).toBe(true);
+});
+
 test('mobile RDP touch mode toggle persists without reconnecting the session', async ({ page, context }) => {
   const connectionName = 'E2E Mobile RDP Touch Modes';
   const storageKey = 'nexus.rdp.touch-mode';

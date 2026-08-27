@@ -554,6 +554,7 @@
       "saveTimeout": "Save timed out",
       "fileExists": "File \"{name}\" already exists.",
       "loadDirectoryFailed": "Failed to load directory",
+      "loadDirectoryTimeout": "Timed out while loading directory.",
       "copyFailed": "Copy failed",
       "copyTimeout": "Copy timed out",
       "sourceSessionNotReady": "The source host SFTP session is not ready or has disconnected",

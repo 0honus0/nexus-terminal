@@ -18,6 +18,7 @@ export type E2eWebSocket = any;
 export async function openAuthenticatedWebSocket(
   request: APIRequestContext,
   url = 'ws://127.0.0.1:4173/ws',
+  options: { autoAcknowledgeTerminalFrames?: boolean } = {},
 ): Promise<E2eWebSocket> {
   const state = await request.storageState();
   const cookies = state.cookies
@@ -30,7 +31,12 @@ export async function openAuthenticatedWebSocket(
   // acknowledged after receipt. Resume commits intentionally wait for cached
   // terminal-frame ACKs before sending ssh:connected / RESUMED notifications.
   socket.on('message', (data: Buffer, isBinary: boolean) => {
-    if (!isBinary || data.length < 16 || data.subarray(0, 4).toString('ascii') !== 'NXTM') return;
+    if (
+      options.autoAcknowledgeTerminalFrames === false
+      || !isBinary
+      || data.length < 16
+      || data.subarray(0, 4).toString('ascii') !== 'NXTM'
+    ) return;
     const sequence = data.readUInt32BE(12);
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'ssh:output:ack', payload: { sequence } }));

@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
 const rootDir = path.join(e2eRoot, '.tmp', 'ssh-root');
+const shellRcPath = path.join(e2eRoot, '.tmp', 'ssh-bashrc');
 const archiveExecHoldPath = path.join(e2eRoot, '.tmp', 'archive-exec-hold.flag');
 const archivePreflightHoldPath = path.join(e2eRoot, '.tmp', 'archive-preflight-hold.flag');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
@@ -32,6 +33,49 @@ const executedCommands = [];
 const receivedWebhooks = [];
 const activeSshClients = new Set();
 let sshServerOnline = false;
+
+const virtualShellPrelude = `
+cd() {
+  local args=("$@")
+  local original_path=''
+  local index=0
+  while [ "$index" -lt "\${#args[@]}" ]; do
+    if [[ "\${args[$index]}" == -* ]]; then
+      index=$((index + 1))
+      continue
+    fi
+    original_path="\${args[$index]}"
+    if [[ "$original_path" == /* ]] && [[ "$original_path" != "$NEXUS_E2E_ROOT"* ]]; then
+      args[$index]="$NEXUS_E2E_ROOT$original_path"
+    fi
+    break
+  done
+  builtin cd "\${args[@]}" || return $?
+  if [[ "$original_path" == /* ]] && [[ "$original_path" != "$NEXUS_E2E_ROOT"* ]]; then
+    PWD="$original_path"
+  fi
+}
+pwd() {
+  local p
+  p=$(builtin pwd "$@") || return $?
+  case "$p" in
+    "$NEXUS_E2E_ROOT") printf '/\\n' ;;
+    "$NEXUS_E2E_ROOT"/*) printf '%s\\n' "\${p:\${#NEXUS_E2E_ROOT}}" ;;
+    *) printf '%s\\n' "$p" ;;
+  esac
+}
+readlink() {
+  local p status
+  p=$(command readlink "$@")
+  status=$?
+  [ "$status" -eq 0 ] || return "$status"
+  case "$p" in
+    "$NEXUS_E2E_ROOT") printf '/' ;;
+    "$NEXUS_E2E_ROOT"/*) printf '%s' "\${p:\${#NEXUS_E2E_ROOT}}" ;;
+    *) printf '%s' "$p" ;;
+  esac
+}
+`;
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
@@ -166,10 +210,87 @@ async function writeXlsxFixture(destination) {
   });
 }
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+async function writeUnicodePathZipFixture(destination, unicodeName) {
+  const legacyName = Buffer.from('legacy-name', 'ascii');
+  const unicodeNameBytes = Buffer.from(unicodeName, 'utf8');
+  const content = Buffer.from('unicode-path-e2e\n', 'utf8');
+
+  // Info-ZIP Unicode Path extra field (0x7075): version + CRC32 of the
+  // legacy filename + the authoritative UTF-8 filename. With LC_ALL=C,
+  // unzip 6.00 renders this filename as #Uxxxx; UTF-8 locales restore it.
+  const unicodePathData = Buffer.alloc(1 + 4 + unicodeNameBytes.length);
+  unicodePathData[0] = 1;
+  unicodePathData.writeUInt32LE(crc32(legacyName), 1);
+  unicodeNameBytes.copy(unicodePathData, 5);
+  const unicodePathExtra = Buffer.alloc(4 + unicodePathData.length);
+  unicodePathExtra.writeUInt16LE(0x7075, 0);
+  unicodePathExtra.writeUInt16LE(unicodePathData.length, 2);
+  unicodePathData.copy(unicodePathExtra, 4);
+
+  const contentCrc = crc32(content);
+  const localHeader = Buffer.alloc(30);
+  localHeader.writeUInt32LE(0x04034b50, 0);
+  localHeader.writeUInt16LE(20, 4);
+  localHeader.writeUInt16LE(0, 6);
+  localHeader.writeUInt16LE(0, 8);
+  localHeader.writeUInt16LE(0, 10);
+  localHeader.writeUInt16LE(0, 12);
+  localHeader.writeUInt32LE(contentCrc, 14);
+  localHeader.writeUInt32LE(content.length, 18);
+  localHeader.writeUInt32LE(content.length, 22);
+  localHeader.writeUInt16LE(legacyName.length, 26);
+  localHeader.writeUInt16LE(unicodePathExtra.length, 28);
+
+  const centralHeader = Buffer.alloc(46);
+  centralHeader.writeUInt32LE(0x02014b50, 0);
+  centralHeader.writeUInt16LE(20, 4);
+  centralHeader.writeUInt16LE(20, 6);
+  centralHeader.writeUInt16LE(0, 8);
+  centralHeader.writeUInt16LE(0, 10);
+  centralHeader.writeUInt16LE(0, 12);
+  centralHeader.writeUInt16LE(0, 14);
+  centralHeader.writeUInt32LE(contentCrc, 16);
+  centralHeader.writeUInt32LE(content.length, 20);
+  centralHeader.writeUInt32LE(content.length, 24);
+  centralHeader.writeUInt16LE(legacyName.length, 28);
+  centralHeader.writeUInt16LE(unicodePathExtra.length, 30);
+  centralHeader.writeUInt16LE(0, 32);
+  centralHeader.writeUInt16LE(0, 34);
+  centralHeader.writeUInt16LE(0, 36);
+  centralHeader.writeUInt32LE(0, 38);
+  centralHeader.writeUInt32LE(0, 42);
+
+  const localRecord = Buffer.concat([localHeader, legacyName, unicodePathExtra, content]);
+  const centralRecord = Buffer.concat([centralHeader, legacyName, unicodePathExtra]);
+  const endOfCentralDirectory = Buffer.alloc(22);
+  endOfCentralDirectory.writeUInt32LE(0x06054b50, 0);
+  endOfCentralDirectory.writeUInt16LE(0, 4);
+  endOfCentralDirectory.writeUInt16LE(0, 6);
+  endOfCentralDirectory.writeUInt16LE(1, 8);
+  endOfCentralDirectory.writeUInt16LE(1, 10);
+  endOfCentralDirectory.writeUInt32LE(centralRecord.length, 12);
+  endOfCentralDirectory.writeUInt32LE(localRecord.length, 16);
+  endOfCentralDirectory.writeUInt16LE(0, 20);
+
+  await fsp.writeFile(destination, Buffer.concat([localRecord, centralRecord, endOfCentralDirectory]));
+}
+
 async function resetRoot() {
   await fsp.rm(archiveExecHoldPath, { force: true });
   await fsp.rm(rootDir, { recursive: true, force: true });
   await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
+  await fsp.writeFile(shellRcPath, `${virtualShellPrelude}\nPS1='nexus-e2e$ '\nPROMPT_COMMAND=''\n`, 'utf8');
   await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'refresh-e2e.txt'), 'refresh-original\n', 'utf8');
@@ -181,6 +302,15 @@ async function resetRoot() {
   await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'archive-source.txt'), 'archive-me\n', 'utf8');
+  await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
+  await fsp.mkdir(path.join(rootDir, 'deleted-cwd'), { recursive: true });
+  await fsp.writeFile(path.join(rootDir, 'deleted-cwd', 'inside.txt'), 'deleted-cwd-e2e\n', 'utf8');
+  await fsp.mkdir(path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  '), { recursive: true });
+  await fsp.writeFile(
+    path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  ', 'inside.txt'),
+    'special-path-e2e\n',
+    'utf8',
+  );
   await fsp.writeFile(path.join(rootDir, 'folder-seed', 'nested.txt'), 'nested\n', 'utf8');
   await fsp.mkdir(path.join(rootDir, 'cross-target'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'cross-copy.txt'), 'cross-copy-body\n', 'utf8');
@@ -551,9 +681,9 @@ function runRemoteCommand(command, stream) {
     ? `sleep ${archiveExecDelayMs / 1000}; `
     : '';
   const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
-  const child = spawn('/bin/sh', ['-lc', delayedCommand], {
+  const child = spawn('/bin/bash', ['-lc', `${virtualShellPrelude}\n${delayedCommand}`], {
     cwd: rootDir,
-    env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color' },
+    env: { ...process.env, HOME: rootDir, TERM: 'xterm-256color', NEXUS_E2E_ROOT: rootDir },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk) => stream.write(chunk));
@@ -568,12 +698,13 @@ function runRemoteCommand(command, stream) {
 
 function attachShell(session, accept) {
   const stream = accept();
-  const child = spawn('/bin/bash', ['--noprofile', '--norc', '-i'], {
+  const child = spawn('/bin/bash', ['--noprofile', '--rcfile', shellRcPath, '-i'], {
     cwd: rootDir,
     env: {
       ...process.env,
       HOME: rootDir,
       TERM: 'xterm-256color',
+      NEXUS_E2E_ROOT: rootDir,
       PS1: 'nexus-e2e$ ',
       PROMPT_COMMAND: '',
     },
@@ -743,6 +874,19 @@ const controlServer = http.createServer(async (req, res) => {
       await fsp.mkdir(targetDir, { recursive: true });
       await fsp.writeFile(path.join(targetDir, '01-first.bin'), Buffer.alloc(size, 0x61));
       await fsp.writeFile(path.join(targetDir, '02-second.bin'), Buffer.alloc(size, 0x62));
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/remove-path') {
+      const requestedPath = String(requestUrl.searchParams.get('path') || '');
+      const targetPath = resolveRemotePath(requestedPath);
+      if (targetPath === path.resolve(rootDir)) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Refusing to remove the E2E root directory' }));
+        return;
+      }
+      await fsp.rm(targetPath, { recursive: true, force: true });
       res.writeHead(204);
       res.end();
       return;

@@ -84,6 +84,17 @@ const joinPath = (base: string, name: string): string => {
   return base.endsWith('/') ? `${base}${name}` : `${base}/${name}`;
 };
 
+const parentDirectoryPath = (path: string): string => {
+  if (path === '/') return '/';
+  const separatorIndex = path.lastIndexOf('/');
+  return separatorIndex <= 0 ? '/' : path.slice(0, separatorIndex);
+};
+
+const isMissingPathError = (message: string): boolean => /(?:ENOENT|no such file|not found)/i.test(message);
+
+// Keep directory operations aligned with the backend SSH connection readyTimeout.
+const SSH_OPERATION_TIMEOUT_MS = 20_000;
+
 // Helper function
 const sortFiles = (a: FileListItem, b: FileListItem): number => {
   if (a.attrs.isDirectory && !b.attrs.isDirectory) return -1;
@@ -124,6 +135,13 @@ export function createSftpActionsManager(
   // const fileList = ref<FileListItem[]>([]); // 不再直接使用 fileList ref
   const isLoading = ref<boolean>(false);
   const loadingRequestId = ref<string | null>(null); // 跟踪当前加载请求 ID
+  let directoryLoadTimeout: ReturnType<typeof setTimeout> | null = null;
+  const clearDirectoryLoadTimeout = () => {
+    if (directoryLoadTimeout !== null) {
+      clearTimeout(directoryLoadTimeout);
+      directoryLoadTimeout = null;
+    }
+  };
   // const error = ref<string | null>(null); // 不再使用本地 error ref
   const instanceSessionId = sessionId; // 保存会话 ID 用于日志
   const uiNotificationsStore = useUiNotificationsStore(); // 初始化 UI 通知 store
@@ -267,6 +285,7 @@ export function createSftpActionsManager(
   // 清理函数，用于注销所有消息处理器
   const cleanup = () => {
     console.log(`[SFTP ${instanceSessionId}] Cleaning up message handlers.`);
+    clearDirectoryLoadTimeout();
     deferredCleanup = null;
     stopDeferredCleanupWatch();
     unregisterCallbacks.forEach((cb) => cb());
@@ -441,6 +460,15 @@ export function createSftpActionsManager(
     // currentPathRef.value = path; // <-- 移除此行，延迟更新
     const requestId = generateRequestId();
     loadingRequestId.value = requestId; // 记录当前加载请求 ID
+    clearDirectoryLoadTimeout();
+    directoryLoadTimeout = setTimeout(() => {
+      if (loadingRequestId.value !== requestId) return;
+      console.error(`[SFTP ${instanceSessionId}] 加载目录 ${path} 超时 (ID: ${requestId})`);
+      loadingRequestId.value = null;
+      isLoading.value = false;
+      directoryLoadTimeout = null;
+      uiNotificationsStore.showError(t('fileManager.errors.loadDirectoryTimeout', 'Timed out while loading directory.'));
+    }, SSH_OPERATION_TIMEOUT_MS);
     sendMessage({ type: 'sftp:readdir', requestId: requestId, payload: { path } });
   };
 
@@ -1123,6 +1151,7 @@ export function createSftpActionsManager(
       console.error(`[SFTP ${instanceSessionId}] Received readdir success without path!`);
       // 如果收到的消息没有路径，但请求 ID 匹配，仍然需要重置加载状态
       if (message.requestId === loadingRequestId.value) {
+        clearDirectoryLoadTimeout();
         isLoading.value = false;
         loadingRequestId.value = null;
       }
@@ -1137,6 +1166,7 @@ export function createSftpActionsManager(
       return; // 忽略过时的响应
     }
 
+    clearDirectoryLoadTimeout();
     console.log(`[SFTP ${instanceSessionId}] Received file list for directory ${path}`);
 
     // Find or create the node for the directory itself (e.g., /root)
@@ -1146,10 +1176,8 @@ export function createSftpActionsManager(
     // If findNodeByPath failed even with createIfMissing=true, something is wrong.
     if (!targetNode) {
       console.error(`[SFTP ${instanceSessionId}] Failed to find or create node for path ${path}. Cannot update tree.`);
-      // Ensure loading state is reset if the current path failed
-      if (path === currentPathRef.value) {
-        isLoading.value = false;
-      }
+      isLoading.value = false;
+      loadingRequestId.value = null;
       return;
     }
 
@@ -1213,6 +1241,7 @@ export function createSftpActionsManager(
     console.log(`[SFTP ${instanceSessionId}] currentPathRef updated to ${path} after successful readdir.`);
 
     // 重置加载状态，因为这是匹配的响应
+    clearDirectoryLoadTimeout();
     isLoading.value = false;
     loadingRequestId.value = null;
     console.log(`[SFTP ${instanceSessionId}] isLoading reset after successful readdir for ${path}.`);
@@ -1231,13 +1260,27 @@ export function createSftpActionsManager(
       return; // 忽略过时的错误响应
     }
 
+    clearDirectoryLoadTimeout();
     console.error(`[SFTP ${instanceSessionId}] 加载目录 ${errorPath} 出错:`, errorPayload); // 日志改为中文
-    // error.value = errorPayload; // 使用通知
-    uiNotificationsStore.showError(`${t('fileManager.errors.loadDirectoryFailed')}: ${errorPayload}`);
 
-    // 重置加载状态，因为这是匹配的响应
+    // Reset first so a recovery request is not blocked by the in-flight guard.
     isLoading.value = false;
     loadingRequestId.value = null;
+
+    if (
+      typeof errorPath === 'string'
+      && errorPath === currentPathRef.value
+      && errorPath !== '/'
+      && isMissingPathError(errorPayload)
+    ) {
+      const fallbackPath = parentDirectoryPath(errorPath);
+      console.warn(`[SFTP ${instanceSessionId}] 当前目录 ${errorPath} 已不存在，回退到 ${fallbackPath}.`);
+      loadDirectory(fallbackPath, true);
+      return;
+    }
+
+    // error.value = errorPayload; // 使用通知
+    uiNotificationsStore.showError(`${t('fileManager.errors.loadDirectoryFailed')}: ${errorPayload}`);
     console.log(`[SFTP ${instanceSessionId}] isLoading reset after failed readdir for ${errorPath}.`);
   };
 

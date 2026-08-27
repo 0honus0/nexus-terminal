@@ -2588,7 +2588,16 @@ export class SftpService {
         : `if LC_ALL=C unzip -Z -v ${quotedArchiveBasename} 2>/dev/null | grep -Eqi 'file security status:[[:space:]]*encrypted'; then printf '${ARCHIVE_PASSWORD_REQUIRED_MARKER}\n' >&2; exit 82; fi`;
       const passwordOption = quotedPassword ? `-P ${quotedPassword} ` : '';
       const countCommand = `total=$(unzip -Z1 ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
-      command = `${cdCommand} && ${passwordPreflight} && ${countCommand} && LC_ALL=C unzip -o ${passwordOption}${quotedArchiveBasename}`;
+      // Info-ZIP turns Unicode Path extra fields into #Uxxxx names under the
+      // C/POSIX locale. Extract under an available UTF-8 locale instead.
+      const utf8LocaleCommand = [
+        '{',
+        `nexus_utf8_locale=$(locale -a 2>/dev/null | grep -Eim1 '^(C\\.UTF-8|C\\.utf8|en_US\\.UTF-8|en_US\\.utf8)$' || true);`,
+        `if [ -z "$nexus_utf8_locale" ]; then nexus_utf8_locale=$(locale -a 2>/dev/null | grep -Eim1 'utf-?8' || true); fi;`,
+        `if [ -z "$nexus_utf8_locale" ]; then nexus_utf8_locale=C.UTF-8; fi;`,
+        '}',
+      ].join(' ');
+      command = `${cdCommand} && ${passwordPreflight} && ${countCommand} && ${utf8LocaleCommand} && LC_ALL="$nexus_utf8_locale" unzip -o ${passwordOption}${quotedArchiveBasename}`;
     } else if (lowerArchivePath.endsWith('.tar.gz') || lowerArchivePath.endsWith('.tgz')) {
       const countCommand = `total=$(tar -tzf ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
       command = `${cdCommand} && ${countCommand} && tar -xzvf ${quotedArchiveBasename}`;

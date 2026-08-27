@@ -2,7 +2,7 @@ import Guacamole from 'guacamole-common-js';
 import type { Client, Event as GuacamoleEvent } from 'guacamole-common-js';
 
 const REMOTE_MOUSE_EVENTS = ['mousedown', 'mouseup', 'mousemove'] as const;
-const TAP_MAX_DURATION_MS = 450;
+const TAP_MAX_DURATION_MS = 300;
 const TAP_MOVE_TOLERANCE_PX = 12;
 
 type RemotePointerClient = Pick<Client, 'getDisplay' | 'sendMouseState'>;

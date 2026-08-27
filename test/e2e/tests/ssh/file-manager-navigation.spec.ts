@@ -4,6 +4,7 @@ import {
   activeFileManagerList,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
+  E2E_SSH,
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
@@ -13,6 +14,8 @@ import { step } from '../../support/steps';
 
 const FAVORITE_NAME = 'E2E Folder Seed';
 const FAVORITE_PATH = '/folder-seed';
+const SPECIAL_PATH = "/  特殊 空格'\"$#`()[]{}!&;=,+测试  ";
+const DELETED_CWD_PATH = '/deleted-cwd';
 
 const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
@@ -133,5 +136,64 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(confirmDialog).toBeVisible();
     await confirmDialog.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(favoriteItem).toHaveCount(0);
+  });
+});
+
+test('file-manager and terminal path sync survive shell metacharacters and a deleted terminal cwd', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const fileManager = manager(page);
+  const cdToTerminal = fileManager.getByTitle('Change terminal directory to current path');
+  const syncFromTerminal = fileManager.getByTitle('Sync current path from terminal');
+
+  await step('common shell metacharacters round-trip through file manager and terminal path sync', async () => {
+    await navigateViaPathInput(page, SPECIAL_PATH);
+    await expect(row(page, 'inside.txt')).toBeVisible();
+
+    await cdToTerminal.click();
+    await expect(page.getByText(`Terminal directory changed to ${SPECIAL_PATH}`, { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    await navigateViaPathInput(page, '/');
+    await syncFromTerminal.click();
+    await expect(currentPath(page)).toHaveText(SPECIAL_PATH, { timeout: 10_000 });
+    await expect(row(page, 'inside.txt')).toBeVisible();
+  });
+
+  await step('following the terminal recovers when its current directory was deleted externally', async () => {
+    await navigateViaPathInput(page, DELETED_CWD_PATH);
+    await cdToTerminal.click();
+    await expect(page.getByText(`Terminal directory changed to ${DELETED_CWD_PATH}`, { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    const removeResponse = await fetch(`${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`, {
+      method: 'POST',
+    });
+    expect(removeResponse.ok).toBeTruthy();
+
+    await syncFromTerminal.click();
+    await expect(currentPath(page)).toHaveText('/', { timeout: 10_000 });
+    await expect(row(page, 'seed.txt')).toBeVisible();
+  });
+
+  await step('refresh recovers when the file manager current directory was deleted externally', async () => {
+    const recreateResponse = await fetch(
+      `${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(DELETED_CWD_PATH.slice(1))}&size=1`,
+      { method: 'POST' },
+    );
+    expect(recreateResponse.ok).toBeTruthy();
+
+    await navigateViaPathInput(page, DELETED_CWD_PATH);
+    const removeResponse = await fetch(`${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`, {
+      method: 'POST',
+    });
+    expect(removeResponse.ok).toBeTruthy();
+
+    await fileManager.getByTitle('Refresh').click();
+    await expect(currentPath(page)).toHaveText('/', { timeout: 10_000 });
+    await expect(row(page, 'seed.txt')).toBeVisible();
   });
 });

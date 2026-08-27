@@ -1,7 +1,15 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
-import { closeWebSocket, openSshSession, requestJson, sendJson, waitForJson, waitForSftpReady } from '../../support/ws';
+import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem, setTestSshOnline } from '../../support/ssh';
+import {
+  closeWebSocket,
+  openAuthenticatedWebSocket,
+  openSshSession,
+  requestJson,
+  sendJson,
+  waitForJson,
+  waitForSftpReady,
+} from '../../support/ws';
 import { step } from '../../support/steps';
 
 test('backend can authenticate to the real SSH test server', async ({ request }) => {
@@ -58,6 +66,70 @@ test('duplicate ssh:connect stays non-fatal and leaves SFTP usable', async ({ re
     });
   } finally {
     await closeWebSocket(session.socket);
+  }
+});
+
+test('late terminal ACK after remote SSH disconnect is non-fatal', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const socket = await openAuthenticatedWebSocket(
+    request,
+    'ws://127.0.0.1:4173/ws',
+    { autoAcknowledgeTerminalFrames: false },
+  );
+  const clientSessionId = `late-ack-${crypto.randomUUID()}`;
+
+  try {
+    const terminalFramePromise = new Promise<number>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socket.off('message', onMessage);
+        reject(new Error('Timed out waiting for terminal binary frame'));
+      }, 10_000);
+      const onMessage = (data: Buffer, isBinary: boolean) => {
+        if (!isBinary || data.length < 16 || data.subarray(0, 4).toString('ascii') !== 'NXTM') return;
+        clearTimeout(timeout);
+        socket.off('message', onMessage);
+        resolve(data.readUInt32BE(12));
+      };
+      socket.on('message', onMessage);
+    });
+
+    const connectedPromise = waitForJson(socket, (message) => message.type === 'ssh:connected', 20_000);
+    sendJson(socket, {
+      type: 'ssh:connect',
+      payload: { connectionId: String(connectionId), clientSessionId },
+    });
+    await connectedPromise;
+    sendJson(socket, { type: 'ssh:input', payload: { data: "printf 'LATE_ACK_E2E\\n'\r" } });
+    const delayedSequence = await terminalFramePromise;
+
+    const disconnectedPromise = waitForJson(socket, (message) => message.type === 'ssh:disconnected', 15_000);
+    await setTestSshOnline(false);
+    await disconnectedPromise;
+
+    const genericErrors: string[] = [];
+    const onJsonMessage = (data: Buffer, isBinary: boolean) => {
+      if (isBinary) return;
+      try {
+        const message = JSON.parse(data.toString('utf8')) as { type?: string; payload?: unknown };
+        if (message.type === 'error') genericErrors.push(String(message.payload ?? ''));
+      } catch {
+        // Ignore non-JSON frames; this listener only observes protocol errors.
+      }
+    };
+    socket.on('message', onJsonMessage);
+
+    const listPromise = waitForJson(socket, (message) => message.type === 'SSH_SUSPEND_LIST_RESPONSE', 10_000);
+    sendJson(socket, { type: 'ssh:output:ack', payload: { sequence: delayedSequence } });
+    sendJson(socket, { type: 'SSH_SUSPEND_LIST_REQUEST', payload: {} });
+    await listPromise;
+    socket.off('message', onJsonMessage);
+
+    expect(genericErrors).not.toContain('处理消息时发生内部错误: 无效的终端输出 ACK');
+  } finally {
+    await setTestSshOnline(true);
+    await closeWebSocket(socket);
   }
 });
 
@@ -162,6 +234,55 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
       expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
         .toContain('archive-me');
     });
+  } finally {
+    await closeWebSocket(session.socket);
+  }
+});
+
+test('ZIP Unicode Path entries extract Chinese filenames instead of #U escapes', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const session = await openSshSession(request, connectionId, `archive-unicode-${crypto.randomUUID()}`);
+
+  try {
+    await waitForSftpReady(session.socket);
+    const requestId = `archive-unicode-${crypto.randomUUID()}`;
+    const responsePromise = waitForJson(
+      session.socket,
+      (message) => message.requestId === requestId
+        && ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
+      30_000,
+    );
+    sendJson(session.socket, {
+      type: 'sftp:decompress',
+      requestId,
+      payload: { source: '/中文解压测试.zip' },
+    });
+    const response = await responsePromise;
+    test.skip(response.type === 'sftp:command_not_found', 'unzip is not installed in this test environment');
+    expect(response.type).toBe('sftp:decompress:success');
+
+    const extracted = await requestJson(
+      session.socket,
+      'sftp:readfile',
+      { path: '/中文解压测试', encoding: 'utf8' },
+      'sftp:readfile:success',
+      'sftp:readfile:error',
+    );
+    expect(Buffer.from(String(extracted.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
+      .toContain('unicode-path-e2e');
+
+    const root = await requestJson(
+      session.socket,
+      'sftp:readdir',
+      { path: '/' },
+      'sftp:readdir:success',
+      'sftp:readdir:error',
+    );
+    const filenames = (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename);
+    expect(filenames).toContain('中文解压测试');
+    expect(filenames).not.toContain('#U4e2d#U6587#U89e3#U538b#U6d4b#U8bd5');
   } finally {
     await closeWebSocket(session.socket);
   }

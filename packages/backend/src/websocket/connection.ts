@@ -259,8 +259,19 @@ export function initializeConnectionHandler(
               break;
             case 'ssh:output:ack': {
               const sequence = payload?.sequence;
-              if (!state || !Number.isInteger(sequence) || sequence < 0 || sequence > 0xffffffff) {
+              if (!Number.isInteger(sequence) || sequence < 0 || sequence > 0xffffffff) {
                 throw new Error('无效的终端输出 ACK');
+              }
+              // ACK is emitted by the frontend only after xterm has consumed a binary
+              // terminal frame. When the remote SSH side exits (for example `reboot`),
+              // the shell-close path can dispose/delete the ClientState before those
+              // already-delivered frames finish rendering. Such ACKs are expected and
+              // must not be promoted to a generic protocol error on the still-open WS.
+              if (!state) {
+                console.debug(
+                  `[WebSocket ${sessionId ?? 'detached'}] 忽略已结束会话的迟到终端输出 ACK: ${sequence}`,
+                );
+                break;
               }
               if (!acknowledgeTerminalOutput(state, sequence)) {
                 console.warn(`[WebSocket ${sessionId}] 忽略未知或重复的终端输出 ACK: ${sequence}`);
