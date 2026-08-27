@@ -1914,22 +1914,22 @@ const handlePathInputChange = () => {
 
 const navigateToPath = async (path: string) => {
   if (!currentSftpManager.value || !path || path.trim().length === 0) return;
-  const trimmedPath = path.trim();
+  const targetPath = path;
   isEditingPath.value = false;
   closePathHistory();
 
-  if (trimmedPath === currentSftpManager.value.currentPath.value) {
+  if (targetPath === currentSftpManager.value.currentPath.value) {
     return;
   }
 
-  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] 尝试导航到新路径: ${trimmedPath}`);
+  console.log(`[FileManager ${props.sessionId}-${props.instanceId}] 尝试导航到新路径: ${targetPath}`);
   try {
-    await currentSftpManager.value.loadDirectory(trimmedPath);
+    await currentSftpManager.value.loadDirectory(targetPath);
     // 如果 loadDirectory 没有抛出错误，我们认为它成功了
-    pathHistoryStore.addPath(trimmedPath); // 导航成功后添加到历史
-    editablePath.value = trimmedPath; // 更新输入框内容
+    pathHistoryStore.addPath(targetPath); // 导航成功后添加到历史
+    editablePath.value = targetPath; // 更新输入框内容
   } catch (error) {
-    console.error(`[FileManager ${props.sessionId}-${props.instanceId}] 导航到路径 ${trimmedPath} 失败:`, error);
+    console.error(`[FileManager ${props.sessionId}-${props.instanceId}] 导航到路径 ${targetPath} 失败:`, error);
     // 导航失败，不添加到历史记录，也不更新输入框内容 (除非有特定需求)
   }
 };
@@ -2017,7 +2017,8 @@ const handlePathInput = async (event?: Event | FocusEvent) => {
   
     if (!currentSftpManager.value) return;
 
-    const newPath = editablePath.value.trim();
+    const newPath = editablePath.value;
+    if (newPath.trim().length === 0) return;
     // Check if dropdown has a selection, if so, it should have been handled by Enter in keydown
     if (pathSelectedIndex.value >= 0 && filteredPathHistory.value[pathSelectedIndex.value]) {
         // This case should ideally not be hit if keydown is working correctly
@@ -2119,8 +2120,7 @@ const syncPathFromTerminal = () => {
   const unregisterResult = props.wsDeps.onMessage('ssh:exec_silent:result', (payload, message) => {
     if (message.requestId !== requestId) return;
     finish();
-    const output = typeof payload?.output === 'string' ? payload.output.replace(/\r/g, '') : '';
-    const path = output.split('\n').map((line: string) => line.trim()).find((line: string) => line.startsWith('/'));
+    const path = typeof payload?.output === 'string' && payload.output.startsWith('/') ? payload.output : '';
     if (path) {
       currentSftpManager.value?.loadDirectory(path);
     } else {

@@ -7,6 +7,7 @@ import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-stor
 import WebSocket from 'ws';
 import { StringDecoder } from 'string_decoder';
 import { flushTerminalOutput, queueTerminalOutput } from '../terminal-binary-protocol';
+import * as pathModule from 'node:path';
 
 const encodeForPosixPrintf = (value: string): string =>
   Array.from(value)
@@ -35,11 +36,19 @@ const executeSshCommand = (state: ClientState, command: string, timeoutMs = 5000
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let decodersEnded = false;
     let channel: any;
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (!decodersEnded) {
+        decodersEnded = true;
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
+      }
       if (error) reject(error);
       else resolve(stdout);
     };
@@ -59,10 +68,10 @@ const executeSshCommand = (state: ClientState, command: string, timeoutMs = 5000
       }
       channel = stream;
       stream.on('data', (data: Buffer) => {
-        stdout += data.toString('utf8');
+        stdout += stdoutDecoder.write(data);
       });
       stream.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString('utf8');
+        stderr += stderrDecoder.write(data);
       });
       stream.on('error', (streamError: Error) => finish(streamError));
       stream.on('close', (code: number | undefined) => {
@@ -75,25 +84,58 @@ const executeSshCommand = (state: ClientState, command: string, timeoutMs = 5000
     });
   });
 
-const parseAbsolutePath = (output: string): string => {
-  const candidate = output
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => line.startsWith('/'));
-  if (!candidate) throw new Error('Remote command did not return an absolute path');
+const parseDelimitedAbsolutePath = (output: string): string => {
+  const start = output.indexOf('\0');
+  const end = start >= 0 ? output.indexOf('\0', start + 1) : -1;
+  if (start < 0 || end < 0) throw new Error('Remote command did not return a delimited path');
+  const candidate = output.slice(start + 1, end);
+  if (!candidate.startsWith('/')) throw new Error('Remote command did not return an absolute path');
   return candidate;
 };
 
+const resolveRemoteDirectory = async (state: ClientState, requestedPath: string): Promise<string> =>
+  parseDelimitedAbsolutePath(
+    await executeSshCommand(
+      state,
+      `cd -P ${quotePosixShellArg(requestedPath)} 2>/dev/null && printf '\\000%s\\000' "$PWD"`,
+      5000,
+    ),
+  );
+
+const DELETED_CWD_SUFFIX = ' (deleted)';
+
 const readShellCurrentPath = async (state: ClientState): Promise<string> => {
   if (!state.shellPid) throw new Error('Shell PID is unavailable');
-  return parseAbsolutePath(await executeSshCommand(state, `readlink /proc/${state.shellPid}/cwd`, 5000));
-};
-
-const resolveRemoteDirectory = async (state: ClientState, requestedPath: string): Promise<string> =>
-  parseAbsolutePath(
-    await executeSshCommand(state, `cd ${quotePosixShellArg(requestedPath)} 2>/dev/null && pwd -P`, 5000),
+  const currentPath = parseDelimitedAbsolutePath(
+    await executeSshCommand(
+      state,
+      `printf '\\000'; readlink -n /proc/${state.shellPid}/cwd; nexus_status=$?; printf '\\000'; exit "$nexus_status"`,
+      5000,
+    ),
   );
+
+  if (!currentPath.endsWith(DELETED_CWD_SUFFIX)) return currentPath;
+
+  // A real directory is allowed to literally end in " (deleted)". Only treat
+  // the kernel suffix as special when that exact path no longer resolves.
+  try {
+    return await resolveRemoteDirectory(state, currentPath);
+  } catch {
+    // Continue with deleted-cwd recovery below.
+  }
+
+  const deletedPath = currentPath.slice(0, -DELETED_CWD_SUFFIX.length);
+  let fallbackPath = pathModule.posix.dirname(deletedPath || '/');
+  while (true) {
+    try {
+      return await resolveRemoteDirectory(state, fallbackPath);
+    } catch {
+      if (fallbackPath === '/') break;
+      fallbackPath = pathModule.posix.dirname(fallbackPath);
+    }
+  }
+  throw new Error('Terminal current directory was deleted and no existing parent directory could be resolved.');
+};
 
 const clearPendingDirectoryChange = (state: ClientState): void => {
   if (state.pendingDirectoryChange) clearTimeout(state.pendingDirectoryChange.timeout);
@@ -764,6 +806,14 @@ export async function handleSshChangeDirectory(
 
   if (!requestId || typeof payload?.path !== 'string' || !payload.path.startsWith('/')) {
     fail('无效的终端目录切换请求。');
+    return;
+  }
+  // The path is ultimately typed into an interactive PTY. C0/C1 control
+  // characters can be interpreted by the terminal driver before shell quoting
+  // applies (for example CR submits a line and Ctrl-C sends SIGINT), so reject
+  // those paths instead of risking partial or unintended terminal input.
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(payload.path)) {
+    fail('终端目录切换不支持包含控制字符的路径。');
     return;
   }
   if (!state?.sshShellStream || !state.isShellReady) {

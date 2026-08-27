@@ -555,6 +555,7 @@
       "saveTimeout": "保存超时",
       "fileExists": "文件 \"{name}\" 已存在。",
       "loadDirectoryFailed": "加载目录失败",
+      "loadDirectoryTimeout": "加载目录超时。",
       "copyFailed": "复制失败",
       "copyTimeout": "复制超时",
       "sourceSessionNotReady": "源主机 SFTP 会话未就绪或已断开",

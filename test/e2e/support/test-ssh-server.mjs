@@ -36,10 +36,23 @@ let sshServerOnline = false;
 
 const virtualShellPrelude = `
 cd() {
-  if [ "$#" -eq 1 ] && [[ "$1" == /* ]] && [[ "$1" != "$NEXUS_E2E_ROOT"* ]]; then
-    builtin cd "$NEXUS_E2E_ROOT$1"
-  else
-    builtin cd "$@"
+  local args=("$@")
+  local original_path=''
+  local index=0
+  while [ "$index" -lt "\${#args[@]}" ]; do
+    if [[ "\${args[$index]}" == -* ]]; then
+      index=$((index + 1))
+      continue
+    fi
+    original_path="\${args[$index]}"
+    if [[ "$original_path" == /* ]] && [[ "$original_path" != "$NEXUS_E2E_ROOT"* ]]; then
+      args[$index]="$NEXUS_E2E_ROOT$original_path"
+    fi
+    break
+  done
+  builtin cd "\${args[@]}" || return $?
+  if [[ "$original_path" == /* ]] && [[ "$original_path" != "$NEXUS_E2E_ROOT"* ]]; then
+    PWD="$original_path"
   fi
 }
 pwd() {
@@ -57,9 +70,9 @@ readlink() {
   status=$?
   [ "$status" -eq 0 ] || return "$status"
   case "$p" in
-    "$NEXUS_E2E_ROOT") printf '/\\n' ;;
-    "$NEXUS_E2E_ROOT"/*) printf '%s\\n' "\${p:\${#NEXUS_E2E_ROOT}}" ;;
-    *) printf '%s\\n' "$p" ;;
+    "$NEXUS_E2E_ROOT") printf '/' ;;
+    "$NEXUS_E2E_ROOT"/*) printf '%s' "\${p:\${#NEXUS_E2E_ROOT}}" ;;
+    *) printf '%s' "$p" ;;
   esac
 }
 `;
@@ -292,9 +305,9 @@ async function resetRoot() {
   await writeUnicodePathZipFixture(path.join(rootDir, '中文解压测试.zip'), '中文解压测试');
   await fsp.mkdir(path.join(rootDir, 'deleted-cwd'), { recursive: true });
   await fsp.writeFile(path.join(rootDir, 'deleted-cwd', 'inside.txt'), 'deleted-cwd-e2e\n', 'utf8');
-  await fsp.mkdir(path.join(rootDir, '特殊 空格\'"$#`()[]{}!&;=,+测试'), { recursive: true });
+  await fsp.mkdir(path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  '), { recursive: true });
   await fsp.writeFile(
-    path.join(rootDir, '特殊 空格\'"$#`()[]{}!&;=,+测试', 'inside.txt'),
+    path.join(rootDir, '  特殊 空格\'"$#`()[]{}!&;=,+测试  ', 'inside.txt'),
     'special-path-e2e\n',
     'utf8',
   );

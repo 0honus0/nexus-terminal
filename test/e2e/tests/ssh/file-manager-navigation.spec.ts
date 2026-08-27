@@ -14,7 +14,7 @@ import { step } from '../../support/steps';
 
 const FAVORITE_NAME = 'E2E Folder Seed';
 const FAVORITE_PATH = '/folder-seed';
-const SPECIAL_PATH = "/特殊 空格'\"$#`()[]{}!&;=,+测试";
+const SPECIAL_PATH = "/  特殊 空格'\"$#`()[]{}!&;=,+测试  ";
 const DELETED_CWD_PATH = '/deleted-cwd';
 
 const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
@@ -177,8 +177,23 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
     await syncFromTerminal.click();
     await expect(currentPath(page)).toHaveText('/', { timeout: 10_000 });
     await expect(row(page, 'seed.txt')).toBeVisible();
+  });
+
+  await step('refresh recovers when the file manager current directory was deleted externally', async () => {
+    const recreateResponse = await fetch(
+      `${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(DELETED_CWD_PATH.slice(1))}&size=1`,
+      { method: 'POST' },
+    );
+    expect(recreateResponse.ok).toBeTruthy();
+
+    await navigateViaPathInput(page, DELETED_CWD_PATH);
+    const removeResponse = await fetch(`${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`, {
+      method: 'POST',
+    });
+    expect(removeResponse.ok).toBeTruthy();
 
     await fileManager.getByTitle('Refresh').click();
+    await expect(currentPath(page)).toHaveText('/', { timeout: 10_000 });
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 });
