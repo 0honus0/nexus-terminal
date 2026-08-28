@@ -1,24 +1,50 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../../types/sftp.types';
+import { filePreviewTabsContextKey } from '../../composables/file-preview/tabsContext';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   file: FileListItem;
   subtitle?: string;
-}>();
+  active?: boolean;
+}>(), {
+  active: true,
+});
 
 const emit = defineEmits<{
   close: [];
 }>();
 
 const { t } = useI18n();
+const tabsContext = inject(filePreviewTabsContextKey, null);
 const dialogRef = ref<HTMLElement | null>(null);
 let previouslyFocusedElement: HTMLElement | null = null;
 
-const close = () => emit('close');
+const tabs = computed(() => tabsContext?.tabs.value ?? []);
+const activeTabId = computed(() => tabsContext?.activeTabId.value ?? null);
+const close = () => {
+  if (tabsContext) {
+    tabsContext.hide();
+    return;
+  }
+  emit('close');
+};
+
+const activateTab = (tabId: string) => tabsContext?.activate(tabId);
+const closeTab = (event: MouseEvent, tabId: string) => {
+  event.stopPropagation();
+  tabsContext?.close(tabId);
+};
+
+const handleTabKeydown = (event: KeyboardEvent, tabId: string) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  activateTab(tabId);
+};
 
 const handleKeydown = (event: KeyboardEvent) => {
+  if (!props.active) return;
   if (event.key === 'Escape') {
     event.preventDefault();
     close();
@@ -30,12 +56,16 @@ onMounted(() => {
     ? document.activeElement
     : null;
   document.addEventListener('keydown', handleKeydown);
-  void nextTick(() => dialogRef.value?.focus());
+  if (props.active) void nextTick(() => dialogRef.value?.focus());
+});
+
+watch(() => props.active, (active) => {
+  if (active) void nextTick(() => dialogRef.value?.focus());
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown);
-  previouslyFocusedElement?.focus({ preventScroll: true });
+  if (!tabsContext && props.active) previouslyFocusedElement?.focus({ preventScroll: true });
 });
 </script>
 
@@ -44,6 +74,7 @@ onBeforeUnmount(() => {
     <div
       ref="dialogRef"
       class="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 p-3 md:p-6 outline-none"
+      :style="props.active ? undefined : { display: 'none' }"
       role="dialog"
       aria-modal="true"
       :aria-label="props.file.filename"
@@ -51,6 +82,40 @@ onBeforeUnmount(() => {
       @click.self="close"
     >
       <section class="flex h-full max-h-[94vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-2xl">
+        <div
+          v-if="tabsContext && tabs.length"
+          data-testid="file-preview-tabs"
+          role="tablist"
+          :aria-label="t('fileManager.preview.openFiles', 'Open previews')"
+          class="flex shrink-0 overflow-x-auto border-b border-border bg-header"
+        >
+          <div
+            v-for="tab in tabs"
+            :key="tab.id"
+            role="tab"
+            :aria-label="tab.filename"
+            :aria-selected="tab.id === activeTabId"
+            :tabindex="tab.id === activeTabId ? 0 : -1"
+            :title="tab.filePath"
+            class="group flex min-w-0 max-w-56 shrink-0 cursor-pointer items-center gap-2 border-r border-border px-3 py-2 text-xs outline-none transition-colors focus:ring-1 focus:ring-inset focus:ring-primary"
+            :class="tab.id === activeTabId
+              ? 'bg-background text-foreground'
+              : 'bg-header text-text-secondary hover:bg-border/70 hover:text-foreground'"
+            @click="activateTab(tab.id)"
+            @keydown="handleTabKeydown($event, tab.id)"
+          >
+            <span class="min-w-0 flex-1 truncate">{{ tab.filename }}</span>
+            <button
+              type="button"
+              class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-sm leading-none opacity-60 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none"
+              :aria-label="t('fileManager.preview.closeFile', { file: tab.filename }, `Close tab ${tab.filename}`)"
+              @click="closeTab($event, tab.id)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
         <header class="flex min-h-12 shrink-0 items-center gap-3 border-b border-border bg-header px-4 py-2">
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-medium" :title="props.file.filename">{{ props.file.filename }}</div>

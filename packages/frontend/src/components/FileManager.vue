@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, watchEffect, type Component, type PropType, readonly, shallowRef } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, watchEffect, provide, type Component, type PropType, readonly, shallowRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -28,6 +28,7 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
+import { filePreviewTabsContextKey } from '../composables/file-preview/tabsContext';
 import { createWheelScaleResolver } from '@/foundation/interaction/wheelScale';
 import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
@@ -74,31 +75,86 @@ const effectiveSessionId = computed(() => sessionStore.resolveSessionId(props.se
 // --- 获取并存储 SFTP 管理器实例 ---
 // 使用 shallowRef 存储管理器实例，以便在 sessionId 变化时切换
 const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
-const previewComponent = shallowRef<Component | null>(null);
-const previewFile = shallowRef<FileListItem | null>(null);
-const previewFilePath = ref('');
-const previewProps = shallowRef<Record<string, unknown>>({});
-const previewDispose = shallowRef<(() => void) | null>(null);
+
+interface PreviewTabEntry {
+  id: string;
+  file: FileListItem;
+  filePath: string;
+  component: Component;
+  componentProps: Record<string, unknown>;
+  dispose?: () => void;
+}
+
+const previewTabs = shallowRef<PreviewTabEntry[]>([]);
+const activePreviewId = ref<string | null>(null);
+const previewWorkspaceVisible = ref(false);
 const previewAbortController = shallowRef<AbortController | null>(null);
 const isPreviewLoading = ref(false);
 let previewLoadToken = 0;
+
+const activePreviewEntry = computed(() => (
+  previewTabs.value.find((entry) => entry.id === activePreviewId.value) ?? null
+));
+const previewTabDescriptors = computed(() => previewTabs.value.map((entry) => ({
+  id: entry.id,
+  filename: entry.file.filename,
+  filePath: entry.filePath,
+})));
+
+const cancelPendingPreviewLoad = () => {
+  previewLoadToken += 1;
+  previewAbortController.value?.abort();
+  previewAbortController.value = null;
+  isPreviewLoading.value = false;
+};
+
+const hidePreview = () => {
+  cancelPendingPreviewLoad();
+  previewWorkspaceVisible.value = false;
+};
+
+const activatePreviewTab = (tabId: string) => {
+  if (!previewTabs.value.some((entry) => entry.id === tabId)) return;
+  activePreviewId.value = tabId;
+  previewWorkspaceVisible.value = true;
+};
+
+const closePreviewTab = (tabId: string) => {
+  const index = previewTabs.value.findIndex((entry) => entry.id === tabId);
+  if (index < 0) return;
+
+  const [entry] = previewTabs.value.slice(index, index + 1);
+  entry?.dispose?.();
+  const nextTabs = previewTabs.value.filter((candidate) => candidate.id !== tabId);
+  previewTabs.value = nextTabs;
+
+  if (activePreviewId.value === tabId) {
+    const nextActive = nextTabs[index] ?? nextTabs[index - 1] ?? null;
+    activePreviewId.value = nextActive?.id ?? null;
+  }
+  if (nextTabs.length === 0) previewWorkspaceVisible.value = false;
+};
+
+const closeAllPreviews = () => {
+  cancelPendingPreviewLoad();
+  for (const entry of previewTabs.value) entry.dispose?.();
+  previewTabs.value = [];
+  activePreviewId.value = null;
+  previewWorkspaceVisible.value = false;
+};
+
+provide(filePreviewTabsContextKey, {
+  tabs: previewTabDescriptors,
+  activeTabId: computed(() => activePreviewId.value),
+  activate: activatePreviewTab,
+  close: closePreviewTab,
+  hide: hidePreview,
+});
+
 const pendingPathResolutionCleanups = new Set<() => void>();
 
 const cancelPendingPathResolutions = () => {
   for (const cleanup of [...pendingPathResolutionCleanups]) cleanup();
-};
-
-const closePreview = () => {
-  previewLoadToken += 1;
-  previewAbortController.value?.abort();
-  previewAbortController.value = null;
-  previewDispose.value?.();
-  previewDispose.value = null;
-  isPreviewLoading.value = false;
-  previewComponent.value = null;
-  previewFile.value = null;
-  previewFilePath.value = '';
-  previewProps.value = {};
 };
 const sftpReadyStateByManager = new WeakMap<SftpManagerInstance, boolean>();
 
@@ -548,13 +604,20 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
       return;
     }
 
-    closePreview();
+    const tabId = `${effectiveSessionId.value}:${filePath}`;
+    const existingTab = previewTabs.value.find((entry) => entry.id === tabId);
+    if (existingTab) {
+      activePreviewId.value = existingTab.id;
+      previewWorkspaceVisible.value = true;
+      return;
+    }
+
+    cancelPendingPreviewLoad();
     const loadToken = previewLoadToken;
     const abortController = new AbortController();
     previewAbortController.value = abortController;
-    previewFile.value = item;
-    previewFilePath.value = filePath;
     isPreviewLoading.value = true;
+    previewWorkspaceVisible.value = true;
 
     try {
       const data = await previewProvider.load(item, {
@@ -569,16 +632,25 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
         return;
       }
 
-      previewDispose.value = data.dispose ?? null;
       previewAbortController.value = null;
-      previewProps.value = data.componentProps;
-      previewComponent.value = previewProvider.preview(item);
+      previewTabs.value = [...previewTabs.value, {
+        id: tabId,
+        file: item,
+        filePath,
+        component: previewProvider.preview(item),
+        componentProps: data.componentProps,
+        dispose: data.dispose,
+      }];
+      activePreviewId.value = tabId;
+      previewWorkspaceVisible.value = true;
       isPreviewLoading.value = false;
     } catch (error) {
       if (abortController.signal.aborted) return;
       console.error('[FileManager] Failed loading preview data', error);
       if (previewLoadToken === loadToken) {
-        closePreview();
+        previewAbortController.value = null;
+        isPreviewLoading.value = false;
+        previewWorkspaceVisible.value = false;
         uiNotificationsStore.showError(t('fileManager.preview.loadFailed'));
       }
     }
@@ -596,16 +668,21 @@ const openItemAsText = (item: FileListItem): void => {
   const manager = currentSftpManager.value;
   if (!manager) return;
   const filePath = manager.joinPath(manager.currentPath.value, item.filename);
-  closePreview();
+  hidePreview();
   openFileInEditor(item, filePath);
 };
 
 const editCurrentPreview = (): void => {
-  const item = previewFile.value;
-  const filePath = previewFilePath.value;
-  if (!item || !filePath) return;
-  closePreview();
-  openFileInEditor(item, filePath);
+  const entry = activePreviewEntry.value;
+  if (!entry) return;
+  closePreviewTab(entry.id);
+  hidePreview();
+  openFileInEditor(entry.file, entry.filePath);
+};
+
+const editPreviewTab = (tabId: string): void => {
+  activePreviewId.value = tabId;
+  editCurrentPreview();
 };
 
 // 定义单击时的动作回调 (移到 Selection 实例化之前)
@@ -1511,7 +1588,7 @@ const handleFileListKeydown = (event: KeyboardEvent) => {
 // 修改：监听 manager 的 currentPath
 watch(() => currentSftpManager.value?.currentPath.value, () => {
     cancelPendingPathResolutions();
-    closePreview();
+    closeAllPreviews();
     selectedIndex.value = -1;
     clearSelection();
     resetFileListScroll();
@@ -1725,7 +1802,7 @@ watch(() => focusSwitcherStore.activateFileManagerSearchTrigger, (newValue, oldV
 watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     if (newSessionId && newSessionId !== oldSessionId) {
         cancelPendingPathResolutions();
-        closePreview();
+        closeAllPreviews();
         closePathHistory(); // 关闭可能打开的路径历史下拉菜单
         pathHistoryStore.setSearchTerm(''); // 清空搜索词
         // 保留旧会话的 SFTP manager。切换回该会话时直接复用目录树和当前路径，避免重新加载。
@@ -1785,7 +1862,7 @@ onBeforeUnmount(() => {
  clearMobileContextTimer();
  layoutSettingsSaver.dispose({ flush: true });
  cancelPendingPathResolutions();
- closePreview();
+ closeAllPreviews();
  fileListResizeObserver?.disconnect();
  fileListResizeObserver = null;
  // 注销搜索框动作
@@ -2699,7 +2776,7 @@ const handleOpenEditorClick = () => {
      role="dialog"
      aria-modal="true"
      :aria-label="t('fileManager.preview.loading')"
-     @click.self="closePreview"
+     @click.self="hidePreview"
    >
      <div class="file-preview-loading-card">
        <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
@@ -2707,18 +2784,20 @@ const handleOpenEditorClick = () => {
        <button
          type="button"
          :aria-label="t('fileManager.preview.close')"
-         @click="closePreview"
+         @click="hidePreview"
        >×</button>
      </div>
    </div>
 
    <component
-     v-if="previewComponent && previewFile"
-     :is="previewComponent"
-     :file="previewFile"
-     v-bind="previewProps"
-     @close="closePreview"
-     @edit="editCurrentPreview"
+     v-for="entry in previewTabs"
+     :key="entry.id"
+     :is="entry.component"
+     :file="entry.file"
+     :active="previewWorkspaceVisible && entry.id === activePreviewId"
+     v-bind="entry.componentProps"
+     @close="hidePreview"
+     @edit="editPreviewTab(entry.id)"
    />
 
   <!-- Favorite Paths Modal is now positioned near its button -->
@@ -2731,7 +2810,7 @@ const handleOpenEditorClick = () => {
 .file-preview-loading-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;

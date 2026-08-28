@@ -7,11 +7,14 @@ import FilePreviewDialog from './FilePreviewDialog.vue';
 import PdfOutlineItems, { type PdfOutlineItem } from './PdfOutlineItems.vue';
 import PdfThumbnail from './PdfThumbnail.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   file: FileListItem;
   document: PDFDocumentProxy;
   outline: PdfOutlineItem[];
-}>();
+  active?: boolean;
+}>(), {
+  active: true,
+});
 
 const emit = defineEmits<{
   close: [];
@@ -182,6 +185,7 @@ onBeforeUnmount(() => {
   <FilePreviewDialog
     :file="props.file"
     :subtitle="subtitle"
+    :active="props.active"
     @close="emit('close')"
   >
     <template #toolbar>

@@ -210,6 +210,61 @@ async function writeXlsxFixture(destination) {
   });
 }
 
+async function writeDocxFixture(destination) {
+  await new Promise((resolve, reject) => {
+    const output = createWriteStream(destination);
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    output.on('close', resolve);
+    output.on('error', reject);
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      + '<Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+      + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+      + '</Types>',
+      { name: '[Content_Types].xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+      + '</Relationships>',
+      { name: '_rels/.rels' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+      + '<w:body>'
+      + '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Nexus DOCX E2E</w:t></w:r></w:p>'
+      + '<w:p><w:r><w:t>DOCX preview tabs preserve document content.</w:t></w:r></w:p>'
+      + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
+      + '</w:body></w:document>',
+      { name: 'word/document.xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+      + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+      + '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/>'
+      + '<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>'
+      + '</w:styles>',
+      { name: 'word/styles.xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      + '</Relationships>',
+      { name: 'word/_rels/document.xml.rels' },
+    );
+    void archive.finalize();
+  });
+}
+
 async function writePdfFixture(destination) {
   const escapePdfText = (value) => value.replace(/([\\()])/g, '\\$1');
   const streamObject = (content) => {
@@ -371,6 +426,7 @@ async function resetRoot() {
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=', 'base64'),
   );
   await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
+  await writeDocxFixture(path.join(rootDir, 'preview.docx'));
   await writePdfFixture(path.join(rootDir, 'preview.pdf'));
   await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
   await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));

@@ -283,6 +283,72 @@ test('file previews and text editor protect historical file-opening regressions'
   });
 });
 
+test('preview tabs keep image PDF XLSX and DOCX files open together and preserve per-file state', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await slowStep('open an image preview and hide the preview workspace without closing its tab', async () => {
+    const filename = '预览-测试.png';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.locator('img')).toBeVisible();
+    await closePreview(page, filename);
+  });
+
+  await slowStep('open PDF and preserve page two while opening other previews', async () => {
+    const filename = 'preview.pdf';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await closePreview(page, filename);
+  });
+
+  await slowStep('open XLSX and preserve the selected worksheet while opening DOCX', async () => {
+    const filename = 'preview.xlsx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
+    await closePreview(page, filename);
+  });
+
+  await slowStep('DOCX opens in the same preview workspace with four switchable tabs', async () => {
+    const filename = 'preview.docx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
+
+    const tabs = dialog.getByTestId('file-preview-tabs');
+    await expect(tabs.getByRole('tab')).toHaveCount(4);
+    await expect(tabs.getByRole('tab', { name: '预览-测试.png' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'preview.pdf' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'preview.xlsx' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'preview.docx' })).toHaveAttribute('aria-selected', 'true');
+
+    await captureFunctionalScreenshot(page, 'file-manager-multi-preview-tabs.png', { viewport: { width: 1440, height: 900 } });
+
+    await tabs.getByRole('tab', { name: 'preview.pdf' }).click();
+    const pdfDialog = page.getByRole('dialog', { name: 'preview.pdf' });
+    await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
+
+    await pdfDialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'preview.xlsx' }).click();
+    const xlsxDialog = page.getByRole('dialog', { name: 'preview.xlsx' });
+    await expect(xlsxDialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(xlsxDialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
+
+    await xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab', { name: '预览-测试.png' }).click();
+    const imageDialog = page.getByRole('dialog', { name: '预览-测试.png' });
+    await expect(imageDialog.locator('img')).toBeVisible();
+  });
+});
+
 test('spreadsheet preview rows per page are configurable and pagination exposes every row', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);

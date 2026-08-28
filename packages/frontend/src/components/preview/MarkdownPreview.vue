@@ -3,10 +3,13 @@ import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   file: FileListItem;
   html: string;
-}>();
+  active?: boolean;
+}>(), {
+  active: true,
+});
 
 const emit = defineEmits<{
   close: [];
@@ -20,6 +23,7 @@ const { t } = useI18n();
   <FilePreviewDialog
     :file="props.file"
     :subtitle="t('fileManager.preview.markdown', 'Markdown')"
+    :active="props.active"
     @close="emit('close')"
   >
     <template #toolbar>

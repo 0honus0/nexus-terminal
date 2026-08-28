@@ -20,11 +20,14 @@ interface SpreadsheetSheet {
   getPage(pageIndex: number, rowsPerPage: number): SpreadsheetPage;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   file: FileListItem;
   sheets: SpreadsheetSheet[];
   rowsPerPage: number;
-}>();
+  active?: boolean;
+}>(), {
+  active: true,
+});
 
 const emit = defineEmits<{
   close: [];
@@ -138,6 +141,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
   <FilePreviewDialog
     :file="props.file"
     :subtitle="subtitle"
+    :active="props.active"
     @close="emit('close')"
   >
     <div
