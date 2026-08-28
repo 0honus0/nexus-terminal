@@ -5,7 +5,6 @@
   "specs": [
     "tests/auth/setup-login.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/backup-ui.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",

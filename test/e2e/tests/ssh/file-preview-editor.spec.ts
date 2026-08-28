@@ -319,6 +319,88 @@ test('preview workspace backdrop hiding preserves tabs across directories even w
   });
 });
 
+test('preview close button follows the file editor close-cache behavior setting', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', {
+    data: { clearFileEditorTabsOnClose: 'true' },
+  })).ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await slowStep('open two special-file previews and clear both with the workspace close button', async () => {
+    await row(page, 'preview.pdf').dblclick();
+    const pdfDialog = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
+    await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await pdfDialog.click({ position: { x: 2, y: 2 } });
+    await expect(pdfDialog).toBeHidden();
+
+    await row(page, 'preview.xlsx').dblclick();
+    const xlsxDialog = page.getByRole('dialog', { name: 'preview.xlsx', exact: true });
+    await expect(xlsxDialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
+    await expect(xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
+
+    await xlsxDialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+    await expect(xlsxDialog).toBeHidden();
+  });
+
+  await slowStep('reopening after a close-button clear starts a fresh one-tab preview workspace', async () => {
+    await row(page, 'preview.pdf').dblclick();
+    const dialog = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(dialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
+    await expect(dialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'preview.pdf', exact: true }))
+      .toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+test('hovering lazy preview formats prewarms their code without downloading remote file content', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const remotePreviewRequests: string[] = [];
+  page.on('request', (request) => {
+    const url = request.url();
+    if (url.includes('/api/v1/sftp/download?')) remotePreviewRequests.push(url);
+  });
+
+  await page.evaluate(() => performance.clearResourceTimings());
+  await openConnectedFileManager(page);
+
+  const expectWarmResource = async (filename: string, resourcePattern: string) => {
+    await row(page, filename).hover();
+    await expect.poll(async () => page.evaluate((patternSource) => {
+      const pattern = new RegExp(patternSource, 'i');
+      return performance.getEntriesByType('resource').some((entry) => pattern.test(entry.name));
+    }, resourcePattern), { timeout: 8_000 }).toBe(true);
+  };
+
+  await step('PDF runtime and component begin loading on row hover', async () => {
+    await expectWarmResource('preview.pdf', '(?:PdfPreview|pdfjs-dist|/pdf-[^/]+\\.js)');
+  });
+
+  await step('XLSX parser begins loading on row hover', async () => {
+    await expectWarmResource('preview.xlsx', 'xlsxPreviewParser');
+  });
+
+  await step('DOCX renderer begins loading on row hover', async () => {
+    await expectWarmResource('preview.docx', 'DocxPreview');
+  });
+
+  await step('Markdown parser begins loading on row hover', async () => {
+    await expectWarmResource('README-e2e.md', '(?:/marked\\.js|/dompurify\\.js|marked\\.esm|purify\\.es)');
+  });
+
+  expect(remotePreviewRequests).toEqual([]);
+});
+
 test('preview tabs keep image PDF XLSX and DOCX files open together and preserve per-file state', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);

@@ -14,6 +14,7 @@ export interface FilePreviewTabsContext {
   close(tabId: string): void;
   refresh(tabId: string): Promise<void>;
   hide(): void;
+  closeWorkspace(): void;
 }
 
 export const filePreviewTabsContextKey: InjectionKey<FilePreviewTabsContext> = Symbol('filePreviewTabsContext');

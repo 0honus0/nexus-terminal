@@ -16,6 +16,7 @@ export async function configureSshE2eSettings(request: APIRequestContext): Promi
       showPopupFileManager: 'true',
       showPopupFileEditor: 'true',
       fileManagerShowDeleteConfirmation: 'true',
+      clearFileEditorTabsOnClose: 'false',
     },
   });
   expect(response.ok()).toBeTruthy();

@@ -2,7 +2,9 @@ import { defineAsyncComponent } from 'vue';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { FilePreviewProvider } from '../types';
 
-const PdfPreview = defineAsyncComponent(() => import('../../../components/preview/PdfPreview.vue'));
+const loadPdfPreviewComponent = () => import('../../../components/preview/PdfPreview.vue');
+const loadPdfRuntime = () => import('pdfjs-dist');
+const PdfPreview = defineAsyncComponent(loadPdfPreviewComponent);
 const pdfPattern = /\.pdf$/i;
 
 export const pdfPreviewProvider: FilePreviewProvider = {
@@ -14,14 +16,19 @@ export const pdfPreviewProvider: FilePreviewProvider = {
     return file.attrs.isFile && pdfPattern.test(file.filename);
   },
 
+  async preload() {
+    await Promise.all([loadPdfPreviewComponent(), loadPdfRuntime()]);
+  },
+
   preview() {
     return PdfPreview;
   },
 
   async load(_file, context) {
     const [{ GlobalWorkerOptions, getDocument }, response] = await Promise.all([
-      import('pdfjs-dist'),
+      loadPdfRuntime(),
       context.fetchInline(),
+      loadPdfPreviewComponent(),
     ]);
 
     GlobalWorkerOptions.workerSrc = pdfWorkerUrl;

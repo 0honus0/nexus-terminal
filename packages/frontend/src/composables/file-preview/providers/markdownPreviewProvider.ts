@@ -2,6 +2,7 @@ import MarkdownPreview from '../../../components/preview/MarkdownPreview.vue';
 import type { FilePreviewProvider } from '../types';
 
 const markdownPattern = /\.(md|markdown)$/i;
+const loadMarkdownRuntime = () => Promise.all([import('dompurify'), import('marked')]);
 
 export const markdownPreviewProvider: FilePreviewProvider = {
   id: 'markdown',
@@ -12,13 +13,19 @@ export const markdownPreviewProvider: FilePreviewProvider = {
     return file.attrs.isFile && markdownPattern.test(file.filename);
   },
 
+  async preload() {
+    await loadMarkdownRuntime();
+  },
+
   preview() {
     return MarkdownPreview;
   },
 
   async load(_file, context) {
-    const [{ default: DOMPurify }, { marked }] = await Promise.all([import('dompurify'), import('marked')]);
-    const response = await context.fetchInline();
+    const [[{ default: DOMPurify }, { marked }], response] = await Promise.all([
+      loadMarkdownRuntime(),
+      context.fetchInline(),
+    ]);
     const source = await response.text();
     const rendered = await marked.parse(source, {
       gfm: true,

@@ -3,6 +3,7 @@ import { useSettingsStore } from '../../../stores/settings.store';
 import type { FilePreviewProvider } from '../types';
 
 const spreadsheetPattern = /\.xlsx$/i;
+const loadSpreadsheetParser = () => import('../xlsxPreviewParser');
 
 export const spreadsheetPreviewProvider: FilePreviewProvider = {
   id: 'spreadsheet',
@@ -13,13 +14,17 @@ export const spreadsheetPreviewProvider: FilePreviewProvider = {
     return file.attrs.isFile && spreadsheetPattern.test(file.filename);
   },
 
+  async preload() {
+    await loadSpreadsheetParser();
+  },
+
   preview() {
     return SpreadsheetPreview;
   },
 
   async load(_file, context) {
     const settingsStore = useSettingsStore();
-    const [{ parseXlsxPreview }, response] = await Promise.all([import('../xlsxPreviewParser'), context.fetchInline()]);
+    const [{ parseXlsxPreview }, response] = await Promise.all([loadSpreadsheetParser(), context.fetchInline()]);
     const buffer = await response.arrayBuffer();
     const sheets = await parseXlsxPreview(buffer, {
       maxColumns: settingsStore.spreadsheetPreviewMaxColumnsNumber,

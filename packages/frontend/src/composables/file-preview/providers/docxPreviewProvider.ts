@@ -1,7 +1,8 @@
 import { defineAsyncComponent } from 'vue';
 import type { FilePreviewProvider } from '../types';
 
-const DocxPreview = defineAsyncComponent(() => import('../../../components/preview/DocxPreview.vue'));
+const loadDocxPreviewComponent = () => import('../../../components/preview/DocxPreview.vue');
+const DocxPreview = defineAsyncComponent(loadDocxPreviewComponent);
 const docxPattern = /\.docx$/i;
 
 export const docxPreviewProvider: FilePreviewProvider = {
@@ -13,12 +14,19 @@ export const docxPreviewProvider: FilePreviewProvider = {
     return (file.attrs.isFile || file.attrs.isSymbolicLink) && docxPattern.test(file.filename);
   },
 
+  async preload() {
+    await loadDocxPreviewComponent();
+  },
+
   preview() {
     return DocxPreview;
   },
 
   async load(_file, context) {
-    const response = await context.fetchInline();
+    const [response] = await Promise.all([
+      context.fetchInline(),
+      loadDocxPreviewComponent(),
+    ]);
     const buffer = await response.arrayBuffer();
     return {
       componentProps: { buffer },
