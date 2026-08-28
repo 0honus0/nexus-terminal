@@ -164,7 +164,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
       <div
         ref="scrollContainerRef"
         data-testid="spreadsheet-scroll-container"
-        class="spreadsheet-scroll-container min-h-0 flex-1 overflow-scroll"
+        class="spreadsheet-scroll-container min-h-0 flex-1 overflow-x-hidden overflow-y-scroll"
       >
         <table class="spreadsheet-preview min-w-full border-separate border-spacing-0 text-xs">
           <tbody>

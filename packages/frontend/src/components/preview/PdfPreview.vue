@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
         <main
           ref="mainScrollerRef"
           data-testid="pdf-page-scroller"
-          class="min-h-0 flex-1 overflow-auto bg-black/15 p-6"
+          class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/15 p-6"
         >
           <div class="flex min-h-full min-w-full items-start justify-center">
             <div
