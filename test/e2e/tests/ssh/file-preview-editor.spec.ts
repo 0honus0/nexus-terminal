@@ -283,6 +283,42 @@ test('file previews and text editor protect historical file-opening regressions'
   });
 });
 
+test('preview workspace backdrop hiding preserves tabs across directories even when editor close-clears-cache is enabled', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', {
+    data: { clearFileEditorTabsOnClose: 'true' },
+  })).ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await slowStep('hide the first PDF by clicking the preview backdrop rather than closing its tab', async () => {
+    await row(page, 'preview.pdf').dblclick();
+    const dialog = page.getByRole('dialog', { name: 'preview.pdf' });
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await dialog.click({ position: { x: 2, y: 2 } });
+    await expect(dialog).toBeHidden();
+  });
+
+  await slowStep('open a PDF in another directory without losing the hidden first preview tab', async () => {
+    await row(page, 'folder-seed').click();
+    await expect(row(page, 'second-preview.pdf')).toBeVisible();
+    await row(page, 'second-preview.pdf').dblclick();
+    const secondDialog = page.getByRole('dialog', { name: 'second-preview.pdf' });
+    await expect(secondDialog.getByTestId('pdf-page-count')).toHaveText('3');
+    const tabs = secondDialog.getByTestId('file-preview-tabs');
+    await expect(tabs.getByRole('tab')).toHaveCount(2);
+    await expect(tabs.getByRole('tab', { name: 'preview.pdf' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'second-preview.pdf' })).toHaveAttribute('aria-selected', 'true');
+
+    await tabs.getByRole('tab', { name: 'preview.pdf' }).click();
+    await expect(page.getByRole('dialog', { name: 'preview.pdf' }).getByTestId('pdf-page-count')).toHaveText('3');
+  });
+});
+
 test('preview tabs keep image PDF XLSX and DOCX files open together and preserve per-file state', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);
@@ -397,6 +433,9 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
     });
     expect(geometry.scrollWidth).toBeGreaterThanOrEqual(Math.floor(geometry.pageWidth + geometry.horizontalPadding) - 2);
     expect(geometry.pageLeft).toBeGreaterThanOrEqual(geometry.scrollerLeft - 1);
+    await dialog.getByTestId('pdf-fit-width').click();
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
     await closePreview(page, filename);
   });
 
@@ -430,6 +469,22 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
     });
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
     await expect.poll(() => sheetTabs.evaluate((element) => element.scrollLeft)).toBe(tabsScrollLeft);
+    await closePreview(page, filename);
+  });
+
+  await slowStep('compact one-sheet XLSX hides horizontal controls when nothing exceeds the viewport', async () => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    const filename = 'compact-preview.xlsx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByText('Compact A1', { exact: true })).toBeVisible();
+    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expect(dialog.getByTestId('spreadsheet-horizontal-scrollbar')).toBeHidden();
+
+    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    await expect(sheetTabs.locator('button')).toHaveCount(1);
+    await expect.poll(() => sheetTabs.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await closePreview(page, filename);
   });
 
