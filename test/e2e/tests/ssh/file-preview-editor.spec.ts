@@ -364,7 +364,6 @@ test('hovering lazy preview formats prewarms their code without downloading remo
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
-  await openConnectedFileManager(page);
 
   const remotePreviewRequests: string[] = [];
   page.on('request', (request) => {
@@ -373,6 +372,7 @@ test('hovering lazy preview formats prewarms their code without downloading remo
   });
 
   await page.evaluate(() => performance.clearResourceTimings());
+  await openConnectedFileManager(page);
 
   const expectWarmResource = async (filename: string, resourcePattern: string) => {
     await row(page, filename).hover();
