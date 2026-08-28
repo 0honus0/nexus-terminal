@@ -516,7 +516,7 @@
       "docx": "Word 文档",
       "docxLoadFailed": "无法显示此 DOCX 文档。",
       "openFiles": "已打开的预览",
-      "closeFile": "关闭 {file}",
+      "closeFile": "关闭预览标签 {file}",
       "spreadsheet": "电子表格",
       "worksheet": "工作表",
       "spreadsheetMeta": "{sheet} · {rows} 行 × {columns} 列",

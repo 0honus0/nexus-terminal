@@ -676,6 +676,7 @@ const editCurrentPreview = (): void => {
   const entry = activePreviewEntry.value;
   if (!entry) return;
   closePreviewTab(entry.id);
+  hidePreview();
   openFileInEditor(entry.file, entry.filePath);
 };
 

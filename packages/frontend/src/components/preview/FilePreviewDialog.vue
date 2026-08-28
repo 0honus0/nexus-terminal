@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-sm leading-none opacity-60 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none"
-              :aria-label="t('fileManager.preview.closeFile', { file: tab.filename }, `Close ${tab.filename}`)"
+              :aria-label="t('fileManager.preview.closeFile', { file: tab.filename }, `Close tab ${tab.filename}`)"
               @click="closeTab($event, tab.id)"
             >
               ×

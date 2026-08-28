@@ -515,7 +515,7 @@
       "docx": "Word document",
       "docxLoadFailed": "The DOCX document could not be displayed.",
       "openFiles": "Open previews",
-      "closeFile": "Close {file}",
+      "closeFile": "Close tab {file}",
       "spreadsheet": "Spreadsheet",
       "worksheet": "Worksheet",
       "spreadsheetMeta": "{sheet} · {rows} rows × {columns} columns",
