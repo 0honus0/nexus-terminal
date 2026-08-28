@@ -8,6 +8,6 @@
     "tests/mobile/terminal-touch.spec.ts",
     "tests/mobile/touch-advanced.spec.ts",
     "tests/mobile/touch-workflows.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts"
+    "tests/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
