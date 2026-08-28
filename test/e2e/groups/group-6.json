@@ -10,7 +10,6 @@
     "tests/ui/ip-whitelist-settings.spec.ts",
     "tests/ui/protected-navigation.spec.ts",
     "tests/ui/session-lifecycle.spec.ts",
-    "tests/ui/ssh-key-management.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts"
+    "tests/ui/ssh-key-management.spec.ts"
   ]
 }

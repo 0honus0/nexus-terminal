@@ -15,6 +15,16 @@ import {
   SftpDecompressErrorPayload,
 } from '../websocket/types'; // Import payload types
 import { quotePosixShellArg } from '../utils/shell';
+import {
+  DOWNLOAD_TICKET_TTL_SECONDS,
+  attachDownloadStream,
+  claimDownloadTicket,
+  completeDownloadTicket,
+  invalidateDownloadTicket,
+  issueDownloadTicket,
+  recordCompletedRange,
+  type DownloadTicketLease,
+} from './download-ticket';
 
 const pendingSftpInitializations = new Map<string, Promise<void>>();
 
@@ -164,12 +174,67 @@ const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<b
   return Boolean(state.sftp);
 };
 
+const resolveDownloadTarget = async (
+  userId: number,
+  connectionId: number,
+  requestedSessionId?: string,
+): Promise<{ sessionId: string; state: ClientState } | null> => {
+  if (requestedSessionId) {
+    const exactState = clientStates.get(requestedSessionId);
+    if (exactState?.ws.userId === userId && exactState.dbConnectionId === connectionId) {
+      if (await ensureSftpReady(requestedSessionId, exactState)) {
+        return { sessionId: requestedSessionId, state: exactState };
+      }
+    }
+  }
+
+  for (const [sessionId, state] of clientStates.entries()) {
+    if (state.ws.userId !== userId || state.dbConnectionId !== connectionId) continue;
+    if (state.sftp || await ensureSftpReady(sessionId, state)) {
+      return { sessionId, state };
+    }
+  }
+  return null;
+};
+
 interface SftpDownloadQuery {
   connectionId?: string;
   sessionId?: string;
   remotePath?: string;
   disposition?: 'inline' | 'attachment';
+  ticket?: string;
 }
+
+interface CreateDownloadTicketBody {
+  connectionId?: string | number;
+  sessionId?: string;
+  remotePath?: string;
+}
+
+type ParsedByteRange = { start: number; end: number } | null | 'invalid';
+
+const parseByteRange = (rangeHeader: string | undefined, fileSize: number): ParsedByteRange => {
+  if (!rangeHeader) return null;
+  if (fileSize <= 0 || rangeHeader.includes(',')) return 'invalid';
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+  if (!match) return 'invalid';
+
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) return 'invalid';
+
+  if (!rawStart) {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return 'invalid';
+    const start = Math.max(0, fileSize - suffixLength);
+    return { start, end: fileSize - 1 };
+  }
+
+  const start = Number(rawStart);
+  if (!Number.isSafeInteger(start) || start < 0 || start >= fileSize) return 'invalid';
+  const requestedEnd = rawEnd ? Number(rawEnd) : fileSize - 1;
+  if (!Number.isSafeInteger(requestedEnd) || requestedEnd < start) return 'invalid';
+  return { start, end: Math.min(requestedEnd, fileSize - 1) };
+};
 
 const inlineContentTypes: Record<string, string> = {
   '.png': 'image/png',
@@ -197,6 +262,58 @@ const getContentDisposition = (disposition: 'inline' | 'attachment', remotePath:
   return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
 };
 
+export const createDownloadTicket = async (
+  req: Request<object, object, CreateDownloadTicketBody>,
+  res: Response,
+): Promise<void> => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ message: '未授权：需要登录。' });
+    return;
+  }
+
+  const connectionId = Number(req.body.connectionId);
+  const remotePath = typeof req.body.remotePath === 'string' ? req.body.remotePath : '';
+  const requestedSessionId = typeof req.body.sessionId === 'string' ? req.body.sessionId : undefined;
+  if (!Number.isSafeInteger(connectionId) || connectionId <= 0 || !remotePath) {
+    res.status(400).json({ message: '缺少或无效的下载参数。' });
+    return;
+  }
+
+  const target = await resolveDownloadTarget(userId, connectionId, requestedSessionId);
+  if (!target?.state.sftp) {
+    res.status(404).json({ message: '未找到指定的活动 SFTP 会话。' });
+    return;
+  }
+
+  try {
+    const stats = await getSftpStats(target.state.sftp, remotePath);
+    if (!stats.isFile()) {
+      res.status(400).json({ message: '短时下载票据仅支持文件。' });
+      return;
+    }
+
+    const { token } = issueDownloadTicket({
+      userId,
+      connectionId,
+      sessionId: target.sessionId,
+      remotePath,
+      fileSize: stats.size,
+      fileMtime: stats.mtime,
+    });
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.status(201).json({
+      url: `/api/v1/sftp/download?ticket=${encodeURIComponent(token)}`,
+      expiresInSeconds: DOWNLOAD_TICKET_TTL_SECONDS,
+    });
+  } catch (error: any) {
+    console.error(`SFTP 下载票据创建失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
+    res.status(error.message?.includes('No such file') ? 404 : 500).json({
+      message: error.message?.includes('No such file') ? '远程文件未找到。' : '创建下载票据失败。',
+    });
+  }
+};
+
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
  */
@@ -204,70 +321,80 @@ export const downloadFile = async (
   req: Request<object, object, object, SftpDownloadQuery>,
   res: Response,
 ): Promise<void> => {
-  const userId = req.session.userId;
-  const connectionId = req.query.connectionId;
-  const requestedSessionId = req.query.sessionId;
-  const remotePath = req.query.remotePath;
-  const disposition = req.query.disposition === 'inline' ? 'inline' : 'attachment';
+  let lease: DownloadTicketLease | null = null;
+  let userId: number;
+  let targetDbConnectionId: number;
+  let requestedSessionId: string | undefined;
+  let remotePath: string;
+  let disposition: 'inline' | 'attachment';
 
-  // 参数验证
-  if (!userId) {
-    res.status(401).json({ message: '未授权：需要登录。' });
-    return;
-  }
-  if (!connectionId || !remotePath) {
-    res.status(400).json({ message: '缺少必要的查询参数 (connectionId, remotePath)。' });
-    return;
-  }
-
-  console.log(`SFTP 下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
-
-  // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
-  let targetState: ClientState | null = null;
-  const targetDbConnectionId = parseInt(connectionId, 10); // 将查询参数字符串转换为数字
-
-  if (isNaN(targetDbConnectionId)) {
-    res.status(400).json({ message: '无效的 connectionId。' });
-    return;
-  }
-
-  console.log(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
-  if (requestedSessionId) {
-    const exactState = clientStates.get(requestedSessionId);
-    if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId) {
-      await ensureSftpReady(requestedSessionId, exactState);
-      targetState = exactState;
+  if (req.query.ticket) {
+    const claim = claimDownloadTicket(req.query.ticket, req.ip || req.socket.remoteAddress || 'unknown');
+    if (claim.status === 'gone') {
+      res.status(410).json({ message: '下载链接已失效。' });
+      return;
     }
-  }
-  for (const [sessionId, state] of clientStates.entries()) {
-    if (targetState) break;
-    // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
-    if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
-      targetState = state;
-      console.log(`SFTP 下载：找到匹配的会话 (Session ID: ${sessionId})。`);
-      break;
+    if (claim.status === 'locked') {
+      res.status(423).json({ message: '下载链接正在由其他来源使用。' });
+      return;
     }
+    lease = claim.lease;
+    userId = lease.userId;
+    targetDbConnectionId = lease.connectionId;
+    requestedSessionId = lease.sessionId;
+    remotePath = lease.remotePath;
+    disposition = 'attachment';
+  } else {
+    const authenticatedUserId = req.session.userId;
+    const connectionId = req.query.connectionId;
+    const requestedRemotePath = req.query.remotePath;
+    if (!authenticatedUserId) {
+      res.status(401).json({ message: '未授权：需要登录。' });
+      return;
+    }
+    if (!connectionId || !requestedRemotePath) {
+      res.status(400).json({ message: '缺少必要的查询参数 (connectionId, remotePath)。' });
+      return;
+    }
+    targetDbConnectionId = Number(connectionId);
+    if (!Number.isSafeInteger(targetDbConnectionId) || targetDbConnectionId <= 0) {
+      res.status(400).json({ message: '无效的 connectionId。' });
+      return;
+    }
+    userId = authenticatedUserId;
+    requestedSessionId = req.query.sessionId;
+    remotePath = requestedRemotePath;
+    disposition = req.query.disposition === 'inline' ? 'inline' : 'attachment';
   }
 
-  if (!targetState || !targetState.sftp) {
-    console.warn(`SFTP 下载失败：未找到用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的活动 SFTP 会话。`);
+  const target = await resolveDownloadTarget(userId, targetDbConnectionId, requestedSessionId);
+  if (!target?.state.sftp) {
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
     return;
   }
-
-  const userSftpSession = targetState.sftp; // 获取正确的 SFTP 实例
+  const userSftpSession = target.state.sftp;
 
   try {
-    // 获取文件状态以确定文件大小（可选，但有助于设置 Content-Length）
     const stats = await getSftpStats(userSftpSession, remotePath);
 
+    if (lease && (stats.size !== lease.fileSize || stats.mtime !== lease.fileMtime)) {
+      invalidateDownloadTicket(lease);
+      res.status(410).json({ message: '远程文件已变化，请重新发起下载。' });
+      return;
+    }
+
     if (stats.isDirectory()) {
+      if (lease) {
+        invalidateDownloadTicket(lease);
+        res.status(410).json({ message: '下载链接对应的文件已变化。' });
+        return;
+      }
       await streamDirectoryArchive(userSftpSession, remotePath, userId, res);
-      console.log(`SFTP 目录软链接下载完成 (用户 ${userId}, 路径 ${remotePath})`);
       return;
     }
 
     if (!stats.isFile()) {
+      if (lease) invalidateDownloadTicket(lease);
       res.status(400).json({ message: '指定的路径不是一个文件。' });
       return;
     }
@@ -277,51 +404,72 @@ export const downloadFile = async (
       return;
     }
 
-    // 内联预览仅对白名单图片类型返回图片 MIME，其他文件仍按通用二进制处理。
+    const range = parseByteRange(req.headers.range, stats.size);
+    if (range === 'invalid') {
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Range', `bytes */${stats.size}`);
+      res.status(416).end();
+      return;
+    }
+
     const extension = path.extname(remotePath).toLowerCase();
-    const contentType =
-      disposition === 'inline'
-        ? (inlineContentTypes[extension] ?? 'application/octet-stream')
-        : 'application/octet-stream';
+    const contentType = disposition === 'inline'
+      ? (inlineContentTypes[extension] ?? 'application/octet-stream')
+      : 'application/octet-stream';
     res.setHeader('Content-Disposition', getContentDisposition(disposition, remotePath));
     res.setHeader('Content-Type', contentType);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'private, no-store');
-    if (stats.size) {
-      res.setHeader('Content-Length', stats.size.toString());
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    if (range) {
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${stats.size}`);
+      res.setHeader('Content-Length', String(range.end - range.start + 1));
+    } else {
+      res.status(200);
+      res.setHeader('Content-Length', String(stats.size));
     }
 
-    // 创建可读流并 pipe 到响应对象
-    const readStream = userSftpSession.createReadStream(remotePath);
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
 
+    const readStream = range
+      ? userSftpSession.createReadStream(remotePath, { start: range.start, end: range.end })
+      : userSftpSession.createReadStream(remotePath);
+    if (lease) attachDownloadStream(lease, readStream);
+
+    let streamFailed = false;
     readStream.on('error', (err: Error) => {
-      // 添加 Error 类型注解
+      streamFailed = true;
       console.error(`SFTP 读取流错误 (用户 ${userId}, 路径 ${remotePath}):`, err);
-      // 如果响应头还没发送，可以发送错误状态码
       if (!res.headersSent) {
-        res.status(500).json({ message: `读取远程文件失败: ${err.message}` });
-      } else {
-        // 如果头已发送，只能尝试结束响应
+        res.status(500).end();
+      } else if (!res.writableEnded) {
         res.end();
       }
     });
 
-    readStream.pipe(res);
-
+    res.once('finish', () => {
+      if (!lease || streamFailed) return;
+      if (range) recordCompletedRange(lease, range.start, range.end);
+      else completeDownloadTicket(lease);
+    });
     res.once('close', () => {
       if (!res.writableEnded && !readStream.destroyed) readStream.destroy();
-      console.log(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
     });
 
-    console.log(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);
+    readStream.pipe(res);
   } catch (error: any) {
     console.error(`SFTP 下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
-      if (error.message?.includes('No such file')) {
-        res.status(404).json({ message: '远程文件未找到。' });
-      } else {
-        res.status(500).json({ message: `处理下载请求时出错: ${error.message}` });
-      }
+      const notFound = error.message?.includes('No such file');
+      if (lease && notFound) invalidateDownloadTicket(lease);
+      res.status(notFound ? 404 : 500).json({
+        message: notFound ? '远程文件未找到。' : `处理下载请求时出错: ${error.message}`,
+      });
     }
   }
 };

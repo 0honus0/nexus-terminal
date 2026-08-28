@@ -81,7 +81,7 @@ watch(() => props.buffer, () => {
       <div
         ref="scrollerRef"
         data-testid="docx-preview-scroller"
-        class="relative min-h-0 flex-1 overflow-auto bg-black/10 p-3 md:p-6"
+        class="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/10 p-3 md:p-6"
       >
         <div
           v-if="isRendering"
@@ -120,5 +120,9 @@ watch(() => props.buffer, () => {
 .docx-preview-host :deep(.docx) {
   margin: 0 auto 1rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.docx-preview-host :deep(section.docx) {
+  overflow: visible;
 }
 </style>

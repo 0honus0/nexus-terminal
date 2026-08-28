@@ -210,6 +210,56 @@ async function writeXlsxFixture(destination, variant = 'default') {
   });
 }
 
+async function writeCompactXlsxFixture(destination) {
+  const worksheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<dimension ref="A1:B2"/><sheetData>'
+    + '<row r="1"><c r="A1" t="inlineStr"><is><t>Compact A1</t></is></c><c r="B1" t="inlineStr"><is><t>Compact B1</t></is></c></row>'
+    + '<row r="2"><c r="A2" t="inlineStr"><is><t>Compact A2</t></is></c><c r="B2" t="inlineStr"><is><t>Compact B2</t></is></c></row>'
+    + '</sheetData></worksheet>';
+
+  await new Promise((resolve, reject) => {
+    const output = createWriteStream(destination);
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    output.on('close', resolve);
+    output.on('error', reject);
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      + '<Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+      + '</Types>',
+      { name: '[Content_Types].xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+      + '</Relationships>',
+      { name: '_rels/.rels' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<sheets><sheet name="Only" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      { name: 'xl/workbook.xml' },
+    );
+    archive.append(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+      + '</Relationships>',
+      { name: 'xl/_rels/workbook.xml.rels' },
+    );
+    archive.append(worksheetXml, { name: 'xl/worksheets/sheet1.xml' });
+    void archive.finalize();
+  });
+}
+
 async function writeDocxFixture(destination, variant = 'default') {
   await new Promise((resolve, reject) => {
     const output = createWriteStream(destination);
@@ -241,6 +291,13 @@ async function writeDocxFixture(destination, variant = 'default') {
       + '<w:body>'
       + `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>`
       + `<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>`
+      + '<w:tbl><w:tblPr><w:tblW w:w="16500" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/></w:tblGrid>'
+      + '<w:tr>'
+      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column A</w:t></w:r></w:p></w:tc>'
+      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column B</w:t></w:r></w:p></w:tc>'
+      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column C</w:t></w:r></w:p></w:tc>'
+      + '</w:tr></w:tbl>'
       + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
       + '</w:body></w:document>',
       { name: 'word/document.xml' },
@@ -426,8 +483,10 @@ async function resetRoot() {
     Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=', 'base64'),
   );
   await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
+  await writeCompactXlsxFixture(path.join(rootDir, 'compact-preview.xlsx'));
   await writeDocxFixture(path.join(rootDir, 'preview.docx'));
   await writePdfFixture(path.join(rootDir, 'preview.pdf'));
+  await writePdfFixture(path.join(rootDir, 'folder-seed', 'second-preview.pdf'));
   await fsp.symlink('预览-测试.png', path.join(rootDir, 'image-link.png'));
   await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);

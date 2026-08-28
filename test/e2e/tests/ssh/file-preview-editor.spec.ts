@@ -283,6 +283,42 @@ test('file previews and text editor protect historical file-opening regressions'
   });
 });
 
+test('preview workspace backdrop hiding preserves tabs across directories even when editor close-clears-cache is enabled', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', {
+    data: { clearFileEditorTabsOnClose: 'true' },
+  })).ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await slowStep('hide the first PDF by clicking the preview backdrop rather than closing its tab', async () => {
+    await row(page, 'preview.pdf').dblclick();
+    const dialog = page.getByRole('dialog', { name: 'preview.pdf' });
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await dialog.click({ position: { x: 2, y: 2 } });
+    await expect(dialog).toBeHidden();
+  });
+
+  await slowStep('open a PDF in another directory without losing the hidden first preview tab', async () => {
+    await row(page, 'folder-seed').click();
+    await expect(row(page, 'second-preview.pdf')).toBeVisible();
+    await row(page, 'second-preview.pdf').dblclick();
+    const secondDialog = page.getByRole('dialog', { name: 'second-preview.pdf' });
+    await expect(secondDialog.getByTestId('pdf-page-count')).toHaveText('3');
+    const tabs = secondDialog.getByTestId('file-preview-tabs');
+    await expect(tabs.getByRole('tab')).toHaveCount(2);
+    await expect(tabs.getByRole('tab', { name: 'preview.pdf', exact: true })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'second-preview.pdf', exact: true })).toHaveAttribute('aria-selected', 'true');
+
+    await tabs.getByRole('tab', { name: 'preview.pdf', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'preview.pdf', exact: true }).getByTestId('pdf-page-count')).toHaveText('3');
+  });
+});
+
 test('preview tabs keep image PDF XLSX and DOCX files open together and preserve per-file state', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);
@@ -349,7 +385,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
   });
 });
 
-test('PDF XLSX and DOCX previews expose synchronized bottom horizontal scrollbars', async ({ page, context }) => {
+test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs stay independent', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -357,45 +393,108 @@ test('PDF XLSX and DOCX previews expose synchronized bottom horizontal scrollbar
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
-  await page.setViewportSize({ width: 760, height: 860 });
 
   const dragBottomScrollbar = async (dialog: Locator, scrollbarTestId: string, scrollerTestId: string) => {
     const scrollbar = dialog.getByTestId(scrollbarTestId);
     const scroller = dialog.getByTestId(scrollerTestId);
     await expect(scrollbar).toBeVisible();
-    await expect.poll(() => scrollbar.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    expect.soft(await scroller.evaluate((element) => getComputedStyle(element).overflowX)).toBe('hidden');
     await scrollbar.evaluate((element) => {
       element.scrollLeft = element.scrollWidth;
       element.dispatchEvent(new Event('scroll'));
     });
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    return { scrollbar, scroller };
   };
 
-  await slowStep('PDF keeps a bottom scrollbar available when zoomed wider than the viewport', async () => {
+  await slowStep('PDF exposes only the dedicated bottom content scrollbar when zoomed wider than the viewport', async () => {
+    await page.setViewportSize({ width: 760, height: 860 });
     const filename = 'preview.pdf';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
     for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
-    await dragBottomScrollbar(dialog, 'pdf-horizontal-scrollbar', 'pdf-page-scroller');
+    const { scroller } = await dragBottomScrollbar(dialog, 'pdf-horizontal-scrollbar', 'pdf-page-scroller');
+    await scroller.evaluate((element) => { element.scrollLeft = 0; });
+    const geometry = await scroller.evaluate((element) => {
+      const pageElement = element.querySelector<HTMLElement>('[data-testid^="pdf-page-"]');
+      if (!pageElement) throw new Error('PDF page element is missing');
+      const scrollerStyle = getComputedStyle(element);
+      const scrollerRect = element.getBoundingClientRect();
+      const pageRect = pageElement.getBoundingClientRect();
+      return {
+        scrollWidth: element.scrollWidth,
+        pageWidth: pageRect.width,
+        horizontalPadding: Number.parseFloat(scrollerStyle.paddingLeft) + Number.parseFloat(scrollerStyle.paddingRight),
+        pageLeft: pageRect.left,
+        scrollerLeft: scrollerRect.left,
+      };
+    });
+    expect(geometry.scrollWidth).toBeGreaterThanOrEqual(Math.floor(geometry.pageWidth + geometry.horizontalPadding) - 2);
+    expect(geometry.pageLeft).toBeGreaterThanOrEqual(geometry.scrollerLeft - 1);
+    await dialog.getByTestId('pdf-fit-width').click();
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
     await closePreview(page, filename);
   });
 
-  await slowStep('XLSX keeps a bottom scrollbar visible below the paginated grid', async () => {
+  await slowStep('XLSX content and worksheet-tab horizontal scrolling remain separate controls', async () => {
+    await page.setViewportSize({ width: 760, height: 860 });
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
-    await dragBottomScrollbar(dialog, 'spreadsheet-horizontal-scrollbar', 'spreadsheet-scroll-container');
+    const { scrollbar, scroller } = await dragBottomScrollbar(
+      dialog,
+      'spreadsheet-horizontal-scrollbar',
+      'spreadsheet-scroll-container',
+    );
     await captureFunctionalScreenshot(page, 'file-manager-preview-horizontal-scroll.png', { viewport: { width: 760, height: 860 } });
+
+    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    expect(await sheetTabs.evaluate((element) => getComputedStyle(element).overflowX)).toBe('auto');
+    await sheetTabs.evaluate((element) => {
+      element.style.width = '120px';
+      element.style.maxWidth = '120px';
+      element.scrollLeft = element.scrollWidth;
+      element.dispatchEvent(new Event('scroll'));
+    });
+    await expect.poll(() => sheetTabs.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    const tabsScrollLeft = await sheetTabs.evaluate((element) => element.scrollLeft);
+
+    await scrollbar.evaluate((element) => {
+      element.scrollLeft = 0;
+      element.dispatchEvent(new Event('scroll'));
+    });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
+    await expect.poll(() => sheetTabs.evaluate((element) => element.scrollLeft)).toBe(tabsScrollLeft);
     await closePreview(page, filename);
   });
 
-  await slowStep('DOCX keeps a bottom scrollbar available for page content wider than the viewport', async () => {
+  await slowStep('compact one-sheet XLSX hides horizontal controls when nothing exceeds the viewport', async () => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    const filename = 'compact-preview.xlsx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByText('Compact A1', { exact: true })).toBeVisible();
+    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    await expect.poll(() => scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await expect(dialog.getByTestId('spreadsheet-horizontal-scrollbar')).toBeHidden();
+
+    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    await expect(sheetTabs.locator('button')).toHaveCount(1);
+    await expect.poll(() => sheetTabs.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    await closePreview(page, filename);
+  });
+
+  await slowStep('DOCX exposes clipped wide table content through the dedicated bottom scrollbar', async () => {
+    await page.setViewportSize({ width: 1280, height: 860 });
     const filename = 'preview.docx';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByText('Wide DOCX Column C', { exact: true })).toBeAttached();
     await dragBottomScrollbar(dialog, 'docx-horizontal-scrollbar', 'docx-preview-scroller');
   });
 });

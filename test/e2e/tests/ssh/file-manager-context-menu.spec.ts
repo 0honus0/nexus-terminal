@@ -146,13 +146,58 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
 
   await step('Download streams a remote file through the browser', async () => {
     await rightClickRow(page, 'seed.txt');
+    const ticketPromise = page.waitForResponse((response) => (
+      response.url().endsWith('/api/v1/sftp/download-ticket') && response.request().method() === 'POST'
+    ));
     const downloadPromise = page.waitForEvent('download');
     await clickMenuItem(page, 'Download');
+    expect((await ticketPromise).status()).toBe(201);
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('seed.txt');
     const downloadPath = await download.path();
     expect(downloadPath).toBeTruthy();
     expect(await readFile(downloadPath!, 'utf8')).toBe('nexus-e2e-seed\n');
+  });
+
+  await slowStep('short-lived download tickets support FDM-style HEAD and Range requests without browser cookies', async () => {
+    const issued = await context.request.post('/api/v1/sftp/download-ticket', {
+      data: {
+        connectionId,
+        remotePath: '/seed.txt',
+      },
+    });
+    expect(issued.status()).toBe(201);
+    const ticket = await issued.json() as { url: string; expiresInSeconds: number };
+    expect(ticket.expiresInSeconds).toBe(300);
+    expect(ticket.url).toMatch(/^\/api\/v1\/sftp\/download\?ticket=/);
+
+    const url = new URL(ticket.url, 'http://127.0.0.1:4173').toString();
+    const ownerHeaders = { 'X-Forwarded-For': '203.0.113.10' };
+    const head = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('accept-ranges')).toBe('bytes');
+    expect(Number(head.headers.get('content-length'))).toBe(Buffer.byteLength('nexus-e2e-seed\n'));
+
+    const firstRange = await fetch(url, {
+      headers: { ...ownerHeaders, Range: 'bytes=0-4' },
+    });
+    expect(firstRange.status).toBe(206);
+    expect(firstRange.headers.get('content-range')).toBe(`bytes 0-4/${Buffer.byteLength('nexus-e2e-seed\n')}`);
+    expect(Buffer.from(await firstRange.arrayBuffer()).toString('utf8')).toBe('nexus');
+
+    const competingClient = await fetch(url, {
+      headers: { 'X-Forwarded-For': '198.51.100.20', Range: 'bytes=5-9' },
+    });
+    expect(competingClient.status).toBe(423);
+
+    const remainder = await fetch(url, {
+      headers: { ...ownerHeaders, Range: 'bytes=5-' },
+    });
+    expect(remainder.status).toBe(206);
+    expect(Buffer.from(await remainder.arrayBuffer()).toString('utf8')).toBe('-e2e-seed\n');
+
+    const destroyed = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
+    expect(destroyed.status).toBe(410);
   });
 
   await slowStep('Upload writes exact bytes over SFTP and the uploaded file downloads intact', async () => {
