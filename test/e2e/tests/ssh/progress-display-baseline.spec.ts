@@ -80,7 +80,10 @@ test('existing copy progress popup hides and restores through Progress Display',
   await refreshFileManager(page);
   await expect(row(page, sourceName)).toBeVisible();
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=80`, { method: 'POST' });
+  // Keep at least one SFTP WRITE round-trip alive while the popup is hidden and
+  // Progress Display is opened. A tiny delay is ineffective when writes are
+  // pipelined and made this assertion depend on runner timing.
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
   try {
     await slowStep('copy creates the existing floating progress popup', async () => {
       await rightClickRow(page, sourceName);
