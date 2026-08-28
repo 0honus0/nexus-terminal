@@ -241,6 +241,13 @@ async function writeDocxFixture(destination, variant = 'default') {
       + '<w:body>'
       + `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>`
       + `<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>`
+      + '<w:tbl><w:tblPr><w:tblW w:w="16500" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>'
+      + '<w:tblGrid><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/></w:tblGrid>'
+      + '<w:tr>'
+      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column A</w:t></w:r></w:p></w:tc>'
+      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column B</w:t></w:r></w:p></w:tc>'
+      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column C</w:t></w:r></w:p></w:tc>'
+      + '</w:tr></w:tbl>'
       + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
       + '</w:body></w:document>',
       { name: 'word/document.xml' },
