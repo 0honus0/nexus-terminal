@@ -311,11 +311,11 @@ test('preview workspace backdrop hiding preserves tabs across directories even w
     await expect(secondDialog.getByTestId('pdf-page-count')).toHaveText('3');
     const tabs = secondDialog.getByTestId('file-preview-tabs');
     await expect(tabs.getByRole('tab')).toHaveCount(2);
-    await expect(tabs.getByRole('tab', { name: 'preview.pdf' })).toBeVisible();
-    await expect(tabs.getByRole('tab', { name: 'second-preview.pdf' })).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.getByRole('tab', { name: 'preview.pdf', exact: true })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'second-preview.pdf', exact: true })).toHaveAttribute('aria-selected', 'true');
 
-    await tabs.getByRole('tab', { name: 'preview.pdf' }).click();
-    await expect(page.getByRole('dialog', { name: 'preview.pdf' }).getByTestId('pdf-page-count')).toHaveText('3');
+    await tabs.getByRole('tab', { name: 'preview.pdf', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'preview.pdf', exact: true }).getByTestId('pdf-page-count')).toHaveText('3');
   });
 });
 
