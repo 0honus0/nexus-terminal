@@ -349,6 +349,93 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
   });
 });
 
+test('preview tabs force refresh externally changed Markdown image PDF XLSX and DOCX files', async ({ page, context }) => {
+  test.setTimeout(120_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const replaceFixture = async (filename: string) => {
+    const response = await fetch(
+      `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(filename)}&variant=refresh`,
+      { method: 'POST' },
+    );
+    expect(response.ok).toBeTruthy();
+  };
+
+  await slowStep('Markdown keeps stale content until the preview refresh button reloads it', async () => {
+    const filename = 'README-e2e.md';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
+    await replaceFixture(filename);
+    await expect(dialog.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Nexus Markdown Refreshed' })).toHaveCount(0);
+    await dialog.getByTestId('file-preview-refresh').click();
+    await expect(dialog.getByRole('heading', { name: 'Nexus Markdown Refreshed' })).toBeVisible();
+    await closePreview(page, filename);
+  });
+
+  await slowStep('image refresh bypasses the cached inline URL and reloads changed pixels', async () => {
+    const filename = '预览-测试.png';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    const image = dialog.locator('img');
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
+    await replaceFixture(filename);
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
+    await dialog.getByTestId('file-preview-refresh').click();
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(2);
+    await closePreview(page, filename);
+  });
+
+  await slowStep('PDF refresh replaces the PDF.js document while preserving the current page', async () => {
+    const filename = 'preview.pdf';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await dialog.getByTestId('pdf-sidebar-outline-tab').click();
+    const outline = dialog.getByTestId('pdf-outline');
+    await outline.getByText('Second Chapter', { exact: true }).click();
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await replaceFixture(filename);
+    await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
+    await dialog.getByTestId('file-preview-refresh').click();
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(dialog.getByTestId('pdf-outline').getByText('Second Chapter Refreshed', { exact: true })).toBeVisible();
+    await closePreview(page, filename);
+  });
+
+  await slowStep('XLSX refresh reparses the workbook while preserving the selected sheet', async () => {
+    const filename = 'preview.xlsx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
+    await replaceFixture(filename);
+    await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
+    await dialog.getByTestId('file-preview-refresh').click();
+    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.getByText('Second Sheet Refreshed', { exact: true })).toBeVisible();
+    await closePreview(page, filename);
+  });
+
+  await slowStep('DOCX refresh rerenders the changed document in its existing tab', async () => {
+    const filename = 'preview.docx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await replaceFixture(filename);
+    await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible();
+    await dialog.getByTestId('file-preview-refresh').click();
+    await expect(dialog.getByText('Nexus DOCX Refreshed', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await captureFunctionalScreenshot(page, 'file-manager-preview-refresh.png', { viewport: { width: 1440, height: 900 } });
+  });
+});
+
 test('spreadsheet preview rows per page are configurable and pagination exposes every row', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);

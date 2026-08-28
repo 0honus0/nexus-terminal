@@ -90,6 +90,8 @@ const activePreviewId = ref<string | null>(null);
 const previewWorkspaceVisible = ref(false);
 const previewAbortController = shallowRef<AbortController | null>(null);
 const isPreviewLoading = ref(false);
+const previewRefreshControllers = new Map<string, AbortController>();
+const refreshingPreviewIds = shallowRef<Set<string>>(new Set());
 let previewLoadToken = 0;
 
 const activePreviewEntry = computed(() => (
@@ -113,6 +115,13 @@ const hidePreview = () => {
   previewWorkspaceVisible.value = false;
 };
 
+const setPreviewRefreshing = (tabId: string, refreshing: boolean) => {
+  const next = new Set(refreshingPreviewIds.value);
+  if (refreshing) next.add(tabId);
+  else next.delete(tabId);
+  refreshingPreviewIds.value = next;
+};
+
 const activatePreviewTab = (tabId: string) => {
   if (!previewTabs.value.some((entry) => entry.id === tabId)) return;
   activePreviewId.value = tabId;
@@ -123,6 +132,9 @@ const closePreviewTab = (tabId: string) => {
   const index = previewTabs.value.findIndex((entry) => entry.id === tabId);
   if (index < 0) return;
 
+  previewRefreshControllers.get(tabId)?.abort();
+  previewRefreshControllers.delete(tabId);
+  setPreviewRefreshing(tabId, false);
   const [entry] = previewTabs.value.slice(index, index + 1);
   entry?.dispose?.();
   const nextTabs = previewTabs.value.filter((candidate) => candidate.id !== tabId);
@@ -137,17 +149,84 @@ const closePreviewTab = (tabId: string) => {
 
 const closeAllPreviews = () => {
   cancelPendingPreviewLoad();
+  for (const controller of previewRefreshControllers.values()) controller.abort();
+  previewRefreshControllers.clear();
+  refreshingPreviewIds.value = new Set();
   for (const entry of previewTabs.value) entry.dispose?.();
   previewTabs.value = [];
   activePreviewId.value = null;
   previewWorkspaceVisible.value = false;
 };
 
+const refreshPreviewTab = async (tabId: string): Promise<void> => {
+  const entry = previewTabs.value.find((candidate) => candidate.id === tabId);
+  if (!entry || previewRefreshControllers.has(tabId)) return;
+
+  const previewProvider = resolveFilePreviewProvider(entry.file);
+  if (!previewProvider) return;
+
+  const abortController = new AbortController();
+  const refreshKey = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  previewRefreshControllers.set(tabId, abortController);
+  setPreviewRefreshing(tabId, true);
+
+  try {
+    const data = await previewProvider.load(entry.file, {
+      filePath: entry.filePath,
+      signal: abortController.signal,
+      buildInlineUrl: (path) => buildInlinePreviewUrl(path, refreshKey),
+      fetchInline: (path = entry.filePath) => fetchInlinePreview(path, abortController.signal, refreshKey),
+    });
+
+    if (abortController.signal.aborted) {
+      data.dispose?.();
+      return;
+    }
+
+    const currentEntry = previewTabs.value.find((candidate) => candidate.id === tabId);
+    if (!currentEntry) {
+      data.dispose?.();
+      return;
+    }
+
+    const previousDispose = currentEntry.dispose;
+    previewTabs.value = previewTabs.value.map((candidate) => (
+      candidate.id === tabId
+        ? {
+            ...candidate,
+            componentProps: data.componentProps,
+            dispose: data.dispose,
+          }
+        : candidate
+    ));
+
+    // Allow mounted preview components to observe their new props before old
+    // PDF workers / object resources are released.
+    await nextTick();
+    try {
+      previousDispose?.();
+    } catch (disposeError) {
+      console.warn('[FileManager] Failed disposing previous preview resources after refresh', disposeError);
+    }
+  } catch (error) {
+    if (abortController.signal.aborted) return;
+    console.error('[FileManager] Failed refreshing preview data', error);
+    uiNotificationsStore.showError(t('fileManager.preview.refreshFailed'));
+  } finally {
+    if (previewRefreshControllers.get(tabId) === abortController) {
+      previewRefreshControllers.delete(tabId);
+      setPreviewRefreshing(tabId, false);
+    }
+  }
+};
+
 provide(filePreviewTabsContextKey, {
   tabs: previewTabDescriptors,
   activeTabId: computed(() => activePreviewId.value),
+  refreshingTabIds: computed(() => refreshingPreviewIds.value),
   activate: activatePreviewTab,
   close: closePreviewTab,
+  refresh: refreshPreviewTab,
   hide: hidePreview,
 });
 
@@ -558,19 +637,21 @@ const handleSort = (key: keyof FileListItem | 'type' | 'size' | 'mtime') => {
 
 
 // --- 列表项点击与选择逻辑 (使用 Composable) ---
-const buildInlinePreviewUrl = (filePath: string): string => {
+const buildInlinePreviewUrl = (filePath: string, refreshKey?: string): string => {
   const params = new URLSearchParams({
     connectionId: props.dbConnectionId,
     sessionId: effectiveSessionId.value,
     remotePath: filePath,
     disposition: 'inline',
   });
+  if (refreshKey) params.set('_previewRefresh', refreshKey);
   return `/api/v1/sftp/download?${params.toString()}`;
 };
 
-const fetchInlinePreview = async (filePath: string, signal: AbortSignal): Promise<Response> => {
-  const response = await fetch(buildInlinePreviewUrl(filePath), {
+const fetchInlinePreview = async (filePath: string, signal: AbortSignal, refreshKey?: string): Promise<Response> => {
+  const response = await fetch(buildInlinePreviewUrl(filePath, refreshKey), {
     credentials: 'same-origin',
+    cache: refreshKey ? 'no-store' : 'default',
     signal,
   });
 

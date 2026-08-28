@@ -23,6 +23,9 @@ let previouslyFocusedElement: HTMLElement | null = null;
 
 const tabs = computed(() => tabsContext?.tabs.value ?? []);
 const activeTabId = computed(() => tabsContext?.activeTabId.value ?? null);
+const isRefreshing = computed(() => Boolean(
+  tabsContext && activeTabId.value && tabsContext.refreshingTabIds.value.has(activeTabId.value)
+));
 const close = () => {
   if (tabsContext) {
     tabsContext.hide();
@@ -32,6 +35,10 @@ const close = () => {
 };
 
 const activateTab = (tabId: string) => tabsContext?.activate(tabId);
+const refreshCurrentTab = () => {
+  if (!tabsContext || !activeTabId.value || isRefreshing.value) return;
+  void tabsContext.refresh(activeTabId.value);
+};
 const closeTab = (event: MouseEvent, tabId: string) => {
   event.stopPropagation();
   tabsContext?.close(tabId);
@@ -122,6 +129,19 @@ onBeforeUnmount(() => {
             <div v-if="props.subtitle" class="truncate text-xs text-text-secondary">{{ props.subtitle }}</div>
           </div>
           <slot name="toolbar" />
+          <button
+            v-if="tabsContext"
+            type="button"
+            data-testid="file-preview-refresh"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-wait disabled:opacity-60"
+            :disabled="isRefreshing"
+            :aria-busy="isRefreshing"
+            :aria-label="t('fileManager.preview.refresh', 'Refresh preview')"
+            :title="t('fileManager.preview.refresh', 'Refresh preview')"
+            @click="refreshCurrentTab"
+          >
+            <i class="fas fa-rotate" :class="isRefreshing ? 'fa-spin' : ''" aria-hidden="true"></i>
+          </button>
           <button
             type="button"
             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-xl leading-none text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"

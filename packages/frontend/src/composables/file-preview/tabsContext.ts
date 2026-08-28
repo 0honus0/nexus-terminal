@@ -9,8 +9,10 @@ export interface FilePreviewTabDescriptor {
 export interface FilePreviewTabsContext {
   tabs: ComputedRef<FilePreviewTabDescriptor[]>;
   activeTabId: ComputedRef<string | null>;
+  refreshingTabIds: ComputedRef<ReadonlySet<string>>;
   activate(tabId: string): void;
   close(tabId: string): void;
+  refresh(tabId: string): Promise<void>;
   hide(): void;
 }
 

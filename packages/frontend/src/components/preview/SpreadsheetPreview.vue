@@ -121,13 +121,21 @@ const handleGridKeydown = (event: KeyboardEvent) => {
 };
 
 const selectSheet = (index: number) => {
+  if (index === activeIndex.value) return;
   activeIndex.value = index;
-};
-
-watch(activeIndex, () => {
   currentPage.value = 1;
   resetScroll();
   focusPreview();
+};
+
+watch(() => props.sheets, (nextSheets, previousSheets) => {
+  const previousName = previousSheets[activeIndex.value]?.name;
+  const matchingIndex = previousName
+    ? nextSheets.findIndex((sheet) => sheet.name === previousName)
+    : -1;
+  activeIndex.value = matchingIndex >= 0
+    ? matchingIndex
+    : Math.min(activeIndex.value, Math.max(0, nextSheets.length - 1));
 });
 
 watch(pageCount, (count) => {

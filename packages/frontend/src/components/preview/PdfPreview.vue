@@ -161,6 +161,14 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 watch([currentPage, zoomPercent, fitWidth], scheduleRender);
 
+watch(() => props.document, () => {
+  renderToken += 1;
+  renderTask?.cancel();
+  renderTask = null;
+  currentPage.value = clampPage(currentPage.value);
+  scheduleRender();
+});
+
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => {
     if (fitWidth.value) scheduleRender();

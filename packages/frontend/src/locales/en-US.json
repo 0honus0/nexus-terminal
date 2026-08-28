@@ -507,6 +507,8 @@
     "preview": {
       "loading": "Loading preview...",
       "loadFailed": "Failed to load file preview.",
+      "refresh": "Refresh preview",
+      "refreshFailed": "Failed to refresh file preview. The previous preview is still available.",
       "imageLoadFailed": "The image could not be displayed.",
       "fileTooLarge": "File is too large for inline preview (maximum {size}).",
       "close": "Close preview",

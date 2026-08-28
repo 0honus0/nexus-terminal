@@ -128,7 +128,7 @@ function statusForError(error) {
   return STATUS_CODE.FAILURE;
 }
 
-async function writeXlsxFixture(destination) {
+async function writeXlsxFixture(destination, variant = 'default') {
   const columnName = (index) => {
     let value = index + 1;
     let result = '';
@@ -146,12 +146,12 @@ async function writeXlsxFixture(destination) {
       for (let column = 0; column < columns; column += 1) {
         const ref = `${columnName(column)}${row}`;
         let value = `${sheetLabel}-${ref}`;
-        if (sheetLabel === 'E2E' && ref === 'A2') value = 'Nexus XLSX E2E';
+        if (sheetLabel === 'E2E' && ref === 'A2') value = variant === 'refresh' ? 'Nexus XLSX Refreshed' : 'Nexus XLSX E2E';
         if (sheetLabel === 'E2E' && ref === 'B2') {
           cells.push(`<c r="${ref}"><v>2026</v></c>`);
           continue;
         }
-        if (sheetLabel === 'Second' && ref === 'A1') value = 'Second Sheet E2E';
+        if (sheetLabel === 'Second' && ref === 'A1') value = variant === 'refresh' ? 'Second Sheet Refreshed' : 'Second Sheet E2E';
         cells.push(`<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`);
       }
       rowXml.push(`<row r="${row}">${cells.join('')}</row>`);
@@ -210,7 +210,7 @@ async function writeXlsxFixture(destination) {
   });
 }
 
-async function writeDocxFixture(destination) {
+async function writeDocxFixture(destination, variant = 'default') {
   await new Promise((resolve, reject) => {
     const output = createWriteStream(destination);
     const archive = new ZipArchive({ zlib: { level: 9 } });
@@ -239,8 +239,8 @@ async function writeDocxFixture(destination) {
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
       + '<w:body>'
-      + '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Nexus DOCX E2E</w:t></w:r></w:p>'
-      + '<w:p><w:r><w:t>DOCX preview tabs preserve document content.</w:t></w:r></w:p>'
+      + `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>`
+      + `<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>`
       + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
       + '</w:body></w:document>',
       { name: 'word/document.xml' },
@@ -265,7 +265,7 @@ async function writeDocxFixture(destination) {
   });
 }
 
-async function writePdfFixture(destination) {
+async function writePdfFixture(destination, variant = 'default') {
   const escapePdfText = (value) => value.replace(/([\\()])/g, '\\$1');
   const streamObject = (content) => {
     const length = Buffer.byteLength(content, 'latin1');
@@ -287,13 +287,13 @@ async function writePdfFixture(destination) {
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 8 0 R >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> >> /Contents 9 0 R >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    pageStream('Nexus PDF E2E', 'Introduction page'),
-    pageStream('Second Chapter', 'Outline navigation target'),
-    pageStream('Details', 'Nested outline target'),
+    pageStream(variant === 'refresh' ? 'Nexus PDF Refreshed' : 'Nexus PDF E2E', 'Introduction page'),
+    pageStream(variant === 'refresh' ? 'Second Chapter Refreshed' : 'Second Chapter', 'Outline navigation target'),
+    pageStream(variant === 'refresh' ? 'Details Refreshed' : 'Details', 'Nested outline target'),
     '<< /Type /Outlines /First 11 0 R /Last 12 0 R /Count 3 >>',
-    '<< /Title (Introduction) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit] >>',
-    '<< /Title (Second Chapter) /Parent 10 0 R /Prev 11 0 R /First 13 0 R /Last 13 0 R /Count 1 /Dest [4 0 R /Fit] >>',
-    '<< /Title (Details) /Parent 12 0 R /Dest [5 0 R /Fit] >>',
+    `<< /Title (${variant === 'refresh' ? 'Introduction Refreshed' : 'Introduction'}) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit] >>`,
+    `<< /Title (${variant === 'refresh' ? 'Second Chapter Refreshed' : 'Second Chapter'}) /Parent 10 0 R /Prev 11 0 R /First 13 0 R /Last 13 0 R /Count 1 /Dest [4 0 R /Fit] >>`,
+    `<< /Title (${variant === 'refresh' ? 'Details Refreshed' : 'Details'}) /Parent 12 0 R /Dest [5 0 R /Fit] >>`,
   ];
 
   let pdf = '%PDF-1.7\n%âãÏÓ\n';
@@ -962,9 +962,23 @@ const controlServer = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && requestUrl.pathname === '/fixture') {
       const name = path.basename(requestUrl.searchParams.get('name') || 'external-refresh.txt');
+      const variant = String(requestUrl.searchParams.get('variant') || '');
       const requestedSize = Number(requestUrl.searchParams.get('size') || '0');
       const size = Number.isFinite(requestedSize) ? Math.max(0, Math.min(32 * 1024 * 1024, Math.round(requestedSize))) : 0;
-      if (size > 0) {
+      if (variant === 'refresh' && name === 'README-e2e.md') {
+        await fsp.writeFile(path.join(rootDir, name), '# Nexus Markdown Refreshed\n\n**force-refresh-ok**\n', 'utf8');
+      } else if (variant === 'refresh' && name === 'preview.xlsx') {
+        await writeXlsxFixture(path.join(rootDir, name), 'refresh');
+      } else if (variant === 'refresh' && name === 'preview.docx') {
+        await writeDocxFixture(path.join(rootDir, name), 'refresh');
+      } else if (variant === 'refresh' && name === 'preview.pdf') {
+        await writePdfFixture(path.join(rootDir, name), 'refresh');
+      } else if (variant === 'refresh' && name === '预览-测试.png') {
+        await fsp.writeFile(
+          path.join(rootDir, name),
+          Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DA8J8BAAf/Af8Bf4mnAAAAAElFTkSuQmCC', 'base64'),
+        );
+      } else if (size > 0) {
         await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
       } else {
         await fsp.writeFile(path.join(rootDir, name), 'created outside Nexus for refresh verification\n', 'utf8');
