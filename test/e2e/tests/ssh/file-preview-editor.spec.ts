@@ -372,8 +372,9 @@ test('hovering lazy preview formats prewarms their code without downloading remo
     if (url.includes('/api/v1/sftp/download?')) remotePreviewRequests.push(url);
   });
 
+  await page.evaluate(() => performance.clearResourceTimings());
+
   const expectWarmResource = async (filename: string, resourcePattern: string) => {
-    await page.evaluate(() => performance.clearResourceTimings());
     await row(page, filename).hover();
     await expect.poll(async () => page.evaluate((patternSource) => {
       const pattern = new RegExp(patternSource, 'i');
