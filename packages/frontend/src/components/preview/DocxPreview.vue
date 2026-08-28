@@ -58,6 +58,14 @@ onMounted(() => {
 watch(() => props.active, (active) => {
   if (active && !rendered) void nextTick(renderDocument);
 });
+
+watch(() => props.buffer, () => {
+  renderToken += 1;
+  rendered = false;
+  renderError.value = '';
+  if (containerRef.value) containerRef.value.replaceChildren();
+  if (props.active) void nextTick(renderDocument);
+});
 </script>
 
 <template>

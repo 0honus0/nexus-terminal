@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
@@ -19,6 +19,11 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const isLoading = ref(true);
 const hasError = ref(false);
+
+watch(() => props.src, () => {
+  isLoading.value = true;
+  hasError.value = false;
+});
 </script>
 
 <template>

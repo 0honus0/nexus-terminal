@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 
 const props = defineProps<{
@@ -16,6 +16,7 @@ const rootRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 let observer: IntersectionObserver | null = null;
 let renderTask: RenderTask | null = null;
+let renderToken = 0;
 let rendered = false;
 let disposed = false;
 
@@ -23,9 +24,10 @@ const render = async () => {
   if (rendered || disposed) return;
   const canvas = canvasRef.value;
   if (!canvas) return;
+  const token = ++renderToken;
 
   const page = await props.document.getPage(props.pageNumber);
-  if (disposed) return;
+  if (disposed || token !== renderToken) return;
   const baseViewport = page.getViewport({ scale: 1 });
   const targetWidth = 116;
   const scale = targetWidth / baseViewport.width;
@@ -37,24 +39,27 @@ const render = async () => {
   canvas.style.width = `${Math.round(viewport.width)}px`;
   canvas.style.height = `${Math.round(viewport.height)}px`;
 
-  renderTask = page.render({
+  const task = page.render({
     canvas,
     viewport,
     transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
   });
+  renderTask = task;
 
   try {
-    await renderTask.promise;
-    rendered = true;
+    await task.promise;
+    if (token === renderToken) rendered = true;
   } catch (error: any) {
     if (error?.name !== 'RenderingCancelledException' && !disposed) throw error;
   } finally {
-    renderTask = null;
+    if (token === renderToken) renderTask = null;
     page.cleanup();
   }
 };
 
-onMounted(() => {
+const observeOrRender = () => {
+  observer?.disconnect();
+  observer = null;
   if (!('IntersectionObserver' in window)) {
     void render();
     return;
@@ -69,10 +74,26 @@ onMounted(() => {
   }, { rootMargin: '160px' });
 
   if (rootRef.value) observer.observe(rootRef.value);
+};
+
+onMounted(observeOrRender);
+
+watch(() => props.document, () => {
+  renderToken += 1;
+  renderTask?.cancel();
+  renderTask = null;
+  rendered = false;
+  const canvas = canvasRef.value;
+  if (canvas) {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+  observeOrRender();
 });
 
 onBeforeUnmount(() => {
   disposed = true;
+  renderToken += 1;
   observer?.disconnect();
   observer = null;
   renderTask?.cancel();

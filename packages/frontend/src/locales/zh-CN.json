@@ -508,6 +508,8 @@
     "preview": {
       "loading": "正在加载预览...",
       "loadFailed": "文件预览加载失败。",
+      "refresh": "刷新预览",
+      "refreshFailed": "文件预览刷新失败，已保留刷新前的预览内容。",
       "imageLoadFailed": "图片无法显示。",
       "fileTooLarge": "文件过大，无法进行内联预览（最大 {size}）。",
       "close": "关闭预览",
