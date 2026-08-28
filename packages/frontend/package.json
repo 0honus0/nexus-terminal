@@ -50,6 +50,7 @@
     "buffer": "^6.0.3",
     "chart.js": "^4.5.1",
     "date-fns": "^4.4.0",
+    "docx-preview": "0.4.0",
     "dompurify": "^3.4.14",
     "element-plus": "^2.14.5",
     "guacamole-common-js": "^1.5.0",

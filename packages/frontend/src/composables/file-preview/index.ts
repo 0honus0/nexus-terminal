@@ -3,6 +3,7 @@ import { imagePreviewProvider } from './providers/imagePreviewProvider';
 import { markdownPreviewProvider } from './providers/markdownPreviewProvider';
 import { pdfPreviewProvider } from './providers/pdfPreviewProvider';
 import { spreadsheetPreviewProvider } from './providers/spreadsheetPreviewProvider';
+import { docxPreviewProvider } from './providers/docxPreviewProvider';
 
 let initialized = false;
 
@@ -15,6 +16,7 @@ export function initFilePreviewProviders() {
   registerFilePreviewProvider(imagePreviewProvider);
   registerFilePreviewProvider(markdownPreviewProvider);
   registerFilePreviewProvider(pdfPreviewProvider);
+  registerFilePreviewProvider(docxPreviewProvider);
   registerFilePreviewProvider(spreadsheetPreviewProvider);
   initialized = true;
 }
