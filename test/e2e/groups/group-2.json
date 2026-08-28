@@ -8,6 +8,7 @@
     "tests/ssh/connection.spec.ts",
     "tests/ssh/reconnect-ui.spec.ts",
     "tests/ssh/progress-display-archive.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts",
     "tests/websocket/authenticated-session.spec.ts"
   ]
 }
