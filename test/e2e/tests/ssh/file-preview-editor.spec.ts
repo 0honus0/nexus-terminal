@@ -395,7 +395,7 @@ test('hovering lazy preview formats prewarms their code without downloading remo
   });
 
   await step('Markdown parser begins loading on row hover', async () => {
-    await expectWarmResource('README-e2e.md', '(?:marked\\.esm|purify\\.es)');
+    await expectWarmResource('README-e2e.md', '(?:/marked\\.js|/dompurify\\.js|marked\\.esm|purify\\.es)');
   });
 
   expect(remotePreviewRequests).toEqual([]);
