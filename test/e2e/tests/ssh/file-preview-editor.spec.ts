@@ -349,6 +349,57 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
   });
 });
 
+test('PDF XLSX and DOCX previews expose synchronized bottom horizontal scrollbars', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+  await page.setViewportSize({ width: 760, height: 860 });
+
+  const dragBottomScrollbar = async (dialog: Locator, scrollbarTestId: string, scrollerTestId: string) => {
+    const scrollbar = dialog.getByTestId(scrollbarTestId);
+    const scroller = dialog.getByTestId(scrollerTestId);
+    await expect(scrollbar).toBeVisible();
+    await expect.poll(() => scrollbar.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await scrollbar.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth;
+      element.dispatchEvent(new Event('scroll'));
+    });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  };
+
+  await slowStep('PDF keeps a bottom scrollbar available when zoomed wider than the viewport', async () => {
+    const filename = 'preview.pdf';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
+    await dragBottomScrollbar(dialog, 'pdf-horizontal-scrollbar', 'pdf-page-scroller');
+    await closePreview(page, filename);
+  });
+
+  await slowStep('XLSX keeps a bottom scrollbar visible below the paginated grid', async () => {
+    const filename = 'preview.xlsx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
+    await dragBottomScrollbar(dialog, 'spreadsheet-horizontal-scrollbar', 'spreadsheet-scroll-container');
+    await captureFunctionalScreenshot(page, 'file-manager-preview-horizontal-scroll.png', { viewport: { width: 760, height: 860 } });
+    await closePreview(page, filename);
+  });
+
+  await slowStep('DOCX keeps a bottom scrollbar available for page content wider than the viewport', async () => {
+    const filename = 'preview.docx';
+    await row(page, filename).dblclick();
+    const dialog = page.getByRole('dialog', { name: filename });
+    await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await dragBottomScrollbar(dialog, 'docx-horizontal-scrollbar', 'docx-preview-scroller');
+  });
+});
+
 test('preview tabs force refresh externally changed Markdown image PDF XLSX and DOCX files', async ({ page, context }) => {
   test.setTimeout(120_000);
   await loginAsInitialAdmin(context.request);

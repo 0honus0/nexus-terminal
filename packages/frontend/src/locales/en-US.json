@@ -509,6 +509,7 @@
       "loadFailed": "Failed to load file preview.",
       "refresh": "Refresh preview",
       "refreshFailed": "Failed to refresh file preview. The previous preview is still available.",
+      "horizontalScroll": "Horizontal scroll",
       "imageLoadFailed": "The image could not be displayed.",
       "fileTooLarge": "File is too large for inline preview (maximum {size}).",
       "close": "Close preview",
