@@ -40,6 +40,13 @@ export interface FilePreviewProvider {
   maxInlineSize?: number;
 
   canPreview(file: FileListItem): boolean;
+
+  /**
+   * 可选的纯代码预热钩子。不得读取远程文件；用于在用户 hover/首次点击时提前加载
+   * 大型解析器或异步预览组件，从而缩短真正打开文件时的等待时间。
+   */
+  preload?(): Promise<void> | void;
+
   preview(file: FileListItem): Component;
   load(file: FileListItem, context: FilePreviewContext): Promise<FilePreviewData> | FilePreviewData;
 }

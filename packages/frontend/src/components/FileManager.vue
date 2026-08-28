@@ -27,7 +27,7 @@ import { usePathHistoryStore } from '../stores/pathHistory.store';
 import FavoritePathsModal from './FavoritePathsModal.vue';
 import ArchiveProgressPopup from './ArchiveProgressPopup.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
-import { resolveFilePreviewProvider } from '../composables/file-preview/registry';
+import { preloadFilePreviewProvider, resolveFilePreviewProvider } from '../composables/file-preview/registry';
 import { filePreviewTabsContextKey } from '../composables/file-preview/tabsContext';
 import { createWheelScaleResolver } from '@/foundation/interaction/wheelScale';
 import { createLatestValueSaver } from '@/foundation/async/latestValueSaver';
@@ -158,6 +158,14 @@ const closeAllPreviews = () => {
   previewWorkspaceVisible.value = false;
 };
 
+const handlePreviewCloseButton = () => {
+  if (settingsStore.clearFileEditorTabsOnCloseBoolean) {
+    closeAllPreviews();
+    return;
+  }
+  hidePreview();
+};
+
 const refreshPreviewTab = async (tabId: string): Promise<void> => {
   const entry = previewTabs.value.find((candidate) => candidate.id === tabId);
   if (!entry || previewRefreshControllers.has(tabId)) return;
@@ -228,6 +236,7 @@ provide(filePreviewTabsContextKey, {
   close: closePreviewTab,
   refresh: refreshPreviewTab,
   hide: hidePreview,
+  closeWorkspace: handlePreviewCloseButton,
 });
 
 const pendingPathResolutionCleanups = new Set<() => void>();
@@ -908,8 +917,14 @@ const {
 
 let suppressClickAfterLongPress = false;
 
+const prewarmPreview = (item: FileListItem) => {
+  if (!item.attrs.isFile && !item.attrs.isSymbolicLink) return;
+  void preloadFilePreviewProvider(item);
+};
+
 // 自定义 handleItemClick 函数以支持移动端多选模式
 const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect = false) => {
+  prewarmPreview(item);
   if (props.isMobile && suppressClickAfterLongPress) {
     suppressClickAfterLongPress = false;
     event.preventDefault();
@@ -2749,6 +2764,7 @@ const handleOpenEditorClick = () => {
             <tr v-for="(item, index) in virtualFileList"
                 :key="item.filename"
                 :draggable="!props.isMobile && item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
+                @pointerenter="prewarmPreview(item)"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
                 @dblclick="handleItemDoubleClick($event, item)"
                 @pointerdown.stop="handleMobileContextPointerStart($event, item)"
@@ -2873,7 +2889,7 @@ const handleOpenEditorClick = () => {
        <button
          type="button"
          :aria-label="t('fileManager.preview.close')"
-         @click="hidePreview"
+         @click="handlePreviewCloseButton"
        >×</button>
      </div>
    </div>
@@ -2885,7 +2901,7 @@ const handleOpenEditorClick = () => {
      :file="entry.file"
      :active="previewWorkspaceVisible && entry.id === activePreviewId"
      v-bind="entry.componentProps"
-     @close="hidePreview"
+     @close="handlePreviewCloseButton"
      @edit="editPreviewTab(entry.id)"
    />
 

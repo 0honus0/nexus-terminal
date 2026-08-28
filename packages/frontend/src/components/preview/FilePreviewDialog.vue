@@ -26,9 +26,17 @@ const activeTabId = computed(() => tabsContext?.activeTabId.value ?? null);
 const isRefreshing = computed(() => Boolean(
   tabsContext && activeTabId.value && tabsContext.refreshingTabIds.value.has(activeTabId.value)
 ));
-const close = () => {
+const hide = () => {
   if (tabsContext) {
     tabsContext.hide();
+    return;
+  }
+  emit('close');
+};
+
+const close = () => {
+  if (tabsContext) {
+    tabsContext.closeWorkspace();
     return;
   }
   emit('close');
@@ -54,7 +62,7 @@ const handleKeydown = (event: KeyboardEvent) => {
   if (!props.active) return;
   if (event.key === 'Escape') {
     event.preventDefault();
-    close();
+    hide();
   }
 };
 
@@ -86,7 +94,7 @@ onBeforeUnmount(() => {
       aria-modal="true"
       :aria-label="props.file.filename"
       tabindex="-1"
-      @click.self="close"
+      @click.self="hide"
     >
       <section class="flex h-full max-h-[94vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-2xl">
         <div
