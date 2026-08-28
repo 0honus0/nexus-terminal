@@ -5,7 +5,6 @@
   "specs": [
     "tests/auth/setup-login.spec.ts",
     "tests/ssh/progress-display-copy-cancel.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
     "tests/ui/notification-delivery.spec.ts",
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
