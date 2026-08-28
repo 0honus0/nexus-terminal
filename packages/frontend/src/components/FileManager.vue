@@ -1195,50 +1195,55 @@ const handlePaste = async () => {
 const triggerFileUpload = () => { fileInputRef.value?.click(); };
 
 // --- 下载触发器 (定义在此处，供 Composable 使用) ---
-const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileListItem 数组
-    // 恢复使用 props.wsDeps.isConnected
-    if (!props.wsDeps.isConnected.value) {
-        return;
-    }
-    // connectionId 仍然从 props 获取
+const triggerDownload = (items: FileListItem[]) => {
+    if (!props.wsDeps.isConnected.value) return;
     const currentConnectionId = props.dbConnectionId;
+    const manager = currentSftpManager.value;
+    const sessionId = effectiveSessionId.value;
     if (!currentConnectionId) {
         console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot download: Missing connection ID.`);
         return;
     }
-    // 修改：简化检查
-    if (!currentSftpManager.value) {
+    if (!manager) {
         console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Cannot download: SFTP manager is not available.`);
         return;
     }
 
-    // 遍历数组中的每个文件项
-    items.forEach(item => {
-        // 确保只下载文件
+    for (const item of items) {
         if (!item.attrs.isFile && !item.attrs.isSymbolicLink) {
             console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Skipping download for non-file item: ${item.filename}`);
-            return;
+            continue;
         }
 
-        const downloadPath = currentSftpManager.value!.joinPath(currentSftpManager.value!.currentPath.value, item.filename);
-        const downloadUrl = `/api/v1/sftp/download?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(effectiveSessionId.value)}&remotePath=${encodeURIComponent(downloadPath)}`;
-        console.log(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`);
+        const downloadPath = manager.joinPath(manager.currentPath.value, item.filename);
+        void (async () => {
+            try {
+                const response = await fetch('/api/v1/sftp/download-ticket', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        connectionId: currentConnectionId,
+                        sessionId,
+                        remotePath: downloadPath,
+                    }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const payload = await response.json() as { url?: string };
+                if (!payload.url) throw new Error('Download ticket response did not include a URL.');
 
-        // 为每个文件创建一个链接并点击
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        // --- 修正：移除文件名中的双引号以兼容 Chrome ---
-        const safeFilename = item.filename.replace(/"/g, ''); // 移除所有双引号
-        link.setAttribute('download', safeFilename);
-        // --- 结束修正 ---
-        document.body.appendChild(link);
-        link.click();
-
-        // 稍微延迟移除链接，以确保下载开始
-        setTimeout(() => {
-            document.body.removeChild(link);
-        }, 100);
-    });
+                const link = document.createElement('a');
+                link.href = payload.url;
+                link.setAttribute('download', item.filename.replace(/"/g, ''));
+                document.body.appendChild(link);
+                link.click();
+                window.setTimeout(() => link.remove(), 100);
+            } catch (error) {
+                console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Failed to create download ticket for ${item.filename}:`, error);
+                uiNotificationsStore.showError(t('fileManager.errors.downloadFailed', 'Failed to start download'));
+            }
+        })();
+    }
 };
 
 
@@ -1669,7 +1674,10 @@ const handleFileListKeydown = (event: KeyboardEvent) => {
 // 修改：监听 manager 的 currentPath
 watch(() => currentSftpManager.value?.currentPath.value, () => {
     cancelPendingPathResolutions();
-    closeAllPreviews();
+    // Navigating folders must not destroy already-open preview tabs. Only cancel
+    // a preview that is still loading; loaded previews remain switchable just
+    // like file-editor tabs.
+    cancelPendingPreviewLoad();
     selectedIndex.value = -1;
     clearSelection();
     resetFileListScroll();
