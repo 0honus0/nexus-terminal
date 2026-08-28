@@ -6,6 +6,7 @@ import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
 import PdfOutlineItems, { type PdfOutlineItem } from './PdfOutlineItems.vue';
 import PdfThumbnail from './PdfThumbnail.vue';
+import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 
 const props = withDefaults(defineProps<{
   file: FileListItem;
@@ -313,22 +314,31 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
-      <main
-        ref="mainScrollerRef"
-        class="min-h-0 flex-1 overflow-auto bg-black/15 p-6"
-      >
-        <div class="flex min-h-full min-w-full items-start justify-center">
-          <div
-            :data-testid="`pdf-page-${currentPage}`"
-            class="bg-white shadow-xl"
-          >
-            <canvas
-              ref="mainCanvasRef"
-              class="block bg-white"
-            />
+      <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main
+          ref="mainScrollerRef"
+          data-testid="pdf-page-scroller"
+          class="min-h-0 flex-1 overflow-auto bg-black/15 p-6"
+        >
+          <div class="flex min-h-full min-w-full items-start justify-center">
+            <div
+              :data-testid="`pdf-page-${currentPage}`"
+              class="bg-white shadow-xl"
+            >
+              <canvas
+                ref="mainCanvasRef"
+                class="block bg-white"
+              />
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+        <PreviewHorizontalScrollbar
+          :target="mainScrollerRef"
+          test-id="pdf-horizontal-scrollbar"
+          :active="props.active"
+          :label="t('fileManager.preview.horizontalScroll', 'Horizontal scroll')"
+        />
+      </div>
     </div>
   </FilePreviewDialog>
 </template>

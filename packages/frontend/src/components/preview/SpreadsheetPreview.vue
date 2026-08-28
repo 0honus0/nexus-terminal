@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
+import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 
 interface SpreadsheetPage {
   rows: unknown[][];
@@ -288,6 +289,13 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           {{ sheet.name }}
         </button>
       </div>
+
+      <PreviewHorizontalScrollbar
+        :target="scrollContainerRef"
+        test-id="spreadsheet-horizontal-scrollbar"
+        :active="props.active"
+        :label="t('fileManager.preview.horizontalScroll', 'Horizontal scroll')"
+      />
     </div>
   </FilePreviewDialog>
 </template>

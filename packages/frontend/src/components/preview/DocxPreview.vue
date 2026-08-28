@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { renderAsync } from 'docx-preview';
 import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
+import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 
 const props = withDefaults(defineProps<{
   file: FileListItem;
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const scrollerRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const isRendering = ref(true);
 const renderError = ref('');
@@ -75,23 +77,36 @@ watch(() => props.buffer, () => {
     :active="props.active"
     @close="emit('close')"
   >
-    <div class="relative h-full min-h-[18rem] overflow-auto bg-black/10 p-3 md:p-6" data-testid="docx-preview">
+    <div class="flex h-full min-h-[18rem] flex-col overflow-hidden" data-testid="docx-preview">
       <div
-        v-if="isRendering"
-        class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/80 text-sm text-text-secondary"
-        aria-live="polite"
+        ref="scrollerRef"
+        data-testid="docx-preview-scroller"
+        class="relative min-h-0 flex-1 overflow-auto bg-black/10 p-3 md:p-6"
       >
-        <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-        <span>{{ t('fileManager.preview.loading', 'Loading preview...') }}</span>
+        <div
+          v-if="isRendering"
+          class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/80 text-sm text-text-secondary"
+          aria-live="polite"
+        >
+          <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+          <span>{{ t('fileManager.preview.loading', 'Loading preview...') }}</span>
+        </div>
+        <div
+          v-if="renderError"
+          class="mx-auto max-w-xl rounded-md border border-error/40 bg-error/10 p-4 text-sm text-error"
+          role="alert"
+        >
+          {{ renderError }}
+        </div>
+        <div ref="containerRef" class="docx-preview-host" />
       </div>
-      <div
-        v-if="renderError"
-        class="mx-auto max-w-xl rounded-md border border-error/40 bg-error/10 p-4 text-sm text-error"
-        role="alert"
-      >
-        {{ renderError }}
-      </div>
-      <div ref="containerRef" class="docx-preview-host" />
+
+      <PreviewHorizontalScrollbar
+        :target="scrollerRef"
+        test-id="docx-horizontal-scrollbar"
+        :active="props.active"
+        :label="t('fileManager.preview.horizontalScroll', 'Horizontal scroll')"
+      />
     </div>
   </FilePreviewDialog>
 </template>
