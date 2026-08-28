@@ -379,7 +379,24 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
     for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
-    await dragBottomScrollbar(dialog, 'pdf-horizontal-scrollbar', 'pdf-page-scroller');
+    const { scroller } = await dragBottomScrollbar(dialog, 'pdf-horizontal-scrollbar', 'pdf-page-scroller');
+    await scroller.evaluate((element) => { element.scrollLeft = 0; });
+    const geometry = await scroller.evaluate((element) => {
+      const pageElement = element.querySelector<HTMLElement>('[data-testid^="pdf-page-"]');
+      if (!pageElement) throw new Error('PDF page element is missing');
+      const scrollerStyle = getComputedStyle(element);
+      const scrollerRect = element.getBoundingClientRect();
+      const pageRect = pageElement.getBoundingClientRect();
+      return {
+        scrollWidth: element.scrollWidth,
+        pageWidth: pageRect.width,
+        horizontalPadding: Number.parseFloat(scrollerStyle.paddingLeft) + Number.parseFloat(scrollerStyle.paddingRight),
+        pageLeft: pageRect.left,
+        scrollerLeft: scrollerRect.left,
+      };
+    });
+    expect(geometry.scrollWidth).toBeGreaterThanOrEqual(Math.floor(geometry.pageWidth + geometry.horizontalPadding) - 2);
+    expect(geometry.pageLeft).toBeGreaterThanOrEqual(geometry.scrollerLeft - 1);
     await closePreview(page, filename);
   });
 
