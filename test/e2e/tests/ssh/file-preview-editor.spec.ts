@@ -305,7 +305,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await dialog.getByTestId('pdf-next-page').click();
+    await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
     await closePreview(page, filename);
   });
