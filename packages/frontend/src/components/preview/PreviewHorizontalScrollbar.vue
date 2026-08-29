@@ -20,6 +20,16 @@ let observedTarget: HTMLElement | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let mutationObserver: MutationObserver | null = null;
 let refreshFrame = 0;
+let previousTouchAction = '';
+let previousOverscrollBehaviorX = '';
+let touchGesture: {
+  identifier: number;
+  startX: number;
+  startY: number;
+  startScrollLeft: number;
+  startScrollTop: number;
+  horizontalPanActive: boolean;
+} | null = null;
 
 const syncTrackFromTarget = () => {
   if (!observedTarget || !trackRef.value) return;
@@ -53,6 +63,58 @@ const handleTrackScroll = () => {
   observedTarget.scrollLeft = trackRef.value.scrollLeft;
 };
 
+const findGestureTouch = (event: TouchEvent): Touch | null => {
+  if (!touchGesture) return null;
+  for (const touch of Array.from(event.touches)) {
+    if (touch.identifier === touchGesture.identifier) return touch;
+  }
+  return null;
+};
+
+const handleTargetTouchStart = (event: TouchEvent) => {
+  if (!observedTarget || event.touches.length !== 1) {
+    touchGesture = null;
+    return;
+  }
+
+  const touch = event.touches[0];
+  touchGesture = {
+    identifier: touch.identifier,
+    startX: touch.clientX,
+    startY: touch.clientY,
+    startScrollLeft: observedTarget.scrollLeft,
+    startScrollTop: observedTarget.scrollTop,
+    horizontalPanActive: false,
+  };
+};
+
+const handleTargetTouchMove = (event: TouchEvent) => {
+  if (!observedTarget || !touchGesture) return;
+  const touch = findGestureTouch(event);
+  if (!touch) return;
+
+  const deltaX = touch.clientX - touchGesture.startX;
+  const deltaY = touch.clientY - touchGesture.startY;
+  if (!touchGesture.horizontalPanActive) {
+    if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    if (observedTarget.scrollWidth <= observedTarget.clientWidth + 1) return;
+    touchGesture.horizontalPanActive = true;
+  }
+
+  // The preview content deliberately hides its native horizontal scrollbar on
+  // desktop. On touch devices that also removes the browser's horizontal pan
+  // affordance, so mirror the finger movement into the real scroll target.
+  event.preventDefault();
+  observedTarget.scrollLeft = touchGesture.startScrollLeft - deltaX;
+  observedTarget.scrollTop = touchGesture.startScrollTop - deltaY;
+  syncTrackFromTarget();
+};
+
+const clearTargetTouchGesture = () => {
+  touchGesture = null;
+};
+
 const observeTargetChildren = () => {
   if (!resizeObserver || !observedTarget) return;
   for (const child of Array.from(observedTarget.children)) resizeObserver.observe(child);
@@ -60,11 +122,20 @@ const observeTargetChildren = () => {
 
 const detachTarget = () => {
   observedTarget?.removeEventListener('scroll', handleTargetScroll);
+  observedTarget?.removeEventListener('touchstart', handleTargetTouchStart);
+  observedTarget?.removeEventListener('touchmove', handleTargetTouchMove);
+  observedTarget?.removeEventListener('touchend', clearTargetTouchGesture);
+  observedTarget?.removeEventListener('touchcancel', clearTargetTouchGesture);
+  if (observedTarget) {
+    observedTarget.style.touchAction = previousTouchAction;
+    observedTarget.style.overscrollBehaviorX = previousOverscrollBehaviorX;
+  }
   window.removeEventListener('resize', queueRefresh);
   resizeObserver?.disconnect();
   mutationObserver?.disconnect();
   resizeObserver = null;
   mutationObserver = null;
+  touchGesture = null;
   observedTarget = null;
 };
 
@@ -76,7 +147,15 @@ const attachTarget = (target: HTMLElement | null) => {
     return;
   }
 
+  previousTouchAction = target.style.touchAction;
+  previousOverscrollBehaviorX = target.style.overscrollBehaviorX;
+  target.style.touchAction = 'pan-y';
+  target.style.overscrollBehaviorX = 'contain';
   target.addEventListener('scroll', handleTargetScroll, { passive: true });
+  target.addEventListener('touchstart', handleTargetTouchStart, { passive: true });
+  target.addEventListener('touchmove', handleTargetTouchMove, { passive: false });
+  target.addEventListener('touchend', clearTargetTouchGesture, { passive: true });
+  target.addEventListener('touchcancel', clearTargetTouchGesture, { passive: true });
   window.addEventListener('resize', queueRefresh, { passive: true });
 
   resizeObserver = new ResizeObserver(queueRefresh);

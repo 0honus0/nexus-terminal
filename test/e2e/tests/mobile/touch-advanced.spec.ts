@@ -70,6 +70,54 @@ function expectBoxInsideViewport(box: { x: number; y: number; width: number; hei
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
 }
 
+async function dragPreviewWithTouch(
+  target: Locator,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> {
+  await target.evaluate((element, points) => {
+    const makeTouch = (point: { x: number; y: number }) => new Touch({
+      identifier: 1,
+      target: element,
+      clientX: point.x,
+      clientY: point.y,
+      screenX: point.x,
+      screenY: point.y,
+      pageX: point.x,
+      pageY: point.y,
+      radiusX: 1,
+      radiusY: 1,
+      force: 1,
+    });
+
+    const startTouch = makeTouch(points.from);
+    element.dispatchEvent(new TouchEvent('touchstart', {
+      bubbles: true,
+      cancelable: true,
+      touches: [startTouch],
+      targetTouches: [startTouch],
+      changedTouches: [startTouch],
+    }));
+
+    const moveTouch = makeTouch(points.to);
+    element.dispatchEvent(new TouchEvent('touchmove', {
+      bubbles: true,
+      cancelable: true,
+      touches: [moveTouch],
+      targetTouches: [moveTouch],
+      changedTouches: [moveTouch],
+    }));
+
+    element.dispatchEvent(new TouchEvent('touchend', {
+      bubbles: true,
+      cancelable: true,
+      touches: [],
+      targetTouches: [],
+      changedTouches: [moveTouch],
+    }));
+  }, { from, to });
+}
+
 test('mobile long-press menu flattens archive actions and creates a real ZIP', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
@@ -296,6 +344,13 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
 
     await scroller.evaluate((element) => {
+      element.scrollLeft = 0;
+      element.scrollTop = 0;
+    });
+    await dragPreviewWithTouch(scroller, { x: 280, y: 180 }, { x: 90, y: 170 });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+
+    await scroller.evaluate((element) => {
       element.scrollLeft = element.scrollWidth;
       element.scrollTop = element.scrollHeight;
     });
@@ -309,6 +364,53 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
     await captureFunctionalScreenshot(page, 'mobile-spreadsheet-preview.png');
   });
+});
+
+test('mobile PDF preview touch-pans zoomed document content', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+
+  const filename = 'preview.pdf';
+  await fileManagerRow(page, filename).click();
+  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+
+  await dialog.getByTestId('pdf-zoom-in').evaluate((button) => (button as HTMLButtonElement).click());
+  const scroller = dialog.getByTestId('pdf-page-scroller');
+  await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
+  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await dragPreviewWithTouch(scroller, { x: 185, y: 220 }, { x: 75, y: 212 });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+});
+
+test('mobile preview close button clears cached state when close-cache behavior is enabled', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', {
+    data: { clearFileEditorTabsOnClose: 'true' },
+  })).ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const filename = 'preview.xlsx';
+  await fileManagerRow(page, filename).click();
+  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  await dialog.getByTestId('spreadsheet-sheet-1').click();
+  await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+
+  await dialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  await fileManagerRow(page, filename).click();
+  const reopened = page.getByRole('dialog', { name: filename, exact: true });
+  await expect(reopened).toBeVisible({ timeout: 20_000 });
+  await expect(reopened.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
+  await expect(reopened.getByTestId('spreadsheet-sheet-0')).toHaveAttribute('aria-pressed', 'true');
+  await expect(reopened.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({ page, context }) => {
