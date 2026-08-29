@@ -9,7 +9,6 @@ export function useWorkspaceSettings() {
 
   const {
     showPopupFileEditorBoolean,
-    clearFileEditorTabsOnCloseBoolean,
     shareFileEditorTabsBoolean,
     autoCopyOnSelectBoolean,
     workspaceSidebarPersistentBoolean,
@@ -38,39 +37,18 @@ export function useWorkspaceSettings() {
     popupEditorSuccess.value = false;
     try {
       const valueToSave = popupEditorEnabled.value ? 'true' : 'false';
-      await settingsStore.updateSetting('showPopupFileEditor', valueToSave);
+      await settingsStore.updateMultipleSettings({
+        showPopupFileEditor: valueToSave,
+        clearFileEditorTabsOnClose: valueToSave,
+      });
       popupEditorMessage.value = t('settings.popupEditor.success.saved');
       popupEditorSuccess.value = true;
     } catch (error: any) {
-      console.error('更新弹窗编辑器设置失败:', error);
+      console.error('更新弹窗文件编辑与预览设置失败:', error);
       popupEditorMessage.value = error.message || t('settings.popupEditor.error.saveFailed');
       popupEditorSuccess.value = false;
     } finally {
       popupEditorLoading.value = false;
-    }
-  };
-
-  // --- Popup Editor Close Behavior ---
-  const clearEditorTabsOnCloseEnabled = ref(false);
-  const clearEditorTabsOnCloseLoading = ref(false);
-  const clearEditorTabsOnCloseMessage = ref('');
-  const clearEditorTabsOnCloseSuccess = ref(false);
-
-  const handleUpdateClearEditorTabsOnClose = async () => {
-    clearEditorTabsOnCloseLoading.value = true;
-    clearEditorTabsOnCloseMessage.value = '';
-    clearEditorTabsOnCloseSuccess.value = false;
-    try {
-      const valueToSave = clearEditorTabsOnCloseEnabled.value ? 'true' : 'false';
-      await settingsStore.updateSetting('clearFileEditorTabsOnClose', valueToSave);
-      clearEditorTabsOnCloseMessage.value = t('settings.workspace.editorCloseBehaviorSuccess');
-      clearEditorTabsOnCloseSuccess.value = true;
-    } catch (error: any) {
-      console.error('更新文件编辑器关闭行为设置失败:', error);
-      clearEditorTabsOnCloseMessage.value = error.message || t('settings.workspace.editorCloseBehaviorError');
-      clearEditorTabsOnCloseSuccess.value = false;
-    } finally {
-      clearEditorTabsOnCloseLoading.value = false;
     }
   };
 
@@ -445,13 +423,6 @@ export function useWorkspaceSettings() {
     { immediate: true },
   );
   watch(
-    clearFileEditorTabsOnCloseBoolean,
-    (newValue) => {
-      clearEditorTabsOnCloseEnabled.value = newValue;
-    },
-    { immediate: true },
-  );
-  watch(
     shareFileEditorTabsBoolean,
     (newValue) => {
       shareTabsEnabled.value = newValue;
@@ -556,12 +527,6 @@ export function useWorkspaceSettings() {
     popupEditorMessage,
     popupEditorSuccess,
     handleUpdatePopupEditorSetting,
-
-    clearEditorTabsOnCloseEnabled,
-    clearEditorTabsOnCloseLoading,
-    clearEditorTabsOnCloseMessage,
-    clearEditorTabsOnCloseSuccess,
-    handleUpdateClearEditorTabsOnClose,
 
     shareTabsEnabled,
     shareTabsLoading,
