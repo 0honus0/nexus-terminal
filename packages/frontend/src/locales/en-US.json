@@ -821,14 +821,15 @@
       }
     },
     "popupEditor": {
-      "title": "Popup File Editor",
-      "enableLabel": "Show popup editor when opening files",
+      "title": "Popup File Editing & Preview",
+      "enableLabel": "Use popup file editing and clear editor or preview caches on close",
+      "description": "When enabled, files open in the popup editor and the editor or preview close button clears all tabs and cached content in that workspace. When disabled, the popup editor is disabled and close buttons only hide while preserving cache. Clicking the blank backdrop or pressing Escape always only hides and preserves cache.",
       "saveButton": "Save Setting",
       "success": {
-        "saved": "Popup editor setting saved successfully."
+        "saved": "Popup file editing and preview setting saved successfully."
       },
       "error": {
-        "saveFailed": "Failed to save popup editor setting."
+        "saveFailed": "Failed to save popup file editing and preview setting."
       }
     },
     "shareEditorTabs": {

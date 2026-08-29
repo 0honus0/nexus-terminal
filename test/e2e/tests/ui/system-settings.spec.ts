@@ -76,3 +76,70 @@ test('system settings persist timezone and language changes through the UI', asy
     expect(restore.ok()).toBeTruthy();
   }
 });
+
+test('workspace popup editor and close-cache behavior share one setting control', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = await originalResponse.json() as Record<string, string | undefined>;
+
+  const normalize = await context.request.put('/api/v1/settings', {
+    data: {
+      language: 'en-US',
+      showPopupFileEditor: 'true',
+      clearFileEditorTabsOnClose: 'false',
+    },
+  });
+  expect(normalize.ok()).toBeTruthy();
+
+  try {
+    await page.goto('/settings');
+    await page.getByTestId('settings-tab-workspace').click();
+
+    const unifiedToggle = page.locator('#showPopupEditor');
+    const unifiedForm = page.locator('form').filter({ has: unifiedToggle });
+    const unifiedSection = page.locator('.settings-section-content').filter({ has: unifiedToggle });
+    await expect(unifiedToggle).toBeChecked();
+    await expect(page.locator('#clearFileEditorTabsOnClose')).toHaveCount(0);
+    await expect(unifiedSection).toContainText('Popup File Editing & Preview');
+
+    await step('disabling the unified control saves both legacy settings as false', async () => {
+      await unifiedToggle.uncheck();
+      const responsePromise = page.waitForResponse((response) =>
+        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      );
+      await unifiedForm.locator('button[type="submit"]').click();
+      expect((await responsePromise).ok()).toBeTruthy();
+
+      const persisted = await context.request.get('/api/v1/settings');
+      expect(persisted.ok()).toBeTruthy();
+      const values = await persisted.json() as Record<string, string>;
+      expect(values.showPopupFileEditor).toBe('false');
+      expect(values.clearFileEditorTabsOnClose).toBe('false');
+    });
+
+    await step('enabling the unified control saves both legacy settings as true', async () => {
+      await unifiedToggle.check();
+      const responsePromise = page.waitForResponse((response) =>
+        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      );
+      await unifiedForm.locator('button[type="submit"]').click();
+      expect((await responsePromise).ok()).toBeTruthy();
+
+      const persisted = await context.request.get('/api/v1/settings');
+      expect(persisted.ok()).toBeTruthy();
+      const values = await persisted.json() as Record<string, string>;
+      expect(values.showPopupFileEditor).toBe('true');
+      expect(values.clearFileEditorTabsOnClose).toBe('true');
+    });
+  } finally {
+    const restore = await context.request.put('/api/v1/settings', {
+      data: {
+        language: original.language ?? 'en-US',
+        showPopupFileEditor: original.showPopupFileEditor ?? 'true',
+        clearFileEditorTabsOnClose: original.clearFileEditorTabsOnClose ?? 'false',
+      },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
