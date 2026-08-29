@@ -366,6 +366,24 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 });
 
+test('mobile PDF preview touch-pans zoomed document content', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+
+  const filename = 'preview.pdf';
+  await fileManagerRow(page, filename).click();
+  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+
+  await dialog.getByTestId('pdf-zoom-in').evaluate((button) => (button as HTMLButtonElement).click());
+  const scroller = dialog.getByTestId('pdf-page-scroller');
+  await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
+  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await dragPreviewWithTouch(scroller, { x: 185, y: 220 }, { x: 75, y: 212 });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+});
+
 test('mobile preview close button clears cached state when close-cache behavior is enabled', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
