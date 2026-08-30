@@ -816,15 +816,15 @@
       }
     },
     "popupEditor": {
-      "title": "弹窗文件编辑与预览",
-      "enableLabel": "启用弹窗文件编辑，并在关闭编辑器或预览时清空缓存",
-      "description": "开启后，打开文件使用弹窗编辑器；点击编辑器或预览右上角关闭按钮会清空对应工作区的全部标签和内容缓存。关闭后不启用弹窗编辑器，关闭按钮仅隐藏并保留缓存；点击空白背景或按 Esc 始终只隐藏并保留缓存。",
+      "title": "弹窗文件编辑器",
+      "enableLabel": "打开文件时显示弹窗编辑器",
+      "description": "此开关同时控制编辑器与预览的关闭缓存行为。开启后，打开文件使用弹窗编辑器，点击编辑器或预览右上角关闭按钮会清空对应工作区的全部标签和内容缓存；关闭后不启用弹窗编辑器，预览关闭按钮仅隐藏并保留缓存。点击空白背景或按 Esc 始终只隐藏并保留缓存。",
       "saveButton": "保存设置",
       "success": {
-        "saved": "弹窗文件编辑与预览设置已成功保存。"
+        "saved": "弹窗编辑器设置已成功保存。"
       },
       "error": {
-        "saveFailed": "保存弹窗文件编辑与预览设置失败。"
+        "saveFailed": "保存弹窗编辑器设置失败。"
       }
     },
     "shareEditorTabs": {
@@ -1017,11 +1017,6 @@
       "sidebarPersistentTitle": "侧边栏行为",
       "sidebarPersistentLabel": "弹出后固定侧边栏 (不自动收回)",
       "sidebarPersistentDescription": "开启后，点击侧边栏外部区域不会自动收回侧边栏。",
-      "editorCloseBehaviorTitle": "文件编辑与预览关闭行为",
-      "editorCloseBehaviorLabel": "点击编辑器或预览关闭按钮时清空全部已打开文件缓存",
-      "editorCloseBehaviorDescription": "默认关闭。开启后，点击编辑器或预览右上角关闭按钮会清空对应工作区的全部文件标签和内容缓存；点击空白背景或按 Esc 仍只隐藏工作区并保留缓存。",
-      "editorCloseBehaviorSuccess": "文件编辑与预览关闭行为设置已保存。",
-      "editorCloseBehaviorError": "保存文件编辑与预览关闭行为设置失败。",
       "success": {
         "sidebarPersistentSaved": "侧边栏设置已保存。",
         "showConnectionTagsSaved": "连接标签显示设置已保存。",

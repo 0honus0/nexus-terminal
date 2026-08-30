@@ -821,15 +821,15 @@
       }
     },
     "popupEditor": {
-      "title": "Popup File Editing & Preview",
-      "enableLabel": "Use popup file editing and clear editor or preview caches on close",
-      "description": "When enabled, files open in the popup editor and the editor or preview close button clears all tabs and cached content in that workspace. When disabled, the popup editor is disabled and close buttons only hide while preserving cache. Clicking the blank backdrop or pressing Escape always only hides and preserves cache.",
+      "title": "Popup File Editor",
+      "enableLabel": "Show popup editor when opening files",
+      "description": "This setting also controls editor and preview close-cache behavior. When enabled, files open in the popup editor and the editor or preview close button clears all tabs and cached content in that workspace. When disabled, the popup editor is disabled and preview close buttons only hide while preserving cache. Clicking the blank backdrop or pressing Escape always only hides and preserves cache.",
       "saveButton": "Save Setting",
       "success": {
-        "saved": "Popup file editing and preview setting saved successfully."
+        "saved": "Popup editor setting saved successfully."
       },
       "error": {
-        "saveFailed": "Failed to save popup file editing and preview setting."
+        "saveFailed": "Failed to save popup editor setting."
       }
     },
     "shareEditorTabs": {
@@ -1021,11 +1021,6 @@
       "sidebarPersistentTitle": "Sidebar Behavior",
       "sidebarPersistentLabel": "Pin sidebar when opened (prevent auto-collapse)",
       "sidebarPersistentDescription": "When enabled, clicking outside the sidebar will not automatically collapse it.",
-      "editorCloseBehaviorTitle": "File Editor & Preview Close Behavior",
-      "editorCloseBehaviorLabel": "Clear all open editor or preview caches when its close button is clicked",
-      "editorCloseBehaviorDescription": "Disabled by default. When enabled, the close button clears all tabs and cached content in the current editor or preview workspace. Clicking the blank backdrop or pressing Escape still only hides the workspace and preserves its cache.",
-      "editorCloseBehaviorSuccess": "File editor and preview close behavior saved.",
-      "editorCloseBehaviorError": "Failed to save file editor and preview close behavior.",
       "success": {
         "sidebarPersistentSaved": "Sidebar setting saved.",
         "showConnectionTagsSaved": "Connection tags visibility setting saved.",

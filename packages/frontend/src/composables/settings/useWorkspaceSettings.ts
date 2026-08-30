@@ -25,7 +25,7 @@ export function useWorkspaceSettings() {
     statusMonitorShowIpBoolean,
   } = storeToRefs(settingsStore);
 
-  // --- Popup Editor ---
+  // --- Popup editor / preview close behavior ---
   const popupEditorEnabled = ref(true);
   const popupEditorLoading = ref(false);
   const popupEditorMessage = ref('');
@@ -37,14 +37,11 @@ export function useWorkspaceSettings() {
     popupEditorSuccess.value = false;
     try {
       const valueToSave = popupEditorEnabled.value ? 'true' : 'false';
-      await settingsStore.updateMultipleSettings({
-        showPopupFileEditor: valueToSave,
-        clearFileEditorTabsOnClose: valueToSave,
-      });
+      await settingsStore.updateSetting('showPopupFileEditor', valueToSave);
       popupEditorMessage.value = t('settings.popupEditor.success.saved');
       popupEditorSuccess.value = true;
     } catch (error: any) {
-      console.error('更新弹窗文件编辑与预览设置失败:', error);
+      console.error('更新弹窗文件编辑器设置失败:', error);
       popupEditorMessage.value = error.message || t('settings.popupEditor.error.saveFailed');
       popupEditorSuccess.value = false;
     } finally {

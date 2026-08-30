@@ -289,6 +289,9 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
   const sqlInsertOrIgnore = `INSERT OR IGNORE INTO settings (key, value, created_at, updated_at) VALUES (?, ?, ?, ?)`;
 
   try {
+    // `showPopupFileEditor` is the single source of truth for both popup editing
+    // and editor/preview close behavior. Remove the retired setting on upgrade.
+    await runDb(db, 'DELETE FROM settings WHERE key = ?', ['clearFileEditorTabsOnClose']);
     for (const [key, value] of Object.entries(defaultSettings)) {
       await runDb(db, sqlInsertOrIgnore, [key, value, nowSeconds, nowSeconds]);
     }

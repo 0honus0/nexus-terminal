@@ -25,6 +25,12 @@ async function closePreview(page: Page, filename: string): Promise<void> {
   await expect(dialog).toBeHidden();
 }
 
+async function hidePreview(page: Page, filename: string): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: filename });
+  await dialog.click({ position: { x: 2, y: 2 } });
+  await expect(dialog).toBeHidden();
+}
+
 test('file previews and text editor protect historical file-opening regressions', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -283,12 +289,12 @@ test('file previews and text editor protect historical file-opening regressions'
   });
 });
 
-test('preview workspace backdrop hiding preserves tabs across directories even when editor close-clears-cache is enabled', async ({ page, context }) => {
+test('preview workspace backdrop hiding preserves tabs across directories when popup file editing is enabled', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   expect((await context.request.put('/api/v1/settings', {
-    data: { clearFileEditorTabsOnClose: 'true' },
+    data: { showPopupFileEditor: 'true' },
   })).ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
@@ -296,11 +302,15 @@ test('preview workspace backdrop hiding preserves tabs across directories even w
   await openConnectedFileManager(page);
 
   await slowStep('hide the first PDF by clicking the preview backdrop rather than closing its tab', async () => {
+    const fileList = page.getByTestId('file-manager-list');
+    await fileList.focus();
+    await expect(fileList).toBeFocused();
     await row(page, 'preview.pdf').dblclick();
     const dialog = page.getByRole('dialog', { name: 'preview.pdf' });
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
     await dialog.click({ position: { x: 2, y: 2 } });
     await expect(dialog).toBeHidden();
+    await expect(fileList).toBeFocused();
   });
 
   await slowStep('open a PDF in another directory without losing the hidden first preview tab', async () => {
@@ -319,12 +329,38 @@ test('preview workspace backdrop hiding preserves tabs across directories even w
   });
 });
 
-test('preview close button follows the file editor close-cache behavior setting', async ({ page, context }) => {
+test('PDF preview rejects files above the shared 20 MB inline limit before downloading them', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const oversizedPdf = 'oversized-preview.pdf';
+  const createFixture = await fetch(
+    `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(oversizedPdf)}&size=${21 * 1024 * 1024}`,
+    { method: 'POST' },
+  );
+  expect(createFixture.ok).toBeTruthy();
+
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+  await expect(row(page, oversizedPdf)).toBeVisible();
+
+  const inlineRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/v1/sftp/download?')) inlineRequests.push(request.url());
+  });
+  await row(page, oversizedPdf).dblclick();
+  await expect(page.getByText('File is too large for inline preview (maximum 20.0 MB).', { exact: true })).toBeVisible();
+  expect(inlineRequests).toEqual([]);
+});
+
+test('preview close button clears cached tabs when popup file editing is enabled', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   expect((await context.request.put('/api/v1/settings', {
-    data: { clearFileEditorTabsOnClose: 'true' },
+    data: { showPopupFileEditor: 'true' },
   })).ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
@@ -332,6 +368,8 @@ test('preview close button follows the file editor close-cache behavior setting'
   await openConnectedFileManager(page);
 
   await slowStep('open two special-file previews and clear both with the workspace close button', async () => {
+    const fileList = page.getByTestId('file-manager-list');
+    await fileList.focus();
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
     await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
@@ -345,6 +383,7 @@ test('preview close button follows the file editor close-cache behavior setting'
 
     await xlsxDialog.getByRole('button', { name: 'Close preview', exact: true }).click();
     await expect(xlsxDialog).toBeHidden();
+    await expect(fileList).toBeFocused();
   });
 
   await slowStep('reopening after a close-button clear starts a fresh one-tab preview workspace', async () => {
@@ -354,6 +393,42 @@ test('preview close button follows the file editor close-cache behavior setting'
     await expect(dialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
     await expect(dialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'preview.pdf', exact: true }))
       .toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+test('preview close button preserves cached tabs when popup file editing is disabled', async ({ page, context }) => {
+  test.setTimeout(90_000);
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', {
+    data: { showPopupFileEditor: 'false' },
+  })).ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  await slowStep('build a two-tab preview workspace with PDF state', async () => {
+    await row(page, 'preview.pdf').dblclick();
+    const pdfDialog = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
+    await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await pdfDialog.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await hidePreview(page, 'preview.pdf');
+
+    await row(page, 'preview.xlsx').dblclick();
+    const xlsxDialog = page.getByRole('dialog', { name: 'preview.xlsx', exact: true });
+    await expect(xlsxDialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
+    await expect(xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
+    await xlsxDialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+    await expect(xlsxDialog).toBeHidden();
+  });
+
+  await slowStep('reopening restores both tabs and the previous PDF page', async () => {
+    await row(page, 'preview.pdf').dblclick();
+    const pdfDialog = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
+    await expect(pdfDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
+    await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
   });
 });
 
@@ -415,7 +490,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.locator('img')).toBeVisible();
-    await closePreview(page, filename);
+    await hidePreview(page, filename);
   });
 
   await slowStep('open PDF and preserve page two while opening other previews', async () => {
@@ -425,7 +500,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
     await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-    await closePreview(page, filename);
+    await hidePreview(page, filename);
   });
 
   await slowStep('open XLSX and preserve the selected worksheet while opening DOCX', async () => {
@@ -434,7 +509,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const dialog = page.getByRole('dialog', { name: filename });
     await dialog.getByTestId('spreadsheet-sheet-1').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
-    await closePreview(page, filename);
+    await hidePreview(page, filename);
   });
 
   await slowStep('DOCX opens in the same preview workspace with four switchable tabs', async () => {

@@ -384,11 +384,11 @@ test('mobile PDF preview touch-pans zoomed document content', async ({ page, con
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 });
 
-test('mobile preview close button clears cached state when close-cache behavior is enabled', async ({ page, context }) => {
+test('mobile preview close button clears cached state when popup file editing is enabled', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   expect((await context.request.put('/api/v1/settings', {
-    data: { clearFileEditorTabsOnClose: 'true' },
+    data: { showPopupFileEditor: 'true' },
   })).ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);

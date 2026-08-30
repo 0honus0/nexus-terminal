@@ -93,6 +93,7 @@ const isPreviewLoading = ref(false);
 const previewRefreshControllers = new Map<string, AbortController>();
 const refreshingPreviewIds = shallowRef<Set<string>>(new Set());
 let previewLoadToken = 0;
+let previewPreviouslyFocusedElement: HTMLElement | null = null;
 
 const activePreviewEntry = computed(() => (
   previewTabs.value.find((entry) => entry.id === activePreviewId.value) ?? null
@@ -110,9 +111,27 @@ const cancelPendingPreviewLoad = () => {
   isPreviewLoading.value = false;
 };
 
+const rememberPreviewFocus = () => {
+  if (previewWorkspaceVisible.value) return;
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement)) return;
+  if (activeElement.closest('[data-file-preview-dialog]')) return;
+  previewPreviouslyFocusedElement = activeElement;
+};
+
+const restorePreviewFocus = () => {
+  const element = previewPreviouslyFocusedElement;
+  previewPreviouslyFocusedElement = null;
+  if (!element) return;
+  void nextTick(() => {
+    if (element.isConnected) element.focus({ preventScroll: true });
+  });
+};
+
 const hidePreview = () => {
   cancelPendingPreviewLoad();
   previewWorkspaceVisible.value = false;
+  restorePreviewFocus();
 };
 
 const setPreviewRefreshing = (tabId: string, refreshing: boolean) => {
@@ -124,6 +143,7 @@ const setPreviewRefreshing = (tabId: string, refreshing: boolean) => {
 
 const activatePreviewTab = (tabId: string) => {
   if (!previewTabs.value.some((entry) => entry.id === tabId)) return;
+  rememberPreviewFocus();
   activePreviewId.value = tabId;
   previewWorkspaceVisible.value = true;
 };
@@ -144,7 +164,10 @@ const closePreviewTab = (tabId: string) => {
     const nextActive = nextTabs[index] ?? nextTabs[index - 1] ?? null;
     activePreviewId.value = nextActive?.id ?? null;
   }
-  if (nextTabs.length === 0) previewWorkspaceVisible.value = false;
+  if (nextTabs.length === 0) {
+    previewWorkspaceVisible.value = false;
+    restorePreviewFocus();
+  }
 };
 
 const closeAllPreviews = () => {
@@ -156,10 +179,12 @@ const closeAllPreviews = () => {
   previewTabs.value = [];
   activePreviewId.value = null;
   previewWorkspaceVisible.value = false;
+  restorePreviewFocus();
 };
 
 const handlePreviewCloseButton = () => {
-  if (settingsStore.clearFileEditorTabsOnCloseBoolean) {
+  // `showPopupFileEditor` is the single switch for popup editing and close-cache behavior.
+  if (settingsStore.showPopupFileEditorBoolean) {
     closeAllPreviews();
     return;
   }
@@ -697,6 +722,7 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
     const tabId = `${effectiveSessionId.value}:${filePath}`;
     const existingTab = previewTabs.value.find((entry) => entry.id === tabId);
     if (existingTab) {
+      rememberPreviewFocus();
       activePreviewId.value = existingTab.id;
       previewWorkspaceVisible.value = true;
       return;
@@ -707,6 +733,7 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
     const abortController = new AbortController();
     previewAbortController.value = abortController;
     isPreviewLoading.value = true;
+    rememberPreviewFocus();
     previewWorkspaceVisible.value = true;
 
     try {
@@ -741,6 +768,7 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
         previewAbortController.value = null;
         isPreviewLoading.value = false;
         previewWorkspaceVisible.value = false;
+        restorePreviewFocus();
         uiNotificationsStore.showError(t('fileManager.preview.loadFailed'));
       }
     }
@@ -765,6 +793,9 @@ const openItemAsText = (item: FileListItem): void => {
 const editCurrentPreview = (): void => {
   const entry = activePreviewEntry.value;
   if (!entry) return;
+  // This is a direct preview -> editor transition, so let the editor take focus
+  // instead of restoring the file-list focus while the new editor is opening.
+  previewPreviouslyFocusedElement = null;
   closePreviewTab(entry.id);
   hidePreview();
   openFileInEditor(entry.file, entry.filePath);

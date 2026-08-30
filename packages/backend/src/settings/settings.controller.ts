@@ -90,7 +90,6 @@ export const settingsController = {
         'maxLoginAttempts',
         'loginBanDuration',
         'showPopupFileEditor',
-        'clearFileEditorTabsOnClose',
         'shareFileEditorTabs',
         'ipWhitelistEnabled',
         'autoCopyOnSelect',

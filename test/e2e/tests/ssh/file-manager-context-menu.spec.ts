@@ -200,6 +200,29 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     expect(destroyed.status).toBe(410);
   });
 
+  await slowStep('download ticket leases stay bounded by evicting the oldest unused ticket', async () => {
+    const urls: string[] = [];
+    for (let index = 0; index < 65; index += 1) {
+      const issued = await context.request.post('/api/v1/sftp/download-ticket', {
+        data: {
+          connectionId,
+          remotePath: '/seed.txt',
+        },
+      });
+      expect(issued.status()).toBe(201);
+      const ticket = await issued.json() as { url: string };
+      urls.push(new URL(ticket.url, 'http://127.0.0.1:4173').toString());
+    }
+
+    const ownerHeaders = { 'X-Forwarded-For': '203.0.113.30' };
+    const evicted = await fetch(urls[0], { method: 'HEAD', headers: ownerHeaders });
+    expect(evicted.status).toBe(410);
+
+    const newest = await fetch(urls.at(-1)!, { headers: ownerHeaders });
+    expect(newest.status).toBe(200);
+    expect(await newest.text()).toBe('nexus-e2e-seed\n');
+  });
+
   await slowStep('Upload writes exact bytes over SFTP and the uploaded file downloads intact', async () => {
     const filename = 'uploaded-e2e.txt';
     const payload = Buffer.from('UPLOAD_BYTES_E2E\nline-2-中文\n', 'utf8');
