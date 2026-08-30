@@ -58,6 +58,14 @@ const handleTabKeydown = (event: KeyboardEvent, tabId: string) => {
   activateTab(tabId);
 };
 
+const scrollActiveTabIntoView = () => {
+  const activeId = activeTabId.value;
+  if (!activeId || !dialogRef.value) return;
+  const activeTab = Array.from(dialogRef.value.querySelectorAll<HTMLElement>('[data-preview-tab-id]'))
+    .find((element) => element.dataset.previewTabId === activeId);
+  activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+};
+
 const handleKeydown = (event: KeyboardEvent) => {
   if (!props.active) return;
   if (event.key === 'Escape') {
@@ -77,7 +85,15 @@ onMounted(() => {
 });
 
 watch(() => props.active, (active) => {
-  if (active) void nextTick(() => dialogRef.value?.focus());
+  if (!active) return;
+  void nextTick(() => {
+    dialogRef.value?.focus();
+    scrollActiveTabIntoView();
+  });
+});
+
+watch(activeTabId, () => {
+  if (props.active) void nextTick(scrollActiveTabIntoView);
 });
 
 onBeforeUnmount(() => {
@@ -93,7 +109,7 @@ onBeforeUnmount(() => {
     <div
       ref="dialogRef"
       data-file-preview-dialog
-      class="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 p-3 md:p-6 outline-none"
+      class="file-preview-dialog fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 outline-none"
       :style="props.active ? undefined : { display: 'none' }"
       role="dialog"
       aria-modal="true"
@@ -101,13 +117,13 @@ onBeforeUnmount(() => {
       tabindex="-1"
       @click.self="hide"
     >
-      <section class="flex h-full max-h-[94vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-2xl">
+      <section class="file-preview-panel relative flex h-full w-full max-w-[1400px] flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground shadow-2xl">
         <div
           v-if="tabsContext && tabs.length"
           data-testid="file-preview-tabs"
           role="tablist"
           :aria-label="t('fileManager.preview.openFiles', 'Open previews')"
-          class="flex shrink-0 overflow-x-auto border-b border-border bg-header"
+          class="file-preview-tabs flex shrink-0 overflow-x-auto border-b border-border bg-header"
         >
           <div
             v-for="tab in tabs"
@@ -117,7 +133,8 @@ onBeforeUnmount(() => {
             :aria-selected="tab.id === activeTabId"
             :tabindex="tab.id === activeTabId ? 0 : -1"
             :title="tab.filePath"
-            class="group flex min-w-0 max-w-56 shrink-0 cursor-pointer items-center gap-2 border-r border-border px-3 py-2 text-xs outline-none transition-colors focus:ring-1 focus:ring-inset focus:ring-primary"
+            :data-preview-tab-id="tab.id"
+            class="group flex min-h-11 min-w-0 max-w-56 shrink-0 cursor-pointer items-center gap-1 border-r border-border px-2 py-0 text-xs outline-none transition-colors focus:ring-1 focus:ring-inset focus:ring-primary sm:min-h-0 sm:gap-2 sm:px-3 sm:py-2"
             :class="tab.id === activeTabId
               ? 'bg-background text-foreground'
               : 'bg-header text-text-secondary hover:bg-border/70 hover:text-foreground'"
@@ -127,7 +144,7 @@ onBeforeUnmount(() => {
             <span class="min-w-0 flex-1 truncate">{{ tab.filename }}</span>
             <button
               type="button"
-              class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-sm leading-none opacity-60 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-lg leading-none opacity-70 hover:bg-border hover:opacity-100 focus:opacity-100 focus:outline-none sm:h-5 sm:w-5 sm:text-sm"
               :aria-label="t('fileManager.preview.closeFile', { file: tab.filename }, `Close tab ${tab.filename}`)"
               @click="closeTab($event, tab.id)"
             >
@@ -136,17 +153,17 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <header class="flex min-h-12 shrink-0 items-center gap-3 border-b border-border bg-header px-4 py-2">
+        <header class="flex min-h-14 shrink-0 items-center gap-2 border-b border-border bg-header px-3 py-1.5 sm:min-h-12 sm:gap-3 sm:px-4 sm:py-2">
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-medium" :title="props.file.filename">{{ props.file.filename }}</div>
-            <div v-if="props.subtitle" class="truncate text-xs text-text-secondary">{{ props.subtitle }}</div>
+            <div v-if="props.subtitle" class="hidden truncate text-xs text-text-secondary sm:block">{{ props.subtitle }}</div>
           </div>
           <slot name="toolbar" />
           <button
             v-if="tabsContext"
             type="button"
             data-testid="file-preview-refresh"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-wait disabled:opacity-60"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-wait disabled:opacity-60 sm:h-8 sm:w-8"
             :disabled="isRefreshing"
             :aria-busy="isRefreshing"
             :aria-label="t('fileManager.preview.refresh', 'Refresh preview')"
@@ -157,7 +174,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-xl leading-none text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-2xl leading-none text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8 sm:w-8 sm:text-xl"
             :aria-label="t('fileManager.preview.close', 'Close preview')"
             @click="close"
           >
@@ -172,3 +189,36 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+.file-preview-dialog {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+}
+
+.file-preview-panel {
+  max-height: 94vh;
+  max-height: 94dvh;
+}
+
+.file-preview-tabs {
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.file-preview-tabs > [role='tab'] {
+  scroll-snap-align: start;
+}
+
+@media (min-width: 768px) {
+  .file-preview-dialog {
+    padding-top: max(1.5rem, env(safe-area-inset-top));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+  }
+}
+</style>

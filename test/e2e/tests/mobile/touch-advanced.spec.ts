@@ -118,6 +118,54 @@ async function dragPreviewWithTouch(
   }, { from, to });
 }
 
+async function pinchPreviewWithTouch(
+  target: Locator,
+  start: [{ x: number; y: number }, { x: number; y: number }],
+  end: [{ x: number; y: number }, { x: number; y: number }],
+): Promise<void> {
+  await target.evaluate((element, points) => {
+    const makeTouch = (identifier: number, point: { x: number; y: number }) => new Touch({
+      identifier,
+      target: element,
+      clientX: point.x,
+      clientY: point.y,
+      screenX: point.x,
+      screenY: point.y,
+      pageX: point.x,
+      pageY: point.y,
+      radiusX: 1,
+      radiusY: 1,
+      force: 1,
+    });
+
+    const startTouches = [makeTouch(1, points.start[0]), makeTouch(2, points.start[1])];
+    element.dispatchEvent(new TouchEvent('touchstart', {
+      bubbles: true,
+      cancelable: true,
+      touches: startTouches,
+      targetTouches: startTouches,
+      changedTouches: startTouches,
+    }));
+
+    const endTouches = [makeTouch(1, points.end[0]), makeTouch(2, points.end[1])];
+    element.dispatchEvent(new TouchEvent('touchmove', {
+      bubbles: true,
+      cancelable: true,
+      touches: endTouches,
+      targetTouches: endTouches,
+      changedTouches: endTouches,
+    }));
+
+    element.dispatchEvent(new TouchEvent('touchend', {
+      bubbles: true,
+      cancelable: true,
+      touches: [],
+      targetTouches: [],
+      changedTouches: endTouches,
+    }));
+  }, { start, end });
+}
+
 test('mobile long-press menu flattens archive actions and creates a real ZIP', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
@@ -198,6 +246,9 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     await expect(preview).toBeVisible({ timeout: 20_000 });
     await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(preview.locator('strong')).toHaveText('preview-ok');
+    const editBox = await preview.getByRole('button', { name: 'Edit', exact: true }).boundingBox();
+    expect(editBox).toBeTruthy();
+    expect(editBox!.height).toBeGreaterThanOrEqual(40);
     await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
     await captureFunctionalScreenshot(page, 'mobile-markdown-preview.png');
   });
@@ -318,6 +369,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await expect(tabs).toBeVisible();
     await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
     await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
+    await expect(dialog.getByTestId('spreadsheet-horizontal-scrollbar')).toBeHidden();
 
     const [panelBox, tabsBox, viewport] = await Promise.all([
       dialog.locator('section').boundingBox(),
@@ -366,7 +418,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 });
 
-test('mobile PDF preview touch-pans zoomed document content', async ({ page, context }) => {
+test('mobile PDF exposes touch-first controls, sidebar, pinch zoom, and content panning', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
@@ -376,11 +428,59 @@ test('mobile PDF preview touch-pans zoomed document content', async ({ page, con
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
 
-  await dialog.getByTestId('pdf-zoom-in').evaluate((button) => (button as HTMLButtonElement).click());
+  const closeButton = dialog.getByRole('button', { name: 'Close preview', exact: true });
+  const closeBox = await closeButton.boundingBox();
+  expect(closeBox).toBeTruthy();
+  expect(closeBox!.width).toBeGreaterThanOrEqual(40);
+  expect(closeBox!.height).toBeGreaterThanOrEqual(40);
+
+  const zoomInButton = dialog.getByTestId('pdf-zoom-in');
+  const nextPageButton = dialog.getByTestId('pdf-next-page');
+  const sidebarToggle = dialog.getByTestId('pdf-sidebar-toggle');
+  await expect(zoomInButton).toBeVisible();
+  await expect(nextPageButton).toBeVisible();
+  await expect(sidebarToggle).toBeVisible();
+  await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
+
+  const sidebar = dialog.getByTestId('pdf-sidebar');
+  await expect(sidebar).toBeHidden();
+  await sidebarToggle.click();
+  await expect(sidebar).toBeVisible();
+  await sidebar.getByTestId('pdf-thumbnail-2').click();
+  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+  await expect(sidebar).toBeHidden();
+
   const scroller = dialog.getByTestId('pdf-page-scroller');
+  await zoomInButton.click();
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
   await scroller.evaluate((element) => { element.scrollLeft = 0; });
   await dragPreviewWithTouch(scroller, { x: 185, y: 220 }, { x: 75, y: 212 });
+  await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+
+  const zoomBeforePinch = Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', ''));
+  await pinchPreviewWithTouch(
+    scroller,
+    [{ x: 130, y: 250 }, { x: 220, y: 250 }],
+    [{ x: 90, y: 250 }, { x: 270, y: 250 }],
+  );
+  await expect.poll(async () => Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', '')))
+    .toBeGreaterThan(zoomBeforePinch);
+  await expect(dialog.getByTestId('pdf-fit-width')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('mobile DOCX touch-pans wide content without a desktop scrollbar track', async ({ page, context }) => {
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+
+  const filename = 'preview.docx';
+  await fileManagerRow(page, filename).click();
+  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
+  const scroller = dialog.getByTestId('docx-preview-scroller');
+  await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
+  await expect(dialog.getByTestId('docx-horizontal-scrollbar')).toBeHidden();
+  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await dragPreviewWithTouch(scroller, { x: 300, y: 220 }, { x: 90, y: 215 });
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 });
 
@@ -399,6 +499,11 @@ test('mobile preview close button clears cached state when popup file editing is
   await fileManagerRow(page, filename).click();
   const dialog = page.getByRole('dialog', { name: filename, exact: true });
   await expect(dialog).toBeVisible({ timeout: 20_000 });
+  const tabCloseButton = dialog.getByRole('button', { name: 'Close tab preview.xlsx', exact: true });
+  const tabCloseBox = await tabCloseButton.boundingBox();
+  expect(tabCloseBox).toBeTruthy();
+  expect(tabCloseBox!.width).toBeGreaterThanOrEqual(40);
+  expect(tabCloseBox!.height).toBeGreaterThanOrEqual(40);
   await dialog.getByTestId('spreadsheet-sheet-1').click();
   await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
 

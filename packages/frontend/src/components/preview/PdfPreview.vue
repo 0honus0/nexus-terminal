@@ -25,8 +25,10 @@ const { t } = useI18n();
 const currentPage = ref(1);
 const zoomPercent = ref(100);
 const effectiveZoomPercent = ref(100);
+const pinchScale = ref(1);
 const fitWidth = ref(true);
 const sidebarMode = ref<'thumbnails' | 'outline'>('thumbnails');
+const mobileSidebarOpen = ref(false);
 const mainScrollerRef = ref<HTMLElement | null>(null);
 const mainCanvasRef = ref<HTMLCanvasElement | null>(null);
 let renderTask: RenderTask | null = null;
@@ -34,6 +36,12 @@ let renderToken = 0;
 let resizeObserver: ResizeObserver | null = null;
 let resizeFrame = 0;
 let disposed = false;
+let pinchRenderPending = false;
+let pinchGesture: {
+  startDistance: number;
+  startZoom: number;
+  targetZoom: number;
+} | null = null;
 
 const pageCount = computed(() => props.document.numPages);
 const subtitle = computed(() => t('fileManager.preview.pdfMeta', {
@@ -69,6 +77,10 @@ const renderCurrentPage = async () => {
   canvas.height = Math.max(1, Math.floor(viewport.height * outputScale));
   canvas.style.width = `${Math.round(viewport.width)}px`;
   canvas.style.height = `${Math.round(viewport.height)}px`;
+  if (pinchRenderPending) {
+    pinchRenderPending = false;
+    pinchScale.value = 1;
+  }
 
   renderTask = page.render({
     canvas,
@@ -96,6 +108,7 @@ const scheduleRender = () => {
 
 const selectPage = (pageNumber: number) => {
   currentPage.value = clampPage(pageNumber);
+  mobileSidebarOpen.value = false;
   mainScrollerRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 };
 
@@ -124,6 +137,56 @@ const zoomOut = () => {
 const setFitWidth = () => {
   fitWidth.value = true;
   scheduleRender();
+};
+
+const touchDistance = (first: Touch, second: Touch) => Math.hypot(
+  second.clientX - first.clientX,
+  second.clientY - first.clientY,
+);
+
+const handlePdfTouchStart = (event: TouchEvent) => {
+  if (event.touches.length !== 2) {
+    pinchGesture = null;
+    return;
+  }
+  const distance = touchDistance(event.touches[0], event.touches[1]);
+  if (distance <= 0) return;
+  const startZoom = fitWidth.value ? effectiveZoomPercent.value : zoomPercent.value;
+  pinchGesture = {
+    startDistance: distance,
+    startZoom,
+    targetZoom: startZoom,
+  };
+};
+
+const handlePdfTouchMove = (event: TouchEvent) => {
+  if (!pinchGesture || event.touches.length !== 2) return;
+  const distance = touchDistance(event.touches[0], event.touches[1]);
+  if (distance <= 0) return;
+  event.preventDefault();
+  pinchGesture.targetZoom = clampZoom(
+    pinchGesture.startZoom * (distance / pinchGesture.startDistance),
+  );
+  pinchScale.value = pinchGesture.targetZoom / pinchGesture.startZoom;
+  effectiveZoomPercent.value = pinchGesture.targetZoom;
+};
+
+const commitPinchZoom = () => {
+  if (!pinchGesture) return;
+  const { startZoom, targetZoom } = pinchGesture;
+  pinchGesture = null;
+  if (Math.abs(targetZoom - startZoom) < 2) {
+    pinchScale.value = 1;
+    effectiveZoomPercent.value = fitWidth.value ? effectiveZoomPercent.value : zoomPercent.value;
+    return;
+  }
+  pinchRenderPending = true;
+  fitWidth.value = false;
+  zoomPercent.value = targetZoom;
+};
+
+const handlePdfTouchEnd = (event: TouchEvent) => {
+  if (event.touches.length < 2) commitPinchZoom();
 };
 
 const resolveOutlineDestination = async (item: PdfOutlineItem) => {
@@ -162,6 +225,14 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 watch([currentPage, zoomPercent, fitWidth], scheduleRender);
 
+watch(() => props.active, (active) => {
+  if (active) return;
+  mobileSidebarOpen.value = false;
+  pinchGesture = null;
+  pinchRenderPending = false;
+  pinchScale.value = 1;
+});
+
 watch(() => props.document, () => {
   renderToken += 1;
   renderTask?.cancel();
@@ -198,9 +269,10 @@ onBeforeUnmount(() => {
     @close="emit('close')"
   >
     <template #toolbar>
-      <div class="hidden items-center gap-1 sm:flex">
+      <div class="pdf-toolbar flex items-center gap-1">
         <button
           type="button"
+          data-testid="pdf-previous-page"
           class="pdf-toolbar-button"
           :disabled="currentPage <= 1"
           :aria-label="t('fileManager.preview.pdfPreviousPage', 'Previous page')"
@@ -210,7 +282,7 @@ onBeforeUnmount(() => {
         </button>
         <input
           data-testid="pdf-current-page"
-          class="h-8 w-14 rounded border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          class="pdf-page-input h-8 w-14 rounded border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           type="number"
           min="1"
           :max="pageCount"
@@ -221,6 +293,7 @@ onBeforeUnmount(() => {
         <span class="text-xs text-text-secondary">/ <span data-testid="pdf-page-count">{{ pageCount }}</span></span>
         <button
           type="button"
+          data-testid="pdf-next-page"
           class="pdf-toolbar-button"
           :disabled="currentPage >= pageCount"
           :aria-label="t('fileManager.preview.pdfNextPage', 'Next page')"
@@ -228,7 +301,7 @@ onBeforeUnmount(() => {
         >
           ›
         </button>
-        <span class="mx-1 h-5 w-px bg-border" />
+        <span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border" />
         <button
           type="button"
           data-testid="pdf-zoom-out"
@@ -251,28 +324,49 @@ onBeforeUnmount(() => {
         <button
           type="button"
           data-testid="pdf-fit-width"
-          class="ml-1 h-8 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          class="pdf-fit-width ml-1 h-8 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           :class="fitWidth ? 'bg-primary/10 text-primary' : ''"
           :aria-pressed="fitWidth"
           @click="setFitWidth"
         >
           {{ t('fileManager.preview.pdfFitWidth', 'Fit width') }}
         </button>
+        <button
+          type="button"
+          data-testid="pdf-sidebar-toggle"
+          class="pdf-toolbar-button sm:hidden"
+          :aria-expanded="mobileSidebarOpen"
+          :aria-label="t('fileManager.preview.pdfThumbnails', 'Pages')"
+          @click="mobileSidebarOpen = !mobileSidebarOpen"
+        >
+          ☰
+        </button>
       </div>
     </template>
 
     <div
       data-testid="pdf-preview"
-      class="flex h-full min-h-0 w-full overflow-hidden outline-none"
+      class="pdf-preview-root relative flex h-full min-h-0 w-full overflow-hidden outline-none"
       tabindex="0"
       @keydown="handleKeydown"
     >
-      <aside class="flex w-44 shrink-0 flex-col border-r border-border bg-header/60 sm:w-52">
+      <button
+        v-if="mobileSidebarOpen"
+        type="button"
+        class="absolute inset-0 z-10 bg-black/35 sm:hidden"
+        :aria-label="t('common.close', 'Close')"
+        @click="mobileSidebarOpen = false"
+      ></button>
+      <aside
+        data-testid="pdf-sidebar"
+        class="pdf-sidebar absolute inset-y-0 left-0 z-20 w-[min(82vw,20rem)] shrink-0 flex-col border-r border-border bg-header/95 shadow-xl sm:static sm:z-auto sm:flex sm:w-52 sm:bg-header/60 sm:shadow-none"
+        :class="mobileSidebarOpen ? 'flex' : 'hidden sm:flex'"
+      >
         <div class="grid shrink-0 grid-cols-2 border-b border-border p-1">
           <button
             type="button"
             data-testid="pdf-sidebar-thumbnails-tab"
-            class="rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+            class="pdf-sidebar-tab rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             :class="sidebarMode === 'thumbnails' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-border'"
             :aria-pressed="sidebarMode === 'thumbnails'"
             @click="sidebarMode = 'thumbnails'"
@@ -282,7 +376,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             data-testid="pdf-sidebar-outline-tab"
-            class="rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+            class="pdf-sidebar-tab rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
             :class="sidebarMode === 'outline' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-border'"
             :aria-pressed="sidebarMode === 'outline'"
             @click="sidebarMode = 'outline'"
@@ -318,12 +412,17 @@ onBeforeUnmount(() => {
         <main
           ref="mainScrollerRef"
           data-testid="pdf-page-scroller"
-          class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/15 p-6"
+          class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/15 p-3 sm:p-6"
+          @touchstart="handlePdfTouchStart"
+          @touchmove="handlePdfTouchMove"
+          @touchend="handlePdfTouchEnd"
+          @touchcancel="handlePdfTouchEnd"
         >
           <div class="min-h-full w-max min-w-full">
             <div
               :data-testid="`pdf-page-${currentPage}`"
-              class="mx-auto w-fit bg-white shadow-xl"
+              class="pdf-page-stage mx-auto w-fit bg-white shadow-xl"
+              :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})` } : undefined"
             >
               <canvas
                 ref="mainCanvasRef"
@@ -344,6 +443,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pdf-toolbar {
+  min-width: 0;
+}
+
 .pdf-toolbar-button {
   display: flex;
   height: 2rem;
@@ -370,5 +473,70 @@ onBeforeUnmount(() => {
 .pdf-toolbar-button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+@media (max-width: 639px) {
+  .pdf-preview-root {
+    padding-bottom: 3.35rem;
+  }
+
+  .pdf-toolbar {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    min-height: 3.35rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-header);
+    padding: 0.3rem 0.35rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pdf-toolbar-button,
+  .pdf-page-input,
+  .pdf-fit-width {
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .pdf-toolbar-button {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    font-size: 1.2rem;
+  }
+
+  .pdf-page-input {
+    width: 3.25rem;
+    min-width: 3.25rem;
+    font-size: 0.875rem;
+  }
+
+  .pdf-fit-width {
+    margin-left: 0;
+    min-width: max-content;
+    padding-right: 0.65rem;
+    padding-left: 0.65rem;
+  }
+
+  .pdf-sidebar-tab {
+    min-height: 2.75rem;
+  }
+
+  .pdf-page-stage {
+    transform-origin: center center;
+    will-change: transform;
+  }
+
+  .pdf-toolbar-divider {
+    margin-right: 0.15rem;
+    margin-left: 0.15rem;
+  }
+
+  .pdf-sidebar {
+    bottom: 3.35rem;
+  }
 }
 </style>

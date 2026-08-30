@@ -226,7 +226,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
 
       <div
         data-testid="spreadsheet-pagination"
-        class="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-header px-3 py-1.5 text-xs"
+        class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-header px-2 py-1.5 text-xs sm:gap-3 sm:px-3"
       >
         <span
           data-testid="spreadsheet-page-range"
@@ -242,7 +242,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           <button
             type="button"
             data-testid="spreadsheet-previous-page"
-            class="rounded border border-border px-2 py-1 text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
             :disabled="currentPage <= 1"
             :aria-label="t('fileManager.preview.spreadsheetPreviousPage', 'Previous page')"
             @click="previousPage"
@@ -258,7 +258,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           <button
             type="button"
             data-testid="spreadsheet-next-page"
-            class="rounded border border-border px-2 py-1 text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            class="flex h-11 w-11 items-center justify-center rounded border border-border text-base text-text-secondary hover:bg-border hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
             :disabled="currentPage >= pageCount"
             :aria-label="t('fileManager.preview.spreadsheetNextPage', 'Next page')"
             @click="nextPage"
@@ -278,7 +278,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           :key="`${sheet.name}-${index}`"
           type="button"
           :data-testid="`spreadsheet-sheet-${index}`"
-          class="max-w-48 shrink-0 truncate rounded border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-primary"
+          class="min-h-11 max-w-48 shrink-0 truncate rounded border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-primary sm:min-h-0"
           :class="index === activeIndex
             ? 'border-primary bg-primary/15 text-primary'
             : 'border-border bg-background text-text-secondary hover:bg-border hover:text-foreground'"

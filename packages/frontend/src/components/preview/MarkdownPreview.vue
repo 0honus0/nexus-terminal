@@ -29,7 +29,7 @@ const { t } = useI18n();
     <template #toolbar>
       <button
         type="button"
-        class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        class="flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8"
         @click="emit('edit')"
       >
         <i class="fas fa-pen" aria-hidden="true"></i>
