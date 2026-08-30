@@ -2,7 +2,7 @@
   <div v-if="settings" class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
     <h2 class="text-lg font-semibold text-foreground px-6 py-4 border-b border-border bg-header/50">{{ $t('settings.workspace.title') }}</h2>
     <div class="p-6 space-y-6">
-      <!-- Unified popup editor / preview close behavior -->
+      <!-- Popup editor also controls editor / preview close behavior -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.popupEditor.title') }}</h3>
          <form @submit.prevent="handleUpdatePopupEditorSetting" class="space-y-4">

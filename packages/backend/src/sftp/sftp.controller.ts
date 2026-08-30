@@ -16,6 +16,7 @@ import {
 } from '../websocket/types'; // Import payload types
 import { quotePosixShellArg } from '../utils/shell';
 import {
+  DownloadTicketCapacityError,
   DOWNLOAD_TICKET_TTL_SECONDS,
   attachDownloadStream,
   claimDownloadTicket,
@@ -308,6 +309,10 @@ export const createDownloadTicket = async (
     });
   } catch (error: any) {
     console.error(`SFTP 下载票据创建失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
+    if (error instanceof DownloadTicketCapacityError) {
+      res.status(429).json({ message: error.message });
+      return;
+    }
     res.status(error.message?.includes('No such file') ? 404 : 500).json({
       message: error.message?.includes('No such file') ? '远程文件未找到。' : '创建下载票据失败。',
     });

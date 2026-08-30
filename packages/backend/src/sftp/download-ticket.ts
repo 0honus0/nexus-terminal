@@ -2,7 +2,16 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import type { Readable } from 'node:stream';
 
 export const DOWNLOAD_TICKET_TTL_SECONDS = 5 * 60;
+export const DOWNLOAD_TICKET_MAX_PER_USER = 64;
+export const DOWNLOAD_TICKET_MAX_TOTAL = 512;
 const DOWNLOAD_TICKET_TTL_MS = DOWNLOAD_TICKET_TTL_SECONDS * 1000;
+
+export class DownloadTicketCapacityError extends Error {
+  constructor() {
+    super('下载任务过多，请等待现有下载开始或完成后重试。');
+    this.name = 'DownloadTicketCapacityError';
+  }
+}
 
 export interface DownloadTicketLease {
   id: string;
@@ -48,12 +57,52 @@ const forgetLease = (lease: DownloadTicketLease, destroyStreams: boolean): void 
 
 const isExpired = (lease: DownloadTicketLease, now = Date.now()): boolean => lease.expiresAt <= now;
 
+const cleanupExpiredLeases = (now = Date.now()): void => {
+  for (const lease of leases.values()) {
+    if (isExpired(lease, now)) forgetLease(lease, true);
+  }
+};
+
+const findOldestWaitingLease = (userId?: number): DownloadTicketLease | undefined => {
+  for (const lease of leases.values()) {
+    if (lease.state !== 'waiting') continue;
+    if (userId !== undefined && lease.userId !== userId) continue;
+    return lease;
+  }
+  return undefined;
+};
+
+const countUserLeases = (userId: number): number => {
+  let count = 0;
+  for (const lease of leases.values()) {
+    if (lease.userId === userId) count += 1;
+  }
+  return count;
+};
+
+const ensureCapacityForTicket = (userId: number): void => {
+  cleanupExpiredLeases();
+
+  while (countUserLeases(userId) >= DOWNLOAD_TICKET_MAX_PER_USER) {
+    const evictable = findOldestWaitingLease(userId);
+    if (!evictable) throw new DownloadTicketCapacityError();
+    forgetLease(evictable, true);
+  }
+
+  while (leases.size >= DOWNLOAD_TICKET_MAX_TOTAL) {
+    const evictable = findOldestWaitingLease();
+    if (!evictable) throw new DownloadTicketCapacityError();
+    forgetLease(evictable, true);
+  }
+};
+
 export const touchDownloadTicket = (lease: DownloadTicketLease): void => {
   if (leases.get(lease.id) !== lease) return;
   lease.expiresAt = Date.now() + DOWNLOAD_TICKET_TTL_MS;
 };
 
 export const issueDownloadTicket = (input: IssueDownloadTicketInput): { token: string; lease: DownloadTicketLease } => {
+  ensureCapacityForTicket(input.userId);
   const id = randomUUID();
   const secret = randomBytes(32).toString('base64url');
   const now = Date.now();
@@ -150,9 +199,6 @@ export const invalidateDownloadTicket = (lease: DownloadTicketLease): void => {
 };
 
 const cleanupTimer = setInterval(() => {
-  const now = Date.now();
-  for (const lease of leases.values()) {
-    if (isExpired(lease, now)) forgetLease(lease, true);
-  }
+  cleanupExpiredLeases();
 }, 5_000);
 cleanupTimer.unref();

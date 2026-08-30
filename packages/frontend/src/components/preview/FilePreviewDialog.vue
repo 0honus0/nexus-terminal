@@ -19,7 +19,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const tabsContext = inject(filePreviewTabsContextKey, null);
 const dialogRef = ref<HTMLElement | null>(null);
-let previouslyFocusedElement: HTMLElement | null = null;
+let standalonePreviouslyFocusedElement: HTMLElement | null = null;
 
 const tabs = computed(() => tabsContext?.tabs.value ?? []);
 const activeTabId = computed(() => tabsContext?.activeTabId.value ?? null);
@@ -67,9 +67,11 @@ const handleKeydown = (event: KeyboardEvent) => {
 };
 
 onMounted(() => {
-  previouslyFocusedElement = document.activeElement instanceof HTMLElement
-    ? document.activeElement
-    : null;
+  if (!tabsContext) {
+    standalonePreviouslyFocusedElement = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  }
   document.addEventListener('keydown', handleKeydown);
   if (props.active) void nextTick(() => dialogRef.value?.focus());
 });
@@ -80,7 +82,9 @@ watch(() => props.active, (active) => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown);
-  if (!tabsContext && props.active) previouslyFocusedElement?.focus({ preventScroll: true });
+  if (!tabsContext && props.active && standalonePreviouslyFocusedElement?.isConnected) {
+    standalonePreviouslyFocusedElement.focus({ preventScroll: true });
+  }
 });
 </script>
 
@@ -88,6 +92,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       ref="dialogRef"
+      data-file-preview-dialog
       class="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 p-3 md:p-6 outline-none"
       :style="props.active ? undefined : { display: 'none' }"
       role="dialog"

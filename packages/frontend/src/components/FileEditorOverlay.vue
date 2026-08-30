@@ -39,7 +39,6 @@ const {
 const {
     showPopupFileEditorBoolean,
     shareFileEditorTabsBoolean,
-    clearFileEditorTabsOnCloseBoolean,
 } = storeToRefs(settingsStore);
 
 // 从 Appearance Store 获取编辑器字体大小和字体
@@ -552,9 +551,9 @@ const handleBackdropClick = () => {
     hideEditorOverlay();
 };
 
-// 关闭按钮根据工作区设置决定是否清空当前编辑器的全部文件缓存。
+// 弹窗文件编辑开关同时决定关闭按钮是否清空当前编辑器的全部文件缓存。
 const handleCloseButton = () => {
-    if (clearFileEditorTabsOnCloseBoolean.value) {
+    if (showPopupFileEditorBoolean.value) {
         if (shareFileEditorTabsBoolean.value) {
             closeAllGlobalTabs();
         } else {

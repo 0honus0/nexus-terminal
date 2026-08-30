@@ -10,7 +10,7 @@ const pdfPattern = /\.pdf$/i;
 export const pdfPreviewProvider: FilePreviewProvider = {
   id: 'pdf',
   priority: 90,
-  maxInlineSize: 25 * 1024 * 1024,
+  maxInlineSize: 20 * 1024 * 1024,
 
   canPreview(file) {
     return file.attrs.isFile && pdfPattern.test(file.filename);
