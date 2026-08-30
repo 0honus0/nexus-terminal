@@ -237,4 +237,11 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--text-color-secondary) 75%, transparent);
   background-clip: padding-box;
 }
+
+/* Touch devices pan the content directly; keep the bridge mounted but hide the desktop track. */
+@media (hover: none) and (pointer: coarse) {
+  .preview-horizontal-scrollbar {
+    display: none !important;
+  }
+}
 </style>
