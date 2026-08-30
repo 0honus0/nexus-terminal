@@ -302,7 +302,7 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
   await openConnectedFileManager(page);
 
   await slowStep('hide the first PDF by clicking the preview backdrop rather than closing its tab', async () => {
-    const fileList = page.getByTestId('file-manager-list');
+    const fileList = page.getByTestId('file-manager-modal').getByTestId('file-manager-list');
     await fileList.focus();
     await expect(fileList).toBeFocused();
     await row(page, 'preview.pdf').dblclick();
@@ -368,7 +368,7 @@ test('preview close button clears cached tabs when popup file editing is enabled
   await openConnectedFileManager(page);
 
   await slowStep('open two special-file previews and clear both with the workspace close button', async () => {
-    const fileList = page.getByTestId('file-manager-list');
+    const fileList = page.getByTestId('file-manager-modal').getByTestId('file-manager-list');
     await fileList.focus();
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
