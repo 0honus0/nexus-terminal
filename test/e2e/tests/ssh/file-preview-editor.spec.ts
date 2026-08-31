@@ -202,7 +202,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByTestId('file-editor-close').click();
   });
 
-  await slowStep('PDF.js preview scrolls pages continuously and uses an outline-only drawer', async () => {
+  await slowStep('PDF.js preview scrolls continuously with a narrow persistent desktop outline', async () => {
     const filename = 'preview.pdf';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
@@ -226,9 +226,17 @@ test('file previews and text editor protect historical file-opening regressions'
 
     const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
     const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
-    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
-    await outlineToggle.click();
     await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+    await expect(outlineDrawer).toBeVisible();
+    await expect(outlineToggle).toBeHidden();
+    await expect(dialog.getByTestId('pdf-outline-close')).toBeHidden();
+    const outlineBox = await outlineDrawer.boundingBox();
+    const scrollerBox = await scroller.boundingBox();
+    expect(outlineBox).toBeTruthy();
+    expect(scrollerBox).toBeTruthy();
+    expect(outlineBox!.width).toBeGreaterThanOrEqual(190);
+    expect(outlineBox!.width).toBeLessThanOrEqual(224);
+    expect(outlineBox!.x + outlineBox!.width).toBeLessThanOrEqual(scrollerBox!.x + 1);
     const outline = dialog.getByTestId('pdf-outline');
     await expect(outline.getByText('Introduction', { exact: true })).toBeVisible();
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
@@ -237,7 +245,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(dialog.locator('[data-testid^="pdf-thumbnail-"]')).toHaveCount(0);
     await outline.getByText('Second Chapter', { exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
     await captureFunctionalScreenshot(page, 'file-manager-pdf-preview.png', { viewport: { width: 1440, height: 900 } });
 
     const zoom = dialog.getByTestId('pdf-zoom-label');
@@ -713,12 +721,11 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await dialog.getByTestId('pdf-outline-toggle').click();
     const outline = dialog.getByTestId('pdf-outline');
+    await expect(outline).toBeVisible();
     await outline.getByText('Second Chapter', { exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
     await replaceFixture(filename);
-    await dialog.getByTestId('pdf-outline-toggle').click();
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
     await dialog.getByTestId('file-preview-refresh').click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');

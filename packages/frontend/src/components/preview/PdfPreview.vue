@@ -28,11 +28,13 @@ const fitWidth = ref(true);
 const pinchScale = ref(1);
 const pinchPreviewPercent = ref<number | null>(null);
 const outlineOpen = ref(false);
+const desktopOutlinePersistent = ref(false);
 const availablePageWidth = ref(220);
 const pageScalePercents = ref<Record<number, number>>({});
 const mainScrollerRef = ref<HTMLElement | null>(null);
 
 let resizeObserver: ResizeObserver | null = null;
+let desktopOutlineMediaQuery: MediaQueryList | null = null;
 let scrollFrame = 0;
 let restoreFrame = 0;
 let restoringScrollPosition = false;
@@ -61,6 +63,7 @@ const displayedZoomPercent = computed(() => (
   ?? (fitWidth.value ? currentFitZoom.value : zoomPercent.value)
 ));
 const zoomLabel = computed(() => `${Math.round(displayedZoomPercent.value)}%`);
+const outlineHidden = computed(() => !desktopOutlinePersistent.value && !outlineOpen.value);
 
 const clampPage = (value: number) => Math.min(pageCount.value, Math.max(1, Math.round(value)));
 const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value)));
@@ -162,6 +165,11 @@ const handlePageInput = (event: Event) => {
 
 const previousPage = () => scrollToPage(currentPage.value - 1);
 const nextPage = () => scrollToPage(currentPage.value + 1);
+
+const syncOutlineLayout = () => {
+  desktopOutlinePersistent.value = desktopOutlineMediaQuery?.matches ?? false;
+  if (desktopOutlinePersistent.value) outlineOpen.value = false;
+};
 
 const anchorAfterZoom = (pageNumber: number) => {
   void nextTick(() => requestAnimationFrame(() => scrollToPage(pageNumber, 'auto')));
@@ -346,6 +354,9 @@ watch(() => props.document, () => {
 });
 
 onMounted(() => {
+  desktopOutlineMediaQuery = window.matchMedia('(min-width: 640px)');
+  syncOutlineLayout();
+  desktopOutlineMediaQuery.addEventListener('change', syncOutlineLayout);
   resizeObserver = new ResizeObserver(() => {
     if (!updateAvailableWidth()) return;
     anchorAfterZoom(currentPage.value);
@@ -362,6 +373,8 @@ onBeforeUnmount(() => {
   restoreFrame = 0;
   resizeObserver?.disconnect();
   resizeObserver = null;
+  desktopOutlineMediaQuery?.removeEventListener('change', syncOutlineLayout);
+  desktopOutlineMediaQuery = null;
 });
 </script>
 
@@ -438,7 +451,7 @@ onBeforeUnmount(() => {
         <button
           type="button"
           data-testid="pdf-outline-toggle"
-          class="pdf-toolbar-button"
+          class="pdf-toolbar-button sm:hidden"
           :aria-expanded="outlineOpen"
           :aria-label="t('fileManager.preview.pdfOutline', 'Outline')"
           :title="t('fileManager.preview.pdfOutline', 'Outline')"
@@ -456,7 +469,7 @@ onBeforeUnmount(() => {
       @keydown="handleKeydown"
     >
       <button
-        v-if="outlineOpen"
+        v-if="outlineOpen && !desktopOutlinePersistent"
         type="button"
         class="absolute inset-0 z-10 bg-black/35"
         :aria-label="t('common.close', 'Close')"
@@ -464,16 +477,16 @@ onBeforeUnmount(() => {
       ></button>
       <aside
         data-testid="pdf-outline-drawer"
-        class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(84vw,22rem)] flex-col border-r border-border bg-header/95 shadow-xl"
+        class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(82vw,18rem)] flex-col border-r border-border bg-header/95 shadow-xl sm:relative sm:inset-auto sm:z-auto sm:w-52 sm:shrink-0 sm:translate-x-0 sm:pointer-events-auto sm:shadow-none"
         :class="outlineOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"
-        :aria-hidden="!outlineOpen"
+        :aria-hidden="outlineHidden"
       >
         <header class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
           <strong class="truncate text-sm font-medium">{{ t('fileManager.preview.pdfOutline', 'Outline') }}</strong>
           <button
             type="button"
             data-testid="pdf-outline-close"
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground sm:h-8 sm:w-8"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground sm:hidden"
             :aria-label="t('common.close', 'Close')"
             @click="outlineOpen = false"
           >
