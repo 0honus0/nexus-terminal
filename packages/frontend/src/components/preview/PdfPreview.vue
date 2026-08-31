@@ -449,9 +449,10 @@ onBeforeUnmount(() => {
           {{ t('fileManager.preview.pdfFitWidth', 'Fit width') }}
         </button>
         <button
+          v-if="!desktopOutlinePersistent"
           type="button"
           data-testid="pdf-outline-toggle"
-          class="pdf-toolbar-button sm:hidden"
+          class="pdf-toolbar-button"
           :aria-expanded="outlineOpen"
           :aria-label="t('fileManager.preview.pdfOutline', 'Outline')"
           :title="t('fileManager.preview.pdfOutline', 'Outline')"
@@ -484,9 +485,10 @@ onBeforeUnmount(() => {
         <header class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
           <strong class="truncate text-sm font-medium">{{ t('fileManager.preview.pdfOutline', 'Outline') }}</strong>
           <button
+            v-if="!desktopOutlinePersistent"
             type="button"
             data-testid="pdf-outline-close"
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground sm:hidden"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground"
             :aria-label="t('common.close', 'Close')"
             @click="outlineOpen = false"
           >
