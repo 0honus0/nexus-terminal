@@ -460,6 +460,12 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
 
+  await outlineToggle.click();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+  await expect(dialog.getByTestId('pdf-outline-close')).toBeVisible();
+  await dialog.getByTestId('pdf-outline-close').click();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+
   const thirdPage = dialog.getByTestId('pdf-page-3');
   await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await thirdPage.evaluate((element) => element.offsetTop));
   await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
