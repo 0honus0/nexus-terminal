@@ -89,9 +89,17 @@ const applyPageScroll = (page: number, behavior: ScrollBehavior) => {
   return true;
 };
 
+const hasMeasuredPagesThrough = (page: number) => {
+  for (let pageNumber = 1; pageNumber <= page; pageNumber += 1) {
+    if (pageScalePercents.value[pageNumber] == null) return false;
+  }
+  return true;
+};
+
 const finishPendingPageJump = () => {
   const pending = pendingPageJump;
   if (!pending || !props.active) return false;
+  if (!hasMeasuredPagesThrough(pending.page)) return false;
   if (!applyPageScroll(pending.page, pending.behavior)) return false;
   pendingPageJump = null;
   savedNeedsPageAnchor = false;
@@ -181,7 +189,7 @@ const handlePageScale = (pageNumber: number, percent: number) => {
     ...pageScalePercents.value,
     [pageNumber]: percent,
   };
-  if (pendingPageJump?.page === pageNumber) {
+  if (pendingPageJump) {
     void nextTick(() => requestAnimationFrame(() => {
       if (!finishPendingPageJump()) return;
       queueCurrentPageUpdate();
