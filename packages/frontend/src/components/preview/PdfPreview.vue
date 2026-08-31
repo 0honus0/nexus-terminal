@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
+import PdfContinuousPage from './PdfContinuousPage.vue';
 import PdfOutlineItems, { type PdfOutlineItem } from './PdfOutlineItems.vue';
-import PdfThumbnail from './PdfThumbnail.vue';
 import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 
 const props = withDefaults(defineProps<{
@@ -24,19 +24,16 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const currentPage = ref(1);
 const zoomPercent = ref(100);
-const effectiveZoomPercent = ref(100);
-const pinchScale = ref(1);
 const fitWidth = ref(true);
-const sidebarMode = ref<'thumbnails' | 'outline'>('thumbnails');
-const mobileSidebarOpen = ref(false);
+const pinchScale = ref(1);
+const pinchPreviewPercent = ref<number | null>(null);
+const outlineOpen = ref(false);
+const availablePageWidth = ref(220);
+const pageScalePercents = ref<Record<number, number>>({});
 const mainScrollerRef = ref<HTMLElement | null>(null);
-const mainCanvasRef = ref<HTMLCanvasElement | null>(null);
-let renderTask: RenderTask | null = null;
-let renderToken = 0;
+
 let resizeObserver: ResizeObserver | null = null;
-let resizeFrame = 0;
-let disposed = false;
-let pinchRenderPending = false;
+let scrollFrame = 0;
 let pinchGesture: {
   startDistance: number;
   startZoom: number;
@@ -47,96 +44,120 @@ const pageCount = computed(() => props.document.numPages);
 const subtitle = computed(() => t('fileManager.preview.pdfMeta', {
   pages: pageCount.value,
 }, `PDF · ${pageCount.value} pages`));
-const zoomLabel = computed(() => `${Math.round(effectiveZoomPercent.value)}%`);
+const currentFitZoom = computed(() => (
+  pageScalePercents.value[currentPage.value]
+  ?? pageScalePercents.value[1]
+  ?? 100
+));
+const displayedZoomPercent = computed(() => (
+  pinchPreviewPercent.value
+  ?? (fitWidth.value ? currentFitZoom.value : zoomPercent.value)
+));
+const zoomLabel = computed(() => `${Math.round(displayedZoomPercent.value)}%`);
 
 const clampPage = (value: number) => Math.min(pageCount.value, Math.max(1, Math.round(value)));
 const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value)));
 
-const renderCurrentPage = async () => {
-  const canvas = mainCanvasRef.value;
+const updateAvailableWidth = () => {
   const scroller = mainScrollerRef.value;
-  if (!canvas || !scroller || disposed) return;
-
-  const token = ++renderToken;
-  renderTask?.cancel();
-  renderTask = null;
-
-  const page = await props.document.getPage(currentPage.value);
-  if (disposed || token !== renderToken) return;
-
-  const baseViewport = page.getViewport({ scale: 1 });
-  const availableWidth = Math.max(220, scroller.clientWidth - 48);
-  const scale = fitWidth.value
-    ? Math.min(4, Math.max(0.25, availableWidth / baseViewport.width))
-    : clampZoom(zoomPercent.value) / 100;
-  const viewport = page.getViewport({ scale });
-  const outputScale = Math.min(window.devicePixelRatio || 1, 2);
-
-  effectiveZoomPercent.value = scale * 100;
-  canvas.width = Math.max(1, Math.floor(viewport.width * outputScale));
-  canvas.height = Math.max(1, Math.floor(viewport.height * outputScale));
-  canvas.style.width = `${Math.round(viewport.width)}px`;
-  canvas.style.height = `${Math.round(viewport.height)}px`;
-  if (pinchRenderPending) {
-    pinchRenderPending = false;
-    pinchScale.value = 1;
-  }
-
-  renderTask = page.render({
-    canvas,
-    viewport,
-    transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
-  });
-
-  try {
-    await renderTask.promise;
-  } catch (error: any) {
-    if (error?.name !== 'RenderingCancelledException' && !disposed) throw error;
-  } finally {
-    if (token === renderToken) renderTask = null;
-    page.cleanup();
-  }
+  if (!scroller) return;
+  const style = getComputedStyle(scroller);
+  const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+  availablePageWidth.value = Math.max(220, scroller.clientWidth - horizontalPadding);
 };
 
-const scheduleRender = () => {
-  if (resizeFrame) cancelAnimationFrame(resizeFrame);
-  resizeFrame = requestAnimationFrame(() => {
-    resizeFrame = 0;
-    void nextTick(renderCurrentPage);
+const pageElement = (pageNumber: number) => mainScrollerRef.value?.querySelector<HTMLElement>(
+  `[data-pdf-page-number="${pageNumber}"]`,
+) ?? null;
+
+const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'smooth') => {
+  const page = clampPage(pageNumber);
+  currentPage.value = page;
+  outlineOpen.value = false;
+  void nextTick(() => {
+    const scroller = mainScrollerRef.value;
+    const element = pageElement(page);
+    if (!scroller || !element) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const pageRect = element.getBoundingClientRect();
+    const top = Math.max(0, scroller.scrollTop + pageRect.top - scrollerRect.top - 8);
+    scroller.scrollTo({ top, left: 0, behavior });
   });
 };
 
-const selectPage = (pageNumber: number) => {
-  currentPage.value = clampPage(pageNumber);
-  mobileSidebarOpen.value = false;
-  mainScrollerRef.value?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+const updateCurrentPageFromScroll = () => {
+  scrollFrame = 0;
+  const scroller = mainScrollerRef.value;
+  if (!scroller) return;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const focusY = scrollerRect.top + Math.min(scroller.clientHeight * 0.35, 260);
+  const pages = Array.from(scroller.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+  let bestPage = currentPage.value;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const element of pages) {
+    const rect = element.getBoundingClientRect();
+    if (rect.bottom < scrollerRect.top || rect.top > scrollerRect.bottom) continue;
+    const distance = focusY < rect.top
+      ? rect.top - focusY
+      : focusY > rect.bottom
+        ? focusY - rect.bottom
+        : 0;
+    if (distance >= bestDistance) continue;
+    const page = Number(element.dataset.pdfPageNumber);
+    if (!Number.isFinite(page)) continue;
+    bestPage = page;
+    bestDistance = distance;
+    if (distance === 0) break;
+  }
+
+  currentPage.value = clampPage(bestPage);
+};
+
+const queueCurrentPageUpdate = () => {
+  if (scrollFrame) return;
+  scrollFrame = requestAnimationFrame(updateCurrentPageFromScroll);
 };
 
 const handlePageInput = (event: Event) => {
   const input = event.currentTarget as HTMLInputElement;
   const parsed = Number(input.value);
-  if (Number.isFinite(parsed)) selectPage(parsed);
+  if (Number.isFinite(parsed)) scrollToPage(parsed);
   input.value = String(currentPage.value);
 };
 
-const previousPage = () => selectPage(currentPage.value - 1);
-const nextPage = () => selectPage(currentPage.value + 1);
+const previousPage = () => scrollToPage(currentPage.value - 1);
+const nextPage = () => scrollToPage(currentPage.value + 1);
+
+const anchorAfterZoom = (pageNumber: number) => {
+  void nextTick(() => requestAnimationFrame(() => scrollToPage(pageNumber, 'auto')));
+};
 
 const zoomIn = () => {
-  const baseZoom = fitWidth.value ? effectiveZoomPercent.value : zoomPercent.value;
+  const anchorPage = currentPage.value;
+  zoomPercent.value = clampZoom(displayedZoomPercent.value + 25);
   fitWidth.value = false;
-  zoomPercent.value = clampZoom(baseZoom + 25);
+  anchorAfterZoom(anchorPage);
 };
 
 const zoomOut = () => {
-  const baseZoom = fitWidth.value ? effectiveZoomPercent.value : zoomPercent.value;
+  const anchorPage = currentPage.value;
+  zoomPercent.value = clampZoom(displayedZoomPercent.value - 25);
   fitWidth.value = false;
-  zoomPercent.value = clampZoom(baseZoom - 25);
+  anchorAfterZoom(anchorPage);
 };
 
 const setFitWidth = () => {
+  const anchorPage = currentPage.value;
   fitWidth.value = true;
-  scheduleRender();
+  anchorAfterZoom(anchorPage);
+};
+
+const handlePageScale = (pageNumber: number, percent: number) => {
+  pageScalePercents.value = {
+    ...pageScalePercents.value,
+    [pageNumber]: percent,
+  };
 };
 
 const touchDistance = (first: Touch, second: Touch) => Math.hypot(
@@ -151,7 +172,7 @@ const handlePdfTouchStart = (event: TouchEvent) => {
   }
   const distance = touchDistance(event.touches[0], event.touches[1]);
   if (distance <= 0) return;
-  const startZoom = fitWidth.value ? effectiveZoomPercent.value : zoomPercent.value;
+  const startZoom = displayedZoomPercent.value;
   pinchGesture = {
     startDistance: distance,
     startZoom,
@@ -167,22 +188,26 @@ const handlePdfTouchMove = (event: TouchEvent) => {
   pinchGesture.targetZoom = clampZoom(
     pinchGesture.startZoom * (distance / pinchGesture.startDistance),
   );
+  pinchPreviewPercent.value = pinchGesture.targetZoom;
   pinchScale.value = pinchGesture.targetZoom / pinchGesture.startZoom;
-  effectiveZoomPercent.value = pinchGesture.targetZoom;
 };
 
 const commitPinchZoom = () => {
   if (!pinchGesture) return;
+  const anchorPage = currentPage.value;
   const { startZoom, targetZoom } = pinchGesture;
   pinchGesture = null;
+  pinchPreviewPercent.value = null;
   if (Math.abs(targetZoom - startZoom) < 2) {
     pinchScale.value = 1;
-    effectiveZoomPercent.value = fitWidth.value ? effectiveZoomPercent.value : zoomPercent.value;
     return;
   }
-  pinchRenderPending = true;
   fitWidth.value = false;
   zoomPercent.value = targetZoom;
+  void nextTick(() => requestAnimationFrame(() => {
+    pinchScale.value = 1;
+    scrollToPage(anchorPage, 'auto');
+  }));
 };
 
 const handlePdfTouchEnd = (event: TouchEvent) => {
@@ -198,14 +223,14 @@ const resolveOutlineDestination = async (item: PdfOutlineItem) => {
 
   const target = destination[0];
   if (typeof target === 'number') {
-    selectPage(target + 1);
+    scrollToPage(target + 1);
     return;
   }
 
   if (target && typeof target === 'object') {
     try {
       const pageIndex = await props.document.getPageIndex(target as any);
-      selectPage(pageIndex + 1);
+      scrollToPage(pageIndex + 1);
     } catch (error) {
       console.warn('[PdfPreview] Failed to resolve outline destination', error);
     }
@@ -223,41 +248,43 @@ const handleKeydown = (event: KeyboardEvent) => {
   }
 };
 
-watch([currentPage, zoomPercent, fitWidth], scheduleRender);
-
 watch(() => props.active, (active) => {
-  if (active) return;
-  mobileSidebarOpen.value = false;
-  pinchGesture = null;
-  pinchRenderPending = false;
-  pinchScale.value = 1;
+  if (!active) {
+    outlineOpen.value = false;
+    pinchGesture = null;
+    pinchPreviewPercent.value = null;
+    pinchScale.value = 1;
+    return;
+  }
+  void nextTick(() => {
+    updateAvailableWidth();
+    queueCurrentPageUpdate();
+  });
 });
 
 watch(() => props.document, () => {
-  renderToken += 1;
-  renderTask?.cancel();
-  renderTask = null;
-  currentPage.value = clampPage(currentPage.value);
-  scheduleRender();
+  const preservedPage = clampPage(currentPage.value);
+  pageScalePercents.value = {};
+  void nextTick(() => {
+    updateAvailableWidth();
+    window.setTimeout(() => scrollToPage(preservedPage, 'auto'), 80);
+  });
 });
 
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => {
-    if (fitWidth.value) scheduleRender();
+    updateAvailableWidth();
   });
   if (mainScrollerRef.value) resizeObserver.observe(mainScrollerRef.value);
-  scheduleRender();
+  updateAvailableWidth();
+  queueCurrentPageUpdate();
 });
 
 onBeforeUnmount(() => {
-  disposed = true;
-  renderToken += 1;
-  if (resizeFrame) cancelAnimationFrame(resizeFrame);
-  resizeFrame = 0;
+  if (scrollFrame) cancelAnimationFrame(scrollFrame);
+  scrollFrame = 0;
   resizeObserver?.disconnect();
   resizeObserver = null;
-  renderTask?.cancel();
-  renderTask = null;
 });
 </script>
 
@@ -333,13 +360,14 @@ onBeforeUnmount(() => {
         </button>
         <button
           type="button"
-          data-testid="pdf-sidebar-toggle"
-          class="pdf-toolbar-button sm:hidden"
-          :aria-expanded="mobileSidebarOpen"
-          :aria-label="t('fileManager.preview.pdfThumbnails', 'Pages')"
-          @click="mobileSidebarOpen = !mobileSidebarOpen"
+          data-testid="pdf-outline-toggle"
+          class="pdf-toolbar-button"
+          :aria-expanded="outlineOpen"
+          :aria-label="t('fileManager.preview.pdfOutline', 'Outline')"
+          :title="t('fileManager.preview.pdfOutline', 'Outline')"
+          @click="outlineOpen = !outlineOpen"
         >
-          ☰
+          <i class="fas fa-list-ul" aria-hidden="true"></i>
         </button>
       </div>
     </template>
@@ -351,52 +379,31 @@ onBeforeUnmount(() => {
       @keydown="handleKeydown"
     >
       <button
-        v-if="mobileSidebarOpen"
+        v-if="outlineOpen"
         type="button"
-        class="absolute inset-0 z-10 bg-black/35 sm:hidden"
+        class="absolute inset-0 z-10 bg-black/35"
         :aria-label="t('common.close', 'Close')"
-        @click="mobileSidebarOpen = false"
+        @click="outlineOpen = false"
       ></button>
       <aside
-        data-testid="pdf-sidebar"
-        class="pdf-sidebar absolute inset-y-0 left-0 z-20 w-[min(82vw,20rem)] shrink-0 flex-col border-r border-border bg-header/95 shadow-xl sm:static sm:z-auto sm:flex sm:w-52 sm:bg-header/60 sm:shadow-none"
-        :class="mobileSidebarOpen ? 'flex' : 'hidden sm:flex'"
+        data-testid="pdf-outline-drawer"
+        class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(84vw,22rem)] flex-col border-r border-border bg-header/95 shadow-xl"
+        :class="outlineOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"
+        :aria-hidden="!outlineOpen"
       >
-        <div class="grid shrink-0 grid-cols-2 border-b border-border p-1">
+        <header class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
+          <strong class="truncate text-sm font-medium">{{ t('fileManager.preview.pdfOutline', 'Outline') }}</strong>
           <button
             type="button"
-            data-testid="pdf-sidebar-thumbnails-tab"
-            class="pdf-sidebar-tab rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-            :class="sidebarMode === 'thumbnails' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-border'"
-            :aria-pressed="sidebarMode === 'thumbnails'"
-            @click="sidebarMode = 'thumbnails'"
+            data-testid="pdf-outline-close"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground sm:h-8 sm:w-8"
+            :aria-label="t('common.close', 'Close')"
+            @click="outlineOpen = false"
           >
-            {{ t('fileManager.preview.pdfThumbnails', 'Pages') }}
+            ×
           </button>
-          <button
-            type="button"
-            data-testid="pdf-sidebar-outline-tab"
-            class="pdf-sidebar-tab rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-            :class="sidebarMode === 'outline' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-border'"
-            :aria-pressed="sidebarMode === 'outline'"
-            @click="sidebarMode = 'outline'"
-          >
-            {{ t('fileManager.preview.pdfOutline', 'Outline') }}
-          </button>
-        </div>
-
-        <div v-if="sidebarMode === 'thumbnails'" class="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-          <PdfThumbnail
-            v-for="pageNumber in pageCount"
-            :key="pageNumber"
-            :document="props.document"
-            :page-number="pageNumber"
-            :active="pageNumber === currentPage"
-            @select="selectPage"
-          />
-        </div>
-
-        <div v-else data-testid="pdf-outline" class="min-h-0 flex-1 overflow-y-auto p-2">
+        </header>
+        <div data-testid="pdf-outline" class="min-h-0 flex-1 overflow-y-auto p-2">
           <PdfOutlineItems
             v-if="props.outline.length"
             :items="props.outline"
@@ -413,22 +420,28 @@ onBeforeUnmount(() => {
           ref="mainScrollerRef"
           data-testid="pdf-page-scroller"
           class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/15 p-3 sm:p-6"
+          @scroll="queueCurrentPageUpdate"
           @touchstart="handlePdfTouchStart"
           @touchmove="handlePdfTouchMove"
           @touchend="handlePdfTouchEnd"
           @touchcancel="handlePdfTouchEnd"
         >
-          <div class="min-h-full w-max min-w-full">
-            <div
-              :data-testid="`pdf-page-${currentPage}`"
-              class="pdf-page-stage mx-auto w-fit bg-white shadow-xl"
-              :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})` } : undefined"
-            >
-              <canvas
-                ref="mainCanvasRef"
-                class="block bg-white"
-              />
-            </div>
+          <div
+            data-testid="pdf-continuous-pages"
+            class="pdf-pages-column flex min-h-full w-max min-w-full flex-col gap-3 sm:gap-4"
+            :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})` } : undefined"
+          >
+            <PdfContinuousPage
+              v-for="pageNumber in pageCount"
+              :key="pageNumber"
+              :document="props.document"
+              :page-number="pageNumber"
+              :available-width="availablePageWidth"
+              :fit-width="fitWidth"
+              :zoom-percent="zoomPercent"
+              :active="props.active"
+              @scale="handlePageScale"
+            />
           </div>
         </main>
         <PreviewHorizontalScrollbar
@@ -473,6 +486,15 @@ onBeforeUnmount(() => {
 .pdf-toolbar-button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.pdf-outline-drawer {
+  transition: transform 160ms ease-out;
+}
+
+.pdf-pages-column {
+  transform-origin: top center;
+  will-change: transform;
 }
 
 @media (max-width: 639px) {
@@ -521,21 +543,12 @@ onBeforeUnmount(() => {
     padding-left: 0.65rem;
   }
 
-  .pdf-sidebar-tab {
-    min-height: 2.75rem;
-  }
-
-  .pdf-page-stage {
-    transform-origin: center center;
-    will-change: transform;
-  }
-
   .pdf-toolbar-divider {
     margin-right: 0.15rem;
     margin-left: 0.15rem;
   }
 
-  .pdf-sidebar {
+  .pdf-outline-drawer {
     bottom: 3.35rem;
   }
 }
