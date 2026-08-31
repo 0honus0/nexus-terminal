@@ -75,19 +75,23 @@ const pageElement = (pageNumber: number) => mainScrollerRef.value?.querySelector
   `[data-pdf-page-number="${pageNumber}"]`,
 ) ?? null;
 
-const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'smooth') => {
+const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'auto') => {
   const page = clampPage(pageNumber);
   currentPage.value = page;
   outlineOpen.value = false;
-  void nextTick(() => {
+
+  const applyScroll = () => {
     const scroller = mainScrollerRef.value;
     const element = pageElement(page);
-    if (!scroller || !element) return;
+    if (!scroller || !element) return false;
     const scrollerRect = scroller.getBoundingClientRect();
     const pageRect = element.getBoundingClientRect();
     const top = Math.max(0, scroller.scrollTop + pageRect.top - scrollerRect.top - 8);
     scroller.scrollTo({ top, left: 0, behavior });
-  });
+    return true;
+  };
+
+  if (!applyScroll()) void nextTick(applyScroll);
 };
 
 const updateCurrentPageFromScroll = () => {
