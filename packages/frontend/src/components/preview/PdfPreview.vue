@@ -67,10 +67,13 @@ const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value
 
 const updateAvailableWidth = () => {
   const scroller = mainScrollerRef.value;
-  if (!scroller) return;
+  if (!scroller || !props.active || scroller.clientWidth < 32) return false;
   const style = getComputedStyle(scroller);
   const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
-  availablePageWidth.value = Math.max(220, scroller.clientWidth - horizontalPadding);
+  const nextWidth = Math.max(220, scroller.clientWidth - horizontalPadding);
+  const changed = Math.abs(nextWidth - availablePageWidth.value) > 1;
+  availablePageWidth.value = nextWidth;
+  return changed;
 };
 
 const pageElement = (pageNumber: number) => mainScrollerRef.value?.querySelector<HTMLElement>(
@@ -311,7 +314,7 @@ watch(() => props.active, (active) => {
   void nextTick(() => {
     restoreFrame = requestAnimationFrame(() => {
       restoreFrame = 0;
-      updateAvailableWidth();
+      if (updateAvailableWidth()) savedNeedsPageAnchor = true;
       if (savedNeedsPageAnchor) {
         restoringScrollPosition = false;
         scrollToPage(savedCurrentPage, 'auto');
@@ -344,7 +347,8 @@ watch(() => props.document, () => {
 
 onMounted(() => {
   resizeObserver = new ResizeObserver(() => {
-    updateAvailableWidth();
+    if (!updateAvailableWidth()) return;
+    anchorAfterZoom(currentPage.value);
   });
   if (mainScrollerRef.value) resizeObserver.observe(mainScrollerRef.value);
   updateAvailableWidth();
