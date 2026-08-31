@@ -39,6 +39,8 @@ let restoringScrollPosition = false;
 let savedScrollTop = 0;
 let savedScrollLeft = 0;
 let savedCurrentPage = 1;
+let savedNeedsPageAnchor = false;
+let pendingPageJump: { page: number; behavior: ScrollBehavior } | null = null;
 let pinchGesture: {
   startDistance: number;
   startZoom: number;
@@ -75,28 +77,38 @@ const pageElement = (pageNumber: number) => mainScrollerRef.value?.querySelector
   `[data-pdf-page-number="${pageNumber}"]`,
 ) ?? null;
 
+const applyPageScroll = (page: number, behavior: ScrollBehavior) => {
+  const scroller = mainScrollerRef.value;
+  const element = pageElement(page);
+  if (!scroller || !element) return false;
+  const pageRect = element.getBoundingClientRect();
+  if (pageRect.height < 32) return false;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const top = Math.max(0, scroller.scrollTop + pageRect.top - scrollerRect.top - 8);
+  scroller.scrollTo({ top, left: 0, behavior });
+  return true;
+};
+
+const finishPendingPageJump = () => {
+  const pending = pendingPageJump;
+  if (!pending || !props.active) return false;
+  if (!applyPageScroll(pending.page, pending.behavior)) return false;
+  pendingPageJump = null;
+  savedNeedsPageAnchor = false;
+  return true;
+};
+
 const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'auto') => {
   const page = clampPage(pageNumber);
   currentPage.value = page;
   outlineOpen.value = false;
-
-  const applyScroll = () => {
-    const scroller = mainScrollerRef.value;
-    const element = pageElement(page);
-    if (!scroller || !element) return false;
-    const scrollerRect = scroller.getBoundingClientRect();
-    const pageRect = element.getBoundingClientRect();
-    const top = Math.max(0, scroller.scrollTop + pageRect.top - scrollerRect.top - 8);
-    scroller.scrollTo({ top, left: 0, behavior });
-    return true;
-  };
-
-  if (!applyScroll()) void nextTick(applyScroll);
+  pendingPageJump = { page, behavior };
+  if (!finishPendingPageJump()) void nextTick(finishPendingPageJump);
 };
 
 const updateCurrentPageFromScroll = () => {
   scrollFrame = 0;
-  if (restoringScrollPosition || !props.active) return;
+  if (restoringScrollPosition || pendingPageJump || !props.active) return;
   const scroller = mainScrollerRef.value;
   if (!scroller) return;
   const scrollerRect = scroller.getBoundingClientRect();
@@ -126,7 +138,7 @@ const updateCurrentPageFromScroll = () => {
 };
 
 const queueCurrentPageUpdate = () => {
-  if (restoringScrollPosition || !props.active || scrollFrame) return;
+  if (restoringScrollPosition || pendingPageJump || !props.active || scrollFrame) return;
   scrollFrame = requestAnimationFrame(updateCurrentPageFromScroll);
 };
 
@@ -169,6 +181,13 @@ const handlePageScale = (pageNumber: number, percent: number) => {
     ...pageScalePercents.value,
     [pageNumber]: percent,
   };
+  if (pendingPageJump?.page === pageNumber) {
+    void nextTick(() => requestAnimationFrame(() => {
+      if (!finishPendingPageJump()) return;
+      queueCurrentPageUpdate();
+    }));
+    return;
+  }
   queueCurrentPageUpdate();
 };
 
@@ -266,6 +285,7 @@ watch(() => props.active, (active) => {
     savedScrollTop = scroller?.scrollTop ?? savedScrollTop;
     savedScrollLeft = scroller?.scrollLeft ?? savedScrollLeft;
     savedCurrentPage = currentPage.value;
+    savedNeedsPageAnchor = Boolean(pendingPageJump);
     restoringScrollPosition = false;
     if (scrollFrame) cancelAnimationFrame(scrollFrame);
     scrollFrame = 0;
@@ -284,6 +304,11 @@ watch(() => props.active, (active) => {
     restoreFrame = requestAnimationFrame(() => {
       restoreFrame = 0;
       updateAvailableWidth();
+      if (savedNeedsPageAnchor) {
+        restoringScrollPosition = false;
+        scrollToPage(savedCurrentPage, 'auto');
+        return;
+      }
       const scroller = mainScrollerRef.value;
       scroller?.scrollTo({
         top: savedScrollTop,
