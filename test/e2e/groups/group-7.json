@@ -4,7 +4,16 @@
   "workers": 8,
   "specs": [
     "tests/ssh/file-manager-context-menu.spec.ts",
-    "tests/ssh/cross-session-transfer.spec.ts",
-    "tests/ssh/file-upload.spec.ts"
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ui/audit-log-filtering.spec.ts",
+    "tests/ui/backup-ui.spec.ts",
+    "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/connection-create.spec.ts",
+    "tests/ui/connection-non-ssh-bulk.spec.ts",
+    "tests/ui/custom-terminal-theme.spec.ts",
+    "tests/ui/dashboard-workflows.spec.ts",
+    "tests/ui/rdp-remoteapp-fullscreen.spec.ts"
   ]
 }
