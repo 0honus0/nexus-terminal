@@ -34,6 +34,11 @@ const mainScrollerRef = ref<HTMLElement | null>(null);
 
 let resizeObserver: ResizeObserver | null = null;
 let scrollFrame = 0;
+let restoreFrame = 0;
+let restoringScrollPosition = false;
+let savedScrollTop = 0;
+let savedScrollLeft = 0;
+let savedCurrentPage = 1;
 let pinchGesture: {
   startDistance: number;
   startZoom: number;
@@ -87,6 +92,7 @@ const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'smooth') =
 
 const updateCurrentPageFromScroll = () => {
   scrollFrame = 0;
+  if (restoringScrollPosition || !props.active) return;
   const scroller = mainScrollerRef.value;
   if (!scroller) return;
   const scrollerRect = scroller.getBoundingClientRect();
@@ -116,7 +122,7 @@ const updateCurrentPageFromScroll = () => {
 };
 
 const queueCurrentPageUpdate = () => {
-  if (scrollFrame) return;
+  if (restoringScrollPosition || !props.active || scrollFrame) return;
   scrollFrame = requestAnimationFrame(updateCurrentPageFromScroll);
 };
 
@@ -252,15 +258,41 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 watch(() => props.active, (active) => {
   if (!active) {
+    const scroller = mainScrollerRef.value;
+    savedScrollTop = scroller?.scrollTop ?? savedScrollTop;
+    savedScrollLeft = scroller?.scrollLeft ?? savedScrollLeft;
+    savedCurrentPage = currentPage.value;
+    restoringScrollPosition = false;
+    if (scrollFrame) cancelAnimationFrame(scrollFrame);
+    scrollFrame = 0;
+    if (restoreFrame) cancelAnimationFrame(restoreFrame);
+    restoreFrame = 0;
     outlineOpen.value = false;
     pinchGesture = null;
     pinchPreviewPercent.value = null;
     pinchScale.value = 1;
     return;
   }
+
+  restoringScrollPosition = true;
+  currentPage.value = clampPage(savedCurrentPage);
   void nextTick(() => {
-    updateAvailableWidth();
-    queueCurrentPageUpdate();
+    restoreFrame = requestAnimationFrame(() => {
+      restoreFrame = 0;
+      updateAvailableWidth();
+      const scroller = mainScrollerRef.value;
+      scroller?.scrollTo({
+        top: savedScrollTop,
+        left: savedScrollLeft,
+        behavior: 'auto',
+      });
+      restoreFrame = requestAnimationFrame(() => {
+        restoreFrame = 0;
+        currentPage.value = clampPage(savedCurrentPage);
+        restoringScrollPosition = false;
+        queueCurrentPageUpdate();
+      });
+    });
   });
 });
 
@@ -285,6 +317,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (scrollFrame) cancelAnimationFrame(scrollFrame);
   scrollFrame = 0;
+  if (restoreFrame) cancelAnimationFrame(restoreFrame);
+  restoreFrame = 0;
   resizeObserver?.disconnect();
   resizeObserver = null;
 });
