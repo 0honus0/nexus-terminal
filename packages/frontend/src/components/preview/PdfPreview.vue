@@ -97,6 +97,7 @@ const updateCurrentPageFromScroll = () => {
 
   for (const element of pages) {
     const rect = element.getBoundingClientRect();
+    if (rect.height < 32) continue;
     if (rect.bottom < scrollerRect.top || rect.top > scrollerRect.bottom) continue;
     const distance = focusY < rect.top
       ? rect.top - focusY
@@ -158,6 +159,7 @@ const handlePageScale = (pageNumber: number, percent: number) => {
     ...pageScalePercents.value,
     [pageNumber]: percent,
   };
+  queueCurrentPageUpdate();
 };
 
 const touchDistance = (first: Touch, second: Touch) => Math.hypot(
