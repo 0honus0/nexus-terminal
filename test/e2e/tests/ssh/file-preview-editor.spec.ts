@@ -202,34 +202,43 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByTestId('file-editor-close').click();
   });
 
-  await slowStep('PDF.js preview renders pages, thumbnails, outline navigation, and zoom controls', async () => {
+  await slowStep('PDF.js preview scrolls pages continuously and uses an outline-only drawer', async () => {
     const filename = 'preview.pdf';
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog).toBeVisible({ timeout: 20_000 });
 
     const preview = dialog.getByTestId('pdf-preview');
+    const scroller = dialog.getByTestId('pdf-page-scroller');
     await expect(preview).toBeVisible();
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(dialog.getByTestId('pdf-continuous-pages').locator('[data-pdf-page-number]')).toHaveCount(3);
 
     const firstPage = dialog.getByTestId('pdf-page-1');
     await expect(firstPage).toBeVisible();
     await expect.poll(() => firstPage.locator('canvas').evaluate((canvas: HTMLCanvasElement) => canvas.width))
       .toBeGreaterThan(0);
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
 
-    await dialog.getByTestId('pdf-sidebar-outline-tab').click();
+    const secondPage = dialog.getByTestId('pdf-page-2');
+    await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await secondPage.evaluate((element) => element.offsetTop));
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+
+    const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
+    const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
+    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+    await outlineToggle.click();
+    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
     const outline = dialog.getByTestId('pdf-outline');
     await expect(outline.getByText('Introduction', { exact: true })).toBeVisible();
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
     await expect(outline.getByText('Details', { exact: true })).toBeVisible();
+    await expect(dialog.getByTestId('pdf-sidebar-thumbnails-tab')).toHaveCount(0);
+    await expect(dialog.locator('[data-testid^="pdf-thumbnail-"]')).toHaveCount(0);
     await outline.getByText('Second Chapter', { exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
     await captureFunctionalScreenshot(page, 'file-manager-pdf-preview.png', { viewport: { width: 1440, height: 900 } });
-
-    await dialog.getByTestId('pdf-sidebar-thumbnails-tab').click();
-    await expect(dialog.getByTestId('pdf-thumbnail-1')).toBeVisible();
-    await expect(dialog.getByTestId('pdf-thumbnail-2')).toBeVisible();
-    await expect(dialog.getByTestId('pdf-thumbnail-3')).toBeVisible();
 
     const zoom = dialog.getByTestId('pdf-zoom-label');
     const beforeZoom = await zoom.textContent();
@@ -704,11 +713,12 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     await row(page, filename).dblclick();
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await dialog.getByTestId('pdf-sidebar-outline-tab').click();
+    await dialog.getByTestId('pdf-outline-toggle').click();
     const outline = dialog.getByTestId('pdf-outline');
     await outline.getByText('Second Chapter', { exact: true }).click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
     await replaceFixture(filename);
+    await dialog.getByTestId('pdf-outline-toggle').click();
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
     await dialog.getByTestId('file-preview-refresh').click();
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');

@@ -418,7 +418,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 });
 
-test('mobile PDF exposes touch-first controls, sidebar, pinch zoom, and content panning', async ({ page, context }) => {
+test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom, and content panning', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
@@ -427,6 +427,7 @@ test('mobile PDF exposes touch-first controls, sidebar, pinch zoom, and content 
   const dialog = page.getByRole('dialog', { name: filename, exact: true });
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
+  await expect(dialog.getByTestId('pdf-continuous-pages').locator('[data-pdf-page-number]')).toHaveCount(3);
 
   const closeButton = dialog.getByRole('button', { name: 'Close preview', exact: true });
   const closeBox = await closeButton.boundingBox();
@@ -436,21 +437,33 @@ test('mobile PDF exposes touch-first controls, sidebar, pinch zoom, and content 
 
   const zoomInButton = dialog.getByTestId('pdf-zoom-in');
   const nextPageButton = dialog.getByTestId('pdf-next-page');
-  const sidebarToggle = dialog.getByTestId('pdf-sidebar-toggle');
+  const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
   await expect(zoomInButton).toBeVisible();
   await expect(nextPageButton).toBeVisible();
-  await expect(sidebarToggle).toBeVisible();
+  await expect(outlineToggle).toBeVisible();
   await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
 
-  const sidebar = dialog.getByTestId('pdf-sidebar');
-  await expect(sidebar).toBeHidden();
-  await sidebarToggle.click();
-  await expect(sidebar).toBeVisible();
-  await sidebar.getByTestId('pdf-thumbnail-2').click();
-  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-  await expect(sidebar).toBeHidden();
-
   const scroller = dialog.getByTestId('pdf-page-scroller');
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const scrollerBoxBeforeDrawer = await scroller.boundingBox();
+  expect(scrollerBoxBeforeDrawer).toBeTruthy();
+
+  const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await outlineToggle.click();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+  const scrollerBoxWithDrawer = await scroller.boundingBox();
+  expect(scrollerBoxWithDrawer).toBeTruthy();
+  expect(Math.abs(scrollerBoxWithDrawer!.width - scrollerBoxBeforeDrawer!.width)).toBeLessThanOrEqual(1);
+  await expect(dialog.locator('[data-testid^="pdf-thumbnail-"]')).toHaveCount(0);
+  await dialog.getByTestId('pdf-outline').getByText('Second Chapter', { exact: true }).click();
+  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+
+  const thirdPage = dialog.getByTestId('pdf-page-3');
+  await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await thirdPage.evaluate((element) => element.offsetTop));
+  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
+
   await zoomInButton.click();
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
   await scroller.evaluate((element) => { element.scrollLeft = 0; });

@@ -463,7 +463,6 @@
       "pdfZoomOut": "縮小",
       "pdfZoomIn": "拡大",
       "pdfFitWidth": "幅に合わせる",
-      "pdfThumbnails": "ページ",
       "pdfOutline": "目次",
       "pdfNoOutline": "この PDF には文書の目次が含まれていません。"
     },

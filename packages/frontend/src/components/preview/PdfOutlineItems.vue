@@ -22,7 +22,7 @@ const emit = defineEmits<{
       <button
         v-if="item.dest"
         type="button"
-        class="w-full rounded px-2 py-1.5 text-left text-xs text-foreground hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary"
+        class="min-h-11 w-full rounded px-2 py-2 text-left text-sm text-foreground hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary sm:min-h-0 sm:py-1.5 sm:text-xs"
         :title="item.title"
         @click="emit('navigate', item)"
       >
@@ -33,7 +33,7 @@ const emit = defineEmits<{
         :href="item.url"
         target="_blank"
         rel="noopener noreferrer"
-        class="block w-full rounded px-2 py-1.5 text-left text-xs text-primary hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary"
+        class="flex min-h-11 w-full items-center rounded px-2 py-2 text-left text-sm text-primary hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary sm:min-h-0 sm:py-1.5 sm:text-xs"
         :title="item.title"
       >
         {{ item.title }}

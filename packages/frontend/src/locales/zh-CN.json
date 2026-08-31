@@ -535,7 +535,6 @@
       "pdfZoomOut": "缩小",
       "pdfZoomIn": "放大",
       "pdfFitWidth": "适应宽度",
-      "pdfThumbnails": "页面",
       "pdfOutline": "目录",
       "pdfNoOutline": "此 PDF 未包含文档目录。"
     },
