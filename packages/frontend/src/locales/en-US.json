@@ -1577,7 +1577,17 @@
     },
     "noConnectionsWithTag": "No connections found with this tag",
     "noConnectionsMatchSearch": "No connections match your search.",
-    "searchConnectionsPlaceholder": "Search connections..."
+    "searchConnectionsPlaceholder": "Search connections...",
+    "subtitle": "Quickly review and enter your remote connections",
+    "totalConnections": "Total connections",
+    "usedConnections": "Previously connected",
+    "tagCount": "Tags",
+    "quickConnect": "Quick connect",
+    "quickConnectHint": "Find a connection and open it directly",
+    "filterByTag": "Filter by tag",
+    "sortBy": "Sort by",
+    "manageHint": "Add, edit, and batch-manage connections from Connection Management",
+    "recentActivityHint": "Latest audit events"
   },
   "progressCenter": {
     "title": "Progress Display",

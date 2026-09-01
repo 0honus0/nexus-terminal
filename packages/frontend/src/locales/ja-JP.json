@@ -317,7 +317,17 @@
     "noConnectionsMatchSearch": "検索条件に一致する接続はありません。",
     "searchConnectionsPlaceholder": "接続を検索...",
     "viewAllConnections": "すべての接続を表示",
-    "viewFullAuditLog": "完全な監査ログを表示"
+    "viewFullAuditLog": "完全な監査ログを表示",
+    "subtitle": "リモート接続をすばやく確認して開始します",
+    "totalConnections": "接続総数",
+    "usedConnections": "接続履歴あり",
+    "tagCount": "タグ数",
+    "quickConnect": "クイック接続",
+    "quickConnectHint": "接続を検索してすぐに開始",
+    "filterByTag": "タグで絞り込み",
+    "sortBy": "並び順",
+    "manageHint": "接続の追加・編集・一括管理は接続管理で行えます",
+    "recentActivityHint": "最近の監査イベント"
   },
   "dockerManager": {
     "action": {

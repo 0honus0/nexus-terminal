@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 
 const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
@@ -120,6 +121,12 @@ test('dashboard filters connections and persists tag and sort preferences across
         .filter({ hasText: /E2E Dashboard (Alpha|Beta)/ });
       const texts = await visibleFixtureRows.allTextContents();
       expect(texts.map(text => text.includes(ALPHA_NAME) ? ALPHA_NAME : BETA_NAME)).toEqual([ALPHA_NAME, BETA_NAME]);
+
+      await expect(finalDashboard.getByTestId('dashboard-overview')).toBeVisible();
+      await expect(finalDashboard.getByTestId('dashboard-connections-link')).toBeVisible();
+      await expect(finalDashboard.getByTestId(`dashboard-connect-${alphaId}`)).toBeVisible();
+      await expect(finalDashboard.getByTestId(`dashboard-connect-${betaId}`)).toBeVisible();
+      await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
     });
 
     await step('recent activity links to the full audit log view', async () => {

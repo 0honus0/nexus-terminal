@@ -1,57 +1,32 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
-import AddConnectionForm from '../components/AddConnectionForm.vue'; 
-import { useConnectionsStore } from '../stores/connections.store';
+import { computed, onMounted, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { formatDistanceToNow } from 'date-fns';
+import { enUS, ja, zhCN } from 'date-fns/locale';
+import type { Locale } from 'date-fns';
+import { useI18n } from 'vue-i18n';
+import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import { useAuditLogStore } from '../stores/audit.store';
 import { useSessionStore } from '../stores/session.store';
-import { useTagsStore } from '../stores/tags.store'; 
-import type { TagInfo } from '../stores/tags.store'; 
-
-import type { SortField, SortOrder } from '../stores/settings.store'; 
-import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
-import type { ConnectionInfo } from '../stores/connections.store';
-import { storeToRefs } from 'pinia'; 
-import { formatDistanceToNow } from 'date-fns';
-import { zhCN, enUS, ja } from 'date-fns/locale';
-import type { Locale } from 'date-fns';
+import { useTagsStore } from '../stores/tags.store';
+import type { TagInfo } from '../stores/tags.store';
+import type { SortField, SortOrder } from '../stores/settings.store';
 
 const { t, locale } = useI18n();
-const router = useRouter();
 const connectionsStore = useConnectionsStore();
 const auditLogStore = useAuditLogStore();
 const sessionStore = useSessionStore();
-const tagsStore = useTagsStore(); 
-
+const tagsStore = useTagsStore();
 
 const { connections, isLoading: isLoadingConnections } = storeToRefs(connectionsStore);
-const { logs: auditLogs, isLoading: isLoadingLogs, totalLogs } = storeToRefs(auditLogStore);
-const { tags, isLoading: isLoadingTags } = storeToRefs(tagsStore); 
-
-
+const { logs: auditLogs, isLoading: isLoadingLogs } = storeToRefs(auditLogStore);
+const { tags, isLoading: isLoadingTags } = storeToRefs(tagsStore);
 
 const LS_SORT_BY_KEY = 'dashboard_connections_sort_by';
 const LS_SORT_ORDER_KEY = 'dashboard_connections_sort_order';
-const LS_FILTER_TAG_KEY = 'dashboard_connections_filter_tag'; 
-
-// Initialize with localStorage values or defaults
-const localSortBy = ref<SortField>(localStorage.getItem(LS_SORT_BY_KEY) as SortField || 'last_connected_at');
-const localSortOrder = ref<SortOrder>(localStorage.getItem(LS_SORT_ORDER_KEY) as SortOrder || 'desc');
-// +++ 初始化标签筛选状态，从 localStorage 读取，注意类型转换 (修正 ref 初始化) +++
-const getInitialSelectedTagId = (): number | null => {
-  const storedValue = localStorage.getItem(LS_FILTER_TAG_KEY);
-  // 如果存储的值是 'null' 字符串或空，则返回 null，否则解析为数字
-  return storedValue && storedValue !== 'null' ? parseInt(storedValue, 10) : null;
-};
-const selectedTagId = ref<number | null>(getInitialSelectedTagId());
-const searchQuery = ref('');
-
-// +++ 控制添加/编辑表单的显示状态 +++
-const showAddEditConnectionForm = ref(false);
-const connectionToEdit = ref<ConnectionInfo | null>(null);
-
+const LS_FILTER_TAG_KEY = 'dashboard_connections_filter_tag';
 const maxRecentLogs = 5;
- 
+
 const sortOptions: { value: SortField; labelKey: string }[] = [
   { value: 'last_connected_at', labelKey: 'dashboard.sortOptions.lastConnected' },
   { value: 'name', labelKey: 'dashboard.sortOptions.name' },
@@ -60,374 +35,419 @@ const sortOptions: { value: SortField; labelKey: string }[] = [
   { value: 'created_at', labelKey: 'dashboard.sortOptions.created' },
 ];
 
-// +++ 修改计算属性，先筛选再排序 +++
-const filteredAndSortedConnections = computed(() => {
-  const sortBy = localSortBy.value;
-  const sortOrderVal = localSortOrder.value;
-  const factor = sortOrderVal === 'desc' ? -1 : 1;
-  const filterTagId = selectedTagId.value;
-  const query = searchQuery.value.toLowerCase().trim(); // +++ 获取搜索查询 +++
- 
-  // 1. Filter by selected tag
-  let filteredByTag = filterTagId === null
-    ? [...connections.value] // No tag selected, show all
-    : connections.value.filter(conn => conn.tag_ids?.includes(filterTagId));
- 
-  // 2. Filter by search query
-  let searchedConnections = filteredByTag;
-  if (query) {
-    searchedConnections = filteredByTag.filter(conn => {
-      const nameMatch = conn.name?.toLowerCase().includes(query);
-      const usernameMatch = conn.username?.toLowerCase().includes(query);
-      const hostMatch = conn.host?.toLowerCase().includes(query);
-      const portMatch = conn.port?.toString().includes(query);
-      return nameMatch || usernameMatch || hostMatch || portMatch;
-    });
-  }
- 
-  // 3. Sort the searched connections
-  return searchedConnections.sort((a, b) => {
-    let valA: any;
-    let valB: any;
+const getInitialSelectedTagId = (): number | null => {
+  const storedValue = localStorage.getItem(LS_FILTER_TAG_KEY);
+  return storedValue && storedValue !== 'null' ? Number.parseInt(storedValue, 10) : null;
+};
 
-    switch (sortBy) {
+const localSortBy = ref<SortField>((localStorage.getItem(LS_SORT_BY_KEY) as SortField) || 'last_connected_at');
+const localSortOrder = ref<SortOrder>((localStorage.getItem(LS_SORT_ORDER_KEY) as SortOrder) || 'desc');
+const selectedTagId = ref<number | null>(getInitialSelectedTagId());
+const searchQuery = ref('');
+
+const filteredAndSortedConnections = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  const factor = localSortOrder.value === 'desc' ? -1 : 1;
+  const filterTagId = selectedTagId.value;
+
+  const filtered = connections.value.filter((connection) => {
+    if (filterTagId !== null && !connection.tag_ids?.includes(filterTagId)) return false;
+    if (!query) return true;
+    return [connection.name, connection.username, connection.host, String(connection.port)]
+      .some((value) => value?.toLowerCase().includes(query));
+  });
+
+  return filtered.sort((a, b) => {
+    switch (localSortBy.value) {
       case 'name':
-        valA = a.name || '';
-        valB = b.name || '';
-        return valA.localeCompare(valB) * factor;
+        return (a.name || '').localeCompare(b.name || '') * factor;
       case 'type':
-        valA = a.type || '';
-        valB = b.type || '';
-        return valA.localeCompare(valB) * factor;
+        return (a.type || '').localeCompare(b.type || '') * factor;
       case 'created_at':
-        valA = a.created_at ?? 0;
-        valB = b.created_at ?? 0;
-        return (valA - valB) * factor;
+        return ((a.created_at ?? 0) - (b.created_at ?? 0)) * factor;
       case 'updated_at':
-        valA = a.updated_at ?? 0;
-        valB = b.updated_at ?? 0;
-        return (valA - valB) * factor;
-      case 'last_connected_at':
-        valA = a.last_connected_at ?? (sortOrderVal === 'desc' ? -Infinity : Infinity);
-        valB = b.last_connected_at ?? (sortOrderVal === 'desc' ? -Infinity : Infinity);
-        if (valA === valB) return 0;
-        if (valA < valB) return -1 * factor;
-        return 1 * factor;
+        return ((a.updated_at ?? 0) - (b.updated_at ?? 0)) * factor;
+      case 'last_connected_at': {
+        const aTime = a.last_connected_at ?? (localSortOrder.value === 'desc' ? -Infinity : Infinity);
+        const bTime = b.last_connected_at ?? (localSortOrder.value === 'desc' ? -Infinity : Infinity);
+        return (aTime - bTime) * factor;
+      }
       default:
         return 0;
     }
   });
 });
 
-const recentAuditLogs = computed(() => {
-  return auditLogs.value.slice(0, maxRecentLogs);
-});
-
-onMounted(async () => {
-  // Load saved preferences from localStorage (already done during ref initialization)
-
-  // Fetch connections if not already loaded
-  if (connections.value.length === 0) {
-    try {
-      await connectionsStore.fetchConnections();
-    } catch (error) {
-      console.error("加载连接列表失败:", error);
-    }
-  }
-
-  // Fetch recent audit logs
-  try {
-    await auditLogStore.fetchLogs({
-        page: 1,
-        limit: maxRecentLogs,
-        sortOrder: 'desc',
-        isDashboardRequest: true
-    });
-  } catch (error) {
-    console.error("加载审计日志失败:", error);
-  }
-
-  // +++ Fetch tags for filtering +++
-  try {
-    await tagsStore.fetchTags();
-  } catch (error) {
-    console.error("加载标签列表失败:", error);
-  }
-});
-
-const connectTo = (connection: ConnectionInfo) => {
-  sessionStore.handleConnectRequest(connection);
-};
-
-const toggleSortOrder = () => {
-  // Only update the local sort order state
-  localSortOrder.value = localSortOrder.value === 'asc' ? 'desc' : 'asc';
-};
-
-const isAscending = computed(() => localSortOrder.value === 'asc'); // Use local state
-
-// Watch for changes in local sort state and save to localStorage
-watch(localSortBy, (newValue) => {
-  localStorage.setItem(LS_SORT_BY_KEY, newValue);
-});
-
-watch(localSortOrder, (newValue) => {
-  localStorage.setItem(LS_SORT_ORDER_KEY, newValue);
-});
-
-// +++ Watch for changes in selected tag and save to localStorage +++
-watch(selectedTagId, (newValue) => {
-  // Store 'null' as a string or the number
-  localStorage.setItem(LS_FILTER_TAG_KEY, newValue === null ? 'null' : String(newValue));
+const recentAuditLogs = computed(() => auditLogs.value.slice(0, maxRecentLogs));
+const usedConnectionCount = computed(() => connections.value.filter((connection) => Boolean(connection.last_connected_at)).length);
+const protocolSummary = computed(() => {
+  const counts = connections.value.reduce<Record<string, number>>((result, connection) => {
+    result[connection.type] = (result[connection.type] ?? 0) + 1;
+    return result;
+  }, {});
+  return ['SSH', 'RDP', 'VNC']
+    .filter((type) => counts[type])
+    .map((type) => `${type} ${counts[type]}`)
+    .join(' · ');
 });
 
 const dateFnsLocales: Record<string, Locale> = {
   'en-US': enUS,
   'zh-CN': zhCN,
   'ja-JP': ja,
-  // 主语言回退
-  'en': enUS,
-  'zh': zhCN,
-  'ja': ja,
+  en: enUS,
+  zh: zhCN,
+  ja,
 };
 
-// 修正函数签名，接受 number | null | undefined
 const formatRelativeTime = (timestampInSeconds: number | null | undefined): string => {
   if (!timestampInSeconds) return t('connections.status.never');
   try {
-    // 将秒级时间戳转换为毫秒级
-    const timestampInMs = timestampInSeconds * 1000;
-    // 检查转换后的值是否有效
-    if (isNaN(timestampInMs)) {
-        console.warn(`[Dashboard] Invalid timestamp received: ${timestampInSeconds}`);
-        return String(timestampInSeconds); // 返回原始值或错误提示
-    }
-    const date = new Date(timestampInMs);
-
-    const currentI18nLocale = locale.value; // 获取 vue-i18n 当前 locale (e.g., 'zh-CN')
-    const langPart = currentI18nLocale.split('-')[0]; // 获取主语言部分 (e.g., 'zh')
-
-    // 1. 尝试精确匹配 (e.g., 'zh-CN' -> zhCN)
-    let targetDateFnsLocale = dateFnsLocales[currentI18nLocale];
-
-    // 2. 如果无精确匹配，尝试匹配主语言 (e.g., 'zh' -> zhCN)
-    if (!targetDateFnsLocale) {
-      targetDateFnsLocale = dateFnsLocales[langPart];
-    }
-
-    // 3. 如果仍然找不到，回退到默认 enUS
-    if (!targetDateFnsLocale) {
-      console.warn(`[Dashboard] date-fns locale not found for ${currentI18nLocale} or ${langPart}. Falling back to en-US.`);
-      targetDateFnsLocale = enUS; // 默认回退到 enUS
-    }
-
-    return formatDistanceToNow(date, { addSuffix: true, locale: targetDateFnsLocale });
-  } catch (e) {
-    console.error("格式化日期失败:", e);
-    return String(timestampInSeconds); // 出错时返回原始字符串
+    const currentLocale = locale.value;
+    const selectedLocale = dateFnsLocales[currentLocale]
+      ?? dateFnsLocales[currentLocale.split('-')[0]]
+      ?? enUS;
+    return formatDistanceToNow(new Date(timestampInSeconds * 1000), {
+      addSuffix: true,
+      locale: selectedLocale,
+    });
+  } catch {
+    return String(timestampInSeconds);
   }
+};
+
+const getTagNames = (tagIds: number[] | undefined): string[] => {
+  if (!tagIds?.length) return [];
+  const allTags = tags.value as TagInfo[];
+  return tagIds
+    .map((id) => allTags.find((tag) => tag.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
 };
 
 const getActionTranslation = (actionType: string): string => {
-  // 尝试从 i18n 获取翻译，如果找不到则返回原始 actionType
   const key = `auditLog.actions.${actionType}`;
   const translated = t(key);
-  // 如果翻译结果等于 key 本身，说明没有找到翻译
   return translated === key ? actionType : translated;
 };
 
-// 辅助函数：判断活动类型是否表示失败
 const isFailedAction = (actionType: string): boolean => {
-  const lowerCaseAction = actionType.toLowerCase();
-  // 检查常见的失败关键词
-  return lowerCaseAction.includes('fail') || lowerCaseAction.includes('error') || lowerCaseAction.includes('denied');
+  const normalized = actionType.toLowerCase();
+  return normalized.includes('fail') || normalized.includes('error') || normalized.includes('denied');
 };
 
-// +++ 恢复：根据 tag_ids 获取标签名称数组 +++
-const getTagNames = (tagIds: number[] | undefined): string[] => {
-  if (!tagIds || tagIds.length === 0) {
-    return [];
-  }
-  const allTags = tags.value as TagInfo[];
-  return tagIds
-    .map(id => allTags.find(tag => tag.id === id)?.name)
-    .filter((name): name is string => !!name); // 过滤掉未找到的标签并确保类型为 string
+const auditSummary = (details: unknown): string => {
+  if (!details || typeof details !== 'object') return '';
+  const record = details as Record<string, unknown>;
+  if (typeof record.raw === 'string') return record.raw.slice(0, 120);
+
+  const connectionName = typeof record.connectionName === 'string'
+    ? record.connectionName
+    : typeof record.connection_name === 'string'
+      ? record.connection_name
+      : '';
+  const username = typeof record.username === 'string' ? record.username : '';
+  const host = typeof record.host === 'string'
+    ? record.host
+    : typeof record.ip === 'string'
+      ? record.ip
+      : '';
+  const subject = typeof record.command === 'string'
+    ? record.command
+    : typeof record.path === 'string'
+      ? record.path
+      : typeof record.filename === 'string'
+        ? record.filename
+        : '';
+
+  return [connectionName, username && host ? `${username}@${host}` : username || host, subject]
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(' · ');
 };
 
-// +++ 打开添加表单 +++
-const openAddConnectionForm = () => {
-  connectionToEdit.value = null;
-  showAddEditConnectionForm.value = true;
+const connectTo = (connection: ConnectionInfo) => {
+  sessionStore.handleConnectRequest(connection);
 };
 
-// +++ 打开编辑表单 +++
-const openEditConnectionForm = (conn: ConnectionInfo) => {
-  connectionToEdit.value = conn;
-  showAddEditConnectionForm.value = true;
+const toggleSortOrder = () => {
+  localSortOrder.value = localSortOrder.value === 'asc' ? 'desc' : 'asc';
 };
 
-// +++ 处理表单关闭事件 +++
-const handleFormClose = () => {
-  showAddEditConnectionForm.value = false;
-  connectionToEdit.value = null; // 清除编辑状态
-};
+const isAscending = computed(() => localSortOrder.value === 'asc');
 
-// +++ 处理连接添加/更新成功事件 +++
-const handleConnectionModified = async () => {
-  showAddEditConnectionForm.value = false;
-  connectionToEdit.value = null;
-  await connectionsStore.fetchConnections(); // 重新加载连接列表
-};
- 
-// --- 移除 selectTagFilter 函数 ---
- 
+watch(localSortBy, (value) => localStorage.setItem(LS_SORT_BY_KEY, value));
+watch(localSortOrder, (value) => localStorage.setItem(LS_SORT_ORDER_KEY, value));
+watch(selectedTagId, (value) => localStorage.setItem(LS_FILTER_TAG_KEY, value === null ? 'null' : String(value)));
+
+onMounted(async () => {
+  await Promise.allSettled([
+    connectionsStore.fetchConnections(),
+    auditLogStore.fetchLogs({ page: 1, limit: maxRecentLogs, sortOrder: 'desc', isDashboardRequest: true }),
+    tagsStore.fetchTags(),
+  ]);
+});
 </script>
 
 <template>
-  <div data-testid="dashboard-view" class="p-4 md:p-6 lg:p-8 bg-background text-foreground">
-    <h1 class="text-2xl font-semibold mb-6">{{ t('nav.dashboard') }}</h1>
+  <main
+    data-testid="dashboard-view"
+    class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-8 lg:py-7"
+  >
+    <div class="mx-auto w-full max-w-[1680px]">
+      <header class="mb-5 flex flex-col gap-1 sm:mb-6">
+        <h1 class="text-2xl font-semibold tracking-tight">{{ t('nav.dashboard') }}</h1>
+        <p class="text-sm text-text-secondary">
+          {{ t('dashboard.subtitle', '快速查看并进入你的远程连接') }}
+        </p>
+      </header>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-start">
+      <section
+        data-testid="dashboard-overview"
+        class="mb-5 grid grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-sm sm:grid-cols-3"
+      >
+        <div class="border-b border-border px-5 py-4 sm:border-b-0 sm:border-r">
+          <div class="text-xs font-medium uppercase tracking-[0.12em] text-text-alt">
+            {{ t('dashboard.totalConnections', '连接总数') }}
+          </div>
+          <div class="mt-2 flex items-end gap-3">
+            <strong data-testid="dashboard-total-connections" class="text-3xl font-semibold tabular-nums">
+              {{ connections.length }}
+            </strong>
+            <span v-if="protocolSummary" class="mb-1 truncate text-xs text-text-secondary">{{ protocolSummary }}</span>
+          </div>
+        </div>
+        <div class="border-b border-border px-5 py-4 sm:border-b-0 sm:border-r">
+          <div class="text-xs font-medium uppercase tracking-[0.12em] text-text-alt">
+            {{ t('dashboard.usedConnections', '已有连接记录') }}
+          </div>
+          <div class="mt-2 flex items-end gap-2">
+            <strong data-testid="dashboard-used-connections" class="text-3xl font-semibold tabular-nums">
+              {{ usedConnectionCount }}
+            </strong>
+            <span class="mb-1 text-xs text-text-secondary">/ {{ connections.length }}</span>
+          </div>
+        </div>
+        <div class="px-5 py-4">
+          <div class="text-xs font-medium uppercase tracking-[0.12em] text-text-alt">
+            {{ t('dashboard.tagCount', '标签数量') }}
+          </div>
+          <strong data-testid="dashboard-tag-count" class="mt-2 block text-3xl font-semibold tabular-nums">
+            {{ tags.length }}
+          </strong>
+        </div>
+      </section>
 
-      <!-- Connection List -->
-      <div data-testid="dashboard-connections" class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
-        <div class="px-4 py-3 border-b border-border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-          <h2 class="text-lg font-medium flex-shrink-0">{{ t('dashboard.connectionList', '连接列表') }} ({{ filteredAndSortedConnections.length }})</h2>
-          <div class="w-full sm:w-auto flex flex-wrap sm:flex-nowrap items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
-            <!-- Search Input (Order adjusted for button placement) -->
-            <input
-              type="text"
-              v-model="searchQuery"
-              data-testid="dashboard-connection-search"
-              :placeholder="t('dashboard.searchConnectionsPlaceholder', '搜索连接...')"
-              class="h-8 px-3 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-full sm:w-48"
-            />
-            <div class="flex items-center space-x-2"> <!-- Wrapper for existing controls -->
-             <!-- Tag Filter Dropdown -->
-             <select
+      <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section
+          data-testid="dashboard-connections"
+          class="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+        >
+          <div class="border-b border-border px-4 py-4 sm:px-5">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div class="flex min-w-0 items-center gap-2.5">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+                  <i class="fas fa-bolt text-sm"></i>
+                </span>
+                <div class="min-w-0">
+                  <h2 class="text-base font-semibold">{{ t('dashboard.quickConnect', '快速连接') }}</h2>
+                  <p class="truncate text-xs text-text-secondary">
+                    {{ t('dashboard.quickConnectHint', '查找连接并直接进入终端') }}
+                  </p>
+                </div>
+              </div>
+              <span class="shrink-0 text-xs text-text-alt">
+                {{ filteredAndSortedConnections.length }} / {{ connections.length }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]">
+              <label class="relative min-w-0">
+                <span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder', '搜索连接...') }}</span>
+                <i class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-alt" aria-hidden="true"></i>
+                <input
+                  v-model="searchQuery"
+                  data-testid="dashboard-connection-search"
+                  type="search"
+                  :placeholder="t('dashboard.searchConnectionsPlaceholder', '搜索连接...')"
+                  class="h-9 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
+                />
+              </label>
+              <select
                 v-model="selectedTagId"
                 data-testid="dashboard-tag-filter"
-                class="h-8 px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-no-repeat bg-right pr-8"
-                style="background-image: url('data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%236c757d\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3e%3c/svg%3e'); background-position: right 0.5rem center; background-size: 16px 12px;"
-                aria-label="Filter connections by tag"
                 :disabled="isLoadingTags"
+                class="h-9 min-w-32 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
+                :aria-label="t('dashboard.filterByTag', '按标签筛选')"
               >
                 <option :value="null">{{ t('dashboard.filterTags.all', '所有标签') }}</option>
                 <option v-if="isLoadingTags" disabled>{{ t('common.loading') }}</option>
-                <!-- 修正 v-for 循环中的类型 -->
                 <option v-for="tag in (tags as TagInfo[])" :key="tag.id" :value="tag.id">
                   {{ tag.name }}
                 </option>
               </select>
-
-             <!-- Sort By Dropdown -->
-             <select
+              <select
                 v-model="localSortBy"
                 data-testid="dashboard-sort-by"
-                class="h-8 px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary appearance-none bg-no-repeat bg-right pr-8"
-                style="background-image: url('data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%236c757d\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3e%3c/svg%3e'); background-position: right 0.5rem center; background-size: 16px 12px;"
-                aria-label="Sort connections by"
+                class="h-9 min-w-32 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
+                :aria-label="t('dashboard.sortBy', '排序方式')"
               >
                 <option v-for="option in sortOptions" :key="option.value" :value="option.value">
                   {{ t(option.labelKey, option.value.replace('_', ' ')) }}
                 </option>
               </select>
-
-              <!-- Sort Order Button -->
               <button
-                @click="toggleSortOrder"
                 data-testid="dashboard-sort-order"
-                class="h-8 px-1.5 py-1 border border-border rounded hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center"
+                type="button"
+                class="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-text-secondary transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 :aria-label="isAscending ? t('common.sortAscending') : t('common.sortDescending')"
                 :title="isAscending ? t('common.sortAscending') : t('common.sortDescending')"
+                @click="toggleSortOrder"
               >
-                <i :class="['fas', isAscending ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'w-4 h-4']"></i>
+                <i :class="['fas', isAscending ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'text-xs']" aria-hidden="true"></i>
               </button>
             </div>
-            <!-- Add Connection Button -->
-            <button @click="openAddConnectionForm" title="Add Connection" class="h-8 w-8 bg-button rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out flex items-center justify-center flex-shrink-0 ml-2 sm:ml-0">
-              <i class="fas fa-plus" style="color: white;"></i>
-            </button>
           </div>
-        </div>
-        <div class="p-4">
-          <!-- Use filteredAndSortedConnections and check its length -->
-          <div v-if="isLoadingConnections && filteredAndSortedConnections.length === 0" class="text-center text-text-secondary">{{ t('common.loading') }}</div>
-          <ul v-else-if="filteredAndSortedConnections.length > 0" class="space-y-3">
-            <!-- Iterate over filteredAndSortedConnections -->
-            <li v-for="conn in filteredAndSortedConnections" :key="conn.id" :data-testid="`dashboard-connection-row-${conn.id}`" class="flex items-center justify-between p-3 bg-header/50 border border-border/50 rounded transition duration-150 ease-in-out">
-              <div class="flex-grow mr-4 overflow-hidden">
-                <span class="font-medium block truncate flex items-center" :title="conn.name || ''">
-                  <i :class="['fas', conn.type === 'VNC' ? 'fa-plug' : (conn.type === 'RDP' ? 'fa-desktop' : 'fa-server'), 'mr-2 w-4 text-center text-text-secondary']"></i>
-                  <span>{{ conn.name || conn.host || t('connections.unnamedFallback', '未命名连接') }}</span>
-                </span>
-                <span class="text-sm text-text-secondary block truncate" :title="`${conn.username}@${conn.host}:${conn.port}`">
-                  {{ conn.username }}@{{ conn.host }}:{{ conn.port }}
-                </span>
-                <span class="text-xs text-text-alt block mb-1"> <!-- Added margin-bottom -->
-                  {{ t('dashboard.lastConnected', '上次连接:') }} {{ formatRelativeTime(conn.last_connected_at) }}
-                </span>
-                <div v-if="getTagNames(conn.tag_ids).length > 0" class="flex flex-wrap gap-1 mt-1">
-                  <span
-                    v-for="tagName in getTagNames(conn.tag_ids)"
-                    :key="tagName"
-                    class="px-1.5 py-0.5 text-xs rounded bg-muted text-muted-foreground border border-border"
-                  >
-                    {{ tagName }}
-                  </span>
+
+          <div class="px-4 sm:px-5">
+            <div
+              v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
+              class="py-14 text-center text-sm text-text-secondary"
+            >
+              {{ t('common.loading') }}
+            </div>
+
+            <ul v-else-if="filteredAndSortedConnections.length > 0" class="divide-y divide-border/70">
+              <li
+                v-for="conn in filteredAndSortedConnections"
+                :key="conn.id"
+                :data-testid="`dashboard-connection-row-${conn.id}`"
+                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-4 sm:gap-5"
+              >
+                <div class="min-w-0">
+                  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="truncate text-sm font-semibold" :title="conn.name || conn.host">
+                      {{ conn.name || conn.host || t('connections.unnamedFallback', '未命名连接') }}
+                    </span>
+                    <span class="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-text-alt">
+                      {{ conn.type }}
+                    </span>
+                  </div>
+                  <div class="mt-1 truncate font-mono text-xs text-text-secondary" :title="`${conn.username}@${conn.host}:${conn.port}`">
+                    {{ conn.username }}@{{ conn.host }}:{{ conn.port }}
+                  </div>
+                  <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                    <span class="text-xs text-text-alt">
+                      {{ t('dashboard.lastConnected', '上次连接:') }} {{ formatRelativeTime(conn.last_connected_at) }}
+                    </span>
+                    <span
+                      v-for="tagName in getTagNames(conn.tag_ids)"
+                      :key="tagName"
+                      class="max-w-40 truncate rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+                      :title="tagName"
+                    >
+                      {{ tagName }}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div class="flex space-x-2 flex-shrink-0">
-                <button @click="openEditConnectionForm(conn)" class="px-3 py-1.5 bg-transparent text-foreground border border-border rounded-md shadow-sm hover:bg-border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium">
-                  <i class="fas fa-pencil-alt"></i>
-                </button>
-                <button @click="connectTo(conn)" class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium"> <!-- Applied standard button style -->
+
+                <button
+                  type="button"
+                  :data-testid="`dashboard-connect-${conn.id}`"
+                  class="h-9 shrink-0 rounded-md bg-button px-4 text-sm font-medium text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary/60"
+                  @click="connectTo(conn)"
+                >
                   {{ t('connections.actions.connect') }}
                 </button>
-              </div>
-            </li>
-          </ul>
-          <!-- Adjust no connections message based on filtering and search -->
-          <div v-else-if="!isLoadingConnections && searchQuery && filteredAndSortedConnections.length === 0" class="text-center text-text-secondary">{{ t('dashboard.noConnectionsMatchSearch', '没有连接匹配搜索条件') }}</div>
-          <div v-else-if="!isLoadingConnections && selectedTagId !== null && filteredAndSortedConnections.length === 0" class="text-center text-text-secondary">{{ t('dashboard.noConnectionsWithTag', '该标签下没有连接记录') }}</div>
-          <div v-else class="text-center text-text-secondary">{{ t('dashboard.noConnections', '没有连接记录') }}</div>
-        </div>
-      </div>
+              </li>
+            </ul>
 
-      <!-- Recent Activity -->
-      <div data-testid="dashboard-recent-activity" class="bg-card text-card-foreground shadow rounded-lg overflow-hidden border border-border min-h-[400px]">
-        <div class="px-4 py-3 border-b border-border">
-          <h2 class="text-lg font-medium">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
-        </div>
-        <div class="p-4">
-          <!-- Loading State (Only show if loading AND no logs are displayed yet) -->
-          <div v-if="isLoadingLogs && recentAuditLogs.length === 0" class="text-center text-text-secondary">{{ t('common.loading') }}</div>
-          <ul v-else-if="recentAuditLogs.length > 0" class="space-y-3">
-            <li v-for="log in recentAuditLogs" :key="log.id" class="p-3 bg-header/50 border border-border/50 rounded"> <!-- Applied audit log item style -->
-              <div class="flex justify-between items-start mb-1">
-                <span class="font-medium text-sm" :class="{ 'text-error': isFailedAction(log.action_type) }">{{ getActionTranslation(log.action_type) }}</span>
-                <span class="text-xs text-text-alt flex-shrink-0 ml-2">{{ formatRelativeTime(log.timestamp) }}</span>
-              </div>
-              <p class="text-sm text-text-secondary break-words">{{ log.details }}</p>
-            </li>
-          </ul>
-          <div v-else class="text-center text-text-secondary">{{ t('dashboard.noRecentActivity', '没有最近活动记录') }}</div>
-        </div>
-        <div class="px-4 py-3 border-t border-border text-right">
-          <RouterLink data-testid="dashboard-audit-link" :to="{ name: 'AuditLogs' }" class="text-sm text-link hover:text-link-hover hover:underline">
-            {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }}
-          </RouterLink>
-        </div>
-      </div>
+            <div v-else class="py-14 text-center text-sm text-text-secondary">
+              <template v-if="searchQuery">
+                {{ t('dashboard.noConnectionsMatchSearch', '没有连接匹配搜索条件') }}
+              </template>
+              <template v-else-if="selectedTagId !== null">
+                {{ t('dashboard.noConnectionsWithTag', '该标签下没有连接记录') }}
+              </template>
+              <template v-else>
+                {{ t('dashboard.noConnections', '没有连接记录') }}
+              </template>
+            </div>
+          </div>
 
+          <footer class="flex items-center justify-between gap-3 border-t border-border bg-header/25 px-4 py-3 sm:px-5">
+            <span class="text-xs text-text-alt">
+              {{ t('dashboard.manageHint', '连接的新增、编辑和批量管理请前往连接管理') }}
+            </span>
+            <RouterLink
+              data-testid="dashboard-connections-link"
+              :to="{ name: 'Connections' }"
+              class="shrink-0 text-sm font-medium text-link hover:text-link-hover hover:no-underline"
+            >
+              {{ t('dashboard.viewAllConnections', '查看所有连接') }} →
+            </RouterLink>
+          </footer>
+        </section>
+
+        <aside
+          data-testid="dashboard-recent-activity"
+          class="self-start overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+        >
+          <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+            <div class="flex min-w-0 items-center gap-2.5">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+                <i class="fas fa-clock-rotate-left text-sm"></i>
+              </span>
+              <div>
+                <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
+                <p class="text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
+              </div>
+            </div>
+            <span class="text-xs tabular-nums text-text-alt">{{ recentAuditLogs.length }}</span>
+          </header>
+
+          <div class="px-4 sm:px-5">
+            <div v-if="isLoadingLogs && recentAuditLogs.length === 0" class="py-12 text-center text-sm text-text-secondary">
+              {{ t('common.loading') }}
+            </div>
+            <ol v-else-if="recentAuditLogs.length > 0" class="divide-y divide-border/70">
+              <li v-for="log in recentAuditLogs" :key="log.id" class="relative py-4 pl-4">
+                <span
+                  class="absolute left-0 top-[1.35rem] h-2 w-2 rounded-full"
+                  :class="isFailedAction(log.action_type) ? 'bg-error' : 'bg-primary'"
+                  aria-hidden="true"
+                ></span>
+                <div class="flex items-start justify-between gap-3">
+                  <span
+                    class="min-w-0 text-sm font-medium leading-5"
+                    :class="isFailedAction(log.action_type) ? 'text-error' : 'text-foreground'"
+                  >
+                    {{ getActionTranslation(log.action_type) }}
+                  </span>
+                  <time class="shrink-0 pt-0.5 text-[11px] text-text-alt">
+                    {{ formatRelativeTime(log.timestamp) }}
+                  </time>
+                </div>
+                <p v-if="auditSummary(log.details)" class="mt-1 truncate text-xs text-text-secondary" :title="auditSummary(log.details)">
+                  {{ auditSummary(log.details) }}
+                </p>
+              </li>
+            </ol>
+            <div v-else class="py-12 text-center text-sm text-text-secondary">
+              {{ t('dashboard.noRecentActivity', '没有最近活动记录') }}
+            </div>
+          </div>
+
+          <footer class="border-t border-border bg-header/25 px-4 py-3 text-right sm:px-5">
+            <RouterLink
+              data-testid="dashboard-audit-link"
+              :to="{ name: 'AuditLogs' }"
+              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
+            >
+              {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }} →
+            </RouterLink>
+          </footer>
+        </aside>
+      </div>
     </div>
-    <!-- Add/Edit Connection Form Modal -->
-    <AddConnectionForm
-      v-if="showAddEditConnectionForm"
-      :connectionToEdit="connectionToEdit"
-      @close="handleFormClose"
-      @connection-added="handleConnectionModified"
-      @connection-updated="handleConnectionModified"
-    />
-  </div>
+  </main>
 </template>

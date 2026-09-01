@@ -1581,7 +1581,17 @@
     },
     "noConnectionsWithTag": "该标签下没有连接记录",
     "noConnectionsMatchSearch": "没有连接匹配搜索条件",
-    "searchConnectionsPlaceholder": "搜索连接..."
+    "searchConnectionsPlaceholder": "搜索连接...",
+    "subtitle": "快速查看并进入你的远程连接",
+    "totalConnections": "连接总数",
+    "usedConnections": "已有连接记录",
+    "tagCount": "标签数量",
+    "quickConnect": "快速连接",
+    "quickConnectHint": "查找连接并直接进入终端",
+    "filterByTag": "按标签筛选",
+    "sortBy": "排序方式",
+    "manageHint": "连接的新增、编辑和批量管理请前往连接管理",
+    "recentActivityHint": "最近的审计事件"
   },
   "progressCenter": {
     "title": "进度显示",
