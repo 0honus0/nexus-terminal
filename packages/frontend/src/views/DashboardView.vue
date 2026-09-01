@@ -111,12 +111,23 @@ const remoteResourceSessions = computed(() => {
       error: session.statusMonitorManager.statusError.value,
     }));
 });
-const systemResourcesVisible = computed(() => (
-  dashboardShowLocalResourcesBoolean.value || dashboardShowRemoteResourcesBoolean.value
-));
 const resourcePercent = (value: number | undefined): number => {
   if (!Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(0, Math.round(value!)));
+};
+const resourceRingStyle = (
+  value: number | undefined,
+  color: 'primary' | 'success' | 'warning' = 'primary',
+): Record<string, string> => {
+  const percent = resourcePercent(value);
+  const colorValue = color === 'success'
+    ? 'var(--color-success)'
+    : color === 'warning'
+      ? 'var(--color-warning)'
+      : 'var(--link-active-color)';
+  return {
+    background: `conic-gradient(${colorValue} 0 ${percent}%, var(--border-color) ${percent}% 100%)`,
+  };
 };
 const formatMemory = (value: number | undefined): string => {
   if (!Number.isFinite(value)) return '—';
@@ -332,21 +343,66 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="grid min-w-0 grid-cols-3 overflow-hidden rounded-xl border border-border bg-background/50 lg:min-w-[390px]">
-            <div class="border-r border-border px-4 py-4">
-              <div class="text-[10px] font-medium uppercase tracking-[0.1em] text-text-alt">{{ t('dashboard.totalConnections', '连接总数') }}</div>
-              <strong data-testid="dashboard-total-connections" class="mt-2 block text-2xl font-semibold tabular-nums">{{ connections.length }}</strong>
-            </div>
-            <div class="border-r border-border px-4 py-4">
-              <div class="text-[10px] font-medium uppercase tracking-[0.1em] text-text-alt">{{ t('dashboard.usedConnections', '已有连接记录') }}</div>
-              <div class="mt-2 flex items-baseline gap-1">
-                <strong data-testid="dashboard-used-connections" class="text-2xl font-semibold tabular-nums">{{ usedConnectionCount }}</strong>
-                <span class="text-[11px] text-text-alt">/ {{ connections.length }}</span>
+          <div class="min-w-0 space-y-3 lg:min-w-[430px]">
+            <div class="grid grid-cols-3 overflow-hidden rounded-xl border border-border bg-background/50">
+              <div class="border-r border-border px-4 py-4">
+                <div class="text-[10px] font-medium uppercase tracking-[0.1em] text-text-alt">{{ t('dashboard.totalConnections', '连接总数') }}</div>
+                <strong data-testid="dashboard-total-connections" class="mt-2 block text-2xl font-semibold tabular-nums">{{ connections.length }}</strong>
+              </div>
+              <div class="border-r border-border px-4 py-4">
+                <div class="text-[10px] font-medium uppercase tracking-[0.1em] text-text-alt">{{ t('dashboard.usedConnections', '已有连接记录') }}</div>
+                <div class="mt-2 flex items-baseline gap-1">
+                  <strong data-testid="dashboard-used-connections" class="text-2xl font-semibold tabular-nums">{{ usedConnectionCount }}</strong>
+                  <span class="text-[11px] text-text-alt">/ {{ connections.length }}</span>
+                </div>
+              </div>
+              <div class="px-4 py-4">
+                <div class="text-[10px] font-medium uppercase tracking-[0.1em] text-text-alt">{{ t('dashboard.tagCount', '标签数量') }}</div>
+                <strong data-testid="dashboard-tag-count" class="mt-2 block text-2xl font-semibold tabular-nums">{{ tags.length }}</strong>
               </div>
             </div>
-            <div class="px-4 py-4">
-              <div class="text-[10px] font-medium uppercase tracking-[0.1em] text-text-alt">{{ t('dashboard.tagCount', '标签数量') }}</div>
-              <strong data-testid="dashboard-tag-count" class="mt-2 block text-2xl font-semibold tabular-nums">{{ tags.length }}</strong>
+
+            <div
+              v-if="dashboardShowLocalResourcesBoolean"
+              data-testid="dashboard-local-resources"
+              class="rounded-xl border border-primary/20 bg-background/45 px-4 py-3.5"
+            >
+              <div class="mb-3 flex min-w-0 items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="text-xs font-semibold">{{ t('dashboard.resources.local', 'Nexus 本机') }}</div>
+                  <div v-if="localSystemStatus?.osName" class="mt-0.5 truncate text-[10px] text-text-alt" :title="localSystemStatus.osName">{{ localSystemStatus.osName }}</div>
+                </div>
+                <span class="rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">{{ t('dashboard.resources.live', '实时') }}</span>
+              </div>
+
+              <div v-if="localSystemStatus" class="grid grid-cols-3 gap-4">
+                <div class="text-center">
+                  <div data-testid="dashboard-local-cpu-ring" class="mx-auto h-16 w-16 rounded-full p-[5px]" :style="resourceRingStyle(localSystemStatus.cpuPercent)">
+                    <div class="flex h-full w-full items-center justify-center rounded-full bg-card">
+                      <strong class="text-sm tabular-nums">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</strong>
+                    </div>
+                  </div>
+                  <div class="mt-1.5 text-[10px] font-medium text-text-alt">CPU</div>
+                </div>
+                <div class="text-center" :title="`${formatMemory(localSystemStatus.memUsed)} / ${formatMemory(localSystemStatus.memTotal)}`">
+                  <div data-testid="dashboard-local-memory-ring" class="mx-auto h-16 w-16 rounded-full p-[5px]" :style="resourceRingStyle(localSystemStatus.memPercent, 'success')">
+                    <div class="flex h-full w-full items-center justify-center rounded-full bg-card">
+                      <strong class="text-sm tabular-nums">{{ resourcePercent(localSystemStatus.memPercent) }}%</strong>
+                    </div>
+                  </div>
+                  <div class="mt-1.5 text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</div>
+                </div>
+                <div class="text-center">
+                  <div data-testid="dashboard-local-disk-ring" class="mx-auto h-16 w-16 rounded-full p-[5px]" :style="resourceRingStyle(localSystemStatus.diskPercent, 'warning')">
+                    <div class="flex h-full w-full items-center justify-center rounded-full bg-card">
+                      <strong class="text-sm tabular-nums">{{ localSystemStatus.diskPercent === undefined ? '—' : `${resourcePercent(localSystemStatus.diskPercent)}%` }}</strong>
+                    </div>
+                  </div>
+                  <div class="mt-1.5 text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</div>
+                </div>
+              </div>
+              <div v-else-if="localSystemError" class="py-3 text-xs text-error">{{ localSystemError }}</div>
+              <div v-else class="py-3 text-xs text-text-alt">{{ t('common.loading') }}</div>
             </div>
           </div>
         </div>
@@ -354,26 +410,23 @@ onBeforeUnmount(() => {
       </section>
 
       <div
-        :class="systemResourcesVisible
+        :class="dashboardShowRemoteResourcesBoolean
           ? 'grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start'
           : 'grid grid-cols-1 gap-5'"
       >
       <section
-        v-if="systemResourcesVisible"
+        v-if="dashboardShowRemoteResourcesBoolean"
         data-testid="dashboard-system-resources"
         class="order-2 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
       >
         <header class="flex flex-col gap-2 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
-            <h2 class="text-base font-semibold">{{ t('dashboard.resources.title', '系统资源') }}</h2>
-            <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.resources.hint', 'Nexus 本机与活动 SSH 主机') }}</p>
+            <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle', 'SSH 资源') }}</h2>
+            <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '活动 SSH 会话的实时资源') }}</p>
           </div>
           <div class="flex items-center gap-2 text-[11px]">
-            <span v-if="dashboardShowLocalResourcesBoolean" class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
-              {{ t('dashboard.resources.local', 'Nexus 本机') }}
-            </span>
-            <span v-if="dashboardShowRemoteResourcesBoolean" class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
-              {{ t('dashboard.resources.remote', '远程主机') }} {{ remoteResourceSessions.length }}
+            <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
+              {{ remoteResourceSessions.length }} {{ t('dashboard.resources.remote', '远程主机') }}
             </span>
             <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">
               {{ t('dashboard.resources.live', '实时') }}
@@ -382,45 +435,6 @@ onBeforeUnmount(() => {
         </header>
 
         <div class="space-y-3 p-4 sm:p-5">
-          <article
-            v-if="dashboardShowLocalResourcesBoolean"
-            data-testid="dashboard-local-resources"
-            class="rounded-xl border border-primary/25 bg-primary/[0.035] p-4"
-          >
-            <div class="flex min-w-0 items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h3 class="truncate text-sm font-semibold">{{ t('dashboard.resources.local', 'Nexus 本机') }}</h3>
-                <p v-if="localSystemStatus?.osName" class="mt-1 truncate text-[11px] text-text-alt" :title="localSystemStatus.osName">{{ localSystemStatus.osName }}</p>
-              </div>
-              <span class="rounded border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary">LOCAL</span>
-            </div>
-
-            <div v-if="localSystemStatus" class="mt-4 space-y-4">
-              <div>
-                <div class="flex items-center justify-between gap-3 text-xs">
-                  <span class="font-medium text-text-secondary">CPU</span>
-                  <strong class="tabular-nums">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</strong>
-                </div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(localSystemStatus.cpuPercent)}%` }"></div></div>
-              </div>
-              <div>
-                <div class="flex items-center justify-between gap-3 text-xs">
-                  <span class="font-medium text-text-secondary">{{ t('dashboard.resources.memory', '内存') }}</span>
-                  <span class="truncate tabular-nums text-text-alt">{{ formatMemory(localSystemStatus.memUsed) }} / {{ formatMemory(localSystemStatus.memTotal) }} · <strong class="text-foreground">{{ resourcePercent(localSystemStatus.memPercent) }}%</strong></span>
-                </div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(localSystemStatus.memPercent)}%` }"></div></div>
-              </div>
-              <div>
-                <div class="flex items-center justify-between gap-3 text-xs">
-                  <span class="font-medium text-text-secondary">{{ t('dashboard.resources.disk', '根磁盘') }}</span>
-                  <strong class="tabular-nums">{{ localSystemStatus.diskPercent === undefined ? '—' : `${resourcePercent(localSystemStatus.diskPercent)}%` }}</strong>
-                </div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(localSystemStatus.diskPercent)}%` }"></div></div>
-              </div>
-            </div>
-            <div v-else-if="localSystemError" class="mt-4 text-xs text-error">{{ localSystemError }}</div>
-            <div v-else class="mt-4 text-xs text-text-alt">{{ t('common.loading') }}</div>
-          </article>
 
           <article
             v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceSessions : []"
@@ -436,18 +450,30 @@ onBeforeUnmount(() => {
               <span class="rounded border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
             </div>
 
-            <div v-if="remote.status" class="mt-4 space-y-4">
-              <div>
-                <div class="flex items-center justify-between gap-3 text-xs"><span class="font-medium text-text-secondary">CPU</span><strong class="tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong></div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div></div>
+            <div v-if="remote.status" class="mt-4 grid grid-cols-3 gap-3">
+              <div class="text-center">
+                <div :data-testid="`dashboard-resource-ring-${remote.sessionId}-cpu`" class="mx-auto h-16 w-16 rounded-full p-[5px]" :style="resourceRingStyle(remote.status.cpuPercent)">
+                  <div class="flex h-full w-full items-center justify-center rounded-full bg-card">
+                    <strong class="text-sm tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong>
+                  </div>
+                </div>
+                <div class="mt-1.5 text-[10px] font-medium text-text-alt">CPU</div>
               </div>
-              <div>
-                <div class="flex items-center justify-between gap-3 text-xs"><span class="font-medium text-text-secondary">{{ t('dashboard.resources.memory', '内存') }}</span><span class="truncate tabular-nums text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }} · <strong class="text-foreground">{{ resourcePercent(remote.status.memPercent) }}%</strong></span></div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div></div>
+              <div class="text-center" :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
+                <div :data-testid="`dashboard-resource-ring-${remote.sessionId}-memory`" class="mx-auto h-16 w-16 rounded-full p-[5px]" :style="resourceRingStyle(remote.status.memPercent, 'success')">
+                  <div class="flex h-full w-full items-center justify-center rounded-full bg-card">
+                    <strong class="text-sm tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong>
+                  </div>
+                </div>
+                <div class="mt-1.5 text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</div>
               </div>
-              <div>
-                <div class="flex items-center justify-between gap-3 text-xs"><span class="font-medium text-text-secondary">{{ t('dashboard.resources.disk', '根磁盘') }}</span><strong class="tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong></div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div></div>
+              <div class="text-center">
+                <div :data-testid="`dashboard-resource-ring-${remote.sessionId}-disk`" class="mx-auto h-16 w-16 rounded-full p-[5px]" :style="resourceRingStyle(remote.status.diskPercent, 'warning')">
+                  <div class="flex h-full w-full items-center justify-center rounded-full bg-card">
+                    <strong class="text-sm tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong>
+                  </div>
+                </div>
+                <div class="mt-1.5 text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</div>
               </div>
             </div>
             <div v-else-if="remote.error" class="mt-4 truncate text-xs text-error" :title="remote.error">{{ remote.error }}</div>

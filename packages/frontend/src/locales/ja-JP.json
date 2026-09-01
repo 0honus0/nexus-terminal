@@ -337,6 +337,8 @@
     "resources": {
       "title": "システムリソース",
       "hint": "Nexus ホストとアクティブな SSH ホスト",
+      "sshTitle": "SSH リソース",
+      "sshHint": "アクティブな SSH セッションのリアルタイムリソース",
       "live": "リアルタイム",
       "local": "Nexus ホスト",
       "remote": "リモートホスト",

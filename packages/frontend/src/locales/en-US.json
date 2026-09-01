@@ -1608,6 +1608,8 @@
     "resources": {
       "title": "System resources",
       "hint": "Nexus host and active SSH hosts",
+      "sshTitle": "SSH resources",
+      "sshHint": "Live resources for active SSH sessions",
       "live": "Live",
       "local": "Nexus host",
       "remote": "Remote hosts",

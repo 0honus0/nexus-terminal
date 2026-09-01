@@ -229,7 +229,13 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(remoteCards.nth(0)).toContainText('CPU', { timeout: 20_000 });
       await expect(remoteCards.nth(1)).toContainText('CPU', { timeout: 20_000 });
       await expect(remoteCards.nth(2)).toContainText('CPU', { timeout: 20_000 });
-      await expect(page.getByTestId('dashboard-local-resources')).toBeVisible();
+      const overview = page.getByTestId('dashboard-overview');
+      await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
+      await expect(page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources')).toHaveCount(0);
+      await expect(page.getByTestId('dashboard-local-cpu-ring')).toHaveCSS('background-image', /conic-gradient/);
+      await expect(page.getByTestId('dashboard-local-memory-ring')).toHaveCSS('background-image', /conic-gradient/);
+      await expect(page.getByTestId('dashboard-local-disk-ring')).toHaveCSS('background-image', /conic-gradient/);
+      await expect(page.locator('[data-testid^="dashboard-resource-ring-"]')).toHaveCount(9);
       await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
       await page.setViewportSize({ width: 1440, height: 900 });

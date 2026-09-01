@@ -1612,6 +1612,8 @@
     "resources": {
       "title": "系统资源",
       "hint": "Nexus 本机与活动 SSH 主机",
+      "sshTitle": "SSH 资源",
+      "sshHint": "活动 SSH 会话的实时资源",
       "live": "实时",
       "local": "Nexus 本机",
       "remote": "远程主机",
