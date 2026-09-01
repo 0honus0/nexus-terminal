@@ -1065,6 +1065,17 @@
       "title": "Status Monitor: Show IP Address",
       "enableLabel": "Show IP address in status monitor"
     },
+    "dashboardResources": {
+      "title": "Dashboard system resources",
+      "description": "Control whether the dashboard shows resource statistics for the Nexus host and active SSH hosts.",
+      "localLabel": "Show local resources",
+      "localHint": "Show CPU, memory, and root disk usage for the server running Nexus.",
+      "remoteLabel": "Show remote resources",
+      "remoteHint": "Subscribe only to currently connected SSH sessions; offline hosts are not probed.",
+      "error": {
+        "saveFailed": "Failed to save dashboard resource settings."
+      }
+    },
     "terminalScrollback": {
       "title": "Terminal Scrollback Limit",
       "limitLabel": "Maximum Lines",
@@ -1577,7 +1588,41 @@
     },
     "noConnectionsWithTag": "No connections found with this tag",
     "noConnectionsMatchSearch": "No connections match your search.",
-    "searchConnectionsPlaceholder": "Search connections..."
+    "searchConnectionsPlaceholder": "Search connections...",
+    "subtitle": "Quickly review and enter your remote connections",
+    "totalConnections": "Total connections",
+    "usedConnections": "Previously connected",
+    "tagCount": "Tags",
+    "quickConnect": "Quick connect",
+    "quickConnectHint": "Find a connection and open it directly",
+    "filterByTag": "Filter by tag",
+    "sortBy": "Sort by",
+    "manageHint": "Add, edit, and batch-manage connections from Connection Management",
+    "recentActivityHint": "Latest audit events",
+    "workspaceLabel": "Remote workspace",
+    "latestConnection": "Latest connection",
+    "reconnect": "Reconnect",
+    "protocolDistribution": "Connection types",
+    "tagOverview": "Tag overview",
+    "noTags": "No tags yet",
+    "resources": {
+      "title": "System resources",
+      "hint": "Nexus host and active SSH hosts",
+      "sshTitle": "SSH resources",
+      "sshHint": "Live resources for active SSH sessions",
+      "live": "Live",
+      "local": "Nexus host",
+      "remote": "Remote hosts",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Root disk",
+      "connected": "Connected",
+      "waiting": "Waiting for data",
+      "unavailable": "Resource data is unavailable",
+      "noRemoteSessions": "No active SSH sessions",
+      "remoteSession": "Active SSH session",
+      "moreHosts": "{count} more active hosts"
+    }
   },
   "progressCenter": {
     "title": "Progress Display",

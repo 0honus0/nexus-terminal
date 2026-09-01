@@ -1061,6 +1061,17 @@
       "title": "状态监视器显示IP地址",
       "enableLabel": "在状态监视器中显示IP地址"
     },
+    "dashboardResources": {
+      "title": "首页系统资源",
+      "description": "控制仪表盘是否显示 Nexus 本机和活动 SSH 主机的资源统计。",
+      "localLabel": "显示本机资源",
+      "localHint": "显示 Nexus 所在服务器的 CPU、内存和根磁盘使用率。",
+      "remoteLabel": "显示远程资源",
+      "remoteHint": "仅订阅当前已连接 SSH 会话的资源状态，不主动探测离线主机。",
+      "error": {
+        "saveFailed": "保存首页系统资源设置失败。"
+      }
+    },
     "terminalScrollback": {
       "title": "终端回滚行数",
       "limitLabel": "最大行数",
@@ -1581,7 +1592,41 @@
     },
     "noConnectionsWithTag": "该标签下没有连接记录",
     "noConnectionsMatchSearch": "没有连接匹配搜索条件",
-    "searchConnectionsPlaceholder": "搜索连接..."
+    "searchConnectionsPlaceholder": "搜索连接...",
+    "subtitle": "快速查看并进入你的远程连接",
+    "totalConnections": "连接总数",
+    "usedConnections": "已有连接记录",
+    "tagCount": "标签数量",
+    "quickConnect": "快速连接",
+    "quickConnectHint": "查找连接并直接进入终端",
+    "filterByTag": "按标签筛选",
+    "sortBy": "排序方式",
+    "manageHint": "连接的新增、编辑和批量管理请前往连接管理",
+    "recentActivityHint": "最近的审计事件",
+    "workspaceLabel": "远程工作台",
+    "latestConnection": "最近连接",
+    "reconnect": "重新连接",
+    "protocolDistribution": "连接类型",
+    "tagOverview": "标签概览",
+    "noTags": "暂无标签",
+    "resources": {
+      "title": "系统资源",
+      "hint": "Nexus 本机与活动 SSH 主机",
+      "sshTitle": "SSH 资源",
+      "sshHint": "活动 SSH 会话的实时资源",
+      "live": "实时",
+      "local": "Nexus 本机",
+      "remote": "远程主机",
+      "cpu": "CPU",
+      "memory": "内存",
+      "disk": "根磁盘",
+      "connected": "已连接",
+      "waiting": "等待数据",
+      "unavailable": "资源数据暂不可用",
+      "noRemoteSessions": "当前没有活动 SSH 会话",
+      "remoteSession": "活动 SSH 会话",
+      "moreHosts": "另有 {count} 台活动主机"
+    }
   },
   "progressCenter": {
     "title": "进度显示",

@@ -23,6 +23,8 @@ export function useWorkspaceSettings() {
     terminalEnableRightClickPasteBoolean,
     showPopupFileManagerBoolean,
     statusMonitorShowIpBoolean,
+    dashboardShowLocalResourcesBoolean,
+    dashboardShowRemoteResourcesBoolean,
   } = storeToRefs(settingsStore);
 
   // --- Popup editor / preview close behavior ---
@@ -411,6 +413,33 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- Dashboard resource cards ---
+  const dashboardShowLocalResources = ref(true);
+  const dashboardShowRemoteResources = ref(true);
+  const dashboardResourcesLoading = ref(false);
+  const dashboardResourcesMessage = ref('');
+  const dashboardResourcesSuccess = ref(false);
+
+  const handleUpdateDashboardResources = async () => {
+    dashboardResourcesLoading.value = true;
+    dashboardResourcesMessage.value = '';
+    dashboardResourcesSuccess.value = false;
+    try {
+      await settingsStore.updateMultipleSettings({
+        dashboardShowLocalResources: dashboardShowLocalResources.value ? 'true' : 'false',
+        dashboardShowRemoteResources: dashboardShowRemoteResources.value ? 'true' : 'false',
+      });
+      dashboardResourcesMessage.value = t('common.saved');
+      dashboardResourcesSuccess.value = true;
+    } catch (error: any) {
+      console.error('Failed to update dashboard resource settings:', error);
+      dashboardResourcesMessage.value = error.message || t('settings.dashboardResources.error.saveFailed');
+      dashboardResourcesSuccess.value = false;
+    } finally {
+      dashboardResourcesLoading.value = false;
+    }
+  };
+
   // Watchers to sync local state with store state
   watch(
     showPopupFileEditorBoolean,
@@ -517,6 +546,20 @@ export function useWorkspaceSettings() {
     },
     { immediate: true },
   );
+  watch(
+    dashboardShowLocalResourcesBoolean,
+    (newValue) => {
+      dashboardShowLocalResources.value = newValue;
+    },
+    { immediate: true },
+  );
+  watch(
+    dashboardShowRemoteResourcesBoolean,
+    (newValue) => {
+      dashboardShowRemoteResources.value = newValue;
+    },
+    { immediate: true },
+  );
 
   return {
     popupEditorEnabled,
@@ -604,5 +647,12 @@ export function useWorkspaceSettings() {
     statusMonitorShowIpMessage,
     statusMonitorShowIpSuccess,
     handleUpdateStatusMonitorShowIpSetting,
+
+    dashboardShowLocalResources,
+    dashboardShowRemoteResources,
+    dashboardResourcesLoading,
+    dashboardResourcesMessage,
+    dashboardResourcesSuccess,
+    handleUpdateDashboardResources,
   };
 }

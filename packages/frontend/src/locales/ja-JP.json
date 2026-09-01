@@ -317,7 +317,41 @@
     "noConnectionsMatchSearch": "検索条件に一致する接続はありません。",
     "searchConnectionsPlaceholder": "接続を検索...",
     "viewAllConnections": "すべての接続を表示",
-    "viewFullAuditLog": "完全な監査ログを表示"
+    "viewFullAuditLog": "完全な監査ログを表示",
+    "subtitle": "リモート接続をすばやく確認して開始します",
+    "totalConnections": "接続総数",
+    "usedConnections": "接続履歴あり",
+    "tagCount": "タグ数",
+    "quickConnect": "クイック接続",
+    "quickConnectHint": "接続を検索してすぐに開始",
+    "filterByTag": "タグで絞り込み",
+    "sortBy": "並び順",
+    "manageHint": "接続の追加・編集・一括管理は接続管理で行えます",
+    "recentActivityHint": "最近の監査イベント",
+    "workspaceLabel": "リモートワークスペース",
+    "latestConnection": "最近の接続",
+    "reconnect": "再接続",
+    "protocolDistribution": "接続タイプ",
+    "tagOverview": "タグ概要",
+    "noTags": "タグはありません",
+    "resources": {
+      "title": "システムリソース",
+      "hint": "Nexus ホストとアクティブな SSH ホスト",
+      "sshTitle": "SSH リソース",
+      "sshHint": "アクティブな SSH セッションのリアルタイムリソース",
+      "live": "リアルタイム",
+      "local": "Nexus ホスト",
+      "remote": "リモートホスト",
+      "cpu": "CPU",
+      "memory": "メモリ",
+      "disk": "ルートディスク",
+      "connected": "接続済み",
+      "waiting": "データ待機中",
+      "unavailable": "リソースデータを取得できません",
+      "noRemoteSessions": "アクティブな SSH セッションはありません",
+      "remoteSession": "アクティブな SSH セッション",
+      "moreHosts": "他に {count} 台のアクティブホスト"
+    }
   },
   "dockerManager": {
     "action": {
@@ -1275,6 +1309,17 @@
     "statusMonitorShowIp": {
       "title": "ステータスモニターでIPアドレスを表示",
       "enableLabel": "ステータスモニターにIPアドレスを表示する"
+    },
+    "dashboardResources": {
+      "title": "ダッシュボードのシステムリソース",
+      "description": "ダッシュボードに Nexus ホストとアクティブな SSH ホストのリソース統計を表示するか設定します。",
+      "localLabel": "ローカルリソースを表示",
+      "localHint": "Nexus を実行しているサーバーの CPU、メモリ、ルートディスク使用率を表示します。",
+      "remoteLabel": "リモートリソースを表示",
+      "remoteHint": "現在接続中の SSH セッションのみ購読し、オフラインホストは探索しません。",
+      "error": {
+        "saveFailed": "ダッシュボードのリソース設定を保存できませんでした。"
+      }
     },
     "terminalScrollback": {
       "title": "ターミナルスクロールバック制限",

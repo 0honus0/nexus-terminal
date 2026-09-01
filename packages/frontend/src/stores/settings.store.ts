@@ -44,6 +44,8 @@ interface SettingsState {
   dockerDefaultExpand?: string; //  Docker 默认展开详情 'true' or 'false'
   statusMonitorIntervalSeconds?: string; //  状态监控轮询间隔 (秒)
   statusMonitorScale?: string; // 状态监视器 Ctrl+滚轮缩放倍率
+  dashboardShowLocalResources?: string; // 首页显示 Nexus 宿主机资源
+  dashboardShowRemoteResources?: string; // 首页显示活动 SSH 主机资源
   workspaceSidebarPersistent?: string; //  工作区侧边栏是否固定 'true' or 'false'
   sidebarPaneWidths?: string; //  存储各侧边栏组件宽度的 JSON 字符串
   fileManagerRowSizeMultiplier?: string; //  文件管理器行大小乘数 (e.g., '1.0')
@@ -156,6 +158,12 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if (settings.value.statusMonitorScale === undefined) {
         settings.value.statusMonitorScale = '1.0';
+      }
+      if (settings.value.dashboardShowLocalResources === undefined) {
+        settings.value.dashboardShowLocalResources = 'true';
+      }
+      if (settings.value.dashboardShowRemoteResources === undefined) {
+        settings.value.dashboardShowRemoteResources = 'true';
       }
       //  Workspace sidebar persistent default
       if (settings.value.workspaceSidebarPersistent === undefined) {
@@ -478,6 +486,8 @@ export const useSettingsStore = defineStore('settings', () => {
       'dockerDefaultExpand',
       'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
       'statusMonitorScale',
+      'dashboardShowLocalResources',
+      'dashboardShowRemoteResources',
       'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
       'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
       'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -608,6 +618,8 @@ export const useSettingsStore = defineStore('settings', () => {
       'dockerDefaultExpand',
       'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
       'statusMonitorScale',
+      'dashboardShowLocalResources',
+      'dashboardShowRemoteResources',
       'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
       'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
       'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -898,6 +910,14 @@ export const useSettingsStore = defineStore('settings', () => {
     return Math.min(1.6, Math.max(0.65, val));
   });
 
+  const dashboardShowLocalResourcesBoolean = computed(() => {
+    return settings.value.dashboardShowLocalResources !== 'false';
+  });
+
+  const dashboardShowRemoteResourcesBoolean = computed(() => {
+    return settings.value.dashboardShowRemoteResources !== 'false';
+  });
+
   //  Getter for File Manager row size multiplier, returning number
   const fileManagerRowSizeMultiplierNumber = computed(() => {
     const val = parseFloat(settings.value.fileManagerRowSizeMultiplier || '1.0');
@@ -1023,6 +1043,8 @@ export const useSettingsStore = defineStore('settings', () => {
     dockerDefaultExpandBoolean, // +++ 暴露 Docker 默认展开 getter +++
     statusMonitorIntervalSecondsNumber, // +++ 暴露状态监控间隔 getter +++
     statusMonitorScaleNumber,
+    dashboardShowLocalResourcesBoolean,
+    dashboardShowRemoteResourcesBoolean,
     workspaceSidebarPersistentBoolean, // +++ 暴露侧边栏固定 getter +++
     getSidebarPaneWidth, // +++ 暴露获取特定面板宽度的 getter +++
     fileManagerRowSizeMultiplierNumber, // +++ 暴露文件管理器行大小 getter +++
