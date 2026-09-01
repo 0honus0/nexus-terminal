@@ -100,16 +100,21 @@ const latestConnection = computed(() => {
     .sort((a, b) => (b.last_connected_at ?? 0) - (a.last_connected_at ?? 0))[0] ?? null;
 });
 const remoteResourceSessions = computed(() => {
-  return [...sessions.value.entries()]
-    .filter(([, session]) => connections.value.some((connection) => (
-      String(connection.id) === String(session.connectionId) && connection.type === 'SSH'
-    )))
-    .map(([sessionId, session]) => ({
+  return [...sessions.value.entries()].flatMap(([sessionId, session]) => {
+    const connection = connections.value.find((candidate) => (
+      String(candidate.id) === String(session.connectionId) && candidate.type === 'SSH'
+    ));
+    if (!connection) return [];
+    return [{
       sessionId,
-      name: session.connectionName,
+      name: session.connectionName || connection.name || connection.host,
+      username: connection.username,
+      host: connection.host,
+      port: connection.port,
       status: session.statusMonitorManager.serverStatus.value,
       error: session.statusMonitorManager.statusError.value,
-    }));
+    }];
+  });
 });
 const resourcePercent = (value: number | undefined): number => {
   if (!Number.isFinite(value)) return 0;
@@ -472,7 +477,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div data-testid="dashboard-connection-list" class="max-h-[520px] overflow-y-auto border-y border-border/60">
+          <div data-testid="dashboard-connection-list" class="max-h-[520px] overflow-y-auto p-1">
             <div
               v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
               class="py-14 text-center text-sm text-text-secondary"
@@ -480,12 +485,12 @@ onBeforeUnmount(() => {
               {{ t('common.loading') }}
             </div>
 
-            <ul v-else-if="filteredAndSortedConnections.length > 0" class="divide-y divide-border/60">
+            <ul v-else-if="filteredAndSortedConnections.length > 0" class="space-y-2">
               <li
                 v-for="conn in filteredAndSortedConnections"
                 :key="conn.id"
                 :data-testid="`dashboard-connection-row-${conn.id}`"
-                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-1 py-4 sm:gap-5"
+                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg bg-header/20 px-3 py-3.5 transition-colors hover:bg-header/30 sm:gap-5"
               >
                 <div class="min-w-0">
                   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -656,7 +661,9 @@ onBeforeUnmount(() => {
                   <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden="true"></span>
                   <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
                 </div>
-                <p class="mt-1 pl-3.5 text-[11px] text-text-alt">{{ t('dashboard.resources.remoteSession', '活动 SSH 会话') }}</p>
+                <p class="mt-1 pl-3.5 truncate font-mono text-xs text-text-secondary" :title="`${remote.username}@${remote.host}:${remote.port}`">
+                  {{ remote.username }}@{{ remote.host }}:{{ remote.port }}
+                </p>
               </div>
               <span class="rounded bg-muted/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
             </div>

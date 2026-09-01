@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
-import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
+import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 
 const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
@@ -229,6 +229,8 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(remoteCards.nth(0)).toContainText('CPU', { timeout: 20_000 });
       await expect(remoteCards.nth(1)).toContainText('CPU', { timeout: 20_000 });
       await expect(remoteCards.nth(2)).toContainText('CPU', { timeout: 20_000 });
+      await expect(remoteCards.nth(0)).toContainText(`${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}`);
+      await expect(page.getByText('活动 SSH 会话', { exact: true })).toHaveCount(0);
       const overview = page.getByTestId('dashboard-overview');
       await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
       await expect(page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources')).toHaveCount(0);
@@ -256,6 +258,8 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(resources).toHaveCSS('border-top-width', '0px');
       await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('overflow-y', 'auto');
       await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('overflow-y', 'auto');
+      await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(remoteCards.nth(0)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
 
       const overviewBox = await overview.boundingBox();
       const quickConnectBox = await quickConnect.boundingBox();
