@@ -228,7 +228,8 @@ test('file previews and text editor protect historical file-opening regressions'
     const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
     await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
     await expect(outlineDrawer).toBeVisible();
-    await expect(outlineToggle).toBeHidden();
+    await expect(outlineToggle).toBeVisible();
+    await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(dialog.getByTestId('pdf-outline-close')).toBeHidden();
     const outlineBox = await outlineDrawer.boundingBox();
     const scrollerBox = await scroller.boundingBox();
@@ -237,6 +238,18 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(outlineBox!.width).toBeGreaterThanOrEqual(190);
     expect(outlineBox!.width).toBeLessThanOrEqual(224);
     expect(outlineBox!.x + outlineBox!.width).toBeLessThanOrEqual(scrollerBox!.x + 1);
+
+    await outlineToggle.click();
+    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+    await expect(outlineDrawer).toBeHidden();
+    await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect.poll(async () => (await scroller.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(scrollerBox!.width + 180);
+
+    await outlineToggle.click();
+    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+    await expect(outlineDrawer).toBeVisible();
+    await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
     const outline = dialog.getByTestId('pdf-outline');
     await expect(outline.getByText('Introduction', { exact: true })).toBeVisible();
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();

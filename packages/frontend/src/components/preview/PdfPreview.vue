@@ -29,6 +29,7 @@ const pinchScale = ref(1);
 const pinchPreviewPercent = ref<number | null>(null);
 const outlineOpen = ref(false);
 const desktopOutlinePersistent = ref(false);
+const desktopOutlineVisible = ref(true);
 const availablePageWidth = ref(220);
 const pageScalePercents = ref<Record<number, number>>({});
 const mainScrollerRef = ref<HTMLElement | null>(null);
@@ -63,7 +64,10 @@ const displayedZoomPercent = computed(() => (
   ?? (fitWidth.value ? currentFitZoom.value : zoomPercent.value)
 ));
 const zoomLabel = computed(() => `${Math.round(displayedZoomPercent.value)}%`);
-const outlineHidden = computed(() => !desktopOutlinePersistent.value && !outlineOpen.value);
+const outlineVisible = computed(() => (
+  desktopOutlinePersistent.value ? desktopOutlineVisible.value : outlineOpen.value
+));
+const outlineHidden = computed(() => !outlineVisible.value);
 
 const clampPage = (value: number) => Math.min(pageCount.value, Math.max(1, Math.round(value)));
 const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value)));
@@ -167,8 +171,18 @@ const previousPage = () => scrollToPage(currentPage.value - 1);
 const nextPage = () => scrollToPage(currentPage.value + 1);
 
 const syncOutlineLayout = () => {
+  const wasDesktop = desktopOutlinePersistent.value;
   desktopOutlinePersistent.value = desktopOutlineMediaQuery?.matches ?? false;
-  if (desktopOutlinePersistent.value) outlineOpen.value = false;
+  outlineOpen.value = false;
+  if (!wasDesktop && desktopOutlinePersistent.value) desktopOutlineVisible.value = true;
+};
+
+const toggleOutline = () => {
+  if (desktopOutlinePersistent.value) {
+    desktopOutlineVisible.value = !desktopOutlineVisible.value;
+    return;
+  }
+  outlineOpen.value = !outlineOpen.value;
 };
 
 const anchorAfterZoom = (pageNumber: number) => {
@@ -449,14 +463,13 @@ onBeforeUnmount(() => {
           {{ t('fileManager.preview.pdfFitWidth', 'Fit width') }}
         </button>
         <button
-          v-if="!desktopOutlinePersistent"
           type="button"
           data-testid="pdf-outline-toggle"
           class="pdf-toolbar-button"
-          :aria-expanded="outlineOpen"
+          :aria-expanded="outlineVisible"
           :aria-label="t('fileManager.preview.pdfOutline', 'Outline')"
           :title="t('fileManager.preview.pdfOutline', 'Outline')"
-          @click="outlineOpen = !outlineOpen"
+          @click="toggleOutline"
         >
           <i class="fas fa-list-ul" aria-hidden="true"></i>
         </button>
@@ -480,6 +493,7 @@ onBeforeUnmount(() => {
         data-testid="pdf-outline-drawer"
         class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(82vw,18rem)] flex-col border-r border-border bg-header/95 shadow-xl sm:relative sm:inset-auto sm:z-auto sm:w-52 sm:shrink-0 sm:translate-x-0 sm:pointer-events-auto sm:shadow-none"
         :class="outlineOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"
+        :style="desktopOutlinePersistent && !desktopOutlineVisible ? { display: 'none' } : undefined"
         :aria-hidden="outlineHidden"
       >
         <header class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
