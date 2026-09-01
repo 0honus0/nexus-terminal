@@ -608,7 +608,9 @@ onBeforeUnmount(() => {
           type="button"
           data-testid="pdf-outline-toggle"
           class="pdf-toolbar-button"
+          :class="{ 'pdf-toolbar-button-active': outlineVisible }"
           :aria-expanded="outlineVisible"
+          :aria-pressed="outlineVisible"
           :aria-label="t('fileManager.preview.pdfOutline', 'Outline')"
           :title="t('fileManager.preview.pdfOutline', 'Outline')"
           @click="toggleOutline"
@@ -723,9 +725,16 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 
-.pdf-toolbar-button:hover:not(:disabled) {
-  background: var(--color-border);
-  color: var(--text-color-primary);
+.pdf-toolbar-button.pdf-toolbar-button-active {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pdf-toolbar-button:hover:not(:disabled) {
+    background: var(--color-border);
+    color: var(--text-color-primary);
+  }
 }
 
 .pdf-toolbar-button:focus-visible {

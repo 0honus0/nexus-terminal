@@ -441,6 +441,12 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(zoomInButton).toBeVisible();
   await expect(nextPageButton).toBeVisible();
   await expect(outlineToggle).toBeVisible();
+  await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
+  const closedOutlineToggleStyle = await outlineToggle.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, backgroundColor: style.backgroundColor };
+  });
   await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
 
   const scroller = dialog.getByTestId('pdf-page-scroller');
@@ -452,6 +458,22 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+  await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(outlineToggle).toHaveClass(/pdf-toolbar-button-active/);
+
+  // Tapping the same toolbar button to hide the drawer must also clear its
+  // visual active state. Touch browsers can otherwise leave :hover stuck.
+  await outlineToggle.click();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
+  await expect.poll(() => outlineToggle.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, backgroundColor: style.backgroundColor };
+  })).toEqual(closedOutlineToggleStyle);
+
+  await outlineToggle.click();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   const scrollerBoxWithDrawer = await scroller.boundingBox();
   expect(scrollerBoxWithDrawer).toBeTruthy();
   expect(Math.abs(scrollerBoxWithDrawer!.width - scrollerBoxBeforeDrawer!.width)).toBeLessThanOrEqual(1);
@@ -459,12 +481,16 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await dialog.getByTestId('pdf-outline').getByText('Second Chapter', { exact: true }).click();
   await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   await expect(dialog.getByTestId('pdf-outline-close')).toBeVisible();
   await dialog.getByTestId('pdf-outline-close').click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
   const thirdPage = dialog.getByTestId('pdf-page-3');
   await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await thirdPage.evaluate((element) => element.offsetTop));
