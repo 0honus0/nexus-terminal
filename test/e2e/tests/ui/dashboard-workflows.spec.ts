@@ -232,15 +232,18 @@ test('dashboard filters connections and persists tag and sort preferences across
       const overview = page.getByTestId('dashboard-overview');
       await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
       await expect(page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources')).toHaveCount(0);
-      await expect(page.getByTestId('dashboard-local-cpu-ring')).toHaveCSS('background-image', /conic-gradient/);
-      await expect(page.getByTestId('dashboard-local-memory-ring')).toHaveCSS('background-image', /conic-gradient/);
-      await expect(page.getByTestId('dashboard-local-disk-ring')).toHaveCSS('background-image', /conic-gradient/);
-      await expect(page.locator('[data-testid^="dashboard-resource-ring-"]')).toHaveCount(9);
+      await expect(page.getByTestId('dashboard-local-cpu-gauge').locator('path').nth(1)).toHaveAttribute('style', /stroke-dashoffset/);
+      await expect(page.getByTestId('dashboard-local-memory-gauge').locator('path').nth(1)).toHaveAttribute('style', /stroke-dashoffset/);
+      await expect(page.getByTestId('dashboard-local-disk-gauge').locator('path').nth(1)).toHaveAttribute('style', /stroke-dashoffset/);
+      await expect(page.locator('[data-testid^="dashboard-resource-gauge-"]')).toHaveCount(9);
       await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
       await page.setViewportSize({ width: 1440, height: 900 });
+      const overviewBox = await overview.boundingBox();
       const quickConnectBox = await page.getByTestId('dashboard-connections').boundingBox();
       const resourcesBox = await page.getByTestId('dashboard-system-resources').boundingBox();
+      expect(overviewBox).not.toBeNull();
+      expect(overviewBox?.height ?? Infinity).toBeLessThanOrEqual(180);
       expect(quickConnectBox).not.toBeNull();
       expect(resourcesBox).not.toBeNull();
       expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
