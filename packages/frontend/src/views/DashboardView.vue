@@ -549,7 +549,12 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <aside data-testid="dashboard-recent-activity" class="mt-8 border-t border-border/70 pt-5">
+        <div data-testid="dashboard-operation-divider" class="mt-9 flex h-px w-full overflow-hidden rounded-full" aria-hidden="true">
+          <span class="w-20 shrink-0 bg-primary/70"></span>
+          <span class="flex-1 bg-border/80"></span>
+        </div>
+
+        <aside data-testid="dashboard-recent-activity" class="mt-5">
           <header class="flex items-center justify-between gap-3 pb-3">
             <div class="flex min-w-0 items-center gap-2.5">
               <span data-testid="dashboard-recent-activity-icon" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">

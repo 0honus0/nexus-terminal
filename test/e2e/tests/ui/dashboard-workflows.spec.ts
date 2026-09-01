@@ -247,6 +247,8 @@ test('dashboard filters connections and persists tag and sort preferences across
       const quickConnect = page.getByTestId('dashboard-connections');
       const resources = page.getByTestId('dashboard-system-resources');
       const recentActivity = page.getByTestId('dashboard-recent-activity');
+      const operationDivider = page.getByTestId('dashboard-operation-divider');
+      await expect(operationDivider).toBeVisible();
       await expect(workspace).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       await expect(page.getByTestId('dashboard-recent-activity-icon')).toBeVisible();
       await expect(page.getByTestId('dashboard-ssh-resources-icon')).toBeVisible();
@@ -268,7 +270,12 @@ test('dashboard filters connections and persists tag and sort preferences across
       expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
       expect(Math.abs((recentActivityBox?.x ?? 0) - (quickConnectBox?.x ?? 0))).toBeLessThanOrEqual(2);
       expect(Math.abs((recentActivityBox?.width ?? 0) - (quickConnectBox?.width ?? 0))).toBeLessThanOrEqual(2);
-      expect(recentActivityBox?.y ?? 0).toBeGreaterThan((quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0));
+      const dividerBox = await operationDivider.boundingBox();
+      expect(dividerBox).not.toBeNull();
+      expect(Math.abs((dividerBox?.x ?? 0) - (quickConnectBox?.x ?? 0))).toBeLessThanOrEqual(2);
+      expect(Math.abs((dividerBox?.width ?? 0) - (quickConnectBox?.width ?? 0))).toBeLessThanOrEqual(2);
+      expect(dividerBox?.y ?? 0).toBeGreaterThan((quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0));
+      expect(recentActivityBox?.y ?? 0).toBeGreaterThan((dividerBox?.y ?? 0) + (dividerBox?.height ?? 0));
 
       const localResourceBox = await page.getByTestId('dashboard-local-resources').boundingBox();
       const remoteResourceBoxes = await remoteCards.evaluateAll((cards) => cards.map((card) => {
