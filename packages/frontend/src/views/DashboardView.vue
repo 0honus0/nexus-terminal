@@ -622,7 +622,7 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div data-testid="dashboard-remote-resource-list" class="max-h-[760px] overflow-y-auto border-y border-border/60">
+        <div data-testid="dashboard-ssh-resource-list" class="max-h-[760px] overflow-y-auto border-y border-border/60">
 
           <article
             v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceSessions : []"

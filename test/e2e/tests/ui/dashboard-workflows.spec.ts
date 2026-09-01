@@ -250,7 +250,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(quickConnect).toHaveCSS('border-top-width', '0px');
       await expect(resources).toHaveCSS('border-top-width', '0px');
       await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('overflow-y', 'auto');
-      await expect(page.getByTestId('dashboard-remote-resource-list')).toHaveCSS('overflow-y', 'auto');
+      await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('overflow-y', 'auto');
 
       const overviewBox = await overview.boundingBox();
       const quickConnectBox = await quickConnect.boundingBox();
