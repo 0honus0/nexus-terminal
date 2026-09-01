@@ -325,8 +325,8 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="flex min-w-0 flex-wrap items-center justify-end gap-x-5 gap-y-3">
-            <div data-testid="dashboard-overview-stats" class="flex items-end gap-7 px-1">
+          <div class="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start sm:gap-x-5 lg:justify-end">
+            <div data-testid="dashboard-overview-stats" class="flex items-end justify-between gap-7 px-1 sm:justify-start">
               <div>
                 <strong data-testid="dashboard-total-connections" class="block text-xl font-semibold leading-none tabular-nums">{{ connections.length }}</strong>
                 <div class="mt-1.5 text-[10px] text-text-alt">{{ t('dashboard.totalConnections', '连接总数') }}</div>
@@ -340,7 +340,7 @@ onBeforeUnmount(() => {
             <div
               v-if="dashboardShowLocalResourcesBoolean"
               data-testid="dashboard-local-resources"
-              class="min-w-[300px] border-l border-border pl-5"
+              class="min-w-0 border-t border-border pt-3 sm:min-w-[300px] sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
             >
               <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">{{ t('dashboard.resources.local', 'Nexus 本机') }}</div>
@@ -423,9 +423,9 @@ onBeforeUnmount(() => {
           >
             <div
               data-testid="dashboard-connection-toolbar"
-              class="sticky top-0 z-10 grid grid-cols-1 gap-2 border-b border-border/70 bg-background/95 p-2 backdrop-blur sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+              class="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-b border-border/70 bg-background/95 p-2 backdrop-blur sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
             >
-              <label class="relative min-w-0">
+              <label class="relative col-span-3 min-w-0 sm:col-span-1">
                 <span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder', '搜索连接...') }}</span>
                 <i class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-alt" aria-hidden="true"></i>
                 <input
@@ -440,7 +440,7 @@ onBeforeUnmount(() => {
                 v-model="selectedTagId"
                 data-testid="dashboard-tag-filter"
                 :disabled="isLoadingTags"
-                class="h-9 min-w-32 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
+                class="h-9 min-w-0 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:min-w-32 sm:px-3 sm:text-sm"
                 :aria-label="t('dashboard.filterByTag', '按标签筛选')"
               >
                 <option :value="null">{{ t('dashboard.filterTags.all', '所有标签') }}</option>
@@ -452,7 +452,7 @@ onBeforeUnmount(() => {
               <select
                 v-model="localSortBy"
                 data-testid="dashboard-sort-by"
-                class="h-9 min-w-32 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
+                class="h-9 min-w-0 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:min-w-32 sm:px-3 sm:text-sm"
                 :aria-label="t('dashboard.sortBy', '排序方式')"
               >
                 <option v-for="option in sortOptions" :key="option.value" :value="option.value">
@@ -484,7 +484,7 @@ onBeforeUnmount(() => {
                 v-for="conn in filteredAndSortedConnections"
                 :key="conn.id"
                 :data-testid="`dashboard-connection-row-${conn.id}`"
-                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg bg-header/20 px-3 py-3.5 transition-colors hover:bg-header/30 sm:gap-5"
+                class="grid grid-cols-1 items-center gap-3 rounded-lg bg-header/20 px-3 py-3.5 transition-colors hover:bg-header/30 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5"
               >
                 <div class="min-w-0">
                   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -516,7 +516,7 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   :data-testid="`dashboard-connect-${conn.id}`"
-                  class="h-9 shrink-0 rounded-md bg-button px-4 text-sm font-medium text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary/60"
+                  class="h-9 w-full shrink-0 rounded-md bg-button px-4 text-sm font-medium text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary/60 sm:w-auto"
                   @click="connectTo(conn)"
                 >
                   {{ t('connections.actions.connect') }}
@@ -566,7 +566,7 @@ onBeforeUnmount(() => {
               <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '已配置 SSH 主机的低频资源快照') }}</p>
             </div>
           </div>
-          <div class="flex items-center gap-2 text-[11px]">
+          <div class="flex flex-wrap items-center gap-2 text-[11px]">
             <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
               {{ remoteResourceHosts.length }} {{ t('dashboard.resources.remote', '远程主机') }}
             </span>
@@ -611,7 +611,7 @@ onBeforeUnmount(() => {
               <span class="rounded bg-muted/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
             </div>
 
-            <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-4">
+            <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-2 sm:gap-4">
               <div>
                 <div class="flex items-baseline justify-between gap-2">
                   <span class="text-[10px] font-medium text-text-alt">CPU</span>

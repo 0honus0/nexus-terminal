@@ -3,6 +3,7 @@
   "group": 5,
   "workers": 8,
   "specs": [
+    "tests/mobile/dashboard-mobile.spec.ts",
     "tests/mobile/ssh-workspace.spec.ts",
     "tests/mobile/suspend-resume-ui.spec.ts",
     "tests/mobile/terminal-touch.spec.ts",
