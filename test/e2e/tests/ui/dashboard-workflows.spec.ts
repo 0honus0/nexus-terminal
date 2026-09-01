@@ -89,6 +89,60 @@ async function createConnection(
   return id;
 }
 
+test('SSH resource loading state fills the scroll panel without a darker partial block', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+
+  const originalSettingsResponse = await context.request.get('/api/v1/settings');
+  expect(originalSettingsResponse.ok()).toBeTruthy();
+  const originalSettings = await originalSettingsResponse.json() as Record<string, string | undefined>;
+
+  const enableRemoteResources = await context.request.put('/api/v1/settings', {
+    data: { dashboardShowRemoteResources: 'true' },
+  });
+  expect(enableRemoteResources.ok()).toBeTruthy();
+
+  let releaseRemoteResources: (() => void) | undefined;
+  const remoteResourcesReleased = new Promise<void>((resolve) => {
+    releaseRemoteResources = resolve;
+  });
+  let markRemoteRequestStarted: (() => void) | undefined;
+  const remoteRequestStarted = new Promise<void>((resolve) => {
+    markRemoteRequestStarted = resolve;
+  });
+
+  await page.route('**/api/v1/system/ssh-resources', async (route) => {
+    markRemoteRequestStarted?.();
+    await remoteResourcesReleased;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await remoteRequestStarted;
+
+    const list = page.getByTestId('dashboard-ssh-resource-list');
+    const loadingState = page.getByTestId('dashboard-remote-resources');
+    await expect(list).toBeVisible();
+    await expect(loadingState).toBeVisible();
+    await expect(loadingState).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+    const listBox = await list.boundingBox();
+    const loadingBox = await loadingState.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(loadingBox).not.toBeNull();
+    expect(loadingBox?.height ?? 0).toBeGreaterThanOrEqual((listBox?.height ?? 0) - 20);
+  } finally {
+    releaseRemoteResources?.();
+    await page.unrouteAll({ behavior: 'wait' });
+    const restoreSettings = await context.request.put('/api/v1/settings', {
+      data: {
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? 'true',
+      },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
+  }
+});
+
 test('dashboard filters connections and persists tag and sort preferences across reloads', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await cleanupDashboardFixtures(context.request);

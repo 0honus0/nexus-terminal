@@ -648,7 +648,7 @@ onBeforeUnmount(() => {
           <div
             v-if="dashboardShowRemoteResourcesBoolean && remoteResourceHosts.length === 0"
             data-testid="dashboard-remote-resources"
-            class="flex min-h-32 items-center justify-center rounded-lg bg-header/20 px-4 text-center text-xs text-text-alt"
+            class="flex h-full min-h-0 items-center justify-center px-4 text-center text-xs text-text-alt"
           >
             {{ remoteResourcesLoading ? t('common.loading') : t('dashboard.resources.noRemoteSessions', '当前没有已配置 SSH 主机') }}
           </div>
