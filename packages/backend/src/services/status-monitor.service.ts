@@ -3,7 +3,7 @@ import { WebSocket } from 'ws';
 import { ClientState } from '../websocket';
 import { settingsService } from '../settings/settings.service';
 
-interface ServerStatus {
+export interface ServerStatus {
   cpuPercent?: number;
   memPercent?: number;
   memUsed?: number;
@@ -110,6 +110,10 @@ export class StatusMonitorService {
     this.stopStatusPolling(sessionId);
     this.startInFlight.delete(sessionId);
     this.staticInfo.delete(sessionId);
+  }
+
+  async collectServerStatus(sshClient: Client, monitorKey: string): Promise<ServerStatus> {
+    return this.fetchServerStatus(sshClient, `snapshot:${monitorKey}`);
   }
 
   private async fetchAndSendServerStatus(sessionId: string): Promise<void> {

@@ -336,10 +336,11 @@
     "noTags": "タグはありません",
     "resources": {
       "title": "システムリソース",
-      "hint": "Nexus ホストとアクティブな SSH ホスト",
+      "hint": "Nexus ホストと設定済み SSH ホスト",
       "sshTitle": "SSH リソース",
-      "sshHint": "アクティブな SSH セッションのリアルタイムリソース",
+      "sshHint": "設定済み SSH ホストの低頻度リソーススナップショット",
       "live": "リアルタイム",
+      "snapshot": "30秒更新",
       "local": "Nexus ホスト",
       "remote": "リモートホスト",
       "cpu": "CPU",
@@ -348,7 +349,7 @@
       "connected": "接続済み",
       "waiting": "データ待機中",
       "unavailable": "リソースデータを取得できません",
-      "noRemoteSessions": "アクティブな SSH セッションはありません",
+      "noRemoteSessions": "設定済み SSH ホストはありません",
       "remoteSession": "アクティブな SSH セッション",
       "moreHosts": "他に {count} 台のアクティブホスト"
     }

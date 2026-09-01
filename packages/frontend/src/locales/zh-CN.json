@@ -1611,10 +1611,11 @@
     "noTags": "暂无标签",
     "resources": {
       "title": "系统资源",
-      "hint": "Nexus 本机与活动 SSH 主机",
+      "hint": "Nexus 本机与已配置 SSH 主机",
       "sshTitle": "SSH 资源",
-      "sshHint": "活动 SSH 会话的实时资源",
+      "sshHint": "已配置 SSH 主机的低频资源快照",
       "live": "实时",
+      "snapshot": "30 秒刷新",
       "local": "Nexus 本机",
       "remote": "远程主机",
       "cpu": "CPU",
@@ -1623,7 +1624,7 @@
       "connected": "已连接",
       "waiting": "等待数据",
       "unavailable": "资源数据暂不可用",
-      "noRemoteSessions": "当前没有活动 SSH 会话",
+      "noRemoteSessions": "当前没有已配置 SSH 主机",
       "remoteSession": "活动 SSH 会话",
       "moreHosts": "另有 {count} 台活动主机"
     }

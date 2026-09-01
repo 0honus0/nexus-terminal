@@ -25,7 +25,6 @@ const settingsStore = useSettingsStore();
 const { connections, isLoading: isLoadingConnections } = storeToRefs(connectionsStore);
 const { logs: auditLogs, isLoading: isLoadingLogs } = storeToRefs(auditLogStore);
 const { tags, isLoading: isLoadingTags } = storeToRefs(tagsStore);
-const { sessions } = storeToRefs(sessionStore);
 const {
   dashboardShowLocalResourcesBoolean,
   dashboardShowRemoteResourcesBoolean,
@@ -56,8 +55,22 @@ const selectedTagId = ref<number | null>(getInitialSelectedTagId());
 const searchQuery = ref('');
 const localSystemStatus = ref<(ServerStatus & { uptimeSeconds?: number }) | null>(null);
 const localSystemError = ref('');
+interface RemoteResourceStatus {
+  key: string;
+  connectionId: number;
+  name: string;
+  username: string;
+  host: string;
+  port: number;
+  status?: ServerStatus;
+  error?: string;
+  checkedAt: number;
+}
+const remoteResourceHosts = ref<RemoteResourceStatus[]>([]);
+const remoteResourcesLoading = ref(false);
 let localSystemTimer: ReturnType<typeof setInterval> | null = null;
-const activatedRemoteStatusSessions = new Set<string>();
+let remoteResourceTimer: ReturnType<typeof setInterval> | null = null;
+const REMOTE_RESOURCE_POLL_INTERVAL_MS = 30_000;
 
 const filteredAndSortedConnections = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
@@ -93,28 +106,10 @@ const filteredAndSortedConnections = computed(() => {
 });
 
 const recentAuditLogs = computed(() => auditLogs.value.slice(0, maxRecentLogs));
-const usedConnectionCount = computed(() => connections.value.filter((connection) => Boolean(connection.last_connected_at)).length);
 const latestConnection = computed(() => {
   return [...connections.value]
     .filter((connection) => Boolean(connection.last_connected_at))
     .sort((a, b) => (b.last_connected_at ?? 0) - (a.last_connected_at ?? 0))[0] ?? null;
-});
-const remoteResourceSessions = computed(() => {
-  return [...sessions.value.entries()].flatMap(([sessionId, session]) => {
-    const connection = connections.value.find((candidate) => (
-      String(candidate.id) === String(session.connectionId) && candidate.type === 'SSH'
-    ));
-    if (!connection) return [];
-    return [{
-      sessionId,
-      name: session.connectionName || connection.name || connection.host,
-      username: connection.username,
-      host: connection.host,
-      port: connection.port,
-      status: session.statusMonitorManager.serverStatus.value,
-      error: session.statusMonitorManager.statusError.value,
-    }];
-  });
 });
 const resourcePercent = (value: number | undefined): number => {
   if (!Number.isFinite(value)) return 0;
@@ -240,30 +235,32 @@ const syncLocalSystemPolling = () => {
   );
 };
 
-const syncRemoteStatusSubscriptions = () => {
-  const desiredSessionIds = dashboardShowRemoteResourcesBoolean.value
-    ? new Set(
-      [...sessions.value.entries()]
-        .filter(([, session]) => connections.value.some((connection) => (
-          String(connection.id) === String(session.connectionId) && connection.type === 'SSH'
-        )))
-        .map(([sessionId]) => sessionId),
-    )
-    : new Set<string>();
-
-  for (const sessionId of [...activatedRemoteStatusSessions]) {
-    if (desiredSessionIds.has(sessionId)) continue;
-    sessions.value.get(sessionId)?.statusMonitorManager.deactivate();
-    activatedRemoteStatusSessions.delete(sessionId);
+const fetchRemoteResourceStatuses = async () => {
+  if (!dashboardShowRemoteResourcesBoolean.value || remoteResourcesLoading.value) return;
+  remoteResourcesLoading.value = true;
+  try {
+    const response = await apiClient.get<RemoteResourceStatus[]>('/system/ssh-resources');
+    remoteResourceHosts.value = response.data;
+  } catch (error) {
+    console.error('[Dashboard] Failed to load SSH resource statuses:', error);
+  } finally {
+    remoteResourcesLoading.value = false;
   }
+};
 
-  for (const sessionId of desiredSessionIds) {
-    if (activatedRemoteStatusSessions.has(sessionId)) continue;
-    const session = sessions.value.get(sessionId);
-    if (!session) continue;
-    session.statusMonitorManager.activate();
-    activatedRemoteStatusSessions.add(sessionId);
+const stopRemoteResourcePolling = () => {
+  if (remoteResourceTimer) clearInterval(remoteResourceTimer);
+  remoteResourceTimer = null;
+};
+
+const syncRemoteResourcePolling = () => {
+  stopRemoteResourcePolling();
+  if (!dashboardShowRemoteResourcesBoolean.value) {
+    remoteResourceHosts.value = [];
+    return;
   }
+  void fetchRemoteResourceStatuses();
+  remoteResourceTimer = setInterval(() => void fetchRemoteResourceStatuses(), REMOTE_RESOURCE_POLL_INTERVAL_MS);
 };
 
 watch(localSortBy, (value) => localStorage.setItem(LS_SORT_BY_KEY, value));
@@ -275,12 +272,8 @@ watch(
   { immediate: true },
 );
 watch(
-  () => [
-    dashboardShowRemoteResourcesBoolean.value,
-    [...sessions.value.keys()].join('|'),
-    connections.value.map((connection) => `${connection.id}:${connection.type}`).join('|'),
-  ],
-  syncRemoteStatusSubscriptions,
+  dashboardShowRemoteResourcesBoolean,
+  syncRemoteResourcePolling,
   { immediate: true },
 );
 
@@ -294,10 +287,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopLocalSystemPolling();
-  for (const sessionId of activatedRemoteStatusSessions) {
-    sessions.value.get(sessionId)?.statusMonitorManager.deactivate();
-  }
-  activatedRemoteStatusSessions.clear();
+  stopRemoteResourcePolling();
 });
 </script>
 
@@ -333,17 +323,10 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="flex min-w-0 flex-wrap items-center justify-end gap-x-5 gap-y-3">
-            <div data-testid="dashboard-overview-stats" class="flex items-end gap-6 px-1">
+            <div data-testid="dashboard-overview-stats" class="flex items-end gap-7 px-1">
               <div>
                 <strong data-testid="dashboard-total-connections" class="block text-xl font-semibold leading-none tabular-nums">{{ connections.length }}</strong>
                 <div class="mt-1.5 text-[10px] text-text-alt">{{ t('dashboard.totalConnections', '连接总数') }}</div>
-              </div>
-              <div>
-                <div class="flex items-baseline gap-1 leading-none">
-                  <strong data-testid="dashboard-used-connections" class="text-xl font-semibold tabular-nums">{{ usedConnectionCount }}</strong>
-                  <span class="text-[10px] text-text-alt">/ {{ connections.length }}</span>
-                </div>
-                <div class="mt-1.5 text-[10px] text-text-alt">{{ t('dashboard.usedConnections', '已有连接记录') }}</div>
               </div>
               <div>
                 <strong data-testid="dashboard-tag-count" class="block text-xl font-semibold leading-none tabular-nums">{{ tags.length }}</strong>
@@ -477,7 +460,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div data-testid="dashboard-connection-list" class="max-h-[520px] overflow-y-auto p-1">
+          <div
+            data-testid="dashboard-connection-list"
+            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner"
+            style="scrollbar-gutter: stable;"
+          >
             <div
               v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
               class="py-14 text-center text-sm text-text-secondary"
@@ -554,62 +541,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <aside data-testid="dashboard-recent-activity" class="mt-8 border-t border-border/70 pt-5">
-          <header class="flex items-center justify-between gap-3 pb-3">
-            <div class="flex min-w-0 items-center gap-2.5">
-              <span data-testid="dashboard-recent-activity-icon" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
-                <i class="fas fa-clock-rotate-left text-sm"></i>
-              </span>
-              <div class="min-w-0">
-                <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
-                <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
-              </div>
-            </div>
-            <span class="text-xs tabular-nums text-text-alt">{{ recentAuditLogs.length }}</span>
-          </header>
-
-          <div>
-            <div v-if="isLoadingLogs && recentAuditLogs.length === 0" class="py-10 text-center text-sm text-text-secondary">
-              {{ t('common.loading') }}
-            </div>
-            <ol v-else-if="recentAuditLogs.length > 0" class="divide-y divide-border/60">
-              <li v-for="log in recentAuditLogs" :key="log.id" class="relative py-3 pl-4">
-                <span
-                  class="absolute left-0 top-[1.1rem] h-1.5 w-1.5 rounded-full"
-                  :class="isFailedAction(log.action_type) ? 'bg-error' : 'bg-primary'"
-                  aria-hidden="true"
-                ></span>
-                <div class="flex items-start justify-between gap-3">
-                  <span
-                    class="min-w-0 text-sm font-medium leading-5"
-                    :class="isFailedAction(log.action_type) ? 'text-error' : 'text-foreground'"
-                  >
-                    {{ getActionTranslation(log.action_type) }}
-                  </span>
-                  <time class="shrink-0 pt-0.5 text-[11px] text-text-alt">
-                    {{ formatRelativeTime(log.timestamp) }}
-                  </time>
-                </div>
-                <p v-if="auditSummary(log.details)" class="mt-1 truncate text-xs text-text-secondary" :title="auditSummary(log.details)">
-                  {{ auditSummary(log.details) }}
-                </p>
-              </li>
-            </ol>
-            <div v-else class="py-10 text-center text-sm text-text-secondary">
-              {{ t('dashboard.noRecentActivity', '没有最近活动记录') }}
-            </div>
-          </div>
-
-          <div class="pt-3 text-right">
-            <RouterLink
-              data-testid="dashboard-audit-link"
-              :to="{ name: 'AuditLogs' }"
-              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
-            >
-              {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }} →
-            </RouterLink>
-          </div>
-        </aside>
         </div>
 
       <section
@@ -624,36 +555,45 @@ onBeforeUnmount(() => {
             </span>
             <div class="min-w-0">
               <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle', 'SSH 资源') }}</h2>
-              <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '活动 SSH 会话的实时资源') }}</p>
+              <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '已配置 SSH 主机的低频资源快照') }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2 text-[11px]">
             <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
-              {{ remoteResourceSessions.length }} {{ t('dashboard.resources.remote', '远程主机') }}
+              {{ remoteResourceHosts.length }} {{ t('dashboard.resources.remote', '远程主机') }}
             </span>
             <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">
-              {{ t('dashboard.resources.live', '实时') }}
+              {{ t('dashboard.resources.snapshot', '30 秒刷新') }}
             </span>
           </div>
         </header>
 
-        <div data-testid="dashboard-ssh-resource-list" class="max-h-[760px] space-y-2 overflow-y-auto p-1">
+        <div
+          data-testid="dashboard-ssh-resource-list"
+          class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner"
+          style="scrollbar-gutter: stable;"
+        >
 
           <article
-            v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceSessions : []"
-            :key="remote.sessionId"
-            :data-testid="`dashboard-remote-resource-${remote.sessionId}`"
+            v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceHosts : []"
+            :key="remote.key"
+            :data-testid="`dashboard-remote-resource-${remote.key}`"
             class="group relative overflow-hidden rounded-lg bg-header/20 px-3 py-3.5 transition-colors hover:bg-header/30"
           >
             <span
-              :data-testid="`dashboard-ssh-resource-accent-${remote.sessionId}`"
-              class="absolute inset-y-3 left-0 w-0.5 rounded-full bg-success/70"
+              :data-testid="`dashboard-ssh-resource-accent-${remote.key}`"
+              class="absolute inset-y-3 left-0 w-0.5 rounded-full"
+              :class="remote.status ? 'bg-success/70' : remote.error ? 'bg-error/70' : 'bg-border'"
               aria-hidden="true"
             ></span>
             <div class="flex min-w-0 items-start justify-between gap-3 pl-1">
               <div class="min-w-0">
                 <div class="flex min-w-0 items-center gap-2">
-                  <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden="true"></span>
+                  <span
+                    class="h-1.5 w-1.5 shrink-0 rounded-full"
+                    :class="remote.status ? 'bg-success' : remote.error ? 'bg-error' : 'bg-border'"
+                    aria-hidden="true"
+                  ></span>
                   <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
                 </div>
                 <p class="mt-1 pl-3.5 truncate font-mono text-xs text-text-secondary" :title="`${remote.username}@${remote.host}:${remote.port}`">
@@ -670,7 +610,7 @@ onBeforeUnmount(() => {
                   <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong>
                 </div>
                 <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
-                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-cpu`" class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div>
+                  <div :data-testid="`dashboard-resource-bar-${remote.key}-cpu`" class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div>
                 </div>
               </div>
               <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
@@ -679,7 +619,7 @@ onBeforeUnmount(() => {
                   <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong>
                 </div>
                 <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
-                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-memory`" class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div>
+                  <div :data-testid="`dashboard-resource-bar-${remote.key}-memory`" class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div>
                 </div>
                 <div class="mt-1 truncate text-[9px] tabular-nums text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}</div>
               </div>
@@ -689,7 +629,7 @@ onBeforeUnmount(() => {
                   <strong class="text-base font-semibold tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong>
                 </div>
                 <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
-                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-disk`" class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div>
+                  <div :data-testid="`dashboard-resource-bar-${remote.key}-disk`" class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div>
                 </div>
               </div>
             </div>
@@ -698,18 +638,81 @@ onBeforeUnmount(() => {
           </article>
 
           <div
-            v-if="dashboardShowRemoteResourcesBoolean && remoteResourceSessions.length === 0"
+            v-if="dashboardShowRemoteResourcesBoolean && remoteResourceHosts.length === 0"
             data-testid="dashboard-remote-resources"
             class="flex min-h-32 items-center justify-center rounded-lg bg-header/20 px-4 text-center text-xs text-text-alt"
           >
-            {{ t('dashboard.resources.noRemoteSessions', '当前没有活动 SSH 会话') }}
+            {{ remoteResourcesLoading ? t('common.loading') : t('dashboard.resources.noRemoteSessions', '当前没有已配置 SSH 主机') }}
           </div>
           <div v-else-if="dashboardShowRemoteResourcesBoolean" data-testid="dashboard-remote-resources" class="sr-only">
-            {{ remoteResourceSessions.length }}
+            {{ remoteResourceHosts.length }}
           </div>
         </div>
       </section>
       </div>
+
+      <aside data-testid="dashboard-recent-activity" class="border-t border-border/70 pt-5">
+        <header class="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <span data-testid="dashboard-recent-activity-icon" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+              <i class="fas fa-clock-rotate-left text-sm"></i>
+            </span>
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
+              <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-xs tabular-nums text-text-alt">{{ recentAuditLogs.length }}</span>
+            <RouterLink
+              data-testid="dashboard-audit-link"
+              :to="{ name: 'AuditLogs' }"
+              class="text-sm font-medium text-link hover:text-link-hover hover:no-underline"
+            >
+              {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }} →
+            </RouterLink>
+          </div>
+        </header>
+
+        <div v-if="isLoadingLogs && recentAuditLogs.length === 0" class="rounded-xl border border-border/70 bg-header/10 py-10 text-center text-sm text-text-secondary">
+          {{ t('common.loading') }}
+        </div>
+        <ol v-else-if="recentAuditLogs.length > 0" class="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          <li
+            v-for="log in recentAuditLogs"
+            :key="log.id"
+            class="relative min-w-0 rounded-xl border border-border/70 bg-header/15 px-3 py-3 pl-5 transition-colors hover:bg-header/25"
+          >
+            <span
+              class="absolute left-2.5 top-4 h-1.5 w-1.5 rounded-full"
+              :class="isFailedAction(log.action_type) ? 'bg-error' : 'bg-primary'"
+              aria-hidden="true"
+            ></span>
+            <div class="flex min-w-0 items-start justify-between gap-2">
+              <span
+                class="min-w-0 truncate text-sm font-medium leading-5"
+                :class="isFailedAction(log.action_type) ? 'text-error' : 'text-foreground'"
+                :title="getActionTranslation(log.action_type)"
+              >
+                {{ getActionTranslation(log.action_type) }}
+              </span>
+              <time class="shrink-0 pt-0.5 text-[10px] text-text-alt">
+                {{ formatRelativeTime(log.timestamp) }}
+              </time>
+            </div>
+            <p
+              v-if="auditSummary(log.details)"
+              class="mt-1.5 truncate text-xs text-text-secondary"
+              :title="auditSummary(log.details)"
+            >
+              {{ auditSummary(log.details) }}
+            </p>
+          </li>
+        </ol>
+        <div v-else class="rounded-xl border border-border/70 bg-header/10 py-10 text-center text-sm text-text-secondary">
+          {{ t('dashboard.noRecentActivity', '没有最近活动记录') }}
+        </div>
+      </aside>
     </div>
   </main>
 </template>

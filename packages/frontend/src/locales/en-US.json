@@ -1607,10 +1607,11 @@
     "noTags": "No tags yet",
     "resources": {
       "title": "System resources",
-      "hint": "Nexus host and active SSH hosts",
+      "hint": "Nexus host and configured SSH hosts",
       "sshTitle": "SSH resources",
-      "sshHint": "Live resources for active SSH sessions",
+      "sshHint": "Low-frequency resource snapshots for configured SSH hosts",
       "live": "Live",
+      "snapshot": "30s refresh",
       "local": "Nexus host",
       "remote": "Remote hosts",
       "cpu": "CPU",
@@ -1619,7 +1620,7 @@
       "connected": "Connected",
       "waiting": "Waiting for data",
       "unavailable": "Resource data is unavailable",
-      "noRemoteSessions": "No active SSH sessions",
+      "noRemoteSessions": "No configured SSH hosts",
       "remoteSession": "Active SSH session",
       "moreHosts": "{count} more active hosts"
     }
