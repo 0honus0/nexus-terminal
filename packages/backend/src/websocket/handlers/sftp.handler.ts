@@ -31,6 +31,13 @@ export async function handleSftpOperation(
         if (payload?.path) sftpService.readdir(sessionId, payload.path, requestId);
         else throw new Error("Missing 'path' in payload for readdir");
         break;
+      case 'sftp:search':
+        if (payload?.path && typeof payload?.query === 'string') {
+          void sftpService.search(sessionId, payload.path, payload.query, requestId);
+        } else {
+          throw new Error("Missing 'path' or 'query' in payload for search");
+        }
+        break;
       case 'sftp:stat':
         if (payload?.path) sftpService.stat(sessionId, payload.path, requestId);
         else throw new Error("Missing 'path' in payload for stat");

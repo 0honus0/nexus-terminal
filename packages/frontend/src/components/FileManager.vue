@@ -370,6 +370,11 @@ const sortKey = ref<keyof FileListItem | 'type' | 'size' | 'mtime'>('filename');
 const sortDirection = ref<'asc' | 'desc'>('asc');
 const isEditingPath = ref(false);
 const searchQuery = ref(''); // 搜索查询 ref
+const recursiveSearchResults = ref<FileListItem[]>([]);
+const recursiveSearchLoading = ref(false);
+const recursiveSearchTruncated = ref(false);
+let recursiveSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let recursiveSearchToken = 0;
 const isMultiSelectMode = ref(false); // 多选模式状态 (主要用于移动端)
 const isSearchActive = ref(false); // 控制搜索框激活状态
 const searchInputRef = ref<HTMLInputElement | null>(null); // 搜索输入框 ref
@@ -587,9 +592,8 @@ const getFileIconClassBase = (filename: string): string => {
 
 // --- 排序与过滤逻辑 ---
 // 修改：依赖 currentSftpManager.value.fileList
-const sortedFileList = computed(() => {
-    if (!currentSftpManager.value?.fileList.value) return []; // 检查 manager 和 fileList 是否存在
-    const list = [...currentSftpManager.value.fileList.value]; // 从 manager 获取列表
+const sortFileItems = (items: readonly FileListItem[]): FileListItem[] => {
+    const list = [...items];
     const key = sortKey.value;
     const direction = sortDirection.value === 'asc' ? 1 : -1;
 
@@ -616,17 +620,52 @@ const sortedFileList = computed(() => {
         return 0;
     });
     return list;
+};
+
+const sortedFileList = computed(() => {
+    if (!currentSftpManager.value?.fileList.value) return [];
+    return sortFileItems(currentSftpManager.value.fileList.value);
 });
 
 const filteredFileList = computed(() => {
-    if (!searchQuery.value) {
-        return sortedFileList.value; // 如果没有搜索查询，返回原始排序列表
-    }
-    const lowerCaseQuery = searchQuery.value.toLowerCase();
-    return sortedFileList.value.filter(item =>
-        item.filename.toLowerCase().includes(lowerCaseQuery)
-    );
+    if (!searchQuery.value.trim()) return sortedFileList.value;
+    return sortFileItems(recursiveSearchResults.value);
 });
+
+const scheduleRecursiveSearch = () => {
+    if (recursiveSearchTimer) clearTimeout(recursiveSearchTimer);
+    const query = searchQuery.value.trim();
+    if (!query) {
+        recursiveSearchToken += 1;
+        recursiveSearchResults.value = [];
+        recursiveSearchLoading.value = false;
+        recursiveSearchTruncated.value = false;
+        return;
+    }
+
+    const manager = currentSftpManager.value;
+    if (!manager || !props.wsDeps.isSftpReady.value) return;
+    const rootPath = manager.currentPath.value;
+    const token = ++recursiveSearchToken;
+    recursiveSearchLoading.value = true;
+    recursiveSearchResults.value = [];
+    recursiveSearchTruncated.value = false;
+    recursiveSearchTimer = setTimeout(() => {
+        recursiveSearchTimer = null;
+        void manager.searchDirectory(rootPath, query).then((result) => {
+            if (token !== recursiveSearchToken || searchQuery.value.trim() !== query) return;
+            if (currentSftpManager.value !== manager || manager.currentPath.value !== rootPath) return;
+            recursiveSearchResults.value = result.items;
+            recursiveSearchTruncated.value = result.truncated;
+        }).catch((error) => {
+            if (token !== recursiveSearchToken) return;
+            console.error(`[FileManager ${props.sessionId}-${props.instanceId}] Recursive search failed:`, error);
+            uiNotificationsStore.showError(error instanceof Error ? error.message : t('fileManager.errors.searchFailed', 'Failed to search files.'));
+        }).finally(() => {
+            if (token === recursiveSearchToken) recursiveSearchLoading.value = false;
+        });
+    }, 250);
+};
 
 const FILE_VIRTUALIZATION_THRESHOLD = 250;
 const FILE_LIST_OVERSCAN = 12;
@@ -778,16 +817,29 @@ const openFileTarget = async (item: FileListItem, filePath: string): Promise<voi
   openFileInEditor(item, filePath);
 };
 
+const itemBaseName = (item: FileListItem): string => item.basename || item.filename.split('/').pop() || item.filename;
+
+const itemRemotePath = (item: FileListItem): string | null => {
+  const manager = currentSftpManager.value;
+  if (!manager) return null;
+  return item.path || manager.joinPath(manager.currentPath.value, item.filename);
+};
+
+const itemForOpen = (item: FileListItem): FileListItem => item.basename
+  ? { ...item, filename: item.basename }
+  : item;
+
 const canOpenAsText = (item: FileListItem): boolean => {
-  return (item.attrs.isFile || item.attrs.isSymbolicLink) && /\.(md|markdown)$/i.test(item.filename);
+  return (item.attrs.isFile || item.attrs.isSymbolicLink) && /\.(md|markdown)$/i.test(itemBaseName(item));
 };
 
 const openItemAsText = (item: FileListItem): void => {
   const manager = currentSftpManager.value;
   if (!manager) return;
-  const filePath = manager.joinPath(manager.currentPath.value, item.filename);
+  const filePath = itemRemotePath(item);
+  if (!filePath) return;
   hidePreview();
-  openFileInEditor(item, filePath);
+  openFileInEditor(itemForOpen(item), filePath);
 };
 
 const editCurrentPreview = (): void => {
@@ -823,7 +875,8 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
     return;
   }
 
-  const itemPath = manager.joinPath(manager.currentPath.value, item.filename);
+  const itemPath = itemRemotePath(item);
+  if (!itemPath) return;
 
   if (item.attrs.isSymbolicLink) {
     if (manager.isLoading.value) return;
@@ -845,7 +898,7 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
         return;
       }
 
-      const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || item.filename;
+      const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || itemBaseName(item);
       const resolvedFile: FileListItem = {
         ...item,
         filename: targetFilename,
@@ -914,13 +967,13 @@ const handleItemAction = async (item: FileListItem): Promise<void> => {
     if (manager.isLoading.value) return;
     const newPath = item.filename === '..'
       ? manager.currentPath.value.substring(0, manager.currentPath.value.lastIndexOf('/')) || '/'
-      : manager.joinPath(manager.currentPath.value, item.filename);
+      : item.path || manager.joinPath(manager.currentPath.value, item.filename);
     manager.loadDirectory(newPath);
     return;
   }
 
   if (item.attrs.isFile) {
-    await openFileTarget(item, itemPath);
+    await openFileTarget(itemForOpen(item), itemPath);
   }
 };
 
@@ -1074,7 +1127,7 @@ const handleDeleteSelectedClick = () => {
     // 使用 props.wsDeps 和 currentSftpManager.value.fileList
     if (!props.wsDeps.isConnected.value || selectedItems.value.size === 0) return;
     const itemsToDelete = Array.from(selectedItems.value)
-                               .map(filename => currentSftpManager.value?.fileList.value.find((f: FileListItem) => f.filename === filename))
+                               .map(filename => filteredFileList.value.find((f: FileListItem) => f.filename === filename))
                                .filter((item): item is FileListItem => item !== undefined);
    if (itemsToDelete.length === 0) return;
  
@@ -1093,7 +1146,7 @@ const handleDeleteSelectedClick = () => {
 const handleRenameContextMenuClick = (item: FileListItem) => { // item 已有类型
     if (!props.wsDeps.isConnected.value || !item) return; // 恢复使用 props.wsDeps
     if (!currentSftpManager.value) return;
-    openActionModal('rename', item, undefined, item.filename);
+    openActionModal('rename', item, undefined, itemBaseName(item));
 };
 
 const handleChangePermissionsContextMenuClick = (item: FileListItem) => { // item 已有类型
@@ -1261,7 +1314,7 @@ const triggerDownload = (items: FileListItem[]) => {
             continue;
         }
 
-        const downloadPath = manager.joinPath(manager.currentPath.value, item.filename);
+        const downloadPath = item.path || manager.joinPath(manager.currentPath.value, item.filename);
         void (async () => {
             try {
                 const response = await fetch('/api/v1/sftp/download-ticket', {
@@ -1280,7 +1333,7 @@ const triggerDownload = (items: FileListItem[]) => {
 
                 const link = document.createElement('a');
                 link.href = payload.url;
-                link.setAttribute('download', item.filename.replace(/"/g, ''));
+                link.setAttribute('download', itemBaseName(item).replace(/"/g, ''));
                 document.body.appendChild(link);
                 link.click();
                 window.setTimeout(() => link.remove(), 100);
@@ -1299,14 +1352,14 @@ const triggerDownloadDirectory = (item: FileListItem) => {
     const currentConnectionId = props.dbConnectionId;
     if (!currentConnectionId || !currentSftpManager.value || !item.attrs.isDirectory) return;
 
-    const directoryPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
+    const directoryPath = item.path || currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
     const downloadUrl = `/api/v1/sftp/download-directory?connectionId=${currentConnectionId}&sessionId=${encodeURIComponent(effectiveSessionId.value)}&remotePath=${encodeURIComponent(directoryPath)}`;
 
     // Let the browser stream the response directly to disk. Converting the complete
     // archive to a Blob first doubled memory usage and delayed the visible download.
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.setAttribute('download', `${item.filename.replace(/"/g, '')}.zip`);
+    link.setAttribute('download', `${itemBaseName(item).replace(/"/g, '')}.zip`);
     document.body.appendChild(link);
     link.click();
     window.setTimeout(() => link.remove(), 100);
@@ -1420,7 +1473,7 @@ const handleArchivePasswordConfirm = (password: string) => {
 // +++ 复制路径到剪贴板 +++
 const handleCopyPath = async (item: FileListItem) => {
   if (!currentSftpManager.value) return;
-  const fullPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
+  const fullPath = item.path || currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
   try {
     await navigator.clipboard.writeText(fullPath);
     // 可选：显示成功通知
@@ -1446,7 +1499,7 @@ const {
   selectedItems,
   lastClickedIndex,
   // 修改：传递 manager 的 fileList 和 currentPath ref (保持 computed)
-  fileList: computed(() => currentSftpManager.value?.fileList.value ?? []),
+  fileList: computed(() => filteredFileList.value),
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
   isConnected: computed(() => props.wsDeps.isConnected.value),
   isSftpReady: computed(() => props.wsDeps.isSftpReady.value),
@@ -1727,11 +1780,13 @@ watch(() => currentSftpManager.value?.currentPath.value, () => {
     selectedIndex.value = -1;
     clearSelection();
     resetFileListScroll();
+    if (searchQuery.value.trim()) scheduleRecursiveSearch();
 });
 watch(searchQuery, () => {
     selectedIndex.value = -1;
     clearSelection(); // 清空选择
     resetFileListScroll();
+    scheduleRecursiveSearch();
 });
 watch(sortKey, () => {
     selectedIndex.value = -1;
@@ -2000,6 +2055,9 @@ onBeforeUnmount(() => {
  closeAllPreviews();
  fileListResizeObserver?.disconnect();
  fileListResizeObserver = null;
+ if (recursiveSearchTimer) clearTimeout(recursiveSearchTimer);
+ recursiveSearchTimer = null;
+ recursiveSearchToken += 1;
  // 注销搜索框动作
  if (unregisterSearchFocusAction) {
    unregisterSearchFocusAction();
@@ -2654,6 +2712,13 @@ const handleOpenEditorClick = () => {
       :data-row-scale="rowSizeMultiplier.toFixed(2)"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
     >
+        <div
+          v-if="searchQuery && recursiveSearchTruncated && !recursiveSearchLoading"
+          data-testid="file-manager-search-truncated"
+          class="sticky top-0 z-30 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-warning"
+        >
+          {{ t('fileManager.searchTruncated', 'Showing the first 500 matches. Refine your search to see more.') }}
+        </div>
         <!-- 外部文件拖拽蒙版 -->
         <div
           v-if="showExternalDropOverlay"
@@ -2732,7 +2797,7 @@ const handleOpenEditorClick = () => {
           </thead>
 
           <!-- Loading State -->
-          <tbody v-if="!currentSftpManager || currentSftpManager.isLoading.value">
+          <tbody v-if="!currentSftpManager || currentSftpManager.isLoading.value || recursiveSearchLoading">
               <tr>
                   <td :colspan="5" class="px-4 py-6 text-center text-text-secondary italic">
                     {{ t('fileManager.loading') }}
@@ -2793,7 +2858,7 @@ const handleOpenEditorClick = () => {
               <td :colspan="5" class="p-0 border-0" :style="{ height: `${virtualTopPadding}px` }"></td>
             </tr>
             <tr v-for="(item, index) in virtualFileList"
-                :key="item.filename"
+                :key="item.path || item.filename"
                 :draggable="!props.isMobile && item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @pointerenter="prewarmPreview(item)"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
@@ -2810,6 +2875,7 @@ const handleOpenEditorClick = () => {
                     { 'outline-dashed outline-2 outline-offset-[-1px] outline-primary': item.attrs.isDirectory && dragOverTarget === item.filename }
                 ]"
                :data-filename="item.filename"
+               :data-file-path="item.path || item.filename"
                :data-list-index="virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0)"
                @contextmenu.prevent.stop="handleItemContextMenu($event, item)"
                @dragover.prevent="handleDragOverRow(item, $event)"
@@ -2822,7 +2888,7 @@ const handleOpenEditorClick = () => {
                     ? 'fas fa-folder text-primary'
                     : item.attrs.isSymbolicLink
                       ? 'fas fa-link text-cyan-500'
-                      : `${getFileIconClassBase(item.filename)} text-text-secondary`,
+                      : `${getFileIconClassBase(itemBaseName(item))} text-text-secondary`,
                   {
                     'text-white': selectedItems.has(item.filename) || (virtualStartIndex + index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex)
                   }

@@ -645,6 +645,7 @@
     "changeEncodingTooltip": "更改文件编码",
     "loadingEncoding": "加载中...",
     "noSearchResults": "未找到匹配的搜索结果",
+    "searchTruncated": "匹配结果较多，仅显示前 500 项。请缩小搜索范围以查看更多结果。",
     "modals": {
       "titles": {
         "delete": "删除 \"{name}\"",

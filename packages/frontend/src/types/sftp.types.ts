@@ -13,9 +13,17 @@ export interface FileAttributes {
 
 // 类型定义：用于文件列表中的单个条目
 export interface FileListItem {
-  filename: string; // 文件或目录名
+  filename: string; // 文件或目录名；递归搜索结果中为相对路径，用于保证结果唯一
   longname: string; // ls -l 风格的长名称字符串
   attrs: FileAttributes; // 文件属性
+  path?: string; // 递归搜索结果的绝对远程路径
+  basename?: string; // 递归搜索结果的原始文件/目录名
+  relativePath?: string; // 相对于搜索起点的路径
+}
+
+export interface SftpSearchResult {
+  items: FileListItem[];
+  truncated: boolean;
 }
 
 // 压缩/解压操作的实时进度

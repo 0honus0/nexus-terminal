@@ -307,6 +307,7 @@ export function initializeConnectionHandler(
 
             // SFTP Cases (generic operations)
             case 'sftp:readdir':
+            case 'sftp:search':
             case 'sftp:stat':
             case 'sftp:readfile':
             case 'sftp:writefile':

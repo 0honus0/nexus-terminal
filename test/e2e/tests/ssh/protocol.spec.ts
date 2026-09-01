@@ -69,6 +69,47 @@ test('duplicate ssh:connect stays non-fatal and leaves SFTP usable', async ({ re
   }
 });
 
+test('recursive SFTP search stays scoped to the requested path and returns nested paths', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const session = await openSshSession(request, connectionId, `search-${crypto.randomUUID()}`);
+
+  try {
+    await waitForSftpReady(session.socket);
+
+    const rootSearch = await requestJson(
+      session.socket,
+      'sftp:search',
+      { path: '/', query: 'nested' },
+      'sftp:search:success',
+      'sftp:search:error',
+    );
+    expect(rootSearch.payload).toMatchObject({
+      truncated: false,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          filename: 'folder-seed/nested.txt',
+          basename: 'nested.txt',
+          relativePath: 'folder-seed/nested.txt',
+          path: '/folder-seed/nested.txt',
+        }),
+      ]),
+    });
+
+    const scopedSearch = await requestJson(
+      session.socket,
+      'sftp:search',
+      { path: '/folder-seed', query: 'seed.txt' },
+      'sftp:search:success',
+      'sftp:search:error',
+    );
+    expect(scopedSearch.payload).toMatchObject({ items: [] });
+  } finally {
+    await closeWebSocket(session.socket);
+  }
+});
+
 test('late terminal ACK after remote SSH disconnect is non-fatal', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();

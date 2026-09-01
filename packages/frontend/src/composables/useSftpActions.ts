@@ -6,6 +6,7 @@ import type {
   EditorFileContent,
   SftpReadFileSuccessPayload,
   SftpReadFileRequestPayload,
+  SftpSearchResult,
 } from '../types/sftp.types';
 import type { WebSocketMessage, MessagePayload, MessageHandler } from '../types/websocket.types';
 import type { FileTransferItem, FileTransferOperation } from '../types/fileTransfer.types';
@@ -45,6 +46,7 @@ export interface SftpManagerInstance {
 
   // Methods
   loadDirectory: (path: string, forceRefresh?: boolean) => void;
+  searchDirectory: (path: string, query: string) => Promise<SftpSearchResult>;
   createDirectory: (newDirName: string) => void;
   createFile: (newFileName: string) => void;
   deleteItems: (items: FileListItem[]) => void;
@@ -472,6 +474,52 @@ export function createSftpActionsManager(
     sendMessage({ type: 'sftp:readdir', requestId: requestId, payload: { path } });
   };
 
+  const searchDirectory = (path: string, query: string): Promise<SftpSearchResult> => {
+    return new Promise((resolve, reject) => {
+      if (!isSftpReady.value) {
+        const errMsg = t('fileManager.errors.sftpNotReady');
+        return reject(new Error(errMsg));
+      }
+
+      const normalizedQuery = query.trim();
+      if (!normalizedQuery) {
+        resolve({ items: [], truncated: false });
+        return;
+      }
+
+      const requestId = generateRequestId();
+      let unregisterSuccess: (() => void) | null = null;
+      let unregisterError: (() => void) | null = null;
+      const timeoutId = setTimeout(() => {
+        unregisterSuccess?.();
+        unregisterError?.();
+        reject(new Error(t('fileManager.errors.searchTimeout', 'Timed out while searching files.')));
+      }, Math.max(SSH_OPERATION_TIMEOUT_MS, 30_000));
+
+      unregisterSuccess = onMessage('sftp:search:success', (payload: MessagePayload, message: WebSocketMessage) => {
+        if (message.requestId !== requestId) return;
+        clearTimeout(timeoutId);
+        unregisterSuccess?.();
+        unregisterError?.();
+        const result = payload as Partial<SftpSearchResult>;
+        resolve({
+          items: Array.isArray(result.items) ? result.items : [],
+          truncated: result.truncated === true,
+        });
+      });
+
+      unregisterError = onMessage('sftp:search:error', (payload: MessagePayload, message: WebSocketMessage) => {
+        if (message.requestId !== requestId) return;
+        clearTimeout(timeoutId);
+        unregisterSuccess?.();
+        unregisterError?.();
+        reject(new Error(typeof payload === 'string' ? payload : t('fileManager.errors.searchFailed', 'Failed to search files.')));
+      });
+
+      sendMessage({ type: 'sftp:search', requestId, payload: { path, query: normalizedQuery } });
+    });
+  };
+
   const createDirectory = (newDirName: string) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
@@ -498,6 +546,8 @@ export function createSftpActionsManager(
     });
   };
 
+  const itemRemotePath = (item: FileListItem): string => item.path || joinPath(currentPathRef.value, item.filename);
+
   const deleteItems = (items: FileListItem[]) => {
     if (!isSftpReady.value) {
       uiNotificationsStore.showError(t('fileManager.errors.sftpNotReady'));
@@ -506,7 +556,7 @@ export function createSftpActionsManager(
     }
     if (items.length === 0) return;
     items.forEach((item) => {
-      const targetPath = joinPath(currentPathRef.value, item.filename);
+      const targetPath = itemRemotePath(item);
       const actionType = item.attrs.isDirectory ? 'sftp:rmdir' : 'sftp:unlink';
       const requestId = generateRequestId();
       sendMessage({ type: actionType, requestId: requestId, payload: { path: targetPath } });
@@ -519,12 +569,13 @@ export function createSftpActionsManager(
       console.warn(`[SFTP ${instanceSessionId}] 尝试重命名项目 ${item.filename} 但 SFTP 未就绪。`); // 日志改为中文
       return;
     }
-    if (!newName || item.filename === newName) return;
-    const oldPath = joinPath(currentPathRef.value, item.filename);
+    if (!newName || (item.basename || item.filename) === newName) return;
+    const oldPath = itemRemotePath(item);
     // 检查 newName 是否已经是绝对路径 (来自拖拽移动)
+    const renameBaseDir = parentDirectoryPath(oldPath);
     const newPath = newName.startsWith('/')
-      ? newName // 如果是绝对路径，直接使用
-      : joinPath(currentPathRef.value, newName); // 否则，视为相对路径并拼接
+      ? newName
+      : joinPath(renameBaseDir, newName);
     const requestId = generateRequestId();
     sendMessage({ type: 'sftp:rename', requestId: requestId, payload: { oldPath, newPath } });
   };
@@ -535,7 +586,7 @@ export function createSftpActionsManager(
       console.warn(`[SFTP ${instanceSessionId}] 尝试修改 ${item.filename} 的权限但 SFTP 未就绪。`); // 日志改为中文
       return;
     }
-    const targetPath = joinPath(currentPathRef.value, item.filename);
+    const targetPath = itemRemotePath(item);
     const requestId = generateRequestId();
     sendMessage({ type: 'sftp:chmod', requestId: requestId, payload: { path: targetPath, mode: mode } });
   };
@@ -793,12 +844,12 @@ export function createSftpActionsManager(
         archiveBusyError.name = 'ARCHIVE_IN_PROGRESS';
         return reject(archiveBusyError);
       }
-      const sourcePaths = items.map((item) => joinPath(currentPathRef.value, item.filename));
+      const sourcePaths = items.map(itemRemotePath);
       const requestId = generateRequestId();
       const parentDir = currentPathRef.value;
       let archiveBaseName = 'archive';
       if (items.length === 1) {
-        const sourceName = items[0].filename;
+        const sourceName = items[0].basename || items[0].filename;
         // Dotfiles such as .env have no basename before the first dot. Preserve
         // their complete name; for regular files only remove the final suffix.
         archiveBaseName = sourceName.startsWith('.') ? sourceName : sourceName.replace(/\.[^./]+$/, '') || sourceName;
@@ -983,8 +1034,8 @@ export function createSftpActionsManager(
         archiveBusyError.name = 'ARCHIVE_IN_PROGRESS';
         return reject(archiveBusyError);
       }
-      const sourcePath = joinPath(currentPathRef.value, item.filename);
-      const destinationDir = currentPathRef.value;
+      const sourcePath = itemRemotePath(item);
+      const destinationDir = item.path ? parentDirectoryPath(sourcePath) : currentPathRef.value;
       const requestId = generateRequestId();
 
       progressCenter.startTask(
@@ -1816,6 +1867,7 @@ export function createSftpActionsManager(
 
     // Methods
     loadDirectory,
+    searchDirectory,
     createDirectory,
     createFile,
     deleteItems,

@@ -66,6 +66,10 @@ const UPLOAD_DIRECTORY_PREPARE_CONCURRENCY = 8;
 const SFTP_TRANSFER_CHUNK_SIZE = 32 * 1024;
 const SFTP_TRANSFER_CONCURRENCY = 64;
 const SFTP_TRANSFER_PROGRESS_INTERVAL_MS = 200;
+const SFTP_SEARCH_CONCURRENCY = 8;
+const SFTP_SEARCH_MAX_RESULTS = 500;
+const SFTP_SEARCH_MAX_DIRECTORIES = 5000;
+const SFTP_SEARCH_MAX_QUERY_LENGTH = 256;
 
 type ArchivePasswordValidationError = {
   code: 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT';
@@ -383,6 +387,130 @@ export class SftpService {
           path: path,
           payload: `读取目录时发生意外错误: ${error.message}`,
           requestId: requestId,
+        }),
+      );
+    }
+  }
+
+
+  /** 从指定目录开始按名称递归搜索文件和目录。符号链接目录不会继续向下遍历。 */
+  async search(sessionId: string, rootPath: string, query: string, requestId: string): Promise<void> {
+    const state = this.clientStates.get(sessionId);
+    if (!state || !state.sftp) {
+      state?.ws.send(
+        JSON.stringify({
+          type: 'sftp:search:error',
+          path: rootPath,
+          payload: 'SFTP 会话未就绪',
+          requestId,
+        }),
+      );
+      return;
+    }
+
+    const normalizedQuery = query.trim().slice(0, SFTP_SEARCH_MAX_QUERY_LENGTH).toLocaleLowerCase();
+    const normalizedRoot = pathModule.posix.resolve('/', rootPath || '/');
+    if (!normalizedQuery) {
+      state.ws.send(
+        JSON.stringify({
+          type: 'sftp:search:success',
+          path: normalizedRoot,
+          payload: { items: [], truncated: false },
+          requestId,
+        }),
+      );
+      return;
+    }
+
+    const toPayloadItem = (entry: SftpDirEntry, fullPath: string, relativePath: string) => ({
+      filename: relativePath,
+      basename: entry.filename,
+      relativePath,
+      path: fullPath,
+      longname: entry.longname,
+      attrs: {
+        size: entry.attrs.size,
+        uid: entry.attrs.uid,
+        gid: entry.attrs.gid,
+        mode: entry.attrs.mode,
+        atime: entry.attrs.atime * 1000,
+        mtime: entry.attrs.mtime * 1000,
+        isDirectory: entry.attrs.isDirectory(),
+        isFile: entry.attrs.isFile(),
+        isSymbolicLink: entry.attrs.isSymbolicLink(),
+      },
+    });
+
+    try {
+      const queue: string[] = [normalizedRoot];
+      const results: ReturnType<typeof toPayloadItem>[] = [];
+      let scannedDirectories = 0;
+      let truncated = false;
+
+      while (queue.length > 0 && results.length < SFTP_SEARCH_MAX_RESULTS) {
+        const remainingDirectoryBudget = SFTP_SEARCH_MAX_DIRECTORIES - scannedDirectories;
+        if (remainingDirectoryBudget <= 0) {
+          truncated = true;
+          break;
+        }
+
+        const batch = queue.splice(0, Math.min(SFTP_SEARCH_CONCURRENCY, remainingDirectoryBudget));
+        scannedDirectories += batch.length;
+        const directoryResults = await Promise.all(
+          batch.map(async (directory) => {
+            try {
+              return { directory, entries: await this.listDirectory(state.sftp!, directory), error: null as Error | null };
+            } catch (error: any) {
+              return { directory, entries: [] as SftpDirEntry[], error: error instanceof Error ? error : new Error(String(error)) };
+            }
+          }),
+        );
+
+        for (const directoryResult of directoryResults) {
+          if (directoryResult.error) {
+            if (directoryResult.directory === normalizedRoot) throw directoryResult.error;
+            console.debug(
+              `[SFTP ${sessionId}] Recursive search skipped unreadable directory ${directoryResult.directory}: ${directoryResult.error.message}`,
+            );
+            continue;
+          }
+
+          for (const entry of directoryResult.entries) {
+            if (entry.filename === '.' || entry.filename === '..') continue;
+            const fullPath = pathModule.posix.join(directoryResult.directory, entry.filename);
+            const relativePath = pathModule.posix.relative(normalizedRoot, fullPath) || entry.filename;
+
+            if (entry.filename.toLocaleLowerCase().includes(normalizedQuery)) {
+              results.push(toPayloadItem(entry, fullPath, relativePath));
+              if (results.length >= SFTP_SEARCH_MAX_RESULTS) {
+                truncated = true;
+                break;
+              }
+            }
+
+            if (entry.attrs.isDirectory() && !entry.attrs.isSymbolicLink()) queue.push(fullPath);
+          }
+          if (results.length >= SFTP_SEARCH_MAX_RESULTS) break;
+        }
+      }
+
+      if (queue.length > 0) truncated = true;
+      state.ws.send(
+        JSON.stringify({
+          type: 'sftp:search:success',
+          path: normalizedRoot,
+          payload: { items: results, truncated },
+          requestId,
+        }),
+      );
+    } catch (error: any) {
+      console.error(`[SFTP ${sessionId}] Recursive search under ${normalizedRoot} failed (ID: ${requestId}):`, error);
+      state.ws.send(
+        JSON.stringify({
+          type: 'sftp:search:error',
+          path: normalizedRoot,
+          payload: `递归搜索失败: ${error?.message || String(error)}`,
+          requestId,
         }),
       );
     }

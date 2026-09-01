@@ -644,6 +644,7 @@
     "changeEncodingTooltip": "Change file encoding",
     "loadingEncoding": "Loading...",
     "noSearchResults": "No search results found",
+    "searchTruncated": "Showing the first 500 matches. Refine your search to see more.",
     "modals": {
       "titles": {
         "delete": "Delete \"{name}\"",

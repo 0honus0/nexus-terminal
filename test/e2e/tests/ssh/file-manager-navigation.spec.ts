@@ -65,11 +65,29 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(row(page, 'plainfile')).toBeVisible();
     await expect(row(page, 'seed.txt')).toHaveCount(0);
 
+    await search.fill('nested');
+    const recursiveResult = fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]');
+    await expect(recursiveResult).toBeVisible();
+    await expect(recursiveResult).toContainText('folder-seed/nested.txt');
+    await expect(row(page, 'nested.txt')).toHaveCount(0);
+
     await search.fill('definitely-no-e2e-match');
     await expect(fileManager.getByText('No search results found', { exact: true })).toBeVisible();
 
-    await search.press('Escape');
-    await expect(search).toBeHidden();
+    await search.fill('second-preview');
+    const recursivePdf = fileManager.locator('tr[data-file-path="/folder-seed/second-preview.pdf"]');
+    await expect(recursivePdf).toBeVisible();
+    await recursivePdf.dblclick();
+    const preview = page.getByRole('dialog', { name: 'second-preview.pdf' });
+    await expect(preview.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(currentPath(page)).toHaveText('/');
+    await preview.click({ position: { x: 2, y: 2 } });
+    await expect(preview).toBeHidden();
+
+    await fileManager.getByTitle('Search files...').click();
+    const reopenedSearch = fileManager.getByPlaceholder('Search files...');
+    await reopenedSearch.press('Escape');
+    await expect(reopenedSearch).toBeHidden();
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
