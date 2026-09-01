@@ -22,8 +22,8 @@ const BOOTSTRAP_SAMPLE_DELAY_MS = 500;
 
 const snapshotCollector = new StatusMonitorService(new Map());
 const bootstrappedKeys = new Set<string>();
-let cachedResult: { expiresAt: number; value: SshResourceStatus[] } | null = null;
-let refreshInFlight: Promise<SshResourceStatus[]> | null = null;
+let cachedResult: { fingerprint: string; expiresAt: number; value: SshResourceStatus[] } | null = null;
+let refreshInFlight: { fingerprint: string; promise: Promise<SshResourceStatus[]> } | null = null;
 
 const normalizeHost = (host: string): string => host.trim().toLowerCase();
 const resourceKey = (host: string, port: number): string => `${normalizeHost(host)}:${port}`;
@@ -101,11 +101,28 @@ async function collectForHost(
   };
 }
 
-async function refreshSshResourceStatuses(): Promise<SshResourceStatus[]> {
-  const connections = (await ConnectionRepository.findAllConnectionsWithTags()).filter(
-    (connection) => connection.type === 'SSH',
-  );
+function buildConnectionFingerprint(connections: ConnectionRepository.ConnectionWithTags[]): string {
+  return [...connections]
+    .sort((a, b) => a.id - b.id)
+    .map((connection) => [
+      connection.id,
+      connection.updated_at,
+      connection.name ?? '',
+      normalizeHost(connection.host),
+      connection.port,
+      connection.username,
+      connection.auth_method,
+      connection.proxy_id ?? '',
+      connection.proxy_type ?? '',
+      connection.ssh_key_id ?? '',
+      connection.jump_chain?.join(',') ?? '',
+    ].join('\u001f'))
+    .join('\u001e');
+}
 
+function groupSshConnections(
+  connections: ConnectionRepository.ConnectionWithTags[],
+): Map<string, ConnectionRepository.ConnectionWithTags[]> {
   const grouped = new Map<string, ConnectionRepository.ConnectionWithTags[]>();
   for (const connection of connections) {
     const key = resourceKey(connection.host, connection.port);
@@ -113,26 +130,49 @@ async function refreshSshResourceStatuses(): Promise<SshResourceStatus[]> {
     if (existing) existing.push(connection);
     else grouped.set(key, [connection]);
   }
+  return grouped;
+}
 
-  const entries = [...grouped.entries()];
-  const statuses = await mapWithConcurrency(entries, MAX_CONCURRENCY, ([key, candidates]) =>
+async function refreshSshResourceStatuses(
+  grouped: Map<string, ConnectionRepository.ConnectionWithTags[]>,
+): Promise<SshResourceStatus[]> {
+  const statuses = await mapWithConcurrency([...grouped.entries()], MAX_CONCURRENCY, ([key, candidates]) =>
     collectForHost(key, candidates),
   );
 
   statuses.sort((a, b) => a.name.localeCompare(b.name) || a.host.localeCompare(b.host) || a.port - b.port);
-  cachedResult = { expiresAt: Date.now() + CACHE_TTL_MS, value: statuses };
   return statuses;
 }
 
 export async function getSshResourceStatuses(): Promise<SshResourceStatus[]> {
-  if (cachedResult && cachedResult.expiresAt > Date.now()) return cachedResult.value;
-  if (refreshInFlight) return refreshInFlight;
+  // Keep SSH probing low-frequency, but always compare the inexpensive connection
+  // metadata first. A full-result TTL alone can otherwise hide newly created or
+  // edited hosts until the next 30-second poll.
+  const connections = (await ConnectionRepository.findAllConnectionsWithTags()).filter(
+    (connection) => connection.type === 'SSH',
+  );
+  const fingerprint = buildConnectionFingerprint(connections);
 
-  refreshInFlight = refreshSshResourceStatuses();
+  if (cachedResult && cachedResult.fingerprint === fingerprint && cachedResult.expiresAt > Date.now()) {
+    return cachedResult.value;
+  }
+  if (refreshInFlight?.fingerprint === fingerprint) return refreshInFlight.promise;
+
+  const grouped = groupSshConnections(connections);
+  const promise = refreshSshResourceStatuses(grouped);
+  const currentRefresh = { fingerprint, promise };
+  refreshInFlight = currentRefresh;
+
   try {
-    return await refreshInFlight;
+    const statuses = await promise;
+    // A newer configuration may have started refreshing while this request was
+    // still running. Do not let the older result overwrite that newer cache.
+    if (refreshInFlight === currentRefresh) {
+      cachedResult = { fingerprint, expiresAt: Date.now() + CACHE_TTL_MS, value: statuses };
+    }
+    return statuses;
   } finally {
-    refreshInFlight = null;
+    if (refreshInFlight === currentRefresh) refreshInFlight = null;
   }
 }
 
