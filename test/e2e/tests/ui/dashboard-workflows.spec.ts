@@ -249,8 +249,8 @@ test('dashboard filters connections and persists tag and sort preferences across
       const quickConnect = page.getByTestId('dashboard-connections');
       const resources = page.getByTestId('dashboard-system-resources');
       const recentActivity = page.getByTestId('dashboard-recent-activity');
-      const operationDivider = page.getByTestId('dashboard-operation-divider');
-      await expect(operationDivider).toBeVisible();
+      await expect(page.getByTestId('dashboard-operation-divider')).toHaveCount(0);
+      await expect(recentActivity).toHaveCSS('border-top-width', '1px');
       await expect(workspace).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       await expect(page.getByTestId('dashboard-recent-activity-icon')).toBeVisible();
       await expect(page.getByTestId('dashboard-ssh-resources-icon')).toBeVisible();
