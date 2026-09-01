@@ -622,20 +622,28 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div data-testid="dashboard-ssh-resource-list" class="max-h-[760px] overflow-y-auto border-y border-border/60">
+        <div data-testid="dashboard-ssh-resource-list" class="max-h-[760px] space-y-2 overflow-y-auto p-1">
 
           <article
             v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceSessions : []"
             :key="remote.sessionId"
             :data-testid="`dashboard-remote-resource-${remote.sessionId}`"
-            class="border-b border-border/60 px-1 py-4 last:border-b-0"
+            class="group relative overflow-hidden rounded-lg bg-header/20 px-3 py-3.5 transition-colors hover:bg-header/30"
           >
-            <div class="flex min-w-0 items-start justify-between gap-3">
+            <span
+              :data-testid="`dashboard-ssh-resource-accent-${remote.sessionId}`"
+              class="absolute inset-y-3 left-0 w-0.5 rounded-full bg-success/70"
+              aria-hidden="true"
+            ></span>
+            <div class="flex min-w-0 items-start justify-between gap-3 pl-1">
               <div class="min-w-0">
-                <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
-                <p class="mt-1 text-[11px] text-text-alt">{{ t('dashboard.resources.remoteSession', '活动 SSH 会话') }}</p>
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden="true"></span>
+                  <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
+                </div>
+                <p class="mt-1 pl-3.5 text-[11px] text-text-alt">{{ t('dashboard.resources.remoteSession', '活动 SSH 会话') }}</p>
               </div>
-              <span class="rounded border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
+              <span class="rounded bg-muted/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
             </div>
 
             <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-4">
@@ -675,7 +683,7 @@ onBeforeUnmount(() => {
           <div
             v-if="dashboardShowRemoteResourcesBoolean && remoteResourceSessions.length === 0"
             data-testid="dashboard-remote-resources"
-            class="flex min-h-32 items-center justify-center border-b border-border/60 px-4 text-center text-xs text-text-alt"
+            class="flex min-h-32 items-center justify-center rounded-lg bg-header/20 px-4 text-center text-xs text-text-alt"
           >
             {{ t('dashboard.resources.noRemoteSessions', '当前没有活动 SSH 会话') }}
           </div>

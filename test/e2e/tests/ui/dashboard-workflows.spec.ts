@@ -238,6 +238,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(page.getByTestId('dashboard-local-memory-bar')).toHaveAttribute('style', /width:/);
       await expect(page.getByTestId('dashboard-local-disk-bar')).toHaveAttribute('style', /width:/);
       await expect(page.locator('[data-testid^="dashboard-resource-bar-"]')).toHaveCount(9);
+      await expect(page.locator('[data-testid^="dashboard-ssh-resource-accent-"]')).toHaveCount(3);
       await expect(overview.locator('svg')).toHaveCount(0);
       await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
@@ -274,12 +275,14 @@ test('dashboard filters connections and persists tag and sort preferences across
       }));
       expect(localResourceBox).not.toBeNull();
       expect(remoteResourceBoxes).toHaveLength(3);
+      const remoteResourceBackgrounds = await remoteCards.evaluateAll((cards) => cards.map((card) => getComputedStyle(card).backgroundColor));
+      expect(remoteResourceBackgrounds.every((color) => color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)')).toBeTruthy();
       expect(remoteResourceBoxes[0].y).toBeGreaterThan((localResourceBox?.y ?? 0) + (localResourceBox?.height ?? 0) - 2);
       for (let index = 1; index < remoteResourceBoxes.length; index += 1) {
         expect(Math.abs(remoteResourceBoxes[index].x - remoteResourceBoxes[0].x)).toBeLessThanOrEqual(2);
         expect(Math.abs(remoteResourceBoxes[index].width - remoteResourceBoxes[0].width)).toBeLessThanOrEqual(2);
-        expect(remoteResourceBoxes[index].y).toBeGreaterThan(
-          remoteResourceBoxes[index - 1].y + remoteResourceBoxes[index - 1].height - 2,
+        expect(remoteResourceBoxes[index].y).toBeGreaterThanOrEqual(
+          remoteResourceBoxes[index - 1].y + remoteResourceBoxes[index - 1].height + 6,
         );
       }
       await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
