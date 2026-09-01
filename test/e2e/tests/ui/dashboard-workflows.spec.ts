@@ -290,6 +290,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       expect(resourceListBox).not.toBeNull();
       expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
       expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
+      expect(Math.abs((connectionListBox?.y ?? 0) - (resourceListBox?.y ?? 0))).toBeLessThanOrEqual(2);
       expect(Math.abs((connectionListBox?.height ?? 0) - (resourceListBox?.height ?? 0))).toBeLessThanOrEqual(2);
       expect(Math.abs((recentActivityBox?.x ?? 0) - (workspaceBox?.x ?? 0))).toBeLessThanOrEqual(2);
       expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);

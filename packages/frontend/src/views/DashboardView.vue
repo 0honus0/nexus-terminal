@@ -398,7 +398,7 @@ onBeforeUnmount(() => {
           class="min-w-0"
         >
           <div class="pb-4">
-            <div class="mb-4 flex items-center justify-between gap-3">
+            <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
                   <i class="fas fa-bolt text-sm"></i>
@@ -414,8 +414,17 @@ onBeforeUnmount(() => {
                 {{ filteredAndSortedConnections.length }} / {{ connections.length }}
               </span>
             </div>
+          </div>
 
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]">
+          <div
+            data-testid="dashboard-connection-list"
+            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner"
+            style="scrollbar-gutter: stable;"
+          >
+            <div
+              data-testid="dashboard-connection-toolbar"
+              class="sticky top-0 z-10 grid grid-cols-1 gap-2 border-b border-border/70 bg-background/95 p-2 backdrop-blur sm:grid-cols-[minmax(180px,1fr)_auto_auto_auto]"
+            >
               <label class="relative min-w-0">
                 <span class="sr-only">{{ t('dashboard.searchConnectionsPlaceholder', '搜索连接...') }}</span>
                 <i class="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-text-alt" aria-hidden="true"></i>
@@ -461,13 +470,8 @@ onBeforeUnmount(() => {
                 <i :class="['fas', isAscending ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'text-xs']" aria-hidden="true"></i>
               </button>
             </div>
-          </div>
 
-          <div
-            data-testid="dashboard-connection-list"
-            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner"
-            style="scrollbar-gutter: stable;"
-          >
+            <div class="p-1.5">
             <div
               v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
               class="py-14 text-center text-sm text-text-secondary"
@@ -530,6 +534,7 @@ onBeforeUnmount(() => {
               <template v-else>
                 {{ t('dashboard.noConnections', '没有连接记录') }}
               </template>
+            </div>
             </div>
           </div>
 
