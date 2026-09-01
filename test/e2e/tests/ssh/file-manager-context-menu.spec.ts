@@ -159,7 +159,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     expect(await readFile(downloadPath!, 'utf8')).toBe('nexus-e2e-seed\n');
   });
 
-  await slowStep('short-lived download tickets support FDM-style HEAD and Range requests without browser cookies', async () => {
+  await slowStep('short-lived download tickets support download-manager probes, retries, and Range requests without browser cookies', async () => {
     const issued = await context.request.post('/api/v1/sftp/download-ticket', {
       data: {
         connectionId,
@@ -177,6 +177,18 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     expect(head.status).toBe(200);
     expect(head.headers.get('accept-ranges')).toBe('bytes');
     expect(Number(head.headers.get('content-length'))).toBe(Buffer.byteLength('nexus-e2e-seed\n'));
+
+    // IDM/FDM may issue a normal GET first to discover Content-Disposition, then
+    // reopen the same short-lived URL for the actual transfer. A completed probe
+    // must not consume the ticket.
+    const probe = await fetch(url, { headers: ownerHeaders });
+    expect(probe.status).toBe(200);
+    expect(probe.headers.get('content-disposition')).toContain('seed.txt');
+    expect(await probe.text()).toBe('nexus-e2e-seed\n');
+
+    const retryAfterProbe = await fetch(url, { headers: ownerHeaders });
+    expect(retryAfterProbe.status).toBe(200);
+    expect(await retryAfterProbe.text()).toBe('nexus-e2e-seed\n');
 
     const firstRange = await fetch(url, {
       headers: { ...ownerHeaders, Range: 'bytes=0-4' },
@@ -196,11 +208,11 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     expect(remainder.status).toBe(206);
     expect(Buffer.from(await remainder.arrayBuffer()).toString('utf8')).toBe('-e2e-seed\n');
 
-    const destroyed = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
-    expect(destroyed.status).toBe(410);
+    const reusableAfterRanges = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
+    expect(reusableAfterRanges.status).toBe(200);
   });
 
-  await slowStep('download ticket leases stay bounded by evicting the oldest unused ticket', async () => {
+  await slowStep('download ticket leases stay bounded by evicting the oldest idle ticket', async () => {
     const urls: string[] = [];
     for (let index = 0; index < 65; index += 1) {
       const issued = await context.request.post('/api/v1/sftp/download-ticket', {

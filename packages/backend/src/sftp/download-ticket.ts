@@ -27,6 +27,7 @@ export interface DownloadTicketLease {
   state: 'waiting' | 'active';
   ownerIp?: string;
   completedRanges: Array<[number, number]>;
+  activeRequests: number;
   activeStreams: Set<Readable>;
 }
 
@@ -63,9 +64,9 @@ const cleanupExpiredLeases = (now = Date.now()): void => {
   }
 };
 
-const findOldestWaitingLease = (userId?: number): DownloadTicketLease | undefined => {
+const findOldestEvictableLease = (userId?: number): DownloadTicketLease | undefined => {
   for (const lease of leases.values()) {
-    if (lease.state !== 'waiting') continue;
+    if (lease.activeRequests > 0 || lease.activeStreams.size > 0) continue;
     if (userId !== undefined && lease.userId !== userId) continue;
     return lease;
   }
@@ -84,13 +85,13 @@ const ensureCapacityForTicket = (userId: number): void => {
   cleanupExpiredLeases();
 
   while (countUserLeases(userId) >= DOWNLOAD_TICKET_MAX_PER_USER) {
-    const evictable = findOldestWaitingLease(userId);
+    const evictable = findOldestEvictableLease(userId);
     if (!evictable) throw new DownloadTicketCapacityError();
     forgetLease(evictable, true);
   }
 
   while (leases.size >= DOWNLOAD_TICKET_MAX_TOTAL) {
-    const evictable = findOldestWaitingLease();
+    const evictable = findOldestEvictableLease();
     if (!evictable) throw new DownloadTicketCapacityError();
     forgetLease(evictable, true);
   }
@@ -119,6 +120,7 @@ export const issueDownloadTicket = (input: IssueDownloadTicketInput): { token: s
     expiresAt: now + DOWNLOAD_TICKET_TTL_MS,
     state: 'waiting',
     completedRanges: [],
+    activeRequests: 0,
     activeStreams: new Set(),
   };
   leases.set(id, lease);
@@ -150,8 +152,15 @@ export const claimDownloadTicket = (token: string, requestIp: string): ClaimDown
     return { status: 'locked' };
   }
 
+  lease.activeRequests += 1;
   touchDownloadTicket(lease);
   return { status: 'ok', lease };
+};
+
+export const releaseDownloadTicketRequest = (lease: DownloadTicketLease): void => {
+  if (leases.get(lease.id) !== lease) return;
+  lease.activeRequests = Math.max(0, lease.activeRequests - 1);
+  touchDownloadTicket(lease);
 };
 
 export const attachDownloadStream = (lease: DownloadTicketLease, stream: Readable): void => {
@@ -185,13 +194,16 @@ export const recordCompletedRange = (lease: DownloadTicketLease, start: number, 
     || (lease.completedRanges.length === 1
       && lease.completedRanges[0][0] === 0
       && lease.completedRanges[0][1] >= lease.fileSize - 1);
-  if (complete) forgetLease(lease, false);
-  else touchDownloadTicket(lease);
+  touchDownloadTicket(lease);
   return complete;
 };
 
 export const completeDownloadTicket = (lease: DownloadTicketLease): void => {
-  forgetLease(lease, false);
+  // Keep completed tickets alive until their sliding TTL expires. Download managers
+  // commonly probe a URL once for Content-Disposition and then reopen the same URL
+  // (often with Range) for the real transfer. Removing the lease on the first 200
+  // makes that normal retry path fail with 410 behind buffering reverse proxies.
+  touchDownloadTicket(lease);
 };
 
 export const invalidateDownloadTicket = (lease: DownloadTicketLease): void => {

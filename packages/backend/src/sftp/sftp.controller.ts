@@ -24,6 +24,7 @@ import {
   invalidateDownloadTicket,
   issueDownloadTicket,
   recordCompletedRange,
+  releaseDownloadTicketRequest,
   type DownloadTicketLease,
 } from './download-ticket';
 
@@ -344,6 +345,14 @@ export const downloadFile = async (
       return;
     }
     lease = claim.lease;
+    let ticketRequestReleased = false;
+    const releaseTicketRequest = () => {
+      if (ticketRequestReleased || !lease) return;
+      ticketRequestReleased = true;
+      releaseDownloadTicketRequest(lease);
+    };
+    res.once('finish', releaseTicketRequest);
+    res.once('close', releaseTicketRequest);
     userId = lease.userId;
     targetDbConnectionId = lease.connectionId;
     requestedSessionId = lease.sessionId;
