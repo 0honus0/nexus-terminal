@@ -4,7 +4,10 @@
   "workers": 8,
   "specs": [
     "tests/ssh/file-manager-context-menu.spec.ts",
-    "tests/ssh/cross-session-transfer.spec.ts",
-    "tests/ssh/file-upload.spec.ts"
+    "tests/ssh/panel-wheel-scaling.spec.ts",
+    "tests/ssh/terminal-protocol.spec.ts",
+    "tests/ssh/terminal-tools-ui.spec.ts",
+    "tests/ssh/terminal-ui.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
