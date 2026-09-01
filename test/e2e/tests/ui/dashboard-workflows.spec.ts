@@ -137,6 +137,12 @@ test('dashboard filters connections and persists tag and sort preferences across
     expect(systemStatus.diskPercent).toBeLessThanOrEqual(100);
   }
 
+  // Prime the SSH resource cache before adding this test's hosts. The dashboard
+  // must still see newly configured hosts immediately instead of waiting for the
+  // 30-second snapshot TTL to expire.
+  const primedSshResourcesResponse = await context.request.get('/api/v1/system/ssh-resources');
+  expect(primedSshResourcesResponse.ok()).toBeTruthy();
+
   const alphaTagId = await createTag(context.request, ALPHA_TAG);
   const betaTagId = await createTag(context.request, BETA_TAG);
   const alphaId = await createConnection(context.request, ALPHA_NAME, 'dashboard-alpha', '192.0.2.10', alphaTagId);

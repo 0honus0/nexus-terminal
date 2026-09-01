@@ -92,3 +92,61 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     expect((await request.delete(`/api/v1/tags/${tagId}`)).ok()).toBeTruthy();
   });
 });
+
+test('SSH resource snapshots invalidate cached host lists when connection metadata changes', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+
+  const connectionName = 'E2E SSH Resource Cache Invalidation';
+  const host = E2E_SSH.host;
+  const port = E2E_SSH.port;
+  let connectionId = 0;
+
+  const existingConnections = await request.get('/api/v1/connections');
+  expect(existingConnections.ok()).toBeTruthy();
+  const existing = await existingConnections.json() as Array<{ id: number; name?: string }>;
+  for (const connection of existing.filter((item) => item.name === connectionName)) {
+    expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+  }
+
+  try {
+    await step('prime the snapshot cache before adding a new SSH host', async () => {
+      const primed = await request.get('/api/v1/system/ssh-resources');
+      expect(primed.ok()).toBeTruthy();
+      const resources = await primed.json() as Array<{ host: string; port: number }>;
+      expect(resources.some((resource) => resource.host === host && resource.port === port)).toBeFalsy();
+    });
+
+    await step('newly configured host bypasses the old snapshot cache immediately', async () => {
+      const create = await request.post('/api/v1/connections', {
+        data: {
+          name: connectionName,
+          type: 'SSH',
+          host,
+          port,
+          username: E2E_SSH.username,
+          auth_method: 'password',
+          password: E2E_SSH.password,
+        },
+      });
+      expect(create.status()).toBe(201);
+      connectionId = (await create.json() as { connection: { id: number } }).connection.id;
+
+      const refreshed = await request.get('/api/v1/system/ssh-resources');
+      expect(refreshed.ok()).toBeTruthy();
+      const resources = await refreshed.json() as Array<{
+        connectionId: number;
+        host: string;
+        port: number;
+        status?: { cpuPercent: number };
+      }>;
+      const resource = resources.find((item) => item.host === host && item.port === port);
+      expect(resource).toBeDefined();
+      expect(resource?.connectionId).toBe(connectionId);
+      expect(resource?.status?.cpuPercent).toBeGreaterThanOrEqual(0);
+    });
+  } finally {
+    if (connectionId) {
+      expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
+    }
+  }
+});
