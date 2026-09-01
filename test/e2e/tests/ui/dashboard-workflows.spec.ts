@@ -7,6 +7,35 @@ const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
 const ALPHA_TAG = 'E2E Dashboard Alpha Tag';
 const BETA_TAG = 'E2E Dashboard Beta Tag';
+const DASHBOARD_DARK_THEME = {
+  '--app-bg-color': '#212529',
+  '--text-color': '#e9ecef',
+  '--text-color-secondary': '#adb5bd',
+  '--border-color': '#495057',
+  '--link-color': '#BB86FC',
+  '--link-hover-color': '#D1A9FF',
+  '--link-active-color': '#A06CD5',
+  '--link-active-bg-color': 'rgba(160, 108, 213, 0.2)',
+  '--nav-item-active-bg-color': 'var(--link-active-bg-color)',
+  '--header-bg-color': '#343a40',
+  '--footer-bg-color': '#343a40',
+  '--button-bg-color': 'var(--link-active-color)',
+  '--button-text-color': '#ffffff',
+  '--button-hover-bg-color': '#8E44AD',
+  '--icon-color': 'var(--text-color-secondary)',
+  '--icon-hover-color': 'var(--link-hover-color)',
+  '--split-line-color': 'var(--border-color)',
+  '--split-line-hover-color': 'var(--border-color)',
+  '--input-focus-border-color': 'var(--link-active-color)',
+  '--input-focus-glow': 'var(--link-active-color)',
+  '--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
+  '--color-success': '#5cb85c',
+  '--color-error': '#d9534f',
+  '--color-warning': '#f0ad4e',
+  '--font-family-sans-serif': 'sans-serif',
+  '--base-padding': '1rem',
+  '--base-margin': '0.5rem',
+};
 
 async function cleanupDashboardFixtures(request: APIRequestContext): Promise<void> {
   const connectionsResponse = await request.get('/api/v1/connections');
@@ -63,6 +92,49 @@ test('dashboard filters connections and persists tag and sort preferences across
   await loginAsInitialAdmin(context.request);
   await cleanupDashboardFixtures(context.request);
 
+  const originalSettingsResponse = await context.request.get('/api/v1/settings');
+  expect(originalSettingsResponse.ok()).toBeTruthy();
+  const originalSettings = await originalSettingsResponse.json() as Record<string, string | undefined>;
+  const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
+  expect(originalAppearanceResponse.ok()).toBeTruthy();
+  const originalAppearance = await originalAppearanceResponse.json() as { customUiTheme?: string; windowThemeColor?: string };
+
+  const normalizeSettings = await context.request.put('/api/v1/settings', {
+    data: {
+      language: 'zh-CN',
+      dashboardShowLocalResources: 'true',
+      dashboardShowRemoteResources: 'true',
+    },
+  });
+  expect(normalizeSettings.ok()).toBeTruthy();
+  const darkAppearance = await context.request.put('/api/v1/appearance', {
+    data: {
+      customUiTheme: JSON.stringify(DASHBOARD_DARK_THEME),
+      windowThemeColor: '#343a40',
+    },
+  });
+  expect(darkAppearance.ok()).toBeTruthy();
+
+  const systemStatusResponse = await context.request.get('/api/v1/system/status');
+  expect(systemStatusResponse.ok()).toBeTruthy();
+  const systemStatus = await systemStatusResponse.json() as {
+    cpuPercent: number;
+    memPercent: number;
+    memUsed: number;
+    memTotal: number;
+    diskPercent?: number;
+  };
+  expect(systemStatus.cpuPercent).toBeGreaterThanOrEqual(0);
+  expect(systemStatus.cpuPercent).toBeLessThanOrEqual(100);
+  expect(systemStatus.memPercent).toBeGreaterThanOrEqual(0);
+  expect(systemStatus.memPercent).toBeLessThanOrEqual(100);
+  expect(systemStatus.memUsed).toBeGreaterThanOrEqual(0);
+  expect(systemStatus.memTotal).toBeGreaterThan(0);
+  if (systemStatus.diskPercent !== undefined) {
+    expect(systemStatus.diskPercent).toBeGreaterThanOrEqual(0);
+    expect(systemStatus.diskPercent).toBeLessThanOrEqual(100);
+  }
+
   const alphaTagId = await createTag(context.request, ALPHA_TAG);
   const betaTagId = await createTag(context.request, BETA_TAG);
   const alphaId = await createConnection(context.request, ALPHA_NAME, 'dashboard-alpha', '192.0.2.10', alphaTagId);
@@ -72,6 +144,10 @@ test('dashboard filters connections and persists tag and sort preferences across
     await page.goto('/');
     const dashboard = page.getByTestId('dashboard-view');
     await expect(dashboard).toBeVisible();
+    await expect(dashboard.getByTestId('dashboard-system-resources')).toBeVisible();
+    await expect(dashboard.getByTestId('dashboard-local-resources')).toBeVisible();
+    await expect(dashboard.getByTestId('dashboard-remote-resources')).toBeVisible();
+    await expect(dashboard.getByTestId('dashboard-local-resources')).toContainText('CPU');
     const alphaRow = dashboard.getByTestId(`dashboard-connection-row-${alphaId}`);
     const betaRow = dashboard.getByTestId(`dashboard-connection-row-${betaId}`);
     await expect(alphaRow).toContainText(ALPHA_NAME);
@@ -129,6 +205,40 @@ test('dashboard filters connections and persists tag and sort preferences across
       await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
     });
 
+    await step('local and remote dashboard resource sections honor their independent settings', async () => {
+      const remoteOnly = await context.request.put('/api/v1/settings', {
+        data: {
+          dashboardShowLocalResources: 'false',
+          dashboardShowRemoteResources: 'true',
+        },
+      });
+      expect(remoteOnly.ok()).toBeTruthy();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId('dashboard-system-resources')).toBeVisible();
+      await expect(page.getByTestId('dashboard-local-resources')).toBeHidden();
+      await expect(page.getByTestId('dashboard-remote-resources')).toBeVisible();
+
+      const localOnly = await context.request.put('/api/v1/settings', {
+        data: {
+          dashboardShowLocalResources: 'true',
+          dashboardShowRemoteResources: 'false',
+        },
+      });
+      expect(localOnly.ok()).toBeTruthy();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId('dashboard-local-resources')).toBeVisible();
+      await expect(page.getByTestId('dashboard-remote-resources')).toBeHidden();
+
+      const restoreBoth = await context.request.put('/api/v1/settings', {
+        data: {
+          dashboardShowLocalResources: 'true',
+          dashboardShowRemoteResources: 'true',
+        },
+      });
+      expect(restoreBoth.ok()).toBeTruthy();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    });
+
     await step('recent activity links to the full audit log view', async () => {
       await page.getByTestId('dashboard-audit-link').click();
       await expect(page).toHaveURL(/\/audit-logs$/);
@@ -136,5 +246,20 @@ test('dashboard filters connections and persists tag and sort preferences across
     });
   } finally {
     await cleanupDashboardFixtures(context.request);
+    const restoreSettings = await context.request.put('/api/v1/settings', {
+      data: {
+        language: originalSettings.language ?? 'en-US',
+        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? 'true',
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? 'true',
+      },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
+    const restoreAppearance = await context.request.put('/api/v1/appearance', {
+      data: {
+        customUiTheme: originalAppearance.customUiTheme,
+        windowThemeColor: originalAppearance.windowThemeColor,
+      },
+    });
+    expect(restoreAppearance.ok()).toBeTruthy();
   }
 });

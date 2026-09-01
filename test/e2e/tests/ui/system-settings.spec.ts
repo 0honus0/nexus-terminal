@@ -77,6 +77,72 @@ test('system settings persist timezone and language changes through the UI', asy
   }
 });
 
+test('dashboard local and remote resource cards can be configured independently', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = await originalResponse.json() as Record<string, string | undefined>;
+
+  const normalize = await context.request.put('/api/v1/settings', {
+    data: {
+      language: 'en-US',
+      dashboardShowLocalResources: 'true',
+      dashboardShowRemoteResources: 'true',
+    },
+  });
+  expect(normalize.ok()).toBeTruthy();
+
+  try {
+    await page.goto('/settings');
+    await page.getByTestId('settings-tab-workspace').click();
+
+    const localToggle = page.getByTestId('dashboard-show-local-resources');
+    const remoteToggle = page.getByTestId('dashboard-show-remote-resources');
+    const resourceForm = page.locator('form').filter({ has: localToggle });
+    await expect(localToggle).toBeChecked();
+    await expect(remoteToggle).toBeChecked();
+
+    await step('disable only local dashboard resources', async () => {
+      await localToggle.uncheck();
+      const responsePromise = page.waitForResponse((response) =>
+        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      );
+      await resourceForm.locator('button[type="submit"]').click();
+      expect((await responsePromise).ok()).toBeTruthy();
+
+      const persisted = await context.request.get('/api/v1/settings');
+      expect(persisted.ok()).toBeTruthy();
+      const values = await persisted.json() as Record<string, string>;
+      expect(values.dashboardShowLocalResources).toBe('false');
+      expect(values.dashboardShowRemoteResources).toBe('true');
+    });
+
+    await step('switch to local-only resources and persist across reload', async () => {
+      await localToggle.check();
+      await remoteToggle.uncheck();
+      const responsePromise = page.waitForResponse((response) =>
+        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      );
+      await resourceForm.locator('button[type="submit"]').click();
+      expect((await responsePromise).ok()).toBeTruthy();
+
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.getByTestId('settings-tab-workspace').click();
+      await expect(page.getByTestId('dashboard-show-local-resources')).toBeChecked();
+      await expect(page.getByTestId('dashboard-show-remote-resources')).not.toBeChecked();
+    });
+  } finally {
+    const restore = await context.request.put('/api/v1/settings', {
+      data: {
+        language: original.language ?? 'en-US',
+        dashboardShowLocalResources: original.dashboardShowLocalResources ?? 'true',
+        dashboardShowRemoteResources: original.dashboardShowRemoteResources ?? 'true',
+      },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
+
 test('workspace popup editor setting is the only editor and preview close control', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');

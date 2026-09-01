@@ -313,6 +313,50 @@
         </form>
       </div>
       <hr class="border-border/50">
+      <!-- Dashboard resource cards -->
+      <div class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.dashboardResources.title', '首页系统资源') }}</h3>
+        <form @submit.prevent="handleUpdateDashboardResources" class="space-y-4">
+          <p class="text-xs text-text-secondary">{{ t('settings.dashboardResources.description', '控制仪表盘是否显示 Nexus 本机和活动 SSH 主机的资源统计。') }}</p>
+          <div class="space-y-3">
+            <label class="flex items-start gap-2 cursor-pointer select-none">
+              <input
+                v-model="dashboardShowLocalResources"
+                data-testid="dashboard-show-local-resources"
+                type="checkbox"
+                class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+              >
+              <span>
+                <span class="block text-sm text-foreground">{{ t('settings.dashboardResources.localLabel', '显示本机资源') }}</span>
+                <span class="block text-xs text-text-secondary">{{ t('settings.dashboardResources.localHint', '显示 Nexus 所在服务器的 CPU、内存和根磁盘使用率。') }}</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-2 cursor-pointer select-none">
+              <input
+                v-model="dashboardShowRemoteResources"
+                data-testid="dashboard-show-remote-resources"
+                type="checkbox"
+                class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+              >
+              <span>
+                <span class="block text-sm text-foreground">{{ t('settings.dashboardResources.remoteLabel', '显示远程资源') }}</span>
+                <span class="block text-xs text-text-secondary">{{ t('settings.dashboardResources.remoteHint', '仅订阅当前已连接 SSH 会话的资源状态，不主动探测离线主机。') }}</span>
+              </span>
+            </label>
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <button
+              type="submit"
+              :disabled="dashboardResourcesLoading"
+              class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {{ t('common.save') }}
+            </button>
+            <p v-if="dashboardResourcesMessage" :class="['text-sm', dashboardResourcesSuccess ? 'text-success' : 'text-error']">{{ dashboardResourcesMessage }}</p>
+          </div>
+        </form>
+      </div>
+      <hr class="border-border/50">
       <!-- Status Monitor Show IP -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.statusMonitorShowIp.title', '状态监视器 IP 显示') }}</h3>
@@ -500,6 +544,12 @@ const {
   statusMonitorShowIpMessage,
   statusMonitorShowIpSuccess,
   handleUpdateStatusMonitorShowIpSetting,
+  dashboardShowLocalResources,
+  dashboardShowRemoteResources,
+  dashboardResourcesLoading,
+  dashboardResourcesMessage,
+  dashboardResourcesSuccess,
+  handleUpdateDashboardResources,
 } = workspaceSettings;
 
 const {

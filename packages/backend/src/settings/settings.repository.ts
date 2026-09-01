@@ -276,6 +276,8 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
     dockerDefaultExpand: 'false',
     statusMonitorIntervalSeconds: '3',
     statusMonitorScale: '1.0',
+    dashboardShowLocalResources: 'true',
+    dashboardShowRemoteResources: 'true',
     quickCommandsCollapsibleSearch: 'false',
     [SIDEBAR_CONFIG_KEY]: JSON.stringify(defaultSidebarPanesStructure),
     [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),

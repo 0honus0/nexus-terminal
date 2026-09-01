@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { formatDistanceToNow } from 'date-fns';
 import { enUS, ja, zhCN } from 'date-fns/locale';
@@ -11,16 +11,26 @@ import { useSessionStore } from '../stores/session.store';
 import { useTagsStore } from '../stores/tags.store';
 import type { TagInfo } from '../stores/tags.store';
 import type { SortField, SortOrder } from '../stores/settings.store';
+import { useSettingsStore } from '../stores/settings.store';
+import apiClient from '../utils/apiClient';
+import type { ServerStatus } from '../types/server.types';
 
 const { t, locale } = useI18n();
 const connectionsStore = useConnectionsStore();
 const auditLogStore = useAuditLogStore();
 const sessionStore = useSessionStore();
 const tagsStore = useTagsStore();
+const settingsStore = useSettingsStore();
 
 const { connections, isLoading: isLoadingConnections } = storeToRefs(connectionsStore);
 const { logs: auditLogs, isLoading: isLoadingLogs } = storeToRefs(auditLogStore);
 const { tags, isLoading: isLoadingTags } = storeToRefs(tagsStore);
+const { sessions } = storeToRefs(sessionStore);
+const {
+  dashboardShowLocalResourcesBoolean,
+  dashboardShowRemoteResourcesBoolean,
+  statusMonitorIntervalSecondsNumber,
+} = storeToRefs(settingsStore);
 
 const LS_SORT_BY_KEY = 'dashboard_connections_sort_by';
 const LS_SORT_ORDER_KEY = 'dashboard_connections_sort_order';
@@ -44,6 +54,10 @@ const localSortBy = ref<SortField>((localStorage.getItem(LS_SORT_BY_KEY) as Sort
 const localSortOrder = ref<SortOrder>((localStorage.getItem(LS_SORT_ORDER_KEY) as SortOrder) || 'desc');
 const selectedTagId = ref<number | null>(getInitialSelectedTagId());
 const searchQuery = ref('');
+const localSystemStatus = ref<(ServerStatus & { uptimeSeconds?: number }) | null>(null);
+const localSystemError = ref('');
+let localSystemTimer: ReturnType<typeof setInterval> | null = null;
+const activatedRemoteStatusSessions = new Set<string>();
 
 const filteredAndSortedConnections = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
@@ -80,6 +94,49 @@ const filteredAndSortedConnections = computed(() => {
 
 const recentAuditLogs = computed(() => auditLogs.value.slice(0, maxRecentLogs));
 const usedConnectionCount = computed(() => connections.value.filter((connection) => Boolean(connection.last_connected_at)).length);
+const latestConnection = computed(() => {
+  return [...connections.value]
+    .filter((connection) => Boolean(connection.last_connected_at))
+    .sort((a, b) => (b.last_connected_at ?? 0) - (a.last_connected_at ?? 0))[0] ?? null;
+});
+const protocolBreakdown = computed(() => {
+  const total = Math.max(connections.value.length, 1);
+  const counts = connections.value.reduce<Record<'SSH' | 'RDP' | 'VNC', number>>((result, connection) => {
+    result[connection.type] += 1;
+    return result;
+  }, { SSH: 0, RDP: 0, VNC: 0 });
+
+  return (['SSH', 'RDP', 'VNC'] as const)
+    .map((type) => ({
+      type,
+      count: counts[type],
+      percentage: Math.round((counts[type] / total) * 100),
+    }))
+    .filter((item) => item.count > 0);
+});
+const tagOverview = computed(() => {
+  const allTags = tags.value as TagInfo[];
+  return allTags
+    .map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      count: connections.value.filter((connection) => connection.tag_ids?.includes(tag.id)).length,
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, 5);
+});
+const remoteResourceSessions = computed(() => {
+  return [...sessions.value.entries()].map(([sessionId, session]) => ({
+    sessionId,
+    name: session.connectionName,
+    status: session.statusMonitorManager.serverStatus.value,
+    error: session.statusMonitorManager.statusError.value,
+  }));
+});
+const systemResourcesVisible = computed(() => (
+  dashboardShowLocalResourcesBoolean.value || dashboardShowRemoteResourcesBoolean.value
+));
 const protocolSummary = computed(() => {
   const counts = connections.value.reduce<Record<string, number>>((result, connection) => {
     result[connection.type] = (result[connection.type] ?? 0) + 1;
@@ -90,6 +147,24 @@ const protocolSummary = computed(() => {
     .map((type) => `${type} ${counts[type]}`)
     .join(' · ');
 });
+const protocolBarClass = (type: ConnectionInfo['type']): string => {
+  if (type === 'RDP') return 'bg-success';
+  if (type === 'VNC') return 'bg-warning';
+  return 'bg-primary';
+};
+const tagUsageWidth = (count: number): string => {
+  if (!connections.value.length) return '0%';
+  return `${Math.max(8, Math.round((count / connections.value.length) * 100))}%`;
+};
+const resourcePercent = (value: number | undefined): number => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value!)));
+};
+const formatMemory = (value: number | undefined): string => {
+  if (!Number.isFinite(value)) return '—';
+  if (value! >= 1024) return `${(value! / 1024).toFixed(value! >= 10240 ? 0 : 1)} GB`;
+  return `${Math.round(value!)} MB`;
+};
 
 const dateFnsLocales: Record<string, Locale> = {
   'en-US': enUS,
@@ -175,9 +250,69 @@ const toggleSortOrder = () => {
 
 const isAscending = computed(() => localSortOrder.value === 'asc');
 
+const fetchLocalSystemStatus = async () => {
+  if (!dashboardShowLocalResourcesBoolean.value) return;
+  try {
+    const response = await apiClient.get<ServerStatus & { uptimeSeconds?: number }>('/system/status');
+    localSystemStatus.value = response.data;
+    localSystemError.value = '';
+  } catch (error: any) {
+    localSystemError.value = error?.response?.data?.message || error?.message || t('dashboard.resources.unavailable');
+  }
+};
+
+const stopLocalSystemPolling = () => {
+  if (localSystemTimer) clearInterval(localSystemTimer);
+  localSystemTimer = null;
+};
+
+const syncLocalSystemPolling = () => {
+  stopLocalSystemPolling();
+  if (!dashboardShowLocalResourcesBoolean.value) {
+    localSystemStatus.value = null;
+    localSystemError.value = '';
+    return;
+  }
+  void fetchLocalSystemStatus();
+  localSystemTimer = setInterval(
+    () => void fetchLocalSystemStatus(),
+    Math.max(1, statusMonitorIntervalSecondsNumber.value) * 1000,
+  );
+};
+
+const syncRemoteStatusSubscriptions = () => {
+  const desiredSessionIds = dashboardShowRemoteResourcesBoolean.value
+    ? new Set(sessions.value.keys())
+    : new Set<string>();
+
+  for (const sessionId of [...activatedRemoteStatusSessions]) {
+    if (desiredSessionIds.has(sessionId)) continue;
+    sessions.value.get(sessionId)?.statusMonitorManager.deactivate();
+    activatedRemoteStatusSessions.delete(sessionId);
+  }
+
+  for (const sessionId of desiredSessionIds) {
+    if (activatedRemoteStatusSessions.has(sessionId)) continue;
+    const session = sessions.value.get(sessionId);
+    if (!session) continue;
+    session.statusMonitorManager.activate();
+    activatedRemoteStatusSessions.add(sessionId);
+  }
+};
+
 watch(localSortBy, (value) => localStorage.setItem(LS_SORT_BY_KEY, value));
 watch(localSortOrder, (value) => localStorage.setItem(LS_SORT_ORDER_KEY, value));
 watch(selectedTagId, (value) => localStorage.setItem(LS_FILTER_TAG_KEY, value === null ? 'null' : String(value)));
+watch(
+  [dashboardShowLocalResourcesBoolean, statusMonitorIntervalSecondsNumber],
+  syncLocalSystemPolling,
+  { immediate: true },
+);
+watch(
+  () => [dashboardShowRemoteResourcesBoolean.value, [...sessions.value.keys()].join('|')],
+  syncRemoteStatusSubscriptions,
+  { immediate: true },
+);
 
 onMounted(async () => {
   await Promise.allSettled([
@@ -185,6 +320,14 @@ onMounted(async () => {
     auditLogStore.fetchLogs({ page: 1, limit: maxRecentLogs, sortOrder: 'desc', isDashboardRequest: true }),
     tagsStore.fetchTags(),
   ]);
+});
+
+onBeforeUnmount(() => {
+  stopLocalSystemPolling();
+  for (const sessionId of activatedRemoteStatusSessions) {
+    sessions.value.get(sessionId)?.statusMonitorManager.deactivate();
+  }
+  activatedRemoteStatusSessions.clear();
 });
 </script>
 
@@ -194,53 +337,116 @@ onMounted(async () => {
     class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-8 lg:py-7"
   >
     <div class="mx-auto w-full max-w-[1680px]">
-      <header class="mb-5 flex flex-col gap-1 sm:mb-6">
-        <h1 class="text-2xl font-semibold tracking-tight">{{ t('nav.dashboard') }}</h1>
-        <p class="text-sm text-text-secondary">
-          {{ t('dashboard.subtitle', '快速查看并进入你的远程连接') }}
-        </p>
-      </header>
-
       <section
         data-testid="dashboard-overview"
-        class="mb-5 grid grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-sm sm:grid-cols-3"
+        class="relative mb-5 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card shadow-sm"
       >
-        <div class="border-b border-border px-5 py-4 sm:border-b-0 sm:border-r">
-          <div class="text-xs font-medium uppercase tracking-[0.12em] text-text-alt">
-            {{ t('dashboard.totalConnections', '连接总数') }}
+        <div class="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full bg-primary/10 blur-3xl"></div>
+        <div class="pointer-events-none absolute bottom-0 left-1/3 h-28 w-72 rounded-full bg-link/5 blur-3xl"></div>
+
+        <div class="relative grid gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)]">
+          <div class="flex min-w-0 flex-col justify-between gap-6">
+            <div>
+              <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+                NEXUS · {{ t('dashboard.workspaceLabel', '远程工作台') }}
+              </div>
+              <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{{ t('nav.dashboard') }}</h1>
+              <p class="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+                {{ t('dashboard.subtitle', '快速查看并进入你的远程连接') }}
+              </p>
+            </div>
+
+            <div
+              v-if="latestConnection"
+              class="flex min-w-0 flex-col gap-3 rounded-xl border border-border/80 bg-background/45 p-4 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div class="min-w-0">
+                <div class="text-[11px] font-medium uppercase tracking-[0.12em] text-text-alt">
+                  {{ t('dashboard.latestConnection', '最近连接') }}
+                </div>
+                <div class="mt-1 flex min-w-0 items-center gap-2">
+                  <strong class="truncate text-base font-semibold">{{ latestConnection.name || latestConnection.host }}</strong>
+                  <span class="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-text-alt">{{ latestConnection.type }}</span>
+                </div>
+                <div class="mt-1 truncate font-mono text-xs text-text-secondary">
+                  {{ latestConnection.username }}@{{ latestConnection.host }}:{{ latestConnection.port }}
+                </div>
+                <div class="mt-1 text-xs text-text-alt">{{ formatRelativeTime(latestConnection.last_connected_at) }}</div>
+              </div>
+              <button
+                type="button"
+                class="h-9 shrink-0 rounded-md bg-button px-4 text-sm font-medium text-button-text shadow-sm transition hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary/60"
+                @click="connectTo(latestConnection)"
+              >
+                {{ t('dashboard.reconnect', '重新连接') }}
+              </button>
+            </div>
+
+            <div class="grid grid-cols-3 overflow-hidden rounded-xl border border-border/80 bg-background/35 backdrop-blur-sm">
+              <div class="border-r border-border/70 px-4 py-3 sm:px-5">
+                <div class="text-[10px] font-medium uppercase tracking-[0.12em] text-text-alt">{{ t('dashboard.totalConnections', '连接总数') }}</div>
+                <strong data-testid="dashboard-total-connections" class="mt-1 block text-2xl font-semibold tabular-nums sm:text-3xl">{{ connections.length }}</strong>
+              </div>
+              <div class="border-r border-border/70 px-4 py-3 sm:px-5">
+                <div class="text-[10px] font-medium uppercase tracking-[0.12em] text-text-alt">{{ t('dashboard.usedConnections', '已有连接记录') }}</div>
+                <div class="mt-1 flex items-baseline gap-1.5">
+                  <strong data-testid="dashboard-used-connections" class="text-2xl font-semibold tabular-nums sm:text-3xl">{{ usedConnectionCount }}</strong>
+                  <span class="text-xs text-text-alt">/ {{ connections.length }}</span>
+                </div>
+              </div>
+              <div class="px-4 py-3 sm:px-5">
+                <div class="text-[10px] font-medium uppercase tracking-[0.12em] text-text-alt">{{ t('dashboard.tagCount', '标签数量') }}</div>
+                <strong data-testid="dashboard-tag-count" class="mt-1 block text-2xl font-semibold tabular-nums sm:text-3xl">{{ tags.length }}</strong>
+              </div>
+            </div>
           </div>
-          <div class="mt-2 flex items-end gap-3">
-            <strong data-testid="dashboard-total-connections" class="text-3xl font-semibold tabular-nums">
-              {{ connections.length }}
-            </strong>
-            <span v-if="protocolSummary" class="mb-1 truncate text-xs text-text-secondary">{{ protocolSummary }}</span>
+
+          <div class="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <div class="rounded-xl border border-border/80 bg-background/45 p-4 backdrop-blur-sm">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold">{{ t('dashboard.protocolDistribution', '连接类型') }}</h2>
+                <span class="text-xs text-text-alt">{{ protocolSummary || '—' }}</span>
+              </div>
+              <div v-if="protocolBreakdown.length" class="mt-4 space-y-3">
+                <div v-for="item in protocolBreakdown" :key="item.type">
+                  <div class="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                    <span class="font-medium">{{ item.type }}</span>
+                    <span class="tabular-nums text-text-alt">{{ item.count }} · {{ item.percentage }}%</span>
+                  </div>
+                  <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full rounded-full" :class="protocolBarClass(item.type)" :style="{ width: `${item.percentage}%` }"></div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="mt-4 text-xs text-text-alt">{{ t('dashboard.noConnections', '没有连接记录') }}</div>
+            </div>
+
+            <div class="rounded-xl border border-border/80 bg-background/45 p-4 backdrop-blur-sm">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold">{{ t('dashboard.tagOverview', '标签概览') }}</h2>
+                <span class="text-xs text-text-alt">{{ tags.length }}</span>
+              </div>
+              <div v-if="tagOverview.length" class="mt-4 space-y-3">
+                <div v-for="tag in tagOverview" :key="tag.id" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                  <div class="min-w-0">
+                    <div class="mb-1.5 truncate text-xs font-medium" :title="tag.name">{{ tag.name }}</div>
+                    <div class="h-1 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-primary/70" :style="{ width: tagUsageWidth(tag.count) }"></div>
+                    </div>
+                  </div>
+                  <span class="text-xs tabular-nums text-text-alt">{{ tag.count }}</span>
+                </div>
+              </div>
+              <div v-else class="mt-4 text-xs text-text-alt">{{ t('dashboard.noTags', '暂无标签') }}</div>
+            </div>
           </div>
-        </div>
-        <div class="border-b border-border px-5 py-4 sm:border-b-0 sm:border-r">
-          <div class="text-xs font-medium uppercase tracking-[0.12em] text-text-alt">
-            {{ t('dashboard.usedConnections', '已有连接记录') }}
-          </div>
-          <div class="mt-2 flex items-end gap-2">
-            <strong data-testid="dashboard-used-connections" class="text-3xl font-semibold tabular-nums">
-              {{ usedConnectionCount }}
-            </strong>
-            <span class="mb-1 text-xs text-text-secondary">/ {{ connections.length }}</span>
-          </div>
-        </div>
-        <div class="px-5 py-4">
-          <div class="text-xs font-medium uppercase tracking-[0.12em] text-text-alt">
-            {{ t('dashboard.tagCount', '标签数量') }}
-          </div>
-          <strong data-testid="dashboard-tag-count" class="mt-2 block text-3xl font-semibold tabular-nums">
-            {{ tags.length }}
-          </strong>
         </div>
       </section>
 
-      <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
         <section
           data-testid="dashboard-connections"
-          class="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+          class="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
         >
           <div class="border-b border-border px-4 py-4 sm:px-5">
             <div class="mb-4 flex items-center justify-between gap-3">
@@ -308,7 +514,7 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="px-4 sm:px-5">
+          <div class="max-h-[540px] overflow-y-auto px-4 sm:px-5">
             <div
               v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
               class="py-14 text-center text-sm text-text-secondary"
@@ -374,10 +580,7 @@ onMounted(async () => {
             </div>
           </div>
 
-          <footer class="flex items-center justify-between gap-3 border-t border-border bg-header/25 px-4 py-3 sm:px-5">
-            <span class="text-xs text-text-alt">
-              {{ t('dashboard.manageHint', '连接的新增、编辑和批量管理请前往连接管理') }}
-            </span>
+          <footer class="flex items-center justify-end border-t border-border bg-header/25 px-4 py-3 sm:px-5">
             <RouterLink
               data-testid="dashboard-connections-link"
               :to="{ name: 'Connections' }"
@@ -388,10 +591,110 @@ onMounted(async () => {
           </footer>
         </section>
 
-        <aside
-          data-testid="dashboard-recent-activity"
-          class="self-start overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-        >
+        <aside class="space-y-5 self-start">
+          <section
+            v-if="systemResourcesVisible"
+            data-testid="dashboard-system-resources"
+            class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+          >
+            <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+              <div>
+                <h2 class="text-base font-semibold">{{ t('dashboard.resources.title', '系统资源') }}</h2>
+                <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.resources.hint', 'Nexus 本机与活动 SSH 主机') }}</p>
+              </div>
+              <span class="rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
+                {{ t('dashboard.resources.live', '实时') }}
+              </span>
+            </header>
+
+            <div class="space-y-4 p-4 sm:p-5">
+              <div v-if="dashboardShowLocalResourcesBoolean" data-testid="dashboard-local-resources" class="rounded-xl border border-border/80 bg-header/25 p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold">{{ t('dashboard.resources.local', 'Nexus 本机') }}</div>
+                    <div v-if="localSystemStatus?.osName" class="mt-0.5 truncate text-[11px] text-text-alt" :title="localSystemStatus.osName">
+                      {{ localSystemStatus.osName }}
+                    </div>
+                  </div>
+                  <span class="text-[10px] uppercase tracking-[0.12em] text-text-alt">LOCAL</span>
+                </div>
+
+                <div v-if="localSystemStatus" class="mt-4 space-y-3">
+                  <div>
+                    <div class="mb-1.5 flex items-center justify-between text-xs">
+                      <span>{{ t('dashboard.resources.cpu', 'CPU') }}</span>
+                      <span class="tabular-nums text-text-secondary">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</span>
+                    </div>
+                    <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(localSystemStatus.cpuPercent)}%` }"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                      <span>{{ t('dashboard.resources.memory', '内存') }}</span>
+                      <span class="truncate tabular-nums text-text-secondary">
+                        {{ formatMemory(localSystemStatus.memUsed) }} / {{ formatMemory(localSystemStatus.memTotal) }} · {{ resourcePercent(localSystemStatus.memPercent) }}%
+                      </span>
+                    </div>
+                    <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(localSystemStatus.memPercent)}%` }"></div>
+                    </div>
+                  </div>
+                  <div v-if="localSystemStatus.diskPercent !== undefined">
+                    <div class="mb-1.5 flex items-center justify-between text-xs">
+                      <span>{{ t('dashboard.resources.disk', '根磁盘') }}</span>
+                      <span class="tabular-nums text-text-secondary">{{ resourcePercent(localSystemStatus.diskPercent) }}%</span>
+                    </div>
+                    <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(localSystemStatus.diskPercent)}%` }"></div>
+                    </div>
+                  </div>
+                </div>
+                <div v-else-if="localSystemError" class="mt-3 text-xs text-error">{{ localSystemError }}</div>
+                <div v-else class="mt-3 text-xs text-text-alt">{{ t('common.loading') }}</div>
+              </div>
+
+              <div v-if="dashboardShowRemoteResourcesBoolean" data-testid="dashboard-remote-resources">
+                <div class="mb-2 flex items-center justify-between gap-3">
+                  <div class="text-xs font-semibold uppercase tracking-[0.12em] text-text-alt">
+                    {{ t('dashboard.resources.remote', '远程主机') }}
+                  </div>
+                  <span class="text-xs tabular-nums text-text-alt">{{ remoteResourceSessions.length }}</span>
+                </div>
+
+                <div v-if="remoteResourceSessions.length" class="space-y-2">
+                  <div
+                    v-for="remote in remoteResourceSessions.slice(0, 3)"
+                    :key="remote.sessionId"
+                    class="rounded-xl border border-border/80 px-3 py-3"
+                  >
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="min-w-0 truncate text-xs font-semibold" :title="remote.name">{{ remote.name }}</span>
+                      <span v-if="remote.status" class="text-[10px] text-success">{{ t('dashboard.resources.connected', '已连接') }}</span>
+                      <span v-else class="text-[10px] text-text-alt">{{ t('dashboard.resources.waiting', '等待数据') }}</span>
+                    </div>
+                    <div v-if="remote.status" class="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+                      <div class="rounded-md bg-header/40 px-2 py-1.5"><span class="text-text-alt">CPU</span><strong class="ml-1 tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong></div>
+                      <div class="rounded-md bg-header/40 px-2 py-1.5"><span class="text-text-alt">MEM</span><strong class="ml-1 tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong></div>
+                      <div class="rounded-md bg-header/40 px-2 py-1.5"><span class="text-text-alt">DISK</span><strong class="ml-1 tabular-nums">{{ resourcePercent(remote.status.diskPercent) }}%</strong></div>
+                    </div>
+                    <div v-else-if="remote.error" class="mt-2 truncate text-[10px] text-error" :title="remote.error">{{ remote.error }}</div>
+                  </div>
+                  <div v-if="remoteResourceSessions.length > 3" class="pt-1 text-right text-[11px] text-text-alt">
+                    {{ t('dashboard.resources.moreHosts', { count: remoteResourceSessions.length - 3 }) }}
+                  </div>
+                </div>
+                <div v-else class="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-text-alt">
+                  {{ t('dashboard.resources.noRemoteSessions', '当前没有活动 SSH 会话') }}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            data-testid="dashboard-recent-activity"
+            class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+          >
           <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
             <div class="flex min-w-0 items-center gap-2.5">
               <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
@@ -446,6 +749,7 @@ onMounted(async () => {
               {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }} →
             </RouterLink>
           </footer>
+          </section>
         </aside>
       </div>
     </div>

@@ -97,6 +97,8 @@ export const settingsController = {
         'dockerDefaultExpand',
         'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
         'statusMonitorScale',
+        'dashboardShowLocalResources',
+        'dashboardShowRemoteResources',
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'showPopupFileManager', // +++ 弹窗文件管理器设置键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
