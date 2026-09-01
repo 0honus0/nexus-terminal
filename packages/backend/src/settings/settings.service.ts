@@ -32,6 +32,8 @@ const LAYOUT_TREE_KEY = 'layoutTree'; // 布局树设置键
 const AUTO_COPY_ON_SELECT_KEY = 'autoCopyOnSelect'; // 终端选中自动复制设置键
 const STATUS_MONITOR_INTERVAL_SECONDS_KEY = 'statusMonitorIntervalSeconds'; // 状态监控间隔设置键
 const DEFAULT_STATUS_MONITOR_INTERVAL_SECONDS = 3; // 默认状态监控间隔
+const REMOTE_HOST_REFRESH_INTERVAL_SECONDS_KEY = 'remoteHostRefreshIntervalSeconds';
+const DEFAULT_REMOTE_HOST_REFRESH_INTERVAL_SECONDS = 30;
 const IP_BLACKLIST_ENABLED_KEY = 'ipBlacklistEnabled'; // IP 黑名单启用设置键
 const SHOW_CONNECTION_TAGS_KEY = 'showConnectionTags'; // 连接标签显示设置键
 const SHOW_QUICK_COMMAND_TAGS_KEY = 'showQuickCommandTags'; // 快捷指令标签显示设置键
@@ -380,6 +382,21 @@ export const settingsService = {
       );
       throw new Error('Failed to save status monitor interval setting.');
     }
+  },
+
+  async getRemoteHostRefreshIntervalSeconds(): Promise<number> {
+    const value = await settingsRepository.getSetting(REMOTE_HOST_REFRESH_INTERVAL_SECONDS_KEY);
+    const interval = parseInt(value || '', 10);
+    return Number.isInteger(interval) && interval > 0
+      ? interval
+      : DEFAULT_REMOTE_HOST_REFRESH_INTERVAL_SECONDS;
+  },
+
+  async setRemoteHostRefreshIntervalSeconds(interval: number): Promise<void> {
+    if (!Number.isInteger(interval) || interval <= 0) {
+      throw new Error('Invalid remote host refresh interval.');
+    }
+    await settingsRepository.setSetting(REMOTE_HOST_REFRESH_INTERVAL_SECONDS_KEY, String(interval));
   },
 
   // --- Sidebar Config Specific Functions ---

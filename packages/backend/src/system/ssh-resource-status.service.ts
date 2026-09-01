@@ -2,6 +2,7 @@ import type { Client } from 'ssh2';
 import * as ConnectionRepository from '../connections/connection.repository';
 import * as SshService from '../services/ssh.service';
 import { StatusMonitorService, type ServerStatus } from '../services/status-monitor.service';
+import { settingsService } from '../settings/settings.service';
 
 export interface SshResourceStatus {
   key: string;
@@ -15,7 +16,7 @@ export interface SshResourceStatus {
   checkedAt: number;
 }
 
-const CACHE_TTL_MS = 30_000;
+const DEFAULT_REMOTE_HOST_REFRESH_TTL_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 5_000;
 const MAX_CONCURRENCY = 4;
 const BOOTSTRAP_SAMPLE_DELAY_MS = 500;
@@ -152,6 +153,8 @@ export async function getSshResourceStatuses(): Promise<SshResourceStatus[]> {
     (connection) => connection.type === 'SSH',
   );
   const fingerprint = buildConnectionFingerprint(connections);
+  const refreshSeconds = await settingsService.getRemoteHostRefreshIntervalSeconds();
+  const cacheTtlMs = Math.max(1000, refreshSeconds * 1000) || DEFAULT_REMOTE_HOST_REFRESH_TTL_MS;
 
   if (cachedResult && cachedResult.fingerprint === fingerprint && cachedResult.expiresAt > Date.now()) {
     return cachedResult.value;
@@ -168,7 +171,7 @@ export async function getSshResourceStatuses(): Promise<SshResourceStatus[]> {
     // A newer configuration may have started refreshing while this request was
     // still running. Do not let the older result overwrite that newer cache.
     if (refreshInFlight === currentRefresh) {
-      cachedResult = { fingerprint, expiresAt: Date.now() + CACHE_TTL_MS, value: statuses };
+      cachedResult = { fingerprint, expiresAt: Date.now() + cacheTtlMs, value: statuses };
     }
     return statuses;
   } finally {

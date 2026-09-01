@@ -275,6 +275,7 @@ export const ensureDefaultSettingsExist = async (db: Database): Promise<void> =>
     dockerStatusIntervalSeconds: '5',
     dockerDefaultExpand: 'false',
     statusMonitorIntervalSeconds: '3',
+    remoteHostRefreshIntervalSeconds: '30',
     statusMonitorScale: '1.0',
     dashboardShowLocalResources: 'true',
     dashboardShowRemoteResources: 'true',
