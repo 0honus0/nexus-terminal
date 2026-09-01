@@ -67,7 +67,7 @@ const scrollActiveTabIntoView = () => {
 };
 
 const handleKeydown = (event: KeyboardEvent) => {
-  if (!props.active) return;
+  if (!props.active || event.defaultPrevented) return;
   if (event.key === 'Escape') {
     event.preventDefault();
     hide();

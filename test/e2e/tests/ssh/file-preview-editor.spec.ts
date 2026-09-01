@@ -220,6 +220,19 @@ test('file previews and text editor protect historical file-opening regressions'
       .toBeGreaterThan(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
 
+    await page.keyboard.press('Control+f');
+    const pdfSearch = dialog.getByTestId('preview-search-input');
+    await expect(pdfSearch).toBeFocused();
+    await pdfSearch.fill('target');
+    await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/2');
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('target');
+    await dialog.getByTestId('preview-search-next').click();
+    await expect(dialog.getByTestId('preview-search-count')).toHaveText('2/2');
+    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
+    await dialog.getByTestId('preview-search-close').click();
+    await expect(dialog.getByTestId('preview-search-bar')).toHaveCount(0);
+
     const secondPage = dialog.getByTestId('pdf-page-2');
     await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await secondPage.evaluate((element) => element.offsetTop));
     await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
@@ -286,6 +299,17 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
     await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
     await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-preview.png', { viewport: { width: 1440, height: 900 } });
+
+    await page.keyboard.press('Control+f');
+    const spreadsheetSearch = dialog.getByTestId('preview-search-input');
+    await expect(spreadsheetSearch).toBeFocused();
+    await spreadsheetSearch.fill('Second Sheet E2E');
+    await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/1');
+    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.locator('td.spreadsheet-search-active')).toHaveText('Second Sheet E2E');
+    await dialog.getByTestId('preview-search-close').click();
+    await dialog.getByTestId('spreadsheet-sheet-0').click();
+    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveAttribute('aria-pressed', 'true');
 
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
@@ -554,6 +578,16 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await expect(tabs.getByRole('tab', { name: 'preview.pdf' })).toBeVisible();
     await expect(tabs.getByRole('tab', { name: 'preview.xlsx' })).toBeVisible();
     await expect(tabs.getByRole('tab', { name: 'preview.docx' })).toHaveAttribute('aria-selected', 'true');
+
+    await page.keyboard.press('Control+f');
+    const docxSearch = dialog.getByTestId('preview-search-input');
+    await expect(docxSearch).toBeFocused();
+    await docxSearch.fill('Column C');
+    await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/1');
+    await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('Column C');
+    await page.keyboard.press('Escape');
+    await expect(dialog.getByTestId('preview-search-bar')).toHaveCount(0);
+    await expect(dialog).toBeVisible();
 
     await captureFunctionalScreenshot(page, 'file-manager-multi-preview-tabs.png', { viewport: { width: 1440, height: 900 } });
 
