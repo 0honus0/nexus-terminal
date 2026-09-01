@@ -230,6 +230,31 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(remoteCards.nth(1)).toContainText('CPU', { timeout: 20_000 });
       await expect(remoteCards.nth(2)).toContainText('CPU', { timeout: 20_000 });
       await expect(page.getByTestId('dashboard-local-resources')).toBeVisible();
+      await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
+
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const quickConnectBox = await page.getByTestId('dashboard-connections').boundingBox();
+      const resourcesBox = await page.getByTestId('dashboard-system-resources').boundingBox();
+      expect(quickConnectBox).not.toBeNull();
+      expect(resourcesBox).not.toBeNull();
+      expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
+      expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
+
+      const localResourceBox = await page.getByTestId('dashboard-local-resources').boundingBox();
+      const remoteResourceBoxes = await remoteCards.evaluateAll((cards) => cards.map((card) => {
+        const rect = card.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      }));
+      expect(localResourceBox).not.toBeNull();
+      expect(remoteResourceBoxes).toHaveLength(3);
+      expect(remoteResourceBoxes[0].y).toBeGreaterThan((localResourceBox?.y ?? 0) + (localResourceBox?.height ?? 0) - 2);
+      for (let index = 1; index < remoteResourceBoxes.length; index += 1) {
+        expect(Math.abs(remoteResourceBoxes[index].x - remoteResourceBoxes[0].x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(remoteResourceBoxes[index].width - remoteResourceBoxes[0].width)).toBeLessThanOrEqual(2);
+        expect(remoteResourceBoxes[index].y).toBeGreaterThan(
+          remoteResourceBoxes[index - 1].y + remoteResourceBoxes[index - 1].height - 2,
+        );
+      }
       await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
 
       await page.evaluate(async () => {

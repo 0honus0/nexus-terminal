@@ -99,37 +99,21 @@ const latestConnection = computed(() => {
     .filter((connection) => Boolean(connection.last_connected_at))
     .sort((a, b) => (b.last_connected_at ?? 0) - (a.last_connected_at ?? 0))[0] ?? null;
 });
-const protocolBreakdown = computed(() => {
-  const total = Math.max(connections.value.length, 1);
-  const counts = connections.value.reduce<Record<'SSH' | 'RDP' | 'VNC', number>>((result, connection) => {
-    result[connection.type] += 1;
-    return result;
-  }, { SSH: 0, RDP: 0, VNC: 0 });
-
-  return (['SSH', 'RDP', 'VNC'] as const)
-    .map((type) => ({
-      type,
-      count: counts[type],
-      percentage: Math.round((counts[type] / total) * 100),
-    }))
-    .filter((item) => item.count > 0);
-});
 const remoteResourceSessions = computed(() => {
-  return [...sessions.value.entries()].map(([sessionId, session]) => ({
-    sessionId,
-    name: session.connectionName,
-    status: session.statusMonitorManager.serverStatus.value,
-    error: session.statusMonitorManager.statusError.value,
-  }));
+  return [...sessions.value.entries()]
+    .filter(([, session]) => connections.value.some((connection) => (
+      String(connection.id) === String(session.connectionId) && connection.type === 'SSH'
+    )))
+    .map(([sessionId, session]) => ({
+      sessionId,
+      name: session.connectionName,
+      status: session.statusMonitorManager.serverStatus.value,
+      error: session.statusMonitorManager.statusError.value,
+    }));
 });
 const systemResourcesVisible = computed(() => (
   dashboardShowLocalResourcesBoolean.value || dashboardShowRemoteResourcesBoolean.value
 ));
-const protocolBarClass = (type: ConnectionInfo['type']): string => {
-  if (type === 'RDP') return 'bg-success';
-  if (type === 'VNC') return 'bg-warning';
-  return 'bg-primary';
-};
 const resourcePercent = (value: number | undefined): number => {
   if (!Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(0, Math.round(value!)));
@@ -256,7 +240,13 @@ const syncLocalSystemPolling = () => {
 
 const syncRemoteStatusSubscriptions = () => {
   const desiredSessionIds = dashboardShowRemoteResourcesBoolean.value
-    ? new Set(sessions.value.keys())
+    ? new Set(
+      [...sessions.value.entries()]
+        .filter(([, session]) => connections.value.some((connection) => (
+          String(connection.id) === String(session.connectionId) && connection.type === 'SSH'
+        )))
+        .map(([sessionId]) => sessionId),
+    )
     : new Set<string>();
 
   for (const sessionId of [...activatedRemoteStatusSessions]) {
@@ -283,7 +273,11 @@ watch(
   { immediate: true },
 );
 watch(
-  () => [dashboardShowRemoteResourcesBoolean.value, [...sessions.value.keys()].join('|')],
+  () => [
+    dashboardShowRemoteResourcesBoolean.value,
+    [...sessions.value.keys()].join('|'),
+    connections.value.map((connection) => `${connection.id}:${connection.type}`).join('|'),
+  ],
   syncRemoteStatusSubscriptions,
   { immediate: true },
 );
@@ -357,34 +351,17 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="border-t border-border px-5 py-4 sm:px-6">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-            <div class="shrink-0 text-xs font-semibold text-text-secondary">{{ t('dashboard.protocolDistribution', '连接类型') }}</div>
-            <div v-if="protocolBreakdown.length" class="min-w-0 flex-1">
-              <div class="flex h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  v-for="item in protocolBreakdown"
-                  :key="item.type"
-                  class="h-full first:rounded-l-full last:rounded-r-full"
-                  :class="protocolBarClass(item.type)"
-                  :style="{ width: `${item.percentage}%` }"
-                ></div>
-              </div>
-            </div>
-            <div v-if="protocolBreakdown.length" class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-alt">
-              <span v-for="item in protocolBreakdown" :key="`legend-${item.type}`" class="whitespace-nowrap">
-                <strong class="font-medium text-foreground">{{ item.type }}</strong> {{ item.count }} · {{ item.percentage }}%
-              </span>
-            </div>
-            <span v-else class="text-xs text-text-alt">{{ t('dashboard.noConnections', '没有连接记录') }}</span>
-          </div>
-        </div>
       </section>
 
+      <div
+        :class="systemResourcesVisible
+          ? 'grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start'
+          : 'grid grid-cols-1 gap-5'"
+      >
       <section
         v-if="systemResourcesVisible"
         data-testid="dashboard-system-resources"
-        class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+        class="order-2 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
       >
         <header class="flex flex-col gap-2 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
@@ -404,7 +381,7 @@ onBeforeUnmount(() => {
           </div>
         </header>
 
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3 p-4 sm:p-5">
+        <div class="space-y-3 p-4 sm:p-5">
           <article
             v-if="dashboardShowLocalResourcesBoolean"
             data-testid="dashboard-local-resources"
@@ -418,26 +395,25 @@ onBeforeUnmount(() => {
               <span class="rounded border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary">LOCAL</span>
             </div>
 
-            <div v-if="localSystemStatus" class="mt-4 grid grid-cols-3 gap-3">
-              <div class="min-w-0">
-                <div class="flex items-baseline justify-between gap-1">
-                  <span class="text-[11px] text-text-alt">CPU</span>
-                  <strong class="text-sm tabular-nums">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</strong>
+            <div v-if="localSystemStatus" class="mt-4 space-y-4">
+              <div>
+                <div class="flex items-center justify-between gap-3 text-xs">
+                  <span class="font-medium text-text-secondary">CPU</span>
+                  <strong class="tabular-nums">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</strong>
                 </div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(localSystemStatus.cpuPercent)}%` }"></div></div>
               </div>
-              <div class="min-w-0">
-                <div class="flex items-baseline justify-between gap-1">
-                  <span class="text-[11px] text-text-alt">MEM</span>
-                  <strong class="text-sm tabular-nums">{{ resourcePercent(localSystemStatus.memPercent) }}%</strong>
+              <div>
+                <div class="flex items-center justify-between gap-3 text-xs">
+                  <span class="font-medium text-text-secondary">{{ t('dashboard.resources.memory', '内存') }}</span>
+                  <span class="truncate tabular-nums text-text-alt">{{ formatMemory(localSystemStatus.memUsed) }} / {{ formatMemory(localSystemStatus.memTotal) }} · <strong class="text-foreground">{{ resourcePercent(localSystemStatus.memPercent) }}%</strong></span>
                 </div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(localSystemStatus.memPercent)}%` }"></div></div>
-                <div class="mt-1 truncate text-[10px] text-text-alt">{{ formatMemory(localSystemStatus.memUsed) }} / {{ formatMemory(localSystemStatus.memTotal) }}</div>
               </div>
-              <div class="min-w-0">
-                <div class="flex items-baseline justify-between gap-1">
-                  <span class="text-[11px] text-text-alt">DISK</span>
-                  <strong class="text-sm tabular-nums">{{ localSystemStatus.diskPercent === undefined ? '—' : `${resourcePercent(localSystemStatus.diskPercent)}%` }}</strong>
+              <div>
+                <div class="flex items-center justify-between gap-3 text-xs">
+                  <span class="font-medium text-text-secondary">{{ t('dashboard.resources.disk', '根磁盘') }}</span>
+                  <strong class="tabular-nums">{{ localSystemStatus.diskPercent === undefined ? '—' : `${resourcePercent(localSystemStatus.diskPercent)}%` }}</strong>
                 </div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(localSystemStatus.diskPercent)}%` }"></div></div>
               </div>
@@ -460,18 +436,17 @@ onBeforeUnmount(() => {
               <span class="rounded border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
             </div>
 
-            <div v-if="remote.status" class="mt-4 grid grid-cols-3 gap-3">
-              <div class="min-w-0">
-                <div class="flex items-baseline justify-between gap-1"><span class="text-[11px] text-text-alt">CPU</span><strong class="text-sm tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong></div>
+            <div v-if="remote.status" class="mt-4 space-y-4">
+              <div>
+                <div class="flex items-center justify-between gap-3 text-xs"><span class="font-medium text-text-secondary">CPU</span><strong class="tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong></div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div></div>
               </div>
-              <div class="min-w-0">
-                <div class="flex items-baseline justify-between gap-1"><span class="text-[11px] text-text-alt">MEM</span><strong class="text-sm tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong></div>
+              <div>
+                <div class="flex items-center justify-between gap-3 text-xs"><span class="font-medium text-text-secondary">{{ t('dashboard.resources.memory', '内存') }}</span><span class="truncate tabular-nums text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }} · <strong class="text-foreground">{{ resourcePercent(remote.status.memPercent) }}%</strong></span></div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div></div>
-                <div class="mt-1 truncate text-[10px] text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}</div>
               </div>
-              <div class="min-w-0">
-                <div class="flex items-baseline justify-between gap-1"><span class="text-[11px] text-text-alt">DISK</span><strong class="text-sm tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong></div>
+              <div>
+                <div class="flex items-center justify-between gap-3 text-xs"><span class="font-medium text-text-secondary">{{ t('dashboard.resources.disk', '根磁盘') }}</span><strong class="tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong></div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div></div>
               </div>
             </div>
@@ -492,10 +467,9 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section
           data-testid="dashboard-connections"
-          class="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+          class="order-1 min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
         >
           <div class="border-b border-border px-4 py-4 sm:px-5">
             <div class="mb-4 flex items-center justify-between gap-3">
@@ -563,7 +537,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="max-h-[540px] overflow-y-auto px-4 sm:px-5">
+          <div class="max-h-[640px] overflow-y-auto px-4 sm:px-5">
             <div
               v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
               class="py-14 text-center text-sm text-text-secondary"
@@ -640,7 +614,9 @@ onBeforeUnmount(() => {
           </footer>
         </section>
 
-        <aside data-testid="dashboard-recent-activity" class="self-start overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      </div>
+
+        <aside data-testid="dashboard-recent-activity" class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
             <div class="flex min-w-0 items-center gap-2.5">
               <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
@@ -696,7 +672,6 @@ onBeforeUnmount(() => {
             </RouterLink>
           </footer>
         </aside>
-      </div>
     </div>
   </main>
 </template>
