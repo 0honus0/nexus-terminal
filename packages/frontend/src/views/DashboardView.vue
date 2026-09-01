@@ -299,8 +299,8 @@ onBeforeUnmount(() => {
 <template>
   <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-8 lg:py-7">
     <div class="mx-auto w-full max-w-[1680px] space-y-5">
-      <section data-testid="dashboard-overview" class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div class="grid gap-4 bg-gradient-to-r from-primary/[0.06] via-card to-card px-4 py-3.5 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
+        <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-3">
               <span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">NEXUS</span>
@@ -396,98 +396,17 @@ onBeforeUnmount(() => {
       </section>
 
       <div
+        data-testid="dashboard-workspace"
         :class="dashboardShowRemoteResourcesBoolean
-          ? 'grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start'
-          : 'grid grid-cols-1 gap-5'"
+          ? 'grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)] xl:items-start xl:gap-0'
+          : 'grid grid-cols-1'"
       >
-      <section
-        v-if="dashboardShowRemoteResourcesBoolean"
-        data-testid="dashboard-system-resources"
-        class="order-2 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
-      >
-        <header class="flex flex-col gap-2 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
-            <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle', 'SSH 资源') }}</h2>
-            <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '活动 SSH 会话的实时资源') }}</p>
-          </div>
-          <div class="flex items-center gap-2 text-[11px]">
-            <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
-              {{ remoteResourceSessions.length }} {{ t('dashboard.resources.remote', '远程主机') }}
-            </span>
-            <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">
-              {{ t('dashboard.resources.live', '实时') }}
-            </span>
-          </div>
-        </header>
-
-        <div class="space-y-3 p-4 sm:p-5">
-
-          <article
-            v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceSessions : []"
-            :key="remote.sessionId"
-            :data-testid="`dashboard-remote-resource-${remote.sessionId}`"
-            class="rounded-xl border border-border bg-header/20 p-4"
-          >
-            <div class="flex min-w-0 items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
-                <p class="mt-1 text-[11px] text-text-alt">{{ t('dashboard.resources.remoteSession', '活动 SSH 会话') }}</p>
-              </div>
-              <span class="rounded border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
-            </div>
-
-            <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-4">
-              <div>
-                <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-[10px] font-medium text-text-alt">CPU</span>
-                  <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong>
-                </div>
-                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
-                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-cpu`" class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div>
-                </div>
-              </div>
-              <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
-                <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</span>
-                  <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong>
-                </div>
-                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
-                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-memory`" class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div>
-                </div>
-                <div class="mt-1 truncate text-[9px] tabular-nums text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}</div>
-              </div>
-              <div>
-                <div class="flex items-baseline justify-between gap-2">
-                  <span class="text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</span>
-                  <strong class="text-base font-semibold tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong>
-                </div>
-                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
-                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-disk`" class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div>
-                </div>
-              </div>
-            </div>
-            <div v-else-if="remote.error" class="mt-4 truncate text-xs text-error" :title="remote.error">{{ remote.error }}</div>
-            <div v-else class="mt-4 text-xs text-text-alt">{{ t('dashboard.resources.waiting', '等待数据') }}</div>
-          </article>
-
-          <div
-            v-if="dashboardShowRemoteResourcesBoolean && remoteResourceSessions.length === 0"
-            data-testid="dashboard-remote-resources"
-            class="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-border px-4 text-center text-xs text-text-alt"
-          >
-            {{ t('dashboard.resources.noRemoteSessions', '当前没有活动 SSH 会话') }}
-          </div>
-          <div v-else-if="dashboardShowRemoteResourcesBoolean" data-testid="dashboard-remote-resources" class="sr-only">
-            {{ remoteResourceSessions.length }}
-          </div>
-        </div>
-      </section>
-
+        <div class="order-1 min-w-0 xl:pr-7">
         <section
           data-testid="dashboard-connections"
-          class="order-1 min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+          class="min-w-0"
         >
-          <div class="border-b border-border px-4 py-4 sm:px-5">
+          <div class="pb-4">
             <div class="mb-4 flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
@@ -553,7 +472,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="max-h-[640px] overflow-y-auto px-4 sm:px-5">
+          <div data-testid="dashboard-connection-list" class="max-h-[520px] overflow-y-auto border-y border-border/60">
             <div
               v-if="isLoadingConnections && filteredAndSortedConnections.length === 0"
               class="py-14 text-center text-sm text-text-secondary"
@@ -561,12 +480,12 @@ onBeforeUnmount(() => {
               {{ t('common.loading') }}
             </div>
 
-            <ul v-else-if="filteredAndSortedConnections.length > 0" class="divide-y divide-border/70">
+            <ul v-else-if="filteredAndSortedConnections.length > 0" class="divide-y divide-border/60">
               <li
                 v-for="conn in filteredAndSortedConnections"
                 :key="conn.id"
                 :data-testid="`dashboard-connection-row-${conn.id}`"
-                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-4 sm:gap-5"
+                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-1 py-4 sm:gap-5"
               >
                 <div class="min-w-0">
                   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -619,7 +538,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <footer class="flex items-center justify-end border-t border-border bg-header/25 px-4 py-3 sm:px-5">
+          <div class="pt-3 text-right">
             <RouterLink
               data-testid="dashboard-connections-link"
               :to="{ name: 'Connections' }"
@@ -627,33 +546,26 @@ onBeforeUnmount(() => {
             >
               {{ t('dashboard.viewAllConnections', '查看所有连接') }} →
             </RouterLink>
-          </footer>
+          </div>
         </section>
 
-      </div>
-
-        <aside data-testid="dashboard-recent-activity" class="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-          <header class="flex items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-            <div class="flex min-w-0 items-center gap-2.5">
-              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
-                <i class="fas fa-clock-rotate-left text-sm"></i>
-              </span>
-              <div>
-                <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
-                <p class="text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
-              </div>
+        <aside data-testid="dashboard-recent-activity" class="mt-8 border-t border-border/70 pt-5">
+          <header class="flex items-center justify-between gap-3 pb-3">
+            <div>
+              <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
+              <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
             </div>
             <span class="text-xs tabular-nums text-text-alt">{{ recentAuditLogs.length }}</span>
           </header>
 
-          <div class="px-4 sm:px-5">
-            <div v-if="isLoadingLogs && recentAuditLogs.length === 0" class="py-12 text-center text-sm text-text-secondary">
+          <div>
+            <div v-if="isLoadingLogs && recentAuditLogs.length === 0" class="py-10 text-center text-sm text-text-secondary">
               {{ t('common.loading') }}
             </div>
-            <ol v-else-if="recentAuditLogs.length > 0" class="divide-y divide-border/70">
-              <li v-for="log in recentAuditLogs" :key="log.id" class="relative py-4 pl-4">
+            <ol v-else-if="recentAuditLogs.length > 0" class="divide-y divide-border/60">
+              <li v-for="log in recentAuditLogs" :key="log.id" class="relative py-3 pl-4">
                 <span
-                  class="absolute left-0 top-[1.35rem] h-2 w-2 rounded-full"
+                  class="absolute left-0 top-[1.1rem] h-1.5 w-1.5 rounded-full"
                   :class="isFailedAction(log.action_type) ? 'bg-error' : 'bg-primary'"
                   aria-hidden="true"
                 ></span>
@@ -673,12 +585,12 @@ onBeforeUnmount(() => {
                 </p>
               </li>
             </ol>
-            <div v-else class="py-12 text-center text-sm text-text-secondary">
+            <div v-else class="py-10 text-center text-sm text-text-secondary">
               {{ t('dashboard.noRecentActivity', '没有最近活动记录') }}
             </div>
           </div>
 
-          <footer class="border-t border-border bg-header/25 px-4 py-3 text-right sm:px-5">
+          <div class="pt-3 text-right">
             <RouterLink
               data-testid="dashboard-audit-link"
               :to="{ name: 'AuditLogs' }"
@@ -686,8 +598,93 @@ onBeforeUnmount(() => {
             >
               {{ t('dashboard.viewFullAuditLog', '查看完整审计日志') }} →
             </RouterLink>
-          </footer>
+          </div>
         </aside>
+        </div>
+
+      <section
+        v-if="dashboardShowRemoteResourcesBoolean"
+        data-testid="dashboard-system-resources"
+        class="order-2 min-w-0 xl:border-l xl:border-border/70 xl:pl-7"
+      >
+        <header class="flex flex-col gap-2 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle', 'SSH 资源') }}</h2>
+            <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '活动 SSH 会话的实时资源') }}</p>
+          </div>
+          <div class="flex items-center gap-2 text-[11px]">
+            <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
+              {{ remoteResourceSessions.length }} {{ t('dashboard.resources.remote', '远程主机') }}
+            </span>
+            <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">
+              {{ t('dashboard.resources.live', '实时') }}
+            </span>
+          </div>
+        </header>
+
+        <div data-testid="dashboard-remote-resource-list" class="max-h-[760px] overflow-y-auto border-y border-border/60">
+
+          <article
+            v-for="remote in dashboardShowRemoteResourcesBoolean ? remoteResourceSessions : []"
+            :key="remote.sessionId"
+            :data-testid="`dashboard-remote-resource-${remote.sessionId}`"
+            class="border-b border-border/60 px-1 py-4 last:border-b-0"
+          >
+            <div class="flex min-w-0 items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="truncate text-sm font-semibold" :title="remote.name">{{ remote.name }}</h3>
+                <p class="mt-1 text-[11px] text-text-alt">{{ t('dashboard.resources.remoteSession', '活动 SSH 会话') }}</p>
+              </div>
+              <span class="rounded border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
+            </div>
+
+            <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-4">
+              <div>
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-[10px] font-medium text-text-alt">CPU</span>
+                  <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong>
+                </div>
+                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-cpu`" class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div>
+                </div>
+              </div>
+              <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</span>
+                  <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong>
+                </div>
+                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-memory`" class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div>
+                </div>
+                <div class="mt-1 truncate text-[9px] tabular-nums text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}</div>
+              </div>
+              <div>
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</span>
+                  <strong class="text-base font-semibold tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong>
+                </div>
+                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-disk`" class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="remote.error" class="mt-4 truncate text-xs text-error" :title="remote.error">{{ remote.error }}</div>
+            <div v-else class="mt-4 text-xs text-text-alt">{{ t('dashboard.resources.waiting', '等待数据') }}</div>
+          </article>
+
+          <div
+            v-if="dashboardShowRemoteResourcesBoolean && remoteResourceSessions.length === 0"
+            data-testid="dashboard-remote-resources"
+            class="flex min-h-32 items-center justify-center border-b border-border/60 px-4 text-center text-xs text-text-alt"
+          >
+            {{ t('dashboard.resources.noRemoteSessions', '当前没有活动 SSH 会话') }}
+          </div>
+          <div v-else-if="dashboardShowRemoteResourcesBoolean" data-testid="dashboard-remote-resources" class="sr-only">
+            {{ remoteResourceSessions.length }}
+          </div>
+        </div>
+      </section>
+      </div>
     </div>
   </main>
 </template>

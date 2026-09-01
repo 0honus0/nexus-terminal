@@ -242,15 +242,30 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
       await page.setViewportSize({ width: 1440, height: 900 });
+      const workspace = page.getByTestId('dashboard-workspace');
+      const quickConnect = page.getByTestId('dashboard-connections');
+      const resources = page.getByTestId('dashboard-system-resources');
+      const recentActivity = page.getByTestId('dashboard-recent-activity');
+      await expect(workspace).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(quickConnect).toHaveCSS('border-top-width', '0px');
+      await expect(resources).toHaveCSS('border-top-width', '0px');
+      await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('overflow-y', 'auto');
+      await expect(page.getByTestId('dashboard-remote-resource-list')).toHaveCSS('overflow-y', 'auto');
+
       const overviewBox = await overview.boundingBox();
-      const quickConnectBox = await page.getByTestId('dashboard-connections').boundingBox();
-      const resourcesBox = await page.getByTestId('dashboard-system-resources').boundingBox();
+      const quickConnectBox = await quickConnect.boundingBox();
+      const resourcesBox = await resources.boundingBox();
+      const recentActivityBox = await recentActivity.boundingBox();
       expect(overviewBox).not.toBeNull();
       expect(overviewBox?.height ?? Infinity).toBeLessThanOrEqual(180);
       expect(quickConnectBox).not.toBeNull();
       expect(resourcesBox).not.toBeNull();
+      expect(recentActivityBox).not.toBeNull();
       expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
       expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
+      expect(Math.abs((recentActivityBox?.x ?? 0) - (quickConnectBox?.x ?? 0))).toBeLessThanOrEqual(2);
+      expect(Math.abs((recentActivityBox?.width ?? 0) - (quickConnectBox?.width ?? 0))).toBeLessThanOrEqual(2);
+      expect(recentActivityBox?.y ?? 0).toBeGreaterThan((quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0));
 
       const localResourceBox = await page.getByTestId('dashboard-local-resources').boundingBox();
       const remoteResourceBoxes = await remoteCards.evaluateAll((cards) => cards.map((card) => {
