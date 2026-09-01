@@ -1622,6 +1622,7 @@
       "waiting": "等待数据",
       "unavailable": "资源数据暂不可用",
       "noRemoteSessions": "当前没有活动 SSH 会话",
+      "remoteSession": "活动 SSH 会话",
       "moreHosts": "另有 {count} 台活动主机"
     }
   },

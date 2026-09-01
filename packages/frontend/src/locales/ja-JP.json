@@ -347,6 +347,7 @@
       "waiting": "データ待機中",
       "unavailable": "リソースデータを取得できません",
       "noRemoteSessions": "アクティブな SSH セッションはありません",
+      "remoteSession": "アクティブな SSH セッション",
       "moreHosts": "他に {count} 台のアクティブホスト"
     }
   },

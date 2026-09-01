@@ -1618,6 +1618,7 @@
       "waiting": "Waiting for data",
       "unavailable": "Resource data is unavailable",
       "noRemoteSessions": "No active SSH sessions",
+      "remoteSession": "Active SSH session",
       "moreHosts": "{count} more active hosts"
     }
   },

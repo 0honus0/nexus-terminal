@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
+import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 
 const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
@@ -91,6 +92,7 @@ async function createConnection(
 test('dashboard filters connections and persists tag and sort preferences across reloads', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await cleanupDashboardFixtures(context.request);
+  await resetTestSshFilesystem();
 
   const originalSettingsResponse = await context.request.get('/api/v1/settings');
   expect(originalSettingsResponse.ok()).toBeTruthy();
@@ -139,6 +141,7 @@ test('dashboard filters connections and persists tag and sort preferences across
   const betaTagId = await createTag(context.request, BETA_TAG);
   const alphaId = await createConnection(context.request, ALPHA_NAME, 'dashboard-alpha', '192.0.2.10', alphaTagId);
   const betaId = await createConnection(context.request, BETA_NAME, 'dashboard-beta', '192.0.2.20', betaTagId);
+  const sshConnectionId = await ensureTestSshConnection(context.request);
 
   try {
     await page.goto('/');
@@ -202,7 +205,38 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(finalDashboard.getByTestId('dashboard-connections-link')).toBeVisible();
       await expect(finalDashboard.getByTestId(`dashboard-connect-${alphaId}`)).toBeVisible();
       await expect(finalDashboard.getByTestId(`dashboard-connect-${betaId}`)).toBeVisible();
+    });
+
+    await step('all active SSH sessions receive their own dashboard resource card', async () => {
+      for (let index = 0; index < 3; index += 1) {
+        await page.evaluate(async (targetConnectionId) => {
+          const { useSessionStore } = await import('/src/stores/session.store.ts');
+          useSessionStore().openNewSession(targetConnectionId);
+        }, sshConnectionId);
+
+        await expect.poll(() => page.evaluate(async (expectedCount) => {
+          const { useSessionStore } = await import('/src/stores/session.store.ts');
+          const sessions = [...useSessionStore().sessions.values()];
+          return {
+            count: sessions.length,
+            connected: sessions.filter(session => session.wsManager.isConnected.value).length,
+          };
+        }, index + 1), { timeout: 20_000 }).toEqual({ count: index + 1, connected: index + 1 });
+      }
+
+      const remoteCards = page.locator('[data-testid^="dashboard-remote-resource-"]');
+      await expect(remoteCards).toHaveCount(3);
+      await expect(remoteCards.nth(0)).toContainText('CPU', { timeout: 20_000 });
+      await expect(remoteCards.nth(1)).toContainText('CPU', { timeout: 20_000 });
+      await expect(remoteCards.nth(2)).toContainText('CPU', { timeout: 20_000 });
+      await expect(page.getByTestId('dashboard-local-resources')).toBeVisible();
       await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
+
+      await page.evaluate(async () => {
+        const { useSessionStore } = await import('/src/stores/session.store.ts');
+        useSessionStore().cleanupAllSessions();
+      });
+      await expect(remoteCards).toHaveCount(0);
     });
 
     await step('local and remote dashboard resource sections honor their independent settings', async () => {
@@ -245,6 +279,10 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(page.getByTestId('audit-log-view')).toBeVisible();
     });
   } finally {
+    await page.evaluate(async () => {
+      const { useSessionStore } = await import('/src/stores/session.store.ts');
+      useSessionStore().cleanupAllSessions();
+    }).catch(() => undefined);
     await cleanupDashboardFixtures(context.request);
     const restoreSettings = await context.request.put('/api/v1/settings', {
       data: {
