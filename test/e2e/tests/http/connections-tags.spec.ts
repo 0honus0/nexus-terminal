@@ -1,6 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH } from '../../support/ssh';
+import { E2E_SSH, resetTestSshFilesystem } from '../../support/ssh';
 import { step } from '../../support/steps';
 
 test('connection update, tags, clone, credentials, and delete form a complete lifecycle', async ({ request }) => {
@@ -145,6 +145,73 @@ test('SSH resource snapshots invalidate cached host lists when connection metada
       expect(resource?.status?.cpuPercent).toBeGreaterThanOrEqual(0);
     });
   } finally {
+    if (connectionId) {
+      expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
+    }
+  }
+});
+
+test('SSH resource cache expires from collection start so refresh cadence does not double', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+
+  const connectionName = 'E2E SSH Resource Refresh Cadence';
+  const originalSettingsResponse = await request.get('/api/v1/settings');
+  expect(originalSettingsResponse.ok()).toBeTruthy();
+  const originalSettings = await originalSettingsResponse.json() as Record<string, string | undefined>;
+
+  const existingConnections = await request.get('/api/v1/connections');
+  expect(existingConnections.ok()).toBeTruthy();
+  const existing = await existingConnections.json() as Array<{ id: number; name?: string }>;
+  for (const connection of existing.filter((item) => item.name === connectionName)) {
+    expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
+  }
+
+  let connectionId = 0;
+  try {
+    const create = await request.post('/api/v1/connections', {
+      data: {
+        name: connectionName,
+        type: 'SSH',
+        host: E2E_SSH.host,
+        port: E2E_SSH.port,
+        username: E2E_SSH.username,
+        auth_method: 'password',
+        password: E2E_SSH.password,
+      },
+    });
+    expect(create.status()).toBe(201);
+    connectionId = (await create.json() as { connection: { id: number } }).connection.id;
+
+    const intervalUpdate = await request.put('/api/v1/settings', {
+      data: { remoteHostRefreshIntervalSeconds: '2' },
+    });
+    expect(intervalUpdate.ok()).toBeTruthy();
+
+    const firstStartedAt = Date.now();
+    const firstResponse = await request.get('/api/v1/system/ssh-resources');
+    expect(firstResponse.ok()).toBeTruthy();
+    const firstDurationMs = Date.now() - firstStartedAt;
+    expect(firstDurationMs).toBeGreaterThan(50);
+    const firstResources = await firstResponse.json() as Array<{ host: string; port: number; checkedAt: number }>;
+    const firstResource = firstResources.find((item) => item.host === E2E_SSH.host && item.port === E2E_SSH.port);
+    expect(firstResource).toBeDefined();
+
+    const targetElapsedMs = 2050;
+    const remainingMs = Math.max(0, targetElapsedMs - (Date.now() - firstStartedAt));
+    if (remainingMs > 0) await new Promise((resolve) => setTimeout(resolve, remainingMs));
+
+    const secondResponse = await request.get('/api/v1/system/ssh-resources');
+    expect(secondResponse.ok()).toBeTruthy();
+    const secondResources = await secondResponse.json() as Array<{ host: string; port: number; checkedAt: number }>;
+    const secondResource = secondResources.find((item) => item.host === E2E_SSH.host && item.port === E2E_SSH.port);
+    expect(secondResource).toBeDefined();
+    expect(secondResource!.checkedAt).toBeGreaterThan(firstResource!.checkedAt);
+  } finally {
+    const restoreSettings = await request.put('/api/v1/settings', {
+      data: { remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? '30' },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
     if (connectionId) {
       expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
     }

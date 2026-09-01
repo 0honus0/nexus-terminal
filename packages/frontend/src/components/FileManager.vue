@@ -1782,6 +1782,9 @@ watch(() => currentSftpManager.value?.currentPath.value, () => {
     resetFileListScroll();
     if (searchQuery.value.trim()) scheduleRecursiveSearch();
 });
+watch(() => currentSftpManager.value?.contentRevision.value, () => {
+    if (searchQuery.value.trim()) scheduleRecursiveSearch();
+});
 watch(searchQuery, () => {
     selectedIndex.value = -1;
     clearSelection(); // 清空选择

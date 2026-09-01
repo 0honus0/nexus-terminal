@@ -165,6 +165,10 @@ export async function getSshResourceStatuses(): Promise<SshResourceStatus[]> {
   if (refreshInFlight?.fingerprint === fingerprint) return refreshInFlight.promise;
 
   const grouped = groupSshConnections(connections);
+  // Measure cache age from when collection starts, not when it finishes. The
+  // dashboard interval is also start-to-start; starting TTL at completion can
+  // make a 30s setting miss the 30s poll and effectively refresh every 60s.
+  const refreshStartedAt = Date.now();
   const promise = refreshSshResourceStatuses(grouped);
   const currentRefresh = { fingerprint, promise };
   refreshInFlight = currentRefresh;
@@ -174,7 +178,7 @@ export async function getSshResourceStatuses(): Promise<SshResourceStatus[]> {
     // A newer configuration may have started refreshing while this request was
     // still running. Do not let the older result overwrite that newer cache.
     if (refreshInFlight === currentRefresh) {
-      cachedResult = { fingerprint, expiresAt: Date.now() + cacheTtlMs, value: statuses };
+      cachedResult = { fingerprint, expiresAt: refreshStartedAt + cacheTtlMs, value: statuses };
     }
     return statuses;
   } finally {

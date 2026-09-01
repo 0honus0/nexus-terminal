@@ -38,6 +38,7 @@ export interface SftpManagerInstance {
   fileTree: Readonly<FileTreeNode>;
   initialLoadDone: Readonly<Ref<boolean>>;
   currentPath: Readonly<Ref<string>>;
+  contentRevision: Readonly<Ref<number>>;
   archiveProgress: ArchiveProgressState;
   transferTasks: Readonly<Record<string, FileTransferItem>>;
   transferProgressSourceId: string;
@@ -152,6 +153,7 @@ export function createSftpActionsManager(
   const archiveProgressSourceId = `sftp:${sessionId}:${progressInstanceId}:archive`;
   let stopTransferProgressWatch: (() => void) | null = null;
   const initialLoadDone = ref<boolean>(false); // +++ 跟踪此实例是否已完成初始加载 +++
+  const contentRevision = ref(0);
   const archiveProgress = reactive<ArchiveProgressState>({
     active: false,
     operation: null,
@@ -1290,6 +1292,7 @@ export function createSftpActionsManager(
     // *** 在成功加载并更新树之后，才更新当前路径 ***
     currentPathRef.value = path;
     console.log(`[SFTP ${instanceSessionId}] currentPathRef updated to ${path} after successful readdir.`);
+    contentRevision.value += 1;
 
     // 重置加载状态，因为这是匹配的响应
     clearDirectoryLoadTimeout();
@@ -1441,6 +1444,7 @@ export function createSftpActionsManager(
         }
       }
     }
+    contentRevision.value += 1;
   };
 
   // 处理删除目录/文件成功
@@ -1458,6 +1462,7 @@ export function createSftpActionsManager(
       // 理论上 removeNodeFromTree 已经移除了它，这里可以加日志或额外清理
       console.log(`[SFTP ${instanceSessionId}] 目录 ${removedPath} 已从树中移除`);
     }
+    contentRevision.value += 1;
   };
 
   // 处理重命名成功
@@ -1504,6 +1509,7 @@ export function createSftpActionsManager(
         }
       }
     }
+    contentRevision.value += 1;
   };
 
   // 处理修改权限成功
@@ -1531,6 +1537,7 @@ export function createSftpActionsManager(
         }
       }
     }
+    contentRevision.value += 1;
   };
 
   // 处理写入文件成功 (新建或修改)
@@ -1558,6 +1565,7 @@ export function createSftpActionsManager(
         }
       }
     }
+    contentRevision.value += 1;
   };
 
   const onTransferProgress = (payload: MessagePayload, message: WebSocketMessage) => {
@@ -1652,6 +1660,7 @@ export function createSftpActionsManager(
       );
       // 可能需要刷新根目录或采取其他措施
     }
+    contentRevision.value += 1;
   };
 
   // +++ 处理移动成功 +++
@@ -1698,6 +1707,7 @@ export function createSftpActionsManager(
         `[SFTP ${instanceSessionId}] Move success, but destination node ${destinationDir} not found in tree.`,
       );
     }
+    contentRevision.value += 1;
   };
 
   // *** 处理上传成功 ***
@@ -1757,6 +1767,7 @@ export function createSftpActionsManager(
         loadDirectory(currentPathRef.value);
       }
     }
+    contentRevision.value += 1;
   };
 
   const onActionError = (payload: MessagePayload, message: WebSocketMessage) => {
@@ -1859,6 +1870,7 @@ export function createSftpActionsManager(
     // error: readonly(error), // 移除 error
     fileTree: fileTree, // (类型已在接口中定义为 Readonly<FileTreeNode>)
     initialLoadDone: initialLoadDone, // (类型已在接口中定义为 Readonly<Ref>)
+    contentRevision: readonly(contentRevision),
     archiveProgress,
     transferTasks: readonly(transferTasks),
     transferProgressSourceId,

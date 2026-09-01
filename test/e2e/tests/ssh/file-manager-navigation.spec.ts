@@ -71,10 +71,23 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(recursiveResult).toContainText('folder-seed/nested.txt');
     await expect(row(page, 'nested.txt')).toHaveCount(0);
 
-    await search.fill('definitely-no-e2e-match');
+    await recursiveResult.click({ button: 'right' });
+    const contextMenu = page.getByTestId('file-manager-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await contextMenu.getByText('Rename', { exact: true }).first().click();
+    const renameModal = page.getByTestId('file-manager-action-modal');
+    await expect(renameModal).toHaveAttribute('data-action-type', 'rename');
+    await renameModal.locator('#fileManagerActionInput-rename').fill('nested-renamed.txt');
+    await renameModal.getByTestId('file-manager-action-confirm').click();
+    await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]')).toHaveCount(0);
+    await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested-renamed.txt"]')).toBeVisible();
+
+    await fileManager.getByTitle('Search files...').click();
+    const reopenedAfterRename = fileManager.getByPlaceholder('Search files...');
+    await reopenedAfterRename.fill('definitely-no-e2e-match');
     await expect(fileManager.getByText('No search results found', { exact: true })).toBeVisible();
 
-    await search.fill('second-preview');
+    await reopenedAfterRename.fill('second-preview');
     const recursivePdf = fileManager.locator('tr[data-file-path="/folder-seed/second-preview.pdf"]');
     await expect(recursivePdf).toBeVisible();
     await recursivePdf.dblclick();
