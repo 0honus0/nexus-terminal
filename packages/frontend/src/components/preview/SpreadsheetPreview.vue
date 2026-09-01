@@ -169,6 +169,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
               v-for="(row, rowIndex) in activePage.rows"
               :key="activePage.startRow + rowIndex"
               data-testid="spreadsheet-data-row"
+              :class="{ 'spreadsheet-header-row': currentPage === 1 && rowIndex === 0 }"
               :style="activePage.rowHeights[rowIndex] ? { height: `${activePage.rowHeights[rowIndex]}px` } : undefined"
             >
               <th class="sticky left-0 z-10 w-12 min-w-12 border-b border-r border-border bg-header px-2 py-1.5 text-right font-normal text-text-secondary">
@@ -284,7 +285,7 @@ onMounted(() => window.setTimeout(focusPreview, 0));
   min-width: 7rem;
 }
 
-.spreadsheet-preview tr:first-child td {
+.spreadsheet-preview .spreadsheet-header-row td {
   background: color-mix(in srgb, var(--color-header) 80%, transparent);
   font-weight: 600;
 }

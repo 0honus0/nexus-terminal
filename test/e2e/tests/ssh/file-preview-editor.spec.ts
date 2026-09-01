@@ -830,6 +830,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       await expect(dialog.getByText('E2E-A25', { exact: true })).toHaveCount(0);
       await expect(dialog.getByText('E2E-G1', { exact: true })).toHaveCount(0);
       await expect(dialog.getByTestId('spreadsheet-data-row')).toHaveCount(24);
+      await expect(dialog.locator('.spreadsheet-header-row')).toHaveCount(1);
       await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-pagination.png', { viewport: { width: 1440, height: 900 } });
 
       await dialog.getByTestId('spreadsheet-next-page').click();
@@ -840,6 +841,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       await expect(dialog.getByText('E2E-F40', { exact: true })).toBeVisible();
       await expect(dialog.getByText('E2E-A24', { exact: true })).toHaveCount(0);
       await expect(dialog.getByTestId('spreadsheet-data-row')).toHaveCount(16);
+      await expect(dialog.locator('.spreadsheet-header-row')).toHaveCount(0);
       await expect(dialog.getByTestId('spreadsheet-placeholder-row')).toHaveCount(0);
       const lastPageOverflow = await dialog.getByTestId('spreadsheet-scroll-container').evaluate((element) => (
         element.scrollHeight - element.clientHeight
