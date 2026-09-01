@@ -5,9 +5,13 @@
   "specs": [
     "tests/auth/setup-login.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/panel-wheel-scaling.spec.ts",
-    "tests/ssh/terminal-protocol.spec.ts",
-    "tests/ssh/terminal-tools-ui.spec.ts",
-    "tests/ssh/terminal-ui.spec.ts"
+    "tests/ui/audit-log-filtering.spec.ts",
+    "tests/ui/backup-ui.spec.ts",
+    "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/connection-create.spec.ts",
+    "tests/ui/connection-non-ssh-bulk.spec.ts",
+    "tests/ui/custom-terminal-theme.spec.ts",
+    "tests/ui/dashboard-workflows.spec.ts",
+    "tests/ui/rdp-remoteapp-fullscreen.spec.ts"
   ]
 }
