@@ -3,16 +3,8 @@
   "group": 7,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
     "tests/ssh/file-manager-context-menu.spec.ts",
-    "tests/ui/audit-log-filtering.spec.ts",
-    "tests/ui/backup-ui.spec.ts",
-    "tests/ui/batch-connection-edit.spec.ts",
-    "tests/ui/connection-create.spec.ts",
-    "tests/ui/connection-non-ssh-bulk.spec.ts",
-    "tests/ui/custom-terminal-theme.spec.ts",
-    "tests/ui/dashboard-workflows.spec.ts",
-    "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts"
+    "tests/ssh/cross-session-transfer.spec.ts",
+    "tests/ssh/file-upload.spec.ts"
   ]
 }

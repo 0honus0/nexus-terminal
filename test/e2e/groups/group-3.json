@@ -8,6 +8,6 @@
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
     "tests/ssh/progress-display-archive-cancel.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/websocket/authenticated-session.spec.ts"
   ]
 }
