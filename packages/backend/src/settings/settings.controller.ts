@@ -96,6 +96,7 @@ export const settingsController = {
         'dockerStatusIntervalSeconds',
         'dockerDefaultExpand',
         'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+        'remoteHostRefreshIntervalSeconds', // 首页 SSH 资源刷新间隔（与状态监视器独立）
         'statusMonitorScale',
         'dashboardShowLocalResources',
         'dashboardShowRemoteResources',
@@ -129,6 +130,7 @@ export const settingsController = {
       }
 
       const boundedIntegerSettings: Record<string, { min: number; max: number }> = {
+        remoteHostRefreshIntervalSeconds: { min: 1, max: 86400 },
         spreadsheetPreviewMaxRows: { min: 10, max: 2000 },
         spreadsheetPreviewRowsPerPage: { min: 10, max: 2000 },
         spreadsheetPreviewMaxColumns: { min: 5, max: 200 },

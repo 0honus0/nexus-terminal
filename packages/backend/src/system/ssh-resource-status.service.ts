@@ -152,9 +152,12 @@ export async function getSshResourceStatuses(): Promise<SshResourceStatus[]> {
   const connections = (await ConnectionRepository.findAllConnectionsWithTags()).filter(
     (connection) => connection.type === 'SSH',
   );
-  const fingerprint = buildConnectionFingerprint(connections);
+  const connectionFingerprint = buildConnectionFingerprint(connections);
   const refreshSeconds = await settingsService.getRemoteHostRefreshIntervalSeconds();
   const cacheTtlMs = Math.max(1000, refreshSeconds * 1000) || DEFAULT_REMOTE_HOST_REFRESH_TTL_MS;
+  // Include the interval itself in the cache identity so a settings change takes
+  // effect immediately instead of waiting for a snapshot created with the old TTL.
+  const fingerprint = `${connectionFingerprint}\u001d${refreshSeconds}`;
 
   if (cachedResult && cachedResult.fingerprint === fingerprint && cachedResult.expiresAt > Date.now()) {
     return cachedResult.value;

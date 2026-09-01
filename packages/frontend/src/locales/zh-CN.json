@@ -1073,8 +1073,11 @@
       "localHint": "显示 Nexus 所在服务器的 CPU、内存和根磁盘使用率。",
       "remoteLabel": "显示远程资源",
       "remoteHint": "仅订阅当前已连接 SSH 会话的资源状态，不主动探测离线主机。",
+      "refreshIntervalLabel": "SSH 资源刷新间隔（秒）",
+      "refreshIntervalHint": "仅用于首页 SSH 资源快照，与状态监视器刷新间隔相互独立。",
       "error": {
-        "saveFailed": "保存首页系统资源设置失败。"
+        "saveFailed": "保存首页系统资源设置失败。",
+        "invalidInterval": "SSH 资源刷新间隔必须是 1–86400 之间的整数。"
       }
     },
     "terminalScrollback": {
@@ -1620,7 +1623,7 @@
       "sshTitle": "SSH 资源",
       "sshHint": "已配置 SSH 主机的低频资源快照",
       "live": "实时",
-      "snapshot": "30 秒刷新",
+      "snapshot": "{seconds} 秒刷新",
       "local": "Nexus 本机",
       "remote": "远程主机",
       "cpu": "CPU",

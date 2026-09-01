@@ -1077,8 +1077,11 @@
       "localHint": "Show CPU, memory, and root disk usage for the server running Nexus.",
       "remoteLabel": "Show remote resources",
       "remoteHint": "Subscribe only to currently connected SSH sessions; offline hosts are not probed.",
+      "refreshIntervalLabel": "SSH resource refresh interval (seconds)",
+      "refreshIntervalHint": "Used only for dashboard SSH resource snapshots and kept separate from the status monitor interval.",
       "error": {
-        "saveFailed": "Failed to save dashboard resource settings."
+        "saveFailed": "Failed to save dashboard resource settings.",
+        "invalidInterval": "SSH resource refresh interval must be an integer from 1 to 86400."
       }
     },
     "terminalScrollback": {
@@ -1616,7 +1619,7 @@
       "sshTitle": "SSH resources",
       "sshHint": "Low-frequency resource snapshots for configured SSH hosts",
       "live": "Live",
-      "snapshot": "30s refresh",
+      "snapshot": "{seconds}s refresh",
       "local": "Nexus host",
       "remote": "Remote hosts",
       "cpu": "CPU",

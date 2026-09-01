@@ -340,7 +340,7 @@
       "sshTitle": "SSH リソース",
       "sshHint": "設定済み SSH ホストの低頻度リソーススナップショット",
       "live": "リアルタイム",
-      "snapshot": "30秒更新",
+      "snapshot": "{seconds}秒更新",
       "local": "Nexus ホスト",
       "remote": "リモートホスト",
       "cpu": "CPU",
@@ -1323,8 +1323,11 @@
       "localHint": "Nexus を実行しているサーバーの CPU、メモリ、ルートディスク使用率を表示します。",
       "remoteLabel": "リモートリソースを表示",
       "remoteHint": "現在接続中の SSH セッションのみ購読し、オフラインホストは探索しません。",
+      "refreshIntervalLabel": "SSH リソース更新間隔（秒）",
+      "refreshIntervalHint": "ダッシュボードの SSH リソーススナップショット専用で、ステータスモニターの更新間隔とは独立しています。",
       "error": {
-        "saveFailed": "ダッシュボードのリソース設定を保存できませんでした。"
+        "saveFailed": "ダッシュボードのリソース設定を保存できませんでした。",
+        "invalidInterval": "SSH リソース更新間隔は 1～86400 の整数で指定してください。"
       }
     },
     "terminalScrollback": {

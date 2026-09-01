@@ -43,6 +43,7 @@ interface SettingsState {
   dockerStatusIntervalSeconds?: string; //  Docker 状态刷新间隔 (秒)
   dockerDefaultExpand?: string; //  Docker 默认展开详情 'true' or 'false'
   statusMonitorIntervalSeconds?: string; //  状态监控轮询间隔 (秒)
+  remoteHostRefreshIntervalSeconds?: string; // 首页 SSH 资源刷新间隔 (秒)，与状态监视器独立
   statusMonitorScale?: string; // 状态监视器 Ctrl+滚轮缩放倍率
   dashboardShowLocalResources?: string; // 首页显示 Nexus 宿主机资源
   dashboardShowRemoteResources?: string; // 首页显示活动 SSH 主机资源
@@ -155,6 +156,9 @@ export const useSettingsStore = defineStore('settings', () => {
       //  Status Monitor interval default
       if (settings.value.statusMonitorIntervalSeconds === undefined) {
         settings.value.statusMonitorIntervalSeconds = '3'; // 默认 3 秒
+      }
+      if (settings.value.remoteHostRefreshIntervalSeconds === undefined) {
+        settings.value.remoteHostRefreshIntervalSeconds = '30'; // 首页 SSH 资源默认 30 秒刷新
       }
       if (settings.value.statusMonitorScale === undefined) {
         settings.value.statusMonitorScale = '1.0';
@@ -485,6 +489,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'dockerStatusIntervalSeconds',
       'dockerDefaultExpand',
       'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+      'remoteHostRefreshIntervalSeconds', // 首页 SSH 资源刷新间隔
       'statusMonitorScale',
       'dashboardShowLocalResources',
       'dashboardShowRemoteResources',
@@ -617,6 +622,7 @@ export const useSettingsStore = defineStore('settings', () => {
       'dockerStatusIntervalSeconds',
       'dockerDefaultExpand',
       'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+      'remoteHostRefreshIntervalSeconds', // 首页 SSH 资源刷新间隔
       'statusMonitorScale',
       'dashboardShowLocalResources',
       'dashboardShowRemoteResources',
@@ -904,6 +910,11 @@ export const useSettingsStore = defineStore('settings', () => {
     return isNaN(val) || val <= 0 ? 3 : val; // Fallback to 3 if invalid
   });
 
+  const remoteHostRefreshIntervalSecondsNumber = computed(() => {
+    const val = parseInt(settings.value.remoteHostRefreshIntervalSeconds || '30', 10);
+    return Number.isInteger(val) && val >= 1 && val <= 86400 ? val : 30;
+  });
+
   const statusMonitorScaleNumber = computed(() => {
     const val = parseFloat(settings.value.statusMonitorScale || '1.0');
     if (!Number.isFinite(val)) return 1.0;
@@ -1042,6 +1053,7 @@ export const useSettingsStore = defineStore('settings', () => {
     autoCopyOnSelectBoolean,
     dockerDefaultExpandBoolean, // +++ 暴露 Docker 默认展开 getter +++
     statusMonitorIntervalSecondsNumber, // +++ 暴露状态监控间隔 getter +++
+    remoteHostRefreshIntervalSecondsNumber,
     statusMonitorScaleNumber,
     dashboardShowLocalResourcesBoolean,
     dashboardShowRemoteResourcesBoolean,

@@ -387,13 +387,13 @@ export const settingsService = {
   async getRemoteHostRefreshIntervalSeconds(): Promise<number> {
     const value = await settingsRepository.getSetting(REMOTE_HOST_REFRESH_INTERVAL_SECONDS_KEY);
     const interval = parseInt(value || '', 10);
-    return Number.isInteger(interval) && interval > 0
+    return Number.isInteger(interval) && interval >= 1 && interval <= 86400
       ? interval
       : DEFAULT_REMOTE_HOST_REFRESH_INTERVAL_SECONDS;
   },
 
   async setRemoteHostRefreshIntervalSeconds(interval: number): Promise<void> {
-    if (!Number.isInteger(interval) || interval <= 0) {
+    if (!Number.isInteger(interval) || interval < 1 || interval > 86400) {
       throw new Error('Invalid remote host refresh interval.');
     }
     await settingsRepository.setSetting(REMOTE_HOST_REFRESH_INTERVAL_SECONDS_KEY, String(interval));

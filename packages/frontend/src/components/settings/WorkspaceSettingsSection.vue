@@ -343,6 +343,24 @@
                 <span class="block text-xs text-text-secondary">{{ t('settings.dashboardResources.remoteHint', '仅订阅当前已连接 SSH 会话的资源状态，不主动探测离线主机。') }}</span>
               </span>
             </label>
+            <div>
+              <label for="dashboardRemoteRefreshInterval" class="block text-sm font-medium text-foreground mb-1">
+                {{ t('settings.dashboardResources.refreshIntervalLabel', 'SSH 资源刷新间隔（秒）') }}
+              </label>
+              <input
+                id="dashboardRemoteRefreshInterval"
+                v-model.number="remoteHostRefreshIntervalSeconds"
+                data-testid="dashboard-remote-refresh-interval"
+                type="number"
+                min="1"
+                max="86400"
+                step="1"
+                class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              >
+              <p class="text-xs text-text-secondary mt-1">
+                {{ t('settings.dashboardResources.refreshIntervalHint', '仅用于首页 SSH 资源快照，与状态监视器刷新间隔相互独立。') }}
+              </p>
+            </div>
           </div>
           <div class="flex items-center justify-between pt-1">
             <button
@@ -546,6 +564,7 @@ const {
   handleUpdateStatusMonitorShowIpSetting,
   dashboardShowLocalResources,
   dashboardShowRemoteResources,
+  remoteHostRefreshIntervalSeconds,
   dashboardResourcesLoading,
   dashboardResourcesMessage,
   dashboardResourcesSuccess,

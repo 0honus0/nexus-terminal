@@ -88,6 +88,8 @@ test('dashboard local and remote resource cards can be configured independently'
       language: 'en-US',
       dashboardShowLocalResources: 'true',
       dashboardShowRemoteResources: 'true',
+      remoteHostRefreshIntervalSeconds: '30',
+      statusMonitorIntervalSeconds: '3',
     },
   });
   expect(normalize.ok()).toBeTruthy();
@@ -98,9 +100,39 @@ test('dashboard local and remote resource cards can be configured independently'
 
     const localToggle = page.getByTestId('dashboard-show-local-resources');
     const remoteToggle = page.getByTestId('dashboard-show-remote-resources');
+    const refreshInterval = page.getByTestId('dashboard-remote-refresh-interval');
     const resourceForm = page.locator('form').filter({ has: localToggle });
     await expect(localToggle).toBeChecked();
     await expect(remoteToggle).toBeChecked();
+    await expect(refreshInterval).toHaveValue('30');
+
+    await step('save an SSH dashboard refresh interval independently from the status monitor', async () => {
+      await refreshInterval.fill('17');
+      const responsePromise = page.waitForResponse((response) =>
+        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      );
+      await resourceForm.locator('button[type="submit"]').click();
+      expect((await responsePromise).ok()).toBeTruthy();
+
+      const persisted = await context.request.get('/api/v1/settings');
+      expect(persisted.ok()).toBeTruthy();
+      const values = await persisted.json() as Record<string, string>;
+      expect(values.remoteHostRefreshIntervalSeconds).toBe('17');
+      expect(values.statusMonitorIntervalSeconds).toBe('3');
+
+      const invalid = await context.request.put('/api/v1/settings', {
+        data: { remoteHostRefreshIntervalSeconds: '0' },
+      });
+      expect(invalid.status()).toBe(400);
+    });
+
+    await step('dashboard reflects the dedicated SSH refresh interval', async () => {
+      await page.goto('/');
+      await expect(page.getByTestId('dashboard-system-resources').getByText('17s refresh', { exact: true })).toBeVisible();
+      await page.goto('/settings');
+      await page.getByTestId('settings-tab-workspace').click();
+      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveValue('17');
+    });
 
     await step('disable only local dashboard resources', async () => {
       await localToggle.uncheck();
@@ -130,6 +162,7 @@ test('dashboard local and remote resource cards can be configured independently'
       await page.getByTestId('settings-tab-workspace').click();
       await expect(page.getByTestId('dashboard-show-local-resources')).toBeChecked();
       await expect(page.getByTestId('dashboard-show-remote-resources')).not.toBeChecked();
+      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveValue('17');
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
@@ -137,6 +170,8 @@ test('dashboard local and remote resource cards can be configured independently'
         language: original.language ?? 'en-US',
         dashboardShowLocalResources: original.dashboardShowLocalResources ?? 'true',
         dashboardShowRemoteResources: original.dashboardShowRemoteResources ?? 'true',
+        remoteHostRefreshIntervalSeconds: original.remoteHostRefreshIntervalSeconds ?? '30',
+        statusMonitorIntervalSeconds: original.statusMonitorIntervalSeconds ?? '3',
       },
     });
     expect(restore.ok()).toBeTruthy();

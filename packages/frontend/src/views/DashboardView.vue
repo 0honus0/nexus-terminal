@@ -29,6 +29,7 @@ const {
   dashboardShowLocalResourcesBoolean,
   dashboardShowRemoteResourcesBoolean,
   statusMonitorIntervalSecondsNumber,
+  remoteHostRefreshIntervalSecondsNumber,
 } = storeToRefs(settingsStore);
 
 const LS_SORT_BY_KEY = 'dashboard_connections_sort_by';
@@ -70,7 +71,6 @@ const remoteResourceHosts = ref<RemoteResourceStatus[]>([]);
 const remoteResourcesLoading = ref(false);
 let localSystemTimer: ReturnType<typeof setInterval> | null = null;
 let remoteResourceTimer: ReturnType<typeof setInterval> | null = null;
-const REMOTE_RESOURCE_POLL_INTERVAL_MS = 30_000;
 
 const filteredAndSortedConnections = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
@@ -260,7 +260,10 @@ const syncRemoteResourcePolling = () => {
     return;
   }
   void fetchRemoteResourceStatuses();
-  remoteResourceTimer = setInterval(() => void fetchRemoteResourceStatuses(), REMOTE_RESOURCE_POLL_INTERVAL_MS);
+  remoteResourceTimer = setInterval(
+    () => void fetchRemoteResourceStatuses(),
+    Math.max(1, remoteHostRefreshIntervalSecondsNumber.value) * 1000,
+  );
 };
 
 watch(localSortBy, (value) => localStorage.setItem(LS_SORT_BY_KEY, value));
@@ -272,7 +275,7 @@ watch(
   { immediate: true },
 );
 watch(
-  dashboardShowRemoteResourcesBoolean,
+  [dashboardShowRemoteResourcesBoolean, remoteHostRefreshIntervalSecondsNumber],
   syncRemoteResourcePolling,
   { immediate: true },
 );
@@ -563,7 +566,7 @@ onBeforeUnmount(() => {
               {{ remoteResourceHosts.length }} {{ t('dashboard.resources.remote', '远程主机') }}
             </span>
             <span class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success">
-              {{ t('dashboard.resources.snapshot', '30 秒刷新') }}
+              {{ t('dashboard.resources.snapshot', { seconds: remoteHostRefreshIntervalSecondsNumber }) }}
             </span>
           </div>
         </header>

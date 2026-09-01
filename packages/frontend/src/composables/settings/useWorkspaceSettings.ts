@@ -25,6 +25,7 @@ export function useWorkspaceSettings() {
     statusMonitorShowIpBoolean,
     dashboardShowLocalResourcesBoolean,
     dashboardShowRemoteResourcesBoolean,
+    remoteHostRefreshIntervalSecondsNumber,
   } = storeToRefs(settingsStore);
 
   // --- Popup editor / preview close behavior ---
@@ -416,6 +417,7 @@ export function useWorkspaceSettings() {
   // --- Dashboard resource cards ---
   const dashboardShowLocalResources = ref(true);
   const dashboardShowRemoteResources = ref(true);
+  const remoteHostRefreshIntervalSeconds = ref(30);
   const dashboardResourcesLoading = ref(false);
   const dashboardResourcesMessage = ref('');
   const dashboardResourcesSuccess = ref(false);
@@ -425,9 +427,15 @@ export function useWorkspaceSettings() {
     dashboardResourcesMessage.value = '';
     dashboardResourcesSuccess.value = false;
     try {
+      const refreshInterval = remoteHostRefreshIntervalSeconds.value;
+      if (!Number.isInteger(refreshInterval) || refreshInterval < 1 || refreshInterval > 86400) {
+        dashboardResourcesMessage.value = t('settings.dashboardResources.error.invalidInterval');
+        return;
+      }
       await settingsStore.updateMultipleSettings({
         dashboardShowLocalResources: dashboardShowLocalResources.value ? 'true' : 'false',
         dashboardShowRemoteResources: dashboardShowRemoteResources.value ? 'true' : 'false',
+        remoteHostRefreshIntervalSeconds: String(refreshInterval),
       });
       dashboardResourcesMessage.value = t('common.saved');
       dashboardResourcesSuccess.value = true;
@@ -560,6 +568,13 @@ export function useWorkspaceSettings() {
     },
     { immediate: true },
   );
+  watch(
+    remoteHostRefreshIntervalSecondsNumber,
+    (newValue) => {
+      remoteHostRefreshIntervalSeconds.value = newValue;
+    },
+    { immediate: true },
+  );
 
   return {
     popupEditorEnabled,
@@ -650,6 +665,7 @@ export function useWorkspaceSettings() {
 
     dashboardShowLocalResources,
     dashboardShowRemoteResources,
+    remoteHostRefreshIntervalSeconds,
     dashboardResourcesLoading,
     dashboardResourcesMessage,
     dashboardResourcesSuccess,
