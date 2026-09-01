@@ -551,9 +551,14 @@ onBeforeUnmount(() => {
 
         <aside data-testid="dashboard-recent-activity" class="mt-8 border-t border-border/70 pt-5">
           <header class="flex items-center justify-between gap-3 pb-3">
-            <div>
-              <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
-              <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
+            <div class="flex min-w-0 items-center gap-2.5">
+              <span data-testid="dashboard-recent-activity-icon" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+                <i class="fas fa-clock-rotate-left text-sm"></i>
+              </span>
+              <div class="min-w-0">
+                <h2 class="text-base font-semibold">{{ t('dashboard.recentActivity', '最近活动') }}</h2>
+                <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.recentActivityHint', '最近的审计事件') }}</p>
+              </div>
             </div>
             <span class="text-xs tabular-nums text-text-alt">{{ recentAuditLogs.length }}</span>
           </header>
@@ -608,9 +613,14 @@ onBeforeUnmount(() => {
         class="order-2 min-w-0 xl:border-l xl:border-border/70 xl:pl-7"
       >
         <header class="flex flex-col gap-2 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle', 'SSH 资源') }}</h2>
-            <p class="mt-0.5 text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '活动 SSH 会话的实时资源') }}</p>
+          <div class="flex min-w-0 items-center gap-2.5">
+            <span data-testid="dashboard-ssh-resources-icon" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+              <i class="fas fa-server text-sm"></i>
+            </span>
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">{{ t('dashboard.resources.sshTitle', 'SSH 资源') }}</h2>
+              <p class="mt-0.5 truncate text-xs text-text-secondary">{{ t('dashboard.resources.sshHint', '活动 SSH 会话的实时资源') }}</p>
+            </div>
           </div>
           <div class="flex items-center gap-2 text-[11px]">
             <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary">
