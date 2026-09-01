@@ -232,10 +232,13 @@ test('dashboard filters connections and persists tag and sort preferences across
       const overview = page.getByTestId('dashboard-overview');
       await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
       await expect(page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources')).toHaveCount(0);
-      await expect(page.getByTestId('dashboard-local-cpu-gauge').locator('path').nth(1)).toHaveAttribute('style', /stroke-dashoffset/);
-      await expect(page.getByTestId('dashboard-local-memory-gauge').locator('path').nth(1)).toHaveAttribute('style', /stroke-dashoffset/);
-      await expect(page.getByTestId('dashboard-local-disk-gauge').locator('path').nth(1)).toHaveAttribute('style', /stroke-dashoffset/);
-      await expect(page.locator('[data-testid^="dashboard-resource-gauge-"]')).toHaveCount(9);
+      await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('border-top-width', '0px');
+      await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(page.getByTestId('dashboard-local-cpu-bar')).toHaveAttribute('style', /width:/);
+      await expect(page.getByTestId('dashboard-local-memory-bar')).toHaveAttribute('style', /width:/);
+      await expect(page.getByTestId('dashboard-local-disk-bar')).toHaveAttribute('style', /width:/);
+      await expect(page.locator('[data-testid^="dashboard-resource-bar-"]')).toHaveCount(9);
+      await expect(overview.locator('svg')).toHaveCount(0);
       await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
       await page.setViewportSize({ width: 1440, height: 900 });

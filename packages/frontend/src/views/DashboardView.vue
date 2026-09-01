@@ -115,15 +115,6 @@ const resourcePercent = (value: number | undefined): number => {
   if (!Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(0, Math.round(value!)));
 };
-const resourceStroke = (color: 'primary' | 'success' | 'warning' = 'primary'): string => {
-  if (color === 'success') return 'var(--color-success)';
-  if (color === 'warning') return 'var(--color-warning)';
-  return 'var(--link-active-color)';
-};
-const resourceArcStyle = (value: number | undefined): Record<string, string> => ({
-  strokeDasharray: '100',
-  strokeDashoffset: String(100 - resourcePercent(value)),
-});
 const formatMemory = (value: number | undefined): string => {
   if (!Number.isFinite(value)) return '—';
   if (value! >= 1024) return `${(value! / 1024).toFixed(value! >= 10240 ? 0 : 1)} GB`;
@@ -336,21 +327,21 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="flex min-w-0 flex-wrap items-stretch justify-end gap-3">
-            <div class="grid min-w-[276px] grid-cols-3 divide-x divide-border overflow-hidden rounded-lg border border-border bg-background/40">
-              <div class="px-3 py-2.5">
-                <strong data-testid="dashboard-total-connections" class="block text-lg font-semibold leading-none tabular-nums">{{ connections.length }}</strong>
+          <div class="flex min-w-0 flex-wrap items-center justify-end gap-x-5 gap-y-3">
+            <div data-testid="dashboard-overview-stats" class="flex items-end gap-6 px-1">
+              <div>
+                <strong data-testid="dashboard-total-connections" class="block text-xl font-semibold leading-none tabular-nums">{{ connections.length }}</strong>
                 <div class="mt-1.5 text-[10px] text-text-alt">{{ t('dashboard.totalConnections', '连接总数') }}</div>
               </div>
-              <div class="px-3 py-2.5">
+              <div>
                 <div class="flex items-baseline gap-1 leading-none">
-                  <strong data-testid="dashboard-used-connections" class="text-lg font-semibold tabular-nums">{{ usedConnectionCount }}</strong>
+                  <strong data-testid="dashboard-used-connections" class="text-xl font-semibold tabular-nums">{{ usedConnectionCount }}</strong>
                   <span class="text-[10px] text-text-alt">/ {{ connections.length }}</span>
                 </div>
                 <div class="mt-1.5 text-[10px] text-text-alt">{{ t('dashboard.usedConnections', '已有连接记录') }}</div>
               </div>
-              <div class="px-3 py-2.5">
-                <strong data-testid="dashboard-tag-count" class="block text-lg font-semibold leading-none tabular-nums">{{ tags.length }}</strong>
+              <div>
+                <strong data-testid="dashboard-tag-count" class="block text-xl font-semibold leading-none tabular-nums">{{ tags.length }}</strong>
                 <div class="mt-1.5 text-[10px] text-text-alt">{{ t('dashboard.tagCount', '标签数量') }}</div>
               </div>
             </div>
@@ -358,46 +349,43 @@ onBeforeUnmount(() => {
             <div
               v-if="dashboardShowLocalResourcesBoolean"
               data-testid="dashboard-local-resources"
-              class="min-w-[286px] rounded-lg border border-border bg-background/40 px-3 py-2"
+              class="min-w-[300px] border-l border-border pl-5"
             >
               <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0 truncate text-[11px] font-semibold">{{ t('dashboard.resources.local', 'Nexus 本机') }}</div>
-                <span class="flex items-center gap-1.5 text-[10px] text-text-alt">
+                <div class="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">{{ t('dashboard.resources.local', 'Nexus 本机') }}</div>
+                <span class="flex items-center gap-1.5 text-[9px] text-text-alt">
                   <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
                   {{ t('dashboard.resources.live', '实时') }}
                 </span>
               </div>
 
-              <div v-if="localSystemStatus" class="mt-1 grid grid-cols-3 gap-2">
-                <div class="text-center">
-                  <div class="relative mx-auto h-10 w-[68px]">
-                    <svg data-testid="dashboard-local-cpu-gauge" viewBox="0 0 64 34" class="absolute inset-x-0 top-0 h-9 w-full overflow-visible" aria-hidden="true">
-                      <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" stroke="var(--border-color)" stroke-width="4" stroke-linecap="round" />
-                      <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" :stroke="resourceStroke()" stroke-width="4" stroke-linecap="round" :style="resourceArcStyle(localSystemStatus.cpuPercent)" />
-                    </svg>
-                    <strong class="absolute inset-x-0 bottom-0 text-center text-[11px] leading-none tabular-nums">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</strong>
+              <div v-if="localSystemStatus" class="mt-2 grid grid-cols-3 gap-4">
+                <div>
+                  <div class="flex items-baseline justify-between gap-2">
+                    <span class="text-[9px] font-medium text-text-alt">CPU</span>
+                    <strong class="text-sm font-semibold tabular-nums">{{ resourcePercent(localSystemStatus.cpuPercent) }}%</strong>
                   </div>
-                  <div class="mt-0.5 text-[9px] font-medium text-text-alt">CPU</div>
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                    <div data-testid="dashboard-local-cpu-bar" class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(localSystemStatus.cpuPercent)}%` }"></div>
+                  </div>
                 </div>
-                <div class="text-center" :title="`${formatMemory(localSystemStatus.memUsed)} / ${formatMemory(localSystemStatus.memTotal)}`">
-                  <div class="relative mx-auto h-10 w-[68px]">
-                    <svg data-testid="dashboard-local-memory-gauge" viewBox="0 0 64 34" class="absolute inset-x-0 top-0 h-9 w-full overflow-visible" aria-hidden="true">
-                      <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" stroke="var(--border-color)" stroke-width="4" stroke-linecap="round" />
-                      <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" :stroke="resourceStroke('success')" stroke-width="4" stroke-linecap="round" :style="resourceArcStyle(localSystemStatus.memPercent)" />
-                    </svg>
-                    <strong class="absolute inset-x-0 bottom-0 text-center text-[11px] leading-none tabular-nums">{{ resourcePercent(localSystemStatus.memPercent) }}%</strong>
+                <div :title="`${formatMemory(localSystemStatus.memUsed)} / ${formatMemory(localSystemStatus.memTotal)}`">
+                  <div class="flex items-baseline justify-between gap-2">
+                    <span class="text-[9px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</span>
+                    <strong class="text-sm font-semibold tabular-nums">{{ resourcePercent(localSystemStatus.memPercent) }}%</strong>
                   </div>
-                  <div class="mt-0.5 text-[9px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</div>
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                    <div data-testid="dashboard-local-memory-bar" class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(localSystemStatus.memPercent)}%` }"></div>
+                  </div>
                 </div>
-                <div class="text-center">
-                  <div class="relative mx-auto h-10 w-[68px]">
-                    <svg data-testid="dashboard-local-disk-gauge" viewBox="0 0 64 34" class="absolute inset-x-0 top-0 h-9 w-full overflow-visible" aria-hidden="true">
-                      <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" stroke="var(--border-color)" stroke-width="4" stroke-linecap="round" />
-                      <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" :stroke="resourceStroke('warning')" stroke-width="4" stroke-linecap="round" :style="resourceArcStyle(localSystemStatus.diskPercent)" />
-                    </svg>
-                    <strong class="absolute inset-x-0 bottom-0 text-center text-[11px] leading-none tabular-nums">{{ localSystemStatus.diskPercent === undefined ? '—' : `${resourcePercent(localSystemStatus.diskPercent)}%` }}</strong>
+                <div>
+                  <div class="flex items-baseline justify-between gap-2">
+                    <span class="text-[9px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</span>
+                    <strong class="text-sm font-semibold tabular-nums">{{ localSystemStatus.diskPercent === undefined ? '—' : `${resourcePercent(localSystemStatus.diskPercent)}%` }}</strong>
                   </div>
-                  <div class="mt-0.5 text-[9px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</div>
+                  <div class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-border/80">
+                    <div data-testid="dashboard-local-disk-bar" class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(localSystemStatus.diskPercent)}%` }"></div>
+                  </div>
                 </div>
               </div>
               <div v-else-if="localSystemError" class="py-2 text-[11px] text-error">{{ localSystemError }}</div>
@@ -448,36 +436,34 @@ onBeforeUnmount(() => {
               <span class="rounded border border-border bg-background/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-text-secondary">SSH</span>
             </div>
 
-            <div v-if="remote.status" class="mt-2.5 grid grid-cols-3 gap-2 rounded-lg bg-background/35 px-2 py-2">
-              <div class="text-center">
-                <div class="relative mx-auto h-11 w-[72px]">
-                  <svg :data-testid="`dashboard-resource-gauge-${remote.sessionId}-cpu`" viewBox="0 0 64 34" class="absolute inset-x-0 top-0 h-9 w-full overflow-visible" aria-hidden="true">
-                    <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" stroke="var(--border-color)" stroke-width="4" stroke-linecap="round" />
-                    <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" :stroke="resourceStroke()" stroke-width="4" stroke-linecap="round" :style="resourceArcStyle(remote.status.cpuPercent)" />
-                  </svg>
-                  <strong class="absolute inset-x-0 bottom-0 text-center text-xs leading-none tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong>
+            <div v-if="remote.status" class="mt-3 grid grid-cols-3 gap-4">
+              <div>
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-[10px] font-medium text-text-alt">CPU</span>
+                  <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.cpuPercent) }}%</strong>
                 </div>
-                <div class="mt-0.5 text-[9px] font-medium text-text-alt">CPU</div>
+                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-cpu`" class="h-full rounded-full bg-primary" :style="{ width: `${resourcePercent(remote.status.cpuPercent)}%` }"></div>
+                </div>
               </div>
-              <div class="text-center" :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
-                <div class="relative mx-auto h-11 w-[72px]">
-                  <svg :data-testid="`dashboard-resource-gauge-${remote.sessionId}-memory`" viewBox="0 0 64 34" class="absolute inset-x-0 top-0 h-9 w-full overflow-visible" aria-hidden="true">
-                    <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" stroke="var(--border-color)" stroke-width="4" stroke-linecap="round" />
-                    <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" :stroke="resourceStroke('success')" stroke-width="4" stroke-linecap="round" :style="resourceArcStyle(remote.status.memPercent)" />
-                  </svg>
-                  <strong class="absolute inset-x-0 bottom-0 text-center text-xs leading-none tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong>
+              <div :title="`${formatMemory(remote.status.memUsed)} / ${formatMemory(remote.status.memTotal)}`">
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</span>
+                  <strong class="text-base font-semibold tabular-nums">{{ resourcePercent(remote.status.memPercent) }}%</strong>
                 </div>
-                <div class="mt-0.5 text-[9px] font-medium text-text-alt">{{ t('dashboard.resources.memory', '内存') }}</div>
+                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-memory`" class="h-full rounded-full bg-success" :style="{ width: `${resourcePercent(remote.status.memPercent)}%` }"></div>
+                </div>
+                <div class="mt-1 truncate text-[9px] tabular-nums text-text-alt">{{ formatMemory(remote.status.memUsed) }} / {{ formatMemory(remote.status.memTotal) }}</div>
               </div>
-              <div class="text-center">
-                <div class="relative mx-auto h-11 w-[72px]">
-                  <svg :data-testid="`dashboard-resource-gauge-${remote.sessionId}-disk`" viewBox="0 0 64 34" class="absolute inset-x-0 top-0 h-9 w-full overflow-visible" aria-hidden="true">
-                    <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" stroke="var(--border-color)" stroke-width="4" stroke-linecap="round" />
-                    <path d="M8 30 A24 24 0 0 1 56 30" pathLength="100" fill="none" :stroke="resourceStroke('warning')" stroke-width="4" stroke-linecap="round" :style="resourceArcStyle(remote.status.diskPercent)" />
-                  </svg>
-                  <strong class="absolute inset-x-0 bottom-0 text-center text-xs leading-none tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong>
+              <div>
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-[10px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</span>
+                  <strong class="text-base font-semibold tabular-nums">{{ remote.status.diskPercent === undefined ? '—' : `${resourcePercent(remote.status.diskPercent)}%` }}</strong>
                 </div>
-                <div class="mt-0.5 text-[9px] font-medium text-text-alt">{{ t('dashboard.resources.disk', '根磁盘') }}</div>
+                <div class="mt-2 h-0.5 overflow-hidden rounded-full bg-border/80">
+                  <div :data-testid="`dashboard-resource-bar-${remote.sessionId}-disk`" class="h-full rounded-full bg-warning" :style="{ width: `${resourcePercent(remote.status.diskPercent)}%` }"></div>
+                </div>
               </div>
             </div>
             <div v-else-if="remote.error" class="mt-4 truncate text-xs text-error" :title="remote.error">{{ remote.error }}</div>
