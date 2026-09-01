@@ -7,6 +7,11 @@ export interface ParsedSpreadsheetPage {
   rowHeights: Array<number | null>;
 }
 
+export interface ParsedSpreadsheetMatch {
+  rowIndex: number;
+  columnIndex: number;
+}
+
 export interface ParsedSpreadsheetSheet {
   name: string;
   totalRows: number;
@@ -14,6 +19,7 @@ export interface ParsedSpreadsheetSheet {
   displayedColumns: number;
   columnWidths: Array<number | null>;
   getPage(pageIndex: number, rowsPerPage: number): ParsedSpreadsheetPage;
+  findMatches(query: string, limit?: number): ParsedSpreadsheetMatch[];
 }
 
 const MIN_COLUMN_WIDTH_PX = 48;
@@ -81,6 +87,7 @@ const parseSheet = (
       displayedColumns: 0,
       columnWidths: [],
       getPage: emptyPage,
+      findMatches: () => [],
     };
   }
 
@@ -127,6 +134,25 @@ const parseSheet = (
     };
   };
 
+  const findMatches = (query: string, limit = 10_000): ParsedSpreadsheetMatch[] => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle || totalRows === 0 || displayedColumns === 0 || limit <= 0) return [];
+
+    const matches: ParsedSpreadsheetMatch[] = [];
+    for (let rowIndex = 0; rowIndex < totalRows; rowIndex += 1) {
+      const sourceRow = fullRange.s.r + rowIndex;
+      for (let columnIndex = 0; columnIndex < displayedColumns; columnIndex += 1) {
+        const sourceColumn = fullRange.s.c + columnIndex;
+        const value = formatCell(denseData[sourceRow]?.[sourceColumn]);
+        if (String(value).toLocaleLowerCase().includes(needle)) {
+          matches.push({ rowIndex, columnIndex });
+          if (matches.length >= limit) return matches;
+        }
+      }
+    }
+    return matches;
+  };
+
   return {
     name,
     totalRows,
@@ -134,6 +160,7 @@ const parseSheet = (
     displayedColumns,
     columnWidths,
     getPage,
+    findMatches,
   };
 };
 

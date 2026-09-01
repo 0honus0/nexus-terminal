@@ -4,7 +4,13 @@ import { useI18n } from 'vue-i18n';
 import { renderAsync } from 'docx-preview';
 import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
+import PreviewSearchBar from './PreviewSearchBar.vue';
 import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
+import {
+  activatePreviewSearchMatch,
+  clearPreviewSearchMatches,
+  highlightPreviewSearchMatches,
+} from './previewDomSearch';
 
 const props = withDefaults(defineProps<{
   file: FileListItem;
@@ -23,8 +29,52 @@ const scrollerRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const isRendering = ref(true);
 const renderError = ref('');
+const searchOpen = ref(false);
+const searchQuery = ref('');
+const searchMatches = ref<HTMLElement[]>([]);
+const activeSearchIndex = ref(-1);
 let rendered = false;
 let renderToken = 0;
+
+const focusSearchMatch = (behavior: ScrollBehavior = 'smooth') => {
+  const activeMatch = activatePreviewSearchMatch(searchMatches.value, activeSearchIndex.value);
+  activeMatch?.scrollIntoView({ block: 'center', inline: 'nearest', behavior });
+};
+
+const refreshSearch = (behavior: ScrollBehavior = 'auto') => {
+  searchMatches.value = highlightPreviewSearchMatches(containerRef.value, searchQuery.value);
+  activeSearchIndex.value = searchMatches.value.length > 0 ? 0 : -1;
+  if (activeSearchIndex.value >= 0) void nextTick(() => focusSearchMatch(behavior));
+};
+
+const updateSearchQuery = (value: string) => {
+  searchQuery.value = value;
+  refreshSearch();
+};
+
+const openSearch = () => {
+  searchOpen.value = true;
+};
+
+const closeSearch = () => {
+  searchOpen.value = false;
+  searchQuery.value = '';
+  activeSearchIndex.value = -1;
+  searchMatches.value = [];
+  clearPreviewSearchMatches(containerRef.value);
+};
+
+const nextSearchMatch = () => {
+  if (searchMatches.value.length === 0) return;
+  activeSearchIndex.value = (activeSearchIndex.value + 1) % searchMatches.value.length;
+  focusSearchMatch();
+};
+
+const previousSearchMatch = () => {
+  if (searchMatches.value.length === 0) return;
+  activeSearchIndex.value = (activeSearchIndex.value - 1 + searchMatches.value.length) % searchMatches.value.length;
+  focusSearchMatch();
+};
 
 const renderDocument = async () => {
   if (rendered || !containerRef.value) return;
@@ -43,6 +93,7 @@ const renderDocument = async () => {
       useBase64URL: true,
     });
     if (token === renderToken) rendered = true;
+    if (token === renderToken && searchQuery.value.trim()) refreshSearch();
   } catch (error) {
     console.error('[DocxPreview] Failed to render DOCX', error);
     if (token === renderToken) {
@@ -65,6 +116,9 @@ watch(() => props.buffer, () => {
   renderToken += 1;
   rendered = false;
   renderError.value = '';
+  searchMatches.value = [];
+  activeSearchIndex.value = -1;
+  clearPreviewSearchMatches(containerRef.value);
   if (containerRef.value) containerRef.value.replaceChildren();
   if (props.active) void nextTick(renderDocument);
 });
@@ -77,6 +131,21 @@ watch(() => props.buffer, () => {
     :active="props.active"
     @close="emit('close')"
   >
+    <template #toolbar>
+      <PreviewSearchBar
+        :open="searchOpen"
+        :query="searchQuery"
+        :current="activeSearchIndex >= 0 ? activeSearchIndex + 1 : 0"
+        :total="searchMatches.length"
+        :active="props.active"
+        @open="openSearch"
+        @close="closeSearch"
+        @update:query="updateSearchQuery"
+        @previous="previousSearchMatch"
+        @next="nextSearchMatch"
+      />
+    </template>
+
     <div class="flex h-full min-h-[18rem] flex-col overflow-hidden" data-testid="docx-preview">
       <div
         ref="scrollerRef"
@@ -124,5 +193,17 @@ watch(() => props.buffer, () => {
 
 .docx-preview-host :deep(section.docx) {
   overflow: visible;
+}
+
+.docx-preview-host :deep(mark[data-preview-search-match]) {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-warning) 55%, transparent);
+  color: inherit;
+  padding: 0;
+}
+
+.docx-preview-host :deep(mark[data-preview-search-active]) {
+  background: color-mix(in srgb, var(--color-primary) 52%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--color-primary) 80%, transparent);
 }
 </style>

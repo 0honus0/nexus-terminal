@@ -6,7 +6,13 @@ import type { FileListItem } from '../../types/sftp.types';
 import FilePreviewDialog from './FilePreviewDialog.vue';
 import PdfContinuousPage from './PdfContinuousPage.vue';
 import PdfOutlineItems, { type PdfOutlineItem } from './PdfOutlineItems.vue';
+import PreviewSearchBar from './PreviewSearchBar.vue';
 import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
+
+interface PdfSearchMatch {
+  page: number;
+  occurrence: number;
+}
 
 const props = withDefaults(defineProps<{
   file: FileListItem;
@@ -33,6 +39,12 @@ const desktopOutlineVisible = ref(true);
 const availablePageWidth = ref(220);
 const pageScalePercents = ref<Record<number, number>>({});
 const mainScrollerRef = ref<HTMLElement | null>(null);
+const searchOpen = ref(false);
+const searchQuery = ref('');
+const searchAppliedQuery = ref('');
+const searchBusy = ref(false);
+const searchMatches = ref<PdfSearchMatch[]>([]);
+const activeSearchIndex = ref(-1);
 
 let resizeObserver: ResizeObserver | null = null;
 let desktopOutlineMediaQuery: MediaQueryList | null = null;
@@ -44,6 +56,10 @@ let savedScrollLeft = 0;
 let savedCurrentPage = 1;
 let savedNeedsPageAnchor = false;
 let pendingPageJump: { page: number; behavior: ScrollBehavior } | null = null;
+let searchIndexDocument: PDFDocumentProxy | null = null;
+let searchIndexPromise: Promise<void> | null = null;
+let searchPageTextItems: string[][] = [];
+let searchToken = 0;
 let pinchGesture: {
   startDistance: number;
   startZoom: number;
@@ -68,6 +84,7 @@ const outlineVisible = computed(() => (
   desktopOutlinePersistent.value ? desktopOutlineVisible.value : outlineOpen.value
 ));
 const outlineHidden = computed(() => !outlineVisible.value);
+const activeSearchMatch = computed(() => searchMatches.value[activeSearchIndex.value] ?? null);
 
 const clampPage = (value: number) => Math.min(pageCount.value, Math.max(1, Math.round(value)));
 const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value)));
@@ -169,6 +186,107 @@ const handlePageInput = (event: Event) => {
 
 const previousPage = () => scrollToPage(currentPage.value - 1);
 const nextPage = () => scrollToPage(currentPage.value + 1);
+
+const ensureSearchIndex = async () => {
+  if (searchIndexDocument === props.document && searchPageTextItems.length === pageCount.value) return;
+  if (searchIndexPromise && searchIndexDocument === props.document) {
+    await searchIndexPromise;
+    return;
+  }
+
+  const targetDocument = props.document;
+  searchIndexDocument = targetDocument;
+  searchPageTextItems = Array.from({ length: targetDocument.numPages }, () => []);
+  searchIndexPromise = (async () => {
+    let nextPageIndex = 0;
+    const workerCount = Math.min(4, targetDocument.numPages);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextPageIndex < targetDocument.numPages) {
+        const pageIndex = nextPageIndex;
+        nextPageIndex += 1;
+        const page = await targetDocument.getPage(pageIndex + 1);
+        const textContent = await page.getTextContent();
+        searchPageTextItems[pageIndex] = textContent.items.flatMap((item) => (
+          'str' in item && typeof item.str === 'string' ? [item.str] : []
+        ));
+      }
+    }));
+  })();
+
+  try {
+    await searchIndexPromise;
+  } finally {
+    if (searchIndexDocument === targetDocument) searchIndexPromise = null;
+  }
+};
+
+const activatePdfSearchIndex = (index: number, behavior: ScrollBehavior = 'smooth') => {
+  const count = searchMatches.value.length;
+  if (count === 0) {
+    activeSearchIndex.value = -1;
+    return;
+  }
+  activeSearchIndex.value = ((index % count) + count) % count;
+  scrollToPage(searchMatches.value[activeSearchIndex.value].page, behavior);
+};
+
+const runPdfSearch = async (value: string) => {
+  searchQuery.value = value;
+  const query = value.trim().toLocaleLowerCase();
+  const token = ++searchToken;
+
+  if (!query) {
+    searchBusy.value = false;
+    searchAppliedQuery.value = '';
+    searchMatches.value = [];
+    activeSearchIndex.value = -1;
+    return;
+  }
+
+  searchBusy.value = true;
+  try {
+    await ensureSearchIndex();
+    if (token !== searchToken) return;
+
+    const matches: PdfSearchMatch[] = [];
+    searchPageTextItems.forEach((items, pageIndex) => {
+      let occurrenceOnPage = 0;
+      for (const item of items) {
+        const text = item.toLocaleLowerCase();
+        let offset = text.indexOf(query);
+        while (offset >= 0) {
+          matches.push({ page: pageIndex + 1, occurrence: occurrenceOnPage });
+          occurrenceOnPage += 1;
+          offset = text.indexOf(query, offset + query.length);
+        }
+      }
+    });
+
+    searchAppliedQuery.value = value.trim();
+    searchMatches.value = matches;
+    if (matches.length > 0) activatePdfSearchIndex(0, 'auto');
+    else activeSearchIndex.value = -1;
+  } finally {
+    if (token === searchToken) searchBusy.value = false;
+  }
+};
+
+const openSearch = () => {
+  searchOpen.value = true;
+};
+
+const closeSearch = () => {
+  searchOpen.value = false;
+  searchToken += 1;
+  searchBusy.value = false;
+  searchQuery.value = '';
+  searchAppliedQuery.value = '';
+  searchMatches.value = [];
+  activeSearchIndex.value = -1;
+};
+
+const nextSearchMatch = () => activatePdfSearchIndex(activeSearchIndex.value + 1);
+const previousSearchMatch = () => activatePdfSearchIndex(activeSearchIndex.value - 1);
 
 const syncOutlineLayout = () => {
   const wasDesktop = desktopOutlinePersistent.value;
@@ -360,7 +478,16 @@ watch(() => props.active, (active) => {
 
 watch(() => props.document, () => {
   const preservedPage = clampPage(currentPage.value);
+  searchToken += 1;
+  searchIndexDocument = null;
+  searchIndexPromise = null;
+  searchPageTextItems = [];
+  searchMatches.value = [];
+  activeSearchIndex.value = -1;
+  searchAppliedQuery.value = '';
+  searchBusy.value = false;
   pageScalePercents.value = {};
+  if (searchQuery.value.trim()) void runPdfSearch(searchQuery.value);
   void nextTick(() => {
     updateAvailableWidth();
     window.setTimeout(() => scrollToPage(preservedPage, 'auto'), 80);
@@ -381,6 +508,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  searchToken += 1;
   if (scrollFrame) cancelAnimationFrame(scrollFrame);
   scrollFrame = 0;
   if (restoreFrame) cancelAnimationFrame(restoreFrame);
@@ -401,6 +529,20 @@ onBeforeUnmount(() => {
   >
     <template #toolbar>
       <div class="pdf-toolbar flex items-center gap-1">
+        <PreviewSearchBar
+          :open="searchOpen"
+          :query="searchQuery"
+          :current="activeSearchIndex >= 0 ? activeSearchIndex + 1 : 0"
+          :total="searchMatches.length"
+          :active="props.active"
+          :busy="searchBusy"
+          @open="openSearch"
+          @close="closeSearch"
+          @update:query="runPdfSearch"
+          @previous="previousSearchMatch"
+          @next="nextSearchMatch"
+        />
+        <span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border" />
         <button
           type="button"
           data-testid="pdf-previous-page"
@@ -546,6 +688,8 @@ onBeforeUnmount(() => {
               :fit-width="fitWidth"
               :zoom-percent="zoomPercent"
               :active="props.active"
+              :search-query="searchAppliedQuery"
+              :active-search-occurrence="activeSearchMatch?.page === pageNumber ? activeSearchMatch.occurrence : null"
               @scale="handlePageScale"
             />
           </div>

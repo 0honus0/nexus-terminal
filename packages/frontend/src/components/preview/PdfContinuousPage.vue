@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import { TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
+import {
+  activatePreviewSearchMatch,
+  clearPreviewSearchMatches,
+  highlightPreviewSearchMatches,
+} from './previewDomSearch';
 
 const props = defineProps<{
   document: PDFDocumentProxy;
@@ -9,6 +14,8 @@ const props = defineProps<{
   fitWidth: boolean;
   zoomPercent: number;
   active: boolean;
+  searchQuery?: string;
+  activeSearchOccurrence?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -17,6 +24,7 @@ const emit = defineEmits<{
 
 const rootRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const textLayerRef = ref<HTMLElement | null>(null);
 const baseWidth = ref(0);
 const baseHeight = ref(0);
 const isVisible = ref(false);
@@ -24,6 +32,9 @@ const isRendering = ref(false);
 
 let observer: IntersectionObserver | null = null;
 let renderTask: RenderTask | null = null;
+let textLayer: TextLayer | null = null;
+let textLayerToken = 0;
+let searchMatches: HTMLElement[] = [];
 let metadataToken = 0;
 let renderToken = 0;
 let disposed = false;
@@ -49,10 +60,50 @@ const loadMetrics = async () => {
   page.cleanup();
 };
 
+const focusActiveSearchMatch = (behavior: ScrollBehavior = 'smooth') => {
+  const activeIndex = props.activeSearchOccurrence ?? -1;
+  const match = activatePreviewSearchMatch(searchMatches, activeIndex);
+  if (match && props.active) match.scrollIntoView({ block: 'center', inline: 'nearest', behavior });
+};
+
+const applySearchHighlights = (behavior: ScrollBehavior = 'auto') => {
+  searchMatches = highlightPreviewSearchMatches(textLayerRef.value, props.searchQuery ?? '');
+  if ((props.activeSearchOccurrence ?? -1) >= 0) focusActiveSearchMatch(behavior);
+};
+
+const renderTextLayer = async (
+  page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
+  viewport: ReturnType<Awaited<ReturnType<PDFDocumentProxy['getPage']>>['getViewport']>,
+) => {
+  const container = textLayerRef.value;
+  if (!container || disposed) return;
+  const token = ++textLayerToken;
+  textLayer?.cancel();
+  textLayer = null;
+  searchMatches = [];
+  clearPreviewSearchMatches(container);
+  container.replaceChildren();
+  container.style.setProperty('--total-scale-factor', String(viewport.scale));
+
+  const textContent = await page.getTextContent();
+  if (disposed || token !== textLayerToken || !props.active || !isVisible.value) return;
+
+  const layer = new TextLayer({ textContentSource: textContent, container, viewport });
+  textLayer = layer;
+  await layer.render();
+  if (disposed || token !== textLayerToken) return;
+  applySearchHighlights();
+};
+
 const releaseCanvas = () => {
   renderToken += 1;
+  textLayerToken += 1;
   renderTask?.cancel();
   renderTask = null;
+  textLayer?.cancel();
+  textLayer = null;
+  searchMatches = [];
+  if (textLayerRef.value) textLayerRef.value.replaceChildren();
   isRendering.value = false;
   const canvas = canvasRef.value;
   if (!canvas) return;
@@ -89,9 +140,14 @@ const renderPage = async () => {
     viewport,
     transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
   });
+  const textLayerPromise = renderTextLayer(page, viewport).catch((error: any) => {
+    if (error?.name !== 'AbortException' && !disposed) {
+      console.warn(`[PdfContinuousPage] Failed to render text layer for page ${props.pageNumber}`, error);
+    }
+  });
 
   try {
-    await renderTask.promise;
+    await Promise.all([renderTask.promise, textLayerPromise]);
   } catch (error: any) {
     if (error?.name !== 'RenderingCancelledException' && !disposed) throw error;
   } finally {
@@ -139,11 +195,24 @@ watch(() => props.active, (active) => {
   }
 });
 
+watch(() => props.searchQuery, () => {
+  applySearchHighlights();
+});
+
+watch(() => props.activeSearchOccurrence, () => {
+  focusActiveSearchMatch();
+});
+
 watch(() => props.document, () => {
   metadataToken += 1;
   renderToken += 1;
+  textLayerToken += 1;
   renderTask?.cancel();
   renderTask = null;
+  textLayer?.cancel();
+  textLayer = null;
+  searchMatches = [];
+  if (textLayerRef.value) textLayerRef.value.replaceChildren();
   baseWidth.value = 0;
   baseHeight.value = 0;
   void loadMetrics().then(() => {
@@ -164,10 +233,13 @@ onBeforeUnmount(() => {
   disposed = true;
   metadataToken += 1;
   renderToken += 1;
+  textLayerToken += 1;
   observer?.disconnect();
   observer = null;
   renderTask?.cancel();
   renderTask = null;
+  textLayer?.cancel();
+  textLayer = null;
 });
 </script>
 
@@ -193,7 +265,65 @@ onBeforeUnmount(() => {
       >
         {{ props.pageNumber }}
       </div>
-      <canvas ref="canvasRef" class="relative block bg-white" />
+      <canvas ref="canvasRef" class="relative z-0 block bg-white" />
+      <div ref="textLayerRef" class="pdf-text-layer" />
     </div>
   </section>
 </template>
+
+<style scoped>
+.pdf-text-layer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: clip;
+  color-scheme: only light;
+  text-align: initial;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  transform-origin: 0 0;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+}
+
+.pdf-text-layer :deep(span),
+.pdf-text-layer :deep(br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.pdf-text-layer :deep(> :not(.markedContent)),
+.pdf-text-layer :deep(.markedContent span:not(.markedContent)) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer :deep(.markedContent) {
+  display: contents;
+}
+
+.pdf-text-layer :deep(mark[data-preview-search-match]) {
+  border-radius: 1px;
+  background: rgba(255, 210, 0, 0.48);
+  color: transparent;
+  padding: 0;
+}
+
+.pdf-text-layer :deep(mark[data-preview-search-active]) {
+  background: rgba(99, 102, 241, 0.5);
+  outline: 1px solid rgba(99, 102, 241, 0.85);
+}
+</style>
