@@ -1,0 +1,76 @@
+import { expect, test } from '../../support/fixtures';
+import { loginAsInitialAdmin } from '../../support/auth';
+import {
+  E2E_SSH,
+  configureSshE2eSettings,
+  fileManagerRow,
+  removeNamedSshConnections,
+  resetTestSshFilesystem,
+} from '../../support/ssh';
+import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
+import { step, slowStep } from '../../support/steps';
+
+test('adds, tests, and connects to a real SSH server', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  await removeNamedSshConnections(context.request);
+
+  await step('open add SSH connection form', async () => {
+    await page.goto('/connections');
+    await page.getByTestId('connections-add-button').click();
+    await expect(page.getByRole('heading', { name: 'Add New Connection' })).toBeVisible();
+  });
+
+  await step('fill SSH password connection', async () => {
+    await page.locator('#conn-name').fill(E2E_SSH.name);
+    await page.locator('#conn-host').fill(E2E_SSH.host);
+    await page.locator('#conn-port').fill(String(E2E_SSH.port));
+    await page.locator('#conn-username').fill(E2E_SSH.username);
+    await page.locator('#conn-password').fill(E2E_SSH.password);
+  });
+
+  await step('test unsaved SSH connection against real server', async () => {
+    const responsePromise = page.waitForResponse((response) =>
+      response.url().includes('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
+    );
+    await page.getByTestId('connection-test-button').click();
+    const response = await responsePromise;
+    expect(response.ok()).toBeTruthy();
+    await expect(response.json()).resolves.toMatchObject({ success: true });
+  });
+
+  await step('save SSH connection', async () => {
+    const createPromise = page.waitForResponse((response) =>
+      response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+    );
+    await page.getByTestId('connection-submit-button').click();
+    const response = await createPromise;
+    expect(response.status()).toBe(201);
+    await expect(page.getByText(E2E_SSH.name, { exact: true }).first()).toBeVisible();
+  });
+
+  await slowStep('open real SSH session and SFTP file manager', async () => {
+    const row = page.getByText(E2E_SSH.name, { exact: true }).first().locator('xpath=ancestor::li');
+    await row.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(page).toHaveURL(/\/workspace$/);
+
+    if (functionalScreenshotsEnabled()) {
+      const terminal = page.getByTestId('terminal');
+      const commandInput = page.getByTestId('command-input');
+      await expect(terminal).toBeVisible({ timeout: 20_000 });
+      await commandInput.fill('clear');
+      await commandInput.press('Enter');
+      await commandInput.fill("printf 'Nexus Terminal documentation screenshot\\n'");
+      await commandInput.press('Enter');
+      await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+        .toContain('Nexus Terminal documentation screenshot');
+      await captureFunctionalScreenshot(page, 'ssh-terminal.png', { viewport: { width: 1440, height: 900 } });
+    }
+
+    const fileManagerButton = page.getByTestId('open-file-manager-button');
+    await expect(fileManagerButton).toBeVisible({ timeout: 20_000 });
+    await fileManagerButton.click();
+    await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
+  });
+});

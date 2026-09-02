@@ -1,0 +1,47 @@
+{
+  "name": "nexus-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "./build.sh local all",
+    "build:backend": "./build.sh local backend",
+    "build:frontend": "./build.sh local frontend",
+    "build:remote-gateway": "./build.sh local remote-gateway",
+    "docker:build": "./build.sh docker",
+    "docker:save": "./build.sh docker-save",
+    "test:e2e:env:latest": "node scripts/e2e/update-latest-test-environment.mjs",
+    "test:e2e:env:sync": "node scripts/e2e/sync-test-environment.mjs",
+    "test:e2e:runner:build": "bash scripts/e2e/build-runner-image.sh",
+    "test:e2e:seed": "npm --prefix test/e2e run seed:refresh",
+    "test:e2e:groups:generate": "npm --prefix test/e2e run groups:generate --",
+    "test:e2e:groups:check": "npm --prefix test/e2e run groups:check --",
+    "test:e2e:groups:matrix": "npm --prefix test/e2e run groups:matrix --",
+    "test:e2e:group": "npm --prefix test/e2e run groups:run --",
+    "test:e2e:groups:update-timings": "npm --prefix test/e2e run groups:update-timings --",
+    "test:e2e": "npm --prefix test/e2e test",
+    "test:e2e:auth": "npm --prefix test/e2e run test:auth",
+    "test:e2e:http": "npm --prefix test/e2e run test:http",
+    "test:e2e:websocket": "npm --prefix test/e2e run test:websocket",
+    "test:e2e:ui": "npm --prefix test/e2e run test:ui",
+    "test:e2e:ssh": "npm --prefix test/e2e run test:ssh",
+    "test:e2e:mobile": "npm --prefix test/e2e run test:mobile",
+    "test:e2e:list": "npm --prefix test/e2e run test:list",
+    "format": "prettier --write \"packages/**/*.{ts,tsx,js,json,css,md}\"",
+    "format:check": "prettier --check \"packages/**/*.{ts,tsx,js,json,css,md}\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0honus0/nexus-terminal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/0honus0/nexus-terminal/issues"
+  },
+  "homepage": "https://github.com/0honus0/nexus-terminal#readme",
+  "description": "Unified build entry points for Nexus Terminal",
+  "devDependencies": {
+    "prettier": "^3.9.6"
+  }
+}

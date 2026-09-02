@@ -1,0 +1,96 @@
+x-nexus-service: &nexus-service
+  image: ${NEXUS_IMAGE_REPOSITORY:-ghcr.io/0honus0/nexus-terminal}:${NEXUS_IMAGE_TAG:-latest}
+  restart: unless-stopped
+  networks:
+    - nexus-terminal-network
+
+services:
+  frontend:
+    <<: *nexus-service
+    command: ["frontend"]
+    container_name: nexus-terminal-frontend
+    ports:
+      - "${NEXUS_HTTP_PORT:-18111}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      remote-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    <<: *nexus-service
+    command: ["backend"]
+    container_name: nexus-terminal-backend
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: ${BACKEND_PORT:-3001}
+      APP_NAME: ${APP_NAME:-Nexus Terminal}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-docker}
+      REMOTE_GATEWAY_API_BASE_LOCAL: ${REMOTE_GATEWAY_API_BASE_LOCAL:-http://localhost:9090}
+      REMOTE_GATEWAY_API_BASE_DOCKER: ${REMOTE_GATEWAY_API_BASE_DOCKER:-http://remote-gateway:9090}
+      REMOTE_GATEWAY_WS_URL_LOCAL: ${REMOTE_GATEWAY_WS_URL_LOCAL:-ws://localhost:8080}
+      REMOTE_GATEWAY_WS_URL_DOCKER: ${REMOTE_GATEWAY_WS_URL_DOCKER:-ws://remote-gateway:8080}
+      GUACD_HOST: ${GUACD_HOST:-guacd}
+      GUACD_PORT: ${GUACD_PORT:-4822}
+      RP_ID: ${RP_ID:-}
+      RP_ORIGIN: ${RP_ORIGIN:-}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${PORT:-3001}/api/v1/status"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  remote-gateway:
+    <<: *nexus-service
+    command: ["remote-gateway"]
+    container_name: nexus-terminal-remote-gateway
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      GUACD_HOST: ${GUACD_HOST:-guacd}
+      GUACD_PORT: ${GUACD_PORT:-4822}
+      REMOTE_GATEWAY_API_PORT: ${REMOTE_GATEWAY_API_PORT:-9090}
+      REMOTE_GATEWAY_API_HOST: 0.0.0.0
+      REMOTE_GATEWAY_WS_PORT: ${REMOTE_GATEWAY_WS_PORT:-8080}
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      guacd:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 $${REMOTE_GATEWAY_API_PORT:-9090} && nc -z 127.0.0.1 $${REMOTE_GATEWAY_WS_PORT:-8080}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  guacd:
+    image: ${GUACD_IMAGE:-guacamole/guacd:latest}
+    container_name: nexus-terminal-guacd
+    restart: unless-stopped
+    networks:
+      - nexus-terminal-network
+
+networks:
+  nexus-terminal-network:
+    driver: bridge
+    name: nexus-terminal-network
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${NEXUS_IPV6_SUBNET:-fd01::/80}
+          gateway: ${NEXUS_IPV6_GATEWAY:-fd01::1}

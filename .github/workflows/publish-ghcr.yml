@@ -1,0 +1,163 @@
+name: Publish container image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Image architecture to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - arm
+          - amd
+          - all
+      image_tag:
+        description: Optional image tag (defaults to sha-<commit>)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-ghcr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare publication
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.image_tag.outputs.value }}
+      architecture: ${{ steps.architecture.outputs.value }}
+      platforms: ${{ steps.architecture.outputs.platforms }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Select image tag
+        id: image_tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ -n "$RELEASE_TAG" ]]; then
+            image_tag="$RELEASE_TAG"
+          elif [[ -n "$REQUESTED_TAG" ]]; then
+            image_tag="$REQUESTED_TAG"
+          else
+            image_tag="sha-${GITHUB_SHA::12}"
+          fi
+
+          if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid Docker image tag: $image_tag" >&2
+            exit 1
+          fi
+          echo "value=$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Select image architecture
+        id: architecture
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_ARCHITECTURE: ${{ inputs.architecture }}
+        run: |
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            architecture="all"
+          else
+            architecture="${REQUESTED_ARCHITECTURE:-all}"
+          fi
+
+          case "$architecture" in
+            arm)
+              platforms="linux/arm64"
+              ;;
+            amd)
+              platforms="linux/amd64"
+              ;;
+            all)
+              platforms="linux/amd64,linux/arm64"
+              ;;
+            *)
+              echo "Unsupported architecture: $architecture" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "value=$architecture" >> "$GITHUB_OUTPUT"
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release versions
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          release_version="${RELEASE_TAG#v}"
+          manifests=(
+            package.json
+            packages/backend/package.json
+            packages/frontend/package.json
+            packages/remote-gateway/package.json
+          )
+
+          for manifest in "${manifests[@]}"; do
+            manifest_version="$(node -p "require('./$manifest').version")"
+            if [[ "$manifest_version" != "$release_version" ]]; then
+              echo "$manifest version $manifest_version does not match release $RELEASE_TAG" >&2
+              exit 1
+            fi
+          done
+
+  publish:
+    name: Publish unified image (${{ needs.prepare.outputs.architecture }})
+    needs: prepare
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set image name
+        id: image
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner}/nexus-terminal" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: needs.prepare.outputs.architecture != 'amd'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: ${{ needs.prepare.outputs.platforms }}
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.image_tag }}
+          cache-from: type=gha,scope=unified-image
+          cache-to: type=gha,mode=max,scope=unified-image

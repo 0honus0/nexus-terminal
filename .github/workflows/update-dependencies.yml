@@ -1,0 +1,260 @@
+name: Update dependencies
+
+on:
+  schedule:
+    # Every Monday at 02:23 UTC.
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nexus-dependency-updates
+  cancel-in-progress: false
+
+env:
+  UPDATE_BRANCH: chore/dependency-updates
+
+jobs:
+  update:
+    name: Update frontend, backend and remote gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: |
+            packages/frontend/package-lock.json
+            packages/backend/package-lock.json
+            packages/remote-gateway/package-lock.json
+            test/e2e/package-lock.json
+
+      - name: Create update branch
+        shell: bash
+        run: git checkout -B "$UPDATE_BRANCH"
+
+      - name: Update frontend dependencies
+        run: npm --prefix packages/frontend update --save
+
+      - name: Keep DOMPurify override aligned
+        shell: bash
+        run: |
+          version="$(node -p "require('./packages/frontend/package.json').dependencies.dompurify")"
+          npm --prefix packages/frontend pkg set "overrides.dompurify=$version"
+          npm --prefix packages/frontend install --package-lock-only
+
+      - name: Update backend dependencies
+        run: npm --prefix packages/backend update --save
+
+      - name: Update remote gateway dependencies
+        run: npm --prefix packages/remote-gateway update --save
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- \
+            packages/frontend/package.json packages/frontend/package-lock.json \
+            packages/backend/package.json packages/backend/package-lock.json \
+            packages/remote-gateway/package.json packages/remote-gateway/package-lock.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dependency updates are available." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Dependency updates"
+              echo
+              echo '```text'
+              git diff --stat -- \
+                packages/frontend/package.json packages/frontend/package-lock.json \
+                packages/backend/package.json packages/backend/package-lock.json \
+                packages/remote-gateway/package.json packages/remote-gateway/package-lock.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build frontend
+        if: steps.changes.outputs.changed == 'true'
+        run: npm --prefix packages/frontend run build
+
+      - name: Build backend
+        if: steps.changes.outputs.changed == 'true'
+        run: npm --prefix packages/backend run build
+
+      - name: Build remote gateway
+        if: steps.changes.outputs.changed == 'true'
+        run: npm --prefix packages/remote-gateway run build
+
+      - name: Audit dependencies
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          npm --prefix packages/frontend audit --audit-level=high
+          npm --prefix packages/backend audit --audit-level=high
+          npm --prefix packages/remote-gateway audit --audit-level=high
+
+      - name: Install E2E dependencies
+        if: steps.changes.outputs.changed == 'true'
+        run: npm ci --prefix test/e2e
+
+      - name: Run production ingress WebAuthn E2E
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          NODE_ENV: test
+          PORT: "3001"
+          NEXUS_DATA_DIR: ${{ runner.temp }}/nexus-terminal-ingress-data
+          SESSION_COOKIE_NAME: nexus.ingress.sid
+          SESSION_SECRET: ingress-session-secret-do-not-use-outside-tests-0000000000000000000000
+          ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          REMOTE_GATEWAY_SHARED_SECRET: ingress-remote-gateway-shared-secret-do-not-use-outside-tests
+          RP_ID: ssh.honus.top
+          RP_ORIGIN: https://ssh.honus.top,https://ssh.trui.de
+        run: |
+          set -euo pipefail
+
+          backend_log="$RUNNER_TEMP/nexus-terminal-ingress-backend.log"
+          ingress_container="nexus-terminal-ingress-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          node packages/backend/dist/index.js >"$backend_log" 2>&1 &
+          backend_pid=$!
+
+          cleanup() {
+            docker rm -f "$ingress_container" >/dev/null 2>&1 || true
+            kill "$backend_pid" >/dev/null 2>&1 || true
+            wait "$backend_pid" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          backend_ready=0
+          for _ in {1..60}; do
+            if curl -fsS http://127.0.0.1:3001/api/v1/status >/dev/null; then
+              backend_ready=1
+              break
+            fi
+            if ! kill -0 "$backend_pid" >/dev/null 2>&1; then
+              cat "$backend_log"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [[ "$backend_ready" -ne 1 ]]; then
+            cat "$backend_log"
+            exit 1
+          fi
+
+          docker run -d \
+            --name "$ingress_container" \
+            --add-host backend:host-gateway \
+            -p 127.0.0.1:18112:80 \
+            -v "$PWD/packages/frontend/dist:/usr/share/nginx/html:ro" \
+            -v "$PWD/packages/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            nginx:alpine >/dev/null
+
+          ingress_ready=0
+          for _ in {1..60}; do
+            if curl -fsS -H 'Host: ssh.honus.top' http://127.0.0.1:18112/.well-known/webauthn >/dev/null; then
+              ingress_ready=1
+              break
+            fi
+            if [[ "$(docker inspect -f '{{.State.Running}}' "$ingress_container" 2>/dev/null || true)" != "true" ]]; then
+              docker logs "$ingress_container" || true
+              cat "$backend_log"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [[ "$ingress_ready" -ne 1 ]]; then
+            docker logs "$ingress_container" || true
+            cat "$backend_log"
+            exit 1
+          fi
+
+          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix test/e2e run test:ingress; then
+            docker logs "$ingress_container" || true
+            cat "$backend_log"
+            exit 1
+          fi
+
+      - name: Install Chromium and system dependencies
+        if: steps.changes.outputs.changed == 'true'
+        working-directory: test/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Install remote archive command dependencies
+        if: steps.changes.outputs.changed == 'true'
+        run: sudo apt-get update && sudo apt-get install -y zip unzip bzip2
+
+      - name: Run HTTP, WebSocket, UI, SSH, SFTP, and Mobile E2E
+        if: steps.changes.outputs.changed == 'true'
+        run: npm run test:e2e
+
+      - name: Upload dependency update E2E logs
+        if: always() && steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-update-e2e-logs
+          path: test/e2e/logs/
+          if-no-files-found: ignore
+
+      - name: Upload dependency update Playwright report
+        if: failure() && steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-update-playwright-report
+          path: |
+            test/e2e/playwright-report/
+            test/e2e/test-results/
+          if-no-files-found: ignore
+
+      - name: Commit and push update branch
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            packages/frontend/package.json packages/frontend/package-lock.json \
+            packages/backend/package.json packages/backend/package-lock.json \
+            packages/remote-gateway/package.json packages/remote-gateway/package-lock.json
+          git commit -m "chore(deps): update Nexus dependencies"
+          git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+
+      - name: Create dependency update pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          existing_pr="$(gh pr list \
+            --base "$BASE_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [[ -n "$existing_pr" ]]; then
+            echo "Updated existing dependency PR #$existing_pr." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          gh pr create \
+            --base "$BASE_BRANCH" \
+            --head "$UPDATE_BRANCH" \
+            --title "chore(deps): update Nexus dependencies" \
+            --body $'Automated dependency refresh for the three Nexus packages:\n\n- `packages/frontend`\n- `packages/backend`\n- `packages/remote-gateway`\n\nBefore this PR is created or updated, the workflow builds all three packages, runs `npm audit --audit-level=high`, and passes the full Nexus E2E suite. Major-version upgrades are intentionally excluded.'
