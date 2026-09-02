@@ -191,9 +191,6 @@ test('dashboard filters connections and persists tag and sort preferences across
     expect(systemStatus.diskPercent).toBeLessThanOrEqual(100);
   }
 
-  // Prime the SSH resource cache before adding this test's hosts. The dashboard
-  // must still see newly configured hosts immediately instead of waiting for the
-  // 30-second snapshot TTL to expire.
   const primedSshResourcesResponse = await context.request.get('/api/v1/system/ssh-resources');
   expect(primedSshResourcesResponse.ok()).toBeTruthy();
 
@@ -345,6 +342,8 @@ test('dashboard filters connections and persists tag and sort preferences across
       expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
       expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
       expect(Math.abs((connectionListBox?.y ?? 0) - (resourceListBox?.y ?? 0))).toBeLessThanOrEqual(2);
+      expect(connectionListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
+      expect(resourceListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
       expect(Math.abs((connectionListBox?.height ?? 0) - (resourceListBox?.height ?? 0))).toBeLessThanOrEqual(2);
       expect(Math.abs((recentActivityBox?.x ?? 0) - (workspaceBox?.x ?? 0))).toBeLessThanOrEqual(2);
       expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);

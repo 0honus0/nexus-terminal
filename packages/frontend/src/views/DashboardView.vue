@@ -418,7 +418,7 @@ onBeforeUnmount(() => {
 
           <div
             data-testid="dashboard-connection-list"
-            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner"
+            class="h-[clamp(300px,42vh,440px)] xl:h-[clamp(360px,50vh,520px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner"
             style="scrollbar-gutter: stable;"
           >
             <div
@@ -578,7 +578,7 @@ onBeforeUnmount(() => {
 
         <div
           data-testid="dashboard-ssh-resource-list"
-          class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner"
+          class="h-[clamp(300px,42vh,440px)] xl:h-[clamp(360px,50vh,520px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner"
           style="scrollbar-gutter: stable;"
         >
 
