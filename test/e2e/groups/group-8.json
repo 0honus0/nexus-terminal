@@ -3,12 +3,12 @@
   "group": 8,
   "workers": 8,
   "specs": [
-    "tests/ssh/file-manager-menu-readiness.spec.ts",
-    "tests/ssh/file-manager-navigation.spec.ts",
-    "tests/ssh/panel-wheel-scaling.spec.ts",
-    "tests/ssh/terminal-protocol.spec.ts",
-    "tests/ssh/terminal-tools-ui.spec.ts",
-    "tests/ssh/terminal-ui.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts"
+    "tests/mobile/dashboard-mobile.spec.ts",
+    "tests/mobile/ssh-workspace.spec.ts",
+    "tests/mobile/suspend-resume-ui.spec.ts",
+    "tests/mobile/terminal-touch.spec.ts",
+    "tests/mobile/touch-advanced.spec.ts",
+    "tests/mobile/touch-workflows.spec.ts",
+    "tests/ssh/file-manager-navigation.spec.ts"
   ]
 }

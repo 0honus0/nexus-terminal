@@ -10,7 +10,7 @@ import {
   waitForSftpReady,
 } from '../../support/ws';
 
-test('a marked live SSH session survives WebSocket disconnect and resumes transactionally', async ({ request }) => {
+test('a marked live SSH session survives WebSocket disconnect and resumes the same shell', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);

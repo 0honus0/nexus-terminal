@@ -315,7 +315,7 @@ The guard checks the dependency graph, including layer edges, source cycles, mod
 
 ## Verification and testing
 
-Architecture verification and user-facing E2E are intentionally separate. The concrete verification commands and E2E policy are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#verification-commands) and [E2E](../testing/E2E.md).
+Architecture verification and user-facing E2E are intentionally separate. The concrete verification commands and E2E policy are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#verification-commands) and [E2E](../testing/E2E.md). The repository does not maintain a second lower-level automated test suite.
 
 ## Placement guide
 

@@ -101,25 +101,27 @@ Constraints:
 - Permanent WebSocket transport concerns such as upgrade/auth/heartbeat and transparent remote-desktop forwarding stay outside the compatibility directory.
 - When the frontend moves to the clean contracts, each `legacy-api/` directory is deleted as a whole. The migration must not require changes to Module or Platform APIs merely to remove these adapters.
 
-## E2E and regression testing
+## E2E testing
 
-1. **New E2E cases may only test behavior that a real user can reach through the product's real HTTP API, WebSocket protocol, browser UI, or production ingress.** Do not add Playwright E2E that imports/instantiates internal services, repositories, adapters, registries, or other implementation classes.
-2. Internal architecture/invariant coverage belongs in TypeScript checks, the architecture guard, or focused lower-level regression tests—not user E2E.
-3. Complete browser E2E evidence must run in the repository GitHub Actions environment with the pinned Node/Playwright runner. A local host without the required browser/runtime dependencies is not canonical full-E2E evidence.
-4. Every E2E spec must be independently runnable from its declared baseline; no spec/project may require another spec/project to have run first.
-5. Normal specs start from the committed deterministic seed. First-run setup coverage is the explicit empty-database exception.
-6. A `*.spec.ts` file is the smallest scheduling unit. CI grouping may move whole specs but must not split individual tests from one spec across groups.
-7. Product/test directory structure and execution grouping are separate. Test files stay organized by product behavior; group configuration owns load balancing.
-8. `test.describe.serial(...)` is allowed only for deliberate state sharing inside one spec. No serial dependency may cross a spec boundary.
-9. Test cleanup is not the isolation guarantee. The reset baseline must make the next spec correct even when a previous spec fails before cleanup.
-10. Every shared E2E surface that can leak state must be reset, including database state, file-backed sessions, SSH/SFTP fixtures, SSH online/offline state, artificial delays/hold flags, and future shared test-server controls.
-11. The committed seed is refreshed through the repository seed command and must not be hand-edited. It may contain deterministic test-only credentials/baseline data but not production secrets, user data, runtime sessions, or machine-specific state.
-12. Every main E2E spec must be assigned to exactly one execution group. Missing specs, duplicate assignments, and stale paths are invalid.
-13. Group generation must be deterministic for identical spec inputs and timing history.
-14. Timing noise must not cause constant group reshuffling. Rebalancing uses stabilized historical timings and keeps existing placement when improvement is insignificant.
-15. Rebalancing changes scheduling only; it must not change test semantics, seed mode, test data, prerequisites, or behavior inside a spec.
-16. Docker deployment smoke validates production-style packaging/ingress separately from the main grouped browser suite; it is not a substitute for user-facing functional E2E.
-17. Documentation screenshots reuse real user E2E scenarios instead of creating a parallel screenshot-only implementation-test suite.
+1. **The repository keeps automated test cases only as E2E under `test/e2e`.** Do not add or retain unit, component, backend-internal, adapter, repository, service, migration, or other non-E2E test suites/spec files, test-framework dependencies, CI test jobs, or orphan test helpers outside the E2E system.
+2. **E2E cases may only assert behavior that a real user can reach through the product's real HTTP API, WebSocket protocol, browser UI, or production ingress, or the success/failure of a real external integration invoked by those product surfaces.** Do not import/instantiate internal services, repositories, adapters, registries, migrations, or implementation classes.
+3. Test-only fixture/control endpoints may prepare deterministic data, availability, latency, disconnects, or other fault conditions. They are setup/fault-injection tools only: final assertions must use product HTTP/WebSocket/UI/ingress behavior. Fake downstream services may validate received requests and return success/failure, but E2E must not query their internal logs, command traces, file state, counters, or captured requests as the assertion surface. Browser network interception may delay or fault a real product request, but must not fabricate a successful product business response in place of the Backend.
+4. Internal architecture/invariants are verified by TypeScript/build checks and the architecture guard, not by a separate automated test suite.
+5. Complete browser E2E evidence must run in the repository GitHub Actions environment with the pinned Node/Playwright runner. A local host without the required browser/runtime dependencies is not canonical full-E2E evidence.
+6. Every E2E test case must be independently runnable from its declared database baseline; no case, spec, project, or CI group may require another test case to have run first.
+7. Normal specs start from the committed deterministic seed. First-run setup coverage is the explicit empty-database exception.
+8. A `*.spec.ts` file is the smallest scheduling unit. CI grouping may move whole specs but must not split individual tests from one spec across groups.
+9. Product/test directory structure and execution grouping are separate. Test files stay organized by product behavior; group configuration owns load balancing.
+10. Do not use `test.describe.serial(...)` to preserve product/database state between cases. Persistent product state is reset before every test case; ordering must never be a prerequisite for correctness.
+11. Test cleanup is not the isolation guarantee. The reset baseline must make the next spec correct even when a previous spec fails before cleanup.
+12. Every shared E2E surface that can leak state must be reset, including database state, file-backed sessions, SSH/SFTP fixtures, SSH online/offline state, artificial delays/hold flags, and future shared test-server controls.
+13. The committed seed is refreshed through the repository seed command and must not be hand-edited. It may contain deterministic test-only credentials/baseline data but not production secrets, user data, runtime sessions, or machine-specific state.
+14. Every main E2E spec must be assigned to exactly one execution group. Missing specs, duplicate assignments, and stale paths are invalid.
+15. Group generation must be deterministic for identical spec inputs and timing history.
+16. Timing noise must not cause constant group reshuffling. Rebalancing uses stabilized historical timings and keeps existing placement when improvement is insignificant.
+17. Rebalancing changes scheduling only; it must not change test semantics, seed mode, test data, prerequisites, or behavior inside a spec.
+18. Docker deployment smoke validates production-style packaging/ingress separately from the main grouped browser suite; it is not a substitute for user-facing functional E2E.
+19. Documentation screenshots reuse real user E2E scenarios instead of creating a parallel screenshot-only implementation-test suite.
 
 ## Documentation constraints
 
@@ -135,6 +137,7 @@ The normal pre-commit verification set for architecture-affecting changes is:
 ```bash
 npm run format
 npm run format:check
+npm run check:test-policy
 npm run build:backend
 npm run build:frontend
 npm run build:remote-gateway

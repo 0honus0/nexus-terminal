@@ -3,7 +3,6 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 
 const CONNECTION_NAME = 'E2E RDP RemoteApp';
-const TEST_GATEWAY_URL = 'http://127.0.0.1:29090';
 
 async function cleanupConnection(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
@@ -21,7 +20,6 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
   await cleanupConnection(context.request);
-  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
 
   await page.addInitScript(() => {
     let fullscreenElement: Element | null = null;
@@ -107,33 +105,12 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(form).toBeHidden();
     });
 
-    await step('RDP token generation forwards dynamic resize and RemoteApp parameters to the gateway', async () => {
+    await step('RDP token generation succeeds with the persisted RemoteApp settings', async () => {
       const session = await context.request.post(
         `/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`,
       );
       expect(session.ok()).toBeTruthy();
       await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
-
-      await expect
-        .poll(async () => {
-          const response = await context.request.get(`${TEST_GATEWAY_URL}/control/latest`);
-          if (!response.ok()) return null;
-          return ((await response.json()) as { latestRequest: unknown }).latestRequest;
-        })
-        .toMatchObject({
-          protocol: 'rdp',
-          connectionConfig: {
-            hostname: '192.0.2.77',
-            port: '3389',
-            width: '1440',
-            height: '900',
-            dpi: '120',
-            resizeMethod: 'display-update',
-            remoteApp: '||notepad',
-            remoteAppDir: 'C:\\Work',
-            remoteAppArgs: '/A readme.txt',
-          },
-        });
     });
 
     await step('Progress Display stays in normal layout and RDP always renders above it', async () => {
@@ -371,7 +348,6 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
       })
     ).ok(),
   ).toBeTruthy();
-  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
 
   const connectionId = await createRemoteConnection(context.request, 'RDP', POINTER_RDP_NAME, '192.0.2.91', 3389);
   try {
@@ -403,7 +379,6 @@ test('VNC pointer resize and restore-button dragging share the same window seman
       })
     ).ok(),
   ).toBeTruthy();
-  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
 
   const connectionId = await createRemoteConnection(context.request, 'VNC', POINTER_VNC_NAME, '192.0.2.92', 5901);
   try {

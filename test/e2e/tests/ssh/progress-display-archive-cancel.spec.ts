@@ -1,11 +1,8 @@
 import { expect, test } from '../../support/fixtures';
 import { E2E_SSH } from '../../support/ssh';
-import { menu, openFileManager, remoteFileExists, rightClickRow } from './progress-display.helpers';
+import { menu, openFileManager, refreshFileManager, rightClickRow, row } from './progress-display.helpers';
 
-test('archive cancellation remains authoritative while command preflight is stalled beyond the old marker TTL', async ({
-  page,
-  context,
-}) => {
+test('archive remains cancelled while remote command preparation is stalled', async ({ page, context }) => {
   test.setTimeout(75_000);
   await openFileManager(page, context);
   await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
@@ -30,11 +27,8 @@ test('archive cancellation remains authoritative while command preflight is stal
     await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);
 
-    expect(await remoteFileExists('archive-source.zip')).toBe(false);
-    const commandsResponse = await fetch(`${E2E_SSH.controlUrl}/commands`);
-    expect(commandsResponse.ok).toBeTruthy();
-    const commandsBody = (await commandsResponse.json()) as { commands: string[] };
-    expect(commandsBody.commands.some((command) => command.includes('__NEXUS_ARCHIVE_TOTAL__:'))).toBe(false);
+    await refreshFileManager(page);
+    await expect(row(page, 'archive-source.zip')).toHaveCount(0);
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
   }

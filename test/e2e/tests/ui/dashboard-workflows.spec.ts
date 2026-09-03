@@ -112,8 +112,9 @@ test('SSH resource loading state fills the scroll panel without a darker partial
 
   await page.route('**/api/v1/system/ssh-resources', async (route) => {
     markRemoteRequestStarted?.();
+    const backendResponse = await route.fetch();
     await remoteResourcesReleased;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await route.fulfill({ response: backendResponse });
   });
 
   try {
@@ -236,9 +237,6 @@ test('dashboard filters connections and persists tag and sort preferences across
       await filter.selectOption(String(alphaTagId));
       await expect(alphaRow).toBeVisible();
       await expect(betaRow).toBeHidden();
-      await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('dashboard_connections_filter_tag')))
-        .toBe(String(alphaTagId));
 
       await page.reload();
       const reloadedDashboard = page.getByTestId('dashboard-view');
@@ -252,15 +250,6 @@ test('dashboard filters connections and persists tag and sort preferences across
       await reloadedDashboard.getByTestId('dashboard-tag-filter').selectOption({ index: 0 });
       await reloadedDashboard.getByTestId('dashboard-sort-by').selectOption('name');
       await reloadedDashboard.getByTestId('dashboard-sort-order').click();
-
-      await expect
-        .poll(() =>
-          page.evaluate(() => ({
-            sortBy: localStorage.getItem('dashboard_connections_sort_by'),
-            sortOrder: localStorage.getItem('dashboard_connections_sort_order'),
-          })),
-        )
-        .toEqual({ sortBy: 'name', sortOrder: 'asc' });
 
       await page.reload();
       const finalDashboard = page.getByTestId('dashboard-view');
@@ -280,145 +269,116 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(finalDashboard.getByTestId(`dashboard-connect-${betaId}`)).toBeVisible();
     });
 
-    await step(
-      'dashboard collects configured SSH resources without a terminal and deduplicates repeated sessions',
-      async () => {
-        const remoteCards = page.locator('[data-testid^="dashboard-remote-resource-"]');
-        const e2eHostCard = remoteCards.filter({ hasText: `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}` });
+    await step('dashboard renders configured SSH resources and keeps the resource layout stable', async () => {
+      const remoteCards = page.locator('[data-testid^="dashboard-remote-resource-"]');
+      const e2eHostCard = remoteCards.filter({ hasText: `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}` });
 
-        await expect(remoteCards).toHaveCount(3, { timeout: 20_000 });
-        await expect(e2eHostCard).toHaveCount(1);
-        await expect(e2eHostCard).toContainText('CPU', { timeout: 20_000 });
+      await expect(remoteCards).toHaveCount(3, { timeout: 20_000 });
+      await expect(e2eHostCard).toHaveCount(1);
+      await expect(e2eHostCard).toContainText('CPU', { timeout: 20_000 });
 
-        for (let index = 0; index < 3; index += 1) {
-          await page.evaluate(async (targetConnectionId) => {
-            const { useSessionStore } = await import('/src/stores/session.store.ts');
-            useSessionStore().openNewSession(targetConnectionId);
-          }, sshConnectionId);
+      await expect(remoteCards).toHaveCount(3);
+      await expect(e2eHostCard).toHaveCount(1);
+      await expect(e2eHostCard).toContainText('CPU');
+      await expect(page.getByText('活动 SSH 会话', { exact: true })).toHaveCount(0);
+      const overview = page.getByTestId('dashboard-overview');
+      await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
+      await expect(page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources')).toHaveCount(
+        0,
+      );
+      await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('border-top-width', '0px');
+      await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(page.getByTestId('dashboard-local-cpu-bar')).toHaveAttribute('style', /width:/);
+      await expect(page.getByTestId('dashboard-local-memory-bar')).toHaveAttribute('style', /width:/);
+      await expect(page.getByTestId('dashboard-local-disk-bar')).toHaveAttribute('style', /width:/);
+      await expect(page.locator('[data-testid^="dashboard-resource-bar-"]')).toHaveCount(3);
+      await expect(page.locator('[data-testid^="dashboard-ssh-resource-accent-"]')).toHaveCount(3);
+      await expect(overview.locator('svg')).toHaveCount(0);
+      await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
-          await expect
-            .poll(
-              () =>
-                page.evaluate(async (expectedCount) => {
-                  const { useSessionStore } = await import('/src/stores/session.store.ts');
-                  const sessions = [...useSessionStore().sessions.values()];
-                  return {
-                    count: sessions.length,
-                    connected: sessions.filter((session) => session.wsManager.isConnected.value).length,
-                  };
-                }, index + 1),
-              { timeout: 20_000 },
-            )
-            .toEqual({ count: index + 1, connected: index + 1 });
-        }
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const workspace = page.getByTestId('dashboard-workspace');
+      const quickConnect = page.getByTestId('dashboard-connections');
+      const resources = page.getByTestId('dashboard-system-resources');
+      const recentActivity = page.getByTestId('dashboard-recent-activity');
+      await expect(page.getByTestId('dashboard-operation-divider')).toHaveCount(0);
+      await expect(recentActivity).toHaveCSS('border-top-width', '1px');
+      await expect(workspace).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(page.getByTestId('dashboard-recent-activity-icon')).toBeVisible();
+      await expect(page.getByTestId('dashboard-ssh-resources-icon')).toBeVisible();
+      await expect(quickConnect).toHaveCSS('border-top-width', '0px');
+      await expect(resources).toHaveCSS('border-top-width', '0px');
+      await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('overflow-y', 'auto');
+      await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('overflow-y', 'auto');
+      await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('border-top-width', '1px');
+      await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('border-top-width', '1px');
+      await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).not.toHaveCSS(
+        'background-color',
+        'rgba(0, 0, 0, 0)',
+      );
+      await expect(remoteCards.nth(0)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
 
-        await expect(remoteCards).toHaveCount(3);
-        await expect(e2eHostCard).toHaveCount(1);
-        await expect(e2eHostCard).toContainText('CPU');
-        await expect(page.getByText('活动 SSH 会话', { exact: true })).toHaveCount(0);
-        const overview = page.getByTestId('dashboard-overview');
-        await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
-        await expect(
-          page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources'),
-        ).toHaveCount(0);
-        await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('border-top-width', '0px');
-        await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-        await expect(page.getByTestId('dashboard-local-cpu-bar')).toHaveAttribute('style', /width:/);
-        await expect(page.getByTestId('dashboard-local-memory-bar')).toHaveAttribute('style', /width:/);
-        await expect(page.getByTestId('dashboard-local-disk-bar')).toHaveAttribute('style', /width:/);
-        await expect(page.locator('[data-testid^="dashboard-resource-bar-"]')).toHaveCount(3);
-        await expect(page.locator('[data-testid^="dashboard-ssh-resource-accent-"]')).toHaveCount(3);
-        await expect(overview.locator('svg')).toHaveCount(0);
-        await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
+      const overviewBox = await overview.boundingBox();
+      const workspaceBox = await workspace.boundingBox();
+      const quickConnectBox = await quickConnect.boundingBox();
+      const resourcesBox = await resources.boundingBox();
+      const recentActivityBox = await recentActivity.boundingBox();
+      const connectionListBox = await page.getByTestId('dashboard-connection-list').boundingBox();
+      const resourceListBox = await page.getByTestId('dashboard-ssh-resource-list').boundingBox();
+      expect(overviewBox).not.toBeNull();
+      expect(overviewBox?.height ?? Infinity).toBeLessThanOrEqual(180);
+      expect(workspaceBox).not.toBeNull();
+      expect(quickConnectBox).not.toBeNull();
+      expect(resourcesBox).not.toBeNull();
+      expect(recentActivityBox).not.toBeNull();
+      expect(connectionListBox).not.toBeNull();
+      expect(resourceListBox).not.toBeNull();
+      expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
+      expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
+      expect(Math.abs((connectionListBox?.y ?? 0) - (resourceListBox?.y ?? 0))).toBeLessThanOrEqual(2);
+      expect(connectionListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
+      expect(resourceListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
+      expect(Math.abs((connectionListBox?.height ?? 0) - (resourceListBox?.height ?? 0))).toBeLessThanOrEqual(2);
+      expect(Math.abs((recentActivityBox?.x ?? 0) - (workspaceBox?.x ?? 0))).toBeLessThanOrEqual(2);
+      expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
+      expect(recentActivityBox?.y ?? 0).toBeGreaterThan(
+        Math.max(
+          (quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0),
+          (resourcesBox?.y ?? 0) + (resourcesBox?.height ?? 0),
+        ),
+      );
+      expect(recentActivityBox?.y ?? Infinity).toBeLessThan(900);
 
-        await page.setViewportSize({ width: 1440, height: 900 });
-        const workspace = page.getByTestId('dashboard-workspace');
-        const quickConnect = page.getByTestId('dashboard-connections');
-        const resources = page.getByTestId('dashboard-system-resources');
-        const recentActivity = page.getByTestId('dashboard-recent-activity');
-        await expect(page.getByTestId('dashboard-operation-divider')).toHaveCount(0);
-        await expect(recentActivity).toHaveCSS('border-top-width', '1px');
-        await expect(workspace).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-        await expect(page.getByTestId('dashboard-recent-activity-icon')).toBeVisible();
-        await expect(page.getByTestId('dashboard-ssh-resources-icon')).toBeVisible();
-        await expect(quickConnect).toHaveCSS('border-top-width', '0px');
-        await expect(resources).toHaveCSS('border-top-width', '0px');
-        await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('overflow-y', 'auto');
-        await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('overflow-y', 'auto');
-        await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('border-top-width', '1px');
-        await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('border-top-width', '1px');
-        await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).not.toHaveCSS(
-          'background-color',
-          'rgba(0, 0, 0, 0)',
+      const localResourceBox = await page.getByTestId('dashboard-local-resources').boundingBox();
+      const remoteResourceBoxes = await remoteCards.evaluateAll((cards) =>
+        cards.map((card) => {
+          const rect = card.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        }),
+      );
+      expect(localResourceBox).not.toBeNull();
+      expect(remoteResourceBoxes).toHaveLength(3);
+      const remoteResourceBackgrounds = await remoteCards.evaluateAll((cards) =>
+        cards.map((card) => getComputedStyle(card).backgroundColor),
+      );
+      expect(
+        remoteResourceBackgrounds.every((color) => color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)'),
+      ).toBeTruthy();
+      expect(remoteResourceBoxes[0].y).toBeGreaterThan(
+        (localResourceBox?.y ?? 0) + (localResourceBox?.height ?? 0) - 2,
+      );
+      for (let index = 1; index < remoteResourceBoxes.length; index += 1) {
+        expect(Math.abs(remoteResourceBoxes[index].x - remoteResourceBoxes[0].x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(remoteResourceBoxes[index].width - remoteResourceBoxes[0].width)).toBeLessThanOrEqual(2);
+        expect(remoteResourceBoxes[index].y).toBeGreaterThanOrEqual(
+          remoteResourceBoxes[index - 1].y + remoteResourceBoxes[index - 1].height + 6,
         );
-        await expect(remoteCards.nth(0)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      }
+      await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
 
-        const overviewBox = await overview.boundingBox();
-        const workspaceBox = await workspace.boundingBox();
-        const quickConnectBox = await quickConnect.boundingBox();
-        const resourcesBox = await resources.boundingBox();
-        const recentActivityBox = await recentActivity.boundingBox();
-        const connectionListBox = await page.getByTestId('dashboard-connection-list').boundingBox();
-        const resourceListBox = await page.getByTestId('dashboard-ssh-resource-list').boundingBox();
-        expect(overviewBox).not.toBeNull();
-        expect(overviewBox?.height ?? Infinity).toBeLessThanOrEqual(180);
-        expect(workspaceBox).not.toBeNull();
-        expect(quickConnectBox).not.toBeNull();
-        expect(resourcesBox).not.toBeNull();
-        expect(recentActivityBox).not.toBeNull();
-        expect(connectionListBox).not.toBeNull();
-        expect(resourceListBox).not.toBeNull();
-        expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
-        expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
-        expect(Math.abs((connectionListBox?.y ?? 0) - (resourceListBox?.y ?? 0))).toBeLessThanOrEqual(2);
-        expect(connectionListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
-        expect(resourceListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
-        expect(Math.abs((connectionListBox?.height ?? 0) - (resourceListBox?.height ?? 0))).toBeLessThanOrEqual(2);
-        expect(Math.abs((recentActivityBox?.x ?? 0) - (workspaceBox?.x ?? 0))).toBeLessThanOrEqual(2);
-        expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
-        expect(recentActivityBox?.y ?? 0).toBeGreaterThan(
-          Math.max(
-            (quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0),
-            (resourcesBox?.y ?? 0) + (resourcesBox?.height ?? 0),
-          ),
-        );
-        expect(recentActivityBox?.y ?? Infinity).toBeLessThan(900);
-
-        const localResourceBox = await page.getByTestId('dashboard-local-resources').boundingBox();
-        const remoteResourceBoxes = await remoteCards.evaluateAll((cards) =>
-          cards.map((card) => {
-            const rect = card.getBoundingClientRect();
-            return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-          }),
-        );
-        expect(localResourceBox).not.toBeNull();
-        expect(remoteResourceBoxes).toHaveLength(3);
-        const remoteResourceBackgrounds = await remoteCards.evaluateAll((cards) =>
-          cards.map((card) => getComputedStyle(card).backgroundColor),
-        );
-        expect(
-          remoteResourceBackgrounds.every((color) => color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)'),
-        ).toBeTruthy();
-        expect(remoteResourceBoxes[0].y).toBeGreaterThan(
-          (localResourceBox?.y ?? 0) + (localResourceBox?.height ?? 0) - 2,
-        );
-        for (let index = 1; index < remoteResourceBoxes.length; index += 1) {
-          expect(Math.abs(remoteResourceBoxes[index].x - remoteResourceBoxes[0].x)).toBeLessThanOrEqual(2);
-          expect(Math.abs(remoteResourceBoxes[index].width - remoteResourceBoxes[0].width)).toBeLessThanOrEqual(2);
-          expect(remoteResourceBoxes[index].y).toBeGreaterThanOrEqual(
-            remoteResourceBoxes[index - 1].y + remoteResourceBoxes[index - 1].height + 6,
-          );
-        }
-        await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
-
-        await page.evaluate(async () => {
-          const { useSessionStore } = await import('/src/stores/session.store.ts');
-          useSessionStore().cleanupAllSessions();
-        });
-        await expect(remoteCards).toHaveCount(3);
-        await expect(e2eHostCard).toHaveCount(1);
-      },
-    );
+      await expect(remoteCards).toHaveCount(3);
+      await expect(e2eHostCard).toHaveCount(1);
+    });
 
     await step('local and remote dashboard resource sections honor their independent settings', async () => {
       const remoteOnly = await context.request.put('/api/v1/settings', {
@@ -460,12 +420,6 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(page.getByTestId('audit-log-view')).toBeVisible();
     });
   } finally {
-    await page
-      .evaluate(async () => {
-        const { useSessionStore } = await import('/src/stores/session.store.ts');
-        useSessionStore().cleanupAllSessions();
-      })
-      .catch(() => undefined);
     await cleanupDashboardFixtures(context.request);
     const restoreSettings = await context.request.put('/api/v1/settings', {
       data: {

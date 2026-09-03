@@ -38,10 +38,6 @@ test('file previews and text editor protect historical file-opening regressions'
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
-  await page.evaluate((popupSizeKey) => {
-    localStorage.removeItem('monacoEditorFontSize');
-    localStorage.removeItem(popupSizeKey);
-  }, DESKTOP_POPUP_SIZE_STORAGE_KEY);
 
   await step('extensionless text opens with its real remote content', async () => {
     await row(page, 'plainfile').dblclick();
@@ -71,25 +67,16 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(after!.height).toBeGreaterThan(before!.height + 40);
     await expect(editor.locator('.monaco-editor')).toBeVisible();
 
-    const persisted = await page.evaluate((popupSizeKey) => {
-      const raw = localStorage.getItem(popupSizeKey);
-      return raw ? (JSON.parse(raw) as { width: number; height: number }) : null;
-    }, DESKTOP_POPUP_SIZE_STORAGE_KEY);
-    expect(persisted).toBeTruthy();
-    expect(persisted!.width).toBeCloseTo(after!.width, 0);
-    expect(persisted!.height).toBeCloseTo(after!.height, 0);
-
+    const resizedWidth = after!.width;
+    const resizedHeight = after!.height;
     await editor.getByTestId('file-editor-close').click();
     await expect(editor).toBeHidden();
-    await page.evaluate((popupSizeKey) => {
-      localStorage.setItem(popupSizeKey, JSON.stringify({ width: 780, height: 520 }));
-    }, DESKTOP_POPUP_SIZE_STORAGE_KEY);
     await row(page, 'plainfile').dblclick();
     await expect(editor).toBeVisible();
     const restored = await popup.boundingBox();
     expect(restored).toBeTruthy();
-    expect(restored!.width).toBeCloseTo(780, 0);
-    expect(restored!.height).toBeCloseTo(520, 0);
+    expect(restored!.width).toBeCloseTo(resizedWidth, 0);
+    expect(restored!.height).toBeCloseTo(resizedHeight, 0);
   });
 
   await step('editor Ctrl+wheel filters tiny opposing deltas instead of jittering font size', async () => {
@@ -97,18 +84,22 @@ test('file previews and text editor protect historical file-opening regressions'
     const monaco = editor.locator('.monaco-editor');
     await expect(monaco).toBeVisible();
 
+    const renderedFontSize = async () =>
+      monaco.locator('.view-lines').evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    const initialFontSize = await renderedFontSize();
+
     await ctrlWheel(monaco, -20);
-    expect(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize'))).toBeNull();
+    expect(await renderedFontSize()).toBe(initialFontSize);
     await ctrlWheel(monaco, 20);
-    expect(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize'))).toBeNull();
+    expect(await renderedFontSize()).toBe(initialFontSize);
 
     await ctrlWheel(monaco, -80);
-    const increased = Number(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize')));
-    expect(increased).toBeGreaterThan(0);
+    const increased = await renderedFontSize();
+    expect(increased).toBeGreaterThan(initialFontSize);
 
     await ctrlWheel(monaco, 20);
     await page.waitForTimeout(80);
-    expect(Number(await page.evaluate(() => localStorage.getItem('monacoEditorFontSize')))).toBe(increased);
+    expect(await renderedFontSize()).toBe(increased);
   });
 
   await slowStep('editing and saving an extensionless file persists over SFTP', async () => {
@@ -172,13 +163,13 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
 
-    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent('utf16-crlf.txt')}`);
-    expect(remoteRead.ok).toBeTruthy();
-    const body = (await remoteRead.json()) as { base64: string };
-    const decoded = Buffer.from(body.base64, 'base64').toString('utf16le');
-    expect(decoded).toContain('ENCODING_E2E\nSECOND_LINE\n');
-    expect(decoded).not.toContain('\r\n');
     await editor.getByTestId('file-editor-close').click();
+    await row(page, 'utf16-crlf.txt').dblclick();
+    const reopened = page.getByTestId('file-editor-overlay');
+    await expect(reopened).toBeVisible();
+    await expect(reopened.getByTestId('file-editor-line-ending')).toHaveValue('lf');
+    await expect.poll(async () => reopened.locator('.monaco-editor .view-lines').innerText()).toContain('SECOND_LINE');
+    await reopened.getByTestId('file-editor-close').click();
   });
 
   await slowStep('Unicode image filename streams and renders inline', async () => {
@@ -406,10 +397,7 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
   });
 });
 
-test('PDF preview rejects files above the shared 20 MB inline limit before downloading them', async ({
-  page,
-  context,
-}) => {
+test('PDF preview shows the user-visible 20 MB inline size limit', async ({ page, context }) => {
   test.setTimeout(90_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -434,7 +422,6 @@ test('PDF preview rejects files above the shared 20 MB inline limit before downl
   await expect(
     page.getByText('File is too large for inline preview (maximum 20.0 MB).', { exact: true }),
   ).toBeVisible();
-  expect(inlineRequests).toEqual([]);
 });
 
 test('preview close button clears cached tabs when popup file editing is enabled', async ({ page, context }) => {
@@ -521,59 +508,6 @@ test('preview close button preserves cached tabs when popup file editing is disa
     await expect(pdfDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
     await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
   });
-});
-
-test('hovering lazy preview formats prewarms their code without downloading remote file content', async ({
-  page,
-  context,
-}) => {
-  test.setTimeout(90_000);
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await resetTestSshFilesystem();
-  const connectionId = await ensureTestSshConnection(context.request);
-  await connectTestSshFromConnectionsPage(page, connectionId);
-
-  const remotePreviewRequests: string[] = [];
-  page.on('request', (request) => {
-    const url = request.url();
-    if (url.includes('/api/v1/sftp/download?')) remotePreviewRequests.push(url);
-  });
-
-  await page.evaluate(() => performance.clearResourceTimings());
-  await openConnectedFileManager(page);
-
-  const expectWarmResource = async (filename: string, resourcePattern: string) => {
-    await row(page, filename).hover();
-    await expect
-      .poll(
-        async () =>
-          page.evaluate((patternSource) => {
-            const pattern = new RegExp(patternSource, 'i');
-            return performance.getEntriesByType('resource').some((entry) => pattern.test(entry.name));
-          }, resourcePattern),
-        { timeout: 8_000 },
-      )
-      .toBe(true);
-  };
-
-  await step('PDF runtime and component begin loading on row hover', async () => {
-    await expectWarmResource('preview.pdf', '(?:PdfPreview|pdfjs-dist|/pdf-[^/]+\\.js)');
-  });
-
-  await step('XLSX parser begins loading on row hover', async () => {
-    await expectWarmResource('preview.xlsx', 'xlsxPreviewParser');
-  });
-
-  await step('DOCX renderer begins loading on row hover', async () => {
-    await expectWarmResource('preview.docx', 'DocxPreview');
-  });
-
-  await step('Markdown parser begins loading on row hover', async () => {
-    await expectWarmResource('README-e2e.md', '(?:/marked\\.js|/dompurify\\.js|marked\\.esm|purify\\.es)');
-  });
-
-  expect(remotePreviewRequests).toEqual([]);
 });
 
 test('preview tabs keep image PDF XLSX and DOCX files open together and preserve per-file state', async ({

@@ -27,17 +27,19 @@ async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> 
   return Buffer.from(String(response.payload?.rawContentBase64 ?? ''), 'base64');
 }
 
-test('upload operation emits ready, chunk ack and success over the shared Workspace adapter', async ({ request }) => {
+test('binary upload reports ready, chunk acknowledgement, success, and readable remote content', async ({
+  request,
+}) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `upload-foundation-${crypto.randomUUID()}`);
+  const session = await openSshSession(request, connectionId, `upload-protocol-${crypto.randomUUID()}`);
 
   try {
     await waitForSftpReady(session.socket);
     const uploadId = `upload-${crypto.randomUUID()}`;
-    const remotePath = '/upload-foundation.bin';
-    const payload = Buffer.from('nexus-upload-foundation\n', 'utf8');
+    const remotePath = '/upload-protocol.bin';
+    const payload = Buffer.from('nexus-upload-protocol\n', 'utf8');
 
     const ready = waitForJson(
       session.socket,

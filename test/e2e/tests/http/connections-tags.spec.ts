@@ -95,7 +95,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
   });
 });
 
-test('SSH resource snapshots invalidate cached host lists when connection metadata changes', async ({ request }) => {
+test('new SSH connections appear in resource status immediately', async ({ request }) => {
   await loginAsInitialAdmin(request);
 
   const connectionName = 'E2E SSH Resource Cache Invalidation';
@@ -153,7 +153,7 @@ test('SSH resource snapshots invalidate cached host lists when connection metada
   }
 });
 
-test('SSH resource cache expires from collection start so refresh cadence does not double', async ({ request }) => {
+test('SSH resource status refreshes at the configured cadence even when collection takes time', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
 

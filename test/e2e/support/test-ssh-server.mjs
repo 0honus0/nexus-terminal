@@ -32,8 +32,6 @@ const PASSWORD = 'e2e-password';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
 let archiveExecDelayMs = 0;
-const executedCommands = [];
-const receivedWebhooks = [];
 const activeSshClients = new Set();
 const activeSftpChannels = new Set();
 let openedSftpChannels = 0;
@@ -505,8 +503,6 @@ async function resetRoot() {
   await fsp.symlink('missing-target.png', path.join(rootDir, 'stale-image-link.png'));
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
   statusSample = 0;
-  executedCommands.length = 0;
-  receivedWebhooks.length = 0;
   sftpWriteDelayMs = 0;
   archiveExecDelayMs = 0;
 }
@@ -813,7 +809,6 @@ function buildStatusFixture() {
 }
 
 function runRemoteCommand(command, stream) {
-  executedCommands.push(String(command));
   if (command.includes('__NEXUS_STATUS_')) {
     finishExec(stream, buildStatusFixture());
     return;
@@ -1037,16 +1032,6 @@ const controlServer = http.createServer(async (req, res) => {
       res.end();
       return;
     }
-    if (req.method === 'GET' && requestUrl.pathname === '/ssh/status') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ online: sshServerOnline, activeClients: activeSshClients.size }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/sftp/status') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ activeChannels: activeSftpChannels.size, openedChannels: openedSftpChannels }));
-      return;
-    }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/write-delay') {
       const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
       sftpWriteDelayMs = Number.isFinite(requestedDelay)
@@ -1143,73 +1128,25 @@ const controlServer = http.createServer(async (req, res) => {
       res.end();
       return;
     }
-    if (req.method === 'GET' && requestUrl.pathname === '/path-exists') {
-      const requestedPath = String(requestUrl.searchParams.get('path') || '').replace(/\\/g, '/');
-      const normalized = path.posix.normalize(`/${requestedPath}`).replace(/^\/+/, '');
-      const targetPath = path.resolve(rootDir, normalized);
-      const rootPrefix = `${path.resolve(rootDir)}${path.sep}`;
-      const allowed = targetPath === path.resolve(rootDir) || targetPath.startsWith(rootPrefix);
-      let exists = false;
-      if (allowed) {
-        try {
-          await fsp.access(targetPath);
-          exists = true;
-        } catch {
-          /* absent */
-        }
-      }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ exists }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/files') {
-      const files = await fsp.readdir(rootDir);
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ files }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/commands') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ commands: [...executedCommands] }));
+    if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook-strict') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks).toString('utf8');
+      const valid =
+        req.headers['x-e2e-webhook'] === 'delivery' &&
+        body.includes('\"source\":\"nexus-e2e\"') &&
+        body.includes('\"event\":') &&
+        body.includes('\"details\":');
+      res.writeHead(valid ? 204 : 422, { 'content-type': 'application/json' });
+      res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/e2e-notification-webhook') {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(Buffer.from(chunk));
-      receivedWebhooks.push({
-        method: req.method,
-        headers: req.headers,
-        body: Buffer.concat(chunks).toString('utf8'),
-      });
+      for await (const _chunk of req) {
+        // Drain the request body; this endpoint is only a deterministic external integration target.
+      }
       res.writeHead(204);
       res.end();
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/webhooks') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ webhooks: [...receivedWebhooks] }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/read') {
-      const name = path.basename(requestUrl.searchParams.get('name') || '');
-      const data = await fsp.readFile(path.join(rootDir, name));
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ name, base64: data.toString('base64') }));
-      return;
-    }
-    if (req.method === 'GET' && requestUrl.pathname === '/stat') {
-      const name = requestUrl.searchParams.get('name') || '';
-      const stats = await fsp.stat(resolveRemotePath(name));
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          name,
-          size: stats.size,
-          mode: stats.mode & 0o7777,
-          isFile: stats.isFile(),
-          isDirectory: stats.isDirectory(),
-        }),
-      );
       return;
     }
     res.writeHead(404);

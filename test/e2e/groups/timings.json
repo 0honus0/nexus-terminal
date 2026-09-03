@@ -211,16 +211,6 @@
       ],
       "medianMs": 24579
     },
-    "tests/ssh/file-manager-menu-readiness.spec.ts": {
-      "samplesMs": [
-        12927,
-        13659,
-        13207,
-        13198,
-        12757
-      ],
-      "medianMs": 13198
-    },
     "tests/ssh/file-manager-navigation.spec.ts": {
       "samplesMs": [
         17024,
@@ -250,16 +240,6 @@
         81910
       ],
       "medianMs": 75688
-    },
-    "tests/ssh/filesystem-foundation.spec.ts": {
-      "samplesMs": [
-        303,
-        378,
-        361,
-        376,
-        460
-      ],
-      "medianMs": 376
     },
     "tests/ssh/panel-wheel-scaling.spec.ts": {
       "samplesMs": [
@@ -371,6 +351,16 @@
       ],
       "medianMs": 9982
     },
+    "tests/ssh/sftp-download.spec.ts": {
+      "samplesMs": [
+        303,
+        378,
+        361,
+        376,
+        460
+      ],
+      "medianMs": 376
+    },
     "tests/ssh/status-docker-protocol.spec.ts": {
       "samplesMs": [
         914,
@@ -421,7 +411,7 @@
       ],
       "medianMs": 10755
     },
-    "tests/ssh/upload-foundation.spec.ts": {
+    "tests/ssh/upload-protocol.spec.ts": {
       "samplesMs": [
         258,
         282,

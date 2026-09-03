@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '../../support/fixtures';
+import { expect, test, type BrowserContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import {
@@ -9,23 +9,8 @@ import {
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
 
-async function installClipboardStub(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const clipboardState = { read: '', written: '' };
-    Object.defineProperty(globalThis, '__NEXUS_E2E_CLIPBOARD__', {
-      configurable: true,
-      value: clipboardState,
-    });
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        readText: async () => clipboardState.read,
-        writeText: async (text: string) => {
-          clipboardState.written = String(text);
-        },
-      },
-    });
-  });
+async function enableClipboard(context: BrowserContext): Promise<void> {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
 }
 
 async function connectMobileTerminal(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
@@ -216,7 +201,7 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
   page,
   context,
 }) => {
-  await installClipboardStub(page);
+  await enableClipboard(context);
   await connectMobileTerminal(page, context.request);
   const marker = 'MOBILE_TOUCH_COPY_MARKER';
   const commandInput = page.getByTestId('command-input');
@@ -246,18 +231,7 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
     await menu.getByRole('button', { name: 'Copy', exact: true }).click();
     await expect(menu).toBeHidden();
     await expect(page.locator('.mobile-terminal-selection-handle')).toHaveCount(0);
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const state = (
-            globalThis as typeof globalThis & {
-              __NEXUS_E2E_CLIPBOARD__?: { written?: string };
-            }
-          ).__NEXUS_E2E_CLIPBOARD__;
-          return state?.written ?? '';
-        }),
-      )
-      .toBe(marker);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(marker);
   });
 });
 
@@ -265,20 +239,12 @@ test('mobile clipboard Paste normalizes CR line endings and executes through the
   page,
   context,
 }) => {
-  await installClipboardStub(page);
+  await enableClipboard(context);
   await connectMobileTerminal(page, context.request);
   const terminal = page.getByTestId('terminal');
   const rows = terminal.locator('.xterm-rows');
 
-  await page.evaluate(() => {
-    const state = (
-      globalThis as typeof globalThis & {
-        __NEXUS_E2E_CLIPBOARD__?: { read: string };
-      }
-    ).__NEXUS_E2E_CLIPBOARD__;
-    if (!state) throw new Error('clipboard stub missing');
-    state.read = "printf 'MOBILE_TOUCH_PASTE_OK\\n'\r";
-  });
+  await page.evaluate((text) => navigator.clipboard.writeText(text), "printf 'MOBILE_TOUCH_PASTE_OK\\n'\r");
 
   await step('mobile context menu fallback exposes Paste even without a native browser menu', async () => {
     const inner = terminal.locator('.terminal-inner-container');

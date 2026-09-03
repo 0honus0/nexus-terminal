@@ -14,8 +14,6 @@ import {
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
-const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus_fileEditorDesktopPopupSize';
-
 async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
   await loginAsInitialAdmin(request);
   await configureSshE2eSettings(request);
@@ -215,15 +213,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
-  await slowStep('single tap opens a full-screen mobile editor without touching desktop popup size', async () => {
-    const desktopSize = JSON.stringify({ width: 1111, height: 777 });
-    await page.evaluate(
-      ([popupSizeKey, value]) => {
-        localStorage.setItem(popupSizeKey, value);
-      },
-      [DESKTOP_POPUP_SIZE_STORAGE_KEY, desktopSize],
-    );
-
+  await slowStep('single tap opens a full-screen mobile editor', async () => {
     await fileManagerRow(page, 'plainfile').click();
     const editor = page.getByTestId('file-editor-overlay');
     await expect(editor).toBeVisible({ timeout: 20_000 });
@@ -236,9 +226,6 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     expect(viewport).toBeTruthy();
     expect(Math.abs(popupBox!.width - viewport!.width)).toBeLessThanOrEqual(2);
     expect(Math.abs(popupBox!.height - viewport!.height)).toBeLessThanOrEqual(2);
-    expect(
-      await page.evaluate((popupSizeKey) => localStorage.getItem(popupSizeKey), DESKTOP_POPUP_SIZE_STORAGE_KEY),
-    ).toBe(desktopSize);
     await expect
       .poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
       .toContain('plain-no-extension');
@@ -296,11 +283,6 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
-
-    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
-    expect(remoteRead.ok).toBeTruthy();
-    const body = (await remoteRead.json()) as { base64: string };
-    expect(Buffer.from(body.base64, 'base64').toString('utf8')).toBe('# Mobile Markdown E2E\n\n**mobile-save-ok**\n');
 
     await editor.getByTestId('file-editor-close').click();
     await expect(editor).toBeHidden();

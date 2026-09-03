@@ -233,7 +233,6 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
     },
   });
   expect(settings.ok()).toBeTruthy();
-  await page.addInitScript(() => localStorage.removeItem('nexus_quickCommandRowSizeMultiplier'));
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
@@ -251,10 +250,7 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
   expect(await readScale(list, 'data-row-scale')).toBe(0.64);
 });
 
-test('File Manager flushes the last wheel scale when its sidebar unmounts before debounce', async ({
-  page,
-  context,
-}) => {
+test('File Manager keeps the latest wheel scale when the sidebar is closed immediately', async ({ page, context }) => {
   test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -313,7 +309,10 @@ test('File Manager flushes the last wheel scale when its sidebar unmounts before
   }
 });
 
-test('latest panel scale wins even when an older settings response arrives last', async ({ page, context }) => {
+test('rapid panel scaling persists the newest value when save responses arrive out of order', async ({
+  page,
+  context,
+}) => {
   test.setTimeout(75_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -327,7 +326,6 @@ test('latest panel scale wins even when an older settings response arrives last'
     },
   });
   expect(settings.ok()).toBeTruthy();
-  await page.addInitScript(() => localStorage.removeItem('nexus_quickCommandRowSizeMultiplier'));
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);

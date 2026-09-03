@@ -29,7 +29,8 @@
     "format": "node scripts/format-changed.mjs --write",
     "format:check": "node scripts/format-changed.mjs --check",
     "format:all": "prettier --write \"{packages,test,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"README.md\" \"package.json\"",
-    "format:all:check": "prettier --check \"{packages,test,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"README.md\" \"package.json\""
+    "format:all:check": "prettier --check \"{packages,test,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"README.md\" \"package.json\"",
+    "check:test-policy": "node scripts/check-test-policy.mjs"
   },
   "repository": {
     "type": "git",

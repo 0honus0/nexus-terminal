@@ -265,7 +265,6 @@ test('mobile keyboard sink preserves IME composition before clearing input', asy
 
 test('mobile RDP touch mode toggle persists without reconnecting the session', async ({ page, context }) => {
   const connectionName = 'E2E Mobile RDP Touch Modes';
-  const storageKey = 'nexus.rdp.touch-mode';
 
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
@@ -301,7 +300,6 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
 
   try {
     await page.goto('/login');
-    await page.evaluate((key) => window.localStorage.removeItem(key), storageKey);
     await openConnection();
 
     const directMode = page.getByTestId('rdp-touch-mode-direct');
@@ -317,7 +315,6 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
     await expect(directMode).toHaveAttribute('aria-pressed', 'false');
     await expect(hint).toContainText('One finger: move');
-    await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), storageKey)).toBe('touchpad');
 
     await page.getByTestId('rdp-window-close').click();
     await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
@@ -325,7 +322,10 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
 
     await expect(page.getByTestId('rdp-touch-mode-touchpad')).toHaveAttribute('aria-pressed', 'true');
     await page.getByTestId('rdp-touch-mode-direct').click();
-    await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), storageKey)).toBe('direct');
+    await expect(page.getByTestId('rdp-touch-mode-direct')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('rdp-window-close').click();
+    await openConnection();
+    await expect(page.getByTestId('rdp-touch-mode-direct')).toHaveAttribute('aria-pressed', 'true');
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }

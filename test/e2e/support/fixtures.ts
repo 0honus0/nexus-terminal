@@ -7,24 +7,18 @@ export type E2EDatabaseMode = 'seed' | 'empty';
 
 type E2EFixtures = {
   e2eDatabaseMode: E2EDatabaseMode;
-  _e2eSpecReset: void;
+  _e2eTestReset: void;
 };
-
-let lastResetFile: string | undefined;
 
 export const test = base.extend<E2EFixtures>({
   e2eDatabaseMode: ['seed', { option: true }],
-  _e2eSpecReset: [
-    async ({ request, e2eDatabaseMode }, use, testInfo) => {
-      const resetKey = `${testInfo.project.name}:${testInfo.file}`;
-      if (lastResetFile !== resetKey) {
-        const response = await request.post('/api/v1/__e2e/reset', {
-          data: { mode: e2eDatabaseMode },
-        });
-        baseExpect(response.ok(), await response.text()).toBeTruthy();
-        await resetTestSshFilesystem();
-        lastResetFile = resetKey;
-      }
+  _e2eTestReset: [
+    async ({ request, e2eDatabaseMode }, use) => {
+      const response = await request.post('/api/v1/__e2e/reset', {
+        data: { mode: e2eDatabaseMode },
+      });
+      baseExpect(response.ok(), await response.text()).toBeTruthy();
+      await resetTestSshFilesystem();
 
       await use();
     },

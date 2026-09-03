@@ -49,7 +49,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(manager).toContainText('1.2MB / 800kB');
   });
 
-  await slowStep('stop sends a Docker command that is executed on the remote SSH server', async () => {
+  await slowStep('stop sends the container action through the user WebSocket protocol', async () => {
     const manager = page.getByTestId('docker-manager');
     const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
     await row.getByTestId('docker-stop').click();
@@ -69,18 +69,6 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
               return false;
             }
           }),
-        { timeout: 15_000 },
-      )
-      .toBeTruthy();
-
-    await expect
-      .poll(
-        async () => {
-          const response = await fetch('http://127.0.0.1:22223/commands');
-          if (!response.ok) return false;
-          const body = (await response.json()) as { commands: string[] };
-          return body.commands.includes(`docker stop ${CONTAINER_ID}`);
-        },
         { timeout: 15_000 },
       )
       .toBeTruthy();

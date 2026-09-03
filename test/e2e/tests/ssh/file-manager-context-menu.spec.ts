@@ -253,11 +253,6 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await fileChooser.setFiles({ name: filename, mimeType: 'text/plain', buffer: payload });
     await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
 
-    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
-    expect(remoteRead.ok).toBeTruthy();
-    const remoteBody = (await remoteRead.json()) as { base64: string };
-    expect(Buffer.from(remoteBody.base64, 'base64')).toEqual(payload);
-
     await rightClickRow(page, filename);
     const downloadPromise = page.waitForEvent('download');
     await clickMenuItem(page, 'Download');
@@ -341,16 +336,13 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
       buffer: Buffer.alloc(size, 0x5a),
     });
     await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
-    await expect
-      .poll(
-        async () => {
-          const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(filename)}`);
-          if (!response.ok) return -1;
-          return Number(((await response.json()) as { size: number }).size);
-        },
-        { timeout: 30_000 },
-      )
-      .toBe(size);
+    await rightClickRow(page, filename);
+    const downloadPromise = page.waitForEvent('download');
+    await clickMenuItem(page, 'Download');
+    const download = await downloadPromise;
+    const downloadPath = await download.path();
+    expect(downloadPath).toBeTruthy();
+    expect((await readFile(downloadPath!)).byteLength).toBe(size);
   });
 
   await step('Refresh reloads changes made outside the UI', async () => {

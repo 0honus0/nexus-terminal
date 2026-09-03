@@ -11,6 +11,7 @@ on:
       - 'packages/remote-gateway/**'
       - 'test/e2e/**'
       - 'scripts/e2e/**'
+      - 'scripts/check-test-policy.mjs'
       - 'build.sh'
       - 'package.json'
       - '.github/workflows/e2e.yml'
@@ -24,6 +25,7 @@ on:
       - 'packages/remote-gateway/**'
       - 'test/e2e/**'
       - 'scripts/e2e/**'
+      - 'scripts/check-test-policy.mjs'
       - 'build.sh'
       - 'package.json'
       - '.github/workflows/e2e.yml'
@@ -209,6 +211,9 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ needs.environment.outputs.node_version }}.x
+
+      - name: Enforce E2E-only test policy
+        run: npm run check:test-policy
 
       - name: Resolve and validate E2E groups
         id: groups

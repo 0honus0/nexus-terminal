@@ -6,7 +6,9 @@ import { closeWebSocket, openSshSession, waitForSftpReady } from '../../support/
 const query = (values: Record<string, string | number>): string =>
   new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)])).toString();
 
-test('HTTP download APIs consume the shared remote filesystem boundary', async ({ request }) => {
+test('HTTP download ticket, Range, inline file, and directory ZIP work for an active SSH session', async ({
+  request,
+}) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);

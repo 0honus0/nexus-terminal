@@ -9,7 +9,6 @@ import {
   openConnectedFileManager,
   openInlineProgressDisplay,
   resetTestSshFilesystem,
-  E2E_SSH,
 } from '../../support/ssh';
 
 export const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
@@ -96,11 +95,4 @@ export function hiddenTask(modal: Locator, text: string): Locator {
 export async function closeProgressDisplay(modal: Locator): Promise<void> {
   await modal.getByTestId('progress-display-close').click();
   await expect(modal).toBeHidden();
-}
-
-export async function remoteFileExists(name: string): Promise<boolean> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-  if (!response.ok) return false;
-  const body = (await response.json()) as { files: string[] };
-  return body.files.includes(name);
 }
