@@ -1,9 +1,9 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { TransferTaskRegistry } from '../../../../packages/backend/src/transfers/transfer-task-registry';
-import { TransferOrchestrator } from '../../../../packages/backend/src/transfers/transfer-orchestrator';
-import { RsyncTransferStrategy } from '../../../../packages/backend/src/transfers/strategies/rsync-transfer.strategy';
-import { ScpTransferStrategy } from '../../../../packages/backend/src/transfers/strategies/scp-transfer.strategy';
+import { TransferTaskRegistry } from '../../../../packages/backend/src/modules/transfers/transfer-task-registry';
+import { TransferOrchestrator } from '../../../../packages/backend/src/modules/transfers/transfer-orchestrator';
+import { RsyncTransferStrategy } from '../../../../packages/backend/src/platform/operations/transfer/strategies/rsync-transfer.strategy';
+import { ScpTransferStrategy } from '../../../../packages/backend/src/platform/operations/transfer/strategies/scp-transfer.strategy';
 
 const transferPayload = {
   sourceConnectionId: 1,

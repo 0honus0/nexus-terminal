@@ -1314,6 +1314,51 @@ F4-B status (2026-09-03): server-to-server transfer core decomposition complete 
 - Backend build passes; focused F4-B regression: **4 passed / 0 failed**.
 - F4-A remote Actions run `33719456471` for `6f699c71` is **SUCCESS**.
 
+### F4.5 — Backend physical structure reorganization
+
+Status (2026-09-03): locally complete.
+
+The backend source tree has been physically reorganized before F5 so subsequent WebSocket/controller refactors land in their final architectural locations rather than being moved twice.
+
+New stable top-level layout:
+
+```text
+packages/backend/src/
+├── bootstrap/
+├── config/
+├── infrastructure/
+├── interfaces/
+├── locales/
+├── modules/
+├── platform/
+└── shared/
+```
+
+Key moves:
+
+- reusable execution/filesystem/archive/upload/transfer/docker/system capabilities moved under `platform/`;
+- concrete `ssh2` connection/SFTP adapters moved under `infrastructure/ssh/`;
+- database, backup and Guacamole implementations moved under `infrastructure/`;
+- Workspace and product domains moved under `modules/`;
+- all HTTP controllers/routes moved under `interfaces/http/`;
+- WebSocket protocol code moved under `interfaces/websocket/`;
+- Workspace archive/upload/transfer adapters moved into `modules/workspace/adapters/`;
+- the existing service composition root moved to `bootstrap/container/application.container.ts` pending F6 decomposition;
+- common type/security/event primitives moved under `shared/`;
+- legacy top-level `services/`, `sftp/`, `uploads/`, `archive/`, `execution/`, `transport/`, `workspace/`, `websocket/`, `types/` and `utils/` directories are gone.
+
+Runtime path audit after physical moves fixed `__dirname`-based paths for database data, full backup data, appearance HTML/background data and terminal-theme temporary uploads. The initial migration test exposed and removed accidentally created `src/data`, `src/html-presets` and `src/interfaces/temp-uploads` directories.
+
+Long-term architecture rules are now documented in `packages/backend/README.md`, including platform vs infrastructure boundaries, dependency direction, Workspace adapter responsibilities, ExecutionSession ownership and future Agent integration.
+
+Validation after F4.5:
+
+- backend build: PASS;
+- frontend build: PASS;
+- focused SSH/filesystem/upload/transfer/protocol regression: **18 passed / 2 local zip skips / 0 failed**;
+- HTTP auth + full backup regression: **3 passed / 0 failed**;
+- no compatibility re-export layer was added for old paths.
+
 ### F5 — WebSocket transport/router decomposition
 
 Current large files:

@@ -42,33 +42,33 @@ import crypto from 'crypto';
 
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
-import { getDb, getDbInstance, resetDatabaseForE2E, type E2EDatabaseResetMode } from './database/connection';
-import authRouter from './auth/auth.routes';
-import connectionsRouter from './connections/connections.routes';
-import sftpRouter from './sftp/sftp.routes';
-import proxyRoutes from './proxies/proxies.routes';
-import tagsRouter from './tags/tags.routes';
-import settingsRoutes from './settings/settings.routes';
-import notificationRoutes from './notifications/notification.routes';
-import auditRoutes from './audit/audit.routes';
-import commandHistoryRoutes from './command-history/command-history.routes';
-import quickCommandsRoutes from './quick-commands/quick-commands.routes';
-import terminalThemeRoutes from './terminal-themes/terminal-theme.routes';
-import appearanceRoutes from './appearance/appearance.routes';
-import sshKeysRouter from './ssh_keys/ssh_keys.routes';
-import quickCommandTagRoutes from './quick-command-tags/quick-command-tag.routes';
-import sshSuspendRouter from './ssh-suspend/ssh-suspend.routes';
-import { transfersRoutes } from './transfers/transfers.routes';
-import pathHistoryRoutes from './path-history/path-history.routes';
-import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
-import systemRouter from './system/system.routes';
-import { initializeWebSocket } from './websocket';
-import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
+import { getDb, getDbInstance, resetDatabaseForE2E, type E2EDatabaseResetMode } from './infrastructure/database/connection';
+import authRouter from './interfaces/http/auth/auth.routes';
+import connectionsRouter from './interfaces/http/connections/connections.routes';
+import sftpRouter from './interfaces/http/filesystem/sftp.routes';
+import proxyRoutes from './interfaces/http/proxies/proxies.routes';
+import tagsRouter from './interfaces/http/tags/tags.routes';
+import settingsRoutes from './interfaces/http/settings/settings.routes';
+import notificationRoutes from './interfaces/http/notifications/notification.routes';
+import auditRoutes from './interfaces/http/audit/audit.routes';
+import commandHistoryRoutes from './interfaces/http/command-history/command-history.routes';
+import quickCommandsRoutes from './interfaces/http/quick-commands/quick-commands.routes';
+import terminalThemeRoutes from './interfaces/http/terminal-themes/terminal-theme.routes';
+import appearanceRoutes from './interfaces/http/appearance/appearance.routes';
+import sshKeysRouter from './interfaces/http/ssh-keys/ssh_keys.routes';
+import quickCommandTagRoutes from './interfaces/http/quick-command-tags/quick-command-tag.routes';
+import sshSuspendRouter from './interfaces/http/ssh-suspend/ssh-suspend.routes';
+import { transfersRoutes } from './interfaces/http/transfers/transfers.routes';
+import pathHistoryRoutes from './interfaces/http/path-history/path-history.routes';
+import favoritePathsRouter from './interfaces/http/favorite-paths/favorite-paths.routes';
+import systemRouter from './interfaces/http/system/system.routes';
+import { initializeWebSocket } from './interfaces/websocket';
+import { ipWhitelistMiddleware } from './interfaces/http/auth/ipWhitelist.middleware';
 import { config, getPasskeyRelatedOriginsForRpId } from './config/app.config';
 
-import './services/event.service';
-import './notifications/notification.processor.service';
-import './notifications/notification.dispatcher.service';
+import './shared/events/app-event.service';
+import './modules/notifications/notification.processor.service';
+import './modules/notifications/notification.dispatcher.service';
 
 // --- 全局错误处理 ---
 // 捕获未处理的 Promise Rejection

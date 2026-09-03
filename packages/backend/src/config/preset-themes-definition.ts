@@ -1,4 +1,4 @@
-import type { TerminalTheme } from '../types/terminal-theme.types';
+import type { TerminalTheme } from '../shared/types/terminal-theme.types';
 
 type PresetThemeDefinition = Omit<TerminalTheme, '_id' | 'createdAt' | 'updatedAt'> & { preset_key: string };
 

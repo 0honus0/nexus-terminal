@@ -2,11 +2,11 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { expect, test } from '../../support/fixtures';
 import { E2E_SSH } from '../../support/ssh';
-import { executeSshCommand } from '../../../../packages/backend/src/execution/ssh-command-executor';
-import { CommandSessionManager } from '../../../../packages/backend/src/execution/command-session-manager';
-import type { CommandSession } from '../../../../packages/backend/src/execution/command-session';
-import { ExecutionSessionManager } from '../../../../packages/backend/src/execution/execution-session-manager';
-import { SshConnectionFactory } from '../../../../packages/backend/src/transport/ssh/ssh-connection-factory';
+import { executeSshCommand } from '../../../../packages/backend/src/platform/execution/ssh-command-executor';
+import { CommandSessionManager } from '../../../../packages/backend/src/platform/execution/command-session-manager';
+import type { CommandSession } from '../../../../packages/backend/src/platform/execution/command-session';
+import { ExecutionSessionManager } from '../../../../packages/backend/src/platform/execution/execution-session-manager';
+import { SshConnectionFactory } from '../../../../packages/backend/src/infrastructure/ssh/connection/ssh-connection-factory';
 
 const backendRequire = createRequire(path.resolve(process.cwd(), '../../packages/backend/package.json'));
 const { Client } = backendRequire('ssh2') as { Client: new () => any };

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { runMigrations } from '../../../packages/backend/src/database/migrations';
+import { runMigrations } from '../../../packages/backend/src/infrastructure/database/migrations';
 
 const main = async (): Promise<void> => {
     const dir = mkdtempSync(path.join(tmpdir(), 'nexus-migration-e2e-'));
@@ -83,8 +83,8 @@ const main = async (): Promise<void> => {
         db!.close();
         db = null;
         process.env.NEXUS_DATA_DIR = dir;
-        const { findAllConnectionsWithTags } = await import('../../../packages/backend/src/connections/connection.repository');
-        const { closeDbInstance } = await import('../../../packages/backend/src/database/connection');
+        const { findAllConnectionsWithTags } = await import('../../../packages/backend/src/modules/connections/connection.repository');
+        const { closeDbInstance } = await import('../../../packages/backend/src/infrastructure/database/connection');
         try {
             const connections = await findAllConnectionsWithTags();
             assert.equal(connections.length, 1);
