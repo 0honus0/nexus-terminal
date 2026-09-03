@@ -1,10 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Client } from 'ssh2';
+import type { Client, ExecOptions } from 'ssh2';
 import { CommandSession } from './command-session';
 
 export interface StartCommandSessionOptions {
   id?: string;
   command: string;
+  execOptions?: ExecOptions;
+  maxOutputBytes?: number;
 }
 
 /**
@@ -21,13 +23,15 @@ export class CommandSessionManager {
     if (this.sessions.has(id)) throw new Error(`Command session ${id} already exists.`);
 
     const channel = await new Promise<import('ssh2').ClientChannel>((resolve, reject) => {
-      this.client.exec(options.command, (error, stream) => {
+      const callback = (error: Error | undefined, stream: import('ssh2').ClientChannel) => {
         if (error) reject(error);
         else resolve(stream);
-      });
+      };
+      if (options.execOptions) this.client.exec(options.command, options.execOptions, callback);
+      else this.client.exec(options.command, callback);
     });
 
-    const session = new CommandSession(id, options.command, channel);
+    const session = new CommandSession(id, options.command, channel, options.maxOutputBytes);
     this.sessions.set(id, session);
     const cleanup = () => {
       if (this.sessions.get(id) === session) this.sessions.delete(id);

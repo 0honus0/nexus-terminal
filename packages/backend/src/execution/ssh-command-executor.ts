@@ -4,6 +4,7 @@ export interface SshCommandRequest {
   command: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  signal?: AbortSignal;
 }
 
 export interface SshCommandResult {
@@ -34,12 +35,15 @@ const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
 export async function executeSshCommand(client: Client, request: SshCommandRequest): Promise<SshCommandResult> {
   const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxOutputBytes = request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+  const abortSignal = request.signal;
 
   if (!request.command || typeof request.command !== 'string') throw new Error('SSH command must be a non-empty string.');
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new Error('timeoutMs must be a positive integer.');
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) {
     throw new Error('maxOutputBytes must be a positive integer.');
   }
+
+  if (abortSignal?.aborted) throw new DOMException('SSH command aborted before execution.', 'AbortError');
 
   return new Promise<SshCommandResult>((resolve, reject) => {
     let stream: ClientChannel | undefined;
@@ -62,6 +66,7 @@ export async function executeSshCommand(client: Client, request: SshCommandReque
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      abortSignal?.removeEventListener('abort', onAbort);
       const result: SshCommandResult = {
         exitCode,
         signal,
@@ -69,20 +74,42 @@ export async function executeSshCommand(client: Client, request: SshCommandReque
         stderr: stderr.toString('utf8'),
         truncated,
       };
-      if (error) reject(error instanceof SshCommandError ? error : new SshCommandError(error.message, result));
+      if (error?.name === 'AbortError') reject(error);
+      else if (error) reject(error instanceof SshCommandError ? error : new SshCommandError(error.message, result));
       else resolve(result);
     };
 
-    const timeout = setTimeout(() => {
+    const terminateStream = () => {
+      if (!stream || stream.destroyed) return;
       try {
-        stream?.close();
+        stream.signal('TERM');
       } catch {
-        // Best effort. The SSH connection remains usable for other channels.
+        // Signal support varies by remote server.
       }
+      try {
+        stream.close();
+      } catch {
+        stream.destroy();
+      }
+    };
+
+    const onAbort = () => {
+      finish(new DOMException('SSH command aborted.', 'AbortError'), -1);
+      terminateStream();
+    };
+    abortSignal?.addEventListener('abort', onAbort, { once: true });
+
+    const timeout = setTimeout(() => {
       finish(new Error(`SSH command timed out after ${timeoutMs}ms`), -1);
+      terminateStream();
     }, timeoutMs);
+    timeout.unref?.();
 
     client.exec(request.command, (error, channel) => {
+      if (settled) {
+        try { channel?.close(); } catch { channel?.destroy(); }
+        return;
+      }
       if (error) {
         finish(error, -1);
         return;

@@ -8,6 +8,18 @@ export interface CommandSessionCloseEvent {
   signal?: string | null;
 }
 
+export interface CommandSessionSnapshot {
+  id: string;
+  command: string;
+  status: CommandSessionStatus;
+  startedAt: number;
+  exitCode?: number | null;
+  signal?: string | null;
+  stdout: string;
+  stderr: string;
+  outputTruncated: boolean;
+}
+
 export interface CommandSessionEvents {
   stdout: [Buffer];
   stderr: [Buffer];
@@ -33,19 +45,36 @@ export class CommandSession extends EventEmitter<CommandSessionEvents> {
   private _exitCode: number | null | undefined;
   private _signal: string | null | undefined;
   private settled = false;
+  private stdoutBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+  private stderrBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+  private outputTruncated = false;
 
-  constructor(id: string, command: string, channel: ClientChannel) {
+  constructor(
+    id: string,
+    command: string,
+    channel: ClientChannel,
+    private readonly maxOutputBytes = 1024 * 1024,
+  ) {
     super();
     this.id = id;
     this.command = command;
     this.channel = channel;
+    if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) {
+      throw new Error('maxOutputBytes must be a positive integer.');
+    }
 
     // Keep channel errors observable without triggering EventEmitter's
     // unhandled-error throw before the caller has attached its listener.
     this.on('error', () => undefined);
 
-    channel.on('data', (data: Buffer) => this.emit('stdout', data));
-    channel.stderr.on('data', (data: Buffer) => this.emit('stderr', data));
+    channel.on('data', (data: Buffer) => {
+      this.stdoutBuffer = this.appendBounded(this.stdoutBuffer, data);
+      this.emit('stdout', data);
+    });
+    channel.stderr.on('data', (data: Buffer) => {
+      this.stderrBuffer = this.appendBounded(this.stderrBuffer, data);
+      this.emit('stderr', data);
+    });
     channel.on('error', (error: Error) => {
       if (!this.settled) this._status = 'failed';
       this.emit('error', error);
@@ -74,6 +103,41 @@ export class CommandSession extends EventEmitter<CommandSessionEvents> {
 
   get isRunning(): boolean {
     return this._status === 'running';
+  }
+
+  get stdout(): string {
+    return this.stdoutBuffer.toString('utf8');
+  }
+
+  get stderr(): string {
+    return this.stderrBuffer.toString('utf8');
+  }
+
+  snapshot(): CommandSessionSnapshot {
+    return {
+      id: this.id,
+      command: this.command,
+      status: this.status,
+      startedAt: this.startedAt,
+      exitCode: this.exitCode,
+      signal: this.signal,
+      stdout: this.stdout,
+      stderr: this.stderr,
+      outputTruncated: this.outputTruncated,
+    };
+  }
+
+  private appendBounded(
+    current: Buffer<ArrayBufferLike>,
+    chunk: Buffer<ArrayBufferLike>,
+  ): Buffer<ArrayBufferLike> {
+    if (current.length >= this.maxOutputBytes) {
+      this.outputTruncated = true;
+      return current;
+    }
+    const remaining = this.maxOutputBytes - current.length;
+    if (chunk.length > remaining) this.outputTruncated = true;
+    return Buffer.concat([current, chunk.subarray(0, remaining)]);
   }
 
   write(data: string | Buffer): boolean {

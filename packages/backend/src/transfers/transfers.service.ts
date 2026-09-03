@@ -1,11 +1,13 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { Client, ClientChannel, ConnectConfig, SFTPWrapper } from 'ssh2';
+import { Client, ConnectConfig, SFTPWrapper, type ExecOptions } from 'ssh2';
 import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transfers.types';
 import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
 import { quotePosixShellArg } from '../utils/shell';
+import { executeSshCommand } from '../execution/ssh-command-executor';
+import { CommandSessionManager } from '../execution/command-session-manager';
 
 export class TransfersService {
   private transferTasks: Map<string, TransferTask> = new Map();
@@ -448,26 +450,13 @@ export class TransfersService {
   }
 
   private async checkCommandOnSource(client: Client, command: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      const checkCmd = `command -v ${this.escapeShellArg(command)} 2>/dev/null`;
-      client.exec(checkCmd, (err, stream) => {
-        if (err) {
-          return resolve(null);
-        }
-        let stdout = '';
-        stream
-          .on('data', (data: Buffer) => (stdout += data.toString()))
-          .on('close', (code: number) => {
-            const foundPath = stdout.trim();
-            if (code === 0 && foundPath) {
-              resolve(foundPath);
-            } else {
-              resolve(null);
-            }
-          })
-          .stderr.on('data', (data: Buffer) => {});
-      });
-    });
+    const checkCmd = `command -v ${this.escapeShellArg(command)} 2>/dev/null`;
+    try {
+      const result = await executeSshCommand(client, { command: checkCmd, timeoutMs: 10_000, maxOutputBytes: 16 * 1024 });
+      return result.stdout.trim() || null;
+    } catch {
+      return null;
+    }
   }
 
   private async checkCommandOnTargetServer(
@@ -503,26 +492,13 @@ export class TransfersService {
           .connect(connectConfig);
       });
 
-      foundCommandPath = await new Promise((resolve) => {
-        const checkCmd = `command -v ${this.escapeShellArg(command)} 2>/dev/null`;
-        targetClient.exec(checkCmd, (err, stream) => {
-          if (err) {
-            return resolve(null);
-          }
-          let stdout = '';
-          stream
-            .on('data', (data: Buffer) => (stdout += data.toString()))
-            .on('close', (code: number) => {
-              const pathOutput = stdout.trim();
-              if (code === 0 && pathOutput) {
-                resolve(pathOutput);
-              } else {
-                resolve(null);
-              }
-            })
-            .stderr.on('data', (data: Buffer) => {});
-        });
+      const checkCmd = `command -v ${this.escapeShellArg(command)} 2>/dev/null`;
+      const result = await executeSshCommand(targetClient, {
+        command: checkCmd,
+        timeoutMs: 10_000,
+        maxOutputBytes: 16 * 1024,
       });
+      foundCommandPath = result.stdout.trim() || null;
     } catch (error) {
       foundCommandPath = null; // Ensure it's null on error
     } finally {
@@ -778,73 +754,47 @@ export class TransfersService {
       const targetConnectConfigForMkdir = this.buildSshConnectConfig(targetConnection, targetCredentials);
       try {
         if (signal.aborted) throw new DOMException('Transfer cancelled by user (before mkdir).', 'AbortError');
-        await new Promise<void>((resolveMkdir, rejectMkdir) => {
-          let mkdirStreamClosed = false;
-          const onAbortMkdir = () => {
-            if (!mkdirStreamClosed) {
-              targetClientForMkdir.end();
-            }
-            rejectMkdir(new DOMException('Mkdir operation cancelled by user.', 'AbortError'));
-          };
-          signal.addEventListener('abort', onAbortMkdir, { once: true });
 
-          targetClientForMkdir
-            .on('ready', () => {
-              if (signal.aborted) {
-                // Check signal again after ready, before exec
-                signal.removeEventListener('abort', onAbortMkdir);
-                targetClientForMkdir.end();
-                return rejectMkdir(new DOMException('Mkdir operation cancelled by user (on ready).', 'AbortError'));
-              }
-              const mkdirCommand = `mkdir -p ${this.escapeShellArg(remoteTargetPathOnTarget)}`;
-              targetClientForMkdir.exec(mkdirCommand, (err, stream) => {
-                if (err) {
-                  signal.removeEventListener('abort', onAbortMkdir);
-                  targetClientForMkdir.end();
-                  return rejectMkdir(err);
-                }
-                let mkdirStderr = '';
-                stream
-                  .on('close', (code: number) => {
-                    mkdirStreamClosed = true;
-                    signal.removeEventListener('abort', onAbortMkdir);
-                    targetClientForMkdir.end();
-                    if (code === 0) {
-                      console.info(
-                        `[TransfersService] Sub-task ${subTaskId}: Target directory ${remoteTargetPathOnTarget} ensured on ${targetConnection.host}.`,
-                      );
-                      resolveMkdir();
-                    } else {
-                      rejectMkdir(
-                        new Error(
-                          `Failed to create directory ${remoteTargetPathOnTarget} on ${targetConnection.host}. Exit code: ${code}. Stderr: ${mkdirStderr.trim()}`,
-                        ),
-                      );
-                    }
-                  })
-                  .on('data', (data: Buffer) => {})
-                  .stderr.on('data', (data: Buffer) => {
-                    mkdirStderr += data.toString();
-                  })
-                  .on('error', (streamErr: Error) => {
-                    mkdirStreamClosed = true;
-                    signal.removeEventListener('abort', onAbortMkdir);
-                    targetClientForMkdir.end();
-                    rejectMkdir(streamErr);
-                  });
-              });
-            })
-            .on('error', (connErr: Error) => {
-              signal.removeEventListener('abort', onAbortMkdir);
-              rejectMkdir(connErr);
-            })
-            .on('close', () => {
-              signal.removeEventListener('abort', onAbortMkdir);
-            })
-            .connect(targetConnectConfigForMkdir);
+        await new Promise<void>((resolveConnection, rejectConnection) => {
+          let settled = false;
+          const finish = (error?: Error) => {
+            if (settled) return;
+            settled = true;
+            signal.removeEventListener('abort', onAbortConnection);
+            targetClientForMkdir.removeListener('ready', onReady);
+            targetClientForMkdir.removeListener('error', onError);
+            if (error) rejectConnection(error);
+            else resolveConnection();
+          };
+          const onAbortConnection = () => {
+            try {
+              targetClientForMkdir.end();
+            } catch {
+              // Connection may not have opened yet.
+            }
+            finish(new DOMException('Mkdir connection cancelled by user.', 'AbortError'));
+          };
+          const onReady = () => finish();
+          const onError = (error: Error) => finish(error);
+
+          signal.addEventListener('abort', onAbortConnection, { once: true });
+          targetClientForMkdir.once('ready', onReady);
+          targetClientForMkdir.once('error', onError);
+          targetClientForMkdir.connect(targetConnectConfigForMkdir);
         });
 
-        if (signal.aborted) throw new DOMException('Transfer cancelled by user (after mkdir attempt).', 'AbortError');
+        const mkdirCommand = `mkdir -p ${this.escapeShellArg(remoteTargetPathOnTarget)}`;
+        await executeSshCommand(targetClientForMkdir, {
+          command: mkdirCommand,
+          timeoutMs: 30_000,
+          maxOutputBytes: 64 * 1024,
+          signal,
+        });
+        console.info(
+          `[TransfersService] Sub-task ${subTaskId}: Target directory ${remoteTargetPathOnTarget} ensured on ${targetConnection.host}.`,
+        );
+        targetClientForMkdir.end();
+        if (signal.aborted) throw new DOMException('Transfer cancelled by user (after mkdir).', 'AbortError');
         this.updateSubTaskStatus(
           taskId,
           subTaskId,
@@ -926,70 +876,60 @@ export class TransfersService {
       );
       this.updateSubTaskStatus(taskId, subTaskId, 'transferring', 10, `Executing: ${commandTypeForLogic}`);
 
-      await new Promise<void>((resolveCmd, rejectCmd) => {
-        let streamClosed = false;
-        let commandStream: ClientChannel | undefined;
-        let timeoutHandle: NodeJS.Timeout | undefined;
+      const commandSessions = new CommandSessionManager(sourceSshClient);
+      const execOptions: ExecOptions = {};
+      if (cmdOptions.sshPassCommand) execOptions.pty = true;
 
-        const cleanupCommandListeners = () => {
-          if (timeoutHandle) clearTimeout(timeoutHandle);
-          signal.removeEventListener('abort', onAbortCmd);
-        };
-        const terminateCommandStream = () => {
-          if (!commandStream || streamClosed) return;
-          try {
-            commandStream.signal('TERM');
-          } catch {
-            /* channel may already be closing */
-          }
-          try {
-            commandStream.close();
-          } catch {
-            /* channel may already be closed */
-          }
-        };
-        const onAbortCmd = () => {
-          console.warn(
-            `[TransfersService] Abort signal received for command stream of sub-task ${subTaskId}. Terminating remote command.`,
-          );
-          cleanupCommandListeners();
-          terminateCommandStream();
-          rejectCmd(new DOMException('Command cancelled by user.', 'AbortError'));
-        };
-        signal.addEventListener('abort', onAbortCmd, { once: true });
+      try {
+        const commandSession = await commandSessions.start({
+          id: `transfer:${taskId}:${subTaskId}`,
+          command: commandToExecute,
+          execOptions,
+        });
 
-        const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
-        timeoutHandle = setTimeout(() => {
-          signal.removeEventListener('abort', onAbortCmd);
-          terminateCommandStream();
-          if (!streamClosed) rejectCmd(new Error(`${commandTypeForLogic} command timed out for ${sourceItem.name}.`));
-        }, COMMAND_TIMEOUT_MS);
+        if (signal.aborted) {
+          await commandSession.terminate();
+          throw new DOMException('Command cancelled by user before streaming began.', 'AbortError');
+        }
 
-        const execOptions: { pty?: boolean } = {};
-        if (cmdOptions.sshPassCommand) execOptions.pty = true;
+        await new Promise<void>((resolveCmd, rejectCmd) => {
+          let settled = false;
+          let stderrCombined = '';
+          let timeoutHandle: NodeJS.Timeout | undefined;
 
-        sourceSshClient.exec(commandToExecute, execOptions, (err, stream) => {
-          if (err) {
-            cleanupCommandListeners();
-            return rejectCmd(
-              signal.aborted
-                ? new DOMException('Command cancelled by user (at exec).', 'AbortError')
-                : new Error(`Failed to execute command: ${err.message}`),
+          const cleanup = () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            signal.removeEventListener('abort', onAbortCmd);
+          };
+          const settle = (error?: Error) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (error) rejectCmd(error);
+            else resolveCmd();
+          };
+          const onAbortCmd = () => {
+            console.warn(
+              `[TransfersService] Abort signal received for command session of sub-task ${subTaskId}. Terminating remote command.`,
             );
-          }
+            void commandSession
+              .terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 })
+              .finally(() => settle(new DOMException('Command cancelled by user.', 'AbortError')));
+          };
+          signal.addEventListener('abort', onAbortCmd, { once: true });
 
-          commandStream = stream;
-          if (signal.aborted) {
-            terminateCommandStream();
-            cleanupCommandListeners();
-            return rejectCmd(new DOMException('Command cancelled by user (at exec).', 'AbortError'));
-          }
+          const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
+          timeoutHandle = setTimeout(() => {
+            void commandSession
+              .terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 })
+              .finally(() => settle(new Error(`${commandTypeForLogic} command timed out for ${sourceItem.name}.`)));
+          }, COMMAND_TIMEOUT_MS);
+          timeoutHandle.unref?.();
 
-          stream.on('data', (data: Buffer) => {
-            if (signal.aborted) return;
+          commandSession.on('stdout', (data: Buffer) => {
+            if (signal.aborted || settled) return;
             if (commandTypeForLogic === 'rsync') {
-              const output = data.toString();
-              const progressMatch = output.match(/(\d+)%/);
+              const progressMatch = data.toString().match(/(\d+)%/);
               if (progressMatch?.[1]) {
                 this.updateSubTaskStatus(taskId, subTaskId, 'transferring', parseInt(progressMatch[1], 10));
               }
@@ -997,35 +937,32 @@ export class TransfersService {
               this.updateSubTaskStatus(taskId, subTaskId, 'transferring', 50, 'SCP in progress...');
             }
           });
-          let stderrCombined = '';
-          stream.stderr.on('data', (data: Buffer) => {
-            if (!signal.aborted) stderrCombined += data.toString();
+          commandSession.on('stderr', (data: Buffer) => {
+            if (!signal.aborted && !settled) stderrCombined += data.toString();
           });
-          stream.on('close', (code: number | null) => {
-            streamClosed = true;
-            commandStream = undefined;
-            cleanupCommandListeners();
+          commandSession.once('close', ({ exitCode }) => {
             if (signal.aborted) {
-              return rejectCmd(new DOMException('Command cancelled by user (on close).', 'AbortError'));
+              settle(new DOMException('Command cancelled by user (on close).', 'AbortError'));
+              return;
             }
-            if (code === 0) {
+            if (exitCode === 0) {
               this.updateSubTaskStatus(taskId, subTaskId, 'completed', 100, `${commandTypeForLogic} successful.`);
-              resolveCmd();
-            } else {
-              rejectCmd(new Error(`${commandTypeForLogic} failed. Code: ${code}. Stderr: ${stderrCombined.trim()}`));
+              settle();
+              return;
             }
+            settle(new Error(`${commandTypeForLogic} failed. Code: ${exitCode}. Stderr: ${stderrCombined.trim()}`));
           });
-          stream.on('error', (streamErr: Error) => {
-            streamClosed = true;
-            commandStream = undefined;
-            cleanupCommandListeners();
+          commandSession.once('error', (streamError: Error) => {
             if (signal.aborted) {
-              return rejectCmd(new DOMException('Command stream error due to cancellation.', 'AbortError'));
+              settle(new DOMException('Command stream error due to cancellation.', 'AbortError'));
+              return;
             }
-            rejectCmd(streamErr);
+            settle(streamError);
           });
         });
-      });
+      } finally {
+        await commandSessions.closeAll();
+      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.info(

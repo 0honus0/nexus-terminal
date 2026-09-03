@@ -69,7 +69,8 @@ export class SftpFileSystem {
           const relativePath = path.posix.relative(normalizedRoot, fullPath) || item.filename;
           if (item.filename.toLocaleLowerCase().includes(normalizedQuery)) {
             items.push({
-              ...SftpChannelFileSystem.toFileEntry(relativePath, item.attrs, item.longname),
+              ...SftpChannelFileSystem.toFileEntry(fullPath, item.attrs, item.longname),
+              filename: relativePath,
               basename: item.filename,
               relativePath,
               path: fullPath,
