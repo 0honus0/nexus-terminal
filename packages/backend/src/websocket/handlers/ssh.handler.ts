@@ -8,7 +8,8 @@ import {
   auditLogService,
   notificationService,
 } from '../../runtime/service-container';
-import * as SshService from '../../services/ssh.service';
+import { sshCredentialResolver } from '../../transport/ssh/ssh-credential-resolver';
+import type { ResolvedSshConnection } from '../../transport/ssh/ssh-connection.types';
 import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
 import WebSocket from 'ws';
@@ -435,59 +436,53 @@ export async function handleSshConnect(
     return;
   }
 
-  const dbConnectionId = payload?.connectionId;
-  if (!dbConnectionId) {
+  const rawConnectionId = payload?.connectionId;
+  const dbConnectionIdAsNumber = Number(rawConnectionId);
+  if (!Number.isInteger(dbConnectionIdAsNumber) || dbConnectionIdAsNumber <= 0) {
     if (ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'ssh:error', payload: '缺少 connectionId。' }));
+      ws.send(JSON.stringify({ type: 'ssh:error', payload: '无效或缺少 connectionId。' }));
     return;
   }
 
-  console.log(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
+  console.log(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionIdAsNumber}`);
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' }));
 
   const clientIp = request.clientIpAddress || 'unknown';
-  let connInfo: SshService.DecryptedConnectionDetails | null = null;
+  let connInfo: ResolvedSshConnection | null = null;
 
   try {
-    if (ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' }));
-    connInfo = await SshService.getConnectionDetails(dbConnectionId);
-    const connectionDetailsReadyAt = Date.now();
-
-    if (ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
-    const sshClient = await SshService.establishSshConnection(connInfo);
-    const sshTransportReadyAt = Date.now();
-
     const requestedSessionId = typeof payload?.clientSessionId === 'string' ? payload.clientSessionId.trim() : '';
     const canReuseClientSessionId =
-      /^[A-Za-z0-9_-]{8,128}$/.test(requestedSessionId) && !workspaceSessionRegistry.has(requestedSessionId);
+      /^[A-Za-z0-9_-]{8,128}$/.test(requestedSessionId) &&
+      !workspaceSessionRegistry.has(requestedSessionId) &&
+      !executionSessionManager.get(requestedSessionId);
     const newSessionId = canReuseClientSessionId ? requestedSessionId : uuidv4();
     if (requestedSessionId && !canReuseClientSessionId) {
       console.warn(`WebSocket: 客户端会话 ID 无效或冲突，已回退到服务端 UUID。`);
     }
-    ws.sessionId = newSessionId; // Assign new sessionId to the WebSocket
 
-    const dbConnectionIdAsNumber = parseInt(dbConnectionId, 10);
-    if (isNaN(dbConnectionIdAsNumber)) {
-      console.error(`WebSocket: 无效的 dbConnectionId '${dbConnectionId}' (非数字)，无法创建会话 ${newSessionId}。`);
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' }));
-      sshClient.end();
-      ws.close(1008, 'Invalid Connection ID');
-      return;
-    }
+    if (ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' }));
+    connInfo = await sshCredentialResolver.resolveStored(dbConnectionIdAsNumber);
+    const connectionDetailsReadyAt = Date.now();
+
+    if (ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
+    const executionSession = await executionSessionManager.connect({
+      id: newSessionId,
+      connection: connInfo,
+      ownerType: 'workspace',
+      ownerId: ws.userId !== undefined ? String(ws.userId) : undefined,
+    });
+    const sshClient = executionSession.client;
+    const sshTransportReadyAt = Date.now();
+    ws.sessionId = newSessionId;
 
     const newState: WorkspaceSession = {
-      ws: ws,
-      executionSession: executionSessionManager.create({
-        id: newSessionId,
-        connectionId: dbConnectionIdAsNumber,
-        ownerType: 'workspace',
-        ownerId: ws.userId !== undefined ? String(ws.userId) : undefined,
-        client: sshClient,
-      }),
+      ws,
+      executionSession,
       dbConnectionId: dbConnectionIdAsNumber,
-      connectionName: connInfo!.name,
+      connectionName: connInfo.name,
       ipAddress: clientIp,
       isShellReady: false,
       terminalCols: payload?.cols || 80,
@@ -640,13 +635,13 @@ export async function handleSshConnect(
     });
   } catch (connectError: any) {
     console.error(
-      `WebSocket: 用户 ${ws.username} (IP: ${clientIp}) 连接到数据库 ID ${dbConnectionId} 失败:`,
+      `WebSocket: 用户 ${ws.username} (IP: ${clientIp}) 连接到数据库 ID ${dbConnectionIdAsNumber} 失败:`,
       connectError,
     );
     auditLogService.logAction('SSH_CONNECT_FAILURE', {
       userId: ws.userId,
       username: ws.username,
-      connectionId: dbConnectionId,
+      connectionId: dbConnectionIdAsNumber,
       connectionName: connInfo?.name || 'Unknown',
       ip: clientIp,
       reason: connectError.message,
@@ -654,7 +649,7 @@ export async function handleSshConnect(
     notificationService.sendNotification('SSH_CONNECT_FAILURE', {
       userId: ws.userId,
       username: ws.username,
-      connectionId: dbConnectionId,
+      connectionId: dbConnectionIdAsNumber,
       ip: clientIp,
       reason: connectError.message,
     });

@@ -1,13 +1,14 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { Client, ConnectConfig, SFTPWrapper, type ExecOptions } from 'ssh2';
+import type { Client, SFTPWrapper, ExecOptions } from 'ssh2';
 import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transfers.types';
-import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
-import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
 import { quotePosixShellArg } from '../utils/shell';
 import { executeSshCommand } from '../execution/ssh-command-executor';
 import { CommandSessionManager } from '../execution/command-session-manager';
+import { sshCredentialResolver } from '../transport/ssh/ssh-credential-resolver';
+import { sshConnectionFactory } from '../transport/ssh/ssh-connection-factory';
+import type { ResolvedSshConnection } from '../transport/ssh/ssh-connection.types';
 
 export class TransfersService {
   private transferTasks: Map<string, TransferTask> = new Map();
@@ -127,28 +128,6 @@ export class TransfersService {
     return true;
   }
 
-  private buildSshConnectConfig(
-    connectionInfo: ConnectionWithTags,
-    credentials: DecryptedConnectionCredentials,
-  ): ConnectConfig {
-    const config: ConnectConfig = {
-      host: connectionInfo.host,
-      port: connectionInfo.port || 22,
-      username: connectionInfo.username,
-      readyTimeout: 20000, // 20 seconds
-      keepaliveInterval: 10000, // 10 seconds
-    };
-    if (connectionInfo.auth_method === 'password' && credentials.decryptedPassword) {
-      config.password = credentials.decryptedPassword;
-    } else if (connectionInfo.auth_method === 'key' && credentials.decryptedPrivateKey) {
-      config.privateKey = credentials.decryptedPrivateKey;
-      if (credentials.decryptedPassphrase) {
-        config.passphrase = credentials.decryptedPassphrase;
-      }
-    }
-    return config;
-  }
-
   private async processTransferTask(taskId: string, signal: AbortSignal): Promise<void> {
     // +++ 接收 AbortSignal +++
     const task = this.transferTasks.get(taskId);
@@ -169,50 +148,12 @@ export class TransfersService {
 
     try {
       if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
-      const sourceConnectionResult = await getConnectionWithDecryptedCredentials(task.payload.sourceConnectionId);
+      const sourceConnection = await sshCredentialResolver.resolveStored(task.payload.sourceConnectionId);
       if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
-
-      if (!sourceConnectionResult || !sourceConnectionResult.connection) {
-        throw new Error(`Source connection with ID ${task.payload.sourceConnectionId} not found or inaccessible.`);
-      }
-      const { connection: sourceConnection, ...sourceCredentials } = sourceConnectionResult;
-
-      sourceSshClient = new Client();
-      const sourceConnectConfig = this.buildSshConnectConfig(sourceConnection, sourceCredentials);
-
-      await new Promise<void>((resolve, reject) => {
-        if (signal.aborted) return reject(new DOMException('Transfer cancelled by user.', 'AbortError'));
-
-        const onAbort = () => {
-          sourceSshClient?.end(); // 尝试关闭连接
-          reject(new DOMException('Transfer cancelled by user.', 'AbortError'));
-        };
-        signal.addEventListener('abort', onAbort, { once: true });
-
-        sourceSshClient!
-          .on('ready', () => {
-            signal.removeEventListener('abort', onAbort);
-            console.info(
-              `[TransfersService] SSH connection established to source server ${sourceConnection.host} for task ${taskId}.`,
-            );
-            resolve();
-          })
-          .on('error', (err) => {
-            signal.removeEventListener('abort', onAbort);
-            console.error(
-              `[TransfersService] SSH connection error to source server ${sourceConnection.host} for task ${taskId}:`,
-              err,
-            );
-            reject(err);
-          })
-          .on('close', () => {
-            signal.removeEventListener('abort', onAbort);
-            console.info(
-              `[TransfersService] SSH connection closed to source server ${sourceConnection.host} for task ${taskId}.`,
-            );
-          })
-          .connect(sourceConnectConfig);
-      });
+      sourceSshClient = await sshConnectionFactory.connect(sourceConnection, undefined, signal);
+      console.info(
+        `[TransfersService] SSH connection established to source server ${sourceConnection.host} for task ${taskId}.`,
+      );
 
       if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
 
@@ -270,29 +211,15 @@ export class TransfersService {
             `[TransfersService] Task ${taskId}: Sub-task ${subTask.subTaskId} (item: ${currentSourceItem.name}) - Connecting to target ID ${subTask.connectionId}.`,
           );
 
-          const targetConnectionResult = await getConnectionWithDecryptedCredentials(subTask.connectionId);
+          const targetConnection = await sshCredentialResolver.resolveStored(subTask.connectionId);
           if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
-
-          if (!targetConnectionResult || !targetConnectionResult.connection) {
-            this.updateSubTaskStatus(
-              taskId,
-              subTask.subTaskId,
-              'failed',
-              undefined,
-              `Target connection with ID ${subTask.connectionId} not found.`,
-            );
-            return;
-          }
-          const { connection: targetConnection, ...targetCredentials } = targetConnectionResult;
 
           await this.executeRemoteTransferOnSource(
             taskId,
             subTask.subTaskId,
             sourceSshClient!,
-            sourceConnection,
             currentSourceItem,
             targetConnection,
-            targetCredentials,
             task.payload.remoteTargetPath,
             task.payload.transferMethod,
             signal, // +++ Pass signal +++
@@ -460,38 +387,14 @@ export class TransfersService {
   }
 
   private async checkCommandOnTargetServer(
-    targetConnection: ConnectionWithTags,
-    targetCredentials: DecryptedConnectionCredentials,
+    targetConnection: ResolvedSshConnection,
     command: string,
   ): Promise<string | null> {
-    const targetClient = new Client();
-    const connectConfig = this.buildSshConnectConfig(targetConnection, targetCredentials);
+    let targetClient: Client | undefined;
     let foundCommandPath: string | null = null;
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        targetClient
-          .on('ready', () => {
-            console.info(
-              `[TransfersService] SSH connection established to target server ${targetConnection.host} for command check.`,
-            );
-            resolve();
-          })
-          .on('error', (err) => {
-            console.error(
-              `[TransfersService] SSH connection error to target server ${targetConnection.host} for command check:`,
-              err,
-            );
-            reject(err);
-          })
-          .on('close', () => {
-            console.info(
-              `[TransfersService] SSH connection closed to target server ${targetConnection.host} after command check.`,
-            );
-          })
-          .connect(connectConfig);
-      });
-
+      targetClient = await sshConnectionFactory.connect(targetConnection);
       const checkCmd = `command -v ${this.escapeShellArg(command)} 2>/dev/null`;
       const result = await executeSshCommand(targetClient, {
         command: checkCmd,
@@ -502,7 +405,7 @@ export class TransfersService {
     } catch (error) {
       foundCommandPath = null; // Ensure it's null on error
     } finally {
-      targetClient.end();
+      targetClient?.end();
     }
     return foundCommandPath;
   }
@@ -580,7 +483,6 @@ export class TransfersService {
   private buildTransferCommandString(
     sourceItemPathOnA: string, // Absolute path on source A
     isDir: boolean,
-    targetConnection: ConnectionWithTags, // Target B connection details
     targetPathOnB: string, // Base remote target path on B
     executableCommand: string, // Full path to rsync or scp
     commandType: 'rsync' | 'scp', // To distinguish logic
@@ -645,10 +547,8 @@ export class TransfersService {
     taskId: string,
     subTaskId: string,
     sourceSshClient: Client,
-    sourceConnectionForInfo: ConnectionWithTags,
     sourceItem: { name: string; path: string; type: 'file' | 'directory' },
-    targetConnection: ConnectionWithTags,
-    targetCredentials: DecryptedConnectionCredentials,
+    targetConnection: ResolvedSshConnection,
     remoteTargetPathOnTarget: string,
     transferMethodPreference: 'auto' | 'rsync' | 'scp',
     signal: AbortSignal, // +++ Add AbortSignal parameter +++
@@ -682,7 +582,6 @@ export class TransfersService {
           // Source has rsync, check target
           rsyncPathOnTarget = await this.checkCommandOnTargetServer(
             targetConnection,
-            targetCredentials,
             'rsync' /*, signal */,
           );
           if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
@@ -704,7 +603,6 @@ export class TransfersService {
         if (!rsyncPathOnSource) throw new Error(`Rsync preferred but not available on source for ${sourceItem.name}.`);
         rsyncPathOnTarget = await this.checkCommandOnTargetServer(
           targetConnection,
-          targetCredentials,
           'rsync' /*, signal */,
         );
         if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
@@ -750,39 +648,10 @@ export class TransfersService {
         6,
         `Ensuring target directory ${this.escapeShellArg(remoteTargetPathOnTarget)} exists on ${targetConnection.host}.`,
       );
-      const targetClientForMkdir = new Client();
-      const targetConnectConfigForMkdir = this.buildSshConnectConfig(targetConnection, targetCredentials);
+      let targetClientForMkdir: Client | undefined;
       try {
         if (signal.aborted) throw new DOMException('Transfer cancelled by user (before mkdir).', 'AbortError');
-
-        await new Promise<void>((resolveConnection, rejectConnection) => {
-          let settled = false;
-          const finish = (error?: Error) => {
-            if (settled) return;
-            settled = true;
-            signal.removeEventListener('abort', onAbortConnection);
-            targetClientForMkdir.removeListener('ready', onReady);
-            targetClientForMkdir.removeListener('error', onError);
-            if (error) rejectConnection(error);
-            else resolveConnection();
-          };
-          const onAbortConnection = () => {
-            try {
-              targetClientForMkdir.end();
-            } catch {
-              // Connection may not have opened yet.
-            }
-            finish(new DOMException('Mkdir connection cancelled by user.', 'AbortError'));
-          };
-          const onReady = () => finish();
-          const onError = (error: Error) => finish(error);
-
-          signal.addEventListener('abort', onAbortConnection, { once: true });
-          targetClientForMkdir.once('ready', onReady);
-          targetClientForMkdir.once('error', onError);
-          targetClientForMkdir.connect(targetConnectConfigForMkdir);
-        });
-
+        targetClientForMkdir = await sshConnectionFactory.connect(targetConnection, undefined, signal);
         const mkdirCommand = `mkdir -p ${this.escapeShellArg(remoteTargetPathOnTarget)}`;
         await executeSshCommand(targetClientForMkdir, {
           command: mkdirCommand,
@@ -803,17 +672,7 @@ export class TransfersService {
           `Target directory ensured. Preparing transfer command.`,
         );
       } catch (mkdirError: any) {
-        if (
-          targetClientForMkdir &&
-          (targetClientForMkdir as any)._sock &&
-          !(targetClientForMkdir as any)._sock.destroyed
-        ) {
-          try {
-            targetClientForMkdir.end();
-          } catch (e) {
-            /* ignore */
-          }
-        }
+        try { targetClientForMkdir?.end(); } catch { /* best effort */ }
         console.error(
           `[TransfersService] Sub-task ${subTaskId}: Failed to ensure target directory ${remoteTargetPathOnTarget} on ${targetConnection.host}:`,
           mkdirError.message,
@@ -839,28 +698,28 @@ export class TransfersService {
       }
       // +++ 结束自动创建目标目录 +++
 
-      if (targetConnection.auth_method === 'key' && targetCredentials.decryptedPrivateKey) {
+      if (targetConnection.authMethod === 'key' && targetConnection.privateKey) {
         const randomSuffix = crypto.randomBytes(6).toString('hex');
         tempTargetKeyPathOnSource = path.posix.join('/tmp', `${this.TEMP_KEY_PREFIX}${randomSuffix}`);
         await this.uploadKeyToSourceViaSftp(
           sourceSshClient,
-          targetCredentials.decryptedPrivateKey,
+          targetConnection.privateKey,
           tempTargetKeyPathOnSource,
         );
         if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
         cmdOptions.sshIdentityFileOption = `-i ${this.escapeShellArg(tempTargetKeyPathOnSource)}`;
-        if (targetCredentials.decryptedPassphrase && !sshpassPath) {
+        if (targetConnection.passphrase && !sshpassPath) {
           throw new Error(`Target key has passphrase, but sshpass is not available on source for ${sourceItem.name}.`);
         }
-        if (targetCredentials.decryptedPassphrase && sshpassPath) {
-          cmdOptions.sshPassCommand = `${this.escapeShellArg(sshpassPath)} -p ${this.escapeShellArg(targetCredentials.decryptedPassphrase)}`;
+        if (targetConnection.passphrase && sshpassPath) {
+          cmdOptions.sshPassCommand = `${this.escapeShellArg(sshpassPath)} -p ${this.escapeShellArg(targetConnection.passphrase)}`;
         }
-      } else if (targetConnection.auth_method === 'password' && targetCredentials.decryptedPassword) {
+      } else if (targetConnection.authMethod === 'password' && targetConnection.password) {
         if (!sshpassPath) {
           throw new Error(`Target uses password auth, but sshpass is not available on source for ${sourceItem.name}.`);
         }
-        cmdOptions.sshPassCommand = `${this.escapeShellArg(sshpassPath)} -p ${this.escapeShellArg(targetCredentials.decryptedPassword)}`;
-      } else if (targetConnection.auth_method === 'key' && !targetCredentials.decryptedPrivateKey) {
+        cmdOptions.sshPassCommand = `${this.escapeShellArg(sshpassPath)} -p ${this.escapeShellArg(targetConnection.password)}`;
+      } else if (targetConnection.authMethod === 'key' && !targetConnection.privateKey) {
         throw new Error(`Target connection ${targetConnection.name} is key-based but no private key found.`);
       }
       if (signal.aborted) throw new DOMException('Transfer cancelled by user.', 'AbortError');
@@ -868,7 +727,6 @@ export class TransfersService {
       const commandToExecute = this.buildTransferCommandString(
         sourceItem.path,
         sourceItem.type === 'directory',
-        targetConnection,
         remoteTargetPathOnTarget,
         executableCommandPath,
         commandTypeForLogic,

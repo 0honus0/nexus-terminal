@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import * as ConnectionService from './connection.service';
-import * as SshService from '../services/ssh.service';
+import { sshConnectionTester } from '../transport/ssh/ssh-connection-tester';
 import * as GuacamoleService from '../services/guacamole.service';
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
@@ -122,8 +122,8 @@ export const testConnection = async (req: Request<{ id: string }>, res: Response
       return;
     }
 
-    // 调用 SshService 进行连接测试，现在它会返回延迟
-    const { latency } = await SshService.testConnection(connectionId);
+    // 使用统一 SSH connection tester 执行连接测试
+    const { latency } = await sshConnectionTester.testStored(connectionId);
 
     res.status(200).json({ success: true, message: '连接测试成功。', latency }); // 返回延迟
   } catch (error: any) {
@@ -190,15 +190,13 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
       return;
     }
 
-    // 调用 SshService 进行连接测试，现在它会返回延迟
-    // 注意：SshService.testUnsavedConnection 需要处理原始凭证
-    const { latency } = await SshService.testUnsavedConnection(connectionConfig);
+    // 使用统一 SSH connection tester 执行连接测试
+        const { latency } = await sshConnectionTester.testUnsaved(connectionConfig);
 
-    // 如果 SshService.testUnsavedConnection 没有抛出错误，则表示成功
-    res.status(200).json({ success: true, message: '连接测试成功。', latency });
+        res.status(200).json({ success: true, message: '连接测试成功。', latency });
   } catch (error: any) {
     console.error(`Controller: 测试未保存连接时发生错误:`, error);
-    // SshService 会抛出包含具体原因的 Error
+    // tester 会抛出包含具体原因的 Error
     res.status(500).json({ success: false, message: error.message || '测试连接时发生内部服务器错误。' });
   }
 };

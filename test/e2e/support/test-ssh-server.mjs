@@ -1,4 +1,5 @@
 import http from 'node:http';
+import net from 'node:net';
 import { createWriteStream } from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -915,6 +916,22 @@ const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
       session.on('exec', (acceptExec, _rejectExec, info) => runRemoteCommand(info.command, acceptExec()));
       session.on('sftp', (acceptSftp) => attachSftp(session, acceptSftp));
     });
+
+    // Support ssh2 Client.forwardOut so this same E2E server can act as a jump host.
+    client.on('tcpip', (accept, reject, info) => {
+      const upstream = net.connect(info.destPort, info.destIP);
+      upstream.once('connect', () => {
+        const channel = accept();
+        channel.once('close', () => upstream.destroy());
+        upstream.once('close', () => {
+          try { channel.end(); } catch { /* already closed */ }
+        });
+        channel.pipe(upstream).pipe(channel);
+      });
+      upstream.once('error', () => {
+        try { reject(); } catch { /* request may already have ended */ }
+      });
+    });
   });
 
   client.on('error', (error) => {
@@ -1155,6 +1172,24 @@ const controlServer = http.createServer(async (req, res) => {
     res.writeHead(500, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
   }
+});
+
+// The control HTTP server also doubles as a minimal HTTP CONNECT proxy for SSH transport E2E.
+controlServer.on('connect', (req, clientSocket, head) => {
+  const [host, rawPort] = String(req.url || '').split(':');
+  const port = Number(rawPort);
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
+    clientSocket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    return;
+  }
+
+  const upstream = net.connect(port, host, () => {
+    clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+    if (head.length > 0) upstream.write(head);
+    clientSocket.pipe(upstream).pipe(clientSocket);
+  });
+  upstream.once('error', () => clientSocket.destroy());
+  clientSocket.once('error', () => upstream.destroy());
 });
 
 await startSshServer();

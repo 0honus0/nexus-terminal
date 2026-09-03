@@ -1,6 +1,7 @@
 import type { Client } from 'ssh2';
 import * as ConnectionRepository from '../connections/connection.repository';
-import * as SshService from '../services/ssh.service';
+import { sshCredentialResolver } from '../transport/ssh/ssh-credential-resolver';
+import { sshConnectionFactory } from '../transport/ssh/ssh-connection-factory';
 import { ServerStatusCollector, type ServerStatus } from './server-status.collector';
 import { settingsService } from '../settings/settings.service';
 
@@ -61,8 +62,8 @@ async function collectForHost(
   for (const candidate of candidates) {
     let client: Client | null = null;
     try {
-      const details = await SshService.getConnectionDetails(candidate.id);
-      client = await SshService.establishSshConnection(details, CONNECT_TIMEOUT_MS);
+      const details = await sshCredentialResolver.resolveStored(candidate.id);
+      client = await sshConnectionFactory.connect(details, CONNECT_TIMEOUT_MS);
 
       let status = await snapshotCollector.collect(client, key);
       if (!bootstrappedKeys.has(key)) {

@@ -4,6 +4,8 @@ import {
   ExecutionSession,
   type ExecutionSessionOwnerType,
 } from './execution-session';
+import type { ResolvedSshConnection } from '../transport/ssh/ssh-connection.types';
+import { sshConnectionFactory } from '../transport/ssh/ssh-connection-factory';
 
 export interface CreateExecutionSessionOptions {
   id?: string;
@@ -11,6 +13,15 @@ export interface CreateExecutionSessionOptions {
   ownerType: ExecutionSessionOwnerType;
   ownerId?: string;
   client: Client;
+}
+
+export interface ConnectExecutionSessionOptions {
+  id?: string;
+  connection: ResolvedSshConnection;
+  ownerType: ExecutionSessionOwnerType;
+  ownerId?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -26,6 +37,29 @@ export class ExecutionSessionManager {
     const session = new ExecutionSession({ ...options, id });
     this.sessions.set(id, session);
     return session;
+  }
+
+  async connect(options: ConnectExecutionSessionOptions): Promise<ExecutionSession> {
+    const id = options.id ?? uuidv4();
+    if (this.sessions.has(id)) throw new Error(`Execution session ${id} already exists.`);
+
+    const client = await sshConnectionFactory.connect(options.connection, options.timeoutMs, options.signal);
+    try {
+      return this.create({
+        id,
+        connectionId: options.connection.id,
+        ownerType: options.ownerType,
+        ownerId: options.ownerId,
+        client,
+      });
+    } catch (error) {
+      try {
+        client.end();
+      } catch {
+        // Best effort if session registration fails after transport creation.
+      }
+      throw error;
+    }
   }
 
   get(id: string): ExecutionSession | undefined {

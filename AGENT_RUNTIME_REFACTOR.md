@@ -1372,3 +1372,21 @@ Connection service/controller may be touched by F2 credential resolution where n
 - Backend TypeScript build passes after F1 restructuring.
 - Targeted non-browser real-SSH E2E after F1: `protocol.spec.ts`, `execution-foundation.spec.ts`, `status-docker-protocol.spec.ts`, and `suspend-resume.spec.ts` => **10 passed, 2 skipped, 0 failed**. The skipped archive cases depend on missing `zip` in the local host fixture; they are covered by remote Actions.
 - Next: commit/push F1 and immediately start F2 physical split of `services/ssh.service.ts` while remote Actions validates F1.
+
+
+### 2026-09-03 F2 SSH connection foundation
+
+- F1 remote validation is green: Actions run `33713129527` for `0a236700` => SUCCESS.
+- Physically deleted the old `packages/backend/src/services/ssh.service.ts` monolith (~894 lines); no facade or compatibility alias remains.
+- Added `transport/ssh/` modules for resolved connection types, credential resolution, raw client connection, HTTP/SOCKS proxy routing, jump-chain routing, connection factory and connection testing.
+- All old `SshService`, `DecryptedConnectionDetails`, `getConnectionDetails`, and `establishSshConnection` references are removed.
+- `connections.controller`, Workspace SSH, remote system status collection and `TransfersService` now use the same resolver/factory foundation.
+- `TransfersService` no longer constructs/configures raw ssh2 Clients; source/target/mkdir connections all use `sshConnectionFactory`, including AbortSignal support. Raw SSH connect ownership is confined to `transport/ssh`.
+- `ExecutionSessionManager.connect()` now atomically creates the SSH transport and registers its `ExecutionSession`; Workspace SSH uses this path instead of connecting first and registering later.
+- Transport networking no longer statically depends on DB repositories. `last_connected_at` is an upper-layer async factory hook; this allows pure ExecutionSession transport tests without pulling SQLite persistence into the primitive.
+- Jump-chain intermediate SSH clients are explicitly tied to the final client lifecycle and released on final close.
+- Extended fake SSH server with `forwardOut` support and an HTTP CONNECT proxy fixture.
+- `execution-foundation.spec.ts` now verifies bounded exec, long command sessions, managed SSH+SFTP lifecycle, real HTTP CONNECT routing, and real jump-host routing/cleanup: **5 passed** locally.
+- Workspace protocol/status/suspend targeted E2E after `ExecutionSessionManager.connect()` migration exits **0**; direct saved/unsaved SSH product paths remain functional. Local archive cases can skip when host `zip` is unavailable; remote Actions is the final gate.
+- Known gap intentionally deferred to F4: legacy `TransfersService` rsync/scp strategy has no dedicated E2E today. Add strategy-level E2E while physically replacing that monolith rather than writing tests around code scheduled for immediate deletion.
+- Next: F3 filesystem application boundary. Remove ssh2 `SFTPWrapper`/`Stats` and low-level stat/realpath/readdir/read-stream implementation from `sftp.controller.ts`; controllers should consume reusable filesystem services only.

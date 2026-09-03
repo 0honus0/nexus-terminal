@@ -619,7 +619,7 @@ export const getConnectionWithDecryptedCredentials = async (
   };
 };
 // 注意：testConnection、importConnections、exportConnections 逻辑
-// 将分别移至 SshService 和 ImportExportService。
+// SSH transport 与导入导出逻辑由各自领域模块负责。
 
 /**
  * 克隆连接
