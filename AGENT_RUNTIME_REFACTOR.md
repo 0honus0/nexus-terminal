@@ -1254,10 +1254,11 @@ F3 status (2026-09-03): locally complete and ready for remote validation.
 
 ### F4 — Operation services: archive, upload and transfers
 
-Current remaining issue:
+Current status:
 
-- Workspace archive/SFTP copy/upload operations have been separated from WebSocket transport in F4-A;
-- `transfers/transfers.service.ts` (~1.05k lines) still mixes server-to-server task registry/orchestration, credential/connect logic, rsync/scp strategy selection, progress and cancellation.
+- Workspace archive/SFTP copy/upload operations were separated from WebSocket transport in F4-A;
+- F4-B separates the server-to-server transfer monolith into task state, orchestration, execution and rsync/scp strategies;
+- `transfers/transfers.service.ts` is now only the existing HTTP-controller compatibility/composition facade.
 
 Target split:
 
@@ -1269,8 +1270,9 @@ archive/
 transfers/
   transfer-task-registry.ts
   transfer-orchestrator.ts
+  remote-transfer-executor.ts
   strategies/
-    sftp-transfer.strategy.ts
+    transfer-command.strategy.ts
     rsync-transfer.strategy.ts
     scp-transfer.strategy.ts
   workspace-sftp-transfer.adapter.ts
@@ -1299,6 +1301,18 @@ F4-A status (2026-09-03): operation/transport separation complete for Workspace 
 - Added browser-free `upload-foundation.spec.ts`; real SSH `upload:start -> ready -> NXUP binary chunk -> ACK -> success -> readback` passes.
 - Focused cross-session transfer + upload foundation regression: **2 passed / 0 failed**. Broader archive protocol regression: **7 passed / 2 local zip skips**; archive UI-only test cannot launch locally because the Playwright Chromium binary is absent and remains covered by remote Actions.
 - E2E group manifest now contains **66 specs** and passes group consistency checks.
+
+F4-B status (2026-09-03): server-to-server transfer core decomposition complete locally.
+
+- Reduced `transfers/transfers.service.ts` from **1055 lines to a ~45-line facade** while keeping the controller API stable.
+- Added `TransferTaskRegistry` for task/sub-task ownership, aggregate progress, cancellation controllers, user isolation and safe final-task removal.
+- Added `TransferOrchestrator`; it owns bounded sub-task scheduling only and receives credential resolution/source connection functions by dependency injection instead of importing database repositories.
+- Added transport-neutral `RemoteTransferExecutor` for one source SSH -> target SSH operation, including command discovery, target directory preparation, temporary key lifecycle, cancellation and command timeout handling.
+- Added isolated `RsyncTransferStrategy` and `ScpTransferStrategy` for command construction and stdout progress parsing.
+- Fixed a pre-existing fatal-task state bug: source-level setup failures no longer become `queued` again during final aggregation; unfinished sub-tasks transition to `failed` (or `cancelled` on abort).
+- Added `transfer-foundation.spec.ts` covering registry owner/cancel/remove semantics, rsync/scp command contracts, orchestrator concurrency/progress mapping and the existing HTTP transfer facade/fatal-failure lifecycle.
+- Backend build passes; focused F4-B regression: **4 passed / 0 failed**.
+- F4-A remote Actions run `33719456471` for `6f699c71` is **SUCCESS**.
 
 ### F5 — WebSocket transport/router decomposition
 

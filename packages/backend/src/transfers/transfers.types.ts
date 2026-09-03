@@ -27,4 +27,7 @@ export interface TransferTask {
   subTasks: TransferSubTask[];
   overallProgress?: number; // 0-100, 根据子任务计算
   payload: InitiateTransferPayload; // 存储原始请求负载，方便追溯
+  // Existing API convenience fields returned by task detail/list endpoints.
+  sourceConnectionId?: number;
+  remoteTargetPath?: string;
 }
