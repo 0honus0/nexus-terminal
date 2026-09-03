@@ -1,6 +1,47 @@
 import { AuthenticatedWebSocket } from '../types';
 import { clientStates, sftpService } from '../state';
 import WebSocket from 'ws';
+import { SftpFileSystem } from '../../filesystem/sftp-file-system';
+import { FileRemovalService } from '../../filesystem/file-removal.service';
+
+const DIRECT_FILESYSTEM_TYPES = new Set([
+  'sftp:readdir',
+  'sftp:search',
+  'sftp:stat',
+  'sftp:readfile',
+  'sftp:writefile',
+  'sftp:mkdir',
+  'sftp:rmdir',
+  'sftp:unlink',
+  'sftp:rename',
+  'sftp:chmod',
+  'sftp:realpath',
+  'sftp:delete_paths',
+]);
+
+function sendDirectFilesystemError(
+  ws: AuthenticatedWebSocket,
+  type: string,
+  payload: any,
+  requestId: string,
+  error: unknown,
+): boolean {
+  if (!DIRECT_FILESYSTEM_TYPES.has(type) || ws.readyState !== WebSocket.OPEN) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  const response: Record<string, unknown> = {
+    type: `${type}:error`,
+    requestId,
+    payload: message,
+  };
+  if (payload?.path) response.path = payload.path;
+  if (payload?.oldPath) response.oldPath = payload.oldPath;
+  if (payload?.newPath) response.newPath = payload.newPath;
+  if (type === 'sftp:realpath') {
+    response.payload = { requestedPath: payload?.path, error: message };
+  }
+  ws.send(JSON.stringify(response));
+  return true;
+}
 
 export async function handleSftpOperation(
   ws: AuthenticatedWebSocket,
@@ -25,66 +66,85 @@ export async function handleSftpOperation(
     return;
   }
 
+  const filesystem = new SftpFileSystem(state.executionSession);
+  const removal = new FileRemovalService(state.executionSession);
+
   try {
     switch (type) {
-      case 'sftp:readdir':
-        if (payload?.path) sftpService.readdir(sessionId, payload.path, requestId);
-        else throw new Error("Missing 'path' in payload for readdir");
+      case 'sftp:readdir': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for readdir");
+        const result = await filesystem.list(payload.path);
+        ws.send(JSON.stringify({ type: 'sftp:readdir:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:search':
-        if (payload?.path && typeof payload?.query === 'string') {
-          void sftpService.search(sessionId, payload.path, payload.query, requestId);
-        } else {
+      }
+      case 'sftp:search': {
+        if (!payload?.path || typeof payload?.query !== 'string') {
           throw new Error("Missing 'path' or 'query' in payload for search");
         }
+        const result = await filesystem.search(payload.path, payload.query);
+        ws.send(JSON.stringify({ type: 'sftp:search:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:stat':
-        if (payload?.path) sftpService.stat(sessionId, payload.path, requestId);
-        else throw new Error("Missing 'path' in payload for stat");
+      }
+      case 'sftp:stat': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for stat");
+        const result = await filesystem.stat(payload.path);
+        ws.send(JSON.stringify({ type: 'sftp:stat:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:readfile':
-        if (payload?.path) {
-          const requestedEncoding = payload?.encoding;
-          sftpService.readFile(sessionId, payload.path, requestId, requestedEncoding);
-        } else {
-          throw new Error("Missing 'path' in payload for readfile");
-        }
+      }
+      case 'sftp:readfile': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for readfile");
+        const result = await filesystem.readFile(payload.path, payload?.encoding);
+        ws.send(JSON.stringify({ type: 'sftp:readfile:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:writefile':
+      }
+      case 'sftp:writefile': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for writefile");
         const fileContent = payload?.content ?? payload?.data ?? '';
-        const encoding = payload?.encoding;
-        if (payload?.path) {
-          const dataToSend = typeof fileContent === 'string' ? fileContent : '';
-          // 保留用户选择的换行符，并等待写入失败结果传回前端。
-          await sftpService.writefile(sessionId, payload.path, dataToSend, requestId, encoding);
-        } else throw new Error("Missing 'path' in payload for writefile");
+        const dataToSend = typeof fileContent === 'string' ? fileContent : '';
+        const result = await filesystem.writeFile(payload.path, dataToSend, payload?.encoding || 'utf-8');
+        ws.send(JSON.stringify({ type: 'sftp:writefile:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:mkdir':
-        if (payload?.path) sftpService.mkdir(sessionId, payload.path, requestId);
-        else throw new Error("Missing 'path' in payload for mkdir");
+      }
+      case 'sftp:mkdir': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for mkdir");
+        const result = await filesystem.mkdir(payload.path);
+        ws.send(JSON.stringify({ type: 'sftp:mkdir:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:rmdir':
-        if (payload?.path) sftpService.rmdir(sessionId, payload.path, requestId);
-        else throw new Error("Missing 'path' in payload for rmdir");
+      }
+      case 'sftp:rmdir': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for rmdir");
+        await removal.removeDirectoryForce(payload.path);
+        ws.send(JSON.stringify({ type: 'sftp:rmdir:success', path: payload.path, requestId }));
         break;
-      case 'sftp:unlink':
-        if (payload?.path) sftpService.unlink(sessionId, payload.path, requestId);
-        else throw new Error("Missing 'path' in payload for unlink");
+      }
+      case 'sftp:unlink': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for unlink");
+        await filesystem.unlink(payload.path);
+        ws.send(JSON.stringify({ type: 'sftp:unlink:success', path: payload.path, requestId }));
         break;
-      case 'sftp:rename':
-        if (payload?.oldPath && payload?.newPath)
-          sftpService.rename(sessionId, payload.oldPath, payload.newPath, requestId);
-        else throw new Error("Missing 'oldPath' or 'newPath' in payload for rename");
+      }
+      case 'sftp:rename': {
+        if (!payload?.oldPath || !payload?.newPath) throw new Error("Missing 'oldPath' or 'newPath' in payload for rename");
+        const newItem = await filesystem.rename(payload.oldPath, payload.newPath);
+        ws.send(JSON.stringify({
+          type: 'sftp:rename:success',
+          payload: { oldPath: payload.oldPath, newPath: payload.newPath, newItem },
+          requestId,
+        }));
         break;
-      case 'sftp:chmod':
-        if (payload?.path && typeof payload?.mode === 'number')
-          sftpService.chmod(sessionId, payload.path, payload.mode, requestId);
-        else throw new Error("Missing 'path' or invalid 'mode' in payload for chmod");
+      }
+      case 'sftp:chmod': {
+        if (!payload?.path || typeof payload?.mode !== 'number') throw new Error("Missing 'path' or invalid 'mode' in payload for chmod");
+        const result = await filesystem.chmod(payload.path, payload.mode);
+        ws.send(JSON.stringify({ type: 'sftp:chmod:success', path: payload.path, payload: result, requestId }));
         break;
-      case 'sftp:realpath':
-        if (payload?.path) sftpService.realpath(sessionId, payload.path, requestId);
-        else throw new Error("Missing 'path' in payload for realpath");
+      }
+      case 'sftp:realpath': {
+        if (!payload?.path) throw new Error("Missing 'path' in payload for realpath");
+        const result = await filesystem.realpath(payload.path);
+        ws.send(JSON.stringify({ type: 'sftp:realpath:success', path: payload.path, payload: result, requestId }));
         break;
+      }
       case 'sftp:copy':
         if (Array.isArray(payload?.sources) && payload?.destination) {
           sftpService.copy(sessionId, payload.sources, payload.destination, requestId);
@@ -102,11 +162,16 @@ export async function handleSftpOperation(
         } else
           throw new Error("Missing 'sourceSessionId', 'sources' (array), or 'destination' in payload for cross copy");
         break;
-      case 'sftp:delete_paths':
-        if (Array.isArray(payload?.paths)) {
-          await sftpService.deletePaths(sessionId, payload.paths, requestId);
-        } else throw new Error("Missing 'paths' (array) in payload for delete paths");
+      case 'sftp:delete_paths': {
+        if (!Array.isArray(payload?.paths)) throw new Error("Missing 'paths' (array) in payload for delete paths");
+        await removal.removePaths(payload.paths);
+        ws.send(JSON.stringify({
+          type: 'sftp:delete_paths:success',
+          payload: { paths: payload.paths },
+          requestId,
+        }));
         break;
+      }
       case 'sftp:move':
         if (Array.isArray(payload?.sources) && payload?.destination) {
           sftpService.move(sessionId, payload.sources, payload.destination, requestId);
@@ -169,6 +234,7 @@ export async function handleSftpOperation(
       `WebSocket: Error preparing/calling SFTP service for ${type} (Request ID: ${requestId}):`,
       sftpCallError,
     );
+    if (sendDirectFilesystemError(ws, type, payload, requestId, sftpCallError)) return;
     if (ws.readyState === WebSocket.OPEN)
       ws.send(
         JSON.stringify({

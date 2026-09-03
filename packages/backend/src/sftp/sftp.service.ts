@@ -1,10 +1,9 @@
-import { Client, ClientChannel, SFTPWrapper, Stats, WriteStream, type OpenMode } from 'ssh2';
+import { SFTPWrapper, Stats, WriteStream, type OpenMode } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
 import * as pathModule from 'path';
-import * as jschardet from 'jschardet';
-import * as iconv from 'iconv-lite';
 import { quotePosixShellArg } from '../utils/shell';
+import type { CommandSession } from '../execution/command-session';
 // +++ 导入新类型 +++
 import {
   SftpCompressRequestPayload,
@@ -66,10 +65,6 @@ const UPLOAD_DIRECTORY_PREPARE_CONCURRENCY = 8;
 const SFTP_TRANSFER_CHUNK_SIZE = 32 * 1024;
 const SFTP_TRANSFER_CONCURRENCY = 64;
 const SFTP_TRANSFER_PROGRESS_INTERVAL_MS = 200;
-const SFTP_SEARCH_CONCURRENCY = 8;
-const SFTP_SEARCH_MAX_RESULTS = 500;
-const SFTP_SEARCH_MAX_DIRECTORIES = 5000;
-const SFTP_SEARCH_MAX_QUERY_LENGTH = 256;
 
 type ArchivePasswordValidationError = {
   code: 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT';
@@ -136,7 +131,7 @@ interface ActiveArchiveOperation {
   sessionId: string;
   requestId: string;
   workspacePath?: string;
-  stream: ClientChannel;
+  commandSession: CommandSession;
   heartbeatInterval: ReturnType<typeof setInterval>;
   cancelled: boolean;
 }
@@ -145,7 +140,7 @@ interface PendingArchiveOperation {
   sessionId: string;
   requestId: string;
   cancelled: boolean;
-  preflightStream?: ClientChannel;
+  preflightSession?: CommandSession;
 }
 
 export class SftpService {
@@ -254,1090 +249,28 @@ export class SftpService {
   // --- SFTP 操作方法 ---
 
   /** 读取目录内容 */
-  async readdir(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readdir (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:readdir:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      );
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received readdir request for ${path} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.readdir(path, (err, list) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] readdir ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:readdir:error',
-              path: path,
-              payload: `读取目录失败: ${err.message}`,
-              requestId: requestId,
-            }),
-          );
-        } else {
-          const files = list.map((item) => ({
-            filename: item.filename,
-            longname: item.longname,
-            attrs: {
-              size: item.attrs.size,
-              uid: item.attrs.uid,
-              gid: item.attrs.gid,
-              mode: item.attrs.mode,
-              atime: item.attrs.atime * 1000,
-              mtime: item.attrs.mtime * 1000,
-              isDirectory: item.attrs.isDirectory(),
-              isFile: item.attrs.isFile(),
-              isSymbolicLink: item.attrs.isSymbolicLink(),
-            },
-          }));
-          state.ws.send(
-            JSON.stringify({ type: 'sftp:readdir:success', path: path, payload: files, requestId: requestId }),
-          );
-        }
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] readdir ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:readdir:error',
-          path: path,
-          payload: `读取目录时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
 
   /** 从指定目录开始按名称递归搜索文件和目录。符号链接目录不会继续向下遍历。 */
-  async search(sessionId: string, rootPath: string, query: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:search:error',
-          path: rootPath,
-          payload: 'SFTP 会话未就绪',
-          requestId,
-        }),
-      );
-      return;
-    }
-
-    const normalizedQuery = query.trim().slice(0, SFTP_SEARCH_MAX_QUERY_LENGTH).toLocaleLowerCase();
-    const normalizedRoot = pathModule.posix.resolve('/', rootPath || '/');
-    if (!normalizedQuery) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:search:success',
-          path: normalizedRoot,
-          payload: { items: [], truncated: false },
-          requestId,
-        }),
-      );
-      return;
-    }
-
-    const toPayloadItem = (entry: SftpDirEntry, fullPath: string, relativePath: string) => ({
-      filename: relativePath,
-      basename: entry.filename,
-      relativePath,
-      path: fullPath,
-      longname: entry.longname,
-      attrs: {
-        size: entry.attrs.size,
-        uid: entry.attrs.uid,
-        gid: entry.attrs.gid,
-        mode: entry.attrs.mode,
-        atime: entry.attrs.atime * 1000,
-        mtime: entry.attrs.mtime * 1000,
-        isDirectory: entry.attrs.isDirectory(),
-        isFile: entry.attrs.isFile(),
-        isSymbolicLink: entry.attrs.isSymbolicLink(),
-      },
-    });
-
-    try {
-      const queue: string[] = [normalizedRoot];
-      const results: ReturnType<typeof toPayloadItem>[] = [];
-      let scannedDirectories = 0;
-      let truncated = false;
-
-      while (queue.length > 0 && results.length < SFTP_SEARCH_MAX_RESULTS) {
-        const remainingDirectoryBudget = SFTP_SEARCH_MAX_DIRECTORIES - scannedDirectories;
-        if (remainingDirectoryBudget <= 0) {
-          truncated = true;
-          break;
-        }
-
-        const batch = queue.splice(0, Math.min(SFTP_SEARCH_CONCURRENCY, remainingDirectoryBudget));
-        scannedDirectories += batch.length;
-        const directoryResults = await Promise.all(
-          batch.map(async (directory) => {
-            try {
-              return { directory, entries: await this.listDirectory(state.executionSession.sftp.control!, directory), error: null as Error | null };
-            } catch (error: any) {
-              return { directory, entries: [] as SftpDirEntry[], error: error instanceof Error ? error : new Error(String(error)) };
-            }
-          }),
-        );
-
-        for (const directoryResult of directoryResults) {
-          if (directoryResult.error) {
-            if (directoryResult.directory === normalizedRoot) throw directoryResult.error;
-            console.debug(
-              `[SFTP ${sessionId}] Recursive search skipped unreadable directory ${directoryResult.directory}: ${directoryResult.error.message}`,
-            );
-            continue;
-          }
-
-          for (const entry of directoryResult.entries) {
-            if (entry.filename === '.' || entry.filename === '..') continue;
-            const fullPath = pathModule.posix.join(directoryResult.directory, entry.filename);
-            const relativePath = pathModule.posix.relative(normalizedRoot, fullPath) || entry.filename;
-
-            if (entry.filename.toLocaleLowerCase().includes(normalizedQuery)) {
-              results.push(toPayloadItem(entry, fullPath, relativePath));
-              if (results.length >= SFTP_SEARCH_MAX_RESULTS) {
-                truncated = true;
-                break;
-              }
-            }
-
-            if (entry.attrs.isDirectory() && !entry.attrs.isSymbolicLink()) queue.push(fullPath);
-          }
-          if (results.length >= SFTP_SEARCH_MAX_RESULTS) break;
-        }
-      }
-
-      if (queue.length > 0) truncated = true;
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:search:success',
-          path: normalizedRoot,
-          payload: { items: results, truncated },
-          requestId,
-        }),
-      );
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] Recursive search under ${normalizedRoot} failed (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:search:error',
-          path: normalizedRoot,
-          payload: `递归搜索失败: ${error?.message || String(error)}`,
-          requestId,
-        }),
-      );
-    }
-  }
 
   /** 获取文件/目录状态信息 */
-  async stat(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 stat (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:stat:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received stat request for ${path} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.lstat(path, (err, stats: Stats) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] stat ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:stat:error',
-              path: path,
-              payload: `获取状态失败: ${err.message}`,
-              requestId: requestId,
-            }),
-          );
-        } else {
-          const fileStats = {
-            size: stats.size,
-            uid: stats.uid,
-            gid: stats.gid,
-            mode: stats.mode,
-            atime: stats.atime * 1000,
-            mtime: stats.mtime * 1000,
-            isDirectory: stats.isDirectory(),
-            isFile: stats.isFile(),
-            isSymbolicLink: stats.isSymbolicLink(),
-          };
-          // Send specific success type
-          state.ws.send(
-            JSON.stringify({ type: 'sftp:stat:success', path: path, payload: fileStats, requestId: requestId }),
-          );
-        }
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] stat ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:stat:error',
-          path: path,
-          payload: `获取状态时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 读取文件内容 (支持指定编码) */
-  async readFile(sessionId: string, path: string, requestId: string, requestedEncoding?: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readFile (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:readfile:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      );
-      return;
-    }
-    console.debug(
-      `[SFTP ${sessionId}] Received readFile request for ${path} (ID: ${requestId}, Requested Encoding: ${requestedEncoding ?? 'auto'})`,
-    );
-    try {
-      const readStream = state.executionSession.sftp.control.createReadStream(path);
-      const chunks: Buffer[] = [];
-      let errorOccurred = false;
-
-      readStream.on('data', (chunk: Buffer) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      readStream.on('error', (err: Error) => {
-        if (errorOccurred) return;
-        errorOccurred = true;
-        console.error(`[SFTP ${sessionId}] readFile ${path} stream error (ID: ${requestId}):`, err);
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:readfile:error',
-            path: path,
-            payload: `读取文件流错误: ${err.message}`,
-            requestId: requestId,
-          }),
-        );
-      });
-      readStream.on('end', () => {
-        if (errorOccurred) return;
-        const fileData = Buffer.concat(chunks);
-
-        console.log(
-          `[SFTP ${sessionId}] readFile ${path} success, size: ${fileData.length} bytes (ID: ${requestId}). Processing content...`,
-        );
-        let encodingUsed: string = 'utf-8'; // Default encoding
-        let decodedContent: string = '';
-        let decodeError: string | null = null;
-
-        try {
-          if (requestedEncoding) {
-            // 用户指定了编码
-            encodingUsed = requestedEncoding;
-            console.log(`[SFTP ${sessionId}] Using requested encoding: ${encodingUsed} (ID: ${requestId})`);
-            const normalizedEncoding = encodingUsed.toLowerCase().replace(/[^a-z0-9]/g, ''); // Normalize more aggressively
-            if (iconv.encodingExists(normalizedEncoding)) {
-              decodedContent = iconv.decode(fileData, normalizedEncoding);
-              encodingUsed = normalizedEncoding; // Use the normalized name if valid
-            } else {
-              console.warn(
-                `[SFTP ${sessionId}] Requested encoding "${requestedEncoding}" is not supported by iconv-lite. Falling back to UTF-8. (ID: ${requestId})`,
-              );
-              encodingUsed = 'utf-8'; // Fallback
-              decodedContent = iconv.decode(fileData, encodingUsed);
-              // Optionally add a warning?
-            }
-          } else {
-            // 自动检测编码
-            console.log(`[SFTP ${sessionId}] Detecting encoding for ${path} (ID: ${requestId})`);
-            const detection = jschardet.detect(fileData);
-            const detectedEncodingRaw = detection.encoding ? detection.encoding.toLowerCase() : 'utf-8'; // Default to utf-8 if detection fails
-            const confidence = detection.confidence || 0;
-            console.log(`[SFTP ${sessionId}] Detected encoding: ${detectedEncodingRaw} (confidence: ${confidence})`);
-
-            const chineseEncodings = ['gbk', 'gb2312', 'gb18030', 'big5', 'euc-tw'];
-            let normalizedDetected = detectedEncodingRaw.replace(/[^a-z0-9]/g, '');
-            if (normalizedDetected === 'windows1252') normalizedDetected = 'cp1252';
-            else if (normalizedDetected === 'gb2312') normalizedDetected = 'gbk'; // Prefer gbk
-
-            if (normalizedDetected === 'utf8' || normalizedDetected === 'ascii') {
-              encodingUsed = 'utf-8';
-              decodedContent = fileData.toString('utf8');
-              console.log(`[SFTP ${sessionId}] Decoded ${path} as UTF-8/ASCII.`);
-            } else if (chineseEncodings.includes(normalizedDetected)) {
-              // If detected as a common Chinese encoding, trust it and use gb18030 for broader compatibility
-              encodingUsed = 'gb18030'; // Report gb18030 as used
-              decodedContent = iconv.decode(fileData, encodingUsed);
-              console.log(
-                `[SFTP ${sessionId}] Decoded ${path} from detected Chinese encoding (${normalizedDetected}) as ${encodingUsed}.`,
-              );
-            } else if (confidence < 0.9) {
-              // Low confidence threshold
-              console.warn(
-                `[SFTP ${sessionId}] Low confidence detection (${normalizedDetected}, ${confidence}) for ${path}. Attempting GB18030 decode first.`,
-              );
-              try {
-                // Try decoding as GB18030 first
-                const tempContent = iconv.decode(fileData, 'gb18030');
-                // Basic check for Mojibake
-                if (tempContent.includes('\uFFFD')) {
-                  console.warn(
-                    `[SFTP ${sessionId}] GB18030 decoding resulted in replacement characters. Falling back to original detection (${normalizedDetected}) or UTF-8.`,
-                  );
-                  // Fallback: Try the originally detected encoding if supported, otherwise UTF-8
-                  if (iconv.encodingExists(normalizedDetected)) {
-                    encodingUsed = normalizedDetected;
-                    decodedContent = iconv.decode(fileData, encodingUsed);
-                    console.log(
-                      `[SFTP ${sessionId}] Falling back to decoding ${path} as originally detected ${encodingUsed}.`,
-                    );
-                  } else {
-                    encodingUsed = 'utf-8';
-                    decodedContent = fileData.toString('utf8');
-                    console.log(`[SFTP ${sessionId}] Falling back to decoding ${path} as UTF-8.`);
-                  }
-                } else {
-                  encodingUsed = 'gb18030'; // Success with GB18030
-                  decodedContent = tempContent;
-                  console.log(
-                    `[SFTP ${sessionId}] Decoded ${path} as ${encodingUsed} due to low confidence detection.`,
-                  );
-                }
-              } catch (gbkError) {
-                console.warn(
-                  `[SFTP ${sessionId}] Error decoding as GB18030, falling back to original detection (${normalizedDetected}) or UTF-8:`,
-                  gbkError,
-                );
-                // Fallback: Try the originally detected encoding if supported, otherwise UTF-8
-                if (iconv.encodingExists(normalizedDetected)) {
-                  encodingUsed = normalizedDetected;
-                  decodedContent = iconv.decode(fileData, encodingUsed);
-                  console.log(
-                    `[SFTP ${sessionId}] Falling back to decoding ${path} as originally detected ${encodingUsed}.`,
-                  );
-                } else {
-                  encodingUsed = 'utf-8';
-                  decodedContent = fileData.toString('utf8');
-                  console.log(`[SFTP ${sessionId}] Falling back to decoding ${path} as UTF-8.`);
-                }
-              }
-            } else if (iconv.encodingExists(normalizedDetected)) {
-              // Higher confidence, non-Chinese, supported encoding
-              encodingUsed = normalizedDetected;
-              decodedContent = iconv.decode(fileData, encodingUsed);
-              console.log(
-                `[SFTP ${sessionId}] Decoded ${path} from ${encodingUsed} using iconv-lite (high confidence).`,
-              );
-            } else {
-              console.warn(
-                `[SFTP ${sessionId}] Unsupported or unknown encoding detected for ${path}: ${normalizedDetected}. Falling back to UTF-8.`,
-              );
-              encodingUsed = 'utf-8'; // Final fallback
-              decodedContent = fileData.toString('utf8');
-            }
-          }
-
-          // Final check for replacement characters after deciding the encoding
-          if (decodedContent.includes('\uFFFD')) {
-            console.warn(
-              `[SFTP ${sessionId}] Final decoded content for ${path} (using ${encodingUsed}) contains replacement characters (U+FFFD). Decoding might be incorrect. (ID: ${requestId})`,
-            );
-            // decodeError = `解码内容可能不正确 (使用 ${encodingUsed})，检测到无效字符。`; // Optionally set error
-          }
-        } catch (err: any) {
-          console.error(
-            `[SFTP ${sessionId}] Error detecting/decoding file content for ${path} (ID: ${requestId}):`,
-            err,
-          );
-          decodeError = `文件编码检测或转换失败: ${err.message}`;
-          state.ws.send(
-            JSON.stringify({ type: 'sftp:readfile:error', path: path, payload: decodeError, requestId: requestId }),
-          );
-          return; // Stop processing
-        }
-
-        // 发送 Base64 编码的原始数据和实际使用的编码
-        console.log(
-          `[SFTP ${sessionId}] Sending raw content (Base64) and encoding used (${encodingUsed}) for ${path} (ID: ${requestId})`,
-        );
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:readfile:success',
-            path: path,
-            payload: {
-              rawContentBase64: fileData.toString('base64'), // 发送 Base64 字符串
-              encodingUsed: encodingUsed, // 发送实际使用的编码
-            },
-            requestId: requestId,
-          }),
-        );
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] readFile ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:readfile:error',
-          path: path,
-          payload: `读取文件时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 写入文件内容 (支持指定编码) */
   // --- 修改：添加 encoding 参数 ---
-  async writefile(sessionId: string, path: string, data: string, requestId: string, encoding?: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 writefile (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:writefile:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      );
-      return;
-    }
-    // --- 修改：使用传入的 encoding 或默认 utf-8 ---
-    const targetEncoding = encoding || 'utf-8';
-    console.debug(
-      `[SFTP ${sessionId}] Received writefile request for ${path} (ID: ${requestId}, Encoding: ${targetEncoding})`,
-    );
-    try {
-      // --- 修改：使用 iconv-lite 根据指定编码创建 Buffer ---
-      let buffer: Buffer;
-      try {
-        buffer = iconv.encode(data, targetEncoding);
-        console.log(
-          `[SFTP ${sessionId}] Encoded content for ${path} using ${targetEncoding} (Buffer size: ${buffer.length})`,
-        );
-      } catch (encodeError: any) {
-        console.error(
-          `[SFTP ${sessionId}] Failed to encode content for ${path} with encoding ${targetEncoding} (ID: ${requestId}):`,
-          encodeError,
-        );
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:writefile:error',
-            path: path,
-            payload: `无效的编码或编码失败: ${targetEncoding}`,
-            requestId: requestId,
-          }),
-        );
-        return;
-      }
-
-      // 获取文件当前权限
-      let originalMode: number | undefined;
-      try {
-        const stats = await new Promise<Stats>((resolve, reject) => {
-          state.executionSession.sftp.control!.lstat(path, (err, stats) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(stats);
-            }
-          });
-        });
-        originalMode = stats.mode;
-        console.log(
-          `[SFTP ${sessionId}] Retrieved original file mode for ${path}: ${originalMode.toString(8)} (ID: ${requestId})`,
-        );
-      } catch (statError: any) {
-        console.warn(
-          `[SFTP ${sessionId}] Could not retrieve original file mode for ${path} (ID: ${requestId}):`,
-          statError,
-        );
-        // 如果文件不存在或其他错误，继续写入操作，不设置权限
-      }
-
-      console.debug(`[SFTP ${sessionId}] Creating write stream for ${path} (ID: ${requestId})`);
-      // 在创建写入流时设置文件权限
-      const writeStreamOptions = originalMode !== undefined ? { mode: originalMode } : {};
-      const writeStream = state.executionSession.sftp.control.createWriteStream(path, writeStreamOptions);
-      let errorOccurred = false;
-
-      writeStream.on('error', (err: Error) => {
-        if (errorOccurred) return; // Prevent sending multiple errors
-        errorOccurred = true;
-        console.error(`[SFTP ${sessionId}] writefile ${path} stream error (ID: ${requestId}):`, err);
-        state.ws.send(
-          JSON.stringify({
-            type: 'sftp:writefile:error',
-            path: path,
-            payload: `写入文件流错误: ${err.message}`,
-            requestId: requestId,
-          }),
-        );
-      });
-
-      // Listen for the 'close' event which indicates the stream has finished writing and the file descriptor is closed.
-      writeStream.on('close', () => {
-        if (!errorOccurred) {
-          console.log(
-            `[SFTP ${sessionId}] writefile ${path} stream closed successfully (ID: ${requestId}). Fetching updated stats...`,
-          );
-          if (originalMode !== undefined) {
-            console.log(
-              `[SFTP ${sessionId}] Set file mode for ${path} during creation: ${originalMode.toString(8)} (ID: ${requestId})`,
-            );
-          }
-          // Get updated stats after writing
-          state.executionSession.sftp.control!.lstat(path, (statErr, stats) => {
-            if (statErr) {
-              console.error(`[SFTP ${sessionId}] lstat after writefile ${path} failed (ID: ${requestId}):`, statErr);
-              state.ws.send(
-                JSON.stringify({ type: 'sftp:writefile:success', path: path, payload: null, requestId: requestId }),
-              );
-            } else {
-              const updatedItem = {
-                filename: path.substring(path.lastIndexOf('/') + 1),
-                longname: '',
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.log(
-                `[SFTP ${sessionId}] Sending writefile success with updated item for ${path} (ID: ${requestId})`,
-              );
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:writefile:success',
-                  path: path,
-                  payload: updatedItem,
-                  requestId: requestId,
-                }),
-              );
-            }
-          });
-        }
-      });
-
-      console.debug(`[SFTP ${sessionId}] Writing ${buffer.length} bytes to ${path} (ID: ${requestId})`);
-      writeStream.end(buffer); // Start writing and close the stream afterwards
-      console.debug(`[SFTP ${sessionId}] writefile ${path} end() called (ID: ${requestId})`);
-
-      // Success message is now sent in the 'close' event handler
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] writefile ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:writefile:error',
-          path: path,
-          payload: `写入文件时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 创建目录 */
-  async mkdir(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 mkdir (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:mkdir:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received mkdir request for ${path} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.mkdir(path, (err) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] mkdir ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:mkdir:error',
-              path: path,
-              payload: `创建目录失败: ${err.message}`,
-              requestId: requestId,
-            }),
-          );
-        } else {
-          console.log(`[SFTP ${sessionId}] mkdir ${path} success (ID: ${requestId}). Fetching stats...`);
-          // Get stats for the new directory
-          state.executionSession.sftp.control!.lstat(path, (statErr, stats) => {
-            if (statErr) {
-              console.error(`[SFTP ${sessionId}] lstat after mkdir ${path} failed (ID: ${requestId}):`, statErr);
-              // Send success anyway, but without item details
-              state.ws.send(
-                JSON.stringify({ type: 'sftp:mkdir:success', path: path, payload: null, requestId: requestId }),
-              );
-            } else {
-              const newItem = {
-                filename: path.substring(path.lastIndexOf('/') + 1),
-                longname: '', // lstat doesn't provide longname
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.log(`[SFTP ${sessionId}] Sending mkdir success with new item for ${path} (ID: ${requestId})`);
-              state.ws.send(
-                JSON.stringify({ type: 'sftp:mkdir:success', path: path, payload: newItem, requestId: requestId }),
-              );
-            }
-          });
-        }
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] mkdir ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:mkdir:error',
-          path: path,
-          payload: `创建目录时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 删除目录 (强制递归) */
-  async rmdir(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.isReady) {
-      console.warn(`[SSH Exec] SSH 客户端未准备好，无法在 ${sessionId} 上执行 rmdir (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:rmdir:error', path: path, payload: 'SSH 会话未就绪', requestId: requestId }),
-      );
-      return;
-    }
-    const normalizedPath = pathModule.posix.normalize(path);
-    if (!normalizedPath || normalizedPath === '/' || normalizedPath === '.') {
-      state.ws.send(
-        JSON.stringify({ type: 'sftp:rmdir:error', path, payload: '拒绝删除根目录或无效目录。', requestId }),
-      );
-      return;
-    }
-    console.debug(`[SSH Exec ${sessionId}] Received rmdir request for ${path} (ID: ${requestId})`);
-
-    // 第一种方案：尝试 rm -rf 命令
-    const tryRmRfCommand = async (isSudo: boolean) => {
-      const commandPrefix = isSudo ? 'sudo ' : '';
-      const command = `${commandPrefix}rm -rf -- ${quotePosixShellArg(path)}`;
-      const attemptDescription = isSudo ? 'sudo rm -rf' : 'rm -rf';
-
-      console.log(`[SSH Exec ${sessionId}] 尝试使用 ${attemptDescription} 命令删除 ${path} (ID: ${requestId})`);
-      console.log(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
-
-      try {
-        state.executionSession.client.exec(command, (err, stream) => {
-          if (err) {
-            console.error(
-              `[SSH Exec ${sessionId}] Failed to start exec for ${attemptDescription} ${path} (ID: ${requestId}):`,
-              err,
-            );
-            if (!isSudo) {
-              // 如果普通 rm -rf 失败，尝试 sudo rm -rf
-              tryRmRfCommand(true);
-            } else {
-              // 如果 sudo rm -rf 也失败
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:rmdir:error',
-                  path: path,
-                  payload: `删除目录失败: ${attemptDescription} 命令执行失败: ${err.message}`,
-                  requestId: requestId,
-                }),
-              );
-            }
-            return;
-          }
-
-          let stderrOutput = '';
-          stream.stderr.on('data', (data: Buffer) => {
-            stderrOutput += data.toString();
-          });
-
-          stream.on('close', (code: number | null, signal: string | null) => {
-            if (code === 0) {
-              console.log(
-                `[SSH Exec ${sessionId}] ${attemptDescription} ${path} command executed successfully (ID: ${requestId})`,
-              );
-              state.ws.send(JSON.stringify({ type: 'sftp:rmdir:success', path: path, requestId: requestId }));
-            } else {
-              const errorMessage =
-                stderrOutput.trim() || `命令退出，代码: ${code ?? 'N/A'}${signal ? `, 信号: ${signal}` : ''}`;
-              console.error(
-                `[SSH Exec ${sessionId}] ${attemptDescription} ${path} command failed (ID: ${requestId}). Code: ${code}, Signal: ${signal}, Stderr: ${errorMessage}`,
-              );
-              if (!isSudo) {
-                // 如果普通 rm -rf 失败，尝试 sudo rm -rf
-                console.log(`[SSH Exec ${sessionId}] 普通 rm -rf 失败，错误: ${errorMessage}。尝试 sudo rm -rf。`);
-                tryRmRfCommand(true);
-              } else {
-                // 如果 sudo rm -rf 也失败
-                state.ws.send(
-                  JSON.stringify({
-                    type: 'sftp:rmdir:error',
-                    path: path,
-                    payload: `删除目录失败: 普通 rm -rf 和 sudo rm -rf 命令均失败。最后错误: ${errorMessage}`,
-                    requestId: requestId,
-                  }),
-                );
-              }
-            }
-          });
-
-          stream.on('data', (data: Buffer) => {
-            console.debug(
-              `[SSH Exec ${sessionId}] ${attemptDescription} stdout (ID: ${requestId}): ${data.toString()}`,
-            );
-          });
-        });
-      } catch (error: any) {
-        console.error(
-          `[SSH Exec ${sessionId}] ${attemptDescription} ${path} caught unexpected error during exec setup (ID: ${requestId}):`,
-          error,
-        );
-        if (!isSudo) {
-          // 如果普通 rm -rf 期间发生意外错误，尝试 sudo rm -rf
-          console.log(`[SSH Exec ${sessionId}] 普通 rm -rf 发生意外错误。尝试 sudo rm -rf。`);
-          tryRmRfCommand(true);
-        } else {
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:rmdir:error',
-              path: path,
-              payload: `删除目录失败: ${attemptDescription} 执行时发生意外错误: ${error.message}`,
-              requestId: requestId,
-            }),
-          );
-        }
-      }
-    };
-
-    // 首先尝试不带 sudo 的 rm -rf
-    tryRmRfCommand(false);
-  }
 
   /** 删除文件 */
-  async unlink(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 unlink (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:unlink:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received unlink request for ${path} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.unlink(path, (err) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] unlink ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:unlink:error',
-              path: path,
-              payload: `删除文件失败: ${err.message}`,
-              requestId: requestId,
-            }),
-          );
-        } else {
-          console.log(`[SFTP ${sessionId}] unlink ${path} success (ID: ${requestId})`);
-          state.ws.send(JSON.stringify({ type: 'sftp:unlink:success', path: path, requestId: requestId })); // Send specific success type
-        }
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] unlink ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:unlink:error',
-          path: path,
-          payload: `删除文件时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 重命名/移动文件或目录 */
-  async rename(sessionId: string, oldPath: string, newPath: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 rename (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({
-          type: 'sftp:rename:error',
-          oldPath: oldPath,
-          newPath: newPath,
-          payload: 'SFTP 会话未就绪',
-          requestId: requestId,
-        }),
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received rename request ${oldPath} -> ${newPath} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.rename(oldPath, newPath, (err) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:rename:error',
-              oldPath: oldPath,
-              newPath: newPath,
-              payload: `重命名/移动失败: ${err.message}`,
-              requestId: requestId,
-            }),
-          );
-        } else {
-          console.log(
-            `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} success (ID: ${requestId}). Fetching stats for new path...`,
-          );
-          // Get stats for the new path
-          state.executionSession.sftp.control!.lstat(newPath, (statErr, stats) => {
-            if (statErr) {
-              console.error(`[SFTP ${sessionId}] lstat after rename ${newPath} failed (ID: ${requestId}):`, statErr);
-              // Send success anyway, but without item details
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:rename:success',
-                  payload: { oldPath: oldPath, newPath: newPath, newItem: null },
-                  requestId: requestId,
-                }),
-              );
-            } else {
-              const newItem = {
-                filename: newPath.substring(newPath.lastIndexOf('/') + 1),
-                longname: '', // lstat doesn't provide longname
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.log(`[SFTP ${sessionId}] Sending rename success with new item for ${newPath} (ID: ${requestId})`);
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:rename:success',
-                  payload: { oldPath: oldPath, newPath: newPath, newItem: newItem },
-                  requestId: requestId,
-                }),
-              );
-            }
-          });
-        }
-      });
-    } catch (error: any) {
-      console.error(
-        `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} caught unexpected error (ID: ${requestId}):`,
-        error,
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:rename:error',
-          oldPath: oldPath,
-          newPath: newPath,
-          payload: `重命名/移动时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 修改文件/目录权限 */
-  async chmod(sessionId: string, path: string, mode: number, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 chmod (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:chmod:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      ); // Use specific error type
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received chmod request for ${path} to ${mode.toString(8)} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.chmod(path, mode, (err) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:chmod:error',
-              path: path,
-              payload: `修改权限失败: ${err.message}`,
-              requestId: requestId,
-            }),
-          );
-        } else {
-          console.log(
-            `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} success (ID: ${requestId}). Fetching updated stats...`,
-          );
-          // Get updated stats after chmod
-          state.executionSession.sftp.control!.lstat(path, (statErr, stats) => {
-            if (statErr) {
-              console.error(`[SFTP ${sessionId}] lstat after chmod ${path} failed (ID: ${requestId}):`, statErr);
-              // Send success anyway, but without updated item details
-              state.ws.send(
-                JSON.stringify({ type: 'sftp:chmod:success', path: path, payload: null, requestId: requestId }),
-              );
-            } else {
-              const updatedItem = {
-                filename: path.substring(path.lastIndexOf('/') + 1),
-                longname: '', // lstat doesn't provide longname
-                attrs: {
-                  size: stats.size,
-                  uid: stats.uid,
-                  gid: stats.gid,
-                  mode: stats.mode,
-                  atime: stats.atime * 1000,
-                  mtime: stats.mtime * 1000,
-                  isDirectory: stats.isDirectory(),
-                  isFile: stats.isFile(),
-                  isSymbolicLink: stats.isSymbolicLink(),
-                },
-              };
-              console.log(`[SFTP ${sessionId}] Sending chmod success with updated item for ${path} (ID: ${requestId})`);
-              state.ws.send(
-                JSON.stringify({ type: 'sftp:chmod:success', path: path, payload: updatedItem, requestId: requestId }),
-              );
-            }
-          });
-        }
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] chmod ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:chmod:error',
-          path: path,
-          payload: `修改权限时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   /** 获取路径的绝对表示 */
-  async realpath(sessionId: string, path: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 realpath (ID: ${requestId})`);
-      state?.ws.send(
-        JSON.stringify({ type: 'sftp:realpath:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
-      );
-      return;
-    }
-    console.debug(`[SFTP ${sessionId}] Received realpath request for ${path} (ID: ${requestId})`);
-    try {
-      state.executionSession.sftp.control.realpath(path, (err, absPath) => {
-        if (err) {
-          console.error(`[SFTP ${sessionId}] realpath ${path} failed (ID: ${requestId}):`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp:realpath:error',
-              path: path,
-              payload: { requestedPath: path, error: `获取绝对路径失败: ${err.message}` },
-              requestId: requestId,
-            }),
-          );
-        } else {
-          console.log(
-            `[SFTP ${sessionId}] realpath ${path} -> ${absPath} success (ID: ${requestId}). Fetching target type...`,
-          );
-          // 再次检查 state 和 state.executionSession.sftp.control 是否仍然有效，因为回调是异步的
-          const currentState = this.clientStates.get(sessionId);
-          if (!currentState || !currentState.executionSession.sftp.control) {
-            console.warn(
-              `[SFTP ${sessionId}] SFTP session for ${absPath} became invalid before stat call (ID: ${requestId}).`,
-            );
-            // 即使 SFTP 会话失效，也尝试发送已解析的路径，但标记错误
-            state.ws.send(
-              JSON.stringify({
-                type: 'sftp:realpath:error',
-                path: path, // 原始请求路径
-                payload: {
-                  requestedPath: path,
-                  absolutePath: absPath,
-                  error: 'SFTP 会话在获取目标类型前已失效',
-                },
-                requestId: requestId,
-              }),
-            );
-            return;
-          }
-          // 对 absPath 执行 stat 操作以获取其真实类型
-          currentState.executionSession.sftp.control.stat(absPath, (statErr, stats) => {
-            // 使用 sftp.stat()
-            if (statErr) {
-              console.error(
-                `[SFTP ${sessionId}] stat on realpath target ${absPath} failed (ID: ${requestId}):`,
-                statErr,
-              );
-              // 如果 stat 失败，发送带有错误信息的 realpath:error，但仍包含已解析的路径
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:realpath:error',
-                  path: path, // 原始请求路径
-                  payload: {
-                    requestedPath: path,
-                    absolutePath: absPath, // 仍然发送已解析的路径
-                    error: `获取目标类型失败: ${statErr.message}`,
-                  },
-                  requestId: requestId,
-                }),
-              );
-            } else {
-              let targetType: 'file' | 'directory' | 'unknown' = 'unknown';
-              if (stats.isFile()) {
-                targetType = 'file';
-              } else if (stats.isDirectory()) {
-                targetType = 'directory';
-              }
-              console.log(`[SFTP ${sessionId}] Target type for ${absPath} is ${targetType} (ID: ${requestId})`);
-              state.ws.send(
-                JSON.stringify({
-                  type: 'sftp:realpath:success',
-                  path: path, // 原始请求路径
-                  payload: {
-                    requestedPath: path,
-                    absolutePath: absPath,
-                    targetType: targetType, // 新增字段
-                  },
-                  requestId: requestId,
-                }),
-              );
-            }
-          });
-        }
-      });
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] realpath ${path} caught unexpected error (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:realpath:error',
-          path: path,
-          payload: `获取绝对路径时发生意外错误: ${error.message}`,
-          requestId: requestId,
-        }),
-      );
-    }
-  }
 
   private transferCancellationKey(sessionId: string, requestId: string): string {
     return `${sessionId}:${requestId}`;
@@ -1672,43 +605,6 @@ export class SftpService {
     }
   }
 
-  async deletePaths(sessionId: string, paths: string[], requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
-    if (!state?.executionSession.sftp.control) {
-      state?.ws.send(JSON.stringify({ type: 'sftp:delete_paths:error', payload: 'SFTP 会话未就绪', requestId }));
-      return;
-    }
-
-    try {
-      for (const remotePath of paths) {
-        if (typeof remotePath !== 'string' || !remotePath.startsWith('/')) {
-          throw new Error('删除路径无效');
-        }
-        const normalizedPath = pathModule.posix.normalize(remotePath);
-        if (!normalizedPath || normalizedPath === '/' || normalizedPath === '.') {
-          throw new Error('拒绝删除根目录或无效路径');
-        }
-        await this.removeSftpPathRecursive(state.executionSession.sftp.control, normalizedPath);
-      }
-
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:delete_paths:success',
-          payload: { paths },
-          requestId,
-        }),
-      );
-    } catch (error: any) {
-      console.error(`[SFTP ${sessionId}] delete_paths failed (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:delete_paths:error',
-          payload: `删除源文件失败: ${error.message}`,
-          requestId,
-        }),
-      );
-    }
-  }
 
   // +++ 移动文件或目录 +++
   async move(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
@@ -2325,19 +1221,16 @@ export class SftpService {
     ].join('; ');
 
     try {
-      state.executionSession.client.exec(command, (err, stream) => {
-        this.pendingArchives.delete(archiveKey);
-        if (err) {
-          if (!pendingArchive.cancelled)
-            this.sendCompressError(state.ws, `执行压缩命令失败: ${err.message}`, requestId);
-          return;
-        }
-        if (pendingArchive.cancelled) {
-          void this.stopArchiveChannel(stream).then(() => this.removeRemoteArchiveWorkspace(sessionId, workspacePath));
-          return;
-        }
+      const commandSession = await state.executionSession.commands.start({ command, id: `archive:${requestId}` });
+      this.pendingArchives.delete(archiveKey);
+      if (pendingArchive.cancelled) {
+        void this.stopArchiveCommandSession(commandSession).then(() =>
+          this.removeRemoteArchiveWorkspace(sessionId, workspacePath),
+        );
+        return;
+      }
 
-        let stderrData = '';
+      let stderrData = '';
         let stdoutRemainder = '';
         let stderrRemainder = '';
         let fileCount = 0;
@@ -2383,25 +1276,25 @@ export class SftpService {
         };
 
         const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
-        const operation: ActiveArchiveOperation = {
-          sessionId,
-          requestId,
-          workspacePath,
-          stream,
-          heartbeatInterval,
-          cancelled: false,
-        };
-        this.activeArchives.set(archiveKey, operation);
+      const operation: ActiveArchiveOperation = {
+        sessionId,
+        requestId,
+        workspacePath,
+        commandSession,
+        heartbeatInterval,
+        cancelled: false,
+      };
+      this.activeArchives.set(archiveKey, operation);
 
-        stream.on('data', (data: Buffer) => {
-          stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
-        });
-        stream.stderr.on('data', (data: Buffer) => {
-          const chunk = data.toString();
-          stderrData = this.appendBoundedOutput(stderrData, chunk);
-          stderrRemainder = consumeOutput(chunk, stderrRemainder);
-        });
-        stream.on('close', (exitCode: number | null) => {
+      commandSession.on('stdout', (data: Buffer) => {
+        stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
+      });
+      commandSession.on('stderr', (data: Buffer) => {
+        const chunk = data.toString();
+        stderrData = this.appendBoundedOutput(stderrData, chunk);
+        stderrRemainder = consumeOutput(chunk, stderrRemainder);
+      });
+      commandSession.on('close', ({ exitCode }) => {
           if (streamFinished) return;
           streamFinished = true;
           clearInterval(heartbeatInterval);
@@ -2431,16 +1324,15 @@ export class SftpService {
             const details = stderrData.trim() || `压缩命令退出，代码: ${exitCode ?? 'N/A'}`;
             this.sendCompressError(state.ws, '压缩失败', requestId, details);
           }
-        });
-        stream.on('error', (streamError: Error) => {
-          if (streamFinished) return;
-          streamFinished = true;
-          clearInterval(heartbeatInterval);
-          if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
-          if (operation.cancelled) return;
-          void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
-          this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamError.message);
-        });
+      });
+      commandSession.on('error', (streamError: Error) => {
+        if (streamFinished) return;
+        streamFinished = true;
+        clearInterval(heartbeatInterval);
+        if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
+        if (operation.cancelled) return;
+        void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
+        this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamError.message);
       });
     } catch (execError: any) {
       this.pendingArchives.delete(archiveKey);
@@ -2461,7 +1353,7 @@ export class SftpService {
       operation.cancelled = true;
       this.activeArchives.delete(archiveKey);
       clearInterval(operation.heartbeatInterval);
-      await this.stopArchiveChannel(operation.stream);
+      await this.stopArchiveCommandSession(operation.commandSession);
       if (operation.workspacePath) {
         cleaned = await this.removeRemoteArchiveWorkspace(sessionId, operation.workspacePath);
       }
@@ -2469,14 +1361,7 @@ export class SftpService {
       // Cancellation remains attached to the actual request until preflight exits.
       // Do not use a time-based marker: a stalled SSH exec may resume much later.
       pending.cancelled = true;
-      const preflightStream = pending.preflightStream;
-      if (preflightStream && !preflightStream.destroyed) {
-        try {
-          preflightStream.close();
-        } catch {
-          preflightStream.destroy();
-        }
-      }
+      await pending.preflightSession?.terminate();
     }
 
     if (notifyClient && state?.ws.readyState === WebSocket.OPEN) {
@@ -2491,45 +1376,8 @@ export class SftpService {
   }
 
   /** Ask the remote wrapper shell to stop its compressor, then wait for its EXIT trap. */
-  private async stopArchiveChannel(stream: ClientChannel): Promise<void> {
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
-      let finalTimer: ReturnType<typeof setTimeout> | undefined;
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        if (forceCloseTimer) clearTimeout(forceCloseTimer);
-        if (finalTimer) clearTimeout(finalTimer);
-        stream.off('close', onClose);
-        stream.off('error', onError);
-        resolve();
-      };
-      const onClose = () => finish();
-      const onError = () => finish();
-
-      stream.once('close', onClose);
-      stream.once('error', onError);
-      try {
-        stream.signal('TERM');
-      } catch {
-        // The channel may already be closing; the listeners/timeouts still settle.
-      }
-
-      forceCloseTimer = setTimeout(() => {
-        if (settled) return;
-        try {
-          stream.close();
-        } catch {
-          stream.destroy();
-        }
-      }, 1500);
-      finalTimer = setTimeout(() => {
-        if (!stream.destroyed) stream.destroy();
-        finish();
-      }, 4000);
-    });
+  private async stopArchiveCommandSession(commandSession: CommandSession): Promise<void> {
+    await commandSession.terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 });
   }
 
   /**
@@ -2668,20 +1516,14 @@ export class SftpService {
 
     // --- 执行命令 ---
     try {
-      state.executionSession.client.exec(command, (err, stream) => {
-        this.pendingArchives.delete(archiveKey);
-        if (err) {
-          console.error(`[SFTP Decompress ${sessionId}] Failed to start exec for decompress (ID: ${requestId}):`, err);
-          if (!pendingArchive.cancelled)
-            this.sendDecompressError(state.ws, `执行解压命令失败: ${err.message}`, requestId);
-          return;
-        }
-        if (pendingArchive.cancelled) {
-          void this.stopArchiveChannel(stream);
-          return;
-        }
+      const commandSession = await state.executionSession.commands.start({ command, id: `archive:${requestId}` });
+      this.pendingArchives.delete(archiveKey);
+      if (pendingArchive.cancelled) {
+        void this.stopArchiveCommandSession(commandSession);
+        return;
+      }
 
-        let stderrData = '';
+      let stderrData = '';
         let stdoutRemainder = '';
         let stderrRemainder = '';
         let code: number | null = null;
@@ -2723,27 +1565,27 @@ export class SftpService {
           return nextRemainder;
         };
 
-        const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
-        const operation: ActiveArchiveOperation = {
-          sessionId,
-          requestId,
-          stream,
-          heartbeatInterval,
-          cancelled: false,
-        };
-        this.activeArchives.set(archiveKey, operation);
+      const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
+      const operation: ActiveArchiveOperation = {
+        sessionId,
+        requestId,
+        commandSession,
+        heartbeatInterval,
+        cancelled: false,
+      };
+      this.activeArchives.set(archiveKey, operation);
 
-        stream.on('data', (data: Buffer) => {
-          // 必须持续消费 stdout，否则大型归档会耗尽 SSH 通道窗口并永久挂起。
-          stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
-        });
-        stream.stderr.on('data', (data: Buffer) => {
-          const chunk = data.toString();
-          stderrData = this.appendBoundedOutput(stderrData, chunk);
-          stderrRemainder = consumeOutput(chunk, stderrRemainder);
-        });
+      commandSession.on('stdout', (data: Buffer) => {
+        // 必须持续消费 stdout，否则大型归档会耗尽 SSH 通道窗口并永久挂起。
+        stdoutRemainder = consumeOutput(data.toString(), stdoutRemainder);
+      });
+      commandSession.on('stderr', (data: Buffer) => {
+        const chunk = data.toString();
+        stderrData = this.appendBoundedOutput(stderrData, chunk);
+        stderrRemainder = consumeOutput(chunk, stderrRemainder);
+      });
 
-        stream.on('close', (exitCode: number | null) => {
+      commandSession.on('close', ({ exitCode }) => {
           if (streamFinished) return;
           streamFinished = true;
           clearInterval(heartbeatInterval);
@@ -2800,16 +1642,15 @@ export class SftpService {
             console.error(`[SFTP Decompress ${sessionId}] Decompression failed (ID: ${requestId}): ${errorDetails}`);
             this.sendDecompressError(state.ws, '解压失败', requestId, errorDetails);
           }
-        });
-        stream.on('error', (streamErr: Error) => {
-          if (streamFinished) return;
-          streamFinished = true;
-          clearInterval(heartbeatInterval);
-          if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
-          if (operation.cancelled) return;
-          console.error(`[SFTP Decompress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
-          this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
-        });
+      });
+      commandSession.on('error', (streamErr: Error) => {
+        if (streamFinished) return;
+        streamFinished = true;
+        clearInterval(heartbeatInterval);
+        if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
+        if (operation.cancelled) return;
+        console.error(`[SFTP Decompress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
+        this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
       });
     } catch (execError: any) {
       this.pendingArchives.delete(archiveKey);
@@ -2825,135 +1666,84 @@ export class SftpService {
   // --- 辅助方法 ---
 
   /** 检查远程服务器上是否存在指定的命令。每次 exec 都有独立 settle guard 和超时。 */
-  private checkCommandExists(
+  private async checkCommandExists(
     state: ClientState,
     sessionId: string,
     commandName: string,
     pendingArchive?: PendingArchiveOperation,
   ): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      if (!state.executionSession.isReady) {
-        reject(new Error('SSH client is not available.'));
-        return;
-      }
-      const checkCommands = [`command -v ${commandName}`, `which ${commandName}`];
-      let currentCheckIndex = 0;
-      let settled = false;
+    if (!state.executionSession.isReady) throw new Error('SSH client is not available.');
 
-      const resolveOnce = (value: boolean) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-      const rejectOnce = (error: Error) => {
-        if (settled) return;
-        settled = true;
-        reject(error);
-      };
+    const checkCommands = [`command -v ${commandName}`, `which ${commandName}`];
+    for (let index = 0; index < checkCommands.length; index += 1) {
+      if (pendingArchive?.cancelled) throw new Error('ARCHIVE_CANCELLED');
 
-      const tryCommand = () => {
-        if (settled) return;
-        if (pendingArchive?.cancelled) {
-          rejectOnce(new Error('ARCHIVE_CANCELLED'));
-          return;
-        }
-        if (currentCheckIndex >= checkCommands.length) {
-          resolveOnce(false);
-          return;
-        }
+      const checkCmd = checkCommands[index];
+      console.log(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
 
-        const checkCmd = checkCommands[currentCheckIndex];
-        console.log(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
-        state.executionSession.client!.exec(checkCmd, (err, stream) => {
-          if (settled) {
-            try {
-              stream?.close();
-            } catch {
-              /* already closing */
-            }
-            return;
-          }
-          if (err) {
-            console.error(`[SFTP Command Check ${sessionId}] Failed to start exec for "${checkCmd}":`, err);
-            currentCheckIndex += 1;
-            tryCommand();
-            return;
-          }
-
-          if (pendingArchive) {
-            pendingArchive.preflightStream = stream;
-            if (pendingArchive.cancelled) {
-              try {
-                stream.close();
-              } catch {
-                stream.destroy();
-              }
-              rejectOnce(new Error('ARCHIVE_CANCELLED'));
-              return;
-            }
-          }
-          let output = '';
-          let attemptSettled = false;
-          const clearAttempt = () => {
-            if (pendingArchive?.preflightStream === stream) pendingArchive.preflightStream = undefined;
-          };
-          const timeout = setTimeout(() => {
-            if (attemptSettled || settled) return;
-            attemptSettled = true;
-            clearAttempt();
-            try {
-              stream.close();
-            } catch {
-              stream.destroy();
-            }
-            rejectOnce(new Error(`Command check timed out for '${commandName}'`));
-          }, 10_000);
-          timeout.unref?.();
-
-          const finishAttempt = (code: number | null | undefined, streamError?: Error) => {
-            if (attemptSettled || settled) return;
-            attemptSettled = true;
-            clearTimeout(timeout);
-            clearAttempt();
-
-            if (pendingArchive?.cancelled) {
-              rejectOnce(new Error('ARCHIVE_CANCELLED'));
-              return;
-            }
-            if (streamError) {
-              console.error(`[SFTP Command Check ${sessionId}] Stream error for "${checkCmd}":`, streamError);
-              currentCheckIndex += 1;
-              tryCommand();
-              return;
-            }
-            if (code === 0 && output.trim() !== '') {
-              console.log(
-                `[SFTP Command Check ${sessionId}] Command '${commandName}' found using "${checkCmd}". Output: ${output.trim()}`,
-              );
-              resolveOnce(true);
-              return;
-            }
-
-            console.log(
-              `[SFTP Command Check ${sessionId}] Command '${commandName}' not found with "${checkCmd}" (code: ${code}, output: "${output.trim()}").`,
-            );
-            currentCheckIndex += 1;
-            tryCommand();
-          };
-
-          stream.on('data', (data: Buffer) => {
-            output += data.toString();
-          });
-          stream.stderr.on('data', () => {
-            /* consume stderr to avoid channel backpressure */
-          });
-          stream.on('close', (code: number | null) => finishAttempt(code));
-          stream.on('error', (streamError: Error) => finishAttempt(undefined, streamError));
+      let commandSession: CommandSession;
+      try {
+        commandSession = await state.executionSession.commands.start({
+          command: checkCmd,
+          id: `archive-preflight:${pendingArchive?.requestId ?? commandName}:${index}`,
         });
-      };
+      } catch (error) {
+        console.error(`[SFTP Command Check ${sessionId}] Failed to start exec for "${checkCmd}":`, error);
+        continue;
+      }
 
-      tryCommand();
-    });
+      if (pendingArchive) pendingArchive.preflightSession = commandSession;
+      if (pendingArchive?.cancelled) {
+        await commandSession.terminate();
+        if (pendingArchive.preflightSession === commandSession) pendingArchive.preflightSession = undefined;
+        throw new Error('ARCHIVE_CANCELLED');
+      }
+
+      let output = '';
+      const result = await new Promise<{ exitCode?: number | null; error?: Error; timedOut?: boolean }>((resolve) => {
+        let settled = false;
+        const finish = (value: { exitCode?: number | null; error?: Error; timedOut?: boolean }) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          resolve(value);
+        };
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          void commandSession.terminate().finally(() => finish({ timedOut: true }));
+        }, 10_000);
+        timeout.unref?.();
+
+        commandSession.on('stdout', (data: Buffer) => {
+          output += data.toString();
+        });
+        commandSession.on('stderr', () => {
+          /* consumed by CommandSession to avoid channel backpressure */
+        });
+        commandSession.once('close', ({ exitCode }) => finish({ exitCode }));
+        commandSession.once('error', (error: Error) => finish({ error }));
+      });
+
+      if (pendingArchive?.preflightSession === commandSession) pendingArchive.preflightSession = undefined;
+      if (pendingArchive?.cancelled) throw new Error('ARCHIVE_CANCELLED');
+      if (result.timedOut) throw new Error(`Command check timed out for '${commandName}'`);
+      if (result.error) {
+        console.error(`[SFTP Command Check ${sessionId}] Stream error for "${checkCmd}":`, result.error);
+        continue;
+      }
+      if (result.exitCode === 0 && output.trim() !== '') {
+        console.log(
+          `[SFTP Command Check ${sessionId}] Command '${commandName}' found using "${checkCmd}". Output: ${output.trim()}`,
+        );
+        return true;
+      }
+
+      console.log(
+        `[SFTP Command Check ${sessionId}] Command '${commandName}' not found with "${checkCmd}" (code: ${result.exitCode}, output: "${output.trim()}").`,
+      );
+    }
+
+    return false;
   }
 
   /** 发送压缩错误消息 */

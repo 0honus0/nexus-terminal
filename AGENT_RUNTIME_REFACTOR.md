@@ -1110,4 +1110,12 @@ Then continue in this priority order:
 - Added first multi-channel E2E covering control + transfer channel separation, control navigation during delayed transfer, and channel cleanup after leaving Workspace.
 - Backend build currently passes.
 - Frontend build currently passes.
-- Next concrete task: commit/push this first foundation slice and run remote Actions; use any remote failures to finish ExecutionSession lifecycle migration before further filesystem decomposition.
+- First foundation slice was committed and pushed as commit `2ff6392f` after rebasing the workflow-generated E2E environment update from the remote test branch.
+- Remote Actions run `33709300680` was automatically triggered for `2ff6392f`; it is still in progress at the time of this note.
+- Additional local work after `2ff6392f` (currently uncommitted): recursive SFTP search now acquires the `background` role; the multi-channel E2E now expects all three control/transfer/background channels; Docker handler command execution is being consolidated onto the shared bounded SSH executor. Backend build passes after these local changes.
+- Remote Actions run `33709300680` for `2ff6392f` completed **SUCCESS**: Docker smoke and all 8 Playwright groups passed.
+- Physical module decomposition has started. Added `filesystem/types.ts`, `filesystem/sftp-file-system.ts`, and `filesystem/file-removal.service.ts`. Core FileManager operations (`list/search/stat/read/write/mkdir/unlink/rename/chmod/realpath/rmdir/delete_paths`) now go through reusable filesystem services that depend only on `ExecutionSession`, not WebSocket/ClientState.
+- The corresponding old methods were deleted from `SftpService`; it dropped from ~3723 lines to ~2617 lines. Do not re-add wrapper methods to `SftpService`.
+- Added `CommandSession` + `CommandSessionManager` under `execution/`; `ExecutionSession` now owns long-running command sessions and closes them with the parent session. Archive execution is being migrated onto this primitive.
+- Backend and frontend builds passed after the core filesystem extraction; backend passed again after removal-service extraction.
+- Next concrete task: commit/push this physical-decomposition slice, trigger remote Actions, then continue splitting the remaining `SftpService` into dedicated transfer/archive/upload services while Actions runs.

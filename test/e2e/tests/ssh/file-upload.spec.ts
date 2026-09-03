@@ -105,6 +105,17 @@ test('workspace SFTP uses independent control and transfer channels and releases
 
   await waitForRemoteFiles([fileName], 30_000);
 
+  await step('recursive search lazily opens the background SFTP channel instead of reusing control or transfer', async () => {
+    await page.getByTitle('Search files...').click();
+    const search = page.getByPlaceholder('Search files...');
+    await search.fill('nested');
+    await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => {
+      const status = await readSftpChannelStatus();
+      return { active: status.activeChannels, opened: status.openedChannels };
+    }).toEqual({ active: 3, opened: 3 });
+  });
+
   await step('leaving the workspace releases all SFTP channels owned by its ExecutionSession', async () => {
     await page.goto('/connections');
     await expect.poll(async () => (await readSftpChannelStatus()).activeChannels, { timeout: 15_000 }).toBe(0);

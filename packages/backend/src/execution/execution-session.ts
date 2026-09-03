@@ -1,5 +1,6 @@
 import type { Client } from 'ssh2';
 import { SftpChannelManager } from '../transport/sftp-channel-manager';
+import { CommandSessionManager } from './command-session-manager';
 
 export type ExecutionSessionOwnerType = 'workspace' | 'agent' | 'system';
 export type ExecutionSessionStatus = 'ready' | 'detached' | 'closed';
@@ -23,6 +24,7 @@ export class ExecutionSession {
   public readonly ownerType: ExecutionSessionOwnerType;
   public readonly ownerId?: string;
   public readonly sftp: SftpChannelManager;
+  public readonly commands: CommandSessionManager;
   private _status: ExecutionSessionStatus = 'ready';
   private _client?: Client;
 
@@ -33,6 +35,7 @@ export class ExecutionSession {
     this.ownerId = options.ownerId;
     this._client = options.client;
     this.sftp = new SftpChannelManager(options.client);
+    this.commands = new CommandSessionManager(options.client);
   }
 
   get status(): ExecutionSessionStatus {
@@ -55,6 +58,7 @@ export class ExecutionSession {
   detachClient(): Client {
     if (!this._client || this._status !== 'ready') throw new Error(`Execution session ${this.id} is not attached.`);
     const client = this._client;
+    this.commands.closeAllNow();
     this.sftp.closeAll();
     this._client = undefined;
     this._status = 'detached';
@@ -63,6 +67,7 @@ export class ExecutionSession {
 
   close(): void {
     if (this._status === 'closed') return;
+    this.commands.closeAllNow();
     this.sftp.closeAll();
     const client = this._client;
     this._client = undefined;

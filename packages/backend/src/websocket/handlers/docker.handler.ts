@@ -3,6 +3,7 @@ import { parsePortsString } from '../utils';
 import { clientStates } from '../state';
 import WebSocket from 'ws';
 import { isSafeDockerIdentifier } from '../../utils/shell';
+import { executeSshCommand } from '../../execution/ssh-command-executor';
 
 export async function fetchRemoteDockerStatus(
   state: ClientState,
@@ -19,26 +20,10 @@ export async function fetchRemoteDockerStatus(
 
   try {
     const versionCommand = "docker version --format '{{.Server.Version}}'";
-    const { stdout: versionStdout, stderr: versionStderr } = await new Promise<{ stdout: string; stderr: string }>(
-      (resolve, reject) => {
-        let stdout = '';
-        let stderr = '';
-        if (!state.executionSession.isReady) {
-          return reject(new Error('SSH client disconnected before command execution.'));
-        }
-        state.executionSession.client.exec(versionCommand, { pty: false }, (err, stream) => {
-          if (err) return reject(err);
-          stream.on('data', (data: Buffer) => {
-            stdout += data.toString();
-          });
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString();
-          });
-          stream.on('close', () => resolve({ stdout, stderr }));
-          stream.on('error', (execErr: Error) => reject(execErr));
-        });
-      },
-    );
+    const { stdout: versionStdout, stderr: versionStderr } = await executeSshCommand(state.executionSession.client, {
+      command: versionCommand,
+      timeoutMs: 10_000,
+    });
 
     if (
       versionStderr.includes('command not found') ||
@@ -71,26 +56,11 @@ export async function fetchRemoteDockerStatus(
 
   try {
     const psCommand = "docker ps -a --no-trunc --format '{{json .}}'";
-    const { stdout: psStdout, stderr: psStderr } = await new Promise<{ stdout: string; stderr: string }>(
-      (resolve, reject) => {
-        let stdout = '';
-        let stderr = '';
-        if (!state.executionSession.isReady) {
-          return reject(new Error('SSH client disconnected before command execution.'));
-        }
-        state.executionSession.client.exec(psCommand, { pty: false }, (err, stream) => {
-          if (err) return reject(err);
-          stream.on('data', (data: Buffer) => {
-            stdout += data.toString();
-          });
-          stream.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString();
-          });
-          stream.on('close', () => resolve({ stdout, stderr }));
-          stream.on('error', (execErr: Error) => reject(execErr));
-        });
-      },
-    );
+    const { stdout: psStdout, stderr: psStderr } = await executeSshCommand(state.executionSession.client, {
+      command: psCommand,
+      timeoutMs: 15_000,
+      maxOutputBytes: 4 * 1024 * 1024,
+    });
 
     if (
       psStderr.includes('command not found') ||
@@ -150,26 +120,11 @@ export async function fetchRemoteDockerStatus(
   if (runningContainerIds.length > 0) {
     try {
       const statsCommand = `docker stats ${runningContainerIds.join(' ')} --no-stream --format '{{json .}}'`;
-      const { stdout: statsStdout, stderr: statsStderr } = await new Promise<{ stdout: string; stderr: string }>(
-        (resolve, reject) => {
-          let stdout = '';
-          let stderr = '';
-          if (!state.executionSession.isReady) {
-            return reject(new Error('SSH client disconnected before command execution.'));
-          }
-          state.executionSession.client.exec(statsCommand, { pty: false }, (err, stream) => {
-            if (err) return reject(err);
-            stream.on('data', (data: Buffer) => {
-              stdout += data.toString();
-            });
-            stream.stderr.on('data', (data: Buffer) => {
-              stderr += data.toString();
-            });
-            stream.on('close', () => resolve({ stdout, stderr }));
-            stream.on('error', (execErr: Error) => reject(execErr));
-          });
-        },
-      );
+      const { stdout: statsStdout, stderr: statsStderr } = await executeSshCommand(state.executionSession.client, {
+        command: statsCommand,
+        timeoutMs: 15_000,
+        maxOutputBytes: 4 * 1024 * 1024,
+      });
 
       if (statsStderr) {
         console.warn(
@@ -313,30 +268,11 @@ export async function handleDockerCommand(
         throw new Error(`Unsupported command: ${command}`);
     }
 
-    await new Promise<void>((resolve, reject) => {
-      if (!state.executionSession.isReady) {
-        return reject(new Error('SSH client disconnected before command execution.'));
-      }
-      state.executionSession.client.exec(dockerCliCommand, { pty: false }, (err, stream) => {
-        if (err) return reject(err);
-        let stderr = '';
-        stream.stderr.on('data', (data: Buffer) => {
-          stderr += data.toString();
-        });
-        stream.on('close', (code: number | null) => {
-          if (code === 0) {
-            console.log(`WebSocket: 远程 Docker 命令 (${dockerCliCommand}) on session ${sessionId} 执行成功。`);
-            resolve();
-          } else {
-            console.error(
-              `WebSocket: 远程 Docker 命令 (${dockerCliCommand}) on session ${sessionId} 执行失败 (Code: ${code}). Stderr: ${stderr}`,
-            );
-            reject(new Error(`Command failed with code ${code}. ${stderr || 'No stderr output.'}`));
-          }
-        });
-        stream.on('error', (execErr: Error) => reject(execErr));
-      });
+    await executeSshCommand(state.executionSession.client, {
+      command: dockerCliCommand,
+      timeoutMs: command === 'stop' ? 30_000 : 20_000,
     });
+    console.log(`WebSocket: 远程 Docker 命令 (${dockerCliCommand}) on session ${sessionId} 执行成功。`);
 
     // Request a status update after a short delay
     setTimeout(() => {
@@ -396,23 +332,10 @@ export async function handleDockerGetStats(
   const command = `docker stats ${containerId} --no-stream --format '{{json .}}'`;
 
   try {
-    const execResult = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      let stdout = '';
-      let stderr = '';
-      if (!state.executionSession.isReady) {
-        return reject(new Error('SSH client disconnected before command execution.'));
-      }
-      state.executionSession.client.exec(command, { pty: false }, (err, stream) => {
-        if (err) return reject(err);
-        stream.on('data', (data: Buffer) => {
-          stdout += data.toString();
-        });
-        stream.stderr.on('data', (data: Buffer) => {
-          stderr += data.toString();
-        });
-        stream.on('close', () => resolve({ stdout, stderr }));
-        stream.on('error', (execErr: Error) => reject(execErr));
-      });
+    const execResult = await executeSshCommand(state.executionSession.client, {
+      command,
+      timeoutMs: 15_000,
+      maxOutputBytes: 1024 * 1024,
     });
 
     if (execResult.stderr) {
