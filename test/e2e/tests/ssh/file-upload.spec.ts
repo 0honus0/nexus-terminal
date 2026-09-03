@@ -71,6 +71,46 @@ async function waitForRemoteFiles(names: string[], timeout = 45_000): Promise<vo
   }, { timeout }).toEqual(names);
 }
 
+async function readSftpChannelStatus(): Promise<{ activeChannels: number; openedChannels: number }> {
+  const response = await fetch(`${E2E_SSH.controlUrl}/sftp/status`);
+  expect(response.ok).toBeTruthy();
+  return await response.json() as { activeChannels: number; openedChannels: number };
+}
+
+test('workspace SFTP uses independent control and transfer channels and releases both on close', async ({ page, context }) => {
+  await openFileManager(page, context);
+
+  await step('opening File Manager creates the latency-sensitive control SFTP channel', async () => {
+    await expect.poll(async () => (await readSftpChannelStatus()).activeChannels).toBe(1);
+  });
+
+  const fileName = 'multi-channel-lifecycle.bin';
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1500`, { method: 'POST' });
+  try {
+    await slowStep('a live upload opens a second transfer channel instead of reusing File Manager control SFTP', async () => {
+      await dragLocalFiles(page, [{ name: fileName, size: 256 * 1024, fill: 0x6e }]);
+
+      await expect.poll(async () => {
+        const status = await readSftpChannelStatus();
+        return { active: status.activeChannels, opened: status.openedChannels };
+      }, { timeout: 15_000 }).toEqual({ active: 2, opened: 2 });
+
+      // A control-path operation must remain available while transfer writes are delayed.
+      await fileManagerRow(page, 'folder-seed').dblclick();
+      await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 5_000 });
+    });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+
+  await waitForRemoteFiles([fileName], 30_000);
+
+  await step('leaving the workspace releases all SFTP channels owned by its ExecutionSession', async () => {
+    await page.goto('/connections');
+    await expect.poll(async () => (await readSftpChannelStatus()).activeChannels, { timeout: 15_000 }).toBe(0);
+  });
+});
+
 test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({ page, context }) => {
   await openFileManager(page, context);
 

@@ -25,6 +25,7 @@ import { SftpService } from '../sftp/sftp.service';
 import { cleanupClientConnection } from './utils';
 import { clientStates } from './state';
 import { temporaryLogStorageService } from '../ssh-suspend/temporary-log-storage.service';
+import { executionSessionManager } from '../execution/execution-session-manager';
 
 // Handlers
 import { handleRdpProxyConnection } from './handlers/rdp.handler';
@@ -386,11 +387,18 @@ export function initializeConnectionHandler(
 
                 if (result) {
                   // console.log(`[WebSocket Handler][${type}] 成功恢复会话。准备设置新的 ClientState (ID: ${newFrontendSessionId})。`);
+                  const resumedConnectionId = parseInt(result.originalConnectionId, 10);
                   const newSessionState: ClientState = {
                     ws, // 当前的 WebSocket 连接
-                    sshClient: result.sshClient,
+                    executionSession: executionSessionManager.create({
+                      id: newFrontendSessionId,
+                      connectionId: resumedConnectionId,
+                      ownerType: 'workspace',
+                      ownerId: String(ws.userId),
+                      client: result.sshClient,
+                    }),
                     sshShellStream: result.channel,
-                    dbConnectionId: parseInt(result.originalConnectionId, 10), // 从结果中恢复并转换为数字
+                    dbConnectionId: resumedConnectionId,
                     connectionName: result.connectionName, // 从结果中恢复
                     ipAddress: clientIp,
                     isShellReady: true, // 假设恢复后 Shell 立即可用
@@ -596,7 +604,7 @@ export function initializeConnectionHandler(
               }
 
               const activeSessionState = clientStates.get(sessionToMarkId);
-              if (!activeSessionState || !activeSessionState.sshClient || !activeSessionState.sshShellStream) {
+              if (!activeSessionState || !activeSessionState.executionSession.isReady || !activeSessionState.sshShellStream) {
                 console.error(`[SSH_MARK_FOR_SUSPEND] 找不到活动的SSH会话或其组件: ${sessionToMarkId}`);
                 if (ws.readyState === WebSocket.OPEN)
                   ws.send(

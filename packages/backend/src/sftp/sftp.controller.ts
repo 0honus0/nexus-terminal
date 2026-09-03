@@ -156,8 +156,8 @@ const streamDirectoryArchive = async (
 };
 
 const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<boolean> => {
-  if (state.sftp) return true;
-  if (!state.sshClient) return false;
+  if (state.executionSession.sftp.control) return true;
+  if (!state.executionSession.isReady) return false;
 
   let pending = pendingSftpInitializations.get(sessionId);
   if (!pending) {
@@ -173,7 +173,7 @@ const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<b
       pendingSftpInitializations.delete(sessionId);
     }
   }
-  return Boolean(state.sftp);
+  return Boolean(state.executionSession.sftp.control);
 };
 
 const resolveDownloadTarget = async (
@@ -192,7 +192,7 @@ const resolveDownloadTarget = async (
 
   for (const [sessionId, state] of clientStates.entries()) {
     if (state.ws.userId !== userId || state.dbConnectionId !== connectionId) continue;
-    if (state.sftp || await ensureSftpReady(sessionId, state)) {
+    if (state.executionSession.sftp.control || await ensureSftpReady(sessionId, state)) {
       return { sessionId, state };
     }
   }
@@ -283,13 +283,13 @@ export const createDownloadTicket = async (
   }
 
   const target = await resolveDownloadTarget(userId, connectionId, requestedSessionId);
-  if (!target?.state.sftp) {
+  if (!target?.state.executionSession.sftp.control) {
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。' });
     return;
   }
 
   try {
-    const stats = await getSftpStats(target.state.sftp, remotePath);
+    const stats = await getSftpStats(target.state.executionSession.sftp.control, remotePath);
     if (!stats.isFile()) {
       res.status(400).json({ message: '短时下载票据仅支持文件。' });
       return;
@@ -382,11 +382,11 @@ export const downloadFile = async (
   }
 
   const target = await resolveDownloadTarget(userId, targetDbConnectionId, requestedSessionId);
-  if (!target?.state.sftp) {
+  if (!target?.state.executionSession.sftp.control) {
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
     return;
   }
-  const userSftpSession = target.state.sftp;
+  const userSftpSession = target.state.executionSession.sftp.control;
 
   try {
     const stats = await getSftpStats(userSftpSession, remotePath);
@@ -532,20 +532,20 @@ export const downloadDirectory = async (
   for (const [sessionId, state] of clientStates.entries()) {
     if (targetState) break;
     // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
-    if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
+    if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.executionSession.sftp.control) {
       targetState = state;
       console.log(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
       break;
     }
   }
 
-  if (!targetState || !targetState.sftp) {
+  if (!targetState || !targetState.executionSession.sftp.control) {
     console.warn(`SFTP 文件夹下载失败：未找到用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的活动 SFTP 会话。`);
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
     return;
   }
 
-  const userSftpSession = targetState.sftp; // 获取正确的 SFTP 实例
+  const userSftpSession = targetState.executionSession.sftp.control; // 获取正确的 SFTP 实例
 
   try {
     // 跟随软链接验证目标是否为目录
@@ -682,7 +682,7 @@ export const handleCompressRequest = async (
 
   console.log(`[WS SFTP Compress ${sessionId}] Received request (ID: ${requestId}).`);
 
-  if (!state || !state.sshClient) {
+  if (!state || !state.executionSession.isReady) {
     console.warn(`[WS SFTP Compress ${sessionId}] SSH client not ready (ID: ${requestId})`);
     sendCompressError(ws, 'SSH 会话未就绪', requestId);
     return;
@@ -733,7 +733,7 @@ export const handleCompressRequest = async (
 
   // --- 执行命令 ---
   try {
-    state.sshClient.exec(command, (err, stream) => {
+    state.executionSession.client.exec(command, (err, stream) => {
       if (err) {
         console.error(`[WS SFTP Compress ${sessionId}] Failed to start exec (ID: ${requestId}):`, err);
         sendCompressError(ws, `执行压缩命令失败: ${err.message}`, requestId);
@@ -812,7 +812,7 @@ export const handleDecompressRequest = async (
 
   console.log(`[WS SFTP Decompress ${sessionId}] Received request for ${archivePath} (ID: ${requestId}).`);
 
-  if (!state || !state.sshClient) {
+  if (!state || !state.executionSession.isReady) {
     console.warn(`[WS SFTP Decompress ${sessionId}] SSH client not ready (ID: ${requestId})`);
     sendDecompressError(ws, 'SSH 会话未就绪', requestId);
     return;
@@ -854,7 +854,7 @@ export const handleDecompressRequest = async (
 
   // --- 执行命令 ---
   try {
-    state.sshClient.exec(command, (err, stream) => {
+    state.executionSession.client.exec(command, (err, stream) => {
       if (err) {
         console.error(`[WS SFTP Decompress ${sessionId}] Failed to start exec (ID: ${requestId}):`, err);
         sendDecompressError(ws, `执行解压命令失败: ${err.message}`, requestId);

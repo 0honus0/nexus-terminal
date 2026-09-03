@@ -7,7 +7,7 @@ import { isSafeDockerIdentifier } from '../../utils/shell';
 export async function fetchRemoteDockerStatus(
   state: ClientState,
 ): Promise<{ available: boolean; containers: DockerContainer[] }> {
-  if (!state || !state.sshClient) {
+  if (!state || !state.executionSession.isReady) {
     console.warn(
       `[fetchRemoteDockerStatus] SSH client not available or not connected for session ${state?.ws?.sessionId}.`,
     );
@@ -23,10 +23,10 @@ export async function fetchRemoteDockerStatus(
       (resolve, reject) => {
         let stdout = '';
         let stderr = '';
-        if (!state.sshClient) {
+        if (!state.executionSession.isReady) {
           return reject(new Error('SSH client disconnected before command execution.'));
         }
-        state.sshClient.exec(versionCommand, { pty: false }, (err, stream) => {
+        state.executionSession.client.exec(versionCommand, { pty: false }, (err, stream) => {
           if (err) return reject(err);
           stream.on('data', (data: Buffer) => {
             stdout += data.toString();
@@ -75,10 +75,10 @@ export async function fetchRemoteDockerStatus(
       (resolve, reject) => {
         let stdout = '';
         let stderr = '';
-        if (!state.sshClient) {
+        if (!state.executionSession.isReady) {
           return reject(new Error('SSH client disconnected before command execution.'));
         }
-        state.sshClient.exec(psCommand, { pty: false }, (err, stream) => {
+        state.executionSession.client.exec(psCommand, { pty: false }, (err, stream) => {
           if (err) return reject(err);
           stream.on('data', (data: Buffer) => {
             stdout += data.toString();
@@ -154,10 +154,10 @@ export async function fetchRemoteDockerStatus(
         (resolve, reject) => {
           let stdout = '';
           let stderr = '';
-          if (!state.sshClient) {
+          if (!state.executionSession.isReady) {
             return reject(new Error('SSH client disconnected before command execution.'));
           }
-          state.sshClient.exec(statsCommand, { pty: false }, (err, stream) => {
+          state.executionSession.client.exec(statsCommand, { pty: false }, (err, stream) => {
             if (err) return reject(err);
             stream.on('data', (data: Buffer) => {
               stdout += data.toString();
@@ -220,7 +220,7 @@ export async function handleDockerGetStatus(ws: AuthenticatedWebSocket, sessionI
       ws.send(JSON.stringify({ type: 'docker:status:error', payload: { message: 'Session state not found.' } }));
     return;
   }
-  if (!state.sshClient) {
+  if (!state.executionSession.isReady) {
     console.warn(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 docker:get_status 请求，但无活动 SSH 连接。`,
     );
@@ -258,7 +258,7 @@ export async function handleDockerCommand(
   payload: any,
 ): Promise<void> {
   const state = sessionId ? clientStates.get(sessionId) : undefined;
-  if (!state || !state.sshClient) {
+  if (!state || !state.executionSession.isReady) {
     console.warn(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 docker:command 请求，但无活动 SSH 连接。`);
     if (ws.readyState === WebSocket.OPEN)
       ws.send(
@@ -314,10 +314,10 @@ export async function handleDockerCommand(
     }
 
     await new Promise<void>((resolve, reject) => {
-      if (!state.sshClient) {
+      if (!state.executionSession.isReady) {
         return reject(new Error('SSH client disconnected before command execution.'));
       }
-      state.sshClient.exec(dockerCliCommand, { pty: false }, (err, stream) => {
+      state.executionSession.client.exec(dockerCliCommand, { pty: false }, (err, stream) => {
         if (err) return reject(err);
         let stderr = '';
         stream.stderr.on('data', (data: Buffer) => {
@@ -366,7 +366,7 @@ export async function handleDockerGetStats(
   payload: any,
 ): Promise<void> {
   const state = sessionId ? clientStates.get(sessionId) : undefined;
-  if (!state || !state.sshClient) {
+  if (!state || !state.executionSession.isReady) {
     console.warn(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 docker:get_stats 请求，但无活动 SSH 连接。`,
     );
@@ -399,10 +399,10 @@ export async function handleDockerGetStats(
     const execResult = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
       let stdout = '';
       let stderr = '';
-      if (!state.sshClient) {
+      if (!state.executionSession.isReady) {
         return reject(new Error('SSH client disconnected before command execution.'));
       }
-      state.sshClient.exec(command, { pty: false }, (err, stream) => {
+      state.executionSession.client.exec(command, { pty: false }, (err, stream) => {
         if (err) return reject(err);
         stream.on('data', (data: Buffer) => {
           stdout += data.toString();

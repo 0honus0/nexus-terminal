@@ -4,6 +4,7 @@ import { StatusMonitorService } from '../services/status-monitor.service';
 import { clientStates, sftpService, statusMonitorService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { disposeTerminalTransport } from './terminal-binary-protocol';
+import { executionSessionManager } from '../execution/execution-session-manager';
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -106,7 +107,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
       const rolledBack = await sshSuspendService.rollbackResumeSession(state.ws.userId, state.resumeSuspendSessionId);
       if (rolledBack) {
         state.isSuspendedByService = true;
-        state.sshClient = undefined as any;
+        if (state.executionSession.isReady) executionSessionManager.detach(sessionId);
         state.sshShellStream = undefined;
         state.resumeSuspendSessionId = undefined;
       }
@@ -115,19 +116,20 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
     // 3. 处理 SSH 连接 (核心修改点)
     if (
       state.isMarkedForSuspend &&
-      state.sshClient &&
+      state.executionSession.isReady &&
       state.sshShellStream &&
       state.suspendLogPath &&
       state.ws.userId !== undefined
     ) {
       console.log(`WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`);
-      const sshClientToPass = state.sshClient;
       const channelToPass = state.sshShellStream;
+      let sshClientToPass: import('ssh2').Client | undefined;
       try {
+        sshClientToPass = executionSessionManager.detach(sessionId);
         const takeoverDetails = {
           userId: state.ws.userId,
           originalSessionId: sessionId, // sessionId 是原始活动会话的ID
-          sshClient: state.sshClient,
+          sshClient: sshClientToPass,
           channel: state.sshShellStream,
           connectionName: state.connectionName || '未知连接',
           connectionId: String(state.dbConnectionId),
@@ -139,8 +141,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
           shellAtPrompt: state.shellAtPrompt,
         };
 
-        // 从 state 中“分离”SSH资源，防止后续意外关闭
-        state.sshClient = undefined as any; // 清除引用
+        // ExecutionSession 已从运行时注册表分离，SSH 所有权转交挂起服务。
         state.sshShellStream = undefined; // 清除引用
         state.isSuspendedByService = true; // 标记为已被服务接管（即使是尝试接管）
 
@@ -161,7 +162,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
           );
           // 移交失败，执行常规关闭
           channelToPass?.end();
-          sshClientToPass?.end();
+          sshClientToPass.end();
           state.isSuspendedByService = false; // 重置标记，因为接管失败
         }
       } catch (error) {
@@ -172,16 +173,16 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
           /* ignore cleanup error */
         }
         try {
-          sshClientToPass.end();
+          sshClientToPass?.end();
         } catch {
           /* ignore cleanup error */
         }
         state.isSuspendedByService = false; // 重置标记
       }
-    } else if (!state.isSuspendedByService && state.sshClient) {
+    } else if (!state.isSuspendedByService && state.executionSession.isReady) {
       // 未标记挂起，也未被服务接管，执行常规关闭
       state.sshShellStream?.end();
-      state.sshClient?.end();
+      executionSessionManager.delete(sessionId, true);
       console.log(`WebSocket: 会话 ${sessionId} 的 SSH 连接已关闭 (未标记挂起，未被服务接管)。`);
     } else if (state.isSuspendedByService) {
       // 已被服务接管（例如通过旧的 startSuspend 流程，或成功移交后），不在此处关闭

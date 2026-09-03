@@ -178,101 +178,36 @@ export class SftpService {
    */
   async initializeSftpSession(sessionId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sshClient || state.sftp) {
-      console.warn(`[SFTP] 无法为会话 ${sessionId} 初始化 SFTP：状态无效、SSH客户端不存在或 SFTP 已初始化。`);
+    if (!state?.executionSession.isReady) {
+      console.warn(`[SFTP] 无法为会话 ${sessionId} 初始化 SFTP：SSH 会话未就绪。`);
       return;
     }
-    if (!state.sshClient) {
-      console.error(`[SFTP] 会话 ${sessionId} 的 SSH 客户端不存在，无法初始化 SFTP。`);
+    if (state.executionSession.sftp.control) {
       return;
     }
-    return new Promise((resolve, reject) => {
-      state.sshClient.sftp((err, sftpInstance) => {
-        if (err) {
-          console.error(`[SFTP] 为会话 ${sessionId} 初始化 SFTP 会话失败:`, err);
-          state.ws.send(
-            JSON.stringify({
-              type: 'sftp_error',
-              payload: { connectionId: state.dbConnectionId, message: 'SFTP 初始化失败' },
-            }),
-          );
-          reject(err);
-        } else {
-          console.log(`[SFTP] 为会话 ${sessionId} 初始化 SFTP 会话成功。`);
-          state.sftp = sftpInstance;
-          state.ws.send(JSON.stringify({ type: 'sftp_ready', payload: { connectionId: state.dbConnectionId } }));
-          sftpInstance.on('end', () => {
-            console.log(`[SFTP] 会话 ${sessionId} 的 SFTP 会话已结束。`);
-            if (state) state.sftp = undefined;
-          });
-          sftpInstance.on('close', () => {
-            console.log(`[SFTP] 会话 ${sessionId} 的 SFTP 会话已关闭。`);
-            if (state) state.sftp = undefined;
-          });
-          sftpInstance.on('error', (sftpErr: Error) => {
-            console.error(`[SFTP] 会话 ${sessionId} 的 SFTP 会话出错:`, sftpErr);
-            if (state) state.sftp = undefined;
-            state?.ws.send(
-              JSON.stringify({
-                type: 'sftp_error',
-                payload: { connectionId: state.dbConnectionId, message: 'SFTP 会话错误' },
-              }),
-            );
-          });
-          resolve();
-        }
-      });
-    });
+    const channels = state.executionSession.sftp;
+    try {
+      await channels.ensure('control');
+      console.log(`[SFTP] 会话 ${sessionId} 的 control channel 已就绪。`);
+      state.ws.send(JSON.stringify({ type: 'sftp_ready', payload: { connectionId: state.dbConnectionId } }));
+    } catch (error) {
+      console.error(`[SFTP] 为会话 ${sessionId} 初始化 control channel 失败:`, error);
+      state.ws.send(
+        JSON.stringify({
+          type: 'sftp_error',
+          payload: { connectionId: state.dbConnectionId, message: 'SFTP 初始化失败' },
+        }),
+      );
+      channels.close('control');
+      throw error;
+    }
   }
 
-  /** Lazily open a second SFTP subsystem dedicated to upload I/O.
-   * File-manager control operations keep using state.sftp, so slow remote writes,
-   * stream backpressure, and temporary-file cleanup cannot head-of-line block readdir. */
-  async ensureUploadSftpSession(sessionId: string): Promise<SFTPWrapper> {
+  /** Lazily open a transfer SFTP channel independent from control operations. */
+  async ensureTransferSftpSession(sessionId: string): Promise<SFTPWrapper> {
     const state = this.clientStates.get(sessionId);
-    if (!state?.sshClient) throw new Error('SSH 会话未就绪');
-    if (state.uploadSftp) return state.uploadSftp;
-    if (state.uploadSftpInitPromise) return state.uploadSftpInitPromise;
-
-    let initPromise: Promise<SFTPWrapper>;
-    initPromise = new Promise<SFTPWrapper>((resolve, reject) => {
-      state.sshClient.sftp((err, sftpInstance) => {
-        if (err) {
-          console.error(`[SFTP Upload] 为会话 ${sessionId} 初始化独立上传 SFTP channel 失败:`, err);
-          reject(err);
-          return;
-        }
-        const currentState = this.clientStates.get(sessionId);
-        if (!currentState || currentState !== state) {
-          try {
-            sftpInstance.end();
-          } catch {
-            /* session vanished during setup */
-          }
-          reject(new Error('SSH 会话已结束'));
-          return;
-        }
-
-        state.uploadSftp = sftpInstance;
-        const detach = () => {
-          if (state.uploadSftp === sftpInstance) state.uploadSftp = undefined;
-        };
-        sftpInstance.on('end', detach);
-        sftpInstance.on('close', detach);
-        sftpInstance.on('error', (error: Error) => {
-          console.error(`[SFTP Upload] 会话 ${sessionId} 的独立上传 SFTP channel 出错:`, error);
-          detach();
-        });
-        console.log(`[SFTP Upload] 会话 ${sessionId} 的独立上传 SFTP channel 已就绪。`);
-        resolve(sftpInstance);
-      });
-    });
-    state.uploadSftpInitPromise = initPromise;
-    try {
-      return await initPromise;
-    } finally {
-      if (state.uploadSftpInitPromise === initPromise) state.uploadSftpInitPromise = undefined;
-    }
+    if (!state?.executionSession.isReady) throw new Error('SSH 会话未就绪');
+    return state.executionSession.sftp.ensure('transfer');
   }
 
   /**
@@ -282,8 +217,7 @@ export class SftpService {
   cleanupSftpSession(sessionId: string): void {
     const state = this.clientStates.get(sessionId);
     if (!state) return;
-    const sftp = state.sftp;
-    const uploadSftp = state.uploadSftp;
+    const channels = state.executionSession.sftp;
     const cleanupTasks: Promise<unknown>[] = [];
 
     this.activeUploads.forEach((upload, uploadId) => {
@@ -313,23 +247,7 @@ export class SftpService {
     }
 
     void Promise.allSettled(cleanupTasks).finally(() => {
-      if (uploadSftp) {
-        try {
-          uploadSftp.end();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (sftp) {
-        try {
-          sftp.end();
-        } catch {
-          /* ignore */
-        }
-      }
-      if (state.uploadSftp === uploadSftp) state.uploadSftp = undefined;
-      if (state.sftp === sftp) state.sftp = undefined;
-      state.uploadSftpInitPromise = undefined;
+      channels.closeAll();
     });
   }
 
@@ -338,7 +256,7 @@ export class SftpService {
   /** 读取目录内容 */
   async readdir(sessionId: string, path: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readdir (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:readdir:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -347,7 +265,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received readdir request for ${path} (ID: ${requestId})`);
     try {
-      state.sftp.readdir(path, (err, list) => {
+      state.executionSession.sftp.control.readdir(path, (err, list) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] readdir ${path} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -396,7 +314,7 @@ export class SftpService {
   /** 从指定目录开始按名称递归搜索文件和目录。符号链接目录不会继续向下遍历。 */
   async search(sessionId: string, rootPath: string, query: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       state?.ws.send(
         JSON.stringify({
           type: 'sftp:search:error',
@@ -459,7 +377,7 @@ export class SftpService {
         const directoryResults = await Promise.all(
           batch.map(async (directory) => {
             try {
-              return { directory, entries: await this.listDirectory(state.sftp!, directory), error: null as Error | null };
+              return { directory, entries: await this.listDirectory(state.executionSession.sftp.control!, directory), error: null as Error | null };
             } catch (error: any) {
               return { directory, entries: [] as SftpDirEntry[], error: error instanceof Error ? error : new Error(String(error)) };
             }
@@ -519,7 +437,7 @@ export class SftpService {
   /** 获取文件/目录状态信息 */
   async stat(sessionId: string, path: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 stat (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:stat:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -528,7 +446,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received stat request for ${path} (ID: ${requestId})`);
     try {
-      state.sftp.lstat(path, (err, stats: Stats) => {
+      state.executionSession.sftp.control.lstat(path, (err, stats: Stats) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] stat ${path} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -573,7 +491,7 @@ export class SftpService {
   /** 读取文件内容 (支持指定编码) */
   async readFile(sessionId: string, path: string, requestId: string, requestedEncoding?: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 readFile (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:readfile:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -584,7 +502,7 @@ export class SftpService {
       `[SFTP ${sessionId}] Received readFile request for ${path} (ID: ${requestId}, Requested Encoding: ${requestedEncoding ?? 'auto'})`,
     );
     try {
-      const readStream = state.sftp.createReadStream(path);
+      const readStream = state.executionSession.sftp.control.createReadStream(path);
       const chunks: Buffer[] = [];
       let errorOccurred = false;
 
@@ -774,7 +692,7 @@ export class SftpService {
   // --- 修改：添加 encoding 参数 ---
   async writefile(sessionId: string, path: string, data: string, requestId: string, encoding?: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 writefile (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:writefile:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -814,7 +732,7 @@ export class SftpService {
       let originalMode: number | undefined;
       try {
         const stats = await new Promise<Stats>((resolve, reject) => {
-          state.sftp!.lstat(path, (err, stats) => {
+          state.executionSession.sftp.control!.lstat(path, (err, stats) => {
             if (err) {
               reject(err);
             } else {
@@ -837,7 +755,7 @@ export class SftpService {
       console.debug(`[SFTP ${sessionId}] Creating write stream for ${path} (ID: ${requestId})`);
       // 在创建写入流时设置文件权限
       const writeStreamOptions = originalMode !== undefined ? { mode: originalMode } : {};
-      const writeStream = state.sftp.createWriteStream(path, writeStreamOptions);
+      const writeStream = state.executionSession.sftp.control.createWriteStream(path, writeStreamOptions);
       let errorOccurred = false;
 
       writeStream.on('error', (err: Error) => {
@@ -866,7 +784,7 @@ export class SftpService {
             );
           }
           // Get updated stats after writing
-          state.sftp!.lstat(path, (statErr, stats) => {
+          state.executionSession.sftp.control!.lstat(path, (statErr, stats) => {
             if (statErr) {
               console.error(`[SFTP ${sessionId}] lstat after writefile ${path} failed (ID: ${requestId}):`, statErr);
               state.ws.send(
@@ -925,7 +843,7 @@ export class SftpService {
   /** 创建目录 */
   async mkdir(sessionId: string, path: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 mkdir (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:mkdir:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -934,7 +852,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received mkdir request for ${path} (ID: ${requestId})`);
     try {
-      state.sftp.mkdir(path, (err) => {
+      state.executionSession.sftp.control.mkdir(path, (err) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] mkdir ${path} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -948,7 +866,7 @@ export class SftpService {
         } else {
           console.log(`[SFTP ${sessionId}] mkdir ${path} success (ID: ${requestId}). Fetching stats...`);
           // Get stats for the new directory
-          state.sftp!.lstat(path, (statErr, stats) => {
+          state.executionSession.sftp.control!.lstat(path, (statErr, stats) => {
             if (statErr) {
               console.error(`[SFTP ${sessionId}] lstat after mkdir ${path} failed (ID: ${requestId}):`, statErr);
               // Send success anyway, but without item details
@@ -995,7 +913,7 @@ export class SftpService {
   /** 删除目录 (强制递归) */
   async rmdir(sessionId: string, path: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sshClient) {
+    if (!state || !state.executionSession.isReady) {
       console.warn(`[SSH Exec] SSH 客户端未准备好，无法在 ${sessionId} 上执行 rmdir (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:rmdir:error', path: path, payload: 'SSH 会话未就绪', requestId: requestId }),
@@ -1021,7 +939,7 @@ export class SftpService {
       console.log(`[SSH Exec ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
 
       try {
-        state.sshClient.exec(command, (err, stream) => {
+        state.executionSession.client.exec(command, (err, stream) => {
           if (err) {
             console.error(
               `[SSH Exec ${sessionId}] Failed to start exec for ${attemptDescription} ${path} (ID: ${requestId}):`,
@@ -1114,7 +1032,7 @@ export class SftpService {
   /** 删除文件 */
   async unlink(sessionId: string, path: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 unlink (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:unlink:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -1123,7 +1041,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received unlink request for ${path} (ID: ${requestId})`);
     try {
-      state.sftp.unlink(path, (err) => {
+      state.executionSession.sftp.control.unlink(path, (err) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] unlink ${path} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -1155,7 +1073,7 @@ export class SftpService {
   /** 重命名/移动文件或目录 */
   async rename(sessionId: string, oldPath: string, newPath: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 rename (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({
@@ -1170,7 +1088,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received rename request ${oldPath} -> ${newPath} (ID: ${requestId})`);
     try {
-      state.sftp.rename(oldPath, newPath, (err) => {
+      state.executionSession.sftp.control.rename(oldPath, newPath, (err) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -1187,7 +1105,7 @@ export class SftpService {
             `[SFTP ${sessionId}] rename ${oldPath} -> ${newPath} success (ID: ${requestId}). Fetching stats for new path...`,
           );
           // Get stats for the new path
-          state.sftp!.lstat(newPath, (statErr, stats) => {
+          state.executionSession.sftp.control!.lstat(newPath, (statErr, stats) => {
             if (statErr) {
               console.error(`[SFTP ${sessionId}] lstat after rename ${newPath} failed (ID: ${requestId}):`, statErr);
               // Send success anyway, but without item details
@@ -1246,7 +1164,7 @@ export class SftpService {
   /** 修改文件/目录权限 */
   async chmod(sessionId: string, path: string, mode: number, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 chmod (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:chmod:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -1255,7 +1173,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received chmod request for ${path} to ${mode.toString(8)} (ID: ${requestId})`);
     try {
-      state.sftp.chmod(path, mode, (err) => {
+      state.executionSession.sftp.control.chmod(path, mode, (err) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -1271,7 +1189,7 @@ export class SftpService {
             `[SFTP ${sessionId}] chmod ${path} to ${mode.toString(8)} success (ID: ${requestId}). Fetching updated stats...`,
           );
           // Get updated stats after chmod
-          state.sftp!.lstat(path, (statErr, stats) => {
+          state.executionSession.sftp.control!.lstat(path, (statErr, stats) => {
             if (statErr) {
               console.error(`[SFTP ${sessionId}] lstat after chmod ${path} failed (ID: ${requestId}):`, statErr);
               // Send success anyway, but without updated item details
@@ -1318,7 +1236,7 @@ export class SftpService {
   /** 获取路径的绝对表示 */
   async realpath(sessionId: string, path: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP] SFTP 未准备好，无法在 ${sessionId} 上执行 realpath (ID: ${requestId})`);
       state?.ws.send(
         JSON.stringify({ type: 'sftp:realpath:error', path: path, payload: 'SFTP 会话未就绪', requestId: requestId }),
@@ -1327,7 +1245,7 @@ export class SftpService {
     }
     console.debug(`[SFTP ${sessionId}] Received realpath request for ${path} (ID: ${requestId})`);
     try {
-      state.sftp.realpath(path, (err, absPath) => {
+      state.executionSession.sftp.control.realpath(path, (err, absPath) => {
         if (err) {
           console.error(`[SFTP ${sessionId}] realpath ${path} failed (ID: ${requestId}):`, err);
           state.ws.send(
@@ -1342,9 +1260,9 @@ export class SftpService {
           console.log(
             `[SFTP ${sessionId}] realpath ${path} -> ${absPath} success (ID: ${requestId}). Fetching target type...`,
           );
-          // 再次检查 state 和 state.sftp 是否仍然有效，因为回调是异步的
+          // 再次检查 state 和 state.executionSession.sftp.control 是否仍然有效，因为回调是异步的
           const currentState = this.clientStates.get(sessionId);
-          if (!currentState || !currentState.sftp) {
+          if (!currentState || !currentState.executionSession.sftp.control) {
             console.warn(
               `[SFTP ${sessionId}] SFTP session for ${absPath} became invalid before stat call (ID: ${requestId}).`,
             );
@@ -1364,7 +1282,7 @@ export class SftpService {
             return;
           }
           // 对 absPath 执行 stat 操作以获取其真实类型
-          currentState.sftp.stat(absPath, (statErr, stats) => {
+          currentState.executionSession.sftp.control.stat(absPath, (statErr, stats) => {
             // 使用 sftp.stat()
             if (statErr) {
               console.error(
@@ -1566,12 +1484,12 @@ export class SftpService {
   // +++ 复制文件或目录 +++
   async copy(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP Copy] SFTP 未准备好，无法在 ${sessionId} 上执行 copy (ID: ${requestId})`);
       state?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: 'SFTP 会话未就绪', requestId: requestId }));
       return;
     }
-    const sftp = state.sftp;
+    const sftp = state.executionSession.sftp.control;
     console.debug(
       `[SFTP ${sessionId}] Received copy request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`,
     );
@@ -1673,11 +1591,11 @@ export class SftpService {
       destinationState?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: message, requestId }));
     };
 
-    if (!destinationState?.sftp) {
+    if (!destinationState?.executionSession.sftp.control) {
       fail('目标 SFTP 会话未就绪');
       return;
     }
-    if (!sourceState?.sftp) {
+    if (!sourceState?.executionSession.sftp.control) {
       fail('源 SFTP 会话未就绪或已断开');
       return;
     }
@@ -1686,8 +1604,8 @@ export class SftpService {
       return;
     }
 
-    const sourceSftp = sourceState.sftp;
-    const destinationSftp = destinationState.sftp;
+    const sourceSftp = sourceState.executionSession.sftp.control;
+    const destinationSftp = destinationState.executionSession.sftp.control;
     const copiedItemsDetails: any[] = [];
     const transferKey = this.transferCancellationKey(destinationSessionId, requestId);
     this.activeTransferKeys.add(transferKey);
@@ -1756,7 +1674,7 @@ export class SftpService {
 
   async deletePaths(sessionId: string, paths: string[], requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state?.sftp) {
+    if (!state?.executionSession.sftp.control) {
       state?.ws.send(JSON.stringify({ type: 'sftp:delete_paths:error', payload: 'SFTP 会话未就绪', requestId }));
       return;
     }
@@ -1770,7 +1688,7 @@ export class SftpService {
         if (!normalizedPath || normalizedPath === '/' || normalizedPath === '.') {
           throw new Error('拒绝删除根目录或无效路径');
         }
-        await this.removeSftpPathRecursive(state.sftp, normalizedPath);
+        await this.removeSftpPathRecursive(state.executionSession.sftp.control, normalizedPath);
       }
 
       state.ws.send(
@@ -1795,12 +1713,12 @@ export class SftpService {
   // +++ 移动文件或目录 +++
   async move(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sftp) {
+    if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP Move] SFTP 未准备好，无法在 ${sessionId} 上执行 move (ID: ${requestId})`);
       state?.ws.send(JSON.stringify({ type: 'sftp:move:error', payload: 'SFTP 会话未就绪', requestId: requestId }));
       return;
     }
-    const sftp = state.sftp;
+    const sftp = state.executionSession.sftp.control;
     console.debug(
       `[SFTP ${sessionId}] Received move request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`,
     );
@@ -2304,7 +2222,7 @@ export class SftpService {
     const { sources, destinationArchiveName, format, targetDirectory, password, requestId } = payload;
     const archiveKey = `${sessionId}:${requestId}`;
 
-    if (!state?.sshClient) {
+    if (!state?.executionSession.isReady) {
       this.sendCompressError(state?.ws, 'SSH 会话未就绪', requestId);
       return;
     }
@@ -2407,7 +2325,7 @@ export class SftpService {
     ].join('; ');
 
     try {
-      state.sshClient.exec(command, (err, stream) => {
+      state.executionSession.client.exec(command, (err, stream) => {
         this.pendingArchives.delete(archiveKey);
         if (err) {
           if (!pendingArchive.cancelled)
@@ -2624,7 +2542,7 @@ export class SftpService {
     const { archivePath, password, requestId } = payload;
     const archiveKey = `${sessionId}:${requestId}`;
 
-    if (!state || !state.sshClient) {
+    if (!state || !state.executionSession.isReady) {
       console.warn(`[SFTP Decompress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 decompress (ID: ${requestId})`);
       this.sendDecompressError(state?.ws, 'SSH 会话未就绪', requestId);
       return;
@@ -2750,7 +2668,7 @@ export class SftpService {
 
     // --- 执行命令 ---
     try {
-      state.sshClient.exec(command, (err, stream) => {
+      state.executionSession.client.exec(command, (err, stream) => {
         this.pendingArchives.delete(archiveKey);
         if (err) {
           console.error(`[SFTP Decompress ${sessionId}] Failed to start exec for decompress (ID: ${requestId}):`, err);
@@ -2914,7 +2832,7 @@ export class SftpService {
     pendingArchive?: PendingArchiveOperation,
   ): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      if (!state.sshClient) {
+      if (!state.executionSession.isReady) {
         reject(new Error('SSH client is not available.'));
         return;
       }
@@ -2946,7 +2864,7 @@ export class SftpService {
 
         const checkCmd = checkCommands[currentCheckIndex];
         console.log(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
-        state.sshClient!.exec(checkCmd, (err, stream) => {
+        state.executionSession.client!.exec(checkCmd, (err, stream) => {
           if (settled) {
             try {
               stream?.close();
@@ -3248,7 +3166,7 @@ export class SftpService {
   ): Promise<{ preparedDirectories: number }> {
     const state = this.clientStates.get(sessionId);
     if (!state) throw new Error('SSH 会话未就绪');
-    const uploadSftp = await this.ensureUploadSftpSession(sessionId);
+    const uploadSftp = await this.ensureTransferSftpSession(sessionId);
     if (!prepareId || prepareId.length > 512) throw new Error('上传准备任务 ID 无效');
     if (!Array.isArray(directories) || directories.length > 20000) {
       throw new Error('上传目录列表无效或数量过多');
@@ -3327,7 +3245,7 @@ export class SftpService {
     }
     let uploadSftp: SFTPWrapper;
     try {
-      uploadSftp = await this.ensureUploadSftpSession(sessionId);
+      uploadSftp = await this.ensureTransferSftpSession(sessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[SFTP Upload ${uploadId}] Upload SFTP channel unavailable for session ${sessionId}:`, error);
@@ -3861,9 +3779,9 @@ export class SftpService {
 
     for (let attempt = 1; attempt <= 5; attempt++) {
       const state = this.clientStates.get(sessionId);
-      if (!state?.sftp) return false;
+      if (!state?.executionSession.sftp.control) return false;
       try {
-        await this.removeSftpPathRecursive(state.sftp, workspacePath);
+        await this.removeSftpPathRecursive(state.executionSession.sftp.control, workspacePath);
         return true;
       } catch (error) {
         if (attempt === 5) {
@@ -3883,7 +3801,7 @@ export class SftpService {
   ): Promise<boolean> {
     for (let attempt = 1; attempt <= 3; attempt++) {
       const state = this.clientStates.get(sessionId);
-      const uploadSftp = preferredSftp ?? state?.uploadSftp ?? state?.sftp;
+      const uploadSftp = preferredSftp ?? state?.executionSession.sftp.transfer ?? state?.executionSession.sftp.control;
       if (!uploadSftp) return false;
       try {
         await this.unlinkSftpPath(uploadSftp, remotePath, true);

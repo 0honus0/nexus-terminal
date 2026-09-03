@@ -32,6 +32,8 @@ let archiveExecDelayMs = 0;
 const executedCommands = [];
 const receivedWebhooks = [];
 const activeSshClients = new Set();
+const activeSftpChannels = new Set();
+let openedSftpChannels = 0;
 let sshServerOnline = false;
 
 const virtualShellPrelude = `
@@ -545,6 +547,12 @@ function createHandleRegistry() {
 
 function attachSftp(session, accept) {
   const sftp = accept();
+  const channelToken = Symbol('sftp-channel');
+  activeSftpChannels.add(channelToken);
+  openedSftpChannels += 1;
+  const detachChannel = () => activeSftpChannels.delete(channelToken);
+  sftp.once('end', detachChannel);
+  sftp.once('close', detachChannel);
   const registry = createHandleRegistry();
 
   const respondError = (reqid, error) => {
@@ -958,6 +966,8 @@ const controlServer = http.createServer(async (req, res) => {
       await stopSshServer();
       sftpWriteDelayMs = 0;
       archiveExecDelayMs = 0;
+      activeSftpChannels.clear();
+      openedSftpChannels = 0;
       await fsp.rm(archiveExecHoldPath, { force: true });
       await fsp.rm(archivePreflightHoldPath, { force: true });
       await resetRoot();
@@ -981,6 +991,11 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && requestUrl.pathname === '/ssh/status') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ online: sshServerOnline, activeClients: activeSshClients.size }));
+      return;
+    }
+    if (req.method === 'GET' && requestUrl.pathname === '/sftp/status') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ activeChannels: activeSftpChannels.size, openedChannels: openedSftpChannels }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/sftp/write-delay') {

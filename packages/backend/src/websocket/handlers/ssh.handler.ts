@@ -8,6 +8,8 @@ import WebSocket from 'ws';
 import { StringDecoder } from 'string_decoder';
 import { flushTerminalOutput, queueTerminalOutput } from '../terminal-binary-protocol';
 import * as pathModule from 'node:path';
+import { executeSshCommand } from '../../execution/ssh-command-executor';
+import { executionSessionManager } from '../../execution/execution-session-manager';
 
 const encodeForPosixPrintf = (value: string): string =>
   Array.from(value)
@@ -31,59 +33,6 @@ const sendSshRequestMessage = (
   }
 };
 
-const executeSshCommand = (state: ClientState, command: string, timeoutMs = 5000): Promise<string> =>
-  new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-    let decodersEnded = false;
-    let channel: any;
-    const stdoutDecoder = new StringDecoder('utf8');
-    const stderrDecoder = new StringDecoder('utf8');
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (!decodersEnded) {
-        decodersEnded = true;
-        stdout += stdoutDecoder.end();
-        stderr += stderrDecoder.end();
-      }
-      if (error) reject(error);
-      else resolve(stdout);
-    };
-    const timeout = setTimeout(() => {
-      try {
-        channel?.close();
-      } catch {
-        /* ignore */
-      }
-      finish(new Error('SSH command timed out'));
-    }, timeoutMs);
-
-    state.sshClient.exec(command, (err, stream) => {
-      if (err) {
-        finish(err);
-        return;
-      }
-      channel = stream;
-      stream.on('data', (data: Buffer) => {
-        stdout += stdoutDecoder.write(data);
-      });
-      stream.stderr.on('data', (data: Buffer) => {
-        stderr += stderrDecoder.write(data);
-      });
-      stream.on('error', (streamError: Error) => finish(streamError));
-      stream.on('close', (code: number | undefined) => {
-        if (code && code !== 0) {
-          finish(new Error(stderr.trim() || `SSH command exited with code ${code}`));
-        } else {
-          finish();
-        }
-      });
-    });
-  });
-
 const parseDelimitedAbsolutePath = (output: string): string => {
   const start = output.indexOf('\0');
   const end = start >= 0 ? output.indexOf('\0', start + 1) : -1;
@@ -95,11 +44,12 @@ const parseDelimitedAbsolutePath = (output: string): string => {
 
 const resolveRemoteDirectory = async (state: ClientState, requestedPath: string): Promise<string> =>
   parseDelimitedAbsolutePath(
-    await executeSshCommand(
-      state,
-      `cd -P ${quotePosixShellArg(requestedPath)} 2>/dev/null && printf '\\000%s\\000' "$PWD"`,
-      5000,
-    ),
+    (
+      await executeSshCommand(state.executionSession.client, {
+        command: `cd -P ${quotePosixShellArg(requestedPath)} 2>/dev/null && printf '\\000%s\\000' "$PWD"`,
+        timeoutMs: 5000,
+      })
+    ).stdout,
   );
 
 const DELETED_CWD_SUFFIX = ' (deleted)';
@@ -107,11 +57,12 @@ const DELETED_CWD_SUFFIX = ' (deleted)';
 const readShellCurrentPath = async (state: ClientState): Promise<string> => {
   if (!state.shellPid) throw new Error('Shell PID is unavailable');
   const currentPath = parseDelimitedAbsolutePath(
-    await executeSshCommand(
-      state,
-      `printf '\\000'; readlink -n /proc/${state.shellPid}/cwd; nexus_status=$?; printf '\\000'; exit "$nexus_status"`,
-      5000,
-    ),
+    (
+      await executeSshCommand(state.executionSession.client, {
+        command: `printf '\\000'; readlink -n /proc/${state.shellPid}/cwd; nexus_status=$?; printf '\\000'; exit "$nexus_status"`,
+        timeoutMs: 5000,
+      })
+    ).stdout,
   );
 
   if (!currentPath.endsWith(DELETED_CWD_SUFFIX)) return currentPath;
@@ -521,7 +472,13 @@ export async function handleSshConnect(
 
     const newState: ClientState = {
       ws: ws,
-      sshClient: sshClient,
+      executionSession: executionSessionManager.create({
+        id: newSessionId,
+        connectionId: dbConnectionIdAsNumber,
+        ownerType: 'workspace',
+        ownerId: ws.userId !== undefined ? String(ws.userId) : undefined,
+        client: sshClient,
+      }),
       dbConnectionId: dbConnectionIdAsNumber,
       connectionName: connInfo!.name,
       ipAddress: clientIp,
@@ -774,7 +731,7 @@ export async function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: a
     fail('无效的静默命令请求。');
     return;
   }
-  if (!state?.sshClient || !state.sshShellStream || !state.isShellReady) {
+  if (!state?.executionSession.isReady || !state.sshShellStream || !state.isShellReady) {
     fail('SSH Shell 尚未就绪。');
     return;
   }
@@ -878,7 +835,7 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
   const sessionId = ws.sessionId;
   const state = sessionId ? clientStates.get(sessionId) : undefined;
 
-  if (!state || !state.sshClient) {
+  if (!state || !state.executionSession.isReady) {
     // sshClient is enough, stream might not be ready for resize yet
     console.warn(`WebSocket: 收到来自 ${ws.username} 的调整大小请求，但无有效会话或 SSH 客户端。`);
     return;

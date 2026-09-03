@@ -2,6 +2,7 @@ import { Client } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState } from '../websocket';
 import { settingsService } from '../settings/settings.service';
+import { executeSshCommand } from '../execution/ssh-command-executor';
 
 export interface ServerStatus {
   cpuPercent?: number;
@@ -66,7 +67,7 @@ export class StatusMonitorService {
   async startStatusPolling(sessionId: string): Promise<void> {
     this.subscribedSessions.add(sessionId);
     const initialState = this.clientStates.get(sessionId);
-    if (!initialState?.sshClient || initialState.statusIntervalId || this.startInFlight.has(sessionId)) return;
+    if (!initialState?.executionSession.isReady || initialState.statusIntervalId || this.startInFlight.has(sessionId)) return;
 
     this.startInFlight.add(sessionId);
     try {
@@ -78,7 +79,7 @@ export class StatusMonitorService {
       }
 
       const state = this.clientStates.get(sessionId);
-      if (!this.subscribedSessions.has(sessionId) || !state?.sshClient || state.statusIntervalId) return;
+      if (!this.subscribedSessions.has(sessionId) || !state?.executionSession.isReady || state.statusIntervalId) return;
 
       this.bootstrapSamplePending.add(sessionId);
       state.statusIntervalId = setInterval(() => {
@@ -120,14 +121,14 @@ export class StatusMonitorService {
     if (this.fetchInFlight.has(sessionId)) return;
 
     const state = this.clientStates.get(sessionId);
-    if (!state?.sshClient || state.ws.readyState !== WebSocket.OPEN) {
+    if (!state?.executionSession.isReady || state.ws.readyState !== WebSocket.OPEN) {
       this.stopStatusPolling(sessionId);
       return;
     }
 
     this.fetchInFlight.add(sessionId);
     try {
-      const status = await this.fetchServerStatus(state.sshClient, sessionId);
+      const status = await this.fetchServerStatus(state.executionSession.client, sessionId);
       if (state.ws.readyState === WebSocket.OPEN && state.statusIntervalId) {
         state.ws.send(
           JSON.stringify({
@@ -162,7 +163,13 @@ export class StatusMonitorService {
   private async fetchServerStatus(sshClient: Client, sessionId: string): Promise<ServerStatus> {
     const timestamp = Date.now();
     const includeStatic = !this.staticInfo.has(sessionId);
-    const output = await this.executeSshCommand(sshClient, this.buildCombinedStatusCommand(includeStatic));
+    const output = (
+      await executeSshCommand(sshClient, {
+        command: this.buildCombinedStatusCommand(includeStatic),
+        timeoutMs: 15_000,
+        maxOutputBytes: 1024 * 1024,
+      })
+    ).stdout;
     const sections = this.parseSections(output);
 
     let staticInfo = this.staticInfo.get(sessionId);
@@ -331,27 +338,6 @@ export class StatusMonitorService {
       diskUsed: Number.isFinite(used) ? used : undefined,
       diskPercent: Number.isFinite(percent) ? percent : undefined,
     };
-  }
-
-  private executeSshCommand(sshClient: Client, command: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      let stdout = '';
-      let stderr = '';
-      sshClient.exec(command, (error, stream) => {
-        if (error) return reject(error);
-        stream.on('data', (data: Buffer) => {
-          stdout += data.toString('utf8');
-        });
-        stream.stderr.on('data', (data: Buffer) => {
-          stderr += data.toString('utf8');
-        });
-        stream.on('error', reject);
-        stream.on('close', (code?: number) => {
-          if (code && code !== 0 && !stdout) reject(new Error(stderr.trim() || `状态命令退出码 ${code}`));
-          else resolve(stdout);
-        });
-      });
-    });
   }
 
   private parseProcMeminfo(
