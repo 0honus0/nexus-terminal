@@ -1,7 +1,8 @@
 import path from 'node:path';
 import * as jschardet from 'jschardet';
 import * as iconv from 'iconv-lite';
-import type { SFTPWrapper, Stats } from 'ssh2';
+import type { Stats } from 'ssh2';
+import { SftpChannelFileSystem } from './sftp-channel-file-system';
 import type { ExecutionSession } from '../execution/execution-session';
 import type { FileAttributes, FileEntry, FileSearchResult, ReadFileResult, RealPathResult } from './types';
 
@@ -10,42 +11,6 @@ const SEARCH_MAX_RESULTS = 500;
 const SEARCH_MAX_DIRECTORIES = 5000;
 const SEARCH_MAX_QUERY_LENGTH = 256;
 
-function attrs(stats: Stats): FileAttributes {
-  return {
-    size: stats.size,
-    uid: stats.uid,
-    gid: stats.gid,
-    mode: stats.mode,
-    atime: stats.atime * 1000,
-    mtime: stats.mtime * 1000,
-    isDirectory: stats.isDirectory(),
-    isFile: stats.isFile(),
-    isSymbolicLink: stats.isSymbolicLink(),
-  };
-}
-
-function entry(filename: string, longname: string, stats: Stats): FileEntry {
-  return { filename, longname, attrs: attrs(stats) };
-}
-
-function call<T>(invoke: (callback: (error: Error | undefined | null, value: T) => void) => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    invoke((error, value) => {
-      if (error) reject(error);
-      else resolve(value);
-    });
-  });
-}
-
-function callVoid(invoke: (callback: (error?: Error | null) => void) => void): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    invoke((error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-}
-
 /**
  * Reusable remote filesystem facade backed by one ExecutionSession.
  * It contains no WebSocket or UI state and is shared by Workspace and Agent callers.
@@ -53,15 +18,15 @@ function callVoid(invoke: (callback: (error?: Error | null) => void) => void): P
 export class SftpFileSystem {
   constructor(private readonly session: ExecutionSession) {}
 
-  async ensureControl(): Promise<SFTPWrapper> {
+  async ensureControl(): Promise<SftpChannelFileSystem> {
     if (!this.session.isReady) throw new Error('SSH 会话未就绪');
-    return this.session.sftp.ensure('control');
+    return new SftpChannelFileSystem(await this.session.sftp.ensure('control'));
   }
 
   async list(remotePath: string): Promise<FileEntry[]> {
-    const sftp = await this.ensureControl();
-    const list = await call<Array<{ filename: string; longname: string; attrs: Stats }>>((cb) => sftp.readdir(remotePath, cb));
-    return list.map((item) => entry(item.filename, item.longname, item.attrs));
+    const filesystem = await this.ensureControl();
+    const list = await filesystem.list(remotePath);
+    return list.map((item) => SftpChannelFileSystem.toFileEntry(item.filename, item.attrs, item.longname));
   }
 
   async search(rootPath: string, query: string): Promise<FileSearchResult> {
@@ -70,7 +35,7 @@ export class SftpFileSystem {
     const normalizedRoot = path.posix.resolve('/', rootPath || '/');
     if (!normalizedQuery) return { items: [], truncated: false };
 
-    const sftp = await this.session.sftp.ensure('background');
+    const filesystem = new SftpChannelFileSystem(await this.session.sftp.ensure('background'));
     const queue = [normalizedRoot];
     const items: FileSearchResult['items'] = [];
     let scannedDirectories = 0;
@@ -86,7 +51,7 @@ export class SftpFileSystem {
       scannedDirectories += batch.length;
       const results = await Promise.all(batch.map(async (directory) => {
         try {
-          const list = await call<Array<{ filename: string; longname: string; attrs: Stats }>>((cb) => sftp.readdir(directory, cb));
+          const list = await filesystem.list(directory);
           return { directory, list, error: undefined as Error | undefined };
         } catch (error) {
           return { directory, list: [], error: error instanceof Error ? error : new Error(String(error)) };
@@ -104,7 +69,7 @@ export class SftpFileSystem {
           const relativePath = path.posix.relative(normalizedRoot, fullPath) || item.filename;
           if (item.filename.toLocaleLowerCase().includes(normalizedQuery)) {
             items.push({
-              ...entry(relativePath, item.longname, item.attrs),
+              ...SftpChannelFileSystem.toFileEntry(relativePath, item.attrs, item.longname),
               basename: item.filename,
               relativePath,
               path: fullPath,
@@ -124,16 +89,15 @@ export class SftpFileSystem {
   }
 
   async stat(remotePath: string): Promise<FileAttributes> {
-    const sftp = await this.ensureControl();
-    const stats = await call<Stats>((cb) => sftp.lstat(remotePath, cb));
-    return attrs(stats);
+    const filesystem = await this.ensureControl();
+    return SftpChannelFileSystem.toAttributes(await filesystem.lstat(remotePath));
   }
 
   async readFile(remotePath: string, requestedEncoding?: string): Promise<ReadFileResult> {
-    const sftp = await this.ensureControl();
+    const filesystem = await this.ensureControl();
     const fileData = await new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = [];
-      const stream = sftp.createReadStream(remotePath);
+      const stream = filesystem.channel.createReadStream(remotePath);
       stream.on('data', (chunk: Buffer) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
       stream.once('error', reject);
       stream.once('end', () => resolve(Buffer.concat(chunks)));
@@ -158,72 +122,71 @@ export class SftpFileSystem {
   }
 
   async writeFile(remotePath: string, content: string, encoding = 'utf-8'): Promise<FileEntry | null> {
-    const sftp = await this.ensureControl();
+    const filesystem = await this.ensureControl();
     const data = iconv.encode(content, encoding);
     let originalMode: number | undefined;
     try {
-      originalMode = (await call<Stats>((cb) => sftp.lstat(remotePath, cb))).mode;
+      originalMode = (await filesystem.lstat(remotePath)).mode;
     } catch {
       // New file: no existing permissions to preserve.
     }
 
     await new Promise<void>((resolve, reject) => {
-      const stream = sftp.createWriteStream(remotePath, originalMode !== undefined ? { mode: originalMode } : {});
+      const stream = filesystem.channel.createWriteStream(remotePath, originalMode !== undefined ? { mode: originalMode } : {});
       stream.once('error', reject);
       stream.once('close', resolve);
       stream.end(data);
     });
 
     try {
-      const stats = await call<Stats>((cb) => sftp.lstat(remotePath, cb));
-      return entry(path.posix.basename(remotePath), '', stats);
+      const stats = await filesystem.lstat(remotePath);
+      return SftpChannelFileSystem.toFileEntry(remotePath, stats);
     } catch {
       return null;
     }
   }
 
   async mkdir(remotePath: string): Promise<FileEntry | null> {
-    const sftp = await this.ensureControl();
-    await callVoid((cb) => sftp.mkdir(remotePath, cb));
+    const filesystem = await this.ensureControl();
+    await filesystem.mkdir(remotePath);
     try {
-      const stats = await call<Stats>((cb) => sftp.lstat(remotePath, cb));
-      return entry(path.posix.basename(remotePath), '', stats);
+      return SftpChannelFileSystem.toFileEntry(remotePath, await filesystem.lstat(remotePath));
     } catch {
       return null;
     }
   }
 
   async unlink(remotePath: string): Promise<void> {
-    const sftp = await this.ensureControl();
-    await callVoid((cb) => sftp.unlink(remotePath, cb));
+    const filesystem = await this.ensureControl();
+    await filesystem.unlink(remotePath);
   }
 
   async rename(oldPath: string, newPath: string): Promise<FileEntry | null> {
-    const sftp = await this.ensureControl();
-    await callVoid((cb) => sftp.rename(oldPath, newPath, cb));
+    const filesystem = await this.ensureControl();
+    await filesystem.rename(oldPath, newPath);
     try {
-      const stats = await call<Stats>((cb) => sftp.lstat(newPath, cb));
-      return entry(path.posix.basename(newPath), '', stats);
+      const stats = await filesystem.lstat(newPath);
+      return SftpChannelFileSystem.toFileEntry(newPath, stats);
     } catch {
       return null;
     }
   }
 
   async chmod(remotePath: string, mode: number): Promise<FileEntry | null> {
-    const sftp = await this.ensureControl();
-    await callVoid((cb) => sftp.chmod(remotePath, mode, cb));
+    const filesystem = await this.ensureControl();
+    await filesystem.chmod(remotePath, mode);
     try {
-      const stats = await call<Stats>((cb) => sftp.lstat(remotePath, cb));
-      return entry(path.posix.basename(remotePath), '', stats);
+      const stats = await filesystem.lstat(remotePath);
+      return SftpChannelFileSystem.toFileEntry(remotePath, stats);
     } catch {
       return null;
     }
   }
 
   async realpath(remotePath: string): Promise<RealPathResult> {
-    const sftp = await this.ensureControl();
-    const absolutePath = await call<string>((cb) => sftp.realpath(remotePath, cb));
-    const stats = await call<Stats>((cb) => sftp.stat(absolutePath, cb));
+    const filesystem = await this.ensureControl();
+    const absolutePath = await filesystem.realpath(remotePath);
+    const stats = await filesystem.stat(absolutePath);
     return {
       requestedPath: remotePath,
       absolutePath,

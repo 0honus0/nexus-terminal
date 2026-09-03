@@ -1,31 +1,8 @@
 import path from 'node:path';
-import type { SFTPWrapper, Stats } from 'ssh2';
 import type { ExecutionSession } from '../execution/execution-session';
 import { executeSshCommand, SshCommandError } from '../execution/ssh-command-executor';
 import { quotePosixShellArg } from '../utils/shell';
-
-function call<T>(invoke: (callback: (error: Error | undefined | null, value: T) => void) => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    invoke((error, value) => {
-      if (error) reject(error);
-      else resolve(value);
-    });
-  });
-}
-
-function callVoid(invoke: (callback: (error?: Error | null) => void) => void): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    invoke((error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-}
-
-function isMissing(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return message.includes('no such file') || message.includes('not found') || message.includes('failure') && message.includes('2');
-}
+import { SftpChannelFileSystem } from './sftp-channel-file-system';
 
 function normalizeDestructivePath(remotePath: string): string {
   const normalized = path.posix.normalize(remotePath);
@@ -40,8 +17,8 @@ export class FileRemovalService {
 
   async removePath(remotePath: string): Promise<void> {
     const normalized = normalizeDestructivePath(remotePath);
-    const sftp = await this.session.sftp.ensure('control');
-    await this.removeRecursive(sftp, normalized);
+    const filesystem = new SftpChannelFileSystem(await this.session.sftp.ensure('control'));
+    await this.removeRecursive(filesystem, normalized);
   }
 
   async removePaths(remotePaths: string[]): Promise<void> {
@@ -72,25 +49,24 @@ export class FileRemovalService {
     }
   }
 
-  private async removeRecursive(sftp: SFTPWrapper, remotePath: string): Promise<void> {
-    let stats: Stats;
+  private async removeRecursive(filesystem: SftpChannelFileSystem, remotePath: string): Promise<void> {
+    let stats;
     try {
-      stats = await call<Stats>((cb) => sftp.lstat(remotePath, cb));
+      stats = await filesystem.lstat(remotePath);
     } catch (error) {
-      if (isMissing(error)) return;
+      if (SftpChannelFileSystem.isMissing(error)) return;
       throw error;
     }
 
     if (!stats.isDirectory() || stats.isSymbolicLink()) {
-      await callVoid((cb) => sftp.unlink(remotePath, cb));
+      await filesystem.unlink(remotePath);
       return;
     }
 
-    const entries = await call<Array<{ filename: string; attrs: Stats }>>((cb) => sftp.readdir(remotePath, cb));
-    for (const entry of entries) {
+    for (const entry of await filesystem.list(remotePath)) {
       if (entry.filename === '.' || entry.filename === '..') continue;
-      await this.removeRecursive(sftp, path.posix.join(remotePath, entry.filename));
+      await this.removeRecursive(filesystem, path.posix.join(remotePath, entry.filename));
     }
-    await callVoid((cb) => sftp.rmdir(remotePath, cb));
+    await filesystem.rmdir(remotePath);
   }
 }

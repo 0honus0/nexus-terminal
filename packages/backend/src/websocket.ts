@@ -4,7 +4,7 @@ import { RequestHandler } from 'express';
 import { initializeHeartbeat } from './websocket/heartbeat';
 import { initializeUpgradeHandler } from './websocket/upgrade';
 import { initializeConnectionHandler } from './websocket/connection';
-import { clientStates, sftpService } from './websocket/state';
+import { clientStates, workspaceSftpSessionService } from './websocket/state';
 import { sshSuspendService } from './ssh-suspend/ssh-suspend.service';
 import { cleanupClientConnection } from './websocket/utils';
 
@@ -35,7 +35,7 @@ export const initializeWebSocket = async (
   initializeUpgradeHandler(server, wss, sessionParser);
 
   // 3. Initialize Connection Handler (handles 'connection' event and message routing)
-  initializeConnectionHandler(wss, sshSuspendService, sftpService); // +++ 传递 sftpService 实例 +++
+  initializeConnectionHandler(wss, sshSuspendService, workspaceSftpSessionService);
 
   // --- WebSocket 服务器关闭处理 ---
   wss.on('close', () => {

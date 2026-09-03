@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import path from 'path';
 import type { Readable } from 'node:stream';
-import { clientStates, sftpService } from '../websocket/state';
+import { clientStates, workspaceSftpSessionService } from '../websocket/state';
 import { Archiver, ZipArchive } from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
@@ -161,7 +161,7 @@ const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<b
 
   let pending = pendingSftpInitializations.get(sessionId);
   if (!pending) {
-    pending = sftpService.initializeSftpSession(sessionId);
+    pending = workspaceSftpSessionService.initialize(sessionId);
     pendingSftpInitializations.set(sessionId, pending);
   }
   try {
@@ -624,7 +624,7 @@ const sendDecompressError = (
 };
 
 /**
- * 检查 stderr 输出是否包含表示错误的常见模式 (从 SftpService 复制过来)
+ * 检查 stderr 输出是否包含表示错误的常见模式
  */
 const isErrorInStdErr = (stderr: string): boolean => {
   if (!stderr || stderr.trim().length === 0) {

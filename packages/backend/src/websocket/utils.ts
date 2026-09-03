@@ -1,7 +1,13 @@
 import { PortInfo, ClientState } from './types';
-import { SftpService } from '../sftp/sftp.service';
 import { StatusMonitorService } from '../services/status-monitor.service';
-import { clientStates, sftpService, statusMonitorService } from './state';
+import {
+  archiveService,
+  clientStates,
+  sftpTransferService,
+  sftpUploadService,
+  statusMonitorService,
+  workspaceSftpSessionService,
+} from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { disposeTerminalTransport } from './terminal-binary-protocol';
 import { executionSessionManager } from '../execution/execution-session-manager';
@@ -99,8 +105,11 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
     // 1. 停止状态轮询 (如果存在)
     if (statusMonitorService) statusMonitorService.clearSession(sessionId);
 
-    // 2. 清理 SFTP 会话 (如果存在)
-    if (sftpService) sftpService.cleanupSftpSession(sessionId);
+    // 2. 先清理依赖执行通道/SFTP 的后台文件任务，再释放 SFTP channels。
+    await archiveService.cleanupSession(sessionId);
+    sftpTransferService.cleanupSession(sessionId);
+    await sftpUploadService.cleanupSession(sessionId);
+    workspaceSftpSessionService.closeChannels(sessionId);
 
     // 恢复事务尚未提交时，连接归还挂起服务，保留日志以便重试。
     if (state.resumeSuspendSessionId && state.ws.userId !== undefined) {

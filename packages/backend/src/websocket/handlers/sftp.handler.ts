@@ -1,5 +1,5 @@
 import { AuthenticatedWebSocket } from '../types';
-import { clientStates, sftpService } from '../state';
+import { archiveService, clientStates, sftpTransferService, sftpUploadService } from '../state';
 import WebSocket from 'ws';
 import { SftpFileSystem } from '../../filesystem/sftp-file-system';
 import { FileRemovalService } from '../../filesystem/file-removal.service';
@@ -147,12 +147,12 @@ export async function handleSftpOperation(
       }
       case 'sftp:copy':
         if (Array.isArray(payload?.sources) && payload?.destination) {
-          sftpService.copy(sessionId, payload.sources, payload.destination, requestId);
+          sftpTransferService.copy(sessionId, payload.sources, payload.destination, requestId);
         } else throw new Error("Missing 'sources' (array) or 'destination' in payload for copy");
         break;
       case 'sftp:cross_copy':
         if (typeof payload?.sourceSessionId === 'string' && Array.isArray(payload?.sources) && payload?.destination) {
-          sftpService.copyAcrossSessions(
+          sftpTransferService.copyAcrossSessions(
             sessionId,
             payload.sourceSessionId,
             payload.sources,
@@ -174,12 +174,12 @@ export async function handleSftpOperation(
       }
       case 'sftp:move':
         if (Array.isArray(payload?.sources) && payload?.destination) {
-          sftpService.move(sessionId, payload.sources, payload.destination, requestId);
+          sftpTransferService.move(sessionId, payload.sources, payload.destination, requestId);
         } else throw new Error("Missing 'sources' (array) or 'destination' in payload for move");
         break;
       case 'sftp:transfer:cancel': {
         const transferRequestId = payload?.requestId || requestId;
-        if (transferRequestId) await sftpService.cancelTransfer(sessionId, transferRequestId);
+        if (transferRequestId) await sftpTransferService.cancelTransfer(sessionId, transferRequestId);
         else throw new Error("Missing 'requestId' in payload for transfer cancellation");
         break;
       }
@@ -200,13 +200,13 @@ export async function handleSftpOperation(
             ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
             requestId: requestId,
           };
-          sftpService.compress(sessionId, compressPayload);
+          archiveService.compress(sessionId, compressPayload);
         } else
           throw new Error("Missing 'sources' (array), 'destination', 'format', or 'requestId' in payload for compress");
         break;
       case 'sftp:archive:cancel': {
         const archiveRequestId = payload?.requestId || requestId;
-        if (archiveRequestId) await sftpService.cancelArchive(sessionId, archiveRequestId);
+        if (archiveRequestId) await archiveService.cancelArchive(sessionId, archiveRequestId);
         else throw new Error("Missing 'requestId' in payload for archive cancellation");
         break;
       }
@@ -214,11 +214,11 @@ export async function handleSftpOperation(
         if (payload?.source && requestId) {
           const decompressPayload = {
             archivePath: payload.source as string,
-            // destinationDirectory: payload.destination as string, // sftpService.decompress 目前不使用此参数
+            // destinationDirectory intentionally omitted: extraction occurs beside the archive
             ...(typeof payload.password === 'string' ? { password: payload.password } : {}),
             requestId: requestId,
           };
-          sftpService.decompress(sessionId, decompressPayload);
+          archiveService.decompress(sessionId, decompressPayload);
         } else throw new Error("Missing 'source' or 'requestId' in payload for decompress");
         break;
       default:
@@ -287,7 +287,7 @@ export async function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload:
   console.log(
     `WebSocket: SFTP Upload Start - Session: ${sessionId}, UploadID: ${payload.uploadId}, RemotePath: ${payload.remotePath}, Size: ${payload.size}, RelativePath: ${relativePath}, PrepareID: ${prepareId}`,
   );
-  await sftpService.startUpload(
+  await sftpUploadService.startUpload(
     sessionId,
     payload.uploadId,
     payload.remotePath,
@@ -319,7 +319,7 @@ export async function handleSftpUploadPrepare(ws: AuthenticatedWebSocket, payloa
   }
 
   try {
-    const result = await sftpService.prepareUploadDirectories(
+    const result = await sftpUploadService.prepareUploadDirectories(
       sessionId,
       prepareId,
       payload.basePath,
@@ -375,7 +375,7 @@ export async function handleSftpUploadChunk(
     }
     return;
   }
-  await sftpService.handleUploadChunk(sessionId, payload.uploadId, payload.chunkIndex, payload.data, payload.isLast);
+  await sftpUploadService.handleUploadChunk(sessionId, payload.uploadId, payload.chunkIndex, payload.data, payload.isLast);
 }
 
 export async function handleSftpUploadCancelAll(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
@@ -390,7 +390,7 @@ export async function handleSftpUploadCancelAll(ws: AuthenticatedWebSocket, payl
     }
     return;
   }
-  await sftpService.cancelUploads(sessionId, uploadIds);
+  await sftpUploadService.cancelUploads(sessionId, uploadIds);
 }
 
 export async function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
@@ -411,5 +411,5 @@ export async function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload
       );
     return;
   }
-  await sftpService.cancelUpload(sessionId, payload.uploadId);
+  await sftpUploadService.cancelUpload(sessionId, payload.uploadId);
 }

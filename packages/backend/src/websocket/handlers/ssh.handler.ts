@@ -1,6 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
 import { AuthenticatedWebSocket, ClientState, WebSocketRequest } from '../types';
-import { clientStates, sftpService, statusMonitorService, auditLogService, notificationService } from '../state';
+import {
+  clientStates,
+  workspaceSftpSessionService,
+  statusMonitorService,
+  auditLogService,
+  notificationService,
+} from '../state';
 import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
@@ -604,8 +610,8 @@ export async function handleSshConnect(
           });
 
           console.log(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
-          sftpService
-            .initializeSftpSession(newSessionId)
+          workspaceSftpSessionService
+            .initialize(newSessionId)
             .then(() => console.log(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
             .catch((sftpInitError) =>
               console.error(`WebSocket: 会话 ${newSessionId} 异步初始化 SFTP 失败:`, sftpInitError),

@@ -21,7 +21,7 @@ import {
   ClientState,
 } from './types';
 import { SshSuspendService } from '../ssh-suspend/ssh-suspend.service';
-import { SftpService } from '../sftp/sftp.service';
+import { WorkspaceSftpSessionService } from '../sftp/workspace-sftp-session.service';
 import { cleanupClientConnection } from './utils';
 import { clientStates } from './state';
 import { temporaryLogStorageService } from '../ssh-suspend/temporary-log-storage.service';
@@ -136,9 +136,8 @@ const sendCachedTerminalOutput = async (state: ClientState, stream: AsyncIterabl
 export function initializeConnectionHandler(
   wss: WebSocketServer,
   sshSuspendService: SshSuspendService,
-  sftpService: SftpService,
+  workspaceSftpSessionService: WorkspaceSftpSessionService,
 ): void {
-  // +++ Add sftpService parameter +++
   wss.on('connection', (ws: AuthenticatedWebSocket, request: WebSocketRequest) => {
     ws.isAlive = true;
     const isRdpProxy = request.isRdpProxy;
@@ -475,7 +474,7 @@ export function initializeConnectionHandler(
                       }),
                     );
                   }
-                  void sftpService.initializeSftpSession(newFrontendSessionId).catch((sftpInitErr) => {
+                  void workspaceSftpSessionService.initialize(newFrontendSessionId).catch((sftpInitErr) => {
                     console.error(
                       `[WebSocket Handler][${type}] 为恢复的会话 ${newFrontendSessionId} 初始化 SFTP 失败:`,
                       sftpInitErr,

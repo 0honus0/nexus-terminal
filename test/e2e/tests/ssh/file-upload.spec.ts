@@ -106,8 +106,9 @@ test('workspace SFTP uses independent control and transfer channels and releases
   await waitForRemoteFiles([fileName], 30_000);
 
   await step('recursive search lazily opens the background SFTP channel instead of reusing control or transfer', async () => {
-    await page.getByTitle('Search files...').click();
-    const search = page.getByPlaceholder('Search files...');
+    const fileManagerModal = page.getByTestId('file-manager-modal');
+    await fileManagerModal.getByTitle('Search files...').click();
+    const search = fileManagerModal.getByPlaceholder('Search files...');
     await search.fill('nested');
     await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({ timeout: 10_000 });
     await expect.poll(async () => {

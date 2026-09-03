@@ -1072,20 +1072,19 @@ sed -n '1,260p' packages/backend/src/transport/sftp-channel-manager.ts
 sed -n '1,260p' packages/backend/src/execution/ssh-command-executor.ts
 ```
 
-Then continue in this priority order:
+Then continue in this priority order (updated after the SFTP physical split):
 
 ```text
-1. Finish ExecutionSession lifecycle migration.
-2. Add SFTP channel lifecycle + HOL-blocking E2E.
-3. Move recursive search to background SFTP role.
-4. Move upload/bulk transfer fully to transfer role.
-5. Consolidate remaining simple direct SSH exec calls.
-6. Introduce command-session abstraction for streaming/long jobs.
-7. Split filesystem domain logic out of WebSocket-coupled SftpService.
-8. Run backend/frontend builds.
-9. Commit + push test branch.
-10. Trigger remote E2E Actions and fix failures.
-11. Continue WebSocket protocol/router cleanup only after execution/filesystem core is stable.
+1. Verify the current SFTP physical split with remote Actions.
+2. Fix only real product regressions; do not restore deleted SftpService compatibility APIs.
+3. Audit remaining direct ssh2 Client.exec calls and route simple commands through SshCommandExecutor.
+4. Route streaming/long-running commands through ExecutionSession.commands / CommandSessionManager.
+5. Finish ExecutionSession lifecycle migration for any remaining raw SSH ownership fields.
+6. Add explicit ExecutionSession/Agent-session isolation E2E beyond Workspace SFTP channel tests.
+7. Refactor WebSocket state/router so protocol transport does not own domain services.
+8. Keep backend/frontend builds green after every slice.
+9. Push each meaningful slice to test/agent-runtime-foundation and require remote Actions green.
+10. Delete this document only after the full foundation completion criteria pass.
 ```
 
 ---
@@ -1119,3 +1118,20 @@ Then continue in this priority order:
 - Added `CommandSession` + `CommandSessionManager` under `execution/`; `ExecutionSession` now owns long-running command sessions and closes them with the parent session. Archive execution is being migrated onto this primitive.
 - Backend and frontend builds passed after the core filesystem extraction; backend passed again after removal-service extraction.
 - Next concrete task: commit/push this physical-decomposition slice, trigger remote Actions, then continue splitting the remaining `SftpService` into dedicated transfer/archive/upload services while Actions runs.
+
+- Remote Actions run `33710363320` for commit `d580ca9d` completed **FAILURE**, but the failure was isolated to the newly added multi-channel E2E selector: `page.getByTitle('Search files...')` matched both the active modal FileManager and another FileManager instance. Docker smoke, Playwright groups 1-6 and 8, and every other test in group 7 passed. This was a test locator defect, not an observed product regression.
+- Fixed the multi-channel E2E to scope the search button/input to `data-testid="file-manager-modal"`.
+- Completed the physical SFTP split. **Deleted `packages/backend/src/sftp/sftp.service.ts` entirely. Do not recreate it.**
+- Deleted the temporary `filesystem/sftp-helpers.ts`; the intermediate helper bucket is no longer part of the architecture.
+- Added `filesystem/sftp-channel-file-system.ts` as the concrete primitive adapter around one `SFTPWrapper`. It owns stat/list/rename/mkdir/unlink/chmod/realpath/ensure-directory primitives and normalized stat-to-domain conversion.
+- `filesystem/sftp-file-system.ts` is now the ExecutionSession-aware filesystem facade. It chooses the `control` or `background` channel and is directly reusable by future Agent tools without WebSocket state.
+- `filesystem/file-removal.service.ts` now reuses `SftpChannelFileSystem` plus the shared bounded SSH executor for force-delete fallback.
+- Added `archive/archive.service.ts`; archive active/pending state, preflight, progress, cancellation, long-running command sessions, and workspace cleanup no longer live in the SFTP monolith.
+- Added `transfers/sftp-transfer.service.ts`; Workspace copy/cross-copy/move state and progress are isolated from upload and filesystem CRUD.
+- Added `uploads/sftp-upload.service.ts`; browser upload active/pending/cancel/prepared-batch state is isolated and uses only the transfer SFTP role.
+- Added `sftp/workspace-sftp-session.service.ts`; this is now the thin Workspace-only control-channel ready/close layer. Agent sessions must not call this service; they use `ExecutionSession` + filesystem primitives directly.
+- Migrated `websocket/state.ts`, `sftp.controller.ts`, `websocket.ts`, `websocket/connection.ts`, `ssh.handler.ts`, `sftp.handler.ts`, and cleanup flow to the new services. There are no runtime imports/references to the deleted `SftpService`.
+- Cleanup order is now explicit: archive cleanup -> transfer cancellation state cleanup -> upload cleanup -> Workspace SFTP channel close -> remaining ExecutionSession/SSH cleanup.
+- Backend build passes after deleting the monolith and helper file. Frontend build also passes.
+- A local targeted Playwright run was attempted for cross-session transfer, FileManager context menu and uploads. The non-browser cross-session transfer passed; UI cases could not start because the local host lacks Playwright Chromium `chromium_headless_shell-1234`. Per project policy, do not mutate the local browser environment just to compensate; remote GitHub Actions is the authoritative E2E runtime.
+- Next concrete task: commit/push the full SFTP physical split + selector fix, wait for remote Actions, and fix any real remote regressions before proceeding to remaining direct-exec/WebSocket refactors.
