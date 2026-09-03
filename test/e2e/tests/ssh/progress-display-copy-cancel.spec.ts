@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { E2E_SSH } from '../../support/ssh';
+import { reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
 import {
   clickMenuItem,
   closeProgressDisplay,
@@ -46,6 +46,7 @@ test('copy remains cancelled after a long remote write stall', async ({ page, co
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);
 
+    await reopenConnectedFileManager(page);
     await refreshFileManager(page);
     const partialDirectory = row(page, sourceName);
     if ((await partialDirectory.count()) > 0) {
