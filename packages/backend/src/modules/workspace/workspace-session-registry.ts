@@ -1,47 +1,28 @@
 import type { WorkspaceSession } from './workspace-session';
 
-/** Owns interactive Workspace runtime sessions; no Agent/System sessions live here. */
 export class WorkspaceSessionRegistry {
   private readonly sessions = new Map<string, WorkspaceSession>();
 
-  get size(): number {
-    return this.sessions.size;
+  get(id: string): WorkspaceSession | undefined {
+    return this.sessions.get(id);
   }
 
-  get(sessionId: string): WorkspaceSession | undefined {
-    return this.sessions.get(sessionId);
+  set(session: WorkspaceSession): void {
+    if (this.sessions.has(session.id)) throw new Error(`Workspace session ${session.id} already exists.`);
+    this.sessions.set(session.id, session);
   }
 
-  require(sessionId: string): WorkspaceSession {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`Workspace session ${sessionId} is not active.`);
+  delete(id: string): WorkspaceSession | undefined {
+    const session = this.sessions.get(id);
+    this.sessions.delete(id);
     return session;
   }
 
-  set(sessionId: string, session: WorkspaceSession): void {
-    if (this.sessions.has(sessionId)) throw new Error(`Workspace session ${sessionId} already exists.`);
-    this.sessions.set(sessionId, session);
+  listByUser(userId: number): readonly WorkspaceSession[] {
+    return [...this.sessions.values()].filter((session) => session.userId === userId);
   }
 
-  has(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
-  }
-
-  delete(sessionId: string): boolean {
-    return this.sessions.delete(sessionId);
-  }
-
-  entries(): IterableIterator<[string, WorkspaceSession]> {
-    return this.sessions.entries();
-  }
-
-  values(): IterableIterator<WorkspaceSession> {
-    return this.sessions.values();
-  }
-
-  forEach(callback: (session: WorkspaceSession, sessionId: string) => void): void {
-    this.sessions.forEach((session, sessionId) => callback(session, sessionId));
+  snapshot(): readonly WorkspaceSession[] {
+    return [...this.sessions.values()];
   }
 }
-
-export const workspaceSessionRegistry = new WorkspaceSessionRegistry();

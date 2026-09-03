@@ -1,120 +1,58 @@
-import { v4 as uuidv4 } from 'uuid';
-import type { Client } from 'ssh2';
-import {
-  ExecutionSession,
-  type ExecutionSessionOwnerType,
-} from './execution-session';
-import type { ResolvedSshConnection } from '../../infrastructure/ssh/connection/ssh-connection.types';
-import { sshConnectionFactory } from '../../infrastructure/ssh/connection/ssh-connection-factory';
+import type { ResolvedSshConnection, SshConnectOptions } from '../connection/ssh-connection';
+import { ExecutionSession, type ExecutionSessionIdentity, type ExecutionSessionOwnerType } from './execution-session';
+import type { RemoteExecutionTransportFactory } from './remote-execution.port';
 
-export interface CreateExecutionSessionOptions {
-  id?: string;
-  connectionId: number;
+export interface CreateExecutionSessionRequest {
+  id: string;
   ownerType: ExecutionSessionOwnerType;
   ownerId?: string;
-  client: Client;
-}
-
-export interface ConnectExecutionSessionOptions {
-  id?: string;
   connection: ResolvedSshConnection;
-  ownerType: ExecutionSessionOwnerType;
-  ownerId?: string;
-  timeoutMs?: number;
-  signal?: AbortSignal;
+  connect?: SshConnectOptions;
 }
 
-/**
- * Process-local registry for live execution sessions. Persistent Agent task
- * state belongs elsewhere; live SSH transports are intentionally recreatable.
- */
 export class ExecutionSessionManager {
   private readonly sessions = new Map<string, ExecutionSession>();
 
-  create(options: CreateExecutionSessionOptions): ExecutionSession {
-    const id = options.id ?? uuidv4();
-    if (this.sessions.has(id)) throw new Error(`Execution session ${id} already exists.`);
-    const session = new ExecutionSession({ ...options, id });
-    this.sessions.set(id, session);
+  constructor(private readonly transportFactory: RemoteExecutionTransportFactory) {}
+
+  async create(request: CreateExecutionSessionRequest): Promise<ExecutionSession> {
+    if (this.sessions.has(request.id)) throw new Error(`Execution session ${request.id} already exists.`);
+    const transport = await this.transportFactory.connect(request.connection, request.connect);
+    const identity: ExecutionSessionIdentity = {
+      id: request.id,
+      connectionId: request.connection.connectionId,
+      ownerType: request.ownerType,
+      ownerId: request.ownerId,
+    };
+    const session = new ExecutionSession(identity, transport);
+    this.sessions.set(request.id, session);
     return session;
-  }
-
-  async connect(options: ConnectExecutionSessionOptions): Promise<ExecutionSession> {
-    const id = options.id ?? uuidv4();
-    if (this.sessions.has(id)) throw new Error(`Execution session ${id} already exists.`);
-
-    const client = await sshConnectionFactory.connect(options.connection, options.timeoutMs, options.signal);
-    try {
-      return this.create({
-        id,
-        connectionId: options.connection.id,
-        ownerType: options.ownerType,
-        ownerId: options.ownerId,
-        client,
-      });
-    } catch (error) {
-      try {
-        client.end();
-      } catch {
-        // Best effort if session registration fails after transport creation.
-      }
-      throw error;
-    }
   }
 
   get(id: string): ExecutionSession | undefined {
     return this.sessions.get(id);
   }
 
-  require(id: string): ExecutionSession {
-    const session = this.sessions.get(id);
-    if (!session) throw new Error(`Execution session ${id} was not found.`);
-    return session;
+  snapshot(): readonly ExecutionSessionIdentity[] {
+    return [...this.sessions.values()].map((session) => session.identity);
   }
 
-  delete(id: string, close = true): void {
+  async close(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
     this.sessions.delete(id);
-    if (close) session.close();
+    await session.close();
   }
 
-  detach(id: string): Client {
-    const session = this.require(id);
-    const client = session.detachClient();
-    this.sessions.delete(id);
-    return client;
-  }
-
-  closeByOwner(ownerType: ExecutionSessionOwnerType, ownerId?: string): void {
-    for (const [id, session] of this.sessions.entries()) {
-      if (session.ownerType !== ownerType) continue;
-      if (ownerId !== undefined && session.ownerId !== ownerId) continue;
-      this.sessions.delete(id);
-      session.close();
-    }
-  }
-
-  closeAll(): void {
-    for (const session of this.sessions.values()) session.close();
+  async closeAll(): Promise<void> {
+    const sessions = [...this.sessions.values()];
     this.sessions.clear();
-  }
-
-  snapshot(): Array<{
-    id: string;
-    connectionId: number;
-    ownerType: ExecutionSessionOwnerType;
-    ownerId?: string;
-    status: string;
-  }> {
-    return [...this.sessions.values()].map((session) => ({
-      id: session.id,
-      connectionId: session.connectionId,
-      ownerType: session.ownerType,
-      ownerId: session.ownerId,
-      status: session.status,
+    await Promise.all(sessions.map(async (session) => {
+      try {
+        await session.close();
+      } catch {
+        // One failed transport cleanup must not block the remaining sessions.
+      }
     }));
   }
 }
-
-export const executionSessionManager = new ExecutionSessionManager();
