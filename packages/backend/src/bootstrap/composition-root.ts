@@ -14,6 +14,7 @@ import { TransferTaskRegistry } from '../modules/transfers/transfer-task.service
 import { WorkspaceSessionRegistry } from '../modules/workspace/workspace-session-registry';
 import { WorkspaceService } from '../modules/workspace/workspace.service';
 import { ExecutionSessionManager } from '../platform/execution/execution-session-manager';
+import { ExecutionSessionDiagnosticProbe } from '../platform/execution/diagnostics/execution-session-diagnostic.probe';
 
 export interface PlatformServices {
   executionSessions: ExecutionSessionManager;
@@ -63,6 +64,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const diagnostics = new SystemDiagnosticsService([
     new ProcessDiagnosticProbe(),
     new DatabaseDiagnosticProbe(database),
+    new ExecutionSessionDiagnosticProbe(executionSessions),
   ]);
   const systemHealth = new SystemHealthService();
 
