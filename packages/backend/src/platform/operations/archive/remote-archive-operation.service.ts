@@ -72,10 +72,12 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       const required = request.format === 'zip' ? 'zip' : 'tar';
       const commandAvailable = await this.commandExists(session, required, active);
       if (active.cancelled) {
+        this.finish(active);
         this.emitCancelled(emit, active);
         return;
       }
       if (!commandAvailable) {
+        this.finish(active);
         this.emitFailed(
           emit,
           'compress',
@@ -96,13 +98,16 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       );
       await this.runArchiveCommand(session, active, command, emit, request.format);
       if (active.cancelled) {
+        this.finish(active);
         this.emitCancelled(emit, active);
         return;
       }
       const filesystem = await session.fileSystem('control');
       await filesystem.replaceFile(temporary, destination);
+      this.finish(active);
       emit({ type: 'completed', operation: 'compress', requestId: request.requestId, path: destination });
     } catch (error) {
+      this.finish(active);
       if (active.cancelled) this.emitCancelled(emit, active);
       else this.emitFailed(emit, 'compress', request.requestId, error instanceof Error ? error.message : String(error));
     } finally {
@@ -142,10 +147,12 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       const required = kind === 'zip' ? 'unzip' : 'tar';
       const commandAvailable = await this.commandExists(session, required, active);
       if (active.cancelled) {
+        this.finish(active);
         this.emitCancelled(emit, active);
         return;
       }
       if (!commandAvailable) {
+        this.finish(active);
         this.emitFailed(
           emit,
           'decompress',
@@ -165,18 +172,22 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         kind,
       );
       if (active.cancelled) {
+        this.finish(active);
         this.emitCancelled(emit, active);
         return;
       }
       const combined = `${result.stdout}\n${result.stderr}`;
       if (combined.includes(PASSWORD_REQUIRED_MARKER)) {
+        this.finish(active);
         this.emitFailed(emit, 'decompress', request.requestId, 'Archive password is required.', 'PASSWORD_REQUIRED');
         return;
       }
       if (combined.includes(INVALID_PASSWORD_MARKER)) {
+        this.finish(active);
         this.emitFailed(emit, 'decompress', request.requestId, 'Archive password is invalid.', 'INVALID_PASSWORD');
         return;
       }
+      this.finish(active);
       emit({
         type: 'completed',
         operation: 'decompress',
@@ -184,6 +195,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         path: path.posix.dirname(archivePath),
       });
     } catch (error) {
+      this.finish(active);
       if (active.cancelled) this.emitCancelled(emit, active);
       else {
         const message = error instanceof Error ? error.message : String(error);

@@ -23,8 +23,8 @@ test('archive cancellation remains authoritative while command preflight is stal
     await popup.locator('.stop-button').click();
     await expect(popup).toBeHidden({ timeout: 10_000 });
 
-    // The production cancellation marker currently expires after 30 seconds. A stalled
-    // preflight must not be allowed to "forget" the user's cancellation after that TTL.
+    // A prolonged remote preflight must not be allowed to forget the user's cancellation
+    // before the server eventually becomes responsive again.
     await page.waitForTimeout(31_500);
     await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);

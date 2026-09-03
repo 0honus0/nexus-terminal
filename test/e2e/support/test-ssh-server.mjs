@@ -846,7 +846,12 @@ function runRemoteCommand(command, stream) {
 
   const executableCommand = remapArchiveExecWorkingDirectory(command);
   const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
-  const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(String(command).trim());
+  const normalizedArchivePreflight = String(command)
+    .trim()
+    .replace(/\s+>\s*\/dev\/null\s+2>&1\s*$/, '')
+    .replace(/["']/g, '')
+    .trim();
+  const isArchivePreflightCommand = /^(?:command -v|which)\s+(?:zip|tar|unzip)\s*$/.test(normalizedArchivePreflight);
   const preflightHoldPrefix = isArchivePreflightCommand
     ? `while [ -f ${JSON.stringify(archivePreflightHoldPath)} ]; do sleep 0.05; done; `
     : '';

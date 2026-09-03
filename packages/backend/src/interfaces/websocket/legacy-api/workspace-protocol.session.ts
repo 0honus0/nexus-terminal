@@ -598,6 +598,10 @@ export class LegacyWorkspaceProtocolSession {
         this.sendJson(response);
         return;
       }
+      if (type === 'sftp:compress' || type === 'sftp:decompress') {
+        this.sendJson({ type: `${type}:error`, requestId, payload: { error: message, requestId } });
+        return;
+      }
       const op =
         type === 'sftp:move'
           ? 'sftp:move:error'
