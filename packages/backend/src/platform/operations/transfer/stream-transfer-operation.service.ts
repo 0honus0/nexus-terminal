@@ -31,13 +31,18 @@ const PROGRESS_INTERVAL_MS = 150;
 export class StreamTransferOperationService implements TransferOperation {
   private readonly active = new Map<string, ActiveTransfer>();
 
+  private key(ownerId: string | undefined, requestId: string): string {
+    return `${ownerId ?? ''}\u0000${requestId}`;
+  }
+
   constructor(private readonly sessions: Pick<ExecutionSessionManager, 'require'>) {}
 
   async run(request: TransferRequest, emit: (event: TransferEvent) => void): Promise<void> {
-    if (this.active.has(request.requestId)) throw new Error(`Transfer ${request.requestId} already exists.`);
+    const activeKey = this.key(request.ownerId, request.requestId);
+    if (this.active.has(activeKey)) throw new Error(`Transfer ${request.requestId} already exists for this owner.`);
     const controller = new AbortController();
     const active: ActiveTransfer = { requestId: request.requestId, ownerId: request.ownerId, controller, emit };
-    this.active.set(request.requestId, active);
+    this.active.set(activeKey, active);
 
     try {
       const sourceSession = this.sessions.require(request.sourceSessionId);
@@ -65,7 +70,10 @@ export class StreamTransferOperationService implements TransferOperation {
       for (const sourcePath of request.sourcePaths) {
         this.throwIfAborted(controller.signal);
         const normalizedSource = this.requireAbsolutePath(sourcePath, 'source');
-        const targetPath = path.posix.join(this.requireAbsolutePath(request.destinationPath, 'destination'), path.posix.basename(normalizedSource));
+        const targetPath = path.posix.join(
+          this.requireAbsolutePath(request.destinationPath, 'destination'),
+          path.posix.basename(normalizedSource),
+        );
         if (normalizedSource === targetPath) continue;
 
         if (request.mode === 'move' && sameSession) {
@@ -81,7 +89,15 @@ export class StreamTransferOperationService implements TransferOperation {
           continue;
         }
 
-        await this.copyEntry(sourceFs, destinationFs, normalizedSource, targetPath, tracker, controller.signal, new Set());
+        await this.copyEntry(
+          sourceFs,
+          destinationFs,
+          normalizedSource,
+          targetPath,
+          tracker,
+          controller.signal,
+          new Set(),
+        );
         const metadata = await destinationFs.metadata(targetPath);
         results.push(toRemoteFileEntry(targetPath, metadata));
         if (request.mode === 'move') await this.removeSource(sourceFs, normalizedSource, new Set(), controller.signal);
@@ -91,17 +107,32 @@ export class StreamTransferOperationService implements TransferOperation {
       tracker.currentFile = undefined;
       tracker.totalKnown = true;
       this.emitProgress(tracker, true);
-      emit({ type: 'completed', requestId: request.requestId, mode: request.mode, items: results, crossSession: !sameSession });
+      emit({
+        type: 'completed',
+        requestId: request.requestId,
+        mode: request.mode,
+        sourcePaths: request.sourcePaths,
+        destinationPath: request.destinationPath,
+        items: results,
+        crossSession: !sameSession,
+        ...(request.sourceOwnerId ? { sourceOwnerId: request.sourceOwnerId } : {}),
+      });
     } catch (error) {
       if (controller.signal.aborted) emit({ type: 'cancelled', requestId: request.requestId });
-      else emit({ type: 'failed', requestId: request.requestId, message: error instanceof Error ? error.message : String(error) });
+      else
+        emit({
+          type: 'failed',
+          requestId: request.requestId,
+          mode: request.mode,
+          message: error instanceof Error ? error.message : String(error),
+        });
     } finally {
-      this.active.delete(request.requestId);
+      this.active.delete(activeKey);
     }
   }
 
-  async cancel(requestId: string): Promise<boolean> {
-    const active = this.active.get(requestId);
+  async cancel(ownerId: string, requestId: string): Promise<boolean> {
+    const active = this.active.get(this.key(ownerId, requestId));
     if (!active) return false;
     active.emit({ type: 'cancelling', requestId });
     active.controller.abort();
@@ -110,7 +141,7 @@ export class StreamTransferOperationService implements TransferOperation {
 
   async cancelOwner(ownerId: string): Promise<void> {
     for (const active of this.active.values()) {
-      if (active.ownerId === ownerId) await this.cancel(active.requestId);
+      if (active.ownerId === ownerId) await this.cancel(ownerId, active.requestId);
     }
   }
 
@@ -128,14 +159,30 @@ export class StreamTransferOperationService implements TransferOperation {
     if (metadata.isSymbolicLink) {
       const followed = await sourceFs.metadata(sourcePath, { followSymbolicLinks: true });
       if (followed.isDirectory) {
-        await this.copyDirectory(sourceFs, destinationFs, sourcePath, destinationPath, tracker, signal, ancestorRealPaths);
+        await this.copyDirectory(
+          sourceFs,
+          destinationFs,
+          sourcePath,
+          destinationPath,
+          tracker,
+          signal,
+          ancestorRealPaths,
+        );
       } else if (followed.isFile) {
         await this.copyFile(sourceFs, destinationFs, sourcePath, destinationPath, followed, tracker, signal);
       }
       return;
     }
     if (metadata.isDirectory) {
-      await this.copyDirectory(sourceFs, destinationFs, sourcePath, destinationPath, tracker, signal, ancestorRealPaths);
+      await this.copyDirectory(
+        sourceFs,
+        destinationFs,
+        sourcePath,
+        destinationPath,
+        tracker,
+        signal,
+        ancestorRealPaths,
+      );
     } else if (metadata.isFile) {
       await this.copyFile(sourceFs, destinationFs, sourcePath, destinationPath, metadata, tracker, signal);
     }
@@ -187,7 +234,10 @@ export class StreamTransferOperationService implements TransferOperation {
     const temporaryPath = `${destinationPath}.nexus-transfer-${tracker.requestId}.part`;
     await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
     const source = await sourceFs.openRead(sourcePath);
-    const destination = await destinationFs.openWrite(temporaryPath, { mode: metadata.mode, highWaterMark: 1024 * 1024 });
+    const destination = await destinationFs.openWrite(temporaryPath, {
+      mode: metadata.mode,
+      highWaterMark: 1024 * 1024,
+    });
     const progress = new Transform({
       transform: (chunk, _encoding, callback) => {
         tracker.transferredBytes += Buffer.byteLength(chunk);

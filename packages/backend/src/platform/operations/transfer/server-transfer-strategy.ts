@@ -37,7 +37,7 @@ export class RsyncServerTransferStrategy implements ServerTransferStrategy {
 
   parseProgress(output: string): number | undefined {
     const matches = [...output.matchAll(/(\d{1,3})%/g)];
-    const value = matches.length ? matches[matches.length - 1]?.[1] : undefined;
+    const value = matches.at(-1)?.[1];
     return value ? Math.min(100, Number.parseInt(value, 10)) : undefined;
   }
 
@@ -53,11 +53,7 @@ export class ScpServerTransferStrategy implements ServerTransferStrategy {
     const targetBase = input.targetPath.endsWith('/') ? input.targetPath : `${input.targetPath}/`;
     const parts: string[] = [];
     if (input.sshPassCommand) parts.push(input.sshPassCommand);
-    parts.push(
-      quotePosixShellArg(input.executable),
-      '-o StrictHostKeyChecking=no',
-      '-o UserKnownHostsFile=/dev/null',
-    );
+    parts.push(quotePosixShellArg(input.executable), '-o StrictHostKeyChecking=no', '-o UserKnownHostsFile=/dev/null');
     if (input.isDirectory) parts.push('-r');
     parts.push(`-P ${input.targetPort}`);
     if (input.identityFile) parts.push(`-i ${quotePosixShellArg(input.identityFile)}`);
@@ -67,7 +63,7 @@ export class ScpServerTransferStrategy implements ServerTransferStrategy {
 
   parseProgress(output: string): number | undefined {
     const matches = [...output.matchAll(/(\d{1,3})%/g)];
-    const value = matches.length ? matches[matches.length - 1]?.[1] : undefined;
+    const value = matches.at(-1)?.[1];
     return value ? Math.min(100, Number.parseInt(value, 10)) : undefined;
   }
 

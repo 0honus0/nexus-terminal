@@ -5,6 +5,7 @@ export type TransferMode = 'copy' | 'move';
 export interface TransferRequest {
   requestId: string;
   ownerId?: string;
+  sourceOwnerId?: string;
   sourceSessionId: string;
   destinationSessionId: string;
   sourcePaths: readonly string[];
@@ -23,13 +24,22 @@ export type TransferEvent =
       totalKnown: boolean;
       currentFile?: string;
     }
-  | { type: 'completed'; requestId: string; mode: TransferMode; items: RemoteFileEntry[]; crossSession: boolean }
-  | { type: 'failed'; requestId: string; message: string }
+  | {
+      type: 'completed';
+      requestId: string;
+      mode: TransferMode;
+      sourcePaths: readonly string[];
+      destinationPath: string;
+      items: RemoteFileEntry[];
+      crossSession: boolean;
+      sourceOwnerId?: string;
+    }
+  | { type: 'failed'; requestId: string; mode: TransferMode; message: string }
   | { type: 'cancelling'; requestId: string }
   | { type: 'cancelled'; requestId: string };
 
 export interface TransferOperation {
   run(request: TransferRequest, emit: (event: TransferEvent) => void): Promise<void>;
-  cancel(requestId: string): Promise<boolean>;
+  cancel(ownerId: string, requestId: string): Promise<boolean>;
   cancelOwner(ownerId: string): Promise<void>;
 }

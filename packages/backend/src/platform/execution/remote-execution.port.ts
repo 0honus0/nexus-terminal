@@ -17,7 +17,10 @@ export interface CommandResult {
 }
 
 export class CommandExecutionError extends Error {
-  constructor(message: string, public readonly result?: CommandResult) {
+  constructor(
+    message: string,
+    public readonly result?: CommandResult,
+  ) {
     super(message);
     this.name = 'CommandExecutionError';
   }
@@ -67,6 +70,9 @@ export interface RemoteShellSession {
   readonly isOpen: boolean;
   write(data: string | Uint8Array): boolean;
   resize(columns: number, rows: number): void;
+  pause(): void;
+  resume(): void;
+  onDrain(listener: () => void): () => void;
   onData(listener: (data: Uint8Array) => void): () => void;
   onStderr(listener: (data: Uint8Array) => void): () => void;
   onClose(listener: () => void): () => void;

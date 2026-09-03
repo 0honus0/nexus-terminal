@@ -7,8 +7,12 @@ export class SshShellSessionAdapter implements RemoteShellSession {
   private open = true;
 
   constructor(private readonly channel: ClientChannel) {
-    channel.on('data', (data: Buffer | string) => this.events.emit('data', Buffer.isBuffer(data) ? data : Buffer.from(data)));
-    channel.stderr.on('data', (data: Buffer | string) => this.events.emit('stderr', Buffer.isBuffer(data) ? data : Buffer.from(data)));
+    channel.on('data', (data: Buffer | string) =>
+      this.events.emit('data', Buffer.isBuffer(data) ? data : Buffer.from(data)),
+    );
+    channel.stderr.on('data', (data: Buffer | string) =>
+      this.events.emit('stderr', Buffer.isBuffer(data) ? data : Buffer.from(data)),
+    );
     channel.on('error', (error: Error) => this.events.emit('error', error));
     channel.on('close', () => {
       if (!this.open) return;
@@ -34,6 +38,19 @@ export class SshShellSessionAdapter implements RemoteShellSession {
     this.channel.setWindow(rows, columns, 0, 0);
   }
 
+  pause(): void {
+    if (this.isOpen) this.channel.pause();
+  }
+
+  resume(): void {
+    if (this.isOpen) this.channel.resume();
+  }
+
+  onDrain(listener: () => void): () => void {
+    this.channel.on('drain', listener);
+    return () => this.channel.off('drain', listener);
+  }
+
   onData(listener: (data: Uint8Array) => void): () => void {
     this.events.on('data', listener);
     return () => this.events.off('data', listener);
@@ -57,6 +74,10 @@ export class SshShellSessionAdapter implements RemoteShellSession {
   close(): void {
     if (!this.open) return;
     this.open = false;
-    try { this.channel.close(); } catch { this.channel.destroy(); }
+    try {
+      this.channel.close();
+    } catch {
+      this.channel.destroy();
+    }
   }
 }

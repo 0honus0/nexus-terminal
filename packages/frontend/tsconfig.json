@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ESNext", // 编译目标为最新 ECMAScript 标准
+    "target": "ES2025", // 编译目标为最新 ECMAScript 标准
     "useDefineForClassFields": true, // 使用标准类字段定义
     "module": "ESNext", // 使用 ES 模块系统
     "moduleResolution": "Bundler", // 与 Vite 的模块解析行为保持一致
@@ -10,7 +10,7 @@
     "resolveJsonModule": true, // 允许导入 JSON 文件
     "isolatedModules": true, // 确保每个文件都可以安全地单独编译
     "esModuleInterop": true, // 允许从 CommonJS 模块中默认导入
-    "lib": ["ESNext", "DOM", "DOM.Iterable"], // 包含的库定义
+    "lib": ["ES2025", "DOM", "DOM.Iterable"], // 包含的库定义
     "skipLibCheck": true, // 跳过对声明文件 (*.d.ts) 的类型检查
     "noEmit": true, // 不输出编译后的文件 (由 Vite 处理构建)
     "paths": {

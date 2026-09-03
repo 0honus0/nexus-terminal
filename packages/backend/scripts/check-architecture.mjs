@@ -16,7 +16,7 @@ walk(srcRoot);
 const fileSet = new Set(sourceFiles.map((file) => path.normalize(file)));
 const graph = new Map(sourceFiles.map((file) => [path.normalize(file), []]));
 const failures = [];
-const importPattern = /(?:from\s+|import\s*\()(['"])([^'"]+)\1/g;
+const importPattern = /(import\s+type\s+[^;]*?from\s+|from\s+|import\s*\()(['"])([^'"]+)\2/g;
 
 const allowedLayers = {
   shared: new Set(['shared']),
@@ -47,7 +47,9 @@ for (const file of sourceFiles) {
   const relativeFile = path.relative(srcRoot, file).split(path.sep).join('/');
   importPattern.lastIndex = 0;
   for (let match = importPattern.exec(text); match; match = importPattern.exec(text)) {
-    const specifier = match[2];
+    const importPrefix = match[1];
+    const specifier = match[3];
+    const isTypeOnlyImport = importPrefix.startsWith('import type');
     const target = resolveLocalImport(file, specifier);
     if (target) {
       graph.get(path.normalize(file)).push(target);
@@ -58,9 +60,31 @@ for (const file of sourceFiles) {
         }
       } else {
         const allowed = allowedLayers[fromLayer];
-        if (allowed && !allowed.has(targetLayer)) {
+        const infrastructureDomainPort =
+          fromLayer === 'infrastructure' &&
+          targetLayer === 'modules' &&
+          isTypeOnlyImport &&
+          /(?:\.port|\.types)$/.test(specifier);
+        if (allowed && !allowed.has(targetLayer) && !infrastructureDomainPort) {
           failures.push(`${relativeFile}: forbidden ${fromLayer} -> ${targetLayer} dependency (${specifier})`);
         }
+      }
+    }
+
+    if (target) {
+      const targetRelative = path.relative(srcRoot, target).split(path.sep).join('/');
+      if (targetRelative.startsWith('interfaces/http/legacy-api/') && !relativeFile.startsWith('interfaces/http/')) {
+        failures.push(
+          `${relativeFile}: legacy HTTP compatibility layer may only be imported from interfaces/http (${specifier})`,
+        );
+      }
+      if (
+        targetRelative.startsWith('interfaces/websocket/legacy-api/') &&
+        !relativeFile.startsWith('interfaces/websocket/')
+      ) {
+        failures.push(
+          `${relativeFile}: legacy WebSocket compatibility layer may only be imported from interfaces/websocket (${specifier})`,
+        );
       }
     }
 

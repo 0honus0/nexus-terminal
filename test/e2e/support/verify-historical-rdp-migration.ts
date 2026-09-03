@@ -4,16 +4,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { runMigrations } from '../../../packages/backend/src/infrastructure/database/migrations';
+import { runMigrations } from '../../../packages/backend/src/infrastructure/database/sqlite-migrations';
+import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
+import { SqliteConnectionRepository } from '../../../packages/backend/src/infrastructure/database/repositories/sqlite-connection.repository';
 
 const main = async (): Promise<void> => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'nexus-migration-e2e-'));
-    const dbPath = path.join(dir, 'nexus-terminal.db');
-    let db: DatabaseSync | null = new DatabaseSync(dbPath);
-    const previousDataDir = process.env.NEXUS_DATA_DIR;
+  const dir = mkdtempSync(path.join(tmpdir(), 'nexus-migration-e2e-'));
+  const dbPath = path.join(dir, 'nexus-terminal.db');
+  let db: DatabaseSync | null = new DatabaseSync(dbPath);
 
-    try {
-        db.exec(`
+  try {
+    db.exec(`
             CREATE TABLE connections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NULL,
@@ -55,55 +56,52 @@ const main = async (): Promise<void> => {
             VALUES ('Historical RDP', 'RDP', '192.0.2.88', 3389, 'legacy-user', 'password', 'legacy row', NULL);
         `);
 
-        await runMigrations(db!);
+    await runMigrations(db!);
 
-        const columns = db!.prepare('PRAGMA table_info(connections)').all() as Array<{ name: string }>;
-        assert(columns.some(column => column.name === 'rdp_options'));
+    const columns = db!.prepare('PRAGMA table_info(connections)').all() as Array<{ name: string }>;
+    assert(columns.some((column) => column.name === 'rdp_options'));
 
-        const historicalMigration = db!
-            .prepare('SELECT name FROM migrations WHERE id = 11')
-            .get() as { name: string };
-        assert.equal(historicalMigration.name, 'Add force_keyboard_interactive column to connections table');
+    const historicalMigration = db!.prepare('SELECT name FROM migrations WHERE id = 11').get() as { name: string };
+    assert.equal(historicalMigration.name, 'Add force_keyboard_interactive column to connections table');
 
-        const rdpMigration = db!
-            .prepare('SELECT id, name FROM migrations WHERE id = 19')
-            .get() as { id: number; name: string };
-        assert.equal(rdpMigration.id, 19);
-        assert.equal(rdpMigration.name, 'Add RDP options column to connections table');
+    const rdpMigration = db!.prepare('SELECT id, name FROM migrations WHERE id = 19').get() as {
+      id: number;
+      name: string;
+    };
+    assert.equal(rdpMigration.id, 19);
+    assert.equal(rdpMigration.name, 'Add RDP options column to connections table');
 
-        await runMigrations(db!);
-        const migrationCount = db!
-            .prepare('SELECT COUNT(*) AS count FROM migrations WHERE id = 19')
-            .get() as { count: number };
-        assert.equal(migrationCount.count, 1);
+    await runMigrations(db!);
+    const migrationCount = db!.prepare('SELECT COUNT(*) AS count FROM migrations WHERE id = 19').get() as {
+      count: number;
+    };
+    assert.equal(migrationCount.count, 1);
 
-        // Re-open the upgraded database through the production repository path. This
-        // specifically guards the failure seen in production where migrations reported
-        // "latest" but GET /connections failed because c.rdp_options did not exist.
-        db!.close();
-        db = null;
-        process.env.NEXUS_DATA_DIR = dir;
-        const { findAllConnectionsWithTags } = await import('../../../packages/backend/src/modules/connections/connection.repository');
-        const { closeDbInstance } = await import('../../../packages/backend/src/infrastructure/database/connection');
-        try {
-            const connections = await findAllConnectionsWithTags();
-            assert.equal(connections.length, 1);
-            assert.equal(connections[0]?.name, 'Historical RDP');
-            assert.equal(connections[0]?.rdp_options, null);
-        } finally {
-            await closeDbInstance();
-        }
-
-        console.log('historical RDP migration upgrade and connection list query passed');
+    // Re-open the upgraded database through the current production database/repository path.
+    // This guards the historical failure where migrations reported "latest" but the
+    // connection list still failed because rdp_options was absent.
+    db!.close();
+    db = null;
+    const database = new DatabaseAdapter({ dataDirectory: dir });
+    await database.initialize();
+    try {
+      const repository = new SqliteConnectionRepository(database);
+      const connections = await repository.list();
+      assert.equal(connections.length, 1);
+      assert.equal(connections[0]?.name, 'Historical RDP');
+      assert.equal(connections[0]?.rdpOptions, null);
     } finally {
-        if (db) db.close();
-        if (previousDataDir === undefined) delete process.env.NEXUS_DATA_DIR;
-        else process.env.NEXUS_DATA_DIR = previousDataDir;
-        rmSync(dir, { recursive: true, force: true });
+      await database.close();
     }
+
+    console.log('historical RDP migration upgrade and connection list query passed');
+  } finally {
+    if (db) db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 };
 
-void main().catch(error => {
-    console.error(error);
-    process.exitCode = 1;
+void main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });
