@@ -1,5 +1,5 @@
 import { AuthenticatedWebSocket } from '../types';
-import { archiveService, clientStates, sftpTransferService, sftpUploadService } from '../state';
+import { archiveService, workspaceSessionRegistry, sftpTransferService, sftpUploadService } from '../../runtime/service-container';
 import WebSocket from 'ws';
 import { SftpFileSystem } from '../../filesystem/sftp-file-system';
 import { FileRemovalService } from '../../filesystem/file-removal.service';
@@ -50,7 +50,7 @@ export async function handleSftpOperation(
   requestId?: string,
 ): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
 
   if (!sessionId || !state) {
     console.warn(`WebSocket: 收到来自 ${ws.username} 的 SFTP 请求 (${type})，但无活动会话。`);
@@ -247,7 +247,7 @@ export async function handleSftpOperation(
 
 export async function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
 
   if (!sessionId || !state) {
     console.warn(`WebSocket: 收到来自 ${ws.username} 的 SFTP 上传开始请求，但无活动会话。`);
@@ -300,7 +300,7 @@ export async function handleSftpUploadStart(ws: AuthenticatedWebSocket, payload:
 
 export async function handleSftpUploadPrepare(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   const prepareId = payload?.prepareId;
 
   if (!sessionId || !state) {
@@ -354,7 +354,7 @@ export async function handleSftpUploadChunk(
   payload: BinaryUploadChunkPayload,
 ): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   if (!sessionId || !state) return;
 
   if (
@@ -380,7 +380,7 @@ export async function handleSftpUploadChunk(
 
 export async function handleSftpUploadCancelAll(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   if (!sessionId || !state) return;
 
   const uploadIds = payload?.uploadIds;
@@ -395,7 +395,7 @@ export async function handleSftpUploadCancelAll(ws: AuthenticatedWebSocket, payl
 
 export async function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload: any): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   if (!sessionId || !state) return; // Silently ignore
 
   if (!payload?.uploadId) {

@@ -1,7 +1,4 @@
-import { Client } from 'ssh2';
-import { WebSocket } from 'ws';
-import { ClientState } from '../websocket';
-import { settingsService } from '../settings/settings.service';
+import type { Client } from 'ssh2';
 import { executeSshCommand } from '../execution/ssh-command-executor';
 
 export interface ServerStatus {
@@ -37,8 +34,6 @@ interface StaticStatusInfo {
   netInterface?: string;
 }
 
-const previousNetStats = new Map<string, { rx: number; tx: number; timestamp: number }>();
-
 const SECTION_PREFIX = '__NEXUS_STATUS_';
 const SECTION_NAMES = [
   'OS_RELEASE',
@@ -53,116 +48,20 @@ const SECTION_NAMES = [
 
 type SectionName = (typeof SECTION_NAMES)[number];
 
-export class StatusMonitorService {
-  private previousCpuStats = new Map<string, { total: number; idle: number; timestamp: number; lastPercent: number }>();
-  private staticInfo = new Map<string, StaticStatusInfo>();
-  private fetchInFlight = new Set<string>();
-  private subscribedSessions = new Set<string>();
-  private startInFlight = new Set<string>();
-  private bootstrapSamplePending = new Set<string>();
-  private bootstrapTimers = new Map<string, NodeJS.Timeout>();
+export class ServerStatusCollector {
+  private readonly previousCpuStats = new Map<string, { total: number; idle: number; timestamp: number; lastPercent: number }>();
+  private readonly previousNetStats = new Map<string, { rx: number; tx: number; timestamp: number }>();
+  private readonly staticInfo = new Map<string, StaticStatusInfo>();
 
-  constructor(private readonly clientStates: Map<string, ClientState>) {}
-
-  async startStatusPolling(sessionId: string): Promise<void> {
-    this.subscribedSessions.add(sessionId);
-    const initialState = this.clientStates.get(sessionId);
-    if (!initialState?.executionSession.isReady || initialState.statusIntervalId || this.startInFlight.has(sessionId)) return;
-
-    this.startInFlight.add(sessionId);
-    try {
-      let intervalMs = 3000;
-      try {
-        intervalMs = Math.max(1000, (await settingsService.getStatusMonitorIntervalSeconds()) * 1000);
-      } catch (error) {
-        console.error(`[StatusMonitor ${sessionId}] 获取轮询间隔设置失败，使用默认值 3000ms:`, error);
-      }
-
-      const state = this.clientStates.get(sessionId);
-      if (!this.subscribedSessions.has(sessionId) || !state?.executionSession.isReady || state.statusIntervalId) return;
-
-      this.bootstrapSamplePending.add(sessionId);
-      state.statusIntervalId = setInterval(() => {
-        void this.fetchAndSendServerStatus(sessionId);
-      }, intervalMs);
-      void this.fetchAndSendServerStatus(sessionId);
-    } finally {
-      this.startInFlight.delete(sessionId);
-    }
+  clear(monitorKey: string): void {
+    this.previousCpuStats.delete(monitorKey);
+    this.previousNetStats.delete(monitorKey);
+    this.staticInfo.delete(monitorKey);
   }
 
-  stopStatusPolling(sessionId: string): void {
-    this.subscribedSessions.delete(sessionId);
-    const state = this.clientStates.get(sessionId);
-    if (state?.statusIntervalId) {
-      clearInterval(state.statusIntervalId);
-      state.statusIntervalId = undefined;
-    }
-
-    const bootstrapTimer = this.bootstrapTimers.get(sessionId);
-    if (bootstrapTimer) clearTimeout(bootstrapTimer);
-    this.bootstrapTimers.delete(sessionId);
-    this.bootstrapSamplePending.delete(sessionId);
-    previousNetStats.delete(sessionId);
-    this.previousCpuStats.delete(sessionId);
-  }
-
-  clearSession(sessionId: string): void {
-    this.stopStatusPolling(sessionId);
-    this.startInFlight.delete(sessionId);
-    this.staticInfo.delete(sessionId);
-  }
-
-  async collectServerStatus(sshClient: Client, monitorKey: string): Promise<ServerStatus> {
-    return this.fetchServerStatus(sshClient, `snapshot:${monitorKey}`);
-  }
-
-  private async fetchAndSendServerStatus(sessionId: string): Promise<void> {
-    if (this.fetchInFlight.has(sessionId)) return;
-
-    const state = this.clientStates.get(sessionId);
-    if (!state?.executionSession.isReady || state.ws.readyState !== WebSocket.OPEN) {
-      this.stopStatusPolling(sessionId);
-      return;
-    }
-
-    this.fetchInFlight.add(sessionId);
-    try {
-      const status = await this.fetchServerStatus(state.executionSession.client, sessionId);
-      if (state.ws.readyState === WebSocket.OPEN && state.statusIntervalId) {
-        state.ws.send(
-          JSON.stringify({
-            type: 'status_update',
-            payload: { connectionId: state.dbConnectionId, status },
-          }),
-        );
-      }
-
-      if (this.bootstrapSamplePending.delete(sessionId) && state.statusIntervalId) {
-        const timer = setTimeout(() => {
-          this.bootstrapTimers.delete(sessionId);
-          void this.fetchAndSendServerStatus(sessionId);
-        }, 500);
-        this.bootstrapTimers.set(sessionId, timer);
-      }
-    } catch (error) {
-      if (state.ws.readyState === WebSocket.OPEN && state.statusIntervalId) {
-        const message = error instanceof Error ? error.message : String(error);
-        state.ws.send(
-          JSON.stringify({
-            type: 'status:error',
-            payload: { connectionId: state.dbConnectionId, message: `获取状态失败: ${message}` },
-          }),
-        );
-      }
-    } finally {
-      this.fetchInFlight.delete(sessionId);
-    }
-  }
-
-  private async fetchServerStatus(sshClient: Client, sessionId: string): Promise<ServerStatus> {
+  async collect(sshClient: Client, monitorKey: string): Promise<ServerStatus> {
     const timestamp = Date.now();
-    const includeStatic = !this.staticInfo.has(sessionId);
+    const includeStatic = !this.staticInfo.has(monitorKey);
     const output = (
       await executeSshCommand(sshClient, {
         command: this.buildCombinedStatusCommand(includeStatic),
@@ -172,7 +71,7 @@ export class StatusMonitorService {
     ).stdout;
     const sections = this.parseSections(output);
 
-    let staticInfo = this.staticInfo.get(sessionId);
+    let staticInfo = this.staticInfo.get(monitorKey);
     if (!staticInfo) {
       const netStats = this.parseProcNetDev(sections.get('NET_DEV') ?? '');
       staticInfo = {
@@ -180,7 +79,7 @@ export class StatusMonitorService {
         cpuModel: (sections.get('CPU_MODEL') ?? '').trim() || 'Unknown',
         netInterface: this.parseDefaultInterface(sections.get('NET_ROUTE') ?? '', netStats),
       };
-      this.staticInfo.set(sessionId, staticInfo);
+      this.staticInfo.set(monitorKey, staticInfo);
     }
 
     const status: ServerStatus = {
@@ -198,7 +97,7 @@ export class StatusMonitorService {
 
     const cpuTimes = this.parseProcStat(sections.get('PROC_STAT') ?? '');
     if (cpuTimes) {
-      const previous = this.previousCpuStats.get(sessionId);
+      const previous = this.previousCpuStats.get(monitorKey);
       let cpuPercent = previous?.lastPercent ?? 0;
       if (previous && previous.timestamp < timestamp) {
         const totalDiff = cpuTimes.total - previous.total;
@@ -210,7 +109,7 @@ export class StatusMonitorService {
         }
       }
       status.cpuPercent = cpuPercent;
-      this.previousCpuStats.set(sessionId, { ...cpuTimes, timestamp, lastPercent: cpuPercent });
+      this.previousCpuStats.set(monitorKey, { ...cpuTimes, timestamp, lastPercent: cpuPercent });
     }
 
     const loadFields = (sections.get('LOADAVG') ?? '').trim().split(/\s+/).slice(0, 3).map(Number);
@@ -225,7 +124,7 @@ export class StatusMonitorService {
     }
     if (netInterface && netStats[netInterface]) {
       const current = netStats[netInterface];
-      const previous = previousNetStats.get(sessionId);
+      const previous = this.previousNetStats.get(monitorKey);
       if (previous && previous.timestamp < timestamp) {
         const elapsedSeconds = (timestamp - previous.timestamp) / 1000;
         status.netRxRate =
@@ -236,7 +135,7 @@ export class StatusMonitorService {
         status.netRxRate = 0;
         status.netTxRate = 0;
       }
-      previousNetStats.set(sessionId, { rx: current.rx_bytes, tx: current.tx_bytes, timestamp });
+      this.previousNetStats.set(monitorKey, { rx: current.rx_bytes, tx: current.tx_bytes, timestamp });
     }
 
     return status;

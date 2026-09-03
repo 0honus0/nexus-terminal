@@ -1,6 +1,7 @@
 import type { SFTPWrapper, Stats, WriteStream } from 'ssh2';
 import { WebSocket } from 'ws';
-import type { ClientState } from '../websocket/types';
+import type { WorkspaceSession } from '../workspace/workspace-session';
+import type { WorkspaceSessionRegistry } from '../workspace/workspace-session-registry';
 import path from 'node:path';
 import { SftpChannelFileSystem } from '../filesystem/sftp-channel-file-system';
 
@@ -42,14 +43,14 @@ export class SftpUploadService {
   private readonly cancelledUploadIds = new Set<string>();
   private readonly preparedUploadBatches = new Map<string, PreparedUploadBatch>();
 
-  constructor(private readonly clientStates: Map<string, ClientState>) {}
+  constructor(private readonly workspaceSessionRegistry: WorkspaceSessionRegistry) {}
 
   private filesystem(sftp: SFTPWrapper): SftpChannelFileSystem {
     return new SftpChannelFileSystem(sftp);
   }
 
   private async ensureTransferChannel(sessionId: string): Promise<SFTPWrapper> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state?.executionSession.isReady) throw new Error('SSH 会话未就绪');
     return state.executionSession.sftp.ensure('transfer');
   }
@@ -107,7 +108,7 @@ export class SftpUploadService {
     basePath: string,
     directories: string[],
   ): Promise<{ preparedDirectories: number }> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state) throw new Error('SSH 会话未就绪');
     const uploadSftp = await this.ensureTransferChannel(sessionId);
     if (!prepareId || prepareId.length > 512) throw new Error('上传准备任务 ID 无效');
@@ -181,7 +182,7 @@ export class SftpUploadService {
     prepareId?: string,
     conflictPolicy: 'ask' | 'overwrite' | 'skip' = 'ask',
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state) {
       console.warn(`[SFTP Upload ${uploadId}] SSH session not ready for ${sessionId}.`);
       return;
@@ -408,7 +409,7 @@ export class SftpUploadService {
     chunkBuffer: Buffer,
     isLast: boolean,
   ): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     const uploadState = this.activeUploads.get(uploadId);
 
     if (!state) {
@@ -520,7 +521,7 @@ export class SftpUploadService {
   /** Cancel an ongoing upload. Cancellation is idempotent, including the window
    * before the write stream has been created. */
   async cancelUpload(sessionId: string, uploadId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     this.cancelledUploadIds.add(uploadId);
 
     const activeUpload = this.activeUploads.get(uploadId);
@@ -593,7 +594,7 @@ export class SftpUploadService {
 
   /** Validate the completed part and atomically replace the destination where supported. */
   private async finalizeUploadedFile(_uploadId: string, uploadState: ActiveUpload): Promise<Stats> {
-    const state = this.clientStates.get(uploadState.sessionId);
+    const state = this.workspaceSessionRegistry.get(uploadState.sessionId);
     if (!state) throw new Error('SSH 会话已断开');
     const uploadSftp = uploadState.sftp;
 
@@ -673,7 +674,7 @@ export class SftpUploadService {
     preferredSftp?: SFTPWrapper,
   ): Promise<boolean> {
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const state = this.clientStates.get(sessionId);
+      const state = this.workspaceSessionRegistry.get(sessionId);
       const uploadSftp = preferredSftp ?? state?.executionSession.sftp.transfer ?? state?.executionSession.sftp.control;
       if (!uploadSftp) return false;
       try {

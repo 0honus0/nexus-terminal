@@ -1,8 +1,5 @@
 import WebSocket from 'ws';
-import { ClientChannel } from 'ssh2';
 import type { Request } from 'express';
-import type { StringDecoder } from 'string_decoder';
-import type { ExecutionSession } from '../execution/execution-session';
 
 export interface WebSocketRequest extends Request {
   clientIpAddress: string;
@@ -21,60 +18,6 @@ export interface AuthenticatedWebSocket extends WebSocket {
   userId?: number;
   username?: string;
   sessionId?: string;
-}
-
-// 中心化的客户端状态接口 (统一版本)
-export interface ClientState {
-  // 导出以便 Service 可以导入
-  ws: AuthenticatedWebSocket;
-  uploadWs?: AuthenticatedWebSocket;
-  executionSession: ExecutionSession;
-  sshShellStream?: ClientChannel;
-  dbConnectionId: number;
-  connectionName?: string; // 连接名称字段
-  statusIntervalId?: NodeJS.Timeout; // 状态轮询 ID (由 StatusMonitorService 管理)
-  ipAddress?: string; //  IP 地址字段
-  isShellReady?: boolean; // 标记 Shell 是否已准备好处理输入和调整大小
-  isSuspendedByService?: boolean; // 标记此会话是否已被 SshSuspendService 接管
-  isMarkedForSuspend?: boolean; // 标记此会话是否已被用户请求挂起（等待断开连接）
-  suspendLogPath?: string; // 如果标记挂起，则存储日志路径 (基于原始 sessionId)
-  shellPid?: number;
-  shellKind?: 'bash' | 'zsh' | 'other';
-  shellAtPrompt?: boolean;
-  shellIntegrationReady?: boolean;
-  shellProbePromise?: Promise<void>;
-  shellProbeResolve?: () => void;
-  shellProbeReject?: (error: Error) => void;
-  shellHookPromise?: Promise<void>;
-  shellHookResolve?: () => void;
-  shellHookReject?: (error: Error) => void;
-  shellHookPromptTimeout?: NodeJS.Timeout;
-  shellSetup?: {
-    phase: 'probe' | 'hook';
-    startMarker: string;
-    endMarker: string;
-    buffer: string;
-    timeout: NodeJS.Timeout;
-  };
-  shellControlRemainder?: string;
-  suppressOutputUntilPrompt?: boolean;
-  pendingDirectoryChange?: {
-    requestId: string;
-    path: string;
-    expectedPath: string;
-    executing: boolean;
-    timeout: NodeJS.Timeout;
-  };
-  terminalOutputSequence?: number;
-  terminalOutputHold?: boolean;
-  resumeSuspendSessionId?: string;
-  sshInputQueue?: Array<{ data: string; sequence?: number; bytes: number }>;
-  sshInputWaitingForDrain?: boolean;
-  shellOutputDecoder?: StringDecoder;
-  shellStderrDecoder?: StringDecoder;
-  terminalCols?: number;
-  terminalRows?: number;
-  // suspendLogWritableStream?: NodeJS.WritableStream; // 移除，将直接使用 temporaryLogStorageService.writeToLog
 }
 
 export interface PortInfo {

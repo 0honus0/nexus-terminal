@@ -1,6 +1,8 @@
 import { WebSocket } from 'ws';
 import * as pathModule from 'path';
-import type { ClientState, AuthenticatedWebSocket } from '../websocket/types';
+import type { AuthenticatedWebSocket } from '../websocket/types';
+import type { WorkspaceSession } from '../workspace/workspace-session';
+import type { WorkspaceSessionRegistry } from '../workspace/workspace-session-registry';
 import type { CommandSession } from '../execution/command-session';
 import { quotePosixShellArg } from '../utils/shell';
 import { FileRemovalService } from '../filesystem/file-removal.service';
@@ -57,7 +59,7 @@ export class ArchiveService {
   private readonly activeArchives = new Map<string, ActiveArchiveOperation>();
   private readonly pendingArchives = new Map<string, PendingArchiveOperation>();
 
-  constructor(private readonly clientStates: Map<string, ClientState>) {}
+  constructor(private readonly workspaceSessionRegistry: WorkspaceSessionRegistry) {}
 
   async cleanupSession(sessionId: string): Promise<void> {
     const requestIds = new Set<string>();
@@ -71,7 +73,7 @@ export class ArchiveService {
   }
 
   async compress(sessionId: string, payload: SftpCompressRequestPayload): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     const { sources, destinationArchiveName, format, targetDirectory, password, requestId } = payload;
     const archiveKey = `${sessionId}:${requestId}`;
 
@@ -299,7 +301,7 @@ export class ArchiveService {
     }
   }
   async cancelArchive(sessionId: string, requestId: string, notifyClient = true): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     const archiveKey = `${sessionId}:${requestId}`;
     const operation = this.activeArchives.get(archiveKey);
     const pending = this.pendingArchives.get(archiveKey);
@@ -334,7 +336,7 @@ export class ArchiveService {
     await commandSession.terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 });
   }
   async decompress(sessionId: string, payload: SftpDecompressRequestPayload): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     const { archivePath, password, requestId } = payload;
     const archiveKey = `${sessionId}:${requestId}`;
 
@@ -611,7 +613,7 @@ export class ArchiveService {
     }
   }
   private async checkCommandExists(
-    state: ClientState,
+    state: WorkspaceSession,
     sessionId: string,
     commandName: string,
     pendingArchive?: PendingArchiveOperation,
@@ -846,7 +848,7 @@ export class ArchiveService {
   }
 
   private async removeRemoteArchiveWorkspace(sessionId: string, workspacePath: string): Promise<boolean> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state?.executionSession.isReady) return false;
     try {
       await new FileRemovalService(state.executionSession).removePath(workspacePath);

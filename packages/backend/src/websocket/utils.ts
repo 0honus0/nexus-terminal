@@ -1,13 +1,13 @@
-import { PortInfo, ClientState } from './types';
-import { StatusMonitorService } from '../services/status-monitor.service';
+import { PortInfo } from './types';
+import type { WorkspaceSession } from '../workspace/workspace-session';
 import {
   archiveService,
-  clientStates,
+  workspaceSessionRegistry,
   sftpTransferService,
   sftpUploadService,
   statusMonitorService,
   workspaceSftpSessionService,
-} from './state';
+} from '../runtime/service-container';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { disposeTerminalTransport } from './terminal-binary-protocol';
 import { executionSessionManager } from '../execution/execution-session-manager';
@@ -75,7 +75,7 @@ export function parsePortsString(portsString: string | undefined | null): PortIn
 export const cleanupClientConnection = async (sessionId: string | undefined): Promise<void> => {
   if (!sessionId) return;
 
-  const state = clientStates.get(sessionId);
+  const state = workspaceSessionRegistry.get(sessionId);
   if (state) {
     console.log(
       `WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`,
@@ -199,7 +199,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
     }
 
     // 4. 从状态 Map 中移除
-    clientStates.delete(sessionId);
+    workspaceSessionRegistry.delete(sessionId);
 
     // 5. 清除 WebSocket 上的 sessionId 关联 (可选，因为 ws 可能已关闭)
     if (state.ws && state.ws.sessionId === sessionId) {

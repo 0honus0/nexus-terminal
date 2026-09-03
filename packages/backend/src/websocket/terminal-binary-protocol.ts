@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import type { ClientState } from './types';
+import type { WorkspaceSession } from '../workspace/workspace-session';
 
 const TERMINAL_FRAME_MAGIC = Buffer.from('NXTM', 'ascii');
 const TERMINAL_FRAME_VERSION = 1;
@@ -31,9 +31,9 @@ interface TerminalTransportState {
   unackedBytes: number;
 }
 
-const transportStates = new WeakMap<ClientState, TerminalTransportState>();
+const transportStates = new WeakMap<WorkspaceSession, TerminalTransportState>();
 
-const getTransportState = (state: ClientState): TerminalTransportState => {
+const getTransportState = (state: WorkspaceSession): TerminalTransportState => {
   let transport = transportStates.get(state);
   if (!transport) {
     transport = {
@@ -59,7 +59,7 @@ export const enum TerminalFrameFlag {
   Final = 1 << 0,
 }
 
-const nextSequence = (state: ClientState): number => {
+const nextSequence = (state: WorkspaceSession): number => {
   const sequence = state.terminalOutputSequence ?? 0;
   state.terminalOutputSequence = (sequence + 1) >>> 0;
   return sequence;
@@ -71,7 +71,7 @@ interface EncodedTerminalFrame {
 }
 
 const createTerminalFrame = (
-  state: ClientState,
+  state: WorkspaceSession,
   type: TerminalFrameType,
   payload: Buffer,
   flags: number,
@@ -102,7 +102,7 @@ const splitPayload = (payload: Buffer): Buffer[] => {
   return chunks;
 };
 
-const reconcileStreamFlow = (state: ClientState): void => {
+const reconcileStreamFlow = (state: WorkspaceSession): void => {
   const transport = getTransportState(state);
   const shouldPause =
     transport.networkBackpressureActive || transport.applicationBackpressureActive || state.terminalOutputHold === true;
@@ -115,7 +115,7 @@ const reconcileStreamFlow = (state: ClientState): void => {
   }
 };
 
-const monitorBackpressure = (state: ClientState): void => {
+const monitorBackpressure = (state: WorkspaceSession): void => {
   const transport = getTransportState(state);
   if (transport.backpressureTimer) return;
 
@@ -137,7 +137,7 @@ const monitorBackpressure = (state: ClientState): void => {
   transport.backpressureTimer.unref?.();
 };
 
-const applyBackpressure = (state: ClientState): void => {
+const applyBackpressure = (state: WorkspaceSession): void => {
   if (state.ws.bufferedAmount < TERMINAL_BACKPRESSURE_HIGH_WATER_BYTES) return;
   const transport = getTransportState(state);
   transport.networkBackpressureActive = true;
@@ -146,7 +146,7 @@ const applyBackpressure = (state: ClientState): void => {
 };
 
 const registerPendingAck = (
-  state: ClientState,
+  state: WorkspaceSession,
   sequence: number,
   bytes: number,
   waiter?: Pick<PendingTerminalAck, 'resolve' | 'reject'>,
@@ -176,7 +176,7 @@ const registerPendingAck = (
   }
 };
 
-const discardPendingAck = (state: ClientState, sequence: number, error: Error): void => {
+const discardPendingAck = (state: WorkspaceSession, sequence: number, error: Error): void => {
   const transport = getTransportState(state);
   const pending = transport.pendingAcks.get(sequence);
   if (!pending) return;
@@ -190,7 +190,7 @@ const discardPendingAck = (state: ClientState, sequence: number, error: Error): 
   }
 };
 
-export const acknowledgeTerminalOutput = (state: ClientState, sequence: number): boolean => {
+export const acknowledgeTerminalOutput = (state: WorkspaceSession, sequence: number): boolean => {
   const transport = getTransportState(state);
   const pending = transport.pendingAcks.get(sequence);
   if (!pending) return false;
@@ -205,13 +205,13 @@ export const acknowledgeTerminalOutput = (state: ClientState, sequence: number):
   return true;
 };
 
-export const setTerminalOutputHold = (state: ClientState, hold: boolean): void => {
+export const setTerminalOutputHold = (state: WorkspaceSession, hold: boolean): void => {
   state.terminalOutputHold = hold;
   reconcileStreamFlow(state);
 };
 
 export const sendTerminalFrames = (
-  state: ClientState,
+  state: WorkspaceSession,
   type: TerminalFrameType,
   payload: Buffer,
   flags = 0,
@@ -235,7 +235,7 @@ export const sendTerminalFrames = (
   return true;
 };
 
-export const flushTerminalOutput = (state: ClientState): void => {
+export const flushTerminalOutput = (state: WorkspaceSession): void => {
   const transport = getTransportState(state);
   if (transport.flushTimer) {
     clearTimeout(transport.flushTimer);
@@ -250,7 +250,7 @@ export const flushTerminalOutput = (state: ClientState): void => {
   sendTerminalFrames(state, TerminalFrameType.Output, payload);
 };
 
-export const queueTerminalOutput = (state: ClientState, payload: Buffer): void => {
+export const queueTerminalOutput = (state: WorkspaceSession, payload: Buffer): void => {
   if (payload.length === 0 || state.ws.readyState !== WebSocket.OPEN) return;
   const transport = getTransportState(state);
 
@@ -270,7 +270,7 @@ export const queueTerminalOutput = (state: ClientState, payload: Buffer): void =
   }
 };
 
-export const disposeTerminalTransport = (state: ClientState): void => {
+export const disposeTerminalTransport = (state: WorkspaceSession): void => {
   const transport = transportStates.get(state);
   if (!transport) return;
   if (transport.flushTimer) clearTimeout(transport.flushTimer);
@@ -285,7 +285,7 @@ export const disposeTerminalTransport = (state: ClientState): void => {
 };
 
 export const sendTerminalFrameAndWaitForAck = (
-  state: ClientState,
+  state: WorkspaceSession,
   type: TerminalFrameType,
   payload: Buffer,
   flags = 0,

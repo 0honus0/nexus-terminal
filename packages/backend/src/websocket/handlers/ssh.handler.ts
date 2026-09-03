@@ -1,12 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
-import { AuthenticatedWebSocket, ClientState, WebSocketRequest } from '../types';
+import { AuthenticatedWebSocket, WebSocketRequest } from '../types';
+import type { WorkspaceSession } from '../../workspace/workspace-session';
 import {
-  clientStates,
+  workspaceSessionRegistry,
   workspaceSftpSessionService,
   statusMonitorService,
   auditLogService,
   notificationService,
-} from '../state';
+} from '../../runtime/service-container';
 import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
@@ -29,7 +30,7 @@ const MAX_QUEUED_SSH_INPUT_BYTES = 1024 * 1024;
 const quotePosixShellArg = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const sendSshRequestMessage = (
-  state: ClientState,
+  state: WorkspaceSession,
   type: string,
   requestId: string,
   payload: Record<string, unknown>,
@@ -48,7 +49,7 @@ const parseDelimitedAbsolutePath = (output: string): string => {
   return candidate;
 };
 
-const resolveRemoteDirectory = async (state: ClientState, requestedPath: string): Promise<string> =>
+const resolveRemoteDirectory = async (state: WorkspaceSession, requestedPath: string): Promise<string> =>
   parseDelimitedAbsolutePath(
     (
       await executeSshCommand(state.executionSession.client, {
@@ -60,7 +61,7 @@ const resolveRemoteDirectory = async (state: ClientState, requestedPath: string)
 
 const DELETED_CWD_SUFFIX = ' (deleted)';
 
-const readShellCurrentPath = async (state: ClientState): Promise<string> => {
+const readShellCurrentPath = async (state: WorkspaceSession): Promise<string> => {
   if (!state.shellPid) throw new Error('Shell PID is unavailable');
   const currentPath = parseDelimitedAbsolutePath(
     (
@@ -94,12 +95,12 @@ const readShellCurrentPath = async (state: ClientState): Promise<string> => {
   throw new Error('Terminal current directory was deleted and no existing parent directory could be resolved.');
 };
 
-const clearPendingDirectoryChange = (state: ClientState): void => {
+const clearPendingDirectoryChange = (state: WorkspaceSession): void => {
   if (state.pendingDirectoryChange) clearTimeout(state.pendingDirectoryChange.timeout);
   state.pendingDirectoryChange = undefined;
 };
 
-async function handleShellPrompt(state: ClientState): Promise<void> {
+async function handleShellPrompt(state: WorkspaceSession): Promise<void> {
   const pending = state.pendingDirectoryChange;
   if (!pending || !state.sshShellStream) return;
 
@@ -128,7 +129,7 @@ async function handleShellPrompt(state: ClientState): Promise<void> {
   }
 }
 
-const consumePromptMarkers = (state: ClientState, chunk: string): string => {
+const consumePromptMarkers = (state: WorkspaceSession, chunk: string): string => {
   const data = (state.shellControlRemainder || '') + chunk;
   state.shellControlRemainder = '';
   let visible = '';
@@ -210,7 +211,7 @@ const buildPromptHookCommand = (shellKind: 'bash' | 'zsh', startMarker: string, 
   );
 };
 
-const resolveShellProbe = (state: ClientState): void => {
+const resolveShellProbe = (state: WorkspaceSession): void => {
   const resolve = state.shellProbeResolve;
   state.shellProbePromise = undefined;
   state.shellProbeResolve = undefined;
@@ -218,7 +219,7 @@ const resolveShellProbe = (state: ClientState): void => {
   resolve?.();
 };
 
-const rejectShellProbe = (state: ClientState, error: Error): void => {
+const rejectShellProbe = (state: WorkspaceSession, error: Error): void => {
   const reject = state.shellProbeReject;
   state.shellProbePromise = undefined;
   state.shellProbeResolve = undefined;
@@ -226,14 +227,14 @@ const rejectShellProbe = (state: ClientState, error: Error): void => {
   reject?.(error);
 };
 
-const clearShellHookPromptTimeout = (state: ClientState): void => {
+const clearShellHookPromptTimeout = (state: WorkspaceSession): void => {
   if (state.shellHookPromptTimeout) {
     clearTimeout(state.shellHookPromptTimeout);
     state.shellHookPromptTimeout = undefined;
   }
 };
 
-const resolveShellHook = (state: ClientState): void => {
+const resolveShellHook = (state: WorkspaceSession): void => {
   const resolve = state.shellHookResolve;
   clearShellHookPromptTimeout(state);
   state.shellHookPromise = undefined;
@@ -242,7 +243,7 @@ const resolveShellHook = (state: ClientState): void => {
   resolve?.();
 };
 
-const rejectShellHook = (state: ClientState, error: Error): void => {
+const rejectShellHook = (state: WorkspaceSession, error: Error): void => {
   const reject = state.shellHookReject;
   clearShellHookPromptTimeout(state);
   state.shellHookPromise = undefined;
@@ -252,7 +253,7 @@ const rejectShellHook = (state: ClientState, error: Error): void => {
   reject?.(error);
 };
 
-const installPromptHook = (state: ClientState): Promise<void> => {
+const installPromptHook = (state: WorkspaceSession): Promise<void> => {
   if (state.shellIntegrationReady) return Promise.resolve();
   if (state.shellHookPromise) return state.shellHookPromise;
   if (!state.sshShellStream) return Promise.reject(new Error('SSH Shell 尚未就绪。'));
@@ -286,7 +287,7 @@ const installPromptHook = (state: ClientState): Promise<void> => {
   return hookPromise;
 };
 
-const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
+const consumeShellSetupOutput = (state: WorkspaceSession, chunk: string): string => {
   const pending = state.shellSetup;
   if (!pending) return chunk;
 
@@ -329,12 +330,12 @@ const consumeShellSetupOutput = (state: ClientState, chunk: string): string => {
   return trailingOutput;
 };
 
-export const filterSshShellOutput = (state: ClientState, chunk: string): string => {
+export const filterSshShellOutput = (state: WorkspaceSession, chunk: string): string => {
   const setupFiltered = consumeShellSetupOutput(state, chunk);
   return consumePromptMarkers(state, setupFiltered);
 };
 
-export const forwardSshShellOutput = (state: ClientState, data: Buffer, stderr = false): void => {
+export const forwardSshShellOutput = (state: WorkspaceSession, data: Buffer, stderr = false): void => {
   const decoderKey = stderr ? 'shellStderrDecoder' : 'shellOutputDecoder';
   const decoder = state[decoderKey] ?? new StringDecoder('utf8');
   state[decoderKey] = decoder;
@@ -346,7 +347,7 @@ export const forwardSshShellOutput = (state: ClientState, data: Buffer, stderr =
   }
 };
 
-export const flushSshShellOutput = (state: ClientState): void => {
+export const flushSshShellOutput = (state: WorkspaceSession): void => {
   const stdoutTail = state.shellOutputDecoder?.end() ?? '';
   state.shellOutputDecoder = undefined;
   if (stdoutTail) {
@@ -378,7 +379,7 @@ const buildShellProbeCommand = (startMarker: string, endMarker: string): string 
   );
 };
 
-const ensureShellProbe = (state: ClientState): Promise<void> => {
+const ensureShellProbe = (state: WorkspaceSession): Promise<void> => {
   if (state.shellPid) return Promise.resolve();
   if (state.shellProbePromise) return state.shellProbePromise;
   if (!state.sshShellStream) return Promise.reject(new Error('SSH Shell 尚未就绪。'));
@@ -410,7 +411,7 @@ const ensureShellProbe = (state: ClientState): Promise<void> => {
   return probePromise;
 };
 
-const ensureShellPromptHook = async (state: ClientState): Promise<void> => {
+const ensureShellPromptHook = async (state: WorkspaceSession): Promise<void> => {
   await ensureShellProbe(state);
   await installPromptHook(state);
 };
@@ -422,7 +423,7 @@ export async function handleSshConnect(
 ): Promise<void> {
   const connectStartedAt = Date.now();
   const sessionId = ws.sessionId;
-  const existingState = sessionId ? clientStates.get(sessionId) : undefined;
+  const existingState = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
 
   if (sessionId && existingState) {
     console.warn(`WebSocket: 用户 ${ws.username} (会话: ${sessionId}) 已有活动连接，忽略新的连接请求。`);
@@ -460,7 +461,7 @@ export async function handleSshConnect(
 
     const requestedSessionId = typeof payload?.clientSessionId === 'string' ? payload.clientSessionId.trim() : '';
     const canReuseClientSessionId =
-      /^[A-Za-z0-9_-]{8,128}$/.test(requestedSessionId) && !clientStates.has(requestedSessionId);
+      /^[A-Za-z0-9_-]{8,128}$/.test(requestedSessionId) && !workspaceSessionRegistry.has(requestedSessionId);
     const newSessionId = canReuseClientSessionId ? requestedSessionId : uuidv4();
     if (requestedSessionId && !canReuseClientSessionId) {
       console.warn(`WebSocket: 客户端会话 ID 无效或冲突，已回退到服务端 UUID。`);
@@ -476,7 +477,7 @@ export async function handleSshConnect(
       return;
     }
 
-    const newState: ClientState = {
+    const newState: WorkspaceSession = {
       ws: ws,
       executionSession: executionSessionManager.create({
         id: newSessionId,
@@ -492,7 +493,7 @@ export async function handleSshConnect(
       terminalCols: payload?.cols || 80,
       terminalRows: payload?.rows || 24,
     };
-    clientStates.set(newSessionId, newState);
+    workspaceSessionRegistry.set(newSessionId, newState);
     console.log(
       `WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`,
     );
@@ -542,7 +543,7 @@ export async function handleSshConnect(
           stream.on('data', (data: Buffer) => {
             forwardSshShellOutput(newState, data);
             // 如果会话被标记为待挂起，则将输出写入日志
-            const currentState = clientStates.get(newSessionId); // 获取最新的状态
+            const currentState = workspaceSessionRegistry.get(newSessionId); // 获取最新的状态
             if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
               temporaryLogStorageService.writeToLog(currentState.suspendLogPath, data).catch((err) => {
                 console.error(
@@ -555,7 +556,7 @@ export async function handleSshConnect(
           stream.stderr.on('data', (data: Buffer) => {
             forwardSshShellOutput(newState, data, true);
             // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
-            const currentState = clientStates.get(newSessionId);
+            const currentState = workspaceSessionRegistry.get(newSessionId);
             if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
               temporaryLogStorageService
                 .writeToLog(currentState.suspendLogPath, Buffer.concat([Buffer.from('[STDERR] ', 'utf8'), data]))
@@ -663,12 +664,12 @@ export async function handleSshConnect(
   }
 }
 
-const sendSshInputAck = (state: ClientState, sequence: number | undefined, bytes: number): void => {
+const sendSshInputAck = (state: WorkspaceSession, sequence: number | undefined, bytes: number): void => {
   if (sequence === undefined || state.ws.readyState !== WebSocket.OPEN) return;
   state.ws.send(JSON.stringify({ type: 'ssh:input:ack', payload: { sequence, bytes } }));
 };
 
-const drainSshInputQueue = (state: ClientState): void => {
+const drainSshInputQueue = (state: WorkspaceSession): void => {
   if (state.sshInputWaitingForDrain || !state.sshShellStream) return;
   const queue = state.sshInputQueue ?? [];
   state.sshInputQueue = queue;
@@ -689,7 +690,7 @@ const drainSshInputQueue = (state: ClientState): void => {
 
 export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
 
   if (!state || !state.sshShellStream) {
     console.warn(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 SSH 输入，但无活动 Shell。`);
@@ -726,7 +727,7 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
 
 export async function handleSshExecSilent(ws: AuthenticatedWebSocket, payload: any, requestId?: string): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   const fail = (error: string) => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'ssh:exec_silent:error', requestId, payload: { error } }));
@@ -762,7 +763,7 @@ export async function handleSshChangeDirectory(
   requestId?: string,
 ): Promise<void> {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   const fail = (error: string) => {
     if (requestId && state) sendSshRequestMessage(state, 'ssh:change_directory:error', requestId, { error });
   };
@@ -839,7 +840,7 @@ export async function handleSshChangeDirectory(
 
 export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void {
   const sessionId = ws.sessionId;
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
 
   if (!state || !state.executionSession.isReady) {
     // sshClient is enough, stream might not be ready for resize yet
@@ -865,13 +866,13 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
     console.warn(
       `WebSocket: 会话 ${sessionId} 收到调整大小请求，但 Shell 尚未就绪或流不存在 (isShellReady: ${state.isShellReady})。尺寸将不会立即应用。`,
     );
-    // A more robust solution would queue the resize or store it in ClientState to be applied later.
+    // A more robust solution would queue the resize or store it in WorkspaceSession to be applied later.
   }
 }
 
 export function handleStatusSubscribe(ws: AuthenticatedWebSocket): void {
   const sessionId = ws.sessionId;
-  if (!sessionId || !clientStates.has(sessionId)) return;
+  if (!sessionId || !workspaceSessionRegistry.has(sessionId)) return;
   void statusMonitorService
     .startStatusPolling(sessionId)
     .catch((error) => console.error(`[StatusMonitor ${sessionId}] 启动失败:`, error));

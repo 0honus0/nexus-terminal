@@ -18,12 +18,12 @@ import {
   SshMarkedForSuspendAck,
   SshUnmarkForSuspendRequest,
   SshUnmarkedForSuspendAck,
-  ClientState,
 } from './types';
 import { SshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { WorkspaceSftpSessionService } from '../sftp/workspace-sftp-session.service';
 import { cleanupClientConnection } from './utils';
-import { clientStates } from './state';
+import type { WorkspaceSession } from '../workspace/workspace-session';
+import { workspaceSessionRegistry } from '../runtime/service-container';
 import { temporaryLogStorageService } from '../ssh-suspend/temporary-log-storage.service';
 import { executionSessionManager } from '../execution/execution-session-manager';
 
@@ -107,7 +107,7 @@ const parseBinaryUploadChunk = (message: RawData) => {
   };
 };
 
-const sendCachedTerminalOutput = async (state: ClientState, stream: AsyncIterable<Buffer | string>): Promise<void> => {
+const sendCachedTerminalOutput = async (state: WorkspaceSession, stream: AsyncIterable<Buffer | string>): Promise<void> => {
   const decoder = new StringDecoder('utf8');
   let pendingPayload: Buffer | undefined;
   const enqueueVisible = async (visible: string): Promise<void> => {
@@ -155,7 +155,7 @@ export function initializeConnectionHandler(
       handleRdpProxyConnection(ws, request);
     } else if (request.isUploadTransport) {
       const uploadSessionId = request.uploadSessionId;
-      const state = uploadSessionId ? clientStates.get(uploadSessionId) : undefined;
+      const state = uploadSessionId ? workspaceSessionRegistry.get(uploadSessionId) : undefined;
       if (!uploadSessionId || !state || state.ws.userId !== ws.userId) {
         console.warn(
           `WebSocket: 拒绝上传数据通道绑定，用户 ${ws.username} 无权访问会话 ${uploadSessionId || '(missing)'}。`,
@@ -194,7 +194,7 @@ export function initializeConnectionHandler(
       });
 
       const detachUploadTransport = () => {
-        const currentState = clientStates.get(uploadSessionId);
+        const currentState = workspaceSessionRegistry.get(uploadSessionId);
         if (currentState?.uploadWs === ws) currentState.uploadWs = undefined;
       };
       ws.on('close', (code, reason) => {
@@ -245,7 +245,7 @@ export function initializeConnectionHandler(
         // It's crucial to get the state associated with the current ws.sessionId
         // For 'ssh:connect', ws.sessionId will be undefined initially, so state will be undefined.
         // For other messages, ws.sessionId should exist if connection was successful.
-        const state = sessionId ? clientStates.get(sessionId) : undefined;
+        const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
 
         try {
           switch (type) {
@@ -264,7 +264,7 @@ export function initializeConnectionHandler(
               }
               // ACK is emitted by the frontend only after xterm has consumed a binary
               // terminal frame. When the remote SSH side exits (for example `reboot`),
-              // the shell-close path can dispose/delete the ClientState before those
+              // the shell-close path can dispose/delete the WorkspaceSession before those
               // already-delivered frames finish rendering. Such ACKs are expected and
               // must not be promoted to a generic protocol error on the still-open WS.
               if (!state) {
@@ -385,9 +385,9 @@ export function initializeConnectionHandler(
                 const result = await sshSuspendService.prepareResumeSession(ws.userId, suspendSessionId);
 
                 if (result) {
-                  // console.log(`[WebSocket Handler][${type}] 成功恢复会话。准备设置新的 ClientState (ID: ${newFrontendSessionId})。`);
+                  // console.log(`[WebSocket Handler][${type}] 成功恢复会话。准备设置新的 WorkspaceSession (ID: ${newFrontendSessionId})。`);
                   const resumedConnectionId = parseInt(result.originalConnectionId, 10);
-                  const newSessionState: ClientState = {
+                  const newSessionState: WorkspaceSession = {
                     ws, // 当前的 WebSocket 连接
                     executionSession: executionSessionManager.create({
                       id: newFrontendSessionId,
@@ -408,10 +408,10 @@ export function initializeConnectionHandler(
                     terminalOutputHold: true,
                     resumeSuspendSessionId: suspendSessionId,
                   };
-                  clientStates.set(newFrontendSessionId, newSessionState);
+                  workspaceSessionRegistry.set(newFrontendSessionId, newSessionState);
                   ws.sessionId = newFrontendSessionId; // 将当前 ws 与新会话关联
                   setTerminalOutputHold(newSessionState, true);
-                  // console.log(`[WebSocket Handler][${type}] 新 ClientState (ID: ${newFrontendSessionId}) 已设置并关联到当前 WebSocket。`);
+                  // console.log(`[WebSocket Handler][${type}] 新 WorkspaceSession (ID: ${newFrontendSessionId}) 已设置并关联到当前 WebSocket。`);
 
                   // 重新设置事件监听器，将数据流导向新的前端会话
                   result.channel.pause();
@@ -602,7 +602,7 @@ export function initializeConnectionHandler(
                 break;
               }
 
-              const activeSessionState = clientStates.get(sessionToMarkId);
+              const activeSessionState = workspaceSessionRegistry.get(sessionToMarkId);
               if (!activeSessionState || !activeSessionState.executionSession.isReady || !activeSessionState.sshShellStream) {
                 console.error(`[SSH_MARK_FOR_SUSPEND] 找不到活动的SSH会话或其组件: ${sessionToMarkId}`);
                 if (ws.readyState === WebSocket.OPEN)
@@ -706,7 +706,7 @@ export function initializeConnectionHandler(
                 break;
               }
 
-              const activeSessionState = clientStates.get(sessionToUnmarkId);
+              const activeSessionState = workspaceSessionRegistry.get(sessionToUnmarkId);
               if (!activeSessionState) {
                 console.warn(`[SSH_UNMARK_FOR_SUSPEND] 未找到会话: ${sessionToUnmarkId}`);
                 if (ws.readyState === WebSocket.OPEN)

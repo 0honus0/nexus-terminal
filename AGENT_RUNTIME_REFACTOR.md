@@ -1149,3 +1149,226 @@ Then continue in this priority order (updated after the SFTP physical split):
 - E2E grouping was regenerated from 63 to 64 specs; `groups.mjs check --workers 8` passes. Only group files whose assignment changed are modified.
 - Current local validation for this slice: direct backend TypeScript build passes; frontend production build passed after the physical SFTP split; targeted recursive-search protocol E2E passes; both new execution-foundation E2E cases pass. Local browser UI tests remain intentionally delegated to remote Actions because the host lacks the pinned Playwright Chromium binary.
 - Next concrete task: commit/push this execution/search-regression slice to `test/agent-runtime-foundation`, require the next remote Actions run to go green, then continue with remaining ExecutionSession ownership/WebSocket router decomposition. If remote Actions finds a real regression, fix that before expanding the refactor.
+
+
+---
+
+## 21. Backend-Wide Foundation Plan Before Agent Development
+
+AI/LLM/Agent feature development is explicitly blocked until the backend foundation below is completed and remote E2E is green. The goal is not to refactor every large file in the repository; the goal is to clean every shared runtime boundary that Agent and Workspace/User execution will rely on.
+
+### F1 — Workspace runtime ownership and composition root
+
+Status: **IN PROGRESS**
+
+Target:
+
+```text
+workspace/
+  workspace-session.ts
+  workspace-session-registry.ts
+  workspace-status-monitor.service.ts
+
+runtime/
+  service-container.ts
+```
+
+Rules:
+
+- `WorkspaceSession` owns browser/terminal/WebSocket-specific state only.
+- `ExecutionSession` owns live SSH/SFTP/command resources.
+- `WorkspaceSessionRegistry` replaces the old raw `Map<string, ClientState>`.
+- `websocket/state.ts` is deleted; WebSocket transport does not own service singletons.
+- reusable system status collection lives in `system/server-status.collector.ts`; Workspace polling is only an adapter.
+
+Acceptance:
+
+- no `ClientState` symbol remains;
+- no domain service imports `websocket/state`;
+- backend build + session/SFTP/suspend/status E2E pass.
+
+### F2 — SSH connection foundation
+
+Priority: **NEXT / HIGHEST**
+
+Current blocker:
+
+`packages/backend/src/services/ssh.service.ts` (~893 lines) mixes connection metadata resolution, credential decryption, direct SSH connection setup, SOCKS/HTTP proxying, jump chains, shell creation, saved connection tests and unsaved connection tests.
+
+Target physical split:
+
+```text
+transport/ssh/
+  ssh-connection.types.ts
+  ssh-credential-resolver.ts
+  ssh-connection-factory.ts
+  ssh-direct-connector.ts
+  ssh-proxy-connector.ts
+  ssh-jump-connector.ts
+  ssh-shell.service.ts
+  ssh-connection-tester.ts
+```
+
+Required outcome:
+
+- callers ask a connection factory for a connected SSH transport/client;
+- credential/proxy/jump resolution is not duplicated by Transfers/System/Agent;
+- `ExecutionSessionManager` becomes the normal owner/factory entrypoint for runtime execution sessions;
+- business modules do not know how SOCKS, HTTP proxy or jump-chain connection establishment works;
+- direct/proxy/jump/test behavior retains E2E coverage.
+
+### F3 — Filesystem application boundary
+
+Current core is already split into `SftpChannelFileSystem`, `SftpFileSystem`, `FileRemovalService`, and `SftpChannelManager`, but HTTP/Workspace edges still expose ssh2 types and duplicate low-level SFTP helpers.
+
+Target:
+
+```text
+filesystem/
+  remote-filesystem.ts          # transport-neutral interface/domain types
+  sftp-channel-file-system.ts   # ssh2 adapter only
+  sftp-file-system.ts           # ExecutionSession-aware facade
+  file-removal.service.ts
+  file-stream.service.ts        # HTTP download/read streaming primitives
+  filesystem-target.service.ts  # resolve workspace/connection target where needed
+```
+
+Required outcome:
+
+- `sftp/sftp.controller.ts` stops implementing stat/realpath/readdir primitives itself;
+- `ssh2` `SFTPWrapper`/`Stats` do not leak into controllers/application code;
+- Agent and Workspace can both call the same filesystem abstraction with different ExecutionSessions.
+
+### F4 — Operation services: archive, upload and transfers
+
+Current issue:
+
+- `archive/archive.service.ts` still sends WebSocket messages directly;
+- `transfers/sftp-transfer.service.ts` still sends WebSocket messages directly and resolves Workspace identity internally;
+- `uploads/sftp-upload.service.ts` mixes upload engine state with WebSocket notification framing;
+- `transfers/transfers.service.ts` (~1.2k lines) mixes task registry/orchestration, credential/connect logic, rsync/scp strategy selection, progress and cancellation.
+
+Target split:
+
+```text
+archive/
+  archive-operation.service.ts      # ExecutionSession + events/results only
+  workspace-archive.adapter.ts      # WS mapping only
+
+transfers/
+  transfer-task-registry.ts
+  transfer-orchestrator.ts
+  strategies/
+    sftp-transfer.strategy.ts
+    rsync-transfer.strategy.ts
+    scp-transfer.strategy.ts
+  workspace-sftp-transfer.adapter.ts
+
+uploads/
+  upload-session.service.ts         # browser upload state/engine
+  workspace-upload.adapter.ts       # WS frames only
+```
+
+Rules:
+
+- core operation services return results/events and never call `ws.send()`;
+- Workspace adapters translate operation events into the existing protocol;
+- future Agent tools consume the core operations directly without faking a Workspace session;
+- transfer connection establishment uses F2's SSH connection factory.
+
+### F5 — WebSocket transport/router decomposition
+
+Current large files:
+
+- `websocket/connection.ts` ~840 lines;
+- `websocket/handlers/ssh.handler.ts` ~886 lines;
+- `websocket/handlers/sftp.handler.ts` ~415 lines;
+- `websocket/handlers/docker.handler.ts` ~396 lines.
+
+Target:
+
+```text
+websocket/
+  server.ts
+  upgrade.ts
+  router.ts
+  protocol.ts
+  connection-lifecycle.ts
+  upload-transport.ts
+  handlers/
+    workspace-session.handler.ts
+    terminal.handler.ts
+    filesystem.handler.ts
+    archive.handler.ts
+    transfer.handler.ts
+    docker.handler.ts
+    suspend.handler.ts
+```
+
+Required outcome:
+
+- handlers validate protocol, call application services, send responses/events;
+- handlers do not implement SSH/SFTP/transfer/archive algorithms;
+- connection lifecycle cleanup is centralized and idempotent;
+- terminal shell integration/backpressure stays Workspace-only and does not contaminate ExecutionSession.
+
+### F6 — Service composition / dependency ownership
+
+Current repository still constructs multiple duplicate instances such as `new AuditLogService()`, `new NotificationService()` and local service instances in controllers/services.
+
+Target:
+
+- `runtime/service-container.ts` is the backend composition root for long-lived application services;
+- controllers/handlers receive or import canonical application service instances rather than constructing duplicates;
+- stateful services must have one explicit owner;
+- stateless helpers may remain plain functions/classes;
+- remove the generic `services/` dumping-ground as modules are moved to their domain (`transport`, `workspace`, `system`, `backup`, etc.).
+
+Important: this is not a DI-framework project. Keep composition explicit and simple.
+
+### F7 — Foundation E2E and final gate
+
+Before any Agent feature code begins, require:
+
+1. backend and frontend production builds pass;
+2. direct/proxy/jump SSH behavior remains covered;
+3. Workspace session lifecycle/suspend-resume is green;
+4. execution-foundation E2E is green;
+5. SFTP control/transfer/background isolation is green;
+6. upload/download/cross-session transfer/archive/status/Docker E2E is green;
+7. no raw business-layer `Client.exec()` returns;
+8. no core operation service calls `WebSocket.send`;
+9. no fake Workspace registry/session is created to reuse a core service;
+10. full remote GitHub Actions E2E is green.
+
+Only after F1-F7 pass may M2 AI foundation work begin.
+
+### Large modules noted but NOT foundation blockers
+
+These deserve later cleanup, but should not derail the execution-foundation milestone unless a foundation refactor directly touches them:
+
+```text
+auth/auth.controller.ts             ~1069
+notifications/notification.service  ~751
+connections/connection.service.ts   ~741
+appearance/appearance.service.ts    ~729
+settings/settings.controller.ts     ~681
+settings/settings.service.ts        ~641
+connections/connections.controller  ~589
+```
+
+Connection service/controller may be touched by F2 credential resolution where necessary. Auth/appearance/settings should not be rewritten merely for line-count reduction before Agent work.
+
+
+### 2026-09-03 backend-wide foundation review / F1 Workspace boundary
+
+- Remote Actions run `33712260822` for commit `e2b79642` completed **SUCCESS**. Docker smoke and all 8 Playwright groups are green; this is the current remote baseline for subsequent foundation slices.
+- Per user direction, AI/Agent feature work is now explicitly blocked until the backend foundation F1-F7 plan is complete.
+- Completed a backend-wide architecture scan. Agent-blocking refactors are now explicitly tracked in section 21: Workspace/runtime ownership, SSH connection factory, filesystem application boundary, operation-service WebSocket decoupling, WebSocket router decomposition, service composition and final E2E gate.
+- Moved interactive runtime state out of `websocket/types.ts`: the old `ClientState` symbol is gone. Added `workspace/workspace-session.ts` and `workspace/workspace-session-registry.ts`.
+- Deleted `websocket/state.ts`. Long-lived application service construction moved to `runtime/service-container.ts`; WebSocket transport now consumes the composition root rather than owning the state/service container.
+- All Workspace-facing services (SFTP session/upload/archive/transfer/status, SSH/Docker/SFTP handlers, HTTP SFTP target lookup and cleanup) now use `WorkspaceSessionRegistry` instead of a raw `Map<string, ClientState>`.
+- Split status monitoring correctly instead of manufacturing a fake Workspace registry: reusable SSH sampling/parsing now lives in `system/server-status.collector.ts`; Workspace-specific polling/WebSocket delivery lives in `workspace/workspace-status-monitor.service.ts`. `system/ssh-resource-status.service.ts` consumes the reusable collector directly.
+- Backend TypeScript build passes after F1 restructuring.
+- Targeted non-browser real-SSH E2E after F1: `protocol.spec.ts`, `execution-foundation.spec.ts`, `status-docker-protocol.spec.ts`, and `suspend-resume.spec.ts` => **10 passed, 2 skipped, 0 failed**. The skipped archive cases depend on missing `zip` in the local host fixture; they are covered by remote Actions.
+- Next: commit/push F1 and immediately start F2 physical split of `services/ssh.service.ts` while remote Actions validates F1.

@@ -1,4 +1,4 @@
-import type { ClientState } from '../websocket/types';
+import type { WorkspaceSessionRegistry } from '../workspace/workspace-session-registry';
 
 /**
  * Workspace-only SFTP channel lifecycle.
@@ -7,10 +7,10 @@ import type { ClientState } from '../websocket/types';
  * filesystem operations. Agent sessions use ExecutionSession/SftpFileSystem directly.
  */
 export class WorkspaceSftpSessionService {
-  constructor(private readonly clientStates: Map<string, ClientState>) {}
+  constructor(private readonly workspaceSessionRegistry: WorkspaceSessionRegistry) {}
 
   async initialize(sessionId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state?.executionSession.isReady) {
       console.warn(`[SFTP] 无法为 Workspace 会话 ${sessionId} 初始化 SFTP：SSH 会话未就绪。`);
       return;
@@ -40,6 +40,6 @@ export class WorkspaceSftpSessionService {
   }
 
   closeChannels(sessionId: string): void {
-    this.clientStates.get(sessionId)?.executionSession.sftp.closeAll();
+    this.workspaceSessionRegistry.get(sessionId)?.executionSession.sftp.closeAll();
   }
 }

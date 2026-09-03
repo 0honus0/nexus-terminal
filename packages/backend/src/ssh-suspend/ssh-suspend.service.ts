@@ -8,7 +8,7 @@ import {
   SuspendedSessionInfo,
 } from '../types/ssh-suspend.types';
 import { temporaryLogStorageService, TemporaryLogStorageService } from './temporary-log-storage.service';
-// clientStates 的直接访问已移除，因为takeOverMarkedSession现在从调用者接收所需信息
+// workspaceSessionRegistry 的直接访问已移除，因为takeOverMarkedSession现在从调用者接收所需信息
 
 export interface PreparedResumeSession {
   sshClient: Client;

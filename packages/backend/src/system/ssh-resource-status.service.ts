@@ -1,7 +1,7 @@
 import type { Client } from 'ssh2';
 import * as ConnectionRepository from '../connections/connection.repository';
 import * as SshService from '../services/ssh.service';
-import { StatusMonitorService, type ServerStatus } from '../services/status-monitor.service';
+import { ServerStatusCollector, type ServerStatus } from './server-status.collector';
 import { settingsService } from '../settings/settings.service';
 
 export interface SshResourceStatus {
@@ -21,7 +21,7 @@ const CONNECT_TIMEOUT_MS = 5_000;
 const MAX_CONCURRENCY = 4;
 const BOOTSTRAP_SAMPLE_DELAY_MS = 500;
 
-const snapshotCollector = new StatusMonitorService(new Map());
+const snapshotCollector = new ServerStatusCollector();
 const bootstrappedKeys = new Set<string>();
 let cachedResult: { fingerprint: string; expiresAt: number; value: SshResourceStatus[] } | null = null;
 let refreshInFlight: { fingerprint: string; promise: Promise<SshResourceStatus[]> } | null = null;
@@ -64,12 +64,12 @@ async function collectForHost(
       const details = await SshService.getConnectionDetails(candidate.id);
       client = await SshService.establishSshConnection(details, CONNECT_TIMEOUT_MS);
 
-      let status = await snapshotCollector.collectServerStatus(client, key);
+      let status = await snapshotCollector.collect(client, key);
       if (!bootstrappedKeys.has(key)) {
         // The first CPU sample only establishes a baseline. Take one extra sample
         // on first discovery; later 30-second refreshes only execute once.
         await wait(BOOTSTRAP_SAMPLE_DELAY_MS);
-        status = await snapshotCollector.collectServerStatus(client, key);
+        status = await snapshotCollector.collect(client, key);
         bootstrappedKeys.add(key);
       }
 

@@ -1,12 +1,13 @@
-import { AuthenticatedWebSocket, ClientState, DockerContainer, DockerStats } from '../types';
+import { AuthenticatedWebSocket, DockerContainer, DockerStats } from '../types';
+import type { WorkspaceSession } from '../../workspace/workspace-session';
 import { parsePortsString } from '../utils';
-import { clientStates } from '../state';
+import { workspaceSessionRegistry } from '../../runtime/service-container';
 import WebSocket from 'ws';
 import { isSafeDockerIdentifier } from '../../utils/shell';
 import { executeSshCommand } from '../../execution/ssh-command-executor';
 
 export async function fetchRemoteDockerStatus(
-  state: ClientState,
+  state: WorkspaceSession,
 ): Promise<{ available: boolean; containers: DockerContainer[] }> {
   if (!state || !state.executionSession.isReady) {
     console.warn(
@@ -166,7 +167,7 @@ export async function fetchRemoteDockerStatus(
 }
 
 export async function handleDockerGetStatus(ws: AuthenticatedWebSocket, sessionId: string | undefined): Promise<void> {
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   if (!state) {
     console.warn(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 docker:get_status 请求，但无活动会话状态。`,
@@ -212,7 +213,7 @@ export async function handleDockerCommand(
   sessionId: string | undefined,
   payload: any,
 ): Promise<void> {
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   if (!state || !state.executionSession.isReady) {
     console.warn(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 docker:command 请求，但无活动 SSH 连接。`);
     if (ws.readyState === WebSocket.OPEN)
@@ -276,7 +277,7 @@ export async function handleDockerCommand(
 
     // Request a status update after a short delay
     setTimeout(() => {
-      const currentState = clientStates.get(sessionId!); // Re-fetch state as it might have changed
+      const currentState = workspaceSessionRegistry.get(sessionId!); // Re-fetch state as it might have changed
       if (currentState && currentState.ws.readyState === WebSocket.OPEN) {
         currentState.ws.send(JSON.stringify({ type: 'request_docker_status_update' }));
       }
@@ -301,7 +302,7 @@ export async function handleDockerGetStats(
   sessionId: string | undefined,
   payload: any,
 ): Promise<void> {
-  const state = sessionId ? clientStates.get(sessionId) : undefined;
+  const state = sessionId ? workspaceSessionRegistry.get(sessionId) : undefined;
   if (!state || !state.executionSession.isReady) {
     console.warn(
       `WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 docker:get_stats 请求，但无活动 SSH 连接。`,

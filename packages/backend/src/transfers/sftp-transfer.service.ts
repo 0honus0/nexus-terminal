@@ -1,7 +1,8 @@
 import * as pathModule from 'path';
 import { WebSocket } from 'ws';
 import type { SFTPWrapper, Stats, OpenMode } from 'ssh2';
-import type { ClientState } from '../websocket/types';
+import type { WorkspaceSession } from '../workspace/workspace-session';
+import type { WorkspaceSessionRegistry } from '../workspace/workspace-session-registry';
 import { SftpChannelFileSystem } from '../filesystem/sftp-channel-file-system';
 
 const SFTP_TRANSFER_CHUNK_SIZE = 32 * 1024;
@@ -10,7 +11,7 @@ const SFTP_TRANSFER_PROGRESS_INTERVAL_MS = 200;
 
 interface SftpTransferTracker {
   sessionId: string;
-  state: ClientState;
+  state: WorkspaceSession;
   requestId: string;
   totalBytes: number;
   transferredBytes: number;
@@ -28,7 +29,7 @@ export class SftpTransferService {
   private readonly cancelledTransferIds = new Set<string>();
   private readonly activeTransferKeys = new Set<string>();
 
-  constructor(private readonly clientStates: Map<string, ClientState>) {}
+  constructor(private readonly workspaceSessionRegistry: WorkspaceSessionRegistry) {}
 
   private filesystem(sftp: SFTPWrapper): SftpChannelFileSystem {
     return new SftpChannelFileSystem(sftp);
@@ -55,7 +56,7 @@ export class SftpTransferService {
   private isTransferCancelledError(error: unknown): boolean {
     return error instanceof Error && error.message.includes('SFTP_TRANSFER_CANCELLED');
   }
-  private sendTransferCancelled(state: ClientState | undefined, requestId: string): void {
+  private sendTransferCancelled(state: WorkspaceSession | undefined, requestId: string): void {
     if (state?.ws.readyState === WebSocket.OPEN) {
       state.ws.send(
         JSON.stringify({
@@ -67,7 +68,7 @@ export class SftpTransferService {
     }
   }
   async cancelTransfer(sessionId: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     const key = this.transferCancellationKey(sessionId, requestId);
     if (!this.activeTransferKeys.has(key)) {
       // The task already finished (or never started). Acknowledge the user's request
@@ -90,7 +91,7 @@ export class SftpTransferService {
   }
   private createTransferTracker(
     sessionId: string,
-    state: ClientState,
+    state: WorkspaceSession,
     sources: string[],
     requestId: string,
   ): SftpTransferTracker {
@@ -173,7 +174,7 @@ export class SftpTransferService {
     this.emitTransferProgress(tracker, true);
   }
   async copy(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP Copy] SFTP 未准备好，无法在 ${sessionId} 上执行 copy (ID: ${requestId})`);
       state?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: 'SFTP 会话未就绪', requestId: requestId }));
@@ -274,8 +275,8 @@ export class SftpTransferService {
     destinationDir: string,
     requestId: string,
   ): Promise<void> {
-    const destinationState = this.clientStates.get(destinationSessionId);
-    const sourceState = this.clientStates.get(sourceSessionId);
+    const destinationState = this.workspaceSessionRegistry.get(destinationSessionId);
+    const sourceState = this.workspaceSessionRegistry.get(sourceSessionId);
     const fail = (message: string) => {
       destinationState?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: message, requestId }));
     };
@@ -361,7 +362,7 @@ export class SftpTransferService {
     }
   }
   async move(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
-    const state = this.clientStates.get(sessionId);
+    const state = this.workspaceSessionRegistry.get(sessionId);
     if (!state || !state.executionSession.sftp.control) {
       console.warn(`[SFTP Move] SFTP 未准备好，无法在 ${sessionId} 上执行 move (ID: ${requestId})`);
       state?.ws.send(JSON.stringify({ type: 'sftp:move:error', payload: 'SFTP 会话未就绪', requestId: requestId }));

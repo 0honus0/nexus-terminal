@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import path from 'path';
 import type { Readable } from 'node:stream';
-import { clientStates, workspaceSftpSessionService } from '../websocket/state';
+import { workspaceSessionRegistry, workspaceSftpSessionService } from '../runtime/service-container';
 import { Archiver, ZipArchive } from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
-import { ClientState } from '../websocket/types';
+import type { WorkspaceSession } from '../workspace/workspace-session';
 import {
   DownloadTicketCapacityError,
   DOWNLOAD_TICKET_TTL_SECONDS,
@@ -145,7 +145,7 @@ const streamDirectoryArchive = async (
   if (!aborted) await archive.finalize();
 };
 
-const ensureSftpReady = async (sessionId: string, state: ClientState): Promise<boolean> => {
+const ensureSftpReady = async (sessionId: string, state: WorkspaceSession): Promise<boolean> => {
   if (state.executionSession.sftp.control) return true;
   if (!state.executionSession.isReady) return false;
 
@@ -170,9 +170,9 @@ const resolveDownloadTarget = async (
   userId: number,
   connectionId: number,
   requestedSessionId?: string,
-): Promise<{ sessionId: string; state: ClientState } | null> => {
+): Promise<{ sessionId: string; state: WorkspaceSession } | null> => {
   if (requestedSessionId) {
-    const exactState = clientStates.get(requestedSessionId);
+    const exactState = workspaceSessionRegistry.get(requestedSessionId);
     if (exactState?.ws.userId === userId && exactState.dbConnectionId === connectionId) {
       if (await ensureSftpReady(requestedSessionId, exactState)) {
         return { sessionId: requestedSessionId, state: exactState };
@@ -180,7 +180,7 @@ const resolveDownloadTarget = async (
     }
   }
 
-  for (const [sessionId, state] of clientStates.entries()) {
+  for (const [sessionId, state] of workspaceSessionRegistry.entries()) {
     if (state.ws.userId !== userId || state.dbConnectionId !== connectionId) continue;
     if (state.executionSession.sftp.control || await ensureSftpReady(sessionId, state)) {
       return { sessionId, state };
@@ -503,7 +503,7 @@ export const downloadDirectory = async (
   console.log(`SFTP 文件夹下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
 
   // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
-  let targetState: ClientState | null = null;
+  let targetState: WorkspaceSession | null = null;
   const targetDbConnectionId = parseInt(connectionId, 10); // 将查询参数字符串转换为数字
 
   if (isNaN(targetDbConnectionId)) {
@@ -513,13 +513,13 @@ export const downloadDirectory = async (
 
   console.log(`SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
   if (requestedSessionId) {
-    const exactState = clientStates.get(requestedSessionId);
+    const exactState = workspaceSessionRegistry.get(requestedSessionId);
     if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId) {
       await ensureSftpReady(requestedSessionId, exactState);
       targetState = exactState;
     }
   }
-  for (const [sessionId, state] of clientStates.entries()) {
+  for (const [sessionId, state] of workspaceSessionRegistry.entries()) {
     if (targetState) break;
     // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
     if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.executionSession.sftp.control) {

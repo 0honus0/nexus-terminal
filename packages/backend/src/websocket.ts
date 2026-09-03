@@ -4,12 +4,11 @@ import { RequestHandler } from 'express';
 import { initializeHeartbeat } from './websocket/heartbeat';
 import { initializeUpgradeHandler } from './websocket/upgrade';
 import { initializeConnectionHandler } from './websocket/connection';
-import { clientStates, workspaceSftpSessionService } from './websocket/state';
+import { workspaceSessionRegistry, workspaceSftpSessionService } from './runtime/service-container';
 import { sshSuspendService } from './ssh-suspend/ssh-suspend.service';
 import { cleanupClientConnection } from './websocket/utils';
 
 export {
-  ClientState,
   AuthenticatedWebSocket,
   DockerContainer,
   DockerStats,
@@ -42,7 +41,7 @@ export const initializeWebSocket = async (
     console.log('WebSocket 服务器正在关闭，清理心跳定时器和所有活动会话...');
     clearInterval(heartbeatTimer); // Clear heartbeat started by this function
 
-    clientStates.forEach((_state, sessionId) => {
+    workspaceSessionRegistry.forEach((_state, sessionId) => {
       cleanupClientConnection(sessionId);
     });
     console.log('所有活动会话已清理。');
@@ -51,5 +50,3 @@ export const initializeWebSocket = async (
   console.log('WebSocket 服务器初始化完成。');
   return wss;
 };
-
-export { clientStates };
