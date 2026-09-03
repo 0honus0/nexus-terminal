@@ -9,7 +9,7 @@ const NOTES = 'updated-by-batch-e2e';
 async function cleanup(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
-  const items = await response.json() as Array<{ id: number; name?: string }>;
+  const items = (await response.json()) as Array<{ id: number; name?: string }>;
   for (const item of items.filter((connection) => NAMES.includes(connection.name ?? ''))) {
     expect((await request.delete(`/api/v1/connections/${item.id}`)).ok()).toBeTruthy();
   }
@@ -28,7 +28,7 @@ async function createConnection(request: APIRequestContext, name: string): Promi
     },
   });
   expect(response.status()).toBe(201);
-  return (await response.json() as { connection: { id: number } }).connection.id;
+  return ((await response.json()) as { connection: { id: number } }).connection.id;
 }
 
 test('batch connection edit applies one advanced change to multiple saved connections', async ({ page, context }) => {
@@ -56,11 +56,13 @@ test('batch connection edit applies one advanced change to multiple saved connec
       await expect(modal).toBeHidden({ timeout: 15_000 });
 
       for (const id of ids) {
-        await expect.poll(async () => {
-          const response = await context.request.get(`/api/v1/connections/${id}`);
-          if (!response.ok()) return '';
-          return (await response.json() as { notes?: string }).notes ?? '';
-        }).toBe(NOTES);
+        await expect
+          .poll(async () => {
+            const response = await context.request.get(`/api/v1/connections/${id}`);
+            if (!response.ok()) return '';
+            return ((await response.json()) as { notes?: string }).notes ?? '';
+          })
+          .toBe(NOTES);
       }
     });
   } finally {

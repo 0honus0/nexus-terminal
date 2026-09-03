@@ -3,7 +3,9 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import { closeWebSocket, openAuthenticatedWebSocket, sendJson, waitForJson } from '../../support/ws';
 
-test('the first directory change waits for a real shell prompt instead of reporting foreground activity', async ({ request }) => {
+test('the first directory change waits for a real shell prompt instead of reporting foreground activity', async ({
+  request,
+}) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
@@ -17,7 +19,9 @@ test('the first directory change waits for a real shell prompt instead of report
       try {
         const parsed = JSON.parse(data.toString('utf8'));
         if (parsed.requestId) requestMessages.push(parsed);
-      } catch { /* terminal output is ignored */ }
+      } catch {
+        /* terminal output is ignored */
+      }
     });
 
     const connectedPromise = waitForJson(socket, (message) => message.type === 'ssh:connected');
@@ -31,8 +35,9 @@ test('the first directory change waits for a real shell prompt instead of report
     const requestId = `cwd-${crypto.randomUUID()}`;
     const finalPromise = waitForJson(
       socket,
-      (message) => message.requestId === requestId
-        && (message.type === 'ssh:change_directory:result' || message.type === 'ssh:change_directory:error'),
+      (message) =>
+        message.requestId === requestId &&
+        (message.type === 'ssh:change_directory:result' || message.type === 'ssh:change_directory:error'),
       20_000,
     );
     sendJson(socket, { type: 'ssh:change_directory', payload: { path: targetPath }, requestId });
@@ -40,9 +45,11 @@ test('the first directory change waits for a real shell prompt instead of report
 
     expect(final.type).toBe('ssh:change_directory:result');
     expect(final.payload).toMatchObject({ path: targetPath });
-    expect(requestMessages.some(
-      (message) => message.requestId === requestId && message.type === 'ssh:change_directory:error',
-    )).toBeFalsy();
+    expect(
+      requestMessages.some(
+        (message) => message.requestId === requestId && message.type === 'ssh:change_directory:error',
+      ),
+    ).toBeFalsy();
   } finally {
     await closeWebSocket(socket);
   }

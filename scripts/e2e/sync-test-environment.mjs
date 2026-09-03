@@ -52,7 +52,8 @@ function replaceAllRequired(file, regex, replacement, label) {
 
 function syncActionVersions(actions) {
   const workflowsDir = path.join(repoRoot, '.github/workflows');
-  const workflowFiles = fs.readdirSync(workflowsDir)
+  const workflowFiles = fs
+    .readdirSync(workflowsDir)
     .filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'))
     .map((name) => `.github/workflows/${name}`)
     .sort();
@@ -81,7 +82,10 @@ function syncActionVersions(actions) {
 
 function syncNodeVersions(nodeVersion) {
   const workflowsDir = path.join(repoRoot, '.github/workflows');
-  for (const name of fs.readdirSync(workflowsDir).filter((value) => /\.ya?ml$/.test(value)).sort()) {
+  for (const name of fs
+    .readdirSync(workflowsDir)
+    .filter((value) => /\.ya?ml$/.test(value))
+    .sort()) {
     const file = `.github/workflows/${name}`;
     const absolute = path.join(repoRoot, file);
     const content = fs.readFileSync(absolute, 'utf8');
@@ -108,8 +112,18 @@ function syncPlaywrightPackage(playwrightVersion, updateLock) {
 function syncRunnerFiles(config) {
   const tag = `playwright-${config.playwright}-node${config.node}-v${config.runnerRevision}`;
 
-  replaceRequired('test/e2e/Dockerfile.runner', /^FROM node:[^\n]+/m, `FROM node:${config.node}-bookworm`, 'runner Node base');
-  replaceRequired('test/e2e/Dockerfile.runner', /^ARG PLAYWRIGHT_VERSION=[^\n]+/m, `ARG PLAYWRIGHT_VERSION=${config.playwright}`, 'runner Playwright arg');
+  replaceRequired(
+    'test/e2e/Dockerfile.runner',
+    /^FROM node:[^\n]+/m,
+    `FROM node:${config.node}-bookworm`,
+    'runner Node base',
+  );
+  replaceRequired(
+    'test/e2e/Dockerfile.runner',
+    /^ARG PLAYWRIGHT_VERSION=[^\n]+/m,
+    `ARG PLAYWRIGHT_VERSION=${config.playwright}`,
+    'runner Playwright arg',
+  );
 
   replaceRequired(
     'test/e2e/README.md',

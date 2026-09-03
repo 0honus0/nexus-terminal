@@ -16,8 +16,8 @@ test.describe.serial('initial setup and login', () => {
     await page.locator('#password').fill(E2E_ADMIN.password);
     await page.locator('#confirmPassword').fill(E2E_ADMIN.password);
 
-    const setupResponsePromise = page.waitForResponse((response) =>
-      response.url().endsWith('/api/v1/auth/setup') && response.request().method() === 'POST'
+    const setupResponsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/auth/setup') && response.request().method() === 'POST',
     );
     await page.locator('form button[type="submit"]').click();
 
@@ -37,8 +37,8 @@ test.describe.serial('initial setup and login', () => {
     await page.locator('#username').fill(E2E_ADMIN.username);
     await page.locator('#password').fill(E2E_ADMIN.password);
 
-    const loginResponsePromise = page.waitForResponse((response) =>
-      response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST'
+    const loginResponsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
     );
     await page.locator('form button[type="submit"]').click();
 

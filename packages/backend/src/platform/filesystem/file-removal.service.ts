@@ -7,7 +7,8 @@ import { isRemoteFileMissingError } from './remote-filesystem';
 
 const normalizeDestructivePath = (remotePath: string): string => {
   const normalized = path.posix.normalize(remotePath);
-  if (!normalized || normalized === '/' || normalized === '.') throw new Error('Refusing to remove root or invalid path.');
+  if (!normalized || normalized === '/' || normalized === '.')
+    throw new Error('Refusing to remove root or invalid path.');
   if (!path.posix.isAbsolute(normalized)) throw new Error('Removal path must be absolute.');
   return normalized;
 };

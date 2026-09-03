@@ -10,17 +10,22 @@ const PRIVATE_KEY = '-----BEGIN OPENSSH PRIVATE KEY-----\nE2E-PRIVATE-KEY-CONTEN
 async function listKeys(request: APIRequestContext): Promise<Array<{ id: number; name: string }>> {
   const response = await request.get('/api/v1/ssh-keys');
   expect(response.ok()).toBeTruthy();
-  return await response.json() as Array<{ id: number; name: string }>;
+  return (await response.json()) as Array<{ id: number; name: string }>;
 }
 
 async function cleanupKeys(request: APIRequestContext): Promise<void> {
-  for (const key of (await listKeys(request)).filter((item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME)) {
+  for (const key of (await listKeys(request)).filter(
+    (item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME,
+  )) {
     const remove = await request.delete(`/api/v1/ssh-keys/${key.id}`);
     expect(remove.ok()).toBeTruthy();
   }
 }
 
-test('SSH key management UI adds, renames without replacing private key, and deletes a key', async ({ page, context }) => {
+test('SSH key management UI adds, renames without replacing private key, and deletes a key', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await cleanupKeys(context.request);
@@ -43,7 +48,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
     await modal.locator('#key-private').fill(PRIVATE_KEY);
     await modal.getByTestId('ssh-key-submit').click();
 
-    await expect.poll(async () => (await listKeys(context.request)).find((item) => item.name === ORIGINAL_NAME)?.id ?? 0, { timeout: 15_000 })
+    await expect
+      .poll(async () => (await listKeys(context.request)).find((item) => item.name === ORIGINAL_NAME)?.id ?? 0, {
+        timeout: 15_000,
+      })
       .toBeGreaterThan(0);
     keyId = (await listKeys(context.request)).find((item) => item.name === ORIGINAL_NAME)!.id;
     await expect(modal.locator(`tr[data-key-id="${keyId}"]`)).toContainText(ORIGINAL_NAME);
@@ -63,7 +71,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
     await modal.locator('#key-name').fill(EDITED_NAME);
     await modal.getByTestId('ssh-key-submit').click();
 
-    await expect.poll(async () => (await listKeys(context.request)).find((item) => item.id === keyId)?.name ?? '', { timeout: 15_000 })
+    await expect
+      .poll(async () => (await listKeys(context.request)).find((item) => item.id === keyId)?.name ?? '', {
+        timeout: 15_000,
+      })
       .toBe(EDITED_NAME);
     const details = await context.request.get(`/api/v1/ssh-keys/${keyId}/details`);
     expect(details.ok()).toBeTruthy();

@@ -15,6 +15,7 @@ walk(srcRoot);
 
 const fileSet = new Set(sourceFiles.map((file) => path.normalize(file)));
 const graph = new Map(sourceFiles.map((file) => [path.normalize(file), []]));
+const moduleGraph = new Map();
 const failures = [];
 const importPattern = /(import\s+type\s+[^;]*?from\s+|from\s+|import\s*\()(['"])([^'"]+)\2/g;
 
@@ -32,6 +33,11 @@ function layerOf(file) {
   const relative = path.relative(srcRoot, file).split(path.sep);
   if (relative.length === 1) return 'root';
   return relative[0];
+}
+
+function moduleOf(file) {
+  const relative = path.relative(srcRoot, file).split(path.sep);
+  return relative[0] === 'modules' && relative.length > 1 ? relative[1] : null;
 }
 
 function resolveLocalImport(fromFile, specifier) {
@@ -54,6 +60,14 @@ for (const file of sourceFiles) {
     if (target) {
       graph.get(path.normalize(file)).push(target);
       const targetLayer = layerOf(target);
+      const fromModule = moduleOf(file);
+      const targetModule = moduleOf(target);
+      if (fromModule && targetModule && fromModule !== targetModule) {
+        const dependencies = moduleGraph.get(fromModule) ?? new Set();
+        dependencies.add(targetModule);
+        moduleGraph.set(fromModule, dependencies);
+        if (!moduleGraph.has(targetModule)) moduleGraph.set(targetModule, new Set());
+      }
       if (fromLayer === 'root') {
         if (relativeFile === 'index.ts' && targetLayer !== 'bootstrap') {
           failures.push(`${relativeFile}: root entrypoint may only import bootstrap (found ${targetLayer})`);
@@ -121,8 +135,36 @@ function visit(file) {
 }
 for (const file of sourceFiles) visit(path.normalize(file));
 
+const moduleVisiting = new Set();
+const moduleVisited = new Set();
+const moduleStack = [];
+const moduleCycleKeys = new Set();
+
+function visitModule(moduleName) {
+  if (moduleVisited.has(moduleName)) return;
+  if (moduleVisiting.has(moduleName)) {
+    const start = moduleStack.indexOf(moduleName);
+    const cycle = [...moduleStack.slice(start), moduleName];
+    const key = [...new Set(cycle)].sort().join('|');
+    if (!moduleCycleKeys.has(key)) {
+      moduleCycleKeys.add(key);
+      failures.push(`module dependency cycle: ${cycle.join(' -> ')}`);
+    }
+    return;
+  }
+  moduleVisiting.add(moduleName);
+  moduleStack.push(moduleName);
+  for (const dependency of moduleGraph.get(moduleName) ?? []) visitModule(dependency);
+  moduleStack.pop();
+  moduleVisiting.delete(moduleName);
+  moduleVisited.add(moduleName);
+}
+for (const moduleName of moduleGraph.keys()) visitModule(moduleName);
+
 if (failures.length > 0) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
-console.log(`Architecture check passed: ${sourceFiles.length} files, no forbidden layer edges, no cycles.`);
+console.log(
+  `Architecture check passed: ${sourceFiles.length} files, no forbidden layer edges, no source cycles, no module cycles.`,
+);

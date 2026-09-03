@@ -13,10 +13,7 @@ export const clearPreviewSearchMatches = (root: HTMLElement | null): void => {
   for (const parent of parents) parent.normalize();
 };
 
-export const highlightPreviewSearchMatches = (
-  root: HTMLElement | null,
-  query: string,
-): HTMLElement[] => {
+export const highlightPreviewSearchMatches = (root: HTMLElement | null, query: string): HTMLElement[] => {
   if (!root) return [];
   clearPreviewSearchMatches(root);
 
@@ -29,9 +26,7 @@ export const highlightPreviewSearchMatches = (
       if (!text.trim()) return NodeFilter.FILTER_REJECT;
       const parent = node.parentElement;
       if (!parent || parent.closest('script, style, [aria-hidden="true"]')) return NodeFilter.FILTER_REJECT;
-      return text.toLocaleLowerCase().includes(needle)
-        ? NodeFilter.FILTER_ACCEPT
-        : NodeFilter.FILTER_REJECT;
+      return text.toLocaleLowerCase().includes(needle) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     },
   });
 
@@ -68,10 +63,7 @@ export const highlightPreviewSearchMatches = (
   return matches;
 };
 
-export const activatePreviewSearchMatch = (
-  matches: HTMLElement[],
-  activeIndex: number,
-): HTMLElement | null => {
+export const activatePreviewSearchMatch = (matches: HTMLElement[], activeIndex: number): HTMLElement | null => {
   matches.forEach((match, index) => {
     if (index === activeIndex) match.dataset.previewSearchActive = '';
     else delete match.dataset.previewSearchActive;

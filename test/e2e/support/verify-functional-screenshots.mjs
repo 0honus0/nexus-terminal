@@ -8,7 +8,10 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const root = path.resolve(process.argv[2] || path.join(__dirname, '..', '.tmp', 'functional-screenshots'));
 
 const actual = fs.existsSync(root)
-  ? fs.readdirSync(root).filter((name) => name.endsWith('.png')).sort()
+  ? fs
+      .readdirSync(root)
+      .filter((name) => name.endsWith('.png'))
+      .sort()
   : [];
 const expected = [...manifest].sort();
 const missing = expected.filter((name) => !actual.includes(name));

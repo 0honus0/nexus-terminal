@@ -58,7 +58,7 @@ export class ServerTransferExecutor {
     if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) {
       throw new Error(`Invalid target SSH port: ${request.targetConnection.port}`);
     }
-    await this.withTarget(request.targetConnection, request.signal, async target => {
+    await this.withTarget(request.targetConnection, request.signal, async (target) => {
       await target.execute({
         command: `mkdir -p -- ${quotePosixShellArg(request.remoteTargetPath)}`,
         timeoutMs: 30_000,
@@ -81,11 +81,15 @@ export class ServerTransferExecutor {
         await sourceFs.chmod(temporaryKeyPath, 0o600);
         identityFile = temporaryKeyPath;
         if (target.passphrase) {
-          if (!sshpass) throw new Error(`Target key uses a passphrase but sshpass is unavailable for ${request.sourceItem.name}.`);
+          if (!sshpass)
+            throw new Error(`Target key uses a passphrase but sshpass is unavailable for ${request.sourceItem.name}.`);
           sshPassCommand = `${quotePosixShellArg(sshpass)} -p ${quotePosixShellArg(target.passphrase)}`;
         }
       } else if (target.password) {
-        if (!sshpass) throw new Error(`Target uses password authentication but sshpass is unavailable for ${request.sourceItem.name}.`);
+        if (!sshpass)
+          throw new Error(
+            `Target uses password authentication but sshpass is unavailable for ${request.sourceItem.name}.`,
+          );
         sshPassCommand = `${quotePosixShellArg(sshpass)} -p ${quotePosixShellArg(target.password)}`;
       } else {
         throw new Error(`Target connection ${target.displayName} has no password.`);
@@ -126,7 +130,7 @@ export class ServerTransferExecutor {
       }
       return { method: 'rsync', executable: sourceRsync };
     }
-    if (sourceRsync && await this.targetHasCommand(request.targetConnection, 'rsync', request.signal)) {
+    if (sourceRsync && (await this.targetHasCommand(request.targetConnection, 'rsync', request.signal))) {
       return { method: 'rsync', executable: sourceRsync };
     }
     if (sourceScp) return { method: 'scp', executable: sourceScp };
@@ -146,23 +150,34 @@ export class ServerTransferExecutor {
       maxOutputBytes: 256 * 1024,
     });
     let stderr = '';
-    const offOut = session.onStdout(data => {
+    const offOut = session.onStdout((data) => {
       const progress = strategy.parseProgress(Buffer.from(data).toString());
       if (progress !== undefined) request.onProgress?.({ progress, method: strategy.method });
     });
-    const offErr = session.onStderr(data => { stderr += Buffer.from(data).toString(); });
+    const offErr = session.onStderr((data) => {
+      stderr += Buffer.from(data).toString();
+    });
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const abort = () => void session.terminate().catch(() => undefined);
     request.signal.addEventListener('abort', abort, { once: true });
     try {
       const close = await new Promise<{ exitCode: number | null }>((resolve, reject) => {
         timeout = setTimeout(() => {
-          void session.terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 })
+          void session
+            .terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 })
             .finally(() => reject(new Error(`${strategy.method} timed out for ${request.sourceItem.name}.`)));
         }, COMMAND_TIMEOUT_MS);
         timeout.unref?.();
-        const offClose = session.onClose(event => { offClose(); offError(); resolve(event); });
-        const offError = session.onError(error => { offClose(); offError(); reject(error); });
+        const offClose = session.onClose((event) => {
+          offClose();
+          offError();
+          resolve(event);
+        });
+        const offError = session.onError((error) => {
+          offClose();
+          offError();
+          reject(error);
+        });
       });
       if (request.signal.aborted) throw new DOMException('Transfer cancelled.', 'AbortError');
       if (close.exitCode !== 0) throw new Error(`${strategy.method} failed (${close.exitCode}): ${stderr.trim()}`);
@@ -182,12 +197,18 @@ export class ServerTransferExecutor {
         maxOutputBytes: 16 * 1024,
       });
       return result.stdout.trim() || null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
-  private async targetHasCommand(connection: ResolvedSshConnection, command: string, signal: AbortSignal): Promise<boolean> {
+  private async targetHasCommand(
+    connection: ResolvedSshConnection,
+    command: string,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     try {
-      return await this.withTarget(connection, signal, async target => {
+      return await this.withTarget(connection, signal, async (target) => {
         const result = await target.execute({
           command: `command -v ${quotePosixShellArg(command)} >/dev/null 2>&1`,
           timeoutMs: 10_000,
@@ -209,8 +230,11 @@ export class ServerTransferExecutor {
   ): Promise<T> {
     this.throwIfAborted(signal);
     const target = await this.transports.connect(connection, { signal });
-    try { return await operation(target); }
-    finally { await target.close(); }
+    try {
+      return await operation(target);
+    } finally {
+      await target.close();
+    }
   }
 
   private throwIfAborted(signal: AbortSignal): void {

@@ -11,10 +11,13 @@ type ReceivedWebhook = {
 async function receivedWebhooks(): Promise<ReceivedWebhook[]> {
   const response = await fetch('http://127.0.0.1:22223/webhooks');
   expect(response.ok).toBeTruthy();
-  return (await response.json() as { webhooks: ReceivedWebhook[] }).webhooks;
+  return ((await response.json()) as { webhooks: ReceivedWebhook[] }).webhooks;
 }
 
-test('notification test button performs a real webhook POST with configured headers and body', async ({ page, context }) => {
+test('notification test button performs a real webhook POST with configured headers and body', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
   expect(language.ok()).toBeTruthy();
@@ -30,17 +33,25 @@ test('notification test button performs a real webhook POST with configured head
   await page.locator('#webhook-headers').fill('{"Content-Type":"application/json","X-E2E-Webhook":"delivery"}');
   await page.locator('#webhook-body').fill('{"source":"nexus-e2e","event":"{event}","details":"{details}"}');
 
-  await slowStep('test notification reaches the local webhook receiver through the real backend processor', async () => {
-    const responsePromise = page.waitForResponse((response) => response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST');
-    await page.getByTestId('notification-test').click();
-    expect((await responsePromise).ok()).toBeTruthy();
+  await slowStep(
+    'test notification reaches the local webhook receiver through the real backend processor',
+    async () => {
+      const responsePromise = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST',
+      );
+      await page.getByTestId('notification-test').click();
+      expect((await responsePromise).ok()).toBeTruthy();
 
-    await expect.poll(async () => (await receivedWebhooks()).length, { timeout: 20_000 }).toBeGreaterThan(initialCount);
-    const delivered = (await receivedWebhooks()).at(-1)!;
-    expect(delivered.method).toBe('POST');
-    expect(delivered.headers['x-e2e-webhook']).toBe('delivery');
-    expect(delivered.body).toContain('nexus-e2e');
-    expect(delivered.body).toContain('event');
-    expect(delivered.body).toContain('details');
-  });
+      await expect
+        .poll(async () => (await receivedWebhooks()).length, { timeout: 20_000 })
+        .toBeGreaterThan(initialCount);
+      const delivered = (await receivedWebhooks()).at(-1)!;
+      expect(delivered.method).toBe('POST');
+      expect(delivered.headers['x-e2e-webhook']).toBe('delivery');
+      expect(delivered.body).toContain('nexus-e2e');
+      expect(delivered.body).toContain('event');
+      expect(delivered.body).toContain('details');
+    },
+  );
 });

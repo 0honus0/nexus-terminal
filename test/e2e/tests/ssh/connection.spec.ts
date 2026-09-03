@@ -31,8 +31,9 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
   });
 
   await step('test unsaved SSH connection against real server', async () => {
-    const responsePromise = page.waitForResponse((response) =>
-      response.url().includes('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
     );
     await page.getByTestId('connection-test-button').click();
     const response = await responsePromise;
@@ -41,8 +42,8 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
   });
 
   await step('save SSH connection', async () => {
-    const createPromise = page.waitForResponse((response) =>
-      response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+    const createPromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
     );
     await page.getByTestId('connection-submit-button').click();
     const response = await createPromise;
@@ -63,7 +64,8 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       await commandInput.press('Enter');
       await commandInput.fill("printf 'Nexus Terminal documentation screenshot\\n'");
       await commandInput.press('Enter');
-      await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+      await expect
+        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
         .toContain('Nexus Terminal documentation screenshot');
       await captureFunctionalScreenshot(page, 'ssh-terminal.png', { viewport: { width: 1440, height: 900 } });
     }

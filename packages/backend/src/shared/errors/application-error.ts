@@ -1,11 +1,5 @@
 export type ApplicationErrorCode =
-  | 'VALIDATION'
-  | 'UNAUTHORIZED'
-  | 'FORBIDDEN'
-  | 'NOT_FOUND'
-  | 'CONFLICT'
-  | 'UNAVAILABLE'
-  | 'INTERNAL';
+  'VALIDATION' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'UNAVAILABLE' | 'INTERNAL';
 
 export class ApplicationError extends Error {
   constructor(

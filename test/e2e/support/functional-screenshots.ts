@@ -11,8 +11,7 @@ export const functionalScreenshotsEnabled = (): boolean =>
   /^(1|true|yes)$/i.test(process.env.E2E_CAPTURE_SCREENSHOTS ?? '');
 
 async function screenshotManifest(): Promise<Set<string>> {
-  manifestPromise ??= readFile(manifestPath, 'utf8')
-    .then((raw) => new Set(JSON.parse(raw) as string[]));
+  manifestPromise ??= readFile(manifestPath, 'utf8').then((raw) => new Set(JSON.parse(raw) as string[]));
   return manifestPromise;
 }
 
@@ -40,14 +39,16 @@ export async function captureFunctionalScreenshot(
   const originalViewport = page.viewportSize();
   const targetViewport = options.viewport;
   const shouldRestoreViewport = Boolean(
-    targetViewport
-      && originalViewport
-      && (originalViewport.width !== targetViewport.width || originalViewport.height !== targetViewport.height),
+    targetViewport &&
+    originalViewport &&
+    (originalViewport.width !== targetViewport.width || originalViewport.height !== targetViewport.height),
   );
 
   if (targetViewport && shouldRestoreViewport) {
     await page.setViewportSize(targetViewport);
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
   }
 
   try {

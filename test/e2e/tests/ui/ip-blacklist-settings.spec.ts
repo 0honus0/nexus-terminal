@@ -6,7 +6,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json() as Record<string, string | undefined>;
+  const original = (await originalResponse.json()) as Record<string, string | undefined>;
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
@@ -28,28 +28,34 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
     await step('disable and re-enable the blacklist switch through the UI', async () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'false');
-      await expect.poll(async () => {
-        const settings = await context.request.get('/api/v1/settings');
-        return (await settings.json() as Record<string, string>).ipBlacklistEnabled;
-      }).toBe('false');
+      await expect
+        .poll(async () => {
+          const settings = await context.request.get('/api/v1/settings');
+          return ((await settings.json()) as Record<string, string>).ipBlacklistEnabled;
+        })
+        .toBe('false');
 
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'true');
-      await expect.poll(async () => {
-        const settings = await context.request.get('/api/v1/settings');
-        return (await settings.json() as Record<string, string>).ipBlacklistEnabled;
-      }).toBe('true');
+      await expect
+        .poll(async () => {
+          const settings = await context.request.get('/api/v1/settings');
+          return ((await settings.json()) as Record<string, string>).ipBlacklistEnabled;
+        })
+        .toBe('true');
     });
 
     await step('save login failure threshold and ban duration', async () => {
       await blacklist.getByTestId('ip-blacklist-max-attempts').fill('7');
       await blacklist.getByTestId('ip-blacklist-ban-duration').fill('420');
       await blacklist.getByTestId('ip-blacklist-save').click();
-      await expect.poll(async () => {
-        const response = await context.request.get('/api/v1/settings');
-        const data = await response.json() as Record<string, string>;
-        return [Number(data.maxLoginAttempts), Number(data.loginBanDuration)];
-      }).toEqual([7, 420]);
+      await expect
+        .poll(async () => {
+          const response = await context.request.get('/api/v1/settings');
+          const data = (await response.json()) as Record<string, string>;
+          return [Number(data.maxLoginAttempts), Number(data.loginBanDuration)];
+        })
+        .toEqual([7, 420]);
     });
 
     await step('reload keeps the saved blacklist thresholds visible', async () => {

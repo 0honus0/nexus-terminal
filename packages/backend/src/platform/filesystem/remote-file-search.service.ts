@@ -35,13 +35,19 @@ export class RemoteFileSearchService {
       }
       const batch = queue.splice(0, Math.min(concurrency, remaining));
       scannedDirectories += batch.length;
-      const results = await Promise.all(batch.map(async (directory) => {
-        try {
-          return { directory, entries: await filesystem.readDirectory(directory), error: undefined as Error | undefined };
-        } catch (error) {
-          return { directory, entries: [], error: error instanceof Error ? error : new Error(String(error)) };
-        }
-      }));
+      const results = await Promise.all(
+        batch.map(async (directory) => {
+          try {
+            return {
+              directory,
+              entries: await filesystem.readDirectory(directory),
+              error: undefined as Error | undefined,
+            };
+          } catch (error) {
+            return { directory, entries: [], error: error instanceof Error ? error : new Error(String(error)) };
+          }
+        }),
+      );
 
       for (const result of results) {
         if (result.error) {

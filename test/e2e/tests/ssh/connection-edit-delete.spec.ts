@@ -9,8 +9,10 @@ const EDITED_NAME = 'E2E SSH Lifecycle Edited';
 async function cleanupConnections(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
-  const items = await response.json() as Array<{ id: number; name?: string }>;
-  for (const item of items.filter((connection) => connection.name === ORIGINAL_NAME || connection.name === EDITED_NAME)) {
+  const items = (await response.json()) as Array<{ id: number; name?: string }>;
+  for (const item of items.filter(
+    (connection) => connection.name === ORIGINAL_NAME || connection.name === EDITED_NAME,
+  )) {
     const remove = await request.delete(`/api/v1/connections/${item.id}`);
     expect(remove.ok()).toBeTruthy();
   }
@@ -29,10 +31,13 @@ async function createConnection(request: APIRequestContext): Promise<number> {
     },
   });
   expect(response.status()).toBe(201);
-  return (await response.json() as { connection: { id: number } }).connection.id;
+  return ((await response.json()) as { connection: { id: number } }).connection.id;
 }
 
-test('saved SSH connection can be tested, renamed without re-entering password, retested, and deleted through UI', async ({ page, context }) => {
+test('saved SSH connection can be tested, renamed without re-entering password, retested, and deleted through UI', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await cleanupConnections(context.request);
@@ -43,8 +48,9 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
   await expect(row).toContainText(ORIGINAL_NAME);
 
   await slowStep('saved connection test reaches the real SSH server', async () => {
-    const responsePromise = page.waitForResponse((response) =>
-      response.url().includes(`/api/v1/connections/${connectionId}/test`) && response.request().method() === 'POST',
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/v1/connections/${connectionId}/test`) && response.request().method() === 'POST',
     );
     await row.getByTestId('connection-row-test').click();
     const response = await responsePromise;
@@ -60,8 +66,9 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
     await expect(form.locator('#conn-password')).toHaveValue('');
     await form.locator('#conn-name').fill(EDITED_NAME);
 
-    const updatePromise = page.waitForResponse((response) =>
-      response.url().endsWith(`/api/v1/connections/${connectionId}`) && response.request().method() === 'PUT',
+    const updatePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/v1/connections/${connectionId}`) && response.request().method() === 'PUT',
     );
     await form.getByTestId('connection-submit-button').click();
     const update = await updatePromise;
@@ -71,8 +78,9 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
   });
 
   await slowStep('connection still authenticates after the name-only edit', async () => {
-    const responsePromise = page.waitForResponse((response) =>
-      response.url().includes(`/api/v1/connections/${connectionId}/test`) && response.request().method() === 'POST',
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/v1/connections/${connectionId}/test`) && response.request().method() === 'POST',
     );
     await row.getByTestId('connection-row-test').click();
     const response = await responsePromise;
@@ -89,11 +97,13 @@ test('saved SSH connection can be tested, renamed without re-entering password, 
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(row).toHaveCount(0, { timeout: 15_000 });
 
-    await expect.poll(async () => {
-      const response = await context.request.get('/api/v1/connections');
-      if (!response.ok()) return true;
-      const items = await response.json() as Array<{ id: number }>;
-      return items.some((item) => item.id === connectionId);
-    }).toBeFalsy();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get('/api/v1/connections');
+        if (!response.ok()) return true;
+        const items = (await response.json()) as Array<{ id: number }>;
+        return items.some((item) => item.id === connectionId);
+      })
+      .toBeFalsy();
   });
 });

@@ -129,7 +129,8 @@ export class DatabaseAdapter implements RelationalDatabase {
       for (const suffix of ['', '-wal', '-shm']) fs.rmSync(`${this.databasePath}${suffix}`, { force: true });
 
       if (mode === 'seed') {
-        if (!seedPath || !fs.existsSync(seedPath)) throw new Error(`E2E seed database not found: ${seedPath || '<unset>'}`);
+        if (!seedPath || !fs.existsSync(seedPath))
+          throw new Error(`E2E seed database not found: ${seedPath || '<unset>'}`);
         fs.copyFileSync(seedPath, this.databasePath);
       }
 
@@ -163,7 +164,10 @@ export class DatabaseAdapter implements RelationalDatabase {
 
   private serialize<T>(work: () => Promise<T>): Promise<T> {
     const result = this.operationTail.then(work, work);
-    this.operationTail = result.then(() => undefined, () => undefined);
+    this.operationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   }
 }

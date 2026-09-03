@@ -13,7 +13,7 @@ const QUICK_COMMAND_NAME = 'E2E UI Quick Command';
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
   const list = await request.get('/api/v1/quick-commands');
   expect(list.ok()).toBeTruthy();
-  const existing = await list.json() as Array<{ id: number; name?: string }>;
+  const existing = (await list.json()) as Array<{ id: number; name?: string }>;
   for (const command of existing.filter((item) => item.name === QUICK_COMMAND_NAME)) {
     const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
     expect(remove.ok()).toBeTruthy();
@@ -28,7 +28,7 @@ async function recreateQuickCommand(request: APIRequestContext): Promise<number>
     },
   });
   expect(create.status()).toBe(201);
-  const body = await create.json() as { command: { id: number } };
+  const body = (await create.json()) as { command: { id: number } };
   return body.command.id;
 }
 
@@ -72,11 +72,18 @@ test('common terminal tools work through the real SSH session', async ({ page, c
       await commandBar.getByTitle('Open terminal search').click();
       await expect(commandInput).toHaveAttribute('placeholder', 'Search in terminal...');
       await commandInput.fill(marker);
-      await expect.poll(() => {
-        const callIndex = consoleLines.findIndex((line) => line.includes(`Calling findNext for term: "${marker}"`));
-        if (callIndex < 0) return false;
-        return consoleLines.slice(callIndex, callIndex + 4).some((line) => line.includes('findNext returned: true'));
-      }, { timeout: 10_000 }).toBeTruthy();
+      await expect
+        .poll(
+          () => {
+            const callIndex = consoleLines.findIndex((line) => line.includes(`Calling findNext for term: "${marker}"`));
+            if (callIndex < 0) return false;
+            return consoleLines
+              .slice(callIndex, callIndex + 4)
+              .some((line) => line.includes('findNext returned: true'));
+          },
+          { timeout: 10_000 },
+        )
+        .toBeTruthy();
 
       await commandBar.getByTitle('Find next').click();
       await commandBar.getByTitle('Find previous').click();
@@ -108,7 +115,8 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await expect(historyItem).toBeVisible({ timeout: 20_000 });
     const before = markerCount(await rows.innerText(), marker);
     await historyItem.click();
-    await expect.poll(async () => markerCount(await rows.innerText(), marker), { timeout: 15_000 })
+    await expect
+      .poll(async () => markerCount(await rows.innerText(), marker), { timeout: 15_000 })
       .toBeGreaterThan(before);
   });
 
@@ -119,11 +127,13 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await commandRow.click();
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('QUICK_UI_E2E');
 
-    await expect.poll(async () => {
-      const response = await context.request.get('/api/v1/quick-commands');
-      if (!response.ok()) return 0;
-      const commands = await response.json() as Array<{ id: number; usage_count?: number }>;
-      return Number(commands.find((item) => item.id === quickCommandId)?.usage_count ?? 0);
-    }).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(async () => {
+        const response = await context.request.get('/api/v1/quick-commands');
+        if (!response.ok()) return 0;
+        const commands = (await response.json()) as Array<{ id: number; usage_count?: number }>;
+        return Number(commands.find((item) => item.id === quickCommandId)?.usage_count ?? 0);
+      })
+      .toBeGreaterThanOrEqual(1);
   });
 });

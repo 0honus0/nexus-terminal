@@ -4,7 +4,7 @@ import { connectSshClient, createConnectConfig } from './ssh-client.connector';
 
 const forward = (client: Client, host: string, port: number): Promise<ClientChannel> =>
   new Promise((resolve, reject) => {
-    client.forwardOut('127.0.0.1', 0, host, port, (error, stream) => error ? reject(error) : resolve(stream));
+    client.forwardOut('127.0.0.1', 0, host, port, (error, stream) => (error ? reject(error) : resolve(stream)));
   });
 
 const buildHopConfig = (
@@ -12,14 +12,17 @@ const buildHopConfig = (
   previousStream: ClientChannel | undefined,
   timeoutMs: number,
 ): ConnectConfig => ({
-  ...createConnectConfig({
-    host: previousStream ? undefined : hop.host,
-    port: previousStream ? undefined : hop.port,
-    username: hop.username,
-    password: hop.password,
-    privateKey: hop.privateKey,
-    passphrase: hop.passphrase,
-  }, timeoutMs),
+  ...createConnectConfig(
+    {
+      host: previousStream ? undefined : hop.host,
+      port: previousStream ? undefined : hop.port,
+      username: hop.username,
+      password: hop.password,
+      privateKey: hop.privateKey,
+      passphrase: hop.passphrase,
+    },
+    timeoutMs,
+  ),
   ...(previousStream ? { sock: previousStream } : {}),
 });
 
@@ -38,7 +41,11 @@ export const connectViaJumpChain = async (
   let previousStream: ClientChannel | undefined;
   const cleanupIntermediates = () => {
     for (const client of intermediateClients.splice(0)) {
-      try { client.end(); } catch { /* best effort */ }
+      try {
+        client.end();
+      } catch {
+        /* best effort */
+      }
     }
   };
 
@@ -53,9 +60,10 @@ export const connectViaJumpChain = async (
       });
       intermediateClients.push(client);
 
-      const next = index === jumpChain.length - 1
-        ? { host: connection.host, port: connection.port }
-        : { host: jumpChain[index + 1].host, port: jumpChain[index + 1].port };
+      const next =
+        index === jumpChain.length - 1
+          ? { host: connection.host, port: connection.port }
+          : { host: jumpChain[index + 1].host, port: jumpChain[index + 1].port };
       previousStream = await forward(client, next.host, next.port);
       if (signal?.aborted) {
         previousStream.destroy();
@@ -63,7 +71,8 @@ export const connectViaJumpChain = async (
       }
     }
 
-    if (!previousStream) throw new Error(`Jump chain for ${connection.displayName} produced no stream to the final target.`);
+    if (!previousStream)
+      throw new Error(`Jump chain for ${connection.displayName} produced no stream to the final target.`);
     const finalClient = new Client();
     await connectSshClient(finalClient, {
       config: { ...createConnectConfig(connection, timeoutMs), sock: previousStream },
@@ -73,7 +82,11 @@ export const connectViaJumpChain = async (
     finalClient.once('close', cleanupIntermediates);
     return finalClient;
   } catch (error) {
-    try { previousStream?.destroy(); } catch { /* best effort */ }
+    try {
+      previousStream?.destroy();
+    } catch {
+      /* best effort */
+    }
     cleanupIntermediates();
     throw error;
   }

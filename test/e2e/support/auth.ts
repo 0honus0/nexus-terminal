@@ -6,7 +6,7 @@ export { E2E_ADMIN } from './test-identity';
 export async function ensureInitialAdmin(request: APIRequestContext): Promise<void> {
   const setupStateResponse = await request.get('/api/v1/auth/needs-setup');
   expect(setupStateResponse.ok()).toBeTruthy();
-  const setupState = await setupStateResponse.json() as { needsSetup: boolean };
+  const setupState = (await setupStateResponse.json()) as { needsSetup: boolean };
 
   if (!setupState.needsSetup) return;
 

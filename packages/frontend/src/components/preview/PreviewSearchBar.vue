@@ -1,81 +1,90 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
 
-const props = withDefaults(defineProps<{
-  open: boolean;
-  query: string;
-  current: number;
-  total: number;
-  active?: boolean;
-  busy?: boolean;
-}>(), {
-  active: true,
-  busy: false,
-});
+  const props = withDefaults(
+    defineProps<{
+      open: boolean;
+      query: string;
+      current: number;
+      total: number;
+      active?: boolean;
+      busy?: boolean;
+    }>(),
+    {
+      active: true,
+      busy: false,
+    },
+  );
 
-const emit = defineEmits<{
-  open: [];
-  close: [];
-  'update:query': [value: string];
-  previous: [];
-  next: [];
-}>();
+  const emit = defineEmits<{
+    open: [];
+    close: [];
+    'update:query': [value: string];
+    previous: [];
+    next: [];
+  }>();
 
-const { t } = useI18n();
-const inputRef = ref<HTMLInputElement | null>(null);
+  const { t } = useI18n();
+  const inputRef = ref<HTMLInputElement | null>(null);
 
-const focus = () => {
-  void nextTick(() => {
-    inputRef.value?.focus({ preventScroll: true });
-    inputRef.value?.select();
-  });
-};
+  const focus = () => {
+    void nextTick(() => {
+      inputRef.value?.focus({ preventScroll: true });
+      inputRef.value?.select();
+    });
+  };
 
-const handleDocumentKeydown = (event: KeyboardEvent) => {
-  if (!props.active) return;
+  const handleDocumentKeydown = (event: KeyboardEvent) => {
+    if (!props.active) return;
 
-  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
-    event.preventDefault();
-    emit('open');
-    focus();
-    return;
-  }
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      emit('open');
+      focus();
+      return;
+    }
 
-  if (props.open && event.key === 'Escape') {
-    event.preventDefault();
-    event.stopPropagation();
-    emit('close');
-  }
-};
+    if (props.open && event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      emit('close');
+    }
+  };
 
-const handleInputKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    if (event.shiftKey) emit('previous');
-    else emit('next');
-    return;
-  }
+  const handleInputKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (event.shiftKey) emit('previous');
+      else emit('next');
+      return;
+    }
 
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    event.stopPropagation();
-    emit('close');
-  }
-};
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      emit('close');
+    }
+  };
 
-watch(() => props.open, (open) => {
-  if (open && props.active) focus();
-});
+  watch(
+    () => props.open,
+    (open) => {
+      if (open && props.active) focus();
+    },
+  );
 
-watch(() => props.active, (active) => {
-  if (active && props.open) focus();
-});
+  watch(
+    () => props.active,
+    (active) => {
+      if (active && props.open) focus();
+    },
+  );
 
-onMounted(() => document.addEventListener('keydown', handleDocumentKeydown, true));
-onBeforeUnmount(() => document.removeEventListener('keydown', handleDocumentKeydown, true));
+  onMounted(() => document.addEventListener('keydown', handleDocumentKeydown, true));
+  onBeforeUnmount(() => document.removeEventListener('keydown', handleDocumentKeydown, true));
 
-defineExpose({ focus });
+  defineExpose({ focus });
 </script>
 
 <template>
@@ -113,7 +122,9 @@ defineExpose({ focus });
       aria-live="polite"
     >
       <template v-if="props.busy">…</template>
-      <template v-else-if="props.query.trim()">{{ props.total > 0 ? Math.max(1, props.current) : 0 }}/{{ props.total }}</template>
+      <template v-else-if="props.query.trim()"
+        >{{ props.total > 0 ? Math.max(1, props.current) : 0 }}/{{ props.total }}</template
+      >
     </span>
     <button
       type="button"

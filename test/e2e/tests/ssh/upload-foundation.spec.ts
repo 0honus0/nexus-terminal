@@ -1,14 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
-import {
-  closeWebSocket,
-  openSshSession,
-  requestJson,
-  sendJson,
-  waitForJson,
-  waitForSftpReady,
-} from '../../support/ws';
+import { closeWebSocket, openSshSession, requestJson, sendJson, waitForJson, waitForSftpReady } from '../../support/ws';
 
 function encodeUploadChunk(uploadId: string, chunkIndex: number, data: Buffer, isLast: boolean): Buffer {
   const uploadIdBytes = Buffer.from(uploadId, 'utf8');

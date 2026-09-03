@@ -17,7 +17,9 @@ test('copy cancellation survives an SFTP write stalled beyond the old cancellati
   test.setTimeout(65_000);
   await openFileManager(page, context);
   const sourceName = 'cancel-marker-dir';
-  await fetch(`${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(sourceName)}&size=${32 * 1024}`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(sourceName)}&size=${32 * 1024}`, {
+    method: 'POST',
+  });
   await refreshFileManager(page);
   await expect(row(page, sourceName)).toBeVisible();
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=34000`, { method: 'POST' });
@@ -44,9 +46,11 @@ test('copy cancellation survives an SFTP write stalled beyond the old cancellati
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);
 
-    const secondFile = await fetch(`${E2E_SSH.controlUrl}/path-exists?path=${encodeURIComponent(`folder-seed/${sourceName}/02-second.bin`)}`);
+    const secondFile = await fetch(
+      `${E2E_SSH.controlUrl}/path-exists?path=${encodeURIComponent(`folder-seed/${sourceName}/02-second.bin`)}`,
+    );
     expect(secondFile.ok).toBeTruthy();
-    expect((await secondFile.json() as { exists: boolean }).exists).toBe(false);
+    expect(((await secondFile.json()) as { exists: boolean }).exists).toBe(false);
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }

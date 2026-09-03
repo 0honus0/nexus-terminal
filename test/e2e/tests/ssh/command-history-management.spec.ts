@@ -37,17 +37,24 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 
     // Verify persistence first. This distinguishes backend history-write failures
     // from frontend refresh problems and protects rapid sequential submissions.
-    await expect.poll(async () => {
-      const response = await context.request.get('/api/v1/command-history');
-      if (!response.ok()) return [];
-      const items = await response.json() as Array<{ command: string }>;
-      return items
-        .map((item) => item.command)
-        .filter((command) => command.includes('HISTORY_MANAGED_'));
-    }, { timeout: 15_000 }).toEqual(expect.arrayContaining([COMMAND_A, COMMAND_B]));
+    await expect
+      .poll(
+        async () => {
+          const response = await context.request.get('/api/v1/command-history');
+          if (!response.ok()) return [];
+          const items = (await response.json()) as Array<{ command: string }>;
+          return items.map((item) => item.command).filter((command) => command.includes('HISTORY_MANAGED_'));
+        },
+        { timeout: 15_000 },
+      )
+      .toEqual(expect.arrayContaining([COMMAND_A, COMMAND_B]));
 
-    await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' }).first()).toBeVisible();
+    await expect(
+      historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_B' }).first(),
+    ).toBeVisible();
   });
 
   await step('search filters unrelated history and copy writes the exact command to clipboard', async () => {
@@ -66,7 +73,9 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
     const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
     const before = markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A');
     await rowA.click();
-    await expect.poll(async () => markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A'), { timeout: 15_000 }).toBeGreaterThan(before);
+    await expect
+      .poll(async () => markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A'), { timeout: 15_000 })
+      .toBeGreaterThan(before);
   });
 
   await step('delete removes the individual history record from UI and backend persistence', async () => {
@@ -77,11 +86,13 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
     await rowA.getByTestId('command-history-delete').click();
     await expect(rowA).toHaveCount(0);
 
-    await expect.poll(async () => {
-      const response = await context.request.get('/api/v1/command-history');
-      if (!response.ok()) return true;
-      const items = await response.json() as Array<{ id: number }>;
-      return items.some((item) => item.id === historyId);
-    }).toBeFalsy();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get('/api/v1/command-history');
+        if (!response.ok()) return true;
+        const items = (await response.json()) as Array<{ id: number }>;
+        return items.some((item) => item.id === historyId);
+      })
+      .toBeFalsy();
   });
 });

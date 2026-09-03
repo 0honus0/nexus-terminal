@@ -120,11 +120,19 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
       };
       this.events.once('close', finish);
       this.events.once('error', finish);
-      try { this.signal(signal); } catch { /* remote may not support signals */ }
+      try {
+        this.signal(signal);
+      } catch {
+        /* remote may not support signals */
+      }
       closeTimer = setTimeout(() => {
         if (finished || !this.isRunning) return;
         this.statusValue = 'terminated';
-        try { this.channel.close(); } catch { this.channel.destroy(); }
+        try {
+          this.channel.close();
+        } catch {
+          this.channel.destroy();
+        }
       }, graceMs);
       closeTimer.unref?.();
       forceTimer = setTimeout(() => {

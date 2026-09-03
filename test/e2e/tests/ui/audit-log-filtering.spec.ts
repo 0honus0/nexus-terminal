@@ -9,7 +9,9 @@ test('audit log UI filters by action type and details search term', async ({ pag
 
   const existing = await context.request.get('/api/v1/proxies');
   if (existing.ok()) {
-    for (const proxy of (await existing.json() as Array<{ id: number; name: string }>).filter((item) => item.name === PROXY_NAME)) {
+    for (const proxy of ((await existing.json()) as Array<{ id: number; name: string }>).filter(
+      (item) => item.name === PROXY_NAME,
+    )) {
       await context.request.delete(`/api/v1/proxies/${proxy.id}`);
     }
   }
@@ -18,7 +20,7 @@ test('audit log UI filters by action type and details search term', async ({ pag
     data: { name: PROXY_NAME, type: 'HTTP', host: '127.0.0.1', port: 18081 },
   });
   expect(create.status()).toBe(201);
-  const proxyId = (await create.json() as { proxy: { id: number } }).proxy.id;
+  const proxyId = ((await create.json()) as { proxy: { id: number } }).proxy.id;
 
   try {
     await page.goto('/audit-logs');

@@ -56,15 +56,19 @@ export class StreamUploadOperationService implements UploadOperation {
     for (const input of request.directories) directories.add(this.resolveRelativeDirectory(basePath, input));
 
     await filesystem.ensureDirectory(basePath);
-    const remaining = [...directories].filter(value => value !== basePath).sort((a, b) => {
-      const depth = a.split('/').length - b.split('/').length;
-      return depth || a.localeCompare(b);
-    });
+    const remaining = [...directories]
+      .filter((value) => value !== basePath)
+      .sort((a, b) => {
+        const depth = a.split('/').length - b.split('/').length;
+        return depth || a.localeCompare(b);
+      });
     let index = 0;
     const workers = Math.min(PREPARE_CONCURRENCY, remaining.length);
-    await Promise.all(Array.from({ length: workers }, async () => {
-      while (index < remaining.length) await filesystem.ensureDirectory(remaining[index++]);
-    }));
+    await Promise.all(
+      Array.from({ length: workers }, async () => {
+        while (index < remaining.length) await filesystem.ensureDirectory(remaining[index++]);
+      }),
+    );
 
     this.prepared.set(this.prepareKey(request.ownerId, request.prepareId), {
       ownerId: request.ownerId,
@@ -100,7 +104,11 @@ export class StreamUploadOperationService implements UploadOperation {
         return;
       }
       if (!this.isWithin(batch.basePath, destinationDirectory) || !batch.directories.has(destinationDirectory)) {
-        emit({ type: 'failed', uploadId: request.uploadId, message: 'Upload destination is outside prepared directories.' });
+        emit({
+          type: 'failed',
+          uploadId: request.uploadId,
+          message: 'Upload destination is outside prepared directories.',
+        });
         return;
       }
     } else {
@@ -110,7 +118,12 @@ export class StreamUploadOperationService implements UploadOperation {
     const conflictPolicy = request.conflictPolicy ?? 'ask';
     const exists = await filesystem.exists(destinationPath);
     if (exists && conflictPolicy === 'ask') {
-      emit({ type: 'conflict', uploadId: request.uploadId, destinationPath, filename: path.posix.basename(destinationPath) });
+      emit({
+        type: 'conflict',
+        uploadId: request.uploadId,
+        destinationPath,
+        filename: path.posix.basename(destinationPath),
+      });
       return;
     }
     if (exists && conflictPolicy === 'skip') {
@@ -167,15 +180,20 @@ export class StreamUploadOperationService implements UploadOperation {
   }
 
   async cancelOwner(ownerId: string): Promise<void> {
-    const ids = [...this.active.values()].filter(upload => upload.ownerId === ownerId).map(upload => upload.uploadId);
-    await Promise.all(ids.map(uploadId => this.cancel(ownerId, uploadId)));
+    const ids = [...this.active.values()]
+      .filter((upload) => upload.ownerId === ownerId)
+      .map((upload) => upload.uploadId);
+    await Promise.all(ids.map((uploadId) => this.cancel(ownerId, uploadId)));
     for (const [key, batch] of this.prepared) if (batch.ownerId === ownerId) this.prepared.delete(key);
   }
 
   private async appendSerial(upload: ActiveUpload, request: UploadChunkRequest): Promise<void> {
     if (upload.cancelled || this.active.get(upload.key) !== upload) return;
     if (request.chunkIndex !== upload.nextChunkIndex) {
-      await this.fail(upload, `Upload chunk order mismatch: expected ${upload.nextChunkIndex}, received ${request.chunkIndex}.`);
+      await this.fail(
+        upload,
+        `Upload chunk order mismatch: expected ${upload.nextChunkIndex}, received ${request.chunkIndex}.`,
+      );
       return;
     }
     if (upload.receivedLastChunk) {
@@ -190,9 +208,12 @@ export class StreamUploadOperationService implements UploadOperation {
     }
     const reachesSize = nextBytes === upload.totalSize;
     if (request.isLast !== reachesSize) {
-      await this.fail(upload, request.isLast
-        ? `Final chunk arrived too early: ${nextBytes}/${upload.totalSize}.`
-        : `Declared size reached without final chunk: ${nextBytes}/${upload.totalSize}.`);
+      await this.fail(
+        upload,
+        request.isLast
+          ? `Final chunk arrived too early: ${nextBytes}/${upload.totalSize}.`
+          : `Declared size reached without final chunk: ${nextBytes}/${upload.totalSize}.`,
+      );
       return;
     }
 
@@ -200,9 +221,12 @@ export class StreamUploadOperationService implements UploadOperation {
     upload.bytesAccepted = nextBytes;
     upload.receivedLastChunk = request.isLast;
     await new Promise<void>((resolve, reject) => {
-      upload.stream.write(data, error => error ? reject(error) : resolve());
-    }).catch(async error => {
-      await this.fail(upload, `Unable to write upload chunk ${request.chunkIndex}: ${error instanceof Error ? error.message : String(error)}`);
+      upload.stream.write(data, (error) => (error ? reject(error) : resolve()));
+    }).catch(async (error) => {
+      await this.fail(
+        upload,
+        `Unable to write upload chunk ${request.chunkIndex}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     });
     if (upload.cancelled || this.active.get(upload.key) !== upload) return;
@@ -213,7 +237,8 @@ export class StreamUploadOperationService implements UploadOperation {
       chunkIndex: request.chunkIndex,
       bytesWritten: upload.bytesWritten,
       totalSize: upload.totalSize,
-      progress: upload.totalSize === 0 ? 100 : Math.min(100, Math.round(upload.bytesWritten / upload.totalSize * 100)),
+      progress:
+        upload.totalSize === 0 ? 100 : Math.min(100, Math.round((upload.bytesWritten / upload.totalSize) * 100)),
     });
     if (request.isLast) await this.complete(upload);
   }
@@ -233,7 +258,12 @@ export class StreamUploadOperationService implements UploadOperation {
       await upload.filesystem.replaceFile(upload.temporaryPath, upload.destinationPath);
       const metadata = await upload.filesystem.metadata(upload.destinationPath);
       this.active.delete(upload.key);
-      upload.emit({ type: 'completed', uploadId: upload.uploadId, destinationPath: upload.destinationPath, item: toRemoteFileEntry(upload.destinationPath, metadata) });
+      upload.emit({
+        type: 'completed',
+        uploadId: upload.uploadId,
+        destinationPath: upload.destinationPath,
+        item: toRemoteFileEntry(upload.destinationPath, metadata),
+      });
     } catch (error) {
       await this.fail(upload, `Unable to finalize upload: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -248,8 +278,12 @@ export class StreamUploadOperationService implements UploadOperation {
     upload.emit({ type: 'failed', uploadId: upload.uploadId, message });
   }
 
-  private uploadKey(ownerId: string, uploadId: string): string { return `${ownerId}\u0000${uploadId}`; }
-  private prepareKey(ownerId: string, prepareId: string): string { return `${ownerId}\u0000${prepareId}`; }
+  private uploadKey(ownerId: string, uploadId: string): string {
+    return `${ownerId}\u0000${uploadId}`;
+  }
+  private prepareKey(ownerId: string, prepareId: string): string {
+    return `${ownerId}\u0000${prepareId}`;
+  }
 
   private absolutePath(value: string, label: string): string {
     const normalized = path.posix.normalize(value.replace(/\\/g, '/'));
@@ -258,9 +292,15 @@ export class StreamUploadOperationService implements UploadOperation {
   }
 
   private resolveRelativeDirectory(basePath: string, relativePath: string): string {
-    const normalizedRelative = path.posix.normalize(relativePath.replace(/\\/g, '/').replace(/^\.\//, '')).replace(/\/$/, '');
+    const normalizedRelative = path.posix
+      .normalize(relativePath.replace(/\\/g, '/').replace(/^\.\//, ''))
+      .replace(/\/$/, '');
     if (!normalizedRelative || normalizedRelative === '.') return basePath;
-    if (path.posix.isAbsolute(normalizedRelative) || normalizedRelative === '..' || normalizedRelative.startsWith('../')) {
+    if (
+      path.posix.isAbsolute(normalizedRelative) ||
+      normalizedRelative === '..' ||
+      normalizedRelative.startsWith('../')
+    ) {
       throw new Error(`Upload directory contains traversal: ${relativePath}`);
     }
     const fullPath = path.posix.normalize(path.posix.join(basePath, normalizedRelative));
@@ -269,6 +309,8 @@ export class StreamUploadOperationService implements UploadOperation {
   }
 
   private isWithin(basePath: string, candidate: string): boolean {
-    return basePath === '/' ? candidate.startsWith('/') : candidate === basePath || candidate.startsWith(`${basePath}/`);
+    return basePath === '/'
+      ? candidate.startsWith('/')
+      : candidate === basePath || candidate.startsWith(`${basePath}/`);
   }
 }

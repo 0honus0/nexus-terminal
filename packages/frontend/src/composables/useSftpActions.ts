@@ -471,7 +471,9 @@ export function createSftpActionsManager(
       loadingRequestId.value = null;
       isLoading.value = false;
       directoryLoadTimeout = null;
-      uiNotificationsStore.showError(t('fileManager.errors.loadDirectoryTimeout', 'Timed out while loading directory.'));
+      uiNotificationsStore.showError(
+        t('fileManager.errors.loadDirectoryTimeout', 'Timed out while loading directory.'),
+      );
     }, SSH_OPERATION_TIMEOUT_MS);
     sendMessage({ type: 'sftp:readdir', requestId: requestId, payload: { path } });
   };
@@ -492,11 +494,14 @@ export function createSftpActionsManager(
       const requestId = generateRequestId();
       let unregisterSuccess: (() => void) | null = null;
       let unregisterError: (() => void) | null = null;
-      const timeoutId = setTimeout(() => {
-        unregisterSuccess?.();
-        unregisterError?.();
-        reject(new Error(t('fileManager.errors.searchTimeout', 'Timed out while searching files.')));
-      }, Math.max(SSH_OPERATION_TIMEOUT_MS, 30_000));
+      const timeoutId = setTimeout(
+        () => {
+          unregisterSuccess?.();
+          unregisterError?.();
+          reject(new Error(t('fileManager.errors.searchTimeout', 'Timed out while searching files.')));
+        },
+        Math.max(SSH_OPERATION_TIMEOUT_MS, 30_000),
+      );
 
       unregisterSuccess = onMessage('sftp:search:success', (payload: MessagePayload, message: WebSocketMessage) => {
         if (message.requestId !== requestId) return;
@@ -515,7 +520,11 @@ export function createSftpActionsManager(
         clearTimeout(timeoutId);
         unregisterSuccess?.();
         unregisterError?.();
-        reject(new Error(typeof payload === 'string' ? payload : t('fileManager.errors.searchFailed', 'Failed to search files.')));
+        reject(
+          new Error(
+            typeof payload === 'string' ? payload : t('fileManager.errors.searchFailed', 'Failed to search files.'),
+          ),
+        );
       });
 
       sendMessage({ type: 'sftp:search', requestId, payload: { path, query: normalizedQuery } });
@@ -575,9 +584,7 @@ export function createSftpActionsManager(
     const oldPath = itemRemotePath(item);
     // 检查 newName 是否已经是绝对路径 (来自拖拽移动)
     const renameBaseDir = parentDirectoryPath(oldPath);
-    const newPath = newName.startsWith('/')
-      ? newName
-      : joinPath(renameBaseDir, newName);
+    const newPath = newName.startsWith('/') ? newName : joinPath(renameBaseDir, newName);
     const requestId = generateRequestId();
     sendMessage({ type: 'sftp:rename', requestId: requestId, payload: { oldPath, newPath } });
   };
@@ -1322,10 +1329,10 @@ export function createSftpActionsManager(
     loadingRequestId.value = null;
 
     if (
-      typeof errorPath === 'string'
-      && errorPath === currentPathRef.value
-      && errorPath !== '/'
-      && isMissingPathError(errorPayload)
+      typeof errorPath === 'string' &&
+      errorPath === currentPathRef.value &&
+      errorPath !== '/' &&
+      isMissingPathError(errorPayload)
     ) {
       const fallbackPath = parentDirectoryPath(errorPath);
       console.warn(`[SFTP ${instanceSessionId}] 当前目录 ${errorPath} 已不存在，回退到 ${fallbackPath}.`);

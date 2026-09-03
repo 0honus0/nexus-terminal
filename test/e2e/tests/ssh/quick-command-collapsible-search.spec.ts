@@ -13,7 +13,7 @@ const COMMAND_NAME = 'E2E Collapsible Search Command';
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
   const list = await request.get('/api/v1/quick-commands');
   expect(list.ok()).toBeTruthy();
-  const commands = await list.json() as Array<{ id: number; name?: string }>;
+  const commands = (await list.json()) as Array<{ id: number; name?: string }>;
   for (const command of commands.filter((item) => item.name === COMMAND_NAME)) {
     expect((await request.delete(`/api/v1/quick-commands/${command.id}`)).ok()).toBeTruthy();
   }
@@ -27,18 +27,21 @@ async function recreateQuickCommand(request: APIRequestContext): Promise<number>
     },
   });
   expect(create.status()).toBe(201);
-  const body = await create.json() as { command: { id: number } };
+  const body = (await create.json()) as { command: { id: number } };
   return body.command.id;
 }
 
-test('quick command search stays visible by default and can be collapsed behind a settings toggle', async ({ page, context }) => {
+test('quick command search stays visible by default and can be collapsed behind a settings toggle', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
 
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json() as Record<string, string | undefined>;
+  const original = (await originalResponse.json()) as Record<string, string | undefined>;
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
@@ -72,15 +75,15 @@ test('quick command search stays visible by default and can be collapsed behind 
       await expect(checkbox).not.toBeChecked();
       await checkbox.check();
 
-      const responsePromise = page.waitForResponse((response) => (
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT'
-      ));
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      );
       await setting.getByTestId('quick-command-collapsible-search-save').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      expect((await persisted.json() as Record<string, string>).quickCommandsCollapsibleSearch).toBe('true');
+      expect(((await persisted.json()) as Record<string, string>).quickCommandsCollapsibleSearch).toBe('true');
     });
 
     await step('enabled setting replaces the input with a button until search is requested', async () => {

@@ -15,7 +15,7 @@ const QUICK_COMMAND_NAME = 'E2E Wheel Scale Command';
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
   const list = await request.get('/api/v1/quick-commands');
   expect(list.ok()).toBeTruthy();
-  const existing = await list.json() as Array<{ id: number; name?: string }>;
+  const existing = (await list.json()) as Array<{ id: number; name?: string }>;
   for (const command of existing.filter((item) => item.name === QUICK_COMMAND_NAME)) {
     const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
     expect(remove.ok()).toBeTruthy();
@@ -30,7 +30,7 @@ async function recreateQuickCommand(request: APIRequestContext): Promise<number>
     },
   });
   expect(create.status()).toBe(201);
-  const body = await create.json() as { command: { id: number } };
+  const body = (await create.json()) as { command: { id: number } };
   return body.command.id;
 }
 
@@ -49,8 +49,10 @@ const readScale = async (target: Locator, attribute: 'data-row-scale' | 'data-st
   return Number(value);
 };
 
-
-async function holdFirstSettingsResponse(page: Page, key: string): Promise<{
+async function holdFirstSettingsResponse(
+  page: Page,
+  key: string,
+): Promise<{
   firstStarted: Promise<void>;
   secondStarted: Promise<void>;
   releaseFirst: () => void;
@@ -59,9 +61,15 @@ async function holdFirstSettingsResponse(page: Page, key: string): Promise<{
   let firstStartedResolve!: () => void;
   let secondStartedResolve!: () => void;
   let releaseFirstResolve!: () => void;
-  const firstStarted = new Promise<void>((resolve) => { firstStartedResolve = resolve; });
-  const secondStarted = new Promise<void>((resolve) => { secondStartedResolve = resolve; });
-  const releaseFirstPromise = new Promise<void>((resolve) => { releaseFirstResolve = resolve; });
+  const firstStarted = new Promise<void>((resolve) => {
+    firstStartedResolve = resolve;
+  });
+  const secondStarted = new Promise<void>((resolve) => {
+    secondStartedResolve = resolve;
+  });
+  const releaseFirstPromise = new Promise<void>((resolve) => {
+    releaseFirstResolve = resolve;
+  });
   let matchingRequestCount = 0;
 
   const handler = async (route: Route) => {
@@ -151,26 +159,29 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await expect(monitor).toHaveAttribute('data-status-scale', '0.65');
   });
 
-  await step('quick commands reacts noticeably to one wheel notch and does not bounce back after persistence', async () => {
-    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-    await expect(quickView).toBeVisible({ timeout: 20_000 });
-    const list = quickView.locator('.quick-command-list');
-    const row = quickView.locator(`[data-command-id="${quickCommandId}"]`);
-    await expect(row).toBeVisible({ timeout: 20_000 });
-    await expect(list).toHaveAttribute('data-row-scale', '1.00');
+  await step(
+    'quick commands reacts noticeably to one wheel notch and does not bounce back after persistence',
+    async () => {
+      const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+      await expect(quickView).toBeVisible({ timeout: 20_000 });
+      const list = quickView.locator('.quick-command-list');
+      const row = quickView.locator(`[data-command-id="${quickCommandId}"]`);
+      await expect(row).toBeVisible({ timeout: 20_000 });
+      await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
-    const beforeRowBox = await row.boundingBox();
-    expect(beforeRowBox).toBeTruthy();
-    await ctrlWheel(list, 100);
-    await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThanOrEqual(0.9);
-    const afterRowBox = await row.boundingBox();
-    expect(afterRowBox).toBeTruthy();
-    expect(beforeRowBox!.height - afterRowBox!.height).toBeGreaterThan(1);
+      const beforeRowBox = await row.boundingBox();
+      expect(beforeRowBox).toBeTruthy();
+      await ctrlWheel(list, 100);
+      await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThanOrEqual(0.9);
+      const afterRowBox = await row.boundingBox();
+      expect(afterRowBox).toBeTruthy();
+      expect(beforeRowBox!.height - afterRowBox!.height).toBeGreaterThan(1);
 
-    const scaleAfterWheel = await readScale(list, 'data-row-scale');
-    await page.waitForTimeout(550);
-    expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
-  });
+      const scaleAfterWheel = await readScale(list, 'data-row-scale');
+      await page.waitForTimeout(550);
+      expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
+    },
+  );
 
   await slowStep('file manager keeps the Type column stable while repeatedly shrinking rows', async () => {
     await openConnectedFileManager(page);
@@ -212,7 +223,6 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
   });
 });
 
-
 test('large Ctrl+wheel delta does not leak unused zoom steps into the next event', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -241,8 +251,10 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
   expect(await readScale(list, 'data-row-scale')).toBe(0.64);
 });
 
-
-test('File Manager flushes the last wheel scale when its sidebar unmounts before debounce', async ({ page, context }) => {
+test('File Manager flushes the last wheel scale when its sidebar unmounts before debounce', async ({
+  page,
+  context,
+}) => {
   test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -255,7 +267,7 @@ test('File Manager flushes the last wheel scale when its sidebar unmounts before
   expect(settings.ok()).toBeTruthy();
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
   expect(originalSidebarResponse.ok()).toBeTruthy();
-  const originalSidebar = await originalSidebarResponse.json() as { left: string[]; right: string[] };
+  const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
   const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
     data: { left: originalSidebar.left, right: ['fileManager'] },
   });
@@ -273,15 +285,18 @@ test('File Manager flushes the last wheel scale when its sidebar unmounts before
     await expect(list).toBeVisible();
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
-    const persisted = page.waitForResponse((response) => {
-      if (!response.url().includes('/api/v1/settings') || response.request().method() !== 'PUT') return false;
-      try {
-        const body = response.request().postDataJSON() as Record<string, unknown>;
-        return body.fileManagerRowSizeMultiplier === '0.92';
-      } catch {
-        return false;
-      }
-    }, { timeout: 10_000 });
+    const persisted = page.waitForResponse(
+      (response) => {
+        if (!response.url().includes('/api/v1/settings') || response.request().method() !== 'PUT') return false;
+        try {
+          const body = response.request().postDataJSON() as Record<string, unknown>;
+          return body.fileManagerRowSizeMultiplier === '0.92';
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 10_000 },
+    );
 
     await ctrlWheel(list, 100);
     await expect.poll(() => readScale(list, 'data-row-scale')).toBe(0.92);

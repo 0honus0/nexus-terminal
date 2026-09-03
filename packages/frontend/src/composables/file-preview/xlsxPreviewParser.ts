@@ -47,9 +47,12 @@ const formatCell = (cell: CellObject | undefined): unknown => {
 const columnWidthPx = (info: ColInfo | undefined): number | null => {
   if (!info || info.hidden) return null;
   const width =
-    typeof info.wpx === 'number' ? info.wpx
-      : typeof info.wch === 'number' ? (info.wch * 7) + 12
-        : typeof info.width === 'number' ? (info.width * 7) + 12
+    typeof info.wpx === 'number'
+      ? info.wpx
+      : typeof info.wch === 'number'
+        ? info.wch * 7 + 12
+        : typeof info.width === 'number'
+          ? info.width * 7 + 12
           : null;
   if (width === null || !Number.isFinite(width) || width <= 0) return null;
   return Math.round(clamp(width, MIN_COLUMN_WIDTH_PX, MAX_COLUMN_WIDTH_PX));
@@ -57,10 +60,7 @@ const columnWidthPx = (info: ColInfo | undefined): number | null => {
 
 const rowHeightPx = (info: RowInfo | undefined): number | null => {
   if (!info || info.hidden) return null;
-  const height =
-    typeof info.hpx === 'number' ? info.hpx
-      : typeof info.hpt === 'number' ? info.hpt * (96 / 72)
-        : null;
+  const height = typeof info.hpx === 'number' ? info.hpx : typeof info.hpt === 'number' ? info.hpt * (96 / 72) : null;
   if (height === null || !Number.isFinite(height) || height <= 0) return null;
   return Math.round(clamp(height, MIN_ROW_HEIGHT_PX, MAX_ROW_HEIGHT_PX));
 };
@@ -72,11 +72,7 @@ const emptyPage = (): ParsedSpreadsheetPage => ({
   rowHeights: [],
 });
 
-const parseSheet = (
-  name: string,
-  worksheet: WorkSheet,
-  maxColumns: number,
-): ParsedSpreadsheetSheet => {
+const parseSheet = (name: string, worksheet: WorkSheet, maxColumns: number): ParsedSpreadsheetSheet => {
   const fullRange = decodeRange(worksheet['!ref']);
 
   if (!fullRange) {
@@ -97,9 +93,9 @@ const parseSheet = (
   const denseData = worksheet['!data'] ?? [];
   const columnInfo = worksheet['!cols'] ?? [];
   const rowInfo = worksheet['!rows'] ?? [];
-  const columnWidths = Array.from({ length: displayedColumns }, (_, offset) => (
-    columnWidthPx(columnInfo[fullRange.s.c + offset])
-  ));
+  const columnWidths = Array.from({ length: displayedColumns }, (_, offset) =>
+    columnWidthPx(columnInfo[fullRange.s.c + offset]),
+  );
 
   const getPage = (pageIndex: number, rowsPerPage: number): ParsedSpreadsheetPage => {
     if (totalRows === 0) return emptyPage();
@@ -122,9 +118,7 @@ const parseSheet = (
       rows.push(row);
     }
 
-    const rowHeights = Array.from({ length: displayedRows }, (_, offset) => (
-      rowHeightPx(rowInfo[startRow + offset])
-    ));
+    const rowHeights = Array.from({ length: displayedRows }, (_, offset) => rowHeightPx(rowInfo[startRow + offset]));
 
     return {
       rows,
@@ -178,12 +172,10 @@ export const parseXlsxPreview = async (
     cellText: true,
   });
 
-  const sheets = workbook.SheetNames
-    .map((name) => {
-      const worksheet = workbook.Sheets[name];
-      return worksheet ? parseSheet(name, worksheet, options.maxColumns) : null;
-    })
-    .filter((sheet): sheet is ParsedSpreadsheetSheet => sheet !== null);
+  const sheets = workbook.SheetNames.map((name) => {
+    const worksheet = workbook.Sheets[name];
+    return worksheet ? parseSheet(name, worksheet, options.maxColumns) : null;
+  }).filter((sheet): sheet is ParsedSpreadsheetSheet => sheet !== null);
 
   if (sheets.length === 0) {
     throw new Error('Invalid XLSX file: no worksheets were found.');

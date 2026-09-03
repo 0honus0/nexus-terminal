@@ -1,59 +1,60 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+  import { computed } from 'vue';
 
-defineOptions({ inheritAttrs: false });
+  defineOptions({ inheritAttrs: false });
 
-const props = withDefaults(defineProps<{
-  visible?: boolean;
-  keepMounted?: boolean;
-  teleport?: boolean;
-  overlay?: boolean;
-  zIndex?: number;
-  closeOnBackdrop?: boolean;
-  backdropTrigger?: 'click' | 'mousedown';
-  overlayClass?: string;
-  panelClass?: string;
-  panelTestId?: string;
-  preset?: 'default' | 'standard-modal';
-  surface?: boolean;
-  role?: string;
-  ariaModal?: boolean;
-  ariaLabel?: string;
-  ariaLabelledby?: string;
-}>(), {
-  visible: true,
-  keepMounted: false,
-  teleport: false,
-  overlay: true,
-  zIndex: 50,
-  closeOnBackdrop: true,
-  backdropTrigger: 'click',
-  overlayClass: '',
-  panelClass: '',
-  panelTestId: undefined,
-  preset: 'default',
-  surface: true,
-  role: undefined,
-  ariaModal: undefined,
-});
+  const props = withDefaults(
+    defineProps<{
+      visible?: boolean;
+      keepMounted?: boolean;
+      teleport?: boolean;
+      overlay?: boolean;
+      zIndex?: number;
+      closeOnBackdrop?: boolean;
+      backdropTrigger?: 'click' | 'mousedown';
+      overlayClass?: string;
+      panelClass?: string;
+      panelTestId?: string;
+      preset?: 'default' | 'standard-modal';
+      surface?: boolean;
+      role?: string;
+      ariaModal?: boolean;
+      ariaLabel?: string;
+      ariaLabelledby?: string;
+    }>(),
+    {
+      visible: true,
+      keepMounted: false,
+      teleport: false,
+      overlay: true,
+      zIndex: 50,
+      closeOnBackdrop: true,
+      backdropTrigger: 'click',
+      overlayClass: '',
+      panelClass: '',
+      panelTestId: undefined,
+      preset: 'default',
+      surface: true,
+      role: undefined,
+      ariaModal: undefined,
+    },
+  );
 
-const emit = defineEmits<{
-  (event: 'close'): void;
-}>();
+  const emit = defineEmits<{
+    (event: 'close'): void;
+  }>();
 
-const panelPresetClass = computed(() => (
-  props.preset === 'standard-modal'
-    ? 'max-w-lg max-h-[85dvh] min-h-0 flex flex-col overflow-hidden p-4'
-    : ''
-));
+  const panelPresetClass = computed(() =>
+    props.preset === 'standard-modal' ? 'max-w-lg max-h-[85dvh] min-h-0 flex flex-col overflow-hidden p-4' : '',
+  );
 
-const handleBackdropClick = () => {
-  if (props.closeOnBackdrop && props.backdropTrigger === 'click') emit('close');
-};
+  const handleBackdropClick = () => {
+    if (props.closeOnBackdrop && props.backdropTrigger === 'click') emit('close');
+  };
 
-const handleBackdropMouseDown = () => {
-  if (props.closeOnBackdrop && props.backdropTrigger === 'mousedown') emit('close');
-};
+  const handleBackdropMouseDown = () => {
+    if (props.closeOnBackdrop && props.backdropTrigger === 'mousedown') emit('close');
+  };
 </script>
 
 <template>

@@ -21,14 +21,16 @@ const updatedTheme = {
   blue: '#4488ff',
 };
 
-test('custom terminal theme supports create, conflict, update, export, import, and delete lifecycle', async ({ request }) => {
+test('custom terminal theme supports create, conflict, update, export, import, and delete lifecycle', async ({
+  request,
+}) => {
   await loginAsInitialAdmin(request);
 
   const cleanupByName = async (...names: string[]) => {
     const list = await request.get('/api/v1/terminal-themes');
     expect(list.ok()).toBeTruthy();
-    const themes = await list.json() as Array<{ _id?: string; name: string; isPreset: boolean }>;
-    for (const theme of themes.filter(item => !item.isPreset && names.includes(item.name) && item._id)) {
+    const themes = (await list.json()) as Array<{ _id?: string; name: string; isPreset: boolean }>;
+    for (const theme of themes.filter((item) => !item.isPreset && names.includes(item.name) && item._id)) {
       expect((await request.delete(`/api/v1/terminal-themes/${theme._id}`)).ok()).toBeTruthy();
     }
   };
@@ -43,7 +45,7 @@ test('custom terminal theme supports create, conflict, update, export, import, a
         data: { name: THEME_NAME, themeData: initialTheme },
       });
       expect(create.status()).toBe(201);
-      const created = await create.json() as {
+      const created = (await create.json()) as {
         _id: string;
         name: string;
         isPreset: boolean;
@@ -83,7 +85,7 @@ test('custom terminal theme supports create, conflict, update, export, import, a
       expect(exported.ok()).toBeTruthy();
       expect(exported.headers()['content-type']).toContain('application/json');
       expect(exported.headers()['content-disposition']).toContain('e2e_terminal_theme_updated.json');
-      exportedTheme = await exported.json() as Record<string, string>;
+      exportedTheme = (await exported.json()) as Record<string, string>;
       expect(exportedTheme).toMatchObject(updatedTheme);
     });
 
@@ -99,7 +101,12 @@ test('custom terminal theme supports create, conflict, update, export, import, a
         },
       });
       expect(imported.status()).toBe(201);
-      const body = await imported.json() as { _id: string; name: string; isPreset: boolean; themeData: Record<string, string> };
+      const body = (await imported.json()) as {
+        _id: string;
+        name: string;
+        isPreset: boolean;
+        themeData: Record<string, string>;
+      };
       importedId = body._id;
       expect(body).toMatchObject({ name: IMPORTED_NAME, isPreset: false, themeData: updatedTheme });
     });

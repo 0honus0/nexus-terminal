@@ -66,17 +66,23 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
 }
 
 async function expectPopupBelowApplicationModals(popup: Locator): Promise<void> {
-  await expect.poll(() => popup.evaluate((element) => {
-    const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
-    return Number.isFinite(zIndex) ? zIndex : 0;
-  })).toBeLessThan(50);
+  await expect
+    .poll(() =>
+      popup.evaluate((element) => {
+        const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+        return Number.isFinite(zIndex) ? zIndex : 0;
+      }),
+    )
+    .toBeLessThan(50);
 }
 
 test('existing copy progress popup hides and restores through Progress Display', async ({ page, context }) => {
   await openFileManager(page, context);
 
   const sourceName = 'baseline-copy-progress.bin';
-  await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${4 * 1024 * 1024}`, {
+    method: 'POST',
+  });
   await refreshFileManager(page);
   await expect(row(page, sourceName)).toBeVisible();
 
@@ -122,7 +128,10 @@ test('existing archive progress popup hides and restores through Progress Displa
   try {
     await slowStep('compress creates the existing archive progress popup', async () => {
       await rightClickRow(page, 'archive-source.txt');
-      const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      const compress = menu(page)
+        .locator('li')
+        .filter({ hasText: /^Compress/ })
+        .first();
       await expect(compress).toBeVisible();
       await compress.hover();
       await page.getByText('Compress to zip', { exact: true }).click();

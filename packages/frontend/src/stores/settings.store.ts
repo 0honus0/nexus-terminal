@@ -998,7 +998,9 @@ export const useSettingsStore = defineStore('settings', () => {
   });
 
   const spreadsheetPreviewRowsPerPageNumber = computed(() => {
-    const parsed = Number(settings.value.spreadsheetPreviewRowsPerPage ?? settings.value.spreadsheetPreviewMaxRows ?? '500');
+    const parsed = Number(
+      settings.value.spreadsheetPreviewRowsPerPage ?? settings.value.spreadsheetPreviewMaxRows ?? '500',
+    );
     return Number.isInteger(parsed) ? Math.min(2000, Math.max(10, parsed)) : 500;
   });
 

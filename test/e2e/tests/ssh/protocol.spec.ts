@@ -61,8 +61,9 @@ test('duplicate ssh:connect stays non-fatal and leaves SFTP usable', async ({ re
         'sftp:readdir:success',
         'sftp:readdir:error',
       );
-      expect((Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename))
-        .toContain('seed.txt');
+      expect(
+        (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename),
+      ).toContain('seed.txt');
     });
   } finally {
     await closeWebSocket(session.socket);
@@ -114,11 +115,9 @@ test('late terminal ACK after remote SSH disconnect is non-fatal', async ({ requ
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const socket = await openAuthenticatedWebSocket(
-    request,
-    'ws://127.0.0.1:4173/ws',
-    { autoAcknowledgeTerminalFrames: false },
-  );
+  const socket = await openAuthenticatedWebSocket(request, 'ws://127.0.0.1:4173/ws', {
+    autoAcknowledgeTerminalFrames: false,
+  });
   const clientSessionId = `late-ack-${crypto.randomUUID()}`;
 
   try {
@@ -198,8 +197,9 @@ test('same-session move treats a missing destination path as available', async (
         'sftp:readfile:success',
         'sftp:readfile:error',
       );
-      expect(Buffer.from(String(destination.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
-        .toContain('move-me');
+      expect(Buffer.from(String(destination.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
+        'move-me',
+      );
 
       const root = await requestJson(
         session.socket,
@@ -208,8 +208,9 @@ test('same-session move treats a missing destination path as available', async (
         'sftp:readdir:success',
         'sftp:readdir:error',
       );
-      expect((Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename))
-        .not.toContain('move-source.txt');
+      expect(
+        (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename),
+      ).not.toContain('move-source.txt');
     });
   } finally {
     await closeWebSocket(session.socket);
@@ -228,8 +229,9 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
       const compressRequestId = `archive-compress-${crypto.randomUUID()}`;
       const compressResponsePromise = waitForJson(
         session.socket,
-        (message) => message.requestId === compressRequestId
-          && ['sftp:compress:success', 'sftp:compress:error', 'sftp:command_not_found'].includes(String(message.type)),
+        (message) =>
+          message.requestId === compressRequestId &&
+          ['sftp:compress:success', 'sftp:compress:error', 'sftp:command_not_found'].includes(String(message.type)),
         30_000,
       );
       sendJson(session.socket, {
@@ -252,8 +254,9 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
       const decompressRequestId = `archive-decompress-${crypto.randomUUID()}`;
       const decompressResponsePromise = waitForJson(
         session.socket,
-        (message) => message.requestId === decompressRequestId
-          && ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
+        (message) =>
+          message.requestId === decompressRequestId &&
+          ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
         30_000,
       );
       sendJson(session.socket, {
@@ -262,7 +265,10 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
         payload: { source: '/archive-source.zip' },
       });
       const decompressResponse = await decompressResponsePromise;
-      test.skip(decompressResponse.type === 'sftp:command_not_found', 'unzip is not installed in this test environment');
+      test.skip(
+        decompressResponse.type === 'sftp:command_not_found',
+        'unzip is not installed in this test environment',
+      );
       expect(decompressResponse.type).toBe('sftp:decompress:success');
 
       const restored = await requestJson(
@@ -272,8 +278,9 @@ test('archive commands use the same remote root as SFTP', async ({ request }) =>
         'sftp:readfile:success',
         'sftp:readfile:error',
       );
-      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
-        .toContain('archive-me');
+      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
+        'archive-me',
+      );
     });
   } finally {
     await closeWebSocket(session.socket);
@@ -291,8 +298,9 @@ test('ZIP Unicode Path entries extract Chinese filenames instead of #U escapes',
     const requestId = `archive-unicode-${crypto.randomUUID()}`;
     const responsePromise = waitForJson(
       session.socket,
-      (message) => message.requestId === requestId
-        && ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
+      (message) =>
+        message.requestId === requestId &&
+        ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
       30_000,
     );
     sendJson(session.socket, {
@@ -311,8 +319,9 @@ test('ZIP Unicode Path entries extract Chinese filenames instead of #U escapes',
       'sftp:readfile:success',
       'sftp:readfile:error',
     );
-    expect(Buffer.from(String(extracted.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
-      .toContain('unicode-path-e2e');
+    expect(Buffer.from(String(extracted.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
+      'unicode-path-e2e',
+    );
 
     const root = await requestJson(
       session.socket,
@@ -321,7 +330,9 @@ test('ZIP Unicode Path entries extract Chinese filenames instead of #U escapes',
       'sftp:readdir:success',
       'sftp:readdir:error',
     );
-    const filenames = (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename);
+    const filenames = (Array.isArray(root.payload) ? root.payload : []).map(
+      (item: { filename?: string }) => item.filename,
+    );
     expect(filenames).toContain('中文解压测试');
     expect(filenames).not.toContain('#U4e2d#U6587#U89e3#U538b#U6d4b#U8bd5');
   } finally {
@@ -334,18 +345,16 @@ test('password-protected ZIP validates passwords and preserves the normal decomp
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   const session = await openSshSession(request, connectionId, `archive-password-${crypto.randomUUID()}`);
-  const specialPassword = "Nexus !@#$%^&*()_+-=[]{};:'\",.<>/?\\|`~";
+  const specialPassword = 'Nexus !@#$%^&*()_+-=[]{};:\'",.<>/?\\|`~';
   const maxPassword = 'x'.repeat(128);
 
-  const archiveRequest = async (
-    type: 'sftp:compress' | 'sftp:decompress',
-    payload: Record<string, unknown>,
-  ) => {
+  const archiveRequest = async (type: 'sftp:compress' | 'sftp:decompress', payload: Record<string, unknown>) => {
     const requestId = `archive-password-${crypto.randomUUID()}`;
     const responsePromise = waitForJson(
       session.socket,
-      (message) => message.requestId === requestId
-        && [`${type}:success`, `${type}:error`, 'sftp:command_not_found'].includes(String(message.type)),
+      (message) =>
+        message.requestId === requestId &&
+        [`${type}:success`, `${type}:error`, 'sftp:command_not_found'].includes(String(message.type)),
       30_000,
     );
     sendJson(session.socket, { type, requestId, payload });
@@ -387,8 +396,9 @@ test('password-protected ZIP validates passwords and preserves the normal decomp
         'sftp:readdir:success',
         'sftp:readdir:error',
       );
-      expect((Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename))
-        .not.toContain('archive-source.txt');
+      expect(
+        (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename),
+      ).not.toContain('archive-source.txt');
     });
 
     await step('wrong password reports INVALID_PASSWORD and correct special-character password succeeds', async () => {
@@ -412,8 +422,9 @@ test('password-protected ZIP validates passwords and preserves the normal decomp
         'sftp:readfile:success',
         'sftp:readfile:error',
       );
-      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8'))
-        .toContain('archive-me');
+      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
+        'archive-me',
+      );
     });
 
     await step('128-character password is accepted and round-trips', async () => {

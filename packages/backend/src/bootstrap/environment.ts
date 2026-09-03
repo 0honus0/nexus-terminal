@@ -60,7 +60,9 @@ export const initializeEnvironment = async (): Promise<InitializedEnvironment> =
 
   persistGeneratedSecrets(dataEnvPath, generated);
   if (generated.length > 0) {
-    console.warn(`[Environment] Generated missing secrets and stored them in ${dataEnvPath}. Back up this file securely.`);
+    console.warn(
+      `[Environment] Generated missing secrets and stored them in ${dataEnvPath}. Back up this file securely.`,
+    );
   }
 
   return { dataDirectory };

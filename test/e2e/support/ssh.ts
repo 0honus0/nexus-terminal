@@ -34,7 +34,7 @@ export async function setTestSshOnline(online: boolean): Promise<void> {
 export async function removeNamedSshConnections(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
-  const connections = await response.json() as Array<{ id: number; name?: string }>;
+  const connections = (await response.json()) as Array<{ id: number; name?: string }>;
   for (const connection of connections.filter((item) => item.name === E2E_SSH.name)) {
     const deleteResponse = await request.delete(`/api/v1/connections/${connection.id}`);
     expect(deleteResponse.ok()).toBeTruthy();
@@ -44,7 +44,9 @@ export async function removeNamedSshConnections(request: APIRequestContext): Pro
 export async function ensureTestSshConnection(request: APIRequestContext): Promise<number> {
   const listResponse = await request.get('/api/v1/connections');
   expect(listResponse.ok()).toBeTruthy();
-  const existing = (await listResponse.json() as Array<{ id: number; name?: string }>).find((item) => item.name === E2E_SSH.name);
+  const existing = ((await listResponse.json()) as Array<{ id: number; name?: string }>).find(
+    (item) => item.name === E2E_SSH.name,
+  );
   if (existing) return existing.id;
 
   const createResponse = await request.post('/api/v1/connections', {
@@ -59,7 +61,7 @@ export async function ensureTestSshConnection(request: APIRequestContext): Promi
     },
   });
   expect(createResponse.status()).toBe(201);
-  const body = await createResponse.json() as { connection: { id: number } };
+  const body = (await createResponse.json()) as { connection: { id: number } };
   return body.connection.id;
 }
 
@@ -107,7 +109,6 @@ export async function reopenConnectedFileManager(page: Page): Promise<void> {
   await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
 }
 
-
 async function openProgressDisplay(
   page: Page,
   placement: 'inline' | 'overlay',
@@ -126,27 +127,21 @@ async function openProgressDisplay(
   const display = page.getByTestId('progress-display-modal');
   await expect(display).toBeVisible();
   await expect(display).toHaveAttribute('data-progress-display-placement', placement);
-  await expect.poll(() => page.getByTestId(layoutTestId).evaluate(element => ({
-    position: window.getComputedStyle(element).position,
-    zIndex: window.getComputedStyle(element).zIndex,
-  }))).toEqual(expectedLayout);
+  await expect
+    .poll(() =>
+      page.getByTestId(layoutTestId).evaluate((element) => ({
+        position: window.getComputedStyle(element).position,
+        zIndex: window.getComputedStyle(element).zIndex,
+      })),
+    )
+    .toEqual(expectedLayout);
   return display;
 }
 
 export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(
-    page,
-    'inline',
-    'progress-display-modal',
-    { position: 'static', zIndex: 'auto' },
-  );
+  return openProgressDisplay(page, 'inline', 'progress-display-modal', { position: 'static', zIndex: 'auto' });
 }
 
 export async function openMobileProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(
-    page,
-    'overlay',
-    'progress-display-overlay',
-    { position: 'fixed', zIndex: '1100' },
-  );
+  return openProgressDisplay(page, 'overlay', 'progress-display-overlay', { position: 'fixed', zIndex: '1100' });
 }

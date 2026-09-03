@@ -6,7 +6,9 @@ import { step } from '../../support/steps';
 
 const repoRoot = path.resolve(process.cwd(), '../..');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
-const speakeasy = requireFromBackend('speakeasy') as { totp: (options: { secret: string; encoding: string }) => string };
+const speakeasy = requireFromBackend('speakeasy') as {
+  totp: (options: { secret: string; encoding: string }) => string;
+};
 
 test('2FA can be enabled, required at login, verified, and disabled', async ({ request }) => {
   await loginAsInitialAdmin(request);
@@ -15,7 +17,7 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
   await step('start and activate TOTP 2FA', async () => {
     const setup = await request.post('/api/v1/auth/2fa/setup');
     expect(setup.ok()).toBeTruthy();
-    const setupBody = await setup.json() as { secret: string; qrCodeUrl: string };
+    const setupBody = (await setup.json()) as { secret: string; qrCodeUrl: string };
     secret = setupBody.secret;
     expect(secret).toBeTruthy();
     expect(setupBody.qrCodeUrl).toMatch(/^data:image\/png;base64,/);

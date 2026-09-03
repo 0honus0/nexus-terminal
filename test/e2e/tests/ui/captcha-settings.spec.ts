@@ -19,7 +19,10 @@ async function resetCaptcha(request: import('@playwright/test').APIRequestContex
   expect(response.ok()).toBeTruthy();
 }
 
-test('CAPTCHA settings UI enables a provider, persists public configuration, and disables it again', async ({ page, context }) => {
+test('CAPTCHA settings UI enables a provider, persists public configuration, and disables it again', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await resetCaptcha(context.request);
   const language = await context.request.put('/api/v1/settings', {
@@ -40,7 +43,9 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
       await captcha.getByTestId('captcha-provider').selectOption('hcaptcha');
       await captcha.locator('#hcaptchaSiteKey').fill(HCAPTCHA_SITE_KEY);
       await captcha.locator('#hcaptchaSecretKey').fill('e2e-hcaptcha-secret');
-      const savePromise = page.waitForResponse((response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT');
+      const savePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT',
+      );
       await captcha.getByTestId('captcha-save').click();
       expect((await savePromise).ok()).toBeTruthy();
 
@@ -66,7 +71,9 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
     await step('disable CAPTCHA through the UI and persist the safe default', async () => {
       const reloaded = page.getByTestId('captcha-settings');
       await reloaded.getByTestId('captcha-enabled').uncheck();
-      const savePromise = page.waitForResponse((response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT');
+      const savePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'PUT',
+      );
       await reloaded.getByTestId('captcha-save').click();
       expect((await savePromise).ok()).toBeTruthy();
       const publicConfig = await context.request.get('/api/v1/settings/captcha');

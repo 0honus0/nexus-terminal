@@ -3,7 +3,10 @@ import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { slowStep, step } from '../../support/steps';
 
-test('data management UI exports a real backup file and imports it through the file picker', async ({ page, context }) => {
+test('data management UI exports a real backup file and imports it through the file picker', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await page.goto('/settings');
   await page.getByTestId('settings-tab-dataManagement').click();
@@ -24,11 +27,13 @@ test('data management UI exports a real backup file and imports it through the f
 
   await slowStep('import submits the downloaded backup through the real UI file picker', async () => {
     await section.getByTestId('backup-import-file').setInputFiles(backupPath);
-    const importPromise = page.waitForResponse((response) => response.url().endsWith('/api/v1/settings/backup/import') && response.request().method() === 'POST');
+    const importPromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/settings/backup/import') && response.request().method() === 'POST',
+    );
     await section.getByTestId('backup-import').click();
     const response = await importPromise;
     expect(response.ok()).toBeTruthy();
-    const body = await response.json() as { restoredRows?: number; restoredFiles?: number };
+    const body = (await response.json()) as { restoredRows?: number; restoredFiles?: number };
     expect(Number(body.restoredRows ?? 0)).toBeGreaterThanOrEqual(0);
     expect(Number(body.restoredFiles ?? 0)).toBeGreaterThanOrEqual(0);
   });

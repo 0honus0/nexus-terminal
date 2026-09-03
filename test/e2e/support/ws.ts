@@ -32,11 +32,12 @@ export async function openAuthenticatedWebSocket(
   // terminal-frame ACKs before sending ssh:connected / RESUMED notifications.
   socket.on('message', (data: Buffer, isBinary: boolean) => {
     if (
-      options.autoAcknowledgeTerminalFrames === false
-      || !isBinary
-      || data.length < 16
-      || data.subarray(0, 4).toString('ascii') !== 'NXTM'
-    ) return;
+      options.autoAcknowledgeTerminalFrames === false ||
+      !isBinary ||
+      data.length < 16 ||
+      data.subarray(0, 4).toString('ascii') !== 'NXTM'
+    )
+      return;
     const sequence = data.readUInt32BE(12);
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'ssh:output:ack', payload: { sequence } }));
@@ -114,8 +115,7 @@ export async function requestJson(
 ): Promise<JsonWsMessage> {
   const responsePromise = waitForJson(
     socket,
-    (message) => message.requestId === requestId
-      && (message.type === successType || message.type === errorType),
+    (message) => message.requestId === requestId && (message.type === successType || message.type === errorType),
     timeoutMs,
   );
   sendJson(socket, { type, payload, requestId });
@@ -131,8 +131,9 @@ export async function waitForSftpReady(socket: E2eWebSocket): Promise<void> {
     const requestId = `sftp-ready-${attempt}-${crypto.randomUUID()}`;
     const responsePromise = waitForJson(
       socket,
-      (message) => message.requestId === requestId
-        && (message.type === 'sftp:readdir:success' || message.type === 'sftp:readdir:error'),
+      (message) =>
+        message.requestId === requestId &&
+        (message.type === 'sftp:readdir:success' || message.type === 'sftp:readdir:error'),
       2_000,
     );
     sendJson(socket, { type: 'sftp:readdir', payload: { path: '/' }, requestId });

@@ -34,7 +34,11 @@ export const connectSshClient = (client: Client, options: ConnectClientOptions):
       if (settled) return;
       settled = true;
       cleanup();
-      try { client.end(); } catch { /* best effort */ }
+      try {
+        client.end();
+      } catch {
+        /* best effort */
+      }
       reject(error);
     };
     const onReady = () => settleResolve();

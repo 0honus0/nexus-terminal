@@ -14,10 +14,10 @@ import type {
 import { isRemoteFileMissingError } from '../../../platform/filesystem/remote-filesystem';
 
 const call = <T>(invoke: (callback: (error: Error | undefined | null, value: T) => void) => void): Promise<T> =>
-  new Promise<T>((resolve, reject) => invoke((error, value) => error ? reject(error) : resolve(value)));
+  new Promise<T>((resolve, reject) => invoke((error, value) => (error ? reject(error) : resolve(value))));
 
 const callVoid = (invoke: (callback: (error?: Error | null) => void) => void): Promise<void> =>
-  new Promise<void>((resolve, reject) => invoke((error) => error ? reject(error) : resolve()));
+  new Promise<void>((resolve, reject) => invoke((error) => (error ? reject(error) : resolve())));
 
 export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
   private readonly directoryPromises = new Map<string, Promise<void>>();
@@ -49,8 +49,8 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
 
   async readDirectory(remotePath: string): Promise<RemoteDirectoryEntry[]> {
     const channel = await this.channelProvider();
-    const entries = await call<Array<{ filename: string; longname: string; attrs: Stats }>>(
-      (callback) => channel.readdir(remotePath, callback),
+    const entries = await call<Array<{ filename: string; longname: string; attrs: Stats }>>((callback) =>
+      channel.readdir(remotePath, callback),
     );
     return entries.map((entry) => ({
       name: entry.filename,
@@ -88,7 +88,7 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
         if (length === 0) return new Uint8Array();
         const buffer = Buffer.allocUnsafe(length);
         const bytesRead = await new Promise<number>((resolve, reject) => {
-          channel.read(handle, buffer, 0, length, position, (error, count) => error ? reject(error) : resolve(count));
+          channel.read(handle, buffer, 0, length, position, (error, count) => (error ? reject(error) : resolve(count)));
         });
         return buffer.subarray(0, bytesRead);
       },
@@ -108,7 +108,8 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
     const handle = await call<Buffer>((callback) =>
       options.mode === undefined
         ? channel.open(remotePath, 'w', callback)
-        : channel.open(remotePath, 'w', options.mode, callback));
+        : channel.open(remotePath, 'w', options.mode, callback),
+    );
     let closed = false;
     return {
       write: async (position, data) => {
@@ -183,9 +184,14 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
         await this.rename(sourcePath, destinationPath);
         await this.removeFile(backupPath, { ignoreMissing: true });
       } catch (fallbackError) {
-        try { await this.rename(backupPath, destinationPath); } catch { /* preserve primary failure */ }
+        try {
+          await this.rename(backupPath, destinationPath);
+        } catch {
+          /* preserve primary failure */
+        }
         const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-        const atomicMessage = atomicRenameError instanceof Error ? atomicRenameError.message : String(atomicRenameError);
+        const atomicMessage =
+          atomicRenameError instanceof Error ? atomicRenameError.message : String(atomicRenameError);
         throw new Error(`Unable to replace ${destinationPath}: ${fallbackMessage} (atomic rename: ${atomicMessage})`);
       }
     }

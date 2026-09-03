@@ -1,8 +1,4 @@
-import type {
-  DiagnosticContext,
-  DiagnosticObservation,
-  DiagnosticProbe,
-} from '../../diagnostics/diagnostic-probe';
+import type { DiagnosticContext, DiagnosticObservation, DiagnosticProbe } from '../../diagnostics/diagnostic-probe';
 import type { ExecutionSessionManager } from '../execution-session-manager';
 
 export class ExecutionSessionDiagnosticProbe implements DiagnosticProbe {

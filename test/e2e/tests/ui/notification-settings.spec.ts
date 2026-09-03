@@ -7,14 +7,17 @@ const CHANNEL_NAME = 'E2E Webhook Channel';
 async function cleanupChannel(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/notifications');
   expect(response.ok()).toBeTruthy();
-  const settings = await response.json() as Array<{ id: number; name: string }>;
+  const settings = (await response.json()) as Array<{ id: number; name: string }>;
   for (const setting of settings.filter((item) => item.name === CHANNEL_NAME)) {
     const remove = await request.delete(`/api/v1/notifications/${setting.id}`);
     expect(remove.ok()).toBeTruthy();
   }
 }
 
-test('notification settings create, edit, persist, and delete a webhook channel through the UI', async ({ page, context }) => {
+test('notification settings create, edit, persist, and delete a webhook channel through the UI', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
   expect(language.ok()).toBeTruthy();
@@ -31,7 +34,11 @@ test('notification settings create, edit, persist, and delete a webhook channel 
     await page.locator('#webhook-url').fill('http://127.0.0.1:22223/e2e-notification-webhook');
     await page.locator('#webhook-method').selectOption('POST');
     await page.locator('#webhook-body').fill('{"event":"{event}"}');
-    await page.locator('form').filter({ has: page.locator('#setting-name') }).getByRole('button', { name: 'Save', exact: true }).click();
+    await page
+      .locator('form')
+      .filter({ has: page.locator('#setting-name') })
+      .getByRole('button', { name: 'Save', exact: true })
+      .click();
 
     const card = settings.locator('.grid.gap-4 > div').filter({ hasText: CHANNEL_NAME });
     await expect(card).toBeVisible({ timeout: 15_000 });
@@ -44,12 +51,18 @@ test('notification settings create, edit, persist, and delete a webhook channel 
     await card.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.locator('#setting-name')).toHaveValue(CHANNEL_NAME);
     await page.locator('#setting-enabled').uncheck();
-    await page.locator('form').filter({ has: page.locator('#setting-name') }).getByRole('button', { name: 'Save', exact: true }).click();
+    await page
+      .locator('form')
+      .filter({ has: page.locator('#setting-name') })
+      .getByRole('button', { name: 'Save', exact: true })
+      .click();
     await expect(card).toContainText('Disabled');
 
     const response = await context.request.get('/api/v1/notifications');
     expect(response.ok()).toBeTruthy();
-    const saved = (await response.json() as Array<{ name: string; enabled: boolean }>).find((item) => item.name === CHANNEL_NAME);
+    const saved = ((await response.json()) as Array<{ name: string; enabled: boolean }>).find(
+      (item) => item.name === CHANNEL_NAME,
+    );
     expect(saved).toMatchObject({ name: CHANNEL_NAME, enabled: false });
   });
 
@@ -63,6 +76,6 @@ test('notification settings create, edit, persist, and delete a webhook channel 
 
     const response = await context.request.get('/api/v1/notifications');
     expect(response.ok()).toBeTruthy();
-    expect((await response.json() as Array<{ name: string }>).some((item) => item.name === CHANNEL_NAME)).toBeFalsy();
+    expect(((await response.json()) as Array<{ name: string }>).some((item) => item.name === CHANNEL_NAME)).toBeFalsy();
   });
 });

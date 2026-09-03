@@ -13,7 +13,8 @@ async function main(): Promise<void> {
   fs.mkdirSync(seedDir, { recursive: true });
   process.env.NEXUS_DATA_DIR = seedDir;
 
-  const { getDbInstance, closeDbInstance } = await import('../../../packages/backend/src/infrastructure/database/connection');
+  const { getDbInstance, closeDbInstance } =
+    await import('../../../packages/backend/src/infrastructure/database/connection');
   const db = await getDbInstance();
 
   // Stable bcrypt hash for E2e-Admin-Password-2026! with cost 10.

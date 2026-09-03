@@ -23,10 +23,7 @@ export const docxPreviewProvider: FilePreviewProvider = {
   },
 
   async load(_file, context) {
-    const [response] = await Promise.all([
-      context.fetchInline(),
-      loadDocxPreviewComponent(),
-    ]);
+    const [response] = await Promise.all([context.fetchInline(), loadDocxPreviewComponent()]);
     const buffer = await response.arrayBuffer();
     return {
       componentProps: { buffer },

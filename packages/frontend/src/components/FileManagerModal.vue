@@ -1,40 +1,38 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
-import FileManager from './FileManager.vue';
-import { useSessionStore } from '../stores/session.store';
-import type { WebSocketDependencies } from '../composables/useSftpActions';
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
+  import FileManager from './FileManager.vue';
+  import { useSessionStore } from '../stores/session.store';
+  import type { WebSocketDependencies } from '../composables/useSftpActions';
 
-export interface FileManagerModalEntry {
-  sessionId: string;
-  instanceId: string;
-  dbConnectionId: string;
-  wsDeps: WebSocketDependencies;
-}
+  export interface FileManagerModalEntry {
+    sessionId: string;
+    instanceId: string;
+    dbConnectionId: string;
+    wsDeps: WebSocketDependencies;
+  }
 
-const props = defineProps<{
-  visible: boolean;
-  currentSessionId: string | null;
-  entries: Map<string, FileManagerModalEntry>;
-  isMobile: boolean;
-}>();
+  const props = defineProps<{
+    visible: boolean;
+    currentSessionId: string | null;
+    entries: Map<string, FileManagerModalEntry>;
+    isMobile: boolean;
+  }>();
 
-const emit = defineEmits<{
-  (event: 'close'): void;
-}>();
+  const emit = defineEmits<{
+    (event: 'close'): void;
+  }>();
 
-const sessionStore = useSessionStore();
-const { t } = useI18n();
-const effectiveVisible = computed(() => Boolean(
-  props.visible
-  && props.currentSessionId
-  && props.entries.has(props.currentSessionId),
-));
-const currentSessionLabel = computed(() => {
-  if (!props.currentSessionId) return '';
-  return sessionStore.sessions.get(props.currentSessionId)?.connectionName || props.currentSessionId;
-});
+  const sessionStore = useSessionStore();
+  const { t } = useI18n();
+  const effectiveVisible = computed(() =>
+    Boolean(props.visible && props.currentSessionId && props.entries.has(props.currentSessionId)),
+  );
+  const currentSessionLabel = computed(() => {
+    if (!props.currentSessionId) return '';
+    return sessionStore.sessions.get(props.currentSessionId)?.connectionName || props.currentSessionId;
+  });
 </script>
 
 <template>

@@ -180,3 +180,5 @@ electron-app/dist_electron/
 /test/e2e/*.db
 /test/e2e/*.sqlite
 /test/e2e/*.sqlite3
+
+!scripts/format-changed.mjs

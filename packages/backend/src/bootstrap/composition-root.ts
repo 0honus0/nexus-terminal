@@ -218,11 +218,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
     notificationFormatter,
     settings,
   );
-  const notificationSettings = new NotificationSettingsService(
-    notificationRepository,
-    audit,
-    notifications,
-  );
+  const notificationSettings = new NotificationSettingsService(notificationRepository, audit, notifications);
   const user = new UserService(userRepository);
   const sshKeys = new SshKeyService(sshKeyRepository, cipher);
   const proxies = new ProxyService(proxyRepository, cipher);

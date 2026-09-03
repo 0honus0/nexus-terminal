@@ -1,217 +1,216 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick, type PropType } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { useFavoritePathsStore, type FavoritePathItem } from '../stores/favoritePaths.store';
-import { useSessionStore } from '../stores/session.store';
-import AddEditFavoritePathForm from './AddEditFavoritePathForm.vue';
-import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
-import { useConfirmDialog } from '../composables/useConfirmDialog';
+  import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick, type PropType } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { useFavoritePathsStore, type FavoritePathItem } from '../stores/favoritePaths.store';
+  import { useSessionStore } from '../stores/session.store';
+  import AddEditFavoritePathForm from './AddEditFavoritePathForm.vue';
+  import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+  import { useConfirmDialog } from '../composables/useConfirmDialog';
 
-const PADDING = 8; // px
+  const PADDING = 8; // px
 
-const props = defineProps({
-  isVisible: {
-    type: Boolean,
-    required: true,
-  },
-  triggerElement: {
-    type: Object as PropType<HTMLElement | null>,
-    default: null,
-  },
-});
-
-const emit = defineEmits(['close', 'navigateToPath']);
-
-const { t } = useI18n();
-const favoritePathsStore = useFavoritePathsStore();
-const sessionStore = useSessionStore();
-const emitWorkspaceEvent = useWorkspaceEventEmitter();
-const { showConfirmDialog } = useConfirmDialog();
-
-const searchTerm = ref('');
-const showAddEditModal = ref(false);
-const editingPathItem = ref<FavoritePathItem | null>(null);
-const modalContentRef = ref<HTMLElement | null>(null);
-const modalStyle = ref<Record<string, string>>({});
-
-
-const filteredPaths = computed(() => {
-  if (!searchTerm.value) {
-    return favoritePathsStore.favoritePaths;
-  }
-  const lowerSearchTerm = searchTerm.value.toLowerCase();
-  return favoritePathsStore.favoritePaths.filter(
-    (p) =>
-      p.path.toLowerCase().includes(lowerSearchTerm) ||
-      (p.name && p.name.toLowerCase().includes(lowerSearchTerm))
-  );
-});
-
-// Computed property for sort button icon and title
-const currentSortBy = computed(() => favoritePathsStore.currentSortBy);
-
-const sortButtonIcon = computed(() => {
-  return currentSortBy.value === 'name' ? 'fas fa-sort-alpha-down' : 'fas fa-clock';
-});
-
-
-
-const toggleSort = () => {
-  const newSortBy = currentSortBy.value === 'name' ? 'last_used_at' : 'name';
-  favoritePathsStore.setSortBy(newSortBy);
-};
-
-const handleItemClick = async (pathItem: FavoritePathItem) => {
-  try {
-    // Mark path as used before navigating
-    await favoritePathsStore.markPathAsUsed(pathItem.id, t);
-  } catch (error) {
-    console.error('Failed to mark path as used:', error);
-    // Optionally, inform the user about the failure, though navigation will still proceed.
-  }
-  emit('navigateToPath', pathItem.path);
-  closeModal();
-};
-
-const openAddModal = () => {
-  editingPathItem.value = null;
-  showAddEditModal.value = true;
-};
-
-const openEditModal = (pathItem: FavoritePathItem) => {
-  editingPathItem.value = { ...pathItem };
-  showAddEditModal.value = true;
-};
-
-const handleDelete = async (pathItem: FavoritePathItem) => {
-  const confirmed = await showConfirmDialog({
-    message: t('favoritePaths.confirmDelete', { name: pathItem.name || pathItem.path })
+  const props = defineProps({
+    isVisible: {
+      type: Boolean,
+      required: true,
+    },
+    triggerElement: {
+      type: Object as PropType<HTMLElement | null>,
+      default: null,
+    },
   });
-  if (confirmed) {
-    try {
-      await favoritePathsStore.deleteFavoritePath(pathItem.id, t);
-    } catch (error) {
-      console.error('Failed to delete favorite path from modal:', error);
+
+  const emit = defineEmits(['close', 'navigateToPath']);
+
+  const { t } = useI18n();
+  const favoritePathsStore = useFavoritePathsStore();
+  const sessionStore = useSessionStore();
+  const emitWorkspaceEvent = useWorkspaceEventEmitter();
+  const { showConfirmDialog } = useConfirmDialog();
+
+  const searchTerm = ref('');
+  const showAddEditModal = ref(false);
+  const editingPathItem = ref<FavoritePathItem | null>(null);
+  const modalContentRef = ref<HTMLElement | null>(null);
+  const modalStyle = ref<Record<string, string>>({});
+
+  const filteredPaths = computed(() => {
+    if (!searchTerm.value) {
+      return favoritePathsStore.favoritePaths;
     }
-  }
-};
+    const lowerSearchTerm = searchTerm.value.toLowerCase();
+    return favoritePathsStore.favoritePaths.filter(
+      (p) =>
+        p.path.toLowerCase().includes(lowerSearchTerm) || (p.name && p.name.toLowerCase().includes(lowerSearchTerm)),
+    );
+  });
 
-const handleSendToTerminal = (pathItem: FavoritePathItem) => {
-  const activeSession = sessionStore.activeSession;
-  if (activeSession && activeSession.terminalManager) {
-    const escapedPath = `"${pathItem.path.replace(/"/g, '\\"')}"`;
-    const command = `cd ${escapedPath}\n`;
-    try {
-      activeSession.terminalManager.sendData(command);
-    } catch (error) {
-      console.error('[FavoritePathsModal] Failed to send command to active terminal:', error);
-    }
-  } else {
-    console.warn('[FavoritePathsModal] No active session with a terminal manager found to send path to.');
-  }
-  closeModal(); 
-};
+  // Computed property for sort button icon and title
+  const currentSortBy = computed(() => favoritePathsStore.currentSortBy);
 
-const closeModal = () => {
-  emit('close');
-};
+  const sortButtonIcon = computed(() => {
+    return currentSortBy.value === 'name' ? 'fas fa-sort-alpha-down' : 'fas fa-clock';
+  });
 
-const updatePosition = () => {
-  if (!props.isVisible || !props.triggerElement || !modalContentRef.value) {
-    return;
-  }
-
-  const triggerRect = props.triggerElement.getBoundingClientRect();
-  const modalWidth = modalContentRef.value.offsetWidth;
-  const modalHeight = modalContentRef.value.offsetHeight;
-
-  // If dimensions are zero when modal is supposed to be visible,
-  // it might mean content affecting size isn't ready. Retry once.
-  if (modalWidth === 0 && modalHeight === 0 && props.isVisible) {
-    nextTick(updatePosition);
-    return;
-  }
-  
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  let top = triggerRect.bottom + 2; // Default position below trigger, with a small 2px gap
-  let left = triggerRect.left;
-
-  // Check for bottom overflow
-  if (top + modalHeight + PADDING > viewportHeight) {
-    // Try to position above the trigger
-    top = triggerRect.top - modalHeight - 2; // Position above trigger, with a small 2px gap
-  }
-
-  // If positioning above also causes top overflow (e.g., trigger is near the top and modal is tall)
-  if (top < PADDING) {
-    top = PADDING; // Align to viewport top with padding
-    // Note: If modalHeight is still greater than viewportHeight - 2*PADDING,
-    // it will overflow downwards. The `max-h-80` class on the modal
-    // should generally prevent the modal itself from being excessively tall.
-  }
-
-  // Check for right overflow
-  if (left + modalWidth + PADDING > viewportWidth) {
-    left = viewportWidth - modalWidth - PADDING; // Align to viewport right edge
-  }
-
-  // Check for left overflow (less likely with initial left alignment to trigger, but good for robustness)
-  if (left < PADDING) {
-    left = PADDING; // Align to viewport left edge
-  }
-
-  modalStyle.value = {
-    position: 'fixed', // Position relative to the viewport
-    top: `${top}px`,
-    left: `${left}px`,
+  const toggleSort = () => {
+    const newSortBy = currentSortBy.value === 'name' ? 'last_used_at' : 'name';
+    favoritePathsStore.setSortBy(newSortBy);
   };
-};
 
-// --- Click Outside Logic ---
-const handleClickOutside = (event: MouseEvent) => {
-  if (props.triggerElement && props.triggerElement.contains(event.target as Node)) {
-    return;
-  }
-
-  if (modalContentRef.value && !modalContentRef.value.contains(event.target as Node)) {
-    if (!showAddEditModal.value) { 
-      closeModal();
+  const handleItemClick = async (pathItem: FavoritePathItem) => {
+    try {
+      // Mark path as used before navigating
+      await favoritePathsStore.markPathAsUsed(pathItem.id, t);
+    } catch (error) {
+      console.error('Failed to mark path as used:', error);
+      // Optionally, inform the user about the failure, though navigation will still proceed.
     }
-  }
-};
+    emit('navigateToPath', pathItem.path);
+    closeModal();
+  };
 
-watch(() => props.isVisible, (newValue: boolean) => {
-  if (newValue) {
-    searchTerm.value = '';
-    document.addEventListener('mousedown', handleClickOutside);
-    nextTick(() => { // Ensure DOM is ready for measurements
-      updatePosition(); // Calculate initial position
-      window.addEventListener('resize', updatePosition); // Adjust position on window resize
+  const openAddModal = () => {
+    editingPathItem.value = null;
+    showAddEditModal.value = true;
+  };
+
+  const openEditModal = (pathItem: FavoritePathItem) => {
+    editingPathItem.value = { ...pathItem };
+    showAddEditModal.value = true;
+  };
+
+  const handleDelete = async (pathItem: FavoritePathItem) => {
+    const confirmed = await showConfirmDialog({
+      message: t('favoritePaths.confirmDelete', { name: pathItem.name || pathItem.path }),
     });
-  } else {
+    if (confirmed) {
+      try {
+        await favoritePathsStore.deleteFavoritePath(pathItem.id, t);
+      } catch (error) {
+        console.error('Failed to delete favorite path from modal:', error);
+      }
+    }
+  };
+
+  const handleSendToTerminal = (pathItem: FavoritePathItem) => {
+    const activeSession = sessionStore.activeSession;
+    if (activeSession && activeSession.terminalManager) {
+      const escapedPath = `"${pathItem.path.replace(/"/g, '\\"')}"`;
+      const command = `cd ${escapedPath}\n`;
+      try {
+        activeSession.terminalManager.sendData(command);
+      } catch (error) {
+        console.error('[FavoritePathsModal] Failed to send command to active terminal:', error);
+      }
+    } else {
+      console.warn('[FavoritePathsModal] No active session with a terminal manager found to send path to.');
+    }
+    closeModal();
+  };
+
+  const closeModal = () => {
+    emit('close');
+  };
+
+  const updatePosition = () => {
+    if (!props.isVisible || !props.triggerElement || !modalContentRef.value) {
+      return;
+    }
+
+    const triggerRect = props.triggerElement.getBoundingClientRect();
+    const modalWidth = modalContentRef.value.offsetWidth;
+    const modalHeight = modalContentRef.value.offsetHeight;
+
+    // If dimensions are zero when modal is supposed to be visible,
+    // it might mean content affecting size isn't ready. Retry once.
+    if (modalWidth === 0 && modalHeight === 0 && props.isVisible) {
+      nextTick(updatePosition);
+      return;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let top = triggerRect.bottom + 2; // Default position below trigger, with a small 2px gap
+    let left = triggerRect.left;
+
+    // Check for bottom overflow
+    if (top + modalHeight + PADDING > viewportHeight) {
+      // Try to position above the trigger
+      top = triggerRect.top - modalHeight - 2; // Position above trigger, with a small 2px gap
+    }
+
+    // If positioning above also causes top overflow (e.g., trigger is near the top and modal is tall)
+    if (top < PADDING) {
+      top = PADDING; // Align to viewport top with padding
+      // Note: If modalHeight is still greater than viewportHeight - 2*PADDING,
+      // it will overflow downwards. The `max-h-80` class on the modal
+      // should generally prevent the modal itself from being excessively tall.
+    }
+
+    // Check for right overflow
+    if (left + modalWidth + PADDING > viewportWidth) {
+      left = viewportWidth - modalWidth - PADDING; // Align to viewport right edge
+    }
+
+    // Check for left overflow (less likely with initial left alignment to trigger, but good for robustness)
+    if (left < PADDING) {
+      left = PADDING; // Align to viewport left edge
+    }
+
+    modalStyle.value = {
+      position: 'fixed', // Position relative to the viewport
+      top: `${top}px`,
+      left: `${left}px`,
+    };
+  };
+
+  // --- Click Outside Logic ---
+  const handleClickOutside = (event: MouseEvent) => {
+    if (props.triggerElement && props.triggerElement.contains(event.target as Node)) {
+      return;
+    }
+
+    if (modalContentRef.value && !modalContentRef.value.contains(event.target as Node)) {
+      if (!showAddEditModal.value) {
+        closeModal();
+      }
+    }
+  };
+
+  watch(
+    () => props.isVisible,
+    (newValue: boolean) => {
+      if (newValue) {
+        searchTerm.value = '';
+        document.addEventListener('mousedown', handleClickOutside);
+        nextTick(() => {
+          // Ensure DOM is ready for measurements
+          updatePosition(); // Calculate initial position
+          window.addEventListener('resize', updatePosition); // Adjust position on window resize
+        });
+      } else {
+        document.removeEventListener('mousedown', handleClickOutside);
+        window.removeEventListener('resize', updatePosition); // Clean up resize listener
+      }
+    },
+  );
+
+  onMounted(() => {
+    if (props.isVisible) {
+      searchTerm.value = '';
+      document.addEventListener('mousedown', handleClickOutside);
+      nextTick(() => {
+        updatePosition();
+        window.addEventListener('resize', updatePosition);
+      });
+    }
+  });
+
+  onBeforeUnmount(() => {
     document.removeEventListener('mousedown', handleClickOutside);
-    window.removeEventListener('resize', updatePosition); // Clean up resize listener
-  }
-});
-
-onMounted(() => {
-  if (props.isVisible) {
-    searchTerm.value = ''; 
-    document.addEventListener('mousedown', handleClickOutside);
-    nextTick(() => { 
-      updatePosition();
-      window.addEventListener('resize', updatePosition);
-    });
-  }
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', handleClickOutside);
-  window.removeEventListener('resize', updatePosition); // Ensure resize listener is cleaned up
-});
-
+    window.removeEventListener('resize', updatePosition); // Ensure resize listener is cleaned up
+  });
 </script>
 
 <template>
@@ -251,13 +250,23 @@ onBeforeUnmount(() => {
 
       <!-- Path List -->
       <div class="overflow-y-auto flex-grow p-1 text-sm">
-        <div v-if="favoritePathsStore.isLoading && filteredPaths.length === 0" class="p-3 text-center text-text-secondary">
+        <div
+          v-if="favoritePathsStore.isLoading && filteredPaths.length === 0"
+          class="p-3 text-center text-text-secondary"
+        >
           <i class="fas fa-spinner fa-spin mr-1"></i>
           {{ t('favoritePaths.loading', 'Loading favorites...') }}
         </div>
-        <div v-else-if="!favoritePathsStore.isLoading && filteredPaths.length === 0" class="p-3 text-center text-text-secondary">
+        <div
+          v-else-if="!favoritePathsStore.isLoading && filteredPaths.length === 0"
+          class="p-3 text-center text-text-secondary"
+        >
           <i class="fas fa-star-half-alt mr-1"></i>
-          {{ searchTerm ? t('favoritePaths.noResults', 'No matching favorites found.') : t('favoritePaths.noFavorites', 'No favorite paths yet. Add one!') }}
+          {{
+            searchTerm
+              ? t('favoritePaths.noResults', 'No matching favorites found.')
+              : t('favoritePaths.noFavorites', 'No favorite paths yet. Add one!')
+          }}
         </div>
         <ul v-else-if="filteredPaths.length > 0" class="list-none m-0 p-0">
           <li
@@ -275,23 +284,28 @@ onBeforeUnmount(() => {
                 {{ favPath.path }}
               </p>
             </div>
-            <div class="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+            <div
+              class="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150"
+            >
               <button
                 @click.stop="handleSendToTerminal(favPath)"
                 class="p-1.5 rounded text-text-secondary hover:text-primary hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                :title="t('favoritePaths.sendToTerminal', 'Send to Terminal')">
+                :title="t('favoritePaths.sendToTerminal', 'Send to Terminal')"
+              >
                 <i class="fas fa-terminal text-xs"></i>
               </button>
               <button
                 @click.stop="openEditModal(favPath)"
                 class="p-1.5 rounded text-text-secondary hover:text-primary hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                :title="t('common.edit')">
+                :title="t('common.edit')"
+              >
                 <i class="fas fa-pencil-alt text-xs"></i>
               </button>
               <button
                 @click.stop="handleDelete(favPath)"
                 class="p-1.5 rounded text-text-secondary hover:text-error hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                :title="t('common.delete')">
+                :title="t('common.delete')"
+              >
                 <i class="fas fa-trash-alt text-xs"></i>
               </button>
             </div>
@@ -306,9 +320,12 @@ onBeforeUnmount(() => {
       :is-visible="showAddEditModal"
       :path-data="editingPathItem"
       @close="showAddEditModal = false"
-      @save-success="() => { favoritePathsStore.fetchFavoritePaths(t); showAddEditModal = false; }"
+      @save-success="
+        () => {
+          favoritePathsStore.fetchFavoritePaths(t);
+          showAddEditModal = false;
+        }
+      "
     />
-  </div> 
+  </div>
 </template>
-
-

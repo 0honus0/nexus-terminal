@@ -13,23 +13,22 @@ const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'functional-scr
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
 
-const result = spawnSync(
-  process.platform === 'win32' ? 'npx.cmd' : 'npx',
-  ['playwright', 'test'],
-  {
-    cwd: e2eRoot,
-    env: {
-      ...process.env,
-      E2E_CAPTURE_SCREENSHOTS: '1',
-      E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
-    },
-    stdio: 'inherit',
+const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test'], {
+  cwd: e2eRoot,
+  env: {
+    ...process.env,
+    E2E_CAPTURE_SCREENSHOTS: '1',
+    E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
   },
-);
+  stdio: 'inherit',
+});
 
 if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
 
-const actual = fs.readdirSync(stagingDir).filter((name) => name.endsWith('.png')).sort();
+const actual = fs
+  .readdirSync(stagingDir)
+  .filter((name) => name.endsWith('.png'))
+  .sort();
 const expected = [...manifest].sort();
 const missing = expected.filter((name) => !actual.includes(name));
 const unexpected = actual.filter((name) => !expected.includes(name));

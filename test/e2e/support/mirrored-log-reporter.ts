@@ -44,7 +44,9 @@ export default class MirroredLogReporter implements Reporter {
       }
     }
     this.totalSpecs = this.specOrder.size;
-    this.consoleLog(`[E2E] Starting ${suite.allTests().length} tests across ${this.totalSpecs} specs with ${config.workers} worker(s)`);
+    this.consoleLog(
+      `[E2E] Starting ${suite.allTests().length} tests across ${this.totalSpecs} specs with ${config.workers} worker(s)`,
+    );
   }
 
   onTestBegin(test: TestCase, result: TestResult) {
@@ -109,7 +111,10 @@ export default class MirroredLogReporter implements Reporter {
       this.specDurationsMs.set(spec, (this.specDurationsMs.get(spec) || 0) + result.duration);
     }
 
-    this.append(test, `\nstatus: ${result.status}\ndurationMs: ${result.duration}\nfinished: ${new Date().toISOString()}\n`);
+    this.append(
+      test,
+      `\nstatus: ${result.status}\ndurationMs: ${result.duration}\nfinished: ${new Date().toISOString()}\n`,
+    );
     if (result.error) {
       this.append(test, `\n[ERROR]\n${result.error.stack || result.error.message}\n`);
     }
@@ -121,15 +126,17 @@ export default class MirroredLogReporter implements Reporter {
     }
 
     if (
-      result.retry === 0
-      && test.expectedStatus === 'passed'
-      && (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')
+      result.retry === 0 &&
+      test.expectedStatus === 'passed' &&
+      (result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted')
     ) {
       this.unexpectedFirstAttempts.set(test.id, test.titlePath().filter(Boolean).join(' > '));
     }
 
     const marker = result.status === 'passed' ? '✓' : result.status === 'skipped' ? '○' : '✗';
-    this.consoleLog(`[E2E] ${marker} ${this.consoleTitle(test)} — ${result.status} (${this.formatDuration(result.duration)})`);
+    this.consoleLog(
+      `[E2E] ${marker} ${this.consoleTitle(test)} — ${result.status} (${this.formatDuration(result.duration)})`,
+    );
     if (result.error) {
       this.consoleLog(`[E2E]   error: ${this.singleLine(result.error.message)}`);
     }

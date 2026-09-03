@@ -1,31 +1,31 @@
 <script setup lang="ts">
-import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
-import { ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import type { UploadConflictDecision, UploadConflictPrompt } from '../composables/useFileUploader';
+  import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
+  import { ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import type { UploadConflictDecision, UploadConflictPrompt } from '../composables/useFileUploader';
 
-const props = defineProps<{
-  conflict: UploadConflictPrompt | null;
-}>();
+  const props = defineProps<{
+    conflict: UploadConflictPrompt | null;
+  }>();
 
-const emit = defineEmits<{
-  (e: 'resolve', decision: UploadConflictDecision, applyToAll: boolean): void;
-}>();
+  const emit = defineEmits<{
+    (e: 'resolve', decision: UploadConflictDecision, applyToAll: boolean): void;
+  }>();
 
-const { t } = useI18n();
-const applyToAll = ref(false);
+  const { t } = useI18n();
+  const applyToAll = ref(false);
 
-watch(
-  () => props.conflict?.uploadId,
-  () => {
-    applyToAll.value = false;
-  },
-);
+  watch(
+    () => props.conflict?.uploadId,
+    () => {
+      applyToAll.value = false;
+    },
+  );
 
-const resolve = (decision: UploadConflictDecision) => {
-  if (!props.conflict) return;
-  emit('resolve', decision, applyToAll.value);
-};
+  const resolve = (decision: UploadConflictDecision) => {
+    if (!props.conflict) return;
+    emit('resolve', decision, applyToAll.value);
+  };
 </script>
 
 <template>
@@ -46,7 +46,12 @@ const resolve = (decision: UploadConflictDecision) => {
             {{ t('fileManager.uploadConflict.title', 'File already exists') }}
           </h3>
           <p class="mt-1 text-sm text-text-secondary">
-            {{ t('fileManager.uploadConflict.description', 'A file with the same name already exists at the destination.') }}
+            {{
+              t(
+                'fileManager.uploadConflict.description',
+                'A file with the same name already exists at the destination.',
+              )
+            }}
           </p>
         </div>
       </div>
@@ -61,12 +66,7 @@ const resolve = (decision: UploadConflictDecision) => {
       </div>
 
       <label class="mb-5 flex cursor-pointer items-center gap-2 text-sm text-text-secondary">
-        <input
-          v-model="applyToAll"
-          data-testid="upload-conflict-apply-all"
-          type="checkbox"
-          class="accent-primary"
-        />
+        <input v-model="applyToAll" data-testid="upload-conflict-apply-all" type="checkbox" class="accent-primary" />
         {{ t('fileManager.uploadConflict.applyToAll', 'Use this choice for all remaining conflicts in this upload') }}
       </label>
 

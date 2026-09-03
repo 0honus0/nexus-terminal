@@ -10,7 +10,10 @@ import { slowStep, step } from '../../support/steps';
 
 const CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
-test('Docker manager UI renders remote containers, stats, and executes a container action', async ({ page, context }) => {
+test('Docker manager UI renders remote containers, stats, and executes a container action', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
@@ -51,18 +54,35 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
     await row.getByTestId('docker-stop').click();
 
-    await expect.poll(() => sentFrames.some((frame) => {
-      try {
-        const message = JSON.parse(frame);
-        return message.type === 'docker:command' && message.payload?.command === 'stop' && message.payload?.containerId === CONTAINER_ID;
-      } catch { return false; }
-    }), { timeout: 15_000 }).toBeTruthy();
+    await expect
+      .poll(
+        () =>
+          sentFrames.some((frame) => {
+            try {
+              const message = JSON.parse(frame);
+              return (
+                message.type === 'docker:command' &&
+                message.payload?.command === 'stop' &&
+                message.payload?.containerId === CONTAINER_ID
+              );
+            } catch {
+              return false;
+            }
+          }),
+        { timeout: 15_000 },
+      )
+      .toBeTruthy();
 
-    await expect.poll(async () => {
-      const response = await fetch('http://127.0.0.1:22223/commands');
-      if (!response.ok) return false;
-      const body = await response.json() as { commands: string[] };
-      return body.commands.includes(`docker stop ${CONTAINER_ID}`);
-    }, { timeout: 15_000 }).toBeTruthy();
+    await expect
+      .poll(
+        async () => {
+          const response = await fetch('http://127.0.0.1:22223/commands');
+          if (!response.ok) return false;
+          const body = (await response.json()) as { commands: string[] };
+          return body.commands.includes(`docker stop ${CONTAINER_ID}`);
+        },
+        { timeout: 15_000 },
+      )
+      .toBeTruthy();
   });
 });

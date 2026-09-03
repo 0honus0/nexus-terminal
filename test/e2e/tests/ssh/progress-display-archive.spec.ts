@@ -1,5 +1,12 @@
 import { expect, test } from '../../support/fixtures';
-import { configureSshE2eSettings, connectTestSshFromConnectionsPage, ensureTestSshConnection, reopenConnectedFileManager, resetTestSshFilesystem, E2E_SSH } from '../../support/ssh';
+import {
+  configureSshE2eSettings,
+  connectTestSshFromConnectionsPage,
+  ensureTestSshConnection,
+  reopenConnectedFileManager,
+  resetTestSshFilesystem,
+  E2E_SSH,
+} from '../../support/ssh';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { slowStep, step } from '../../support/steps';
 import {
@@ -16,14 +23,20 @@ import {
   row,
 } from './progress-display.helpers';
 
-test('registered archive progress supports hide, restore, and real cancel for compress and decompress', async ({ page, context }) => {
+test('registered archive progress supports hide, restore, and real cancel for compress and decompress', async ({
+  page,
+  context,
+}) => {
   await openFileManager(page, context);
 
   try {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=4500`, { method: 'POST' });
     await slowStep('compress task can hide, restore, hide again, and cancel from the shared list', async () => {
       await rightClickRow(page, 'archive-source.txt');
-      const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      const compress = menu(page)
+        .locator('li')
+        .filter({ hasText: /^Compress/ })
+        .first();
       await expect(compress).toBeVisible();
       await compress.hover();
       await page.getByText('Compress to zip', { exact: true }).click();
@@ -54,7 +67,10 @@ test('registered archive progress supports hide, restore, and real cancel for co
     await step('create a normal ZIP fixture for the decompression cancellation path', async () => {
       await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
       await rightClickRow(page, 'archive-source.txt');
-      const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      const compress = menu(page)
+        .locator('li')
+        .filter({ hasText: /^Compress/ })
+        .first();
       await compress.hover();
       await page.getByText('Compress to zip', { exact: true }).click();
       await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
@@ -68,27 +84,30 @@ test('registered archive progress supports hide, restore, and real cancel for co
 
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=1`, { method: 'POST' });
-    await slowStep('decompress task registers a real cancel callback and does not extract after cancellation', async () => {
-      await rightClickRow(page, 'archive-source.zip');
-      await clickMenuItem(page, 'Decompress');
-      const popup = page.getByTestId('archive-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await popup.getByTestId('archive-progress-hide').click();
-      await expect(popup).toBeHidden();
+    await slowStep(
+      'decompress task registers a real cancel callback and does not extract after cancellation',
+      async () => {
+        await rightClickRow(page, 'archive-source.zip');
+        await clickMenuItem(page, 'Decompress');
+        const popup = page.getByTestId('archive-progress-popup');
+        await expect(popup).toBeVisible({ timeout: 10_000 });
+        await popup.getByTestId('archive-progress-hide').click();
+        await expect(popup).toBeHidden();
 
-      const modal = await openProgressDisplay(page);
-      const task = hiddenTask(modal, 'archive-source.zip');
-      await expect(task).toContainText('Decompress');
-      await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
-      await task.getByTestId('hidden-progress-cancel').click();
-      await expect(task).toBeHidden({ timeout: 10_000 });
-      await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
-      await closeProgressDisplay(modal);
-      await reopenConnectedFileManager(page);
+        const modal = await openProgressDisplay(page);
+        const task = hiddenTask(modal, 'archive-source.zip');
+        await expect(task).toContainText('Decompress');
+        await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
+        await task.getByTestId('hidden-progress-cancel').click();
+        await expect(task).toBeHidden({ timeout: 10_000 });
+        await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
+        await closeProgressDisplay(modal);
+        await reopenConnectedFileManager(page);
 
-      await page.waitForTimeout(800);
-      await expect(row(page, 'archive-source.txt')).toHaveCount(0);
-    });
+        await page.waitForTimeout(800);
+        await expect(row(page, 'archive-source.txt')).toHaveCount(0);
+      },
+    );
 
     await step('Progress Display reopens with no hidden provider tasks', async () => {
       const modal = await openProgressDisplay(page);
@@ -101,11 +120,12 @@ test('registered archive progress supports hide, restore, and real cancel for co
   }
 });
 
-
 test('overlapping archive requests are rejected without retargeting the active task', async ({ page, context }) => {
   await openFileManager(page, context);
   const secondSource = 'archive-second.txt';
-  const fixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(secondSource)}&size=64`, { method: 'POST' });
+  const fixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(secondSource)}&size=64`, {
+    method: 'POST',
+  });
   expect(fixture.ok).toBeTruthy();
   await refreshFileManager(page);
   await expect(row(page, secondSource)).toBeVisible();
@@ -114,7 +134,10 @@ test('overlapping archive requests are rejected without retargeting the active t
   try {
     await slowStep('second archive request is rejected while the active task keeps ownership', async () => {
       await rightClickRow(page, 'archive-source.txt');
-      let compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      let compress = menu(page)
+        .locator('li')
+        .filter({ hasText: /^Compress/ })
+        .first();
       await compress.hover();
       await page.getByText('Compress to zip', { exact: true }).click();
 
@@ -124,7 +147,10 @@ test('overlapping archive requests are rejected without retargeting the active t
 
       await page.waitForTimeout(700);
       await rightClickRow(page, secondSource);
-      compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+      compress = menu(page)
+        .locator('li')
+        .filter({ hasText: /^Compress/ })
+        .first();
       await compress.hover();
       await page.getByText('Compress to zip', { exact: true }).click();
 
@@ -148,7 +174,10 @@ test('closing and reopening the file manager preserves an in-flight archive task
 
   try {
     await rightClickRow(page, 'archive-source.txt');
-    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    const compress = menu(page)
+      .locator('li')
+      .filter({ hasText: /^Compress/ })
+      .first();
     await compress.hover();
     await page.getByText('Compress to zip', { exact: true }).click();
 
@@ -169,7 +198,6 @@ test('closing and reopening the file manager preserves an in-flight archive task
   }
 });
 
-
 test('a sidebar FileManager can unmount without orphaning its hidden archive task', async ({ page, context }) => {
   test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
@@ -178,7 +206,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
   const connectionId = await ensureTestSshConnection(context.request);
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
   expect(originalSidebarResponse.ok()).toBeTruthy();
-  const originalSidebar = await originalSidebarResponse.json() as { left: string[]; right: string[] };
+  const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
 
   const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
     data: { left: originalSidebar.left, right: ['fileManager'] },
@@ -197,7 +225,10 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await expect(source).toBeVisible({ timeout: 20_000 });
 
     await source.click({ button: 'right' });
-    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    const compress = menu(page)
+      .locator('li')
+      .filter({ hasText: /^Compress/ })
+      .first();
     await compress.hover();
     await page.getByText('Compress to zip', { exact: true }).click();
 

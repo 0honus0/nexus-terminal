@@ -282,10 +282,20 @@ export function useWorkspaceSettings() {
       const rowsPerPage = spreadsheetPreviewRowsPerPageLocal.value;
       const columns = spreadsheetPreviewMaxColumnsLocal.value;
       if (!Number.isInteger(rowsPerPage) || rowsPerPage < 10 || rowsPerPage > 2000) {
-        throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidRows', 'Rows per page must be an integer between 10 and 2000.'));
+        throw new Error(
+          t(
+            'settings.workspace.spreadsheetPreviewLimits.invalidRows',
+            'Rows per page must be an integer between 10 and 2000.',
+          ),
+        );
       }
       if (!Number.isInteger(columns) || columns < 5 || columns > 200) {
-        throw new Error(t('settings.workspace.spreadsheetPreviewLimits.invalidColumns', 'Columns must be an integer between 5 and 200.'));
+        throw new Error(
+          t(
+            'settings.workspace.spreadsheetPreviewLimits.invalidColumns',
+            'Columns must be an integer between 5 and 200.',
+          ),
+        );
       }
       await settingsStore.updateMultipleSettings({
         spreadsheetPreviewRowsPerPage: String(rowsPerPage),
@@ -298,10 +308,9 @@ export function useWorkspaceSettings() {
       spreadsheetPreviewPaginationSuccess.value = true;
     } catch (error: any) {
       console.error('Failed to update spreadsheet preview pagination:', error);
-      spreadsheetPreviewPaginationMessage.value = error.message || t(
-        'settings.workspace.spreadsheetPreviewLimits.saveFailed',
-        'Failed to save spreadsheet preview settings.',
-      );
+      spreadsheetPreviewPaginationMessage.value =
+        error.message ||
+        t('settings.workspace.spreadsheetPreviewLimits.saveFailed', 'Failed to save spreadsheet preview settings.');
       spreadsheetPreviewPaginationSuccess.value = false;
     } finally {
       spreadsheetPreviewPaginationLoading.value = false;

@@ -13,15 +13,23 @@ test.describe('authenticated WebSocket', () => {
           resolve('timeout');
         }, 5_000);
 
-        socket.addEventListener('open', () => {
-          window.clearTimeout(timeout);
-          socket.close();
-          resolve('opened');
-        }, { once: true });
-        socket.addEventListener('error', () => {
-          window.clearTimeout(timeout);
-          resolve('rejected');
-        }, { once: true });
+        socket.addEventListener(
+          'open',
+          () => {
+            window.clearTimeout(timeout);
+            socket.close();
+            resolve('opened');
+          },
+          { once: true },
+        );
+        socket.addEventListener(
+          'error',
+          () => {
+            window.clearTimeout(timeout);
+            resolve('rejected');
+          },
+          { once: true },
+        );
       });
     });
 
@@ -47,15 +55,23 @@ test.describe('authenticated WebSocket', () => {
         }, 5_000);
 
         socket.addEventListener('open', () => socket.send('not-json'), { once: true });
-        socket.addEventListener('message', (event) => {
-          window.clearTimeout(timeout);
-          socket.close();
-          resolve(JSON.parse(String(event.data)) as { type?: string; payload?: unknown });
-        }, { once: true });
-        socket.addEventListener('error', () => {
-          window.clearTimeout(timeout);
-          reject(new Error('Authenticated WebSocket failed to open'));
-        }, { once: true });
+        socket.addEventListener(
+          'message',
+          (event) => {
+            window.clearTimeout(timeout);
+            socket.close();
+            resolve(JSON.parse(String(event.data)) as { type?: string; payload?: unknown });
+          },
+          { once: true },
+        );
+        socket.addEventListener(
+          'error',
+          () => {
+            window.clearTimeout(timeout);
+            reject(new Error('Authenticated WebSocket failed to open'));
+          },
+          { once: true },
+        );
       });
     });
 

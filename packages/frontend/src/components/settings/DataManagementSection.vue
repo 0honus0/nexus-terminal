@@ -1,5 +1,9 @@
 <template>
-  <div v-if="settings" data-testid="data-management-settings" class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
+  <div
+    v-if="settings"
+    data-testid="data-management-settings"
+    class="bg-background border border-border rounded-lg shadow-sm overflow-hidden"
+  >
     <h2 class="text-lg font-semibold text-foreground px-6 py-4 border-b border-border bg-header/50">
       {{ t('settings.category.dataManagement', '数据管理') }}
     </h2>
@@ -22,7 +26,7 @@
               required
               class="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="用于验证身份并加密备份包"
-            >
+            />
           </label>
           <div class="flex flex-wrap items-center gap-3">
             <button
@@ -58,7 +62,7 @@
               required
               class="block w-full text-sm text-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-button file:text-button-text hover:file:bg-button-hover"
               @change="handleBackupFileChange"
-            >
+            />
           </label>
           <label class="block max-w-md">
             <span class="block text-sm font-medium text-foreground mb-1">备份密码（跨实例时填写）</span>
@@ -69,7 +73,7 @@
               autocomplete="off"
               class="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="同一实例导入可留空"
-            >
+            />
           </label>
           <div class="flex flex-wrap items-center gap-3">
             <button
@@ -93,27 +97,27 @@
 </template>
 
 <script setup lang="ts">
-import { storeToRefs } from 'pinia';
-import { useI18n } from 'vue-i18n';
-import { useSettingsStore } from '../../stores/settings.store';
-import { useDataBackup } from '../../composables/settings/useDataBackup';
+  import { storeToRefs } from 'pinia';
+  import { useI18n } from 'vue-i18n';
+  import { useSettingsStore } from '../../stores/settings.store';
+  import { useDataBackup } from '../../composables/settings/useDataBackup';
 
-const settingsStore = useSettingsStore();
-const { settings } = storeToRefs(settingsStore);
-const { t } = useI18n();
+  const settingsStore = useSettingsStore();
+  const { settings } = storeToRefs(settingsStore);
+  const { t } = useI18n();
 
-const {
-  exportPassword,
-  exportLoading,
-  exportMessage,
-  exportSuccess,
-  importPassword,
-  selectedBackupFile,
-  importLoading,
-  importMessage,
-  importSuccess,
-  handleExportBackup,
-  handleBackupFileChange,
-  handleImportBackup,
-} = useDataBackup();
+  const {
+    exportPassword,
+    exportLoading,
+    exportMessage,
+    exportSuccess,
+    importPassword,
+    selectedBackupFile,
+    importLoading,
+    importMessage,
+    importSuccess,
+    handleExportBackup,
+    handleBackupFileChange,
+    handleImportBackup,
+  } = useDataBackup();
 </script>

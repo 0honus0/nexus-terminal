@@ -14,8 +14,8 @@ test('invalid password login stays unauthenticated and surfaces the login failur
     await page.locator('#username').fill(E2E_ADMIN.username);
     await page.locator('#password').fill(WRONG_PASSWORD);
 
-    const responsePromise = page.waitForResponse((response) =>
-      response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+    const responsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
     );
     await page.locator('form button[type="submit"]').click();
     const response = await responsePromise;
@@ -28,7 +28,7 @@ test('invalid password login stays unauthenticated and surfaces the login failur
   await step('the server session remains unauthenticated after the failed login', async () => {
     const status = await context.request.get('/api/v1/auth/status');
     expect(status.status()).toBe(401);
-    const body = await status.json() as { message?: string };
+    const body = (await status.json()) as { message?: string };
     expect(body.message).toBeTruthy();
   });
 });
@@ -39,8 +39,8 @@ test('navigation logout clears the server session and protects authenticated rou
 
   await step('logout from the authenticated navigation bar', async () => {
     await page.goto('/');
-    const logoutResponse = page.waitForResponse((response) =>
-      response.url().endsWith('/api/v1/auth/logout') && response.request().method() === 'POST',
+    const logoutResponse = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/auth/logout') && response.request().method() === 'POST',
     );
     await page.getByRole('link', { name: 'Logout', exact: true }).click();
     expect((await logoutResponse).ok()).toBeTruthy();
@@ -50,7 +50,7 @@ test('navigation logout clears the server session and protects authenticated rou
   await step('the session is cleared and a protected route redirects back to login', async () => {
     const status = await context.request.get('/api/v1/auth/status');
     expect(status.status()).toBe(401);
-    const body = await status.json() as { message?: string };
+    const body = (await status.json()) as { message?: string };
     expect(body.message).toBeTruthy();
 
     await page.goto('/settings');

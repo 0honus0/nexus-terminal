@@ -1,222 +1,236 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import type { FileListItem } from '../../types/sftp.types';
-import type { ParsedSpreadsheetMatch, ParsedSpreadsheetSheet } from '../../composables/file-preview/xlsxPreviewParser';
-import FilePreviewDialog from './FilePreviewDialog.vue';
-import PreviewSearchBar from './PreviewSearchBar.vue';
-import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
+  import { computed, nextTick, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import type { FileListItem } from '../../types/sftp.types';
+  import type {
+    ParsedSpreadsheetMatch,
+    ParsedSpreadsheetSheet,
+  } from '../../composables/file-preview/xlsxPreviewParser';
+  import FilePreviewDialog from './FilePreviewDialog.vue';
+  import PreviewSearchBar from './PreviewSearchBar.vue';
+  import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 
-interface WorkbookSearchMatch extends ParsedSpreadsheetMatch {
-  sheetIndex: number;
-}
-
-const props = withDefaults(defineProps<{
-  file: FileListItem;
-  sheets: ParsedSpreadsheetSheet[];
-  rowsPerPage: number;
-  active?: boolean;
-}>(), {
-  active: true,
-});
-
-const emit = defineEmits<{
-  close: [];
-}>();
-
-const { t } = useI18n();
-const activeIndex = ref(0);
-const currentPage = ref(1);
-const searchOpen = ref(false);
-const searchQuery = ref('');
-const searchMatches = ref<WorkbookSearchMatch[]>([]);
-const activeSearchIndex = ref(-1);
-const previewRootRef = ref<HTMLElement | null>(null);
-const scrollContainerRef = ref<HTMLElement | null>(null);
-const activeSheet = computed(() => props.sheets[activeIndex.value] ?? props.sheets[0]);
-const pageCount = computed(() => activeSheet.value
-  ? Math.max(1, Math.ceil(activeSheet.value.totalRows / props.rowsPerPage))
-  : 1);
-const activePage = computed(() => activeSheet.value?.getPage(currentPage.value - 1, props.rowsPerPage));
-const columnsTruncated = computed(() => Boolean(activeSheet.value && (
-  activeSheet.value.displayedColumns < activeSheet.value.totalColumns
-)));
-const pageRangeStart = computed(() => activePage.value && activePage.value.displayedRows > 0
-  ? activePage.value.startRow + 1
-  : 0);
-const pageRangeEnd = computed(() => activePage.value
-  ? activePage.value.startRow + activePage.value.displayedRows
-  : 0);
-const subtitle = computed(() => activeSheet.value
-  ? t('fileManager.preview.spreadsheetMeta', {
-      sheet: activeSheet.value.name,
-      rows: activeSheet.value.totalRows,
-      columns: activeSheet.value.totalColumns,
-    })
-  : t('fileManager.preview.spreadsheet', 'Spreadsheet'));
-const activeSearchMatch = computed(() => searchMatches.value[activeSearchIndex.value] ?? null);
-const currentSheetSearchMatchKeys = computed(() => {
-  const keys = new Set<string>();
-  for (const match of searchMatches.value) {
-    if (match.sheetIndex !== activeIndex.value) continue;
-    keys.add(`${match.rowIndex}:${match.columnIndex}`);
-  }
-  return keys;
-});
-
-const formatCell = (value: unknown): string => {
-  if (value === null || value === undefined) return '';
-  if (value instanceof Date) return value.toLocaleString();
-  return String(value);
-};
-
-const focusPreview = () => {
-  void nextTick(() => previewRootRef.value?.focus({ preventScroll: true }));
-};
-
-const resetScroll = () => {
-  const scrollContainer = scrollContainerRef.value;
-  if (scrollContainer) scrollContainer.scrollTo({ left: 0, top: 0, behavior: 'auto' });
-};
-
-const selectPage = (page: number) => {
-  currentPage.value = Math.min(pageCount.value, Math.max(1, Math.round(page)));
-  resetScroll();
-  focusPreview();
-};
-
-const previousPage = () => selectPage(currentPage.value - 1);
-const nextPage = () => selectPage(currentPage.value + 1);
-
-const handleGridKeydown = (event: KeyboardEvent) => {
-  if (event.altKey || event.ctrlKey || event.metaKey) return;
-  if (event.key === 'PageUp') {
-    event.preventDefault();
-    previousPage();
-    return;
-  }
-  if (event.key === 'PageDown') {
-    event.preventDefault();
-    nextPage();
-    return;
+  interface WorkbookSearchMatch extends ParsedSpreadsheetMatch {
+    sheetIndex: number;
   }
 
-  const scrollContainer = scrollContainerRef.value;
-  if (!scrollContainer) return;
+  const props = withDefaults(
+    defineProps<{
+      file: FileListItem;
+      sheets: ParsedSpreadsheetSheet[];
+      rowsPerPage: number;
+      active?: boolean;
+    }>(),
+    {
+      active: true,
+    },
+  );
 
-  const verticalStep = Math.max(48, Math.round(scrollContainer.clientHeight * 0.18));
-  const horizontalStep = Math.max(96, Math.round(scrollContainer.clientWidth * 0.18));
-  let left = 0;
-  let top = 0;
+  const emit = defineEmits<{
+    close: [];
+  }>();
 
-  switch (event.key) {
-    case 'ArrowUp': top = -verticalStep; break;
-    case 'ArrowDown': top = verticalStep; break;
-    case 'ArrowLeft': left = -horizontalStep; break;
-    case 'ArrowRight': left = horizontalStep; break;
-    default: return;
-  }
-
-  event.preventDefault();
-  scrollContainer.scrollBy({ left, top, behavior: 'auto' });
-};
-
-const selectSheet = (index: number) => {
-  if (index === activeIndex.value) return;
-  activeIndex.value = index;
-  currentPage.value = 1;
-  resetScroll();
-  focusPreview();
-};
-
-const scrollToSearchMatch = (match: WorkbookSearchMatch, behavior: ScrollBehavior = 'smooth') => {
-  activeIndex.value = match.sheetIndex;
-  currentPage.value = Math.floor(match.rowIndex / props.rowsPerPage) + 1;
-  void nextTick(() => {
-    const cell = scrollContainerRef.value?.querySelector<HTMLElement>(
-      `[data-spreadsheet-row-index="${match.rowIndex}"][data-spreadsheet-column-index="${match.columnIndex}"]`,
-    );
-    cell?.scrollIntoView({ block: 'center', inline: 'center', behavior });
+  const { t } = useI18n();
+  const activeIndex = ref(0);
+  const currentPage = ref(1);
+  const searchOpen = ref(false);
+  const searchQuery = ref('');
+  const searchMatches = ref<WorkbookSearchMatch[]>([]);
+  const activeSearchIndex = ref(-1);
+  const previewRootRef = ref<HTMLElement | null>(null);
+  const scrollContainerRef = ref<HTMLElement | null>(null);
+  const activeSheet = computed(() => props.sheets[activeIndex.value] ?? props.sheets[0]);
+  const pageCount = computed(() =>
+    activeSheet.value ? Math.max(1, Math.ceil(activeSheet.value.totalRows / props.rowsPerPage)) : 1,
+  );
+  const activePage = computed(() => activeSheet.value?.getPage(currentPage.value - 1, props.rowsPerPage));
+  const columnsTruncated = computed(() =>
+    Boolean(activeSheet.value && activeSheet.value.displayedColumns < activeSheet.value.totalColumns),
+  );
+  const pageRangeStart = computed(() =>
+    activePage.value && activePage.value.displayedRows > 0 ? activePage.value.startRow + 1 : 0,
+  );
+  const pageRangeEnd = computed(() =>
+    activePage.value ? activePage.value.startRow + activePage.value.displayedRows : 0,
+  );
+  const subtitle = computed(() =>
+    activeSheet.value
+      ? t('fileManager.preview.spreadsheetMeta', {
+          sheet: activeSheet.value.name,
+          rows: activeSheet.value.totalRows,
+          columns: activeSheet.value.totalColumns,
+        })
+      : t('fileManager.preview.spreadsheet', 'Spreadsheet'),
+  );
+  const activeSearchMatch = computed(() => searchMatches.value[activeSearchIndex.value] ?? null);
+  const currentSheetSearchMatchKeys = computed(() => {
+    const keys = new Set<string>();
+    for (const match of searchMatches.value) {
+      if (match.sheetIndex !== activeIndex.value) continue;
+      keys.add(`${match.rowIndex}:${match.columnIndex}`);
+    }
+    return keys;
   });
-};
 
-const activateSearchIndex = (index: number, behavior: ScrollBehavior = 'smooth') => {
-  const count = searchMatches.value.length;
-  if (count === 0) {
-    activeSearchIndex.value = -1;
-    return;
-  }
-  activeSearchIndex.value = ((index % count) + count) % count;
-  scrollToSearchMatch(searchMatches.value[activeSearchIndex.value], behavior);
-};
+  const formatCell = (value: unknown): string => {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date) return value.toLocaleString();
+    return String(value);
+  };
 
-const refreshSpreadsheetSearch = (behavior: ScrollBehavior = 'auto') => {
-  const query = searchQuery.value.trim();
-  if (!query) {
+  const focusPreview = () => {
+    void nextTick(() => previewRootRef.value?.focus({ preventScroll: true }));
+  };
+
+  const resetScroll = () => {
+    const scrollContainer = scrollContainerRef.value;
+    if (scrollContainer) scrollContainer.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+  };
+
+  const selectPage = (page: number) => {
+    currentPage.value = Math.min(pageCount.value, Math.max(1, Math.round(page)));
+    resetScroll();
+    focusPreview();
+  };
+
+  const previousPage = () => selectPage(currentPage.value - 1);
+  const nextPage = () => selectPage(currentPage.value + 1);
+
+  const handleGridKeydown = (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === 'PageUp') {
+      event.preventDefault();
+      previousPage();
+      return;
+    }
+    if (event.key === 'PageDown') {
+      event.preventDefault();
+      nextPage();
+      return;
+    }
+
+    const scrollContainer = scrollContainerRef.value;
+    if (!scrollContainer) return;
+
+    const verticalStep = Math.max(48, Math.round(scrollContainer.clientHeight * 0.18));
+    const horizontalStep = Math.max(96, Math.round(scrollContainer.clientWidth * 0.18));
+    let left = 0;
+    let top = 0;
+
+    switch (event.key) {
+      case 'ArrowUp':
+        top = -verticalStep;
+        break;
+      case 'ArrowDown':
+        top = verticalStep;
+        break;
+      case 'ArrowLeft':
+        left = -horizontalStep;
+        break;
+      case 'ArrowRight':
+        left = horizontalStep;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    scrollContainer.scrollBy({ left, top, behavior: 'auto' });
+  };
+
+  const selectSheet = (index: number) => {
+    if (index === activeIndex.value) return;
+    activeIndex.value = index;
+    currentPage.value = 1;
+    resetScroll();
+    focusPreview();
+  };
+
+  const scrollToSearchMatch = (match: WorkbookSearchMatch, behavior: ScrollBehavior = 'smooth') => {
+    activeIndex.value = match.sheetIndex;
+    currentPage.value = Math.floor(match.rowIndex / props.rowsPerPage) + 1;
+    void nextTick(() => {
+      const cell = scrollContainerRef.value?.querySelector<HTMLElement>(
+        `[data-spreadsheet-row-index="${match.rowIndex}"][data-spreadsheet-column-index="${match.columnIndex}"]`,
+      );
+      cell?.scrollIntoView({ block: 'center', inline: 'center', behavior });
+    });
+  };
+
+  const activateSearchIndex = (index: number, behavior: ScrollBehavior = 'smooth') => {
+    const count = searchMatches.value.length;
+    if (count === 0) {
+      activeSearchIndex.value = -1;
+      return;
+    }
+    activeSearchIndex.value = ((index % count) + count) % count;
+    scrollToSearchMatch(searchMatches.value[activeSearchIndex.value], behavior);
+  };
+
+  const refreshSpreadsheetSearch = (behavior: ScrollBehavior = 'auto') => {
+    const query = searchQuery.value.trim();
+    if (!query) {
+      searchMatches.value = [];
+      activeSearchIndex.value = -1;
+      return;
+    }
+
+    const matches: WorkbookSearchMatch[] = [];
+    const limit = 10_000;
+    for (let sheetIndex = 0; sheetIndex < props.sheets.length && matches.length < limit; sheetIndex += 1) {
+      const remaining = limit - matches.length;
+      matches.push(
+        ...props.sheets[sheetIndex].findMatches(query, remaining).map((match) => ({
+          ...match,
+          sheetIndex,
+        })),
+      );
+    }
+    searchMatches.value = matches;
+    if (matches.length > 0) activateSearchIndex(0, behavior);
+    else activeSearchIndex.value = -1;
+  };
+
+  const updateSearchQuery = (value: string) => {
+    searchQuery.value = value;
+    refreshSpreadsheetSearch();
+  };
+
+  const openSearch = () => {
+    searchOpen.value = true;
+  };
+
+  const closeSearch = () => {
+    searchOpen.value = false;
+    searchQuery.value = '';
     searchMatches.value = [];
     activeSearchIndex.value = -1;
-    return;
-  }
+    focusPreview();
+  };
 
-  const matches: WorkbookSearchMatch[] = [];
-  const limit = 10_000;
-  for (let sheetIndex = 0; sheetIndex < props.sheets.length && matches.length < limit; sheetIndex += 1) {
-    const remaining = limit - matches.length;
-    matches.push(...props.sheets[sheetIndex].findMatches(query, remaining).map((match) => ({
-      ...match,
-      sheetIndex,
-    })));
-  }
-  searchMatches.value = matches;
-  if (matches.length > 0) activateSearchIndex(0, behavior);
-  else activeSearchIndex.value = -1;
-};
+  const nextSearchMatch = () => activateSearchIndex(activeSearchIndex.value + 1);
+  const previousSearchMatch = () => activateSearchIndex(activeSearchIndex.value - 1);
 
-const updateSearchQuery = (value: string) => {
-  searchQuery.value = value;
-  refreshSpreadsheetSearch();
-};
+  watch(
+    () => props.sheets,
+    (nextSheets, previousSheets) => {
+      const previousName = previousSheets[activeIndex.value]?.name;
+      const matchingIndex = previousName ? nextSheets.findIndex((sheet) => sheet.name === previousName) : -1;
+      activeIndex.value =
+        matchingIndex >= 0 ? matchingIndex : Math.min(activeIndex.value, Math.max(0, nextSheets.length - 1));
+      if (searchQuery.value.trim()) refreshSpreadsheetSearch();
+    },
+  );
 
-const openSearch = () => {
-  searchOpen.value = true;
-};
+  watch(pageCount, (count) => {
+    if (currentPage.value > count) currentPage.value = count;
+  });
 
-const closeSearch = () => {
-  searchOpen.value = false;
-  searchQuery.value = '';
-  searchMatches.value = [];
-  activeSearchIndex.value = -1;
-  focusPreview();
-};
-
-const nextSearchMatch = () => activateSearchIndex(activeSearchIndex.value + 1);
-const previousSearchMatch = () => activateSearchIndex(activeSearchIndex.value - 1);
-
-watch(() => props.sheets, (nextSheets, previousSheets) => {
-  const previousName = previousSheets[activeIndex.value]?.name;
-  const matchingIndex = previousName
-    ? nextSheets.findIndex((sheet) => sheet.name === previousName)
-    : -1;
-  activeIndex.value = matchingIndex >= 0
-    ? matchingIndex
-    : Math.min(activeIndex.value, Math.max(0, nextSheets.length - 1));
-  if (searchQuery.value.trim()) refreshSpreadsheetSearch();
-});
-
-watch(pageCount, (count) => {
-  if (currentPage.value > count) currentPage.value = count;
-});
-
-onMounted(() => window.setTimeout(focusPreview, 0));
+  onMounted(() => window.setTimeout(focusPreview, 0));
 </script>
 
 <template>
-  <FilePreviewDialog
-    :file="props.file"
-    :subtitle="subtitle"
-    :active="props.active"
-    @close="emit('close')"
-  >
+  <FilePreviewDialog :file="props.file" :subtitle="subtitle" :active="props.active" @close="emit('close')">
     <template #toolbar>
       <PreviewSearchBar
         :open="searchOpen"
@@ -254,7 +268,9 @@ onMounted(() => window.setTimeout(focusPreview, 0));
               :class="{ 'spreadsheet-header-row': currentPage === 1 && rowIndex === 0 }"
               :style="activePage.rowHeights[rowIndex] ? { height: `${activePage.rowHeights[rowIndex]}px` } : undefined"
             >
-              <th class="sticky left-0 z-10 w-12 min-w-12 border-b border-r border-border bg-header px-2 py-1.5 text-right font-normal text-text-secondary">
+              <th
+                class="sticky left-0 z-10 w-12 min-w-12 border-b border-r border-border bg-header px-2 py-1.5 text-right font-normal text-text-secondary"
+              >
                 {{ activePage.startRow + rowIndex + 1 }}
               </th>
               <td
@@ -262,16 +278,24 @@ onMounted(() => window.setTimeout(focusPreview, 0));
                 :key="columnIndex"
                 class="max-w-80 whitespace-pre-wrap border-b border-r border-border px-2 py-1.5 align-top"
                 :class="{
-                  'spreadsheet-search-match': currentSheetSearchMatchKeys.has(`${((currentPage - 1) * props.rowsPerPage) + rowIndex}:${columnIndex}`),
-                  'spreadsheet-search-active': activeSearchMatch?.sheetIndex === activeIndex
-                    && activeSearchMatch?.rowIndex === ((currentPage - 1) * props.rowsPerPage) + rowIndex
-                    && activeSearchMatch?.columnIndex === columnIndex,
+                  'spreadsheet-search-match': currentSheetSearchMatchKeys.has(
+                    `${(currentPage - 1) * props.rowsPerPage + rowIndex}:${columnIndex}`,
+                  ),
+                  'spreadsheet-search-active':
+                    activeSearchMatch?.sheetIndex === activeIndex &&
+                    activeSearchMatch?.rowIndex === (currentPage - 1) * props.rowsPerPage + rowIndex &&
+                    activeSearchMatch?.columnIndex === columnIndex,
                 }"
-                :data-spreadsheet-row-index="((currentPage - 1) * props.rowsPerPage) + rowIndex"
+                :data-spreadsheet-row-index="(currentPage - 1) * props.rowsPerPage + rowIndex"
                 :data-spreadsheet-column-index="columnIndex"
-                :style="activeSheet.columnWidths[columnIndex]
-                  ? { width: `${activeSheet.columnWidths[columnIndex]}px`, minWidth: `${activeSheet.columnWidths[columnIndex]}px` }
-                  : undefined"
+                :style="
+                  activeSheet.columnWidths[columnIndex]
+                    ? {
+                        width: `${activeSheet.columnWidths[columnIndex]}px`,
+                        minWidth: `${activeSheet.columnWidths[columnIndex]}px`,
+                      }
+                    : undefined
+                "
                 :title="formatCell(cell)"
               >
                 {{ formatCell(cell) }}
@@ -286,11 +310,13 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           role="status"
           class="sticky bottom-0 border-t border-border bg-header/95 px-4 py-2 text-xs text-text-secondary backdrop-blur"
         >
-          {{ t('fileManager.preview.spreadsheetLimited', {
-            displayedColumns: activeSheet.displayedColumns,
-            totalColumns: activeSheet.totalColumns,
-            totalRows: activeSheet.totalRows,
-          }) }}
+          {{
+            t('fileManager.preview.spreadsheetLimited', {
+              displayedColumns: activeSheet.displayedColumns,
+              totalColumns: activeSheet.totalColumns,
+              totalRows: activeSheet.totalRows,
+            })
+          }}
         </div>
       </div>
 
@@ -298,15 +324,14 @@ onMounted(() => window.setTimeout(focusPreview, 0));
         data-testid="spreadsheet-pagination"
         class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-header px-2 py-1.5 text-xs sm:gap-3 sm:px-3"
       >
-        <span
-          data-testid="spreadsheet-page-range"
-          class="min-w-0 truncate text-text-secondary"
-        >
-          {{ t('fileManager.preview.spreadsheetPageRange', {
-            start: pageRangeStart,
-            end: pageRangeEnd,
-            total: activeSheet.totalRows,
-          }) }}
+        <span data-testid="spreadsheet-page-range" class="min-w-0 truncate text-text-secondary">
+          {{
+            t('fileManager.preview.spreadsheetPageRange', {
+              start: pageRangeStart,
+              end: pageRangeEnd,
+              total: activeSheet.totalRows,
+            })
+          }}
         </span>
         <div class="flex shrink-0 items-center gap-2">
           <button
@@ -321,7 +346,9 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           </button>
           <span class="text-text-secondary">
             {{ t('fileManager.preview.spreadsheetPage', 'Page') }}
-            <strong data-testid="spreadsheet-current-page" class="font-medium text-foreground">{{ currentPage }}</strong>
+            <strong data-testid="spreadsheet-current-page" class="font-medium text-foreground">{{
+              currentPage
+            }}</strong>
             /
             <strong data-testid="spreadsheet-page-count" class="font-medium text-foreground">{{ pageCount }}</strong>
           </span>
@@ -349,9 +376,11 @@ onMounted(() => window.setTimeout(focusPreview, 0));
           type="button"
           :data-testid="`spreadsheet-sheet-${index}`"
           class="min-h-11 max-w-48 shrink-0 truncate rounded border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-primary sm:min-h-0"
-          :class="index === activeIndex
-            ? 'border-primary bg-primary/15 text-primary'
-            : 'border-border bg-background text-text-secondary hover:bg-border hover:text-foreground'"
+          :class="
+            index === activeIndex
+              ? 'border-primary bg-primary/15 text-primary'
+              : 'border-border bg-background text-text-secondary hover:bg-border hover:text-foreground'
+          "
           :title="sheet.name"
           :aria-pressed="index === activeIndex"
           @click="selectSheet(index)"
@@ -371,53 +400,53 @@ onMounted(() => window.setTimeout(focusPreview, 0));
 </template>
 
 <style scoped>
-.spreadsheet-preview td {
-  min-width: 7rem;
-}
+  .spreadsheet-preview td {
+    min-width: 7rem;
+  }
 
-.spreadsheet-preview .spreadsheet-header-row td {
-  background: color-mix(in srgb, var(--color-header) 80%, transparent);
-  font-weight: 600;
-}
+  .spreadsheet-preview .spreadsheet-header-row td {
+    background: color-mix(in srgb, var(--color-header) 80%, transparent);
+    font-weight: 600;
+  }
 
-.spreadsheet-preview td.spreadsheet-search-match {
-  background: color-mix(in srgb, var(--color-warning) 35%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 55%, transparent);
-}
+  .spreadsheet-preview td.spreadsheet-search-match {
+    background: color-mix(in srgb, var(--color-warning) 35%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 55%, transparent);
+  }
 
-.spreadsheet-preview td.spreadsheet-search-active {
-  background: color-mix(in srgb, var(--color-primary) 30%, transparent);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-primary) 80%, transparent);
-}
+  .spreadsheet-preview td.spreadsheet-search-active {
+    background: color-mix(in srgb, var(--color-primary) 30%, transparent);
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-primary) 80%, transparent);
+  }
 
-.spreadsheet-scroll-container {
-  scrollbar-gutter: stable;
-  scrollbar-width: auto;
-}
+  .spreadsheet-scroll-container {
+    scrollbar-gutter: stable;
+    scrollbar-width: auto;
+  }
 
-.spreadsheet-scroll-container::-webkit-scrollbar {
-  width: 13px;
-  height: 13px;
-}
+  .spreadsheet-scroll-container::-webkit-scrollbar {
+    width: 13px;
+    height: 13px;
+  }
 
-.spreadsheet-scroll-container::-webkit-scrollbar-track {
-  background: color-mix(in srgb, var(--color-header) 75%, transparent);
-}
+  .spreadsheet-scroll-container::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--color-header) 75%, transparent);
+  }
 
-.spreadsheet-scroll-container::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-color-secondary) 48%, transparent);
-  border: 3px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
-}
+  .spreadsheet-scroll-container::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--text-color-secondary) 48%, transparent);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
 
-.spreadsheet-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-color-secondary) 70%, transparent);
-  border: 3px solid transparent;
-  background-clip: padding-box;
-}
+  .spreadsheet-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--text-color-secondary) 70%, transparent);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
 
-.spreadsheet-sheet-tabs {
-  scrollbar-width: thin;
-}
+  .spreadsheet-sheet-tabs {
+    scrollbar-width: thin;
+  }
 </style>

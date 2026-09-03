@@ -35,30 +35,33 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await expect(popup).toBeHidden();
     });
 
-    await step('Progress Display lists a compact hidden task with progress and Restore returns the window', async () => {
-      const modal = await openProgressDisplay(page);
-      const task = hiddenTask(modal, filename);
-      await expect(task).toBeVisible();
-      await expect(task).toContainText('Upload');
-      await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
-      await expect(task.getByTestId('hidden-progress-percent')).toBeVisible();
-      await expect(task.locator('[data-progress-session]')).toHaveCount(0);
-      const source = hiddenSource(modal, filename);
-      await expect(source).toBeVisible();
-      await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
-      await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
+    await step(
+      'Progress Display lists a compact hidden task with progress and Restore returns the window',
+      async () => {
+        const modal = await openProgressDisplay(page);
+        const task = hiddenTask(modal, filename);
+        await expect(task).toBeVisible();
+        await expect(task).toContainText('Upload');
+        await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
+        await expect(task.getByTestId('hidden-progress-percent')).toBeVisible();
+        await expect(task.locator('[data-progress-session]')).toHaveCount(0);
+        const source = hiddenSource(modal, filename);
+        await expect(source).toBeVisible();
+        await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
+        await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
 
-      await source.getByTestId('hidden-progress-restore').click();
-      const popup = page.getByTestId('file-upload-progress-popup');
-      await expect(modal).toBeHidden();
-      await reopenConnectedFileManager(page);
-      await expect(popup).toBeVisible();
+        await source.getByTestId('hidden-progress-restore').click();
+        const popup = page.getByTestId('file-upload-progress-popup');
+        await expect(modal).toBeHidden();
+        await reopenConnectedFileManager(page);
+        await expect(popup).toBeVisible();
 
-      await popup.getByTestId('file-upload-progress-hide').click();
-      await expect(popup).toBeHidden();
-      const reopenedModal = await openProgressDisplay(page);
-      await expect(hiddenTask(reopenedModal, filename)).toBeVisible();
-    });
+        await popup.getByTestId('file-upload-progress-hide').click();
+        await expect(popup).toBeHidden();
+        const reopenedModal = await openProgressDisplay(page);
+        await expect(hiddenTask(reopenedModal, filename)).toBeVisible();
+      },
+    );
 
     await slowStep('Cancel invokes the upload provider cancel callback and removes the hidden task', async () => {
       const modal = page.getByTestId('progress-display-modal');
@@ -80,7 +83,9 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
 test('registered copy progress hides and cancels through the shared Progress Display', async ({ page, context }) => {
   await openFileManager(page, context);
   const sourceName = 'progress-center-copy.bin';
-  await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${10 * 1024 * 1024}`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${10 * 1024 * 1024}`, {
+    method: 'POST',
+  });
   await refreshFileManager(page);
   await expect(row(page, sourceName)).toBeVisible();
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=160`, { method: 'POST' });

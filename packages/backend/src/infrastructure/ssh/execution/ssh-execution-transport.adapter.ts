@@ -87,11 +87,14 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
         resolve(shell);
       };
       if (request) {
-        this.client.shell({
-          term: request.term ?? 'xterm-256color',
-          cols: request.columns ?? 80,
-          rows: request.rows ?? 24,
-        }, callback);
+        this.client.shell(
+          {
+            term: request.term ?? 'xterm-256color',
+            cols: request.columns ?? 80,
+            rows: request.rows ?? 24,
+          },
+          callback,
+        );
       } else {
         this.client.shell(callback);
       }
@@ -134,7 +137,11 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
       const timeout = setTimeout(finish, 1000);
       timeout.unref?.();
       this.client.once('close', finish);
-      try { this.client.end(); } catch { finish(); }
+      try {
+        this.client.end();
+      } catch {
+        finish();
+      }
     });
   }
 
@@ -161,7 +168,8 @@ const executeBoundedCommand = (client: Client, request: CommandRequest): Promise
   const signal = request.signal;
 
   if (!request.command?.trim()) return Promise.reject(new Error('Command must be a non-empty string.'));
-  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) return Promise.reject(new Error('timeoutMs must be a positive integer.'));
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0)
+    return Promise.reject(new Error('timeoutMs must be a positive integer.'));
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes <= 0) {
     return Promise.reject(new Error('maxOutputBytes must be a positive integer.'));
   }
@@ -174,7 +182,10 @@ const executeBoundedCommand = (client: Client, request: CommandRequest): Promise
     let stderr: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let truncated = false;
 
-    const append = (current: Buffer<ArrayBufferLike>, input: Buffer<ArrayBufferLike> | string): Buffer<ArrayBufferLike> => {
+    const append = (
+      current: Buffer<ArrayBufferLike>,
+      input: Buffer<ArrayBufferLike> | string,
+    ): Buffer<ArrayBufferLike> => {
       const chunk = Buffer.isBuffer(input) ? input : Buffer.from(input);
       if (current.length >= maxOutputBytes) {
         truncated = true;
@@ -209,8 +220,16 @@ const executeBoundedCommand = (client: Client, request: CommandRequest): Promise
     };
     const terminateChannel = () => {
       if (!channel || channel.destroyed) return;
-      try { channel.signal('TERM'); } catch { /* optional remote capability */ }
-      try { channel.close(); } catch { channel.destroy(); }
+      try {
+        channel.signal('TERM');
+      } catch {
+        /* optional remote capability */
+      }
+      try {
+        channel.close();
+      } catch {
+        channel.destroy();
+      }
     };
     const onAbort = () => {
       settleReject(new DOMException('SSH command aborted.', 'AbortError'));
@@ -227,7 +246,11 @@ const executeBoundedCommand = (client: Client, request: CommandRequest): Promise
 
     client.exec(request.command, (error, stream) => {
       if (settled) {
-        try { stream?.close(); } catch { stream?.destroy(); }
+        try {
+          stream?.close();
+        } catch {
+          stream?.destroy();
+        }
         return;
       }
       if (error) {
@@ -235,9 +258,15 @@ const executeBoundedCommand = (client: Client, request: CommandRequest): Promise
         return;
       }
       channel = stream;
-      stream.on('data', (chunk: Buffer | string) => { stdout = append(stdout, chunk); });
-      stream.stderr.on('data', (chunk: Buffer | string) => { stderr = append(stderr, chunk); });
-      stream.once('error', (streamError: Error) => settleReject(new CommandExecutionError(streamError.message, result(-1))));
+      stream.on('data', (chunk: Buffer | string) => {
+        stdout = append(stdout, chunk);
+      });
+      stream.stderr.on('data', (chunk: Buffer | string) => {
+        stderr = append(stderr, chunk);
+      });
+      stream.once('error', (streamError: Error) =>
+        settleReject(new CommandExecutionError(streamError.message, result(-1))),
+      );
       stream.once('close', (code: number | undefined, exitSignal: string | undefined) => {
         const exitCode = typeof code === 'number' ? code : 0;
         const finalResult = result(exitCode, exitSignal);

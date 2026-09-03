@@ -14,17 +14,22 @@ const EDITED_NAME = 'E2E Managed Quick Command Edited';
 async function cleanupCommands(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/quick-commands');
   expect(response.ok()).toBeTruthy();
-  const commands = await response.json() as Array<{ id: number; name?: string }>;
+  const commands = (await response.json()) as Array<{ id: number; name?: string }>;
   for (const command of commands.filter((item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME)) {
     const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
     expect(remove.ok()).toBeTruthy();
   }
 }
 
-async function findCommand(request: APIRequestContext, name: string): Promise<{ id: number; command: string; usage_count?: number } | undefined> {
+async function findCommand(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ id: number; command: string; usage_count?: number } | undefined> {
   const response = await request.get('/api/v1/quick-commands');
   expect(response.ok()).toBeTruthy();
-  return (await response.json() as Array<{ id: number; name?: string; command: string; usage_count?: number }>).find((item) => item.name === name);
+  return ((await response.json()) as Array<{ id: number; name?: string; command: string; usage_count?: number }>).find(
+    (item) => item.name === name,
+  );
 }
 
 function markerCount(text: string, marker: string): number {
@@ -55,7 +60,9 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await form.getByTestId('quick-command-submit').click();
     await expect(form).toBeHidden({ timeout: 15_000 });
 
-    await expect.poll(async () => (await findCommand(context.request, ORIGINAL_NAME))?.id ?? 0, { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect
+      .poll(async () => (await findCommand(context.request, ORIGINAL_NAME))?.id ?? 0, { timeout: 15_000 })
+      .toBeGreaterThan(0);
     commandId = (await findCommand(context.request, ORIGINAL_NAME))!.id;
   });
 
@@ -66,8 +73,12 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await expect(row).toBeVisible();
     const before = markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1');
     await row.click();
-    await expect.poll(async () => markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1'), { timeout: 15_000 }).toBeGreaterThan(before);
-    await expect.poll(async () => Number((await findCommand(context.request, ORIGINAL_NAME))?.usage_count ?? 0)).toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(async () => markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1'), { timeout: 15_000 })
+      .toBeGreaterThan(before);
+    await expect
+      .poll(async () => Number((await findCommand(context.request, ORIGINAL_NAME))?.usage_count ?? 0))
+      .toBeGreaterThanOrEqual(1);
   });
 
   await step('edit updates both the name and command body', async () => {
@@ -84,7 +95,8 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await form.getByTestId('quick-command-submit').click();
     await expect(form).toBeHidden({ timeout: 15_000 });
 
-    await expect.poll(async () => (await findCommand(context.request, EDITED_NAME))?.command ?? '', { timeout: 15_000 })
+    await expect
+      .poll(async () => (await findCommand(context.request, EDITED_NAME))?.command ?? '', { timeout: 15_000 })
       .toContain('QUICK_MANAGED_V2');
   });
 

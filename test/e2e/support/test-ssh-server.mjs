@@ -18,7 +18,9 @@ const archivePreflightHoldPath = path.join(e2eRoot, '.tmp', 'archive-preflight-h
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
 const {
   Server,
-  utils: { sftp: { OPEN_MODE, STATUS_CODE } },
+  utils: {
+    sftp: { OPEN_MODE, STATUS_CODE },
+  },
 } = requireFromBackend('ssh2');
 const { ZipArchive } = requireFromBackend('archiver');
 
@@ -149,21 +151,25 @@ async function writeXlsxFixture(destination, variant = 'default') {
       for (let column = 0; column < columns; column += 1) {
         const ref = `${columnName(column)}${row}`;
         let value = `${sheetLabel}-${ref}`;
-        if (sheetLabel === 'E2E' && ref === 'A2') value = variant === 'refresh' ? 'Nexus XLSX Refreshed' : 'Nexus XLSX E2E';
+        if (sheetLabel === 'E2E' && ref === 'A2')
+          value = variant === 'refresh' ? 'Nexus XLSX Refreshed' : 'Nexus XLSX E2E';
         if (sheetLabel === 'E2E' && ref === 'B2') {
           cells.push(`<c r="${ref}"><v>2026</v></c>`);
           continue;
         }
-        if (sheetLabel === 'Second' && ref === 'A1') value = variant === 'refresh' ? 'Second Sheet Refreshed' : 'Second Sheet E2E';
+        if (sheetLabel === 'Second' && ref === 'A1')
+          value = variant === 'refresh' ? 'Second Sheet Refreshed' : 'Second Sheet E2E';
         cells.push(`<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`);
       }
       rowXml.push(`<row r="${row}">${cells.join('')}</row>`);
     }
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-      + `<dimension ref="A1:${columnName(columns - 1)}${rows}"/><sheetData>`
-      + rowXml.join('')
-      + '</sheetData></worksheet>';
+    return (
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      `<dimension ref="A1:${columnName(columns - 1)}${rows}"/><sheetData>` +
+      rowXml.join('') +
+      '</sheetData></worksheet>'
+    );
   };
 
   await new Promise((resolve, reject) => {
@@ -174,37 +180,37 @@ async function writeXlsxFixture(destination, variant = 'default') {
     archive.on('error', reject);
     archive.pipe(output);
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-      + '<Default Extension="xml" ContentType="application/xml"/>'
-      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-      + '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-      + '</Types>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        '</Types>',
       { name: '[Content_Types].xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
-      + '</Relationships>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+        '</Relationships>',
       { name: '_rels/.rels' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
-      + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-      + '<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/>'
-      + '<sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+        '<sheets><sheet name="E2E" sheetId="1" r:id="rId1"/>' +
+        '<sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>',
       { name: 'xl/workbook.xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
-      + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
-      + '</Relationships>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
+        '</Relationships>',
       { name: 'xl/_rels/workbook.xml.rels' },
     );
     archive.append(buildWorksheetXml('E2E'), { name: 'xl/worksheets/sheet1.xml' });
@@ -214,12 +220,13 @@ async function writeXlsxFixture(destination, variant = 'default') {
 }
 
 async function writeCompactXlsxFixture(destination) {
-  const worksheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    + '<dimension ref="A1:B2"/><sheetData>'
-    + '<row r="1"><c r="A1" t="inlineStr"><is><t>Compact A1</t></is></c><c r="B1" t="inlineStr"><is><t>Compact B1</t></is></c></row>'
-    + '<row r="2"><c r="A2" t="inlineStr"><is><t>Compact A2</t></is></c><c r="B2" t="inlineStr"><is><t>Compact B2</t></is></c></row>'
-    + '</sheetData></worksheet>';
+  const worksheetXml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<dimension ref="A1:B2"/><sheetData>' +
+    '<row r="1"><c r="A1" t="inlineStr"><is><t>Compact A1</t></is></c><c r="B1" t="inlineStr"><is><t>Compact B1</t></is></c></row>' +
+    '<row r="2"><c r="A2" t="inlineStr"><is><t>Compact A2</t></is></c><c r="B2" t="inlineStr"><is><t>Compact B2</t></is></c></row>' +
+    '</sheetData></worksheet>';
 
   await new Promise((resolve, reject) => {
     const output = createWriteStream(destination);
@@ -229,33 +236,33 @@ async function writeCompactXlsxFixture(destination) {
     archive.on('error', reject);
     archive.pipe(output);
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-      + '<Default Extension="xml" ContentType="application/xml"/>'
-      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-      + '</Types>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        '</Types>',
       { name: '[Content_Types].xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
-      + '</Relationships>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+        '</Relationships>',
       { name: '_rels/.rels' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-      + '<sheets><sheet name="Only" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+        '<sheets><sheet name="Only" sheetId="1" r:id="rId1"/></sheets></workbook>',
       { name: 'xl/workbook.xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
-      + '</Relationships>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+        '</Relationships>',
       { name: 'xl/_rels/workbook.xml.rels' },
     );
     archive.append(worksheetXml, { name: 'xl/worksheets/sheet1.xml' });
@@ -272,53 +279,53 @@ async function writeDocxFixture(destination, variant = 'default') {
     archive.on('error', reject);
     archive.pipe(output);
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-      + '<Default Extension="xml" ContentType="application/xml"/>'
-      + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-      + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
-      + '</Types>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+        '</Types>',
       { name: '[Content_Types].xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-      + '</Relationships>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+        '</Relationships>',
       { name: '_rels/.rels' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-      + '<w:body>'
-      + `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>`
-      + `<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>`
-      + '<w:tbl><w:tblPr><w:tblW w:w="16500" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>'
-      + '<w:tblGrid><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/></w:tblGrid>'
-      + '<w:tr>'
-      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column A</w:t></w:r></w:p></w:tc>'
-      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column B</w:t></w:r></w:p></w:tc>'
-      + '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column C</w:t></w:r></w:p></w:tc>'
-      + '</w:tr></w:tbl>'
-      + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
-      + '</w:body></w:document>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+        '<w:body>' +
+        `<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${variant === 'refresh' ? 'Nexus DOCX Refreshed' : 'Nexus DOCX E2E'}</w:t></w:r></w:p>` +
+        `<w:p><w:r><w:t>${variant === 'refresh' ? 'DOCX force refresh loaded the external update.' : 'DOCX preview tabs preserve document content.'}</w:t></w:r></w:p>` +
+        '<w:tbl><w:tblPr><w:tblW w:w="16500" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
+        '<w:tblGrid><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/><w:gridCol w:w="5500"/></w:tblGrid>' +
+        '<w:tr>' +
+        '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column A</w:t></w:r></w:p></w:tc>' +
+        '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column B</w:t></w:r></w:p></w:tc>' +
+        '<w:tc><w:tcPr><w:tcW w:w="5500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Wide DOCX Column C</w:t></w:r></w:p></w:tc>' +
+        '</w:tr></w:tbl>' +
+        '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>' +
+        '</w:body></w:document>',
       { name: 'word/document.xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-      + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
-      + '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/>'
-      + '<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>'
-      + '</w:styles>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+        '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/>' +
+        '<w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style>' +
+        '</w:styles>',
       { name: 'word/styles.xml' },
     );
     archive.append(
-      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-      + '</Relationships>',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+        '</Relationships>',
       { name: 'word/_rels/document.xml.rels' },
     );
     void archive.finalize();
@@ -331,14 +338,15 @@ async function writePdfFixture(destination, variant = 'default') {
     const length = Buffer.byteLength(content, 'latin1');
     return `<< /Length ${length} >>\nstream\n${content}\nendstream`;
   };
-  const pageStream = (title, body) => streamObject(
-    'BT\n'
-    + '/F1 26 Tf\n'
-    + `72 700 Td (${escapePdfText(title)}) Tj\n`
-    + '/F1 14 Tf\n'
-    + `0 -44 Td (${escapePdfText(body)}) Tj\n`
-    + 'ET',
-  );
+  const pageStream = (title, body) =>
+    streamObject(
+      'BT\n' +
+        '/F1 26 Tf\n' +
+        `72 700 Td (${escapePdfText(title)}) Tj\n` +
+        '/F1 14 Tf\n' +
+        `0 -44 Td (${escapePdfText(body)}) Tj\n` +
+        'ET',
+    );
 
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R /Outlines 10 0 R /PageMode /UseOutlines >>',
@@ -483,7 +491,10 @@ async function resetRoot() {
   await fsp.writeFile(path.join(rootDir, 'cross-move.txt'), 'cross-move-body\n', 'utf8');
   await fsp.writeFile(
     path.join(rootDir, '预览-测试.png'),
-    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=', 'base64'),
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n+8AAAAASUVORK5CYII=',
+      'base64',
+    ),
   );
   await writeXlsxFixture(path.join(rootDir, 'preview.xlsx'));
   await writeCompactXlsxFixture(path.join(rootDir, 'compact-preview.xlsx'));
@@ -508,7 +519,7 @@ function openModeToFsFlags(flags) {
   const truncate = Boolean(flags & OPEN_MODE.TRUNC);
   const exclusive = Boolean(flags & OPEN_MODE.EXCL);
 
-  if (append) return canRead ? (exclusive ? 'ax+' : 'a+') : (exclusive ? 'ax' : 'a');
+  if (append) return canRead ? (exclusive ? 'ax+' : 'a+') : exclusive ? 'ax' : 'a';
   if (canWrite && canRead) {
     if (create || truncate) return exclusive ? 'wx+' : 'w+';
     return 'r+';
@@ -623,7 +634,7 @@ function attachSftp(session, accept) {
     try {
       const fullPath = resolveRemotePath(remotePath);
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
-      const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? (attrs.mode & 0o7777) : 0o644);
+      const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
       const handle = registry.add({ type: 'file', fileHandle, path: fullPath });
       sftp.handle(reqid, handle);
     } catch (error) {
@@ -708,7 +719,7 @@ function attachSftp(session, accept) {
 
   sftp.on('MKDIR', async (reqid, remotePath, attrs) => {
     try {
-      await fsp.mkdir(resolveRemotePath(remotePath), { mode: attrs?.mode ? (attrs.mode & 0o7777) : 0o755 });
+      await fsp.mkdir(resolveRemotePath(remotePath), { mode: attrs?.mode ? attrs.mode & 0o7777 : 0o755 });
       sftp.status(reqid, STATUS_CODE.OK);
     } catch (error) {
       respondError(reqid, error);
@@ -812,31 +823,37 @@ function runRemoteCommand(command, stream) {
     return;
   }
   if (command === "docker ps -a --no-trunc --format '{{json .}}'") {
-    finishExec(stream, `${JSON.stringify({
-      ID: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-      Names: 'nexus-e2e-container',
-      Image: 'alpine:latest',
-      ImageID: 'sha256:e2e',
-      Command: 'sleep 3600',
-      CreatedAt: 1_700_000_000,
-      State: 'running',
-      Status: 'Up 10 minutes',
-      Ports: '127.0.0.1:8080->80/tcp',
-      Labels: 'suite=e2e',
-    })}\n`);
+    finishExec(
+      stream,
+      `${JSON.stringify({
+        ID: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        Names: 'nexus-e2e-container',
+        Image: 'alpine:latest',
+        ImageID: 'sha256:e2e',
+        Command: 'sleep 3600',
+        CreatedAt: 1_700_000_000,
+        State: 'running',
+        Status: 'Up 10 minutes',
+        Ports: '127.0.0.1:8080->80/tcp',
+        Labels: 'suite=e2e',
+      })}\n`,
+    );
     return;
   }
   if (command.startsWith('docker stats ')) {
-    finishExec(stream, `${JSON.stringify({
-      ID: '0123456789ab',
-      Name: 'nexus-e2e-container',
-      CPUPerc: '12.34%',
-      MemUsage: '32MiB / 2GiB',
-      MemPerc: '1.56%',
-      NetIO: '1.2MB / 800kB',
-      BlockIO: '0B / 0B',
-      PIDs: '3',
-    })}\n`);
+    finishExec(
+      stream,
+      `${JSON.stringify({
+        ID: '0123456789ab',
+        Name: 'nexus-e2e-container',
+        CPUPerc: '12.34%',
+        MemUsage: '32MiB / 2GiB',
+        MemPerc: '1.56%',
+        NetIO: '1.2MB / 800kB',
+        BlockIO: '0B / 0B',
+        PIDs: '3',
+      })}\n`,
+    );
     return;
   }
   if (/^docker\s+(start|stop|restart|pause|unpause|rm)\b/.test(command)) {
@@ -858,9 +875,7 @@ function runRemoteCommand(command, stream) {
   const holdPrefix = isArchiveCommand
     ? `while [ -f ${JSON.stringify(archiveExecHoldPath)} ]; do sleep 0.05; done; `
     : '';
-  const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand
-    ? `sleep ${archiveExecDelayMs / 1000}; `
-    : '';
+  const delayPrefix = archiveExecDelayMs > 0 && isArchiveCommand ? `sleep ${archiveExecDelayMs / 1000}; ` : '';
   const delayedCommand = `${preflightHoldPrefix}${holdPrefix}${delayPrefix}${executableCommand}`;
   const child = spawn('/bin/bash', ['-lc', `${virtualShellPrelude}\n${delayedCommand}`], {
     cwd: rootDir,
@@ -929,12 +944,20 @@ const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
         const channel = accept();
         channel.once('close', () => upstream.destroy());
         upstream.once('close', () => {
-          try { channel.end(); } catch { /* already closed */ }
+          try {
+            channel.end();
+          } catch {
+            /* already closed */
+          }
         });
         channel.pipe(upstream).pipe(channel);
       });
       upstream.once('error', () => {
-        try { reject(); } catch { /* request may already have ended */ }
+        try {
+          reject();
+        } catch {
+          /* request may already have ended */
+        }
       });
     });
   });
@@ -964,7 +987,11 @@ async function startSshServer() {
 
 async function stopSshServer() {
   for (const client of [...activeSshClients]) {
-    try { client.end(); } catch { /* already closed */ }
+    try {
+      client.end();
+    } catch {
+      /* already closed */
+    }
   }
   if (!sshServerOnline) return;
   await new Promise((resolve, reject) => {
@@ -1060,7 +1087,9 @@ const controlServer = http.createServer(async (req, res) => {
       const name = path.basename(requestUrl.searchParams.get('name') || 'external-refresh.txt');
       const variant = String(requestUrl.searchParams.get('variant') || '');
       const requestedSize = Number(requestUrl.searchParams.get('size') || '0');
-      const size = Number.isFinite(requestedSize) ? Math.max(0, Math.min(32 * 1024 * 1024, Math.round(requestedSize))) : 0;
+      const size = Number.isFinite(requestedSize)
+        ? Math.max(0, Math.min(32 * 1024 * 1024, Math.round(requestedSize)))
+        : 0;
       if (variant === 'refresh' && name === 'README-e2e.md') {
         await fsp.writeFile(path.join(rootDir, name), '# Nexus Markdown Refreshed\n\n**force-refresh-ok**\n', 'utf8');
       } else if (variant === 'refresh' && name === 'preview.xlsx') {
@@ -1072,7 +1101,10 @@ const controlServer = http.createServer(async (req, res) => {
       } else if (variant === 'refresh' && name === '预览-测试.png') {
         await fsp.writeFile(
           path.join(rootDir, name),
-          Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DA8J8BAAf/Af8Bf4mnAAAAAElFTkSuQmCC', 'base64'),
+          Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGP4z8DA8J8BAAf/Af8Bf4mnAAAAAElFTkSuQmCC',
+            'base64',
+          ),
         );
       } else if (size > 0) {
         await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
@@ -1086,7 +1118,9 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'POST' && requestUrl.pathname === '/fixture-directory') {
       const name = path.basename(requestUrl.searchParams.get('name') || 'copy-cancel-dir');
       const requestedSize = Number(requestUrl.searchParams.get('size') || `${32 * 1024}`);
-      const size = Number.isFinite(requestedSize) ? Math.max(1, Math.min(1024 * 1024, Math.round(requestedSize))) : 32 * 1024;
+      const size = Number.isFinite(requestedSize)
+        ? Math.max(1, Math.min(1024 * 1024, Math.round(requestedSize)))
+        : 32 * 1024;
       const targetDir = path.join(rootDir, name);
       await fsp.rm(targetDir, { recursive: true, force: true });
       await fsp.mkdir(targetDir, { recursive: true });
@@ -1117,7 +1151,12 @@ const controlServer = http.createServer(async (req, res) => {
       const allowed = targetPath === path.resolve(rootDir) || targetPath.startsWith(rootPrefix);
       let exists = false;
       if (allowed) {
-        try { await fsp.access(targetPath); exists = true; } catch { /* absent */ }
+        try {
+          await fsp.access(targetPath);
+          exists = true;
+        } catch {
+          /* absent */
+        }
       }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ exists }));
@@ -1162,13 +1201,15 @@ const controlServer = http.createServer(async (req, res) => {
       const name = requestUrl.searchParams.get('name') || '';
       const stats = await fsp.stat(resolveRemotePath(name));
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        name,
-        size: stats.size,
-        mode: stats.mode & 0o7777,
-        isFile: stats.isFile(),
-        isDirectory: stats.isDirectory(),
-      }));
+      res.end(
+        JSON.stringify({
+          name,
+          size: stats.size,
+          mode: stats.mode & 0o7777,
+          isFile: stats.isFile(),
+          isDirectory: stats.isDirectory(),
+        }),
+      );
       return;
     }
     res.writeHead(404);

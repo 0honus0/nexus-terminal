@@ -14,7 +14,7 @@ const SECONDARY_HOST = 'search-target.invalid';
 async function recreateSecondaryConnection(request: APIRequestContext): Promise<number> {
   const list = await request.get('/api/v1/connections');
   expect(list.ok()).toBeTruthy();
-  const connections = await list.json() as Array<{ id: number; name?: string }>;
+  const connections = (await list.json()) as Array<{ id: number; name?: string }>;
   for (const connection of connections.filter((item) => item.name === SECONDARY_NAME)) {
     const remove = await request.delete(`/api/v1/connections/${connection.id}`);
     expect(remove.ok()).toBeTruthy();
@@ -32,7 +32,7 @@ async function recreateSecondaryConnection(request: APIRequestContext): Promise<
     },
   });
   expect(create.status()).toBe(201);
-  const body = await create.json() as { connection: { id: number } };
+  const body = (await create.json()) as { connection: { id: number } };
   return body.connection.id;
 }
 

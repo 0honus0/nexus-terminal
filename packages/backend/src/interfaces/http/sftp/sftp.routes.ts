@@ -113,12 +113,10 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
           fileMtime: Math.floor(meta.modifiedAt / 1000),
         });
         response.setHeader('Cache-Control', 'private, no-store');
-        response
-          .status(201)
-          .json({
-            url: `/api/v1/sftp/download?ticket=${encodeURIComponent(token)}`,
-            expiresInSeconds: DOWNLOAD_TICKET_TTL_SECONDS,
-          });
+        response.status(201).json({
+          url: `/api/v1/sftp/download?ticket=${encodeURIComponent(token)}`,
+          expiresInSeconds: DOWNLOAD_TICKET_TTL_SECONDS,
+        });
       } catch (error) {
         if (error instanceof DownloadTicketCapacityError) {
           response.status(429).json({ message: error.message });
@@ -248,13 +246,9 @@ export const createSftpRouter = (filesystem: WorkspaceFilesystemService): Router
     } catch (error) {
       if (!response.headersSent) {
         if (lease && isRemoteFileMissingError(error)) tickets.invalidate(lease);
-        response
-          .status(isRemoteFileMissingError(error) ? 404 : 500)
-          .json({
-            message: isRemoteFileMissingError(error)
-              ? '远程文件未找到。'
-              : `处理下载请求时出错: ${errorMessage(error)}`,
-          });
+        response.status(isRemoteFileMissingError(error) ? 404 : 500).json({
+          message: isRemoteFileMissingError(error) ? '远程文件未找到。' : `处理下载请求时出错: ${errorMessage(error)}`,
+        });
       } else if (!response.writableEnded) response.destroy(error instanceof Error ? error : new Error(String(error)));
     }
   });

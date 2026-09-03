@@ -1,7 +1,10 @@
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 import { ZipArchive, type Archiver } from 'archiver';
-import type { DirectoryArchiveHandle, DirectoryArchivePort } from '../../platform/operations/archive/directory-archive.port';
+import type {
+  DirectoryArchiveHandle,
+  DirectoryArchivePort,
+} from '../../platform/operations/archive/directory-archive.port';
 import type { RemoteFileSystem } from '../../platform/filesystem/remote-filesystem';
 
 export class ZipDirectoryArchiveAdapter implements DirectoryArchivePort {
@@ -50,14 +53,22 @@ export class ZipDirectoryArchiveAdapter implements DirectoryArchivePort {
         : entry.metadata;
       if (metadata.isDirectory) {
         archive.append(Buffer.alloc(0), { name: `${destinationPath}/` });
-        await this.addDirectory(filesystem, archive, sourcePath, destinationPath, nextAncestors, activeStreams, isCancelled);
+        await this.addDirectory(
+          filesystem,
+          archive,
+          sourcePath,
+          destinationPath,
+          nextAncestors,
+          activeStreams,
+          isCancelled,
+        );
       } else if (metadata.isFile) {
         const stream = await filesystem.openRead(sourcePath);
         activeStreams.add(stream);
         const forget = () => activeStreams.delete(stream);
         stream.once('end', forget);
         stream.once('close', forget);
-        stream.once('error', error => archive.emit('error', error));
+        stream.once('error', (error) => archive.emit('error', error));
         archive.append(stream, { name: destinationPath });
       }
     }

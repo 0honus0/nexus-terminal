@@ -3,33 +3,33 @@ name: E2E
 on:
   push:
     paths:
-      - "Dockerfile"
-      - ".dockerignore"
-      - "docker/**"
-      - "packages/backend/**"
-      - "packages/frontend/**"
-      - "packages/remote-gateway/**"
-      - "test/e2e/**"
-      - "scripts/e2e/**"
-      - "build.sh"
-      - "package.json"
-      - ".github/workflows/e2e.yml"
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker/**'
+      - 'packages/backend/**'
+      - 'packages/frontend/**'
+      - 'packages/remote-gateway/**'
+      - 'test/e2e/**'
+      - 'scripts/e2e/**'
+      - 'build.sh'
+      - 'package.json'
+      - '.github/workflows/e2e.yml'
   pull_request:
     paths:
-      - "Dockerfile"
-      - ".dockerignore"
-      - "docker/**"
-      - "packages/backend/**"
-      - "packages/frontend/**"
-      - "packages/remote-gateway/**"
-      - "test/e2e/**"
-      - "scripts/e2e/**"
-      - "build.sh"
-      - "package.json"
-      - ".github/workflows/e2e.yml"
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker/**'
+      - 'packages/backend/**'
+      - 'packages/frontend/**'
+      - 'packages/remote-gateway/**'
+      - 'test/e2e/**'
+      - 'scripts/e2e/**'
+      - 'build.sh'
+      - 'package.json'
+      - '.github/workflows/e2e.yml'
   schedule:
     # Weekly latest test-environment check plus a full E2E run.
-    - cron: "17 3 * * 1"
+    - cron: '17 3 * * 1'
   workflow_dispatch:
     inputs:
       workers:

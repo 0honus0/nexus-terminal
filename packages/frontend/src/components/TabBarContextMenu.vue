@@ -1,74 +1,68 @@
 <script setup lang="ts">
-import { computed, PropType } from 'vue';
-import { useI18n } from 'vue-i18n';
+  import { computed, PropType } from 'vue';
+  import { useI18n } from 'vue-i18n';
 
-interface MenuItem {
-  label: string;
-  action: string;
-  disabled?: boolean; // 可选：是否禁用
-  isSeparator?: boolean; // 可选：是否是分隔线
-  isDanger?: boolean; // 可选：是否是危险操作 (例如红色文本)
-}
-
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    required: true,
-  },
-  position: {
-    type: Object as PropType<{ x: number; y: number }>,
-    required: true,
-  },
-  items: {
-    type: Array as PropType<MenuItem[]>,
-    required: true,
-  },
-  // + Add targetId prop
-  targetId: {
-    type: [String, Number, null] as PropType<string | number | null>,
-    default: null,
+  interface MenuItem {
+    label: string;
+    action: string;
+    disabled?: boolean; // 可选：是否禁用
+    isSeparator?: boolean; // 可选：是否是分隔线
+    isDanger?: boolean; // 可选：是否是危险操作 (例如红色文本)
   }
-});
 
-const emit = defineEmits<{
-  // + Update signature to include targetId
-  (e: 'menu-action', payload: { action: string; targetId: string | number | null }): void;
-  (e: 'close'): void; // 请求关闭菜单
-}>();
+  const props = defineProps({
+    visible: {
+      type: Boolean,
+      required: true,
+    },
+    position: {
+      type: Object as PropType<{ x: number; y: number }>,
+      required: true,
+    },
+    items: {
+      type: Array as PropType<MenuItem[]>,
+      required: true,
+    },
+    // + Add targetId prop
+    targetId: {
+      type: [String, Number, null] as PropType<string | number | null>,
+      default: null,
+    },
+  });
 
-const { t } = useI18n();
+  const emit = defineEmits<{
+    // + Update signature to include targetId
+    (e: 'menu-action', payload: { action: string; targetId: string | number | null }): void;
+    (e: 'close'): void; // 请求关闭菜单
+  }>();
 
-const menuStyle = computed(() => ({
-  top: `${props.position.y}px`,
-  left: `${props.position.x}px`,
-}));
+  const { t } = useI18n();
 
-const handleAction = (item: MenuItem) => {
-  console.log(`[ContextMenu] handleAction called for item:`, JSON.stringify(item)); // + Log item
-  if (!item.disabled && !item.isSeparator) {
-    console.log(`[ContextMenu] Inside handleAction, props.targetId is:`, props.targetId); // ++ Log prop value before emit
-    const payload = { action: item.action, targetId: props.targetId };
-    console.log(`[ContextMenu] Emitting menu-action with payload:`, JSON.stringify(payload)); // + Log emit payload
-    emit('menu-action', payload);
-    emit('close'); // 点击后自动关闭
-  }
-};
+  const menuStyle = computed(() => ({
+    top: `${props.position.y}px`,
+    left: `${props.position.x}px`,
+  }));
 
-// 点击菜单外部时，也应该关闭，这通常在父组件中处理 document click listener
-// 但这里也添加一个遮罩层点击关闭
-const handleOverlayClick = () => {
-  emit('close');
-};
+  const handleAction = (item: MenuItem) => {
+    console.log(`[ContextMenu] handleAction called for item:`, JSON.stringify(item)); // + Log item
+    if (!item.disabled && !item.isSeparator) {
+      console.log(`[ContextMenu] Inside handleAction, props.targetId is:`, props.targetId); // ++ Log prop value before emit
+      const payload = { action: item.action, targetId: props.targetId };
+      console.log(`[ContextMenu] Emitting menu-action with payload:`, JSON.stringify(payload)); // + Log emit payload
+      emit('menu-action', payload);
+      emit('close'); // 点击后自动关闭
+    }
+  };
 
+  // 点击菜单外部时，也应该关闭，这通常在父组件中处理 document click listener
+  // 但这里也添加一个遮罩层点击关闭
+  const handleOverlayClick = () => {
+    emit('close');
+  };
 </script>
 
 <template>
-  <div
-    v-if="visible"
-    class="fixed inset-0 z-40"
-    @click.self="handleOverlayClick"
-    @contextmenu.prevent
-  >
+  <div v-if="visible" class="fixed inset-0 z-40" @click.self="handleOverlayClick" @contextmenu.prevent>
     <div
       class="fixed bg-background border border-border/50 shadow-xl rounded-lg py-1.5 z-50 min-w-[180px]"
       :style="menuStyle"
@@ -84,13 +78,14 @@ const handleOverlayClick = () => {
               item.disabled
                 ? 'text-text-secondary opacity-50 cursor-not-allowed'
                 : item.isDanger
-                ? 'text-error hover:bg-error/10 cursor-pointer'
-                : 'text-foreground hover:bg-primary/10 hover:text-primary cursor-pointer',
+                  ? 'text-error hover:bg-error/10 cursor-pointer'
+                  : 'text-foreground hover:bg-primary/10 hover:text-primary cursor-pointer',
             ]"
             @click="handleAction(item)"
           >
             <!-- 移除了图标 -->
-            <span>{{ t(item.label, item.label) }}</span> <!-- 使用 i18n -->
+            <span>{{ t(item.label, item.label) }}</span>
+            <!-- 使用 i18n -->
           </li>
         </template>
       </ul>
@@ -99,5 +94,5 @@ const handleOverlayClick = () => {
 </template>
 
 <style scoped>
-/* 可以添加一些额外的样式，如果需要的话 */
+  /* 可以添加一些额外的样式，如果需要的话 */
 </style>

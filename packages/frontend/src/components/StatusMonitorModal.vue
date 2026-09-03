@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue';
-import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
+  import { defineAsyncComponent } from 'vue';
+  import OverlayPanel from '@/foundation/ui/OverlayPanel.vue';
 
-const StatusMonitor = defineAsyncComponent(() => import('./StatusMonitor.vue'));
+  const StatusMonitor = defineAsyncComponent(() => import('./StatusMonitor.vue'));
 
-const props = defineProps<{
-  isVisible: boolean;
-  activeSessionId: string | null;
-}>();
+  const props = defineProps<{
+    isVisible: boolean;
+    activeSessionId: string | null;
+  }>();
 
-const emit = defineEmits<{
-  (e: 'close'): void;
-}>();
+  const emit = defineEmits<{
+    (e: 'close'): void;
+  }>();
 
-const closeModal = () => emit('close');
+  const closeModal = () => emit('close');
 </script>
 
 <template>

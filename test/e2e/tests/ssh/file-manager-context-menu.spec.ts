@@ -56,7 +56,10 @@ async function goToParent(page: Page): Promise<void> {
 
 async function compressFromMenu(page: Page, source: string, submenuLabel: string, archiveName: string): Promise<void> {
   await rightClickRow(page, source);
-  const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+  const compress = menu(page)
+    .locator('li')
+    .filter({ hasText: /^Compress/ })
+    .first();
   await expect(compress).toBeVisible();
   await compress.hover();
   await page.getByText(submenuLabel, { exact: true }).click();
@@ -72,7 +75,7 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
 
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
   expect(originalSidebarResponse.ok()).toBeTruthy();
-  const originalSidebar = await originalSidebarResponse.json() as { left: string[]; right: string[] };
+  const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
 
   try {
     const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
@@ -106,7 +109,10 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
     });
     await expect(menu(page)).toBeVisible();
 
-    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    const compress = menu(page)
+      .locator('li')
+      .filter({ hasText: /^Compress/ })
+      .first();
     await expect(compress).toBeVisible();
     await compress.hover();
 
@@ -146,9 +152,9 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
 
   await step('Download streams a remote file through the browser', async () => {
     await rightClickRow(page, 'seed.txt');
-    const ticketPromise = page.waitForResponse((response) => (
-      response.url().endsWith('/api/v1/sftp/download-ticket') && response.request().method() === 'POST'
-    ));
+    const ticketPromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/sftp/download-ticket') && response.request().method() === 'POST',
+    );
     const downloadPromise = page.waitForEvent('download');
     await clickMenuItem(page, 'Download');
     expect((await ticketPromise).status()).toBe(201);
@@ -159,58 +165,61 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     expect(await readFile(downloadPath!, 'utf8')).toBe('nexus-e2e-seed\n');
   });
 
-  await slowStep('short-lived download tickets support download-manager probes, retries, and Range requests without browser cookies', async () => {
-    const issued = await context.request.post('/api/v1/sftp/download-ticket', {
-      data: {
-        connectionId,
-        remotePath: '/seed.txt',
-      },
-    });
-    expect(issued.status()).toBe(201);
-    const ticket = await issued.json() as { url: string; expiresInSeconds: number };
-    expect(ticket.expiresInSeconds).toBe(300);
-    expect(ticket.url).toMatch(/^\/api\/v1\/sftp\/download\?ticket=/);
+  await slowStep(
+    'short-lived download tickets support download-manager probes, retries, and Range requests without browser cookies',
+    async () => {
+      const issued = await context.request.post('/api/v1/sftp/download-ticket', {
+        data: {
+          connectionId,
+          remotePath: '/seed.txt',
+        },
+      });
+      expect(issued.status()).toBe(201);
+      const ticket = (await issued.json()) as { url: string; expiresInSeconds: number };
+      expect(ticket.expiresInSeconds).toBe(300);
+      expect(ticket.url).toMatch(/^\/api\/v1\/sftp\/download\?ticket=/);
 
-    const url = new URL(ticket.url, 'http://127.0.0.1:4173').toString();
-    const ownerHeaders = { 'X-Forwarded-For': '203.0.113.10' };
-    const head = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
-    expect(head.status).toBe(200);
-    expect(head.headers.get('accept-ranges')).toBe('bytes');
-    expect(Number(head.headers.get('content-length'))).toBe(Buffer.byteLength('nexus-e2e-seed\n'));
+      const url = new URL(ticket.url, 'http://127.0.0.1:4173').toString();
+      const ownerHeaders = { 'X-Forwarded-For': '203.0.113.10' };
+      const head = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
+      expect(head.status).toBe(200);
+      expect(head.headers.get('accept-ranges')).toBe('bytes');
+      expect(Number(head.headers.get('content-length'))).toBe(Buffer.byteLength('nexus-e2e-seed\n'));
 
-    // IDM/FDM may issue a normal GET first to discover Content-Disposition, then
-    // reopen the same short-lived URL for the actual transfer. A completed probe
-    // must not consume the ticket.
-    const probe = await fetch(url, { headers: ownerHeaders });
-    expect(probe.status).toBe(200);
-    expect(probe.headers.get('content-disposition')).toContain('seed.txt');
-    expect(await probe.text()).toBe('nexus-e2e-seed\n');
+      // IDM/FDM may issue a normal GET first to discover Content-Disposition, then
+      // reopen the same short-lived URL for the actual transfer. A completed probe
+      // must not consume the ticket.
+      const probe = await fetch(url, { headers: ownerHeaders });
+      expect(probe.status).toBe(200);
+      expect(probe.headers.get('content-disposition')).toContain('seed.txt');
+      expect(await probe.text()).toBe('nexus-e2e-seed\n');
 
-    const retryAfterProbe = await fetch(url, { headers: ownerHeaders });
-    expect(retryAfterProbe.status).toBe(200);
-    expect(await retryAfterProbe.text()).toBe('nexus-e2e-seed\n');
+      const retryAfterProbe = await fetch(url, { headers: ownerHeaders });
+      expect(retryAfterProbe.status).toBe(200);
+      expect(await retryAfterProbe.text()).toBe('nexus-e2e-seed\n');
 
-    const firstRange = await fetch(url, {
-      headers: { ...ownerHeaders, Range: 'bytes=0-4' },
-    });
-    expect(firstRange.status).toBe(206);
-    expect(firstRange.headers.get('content-range')).toBe(`bytes 0-4/${Buffer.byteLength('nexus-e2e-seed\n')}`);
-    expect(Buffer.from(await firstRange.arrayBuffer()).toString('utf8')).toBe('nexus');
+      const firstRange = await fetch(url, {
+        headers: { ...ownerHeaders, Range: 'bytes=0-4' },
+      });
+      expect(firstRange.status).toBe(206);
+      expect(firstRange.headers.get('content-range')).toBe(`bytes 0-4/${Buffer.byteLength('nexus-e2e-seed\n')}`);
+      expect(Buffer.from(await firstRange.arrayBuffer()).toString('utf8')).toBe('nexus');
 
-    const competingClient = await fetch(url, {
-      headers: { 'X-Forwarded-For': '198.51.100.20', Range: 'bytes=5-9' },
-    });
-    expect(competingClient.status).toBe(423);
+      const competingClient = await fetch(url, {
+        headers: { 'X-Forwarded-For': '198.51.100.20', Range: 'bytes=5-9' },
+      });
+      expect(competingClient.status).toBe(423);
 
-    const remainder = await fetch(url, {
-      headers: { ...ownerHeaders, Range: 'bytes=5-' },
-    });
-    expect(remainder.status).toBe(206);
-    expect(Buffer.from(await remainder.arrayBuffer()).toString('utf8')).toBe('-e2e-seed\n');
+      const remainder = await fetch(url, {
+        headers: { ...ownerHeaders, Range: 'bytes=5-' },
+      });
+      expect(remainder.status).toBe(206);
+      expect(Buffer.from(await remainder.arrayBuffer()).toString('utf8')).toBe('-e2e-seed\n');
 
-    const reusableAfterRanges = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
-    expect(reusableAfterRanges.status).toBe(200);
-  });
+      const reusableAfterRanges = await fetch(url, { method: 'HEAD', headers: ownerHeaders });
+      expect(reusableAfterRanges.status).toBe(200);
+    },
+  );
 
   await slowStep('download ticket leases stay bounded by evicting the oldest idle ticket', async () => {
     const urls: string[] = [];
@@ -222,7 +231,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
         },
       });
       expect(issued.status()).toBe(201);
-      const ticket = await issued.json() as { url: string };
+      const ticket = (await issued.json()) as { url: string };
       urls.push(new URL(ticket.url, 'http://127.0.0.1:4173').toString());
     }
 
@@ -246,7 +255,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
 
     const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
     expect(remoteRead.ok).toBeTruthy();
-    const remoteBody = await remoteRead.json() as { base64: string };
+    const remoteBody = (await remoteRead.json()) as { base64: string };
     expect(Buffer.from(remoteBody.base64, 'base64')).toEqual(payload);
 
     await rightClickRow(page, filename);
@@ -332,11 +341,16 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
       buffer: Buffer.alloc(size, 0x5a),
     });
     await expect(row(page, filename)).toBeVisible({ timeout: 30_000 });
-    await expect.poll(async () => {
-      const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(filename)}`);
-      if (!response.ok) return -1;
-      return Number((await response.json() as { size: number }).size);
-    }, { timeout: 30_000 }).toBe(size);
+    await expect
+      .poll(
+        async () => {
+          const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(filename)}`);
+          if (!response.ok) return -1;
+          return Number(((await response.json()) as { size: number }).size);
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(size);
   });
 
   await step('Refresh reloads changes made outside the UI', async () => {
@@ -382,7 +396,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   });
 
   await slowStep('Password-protected ZIP prompts only when decompression discovers encryption', async () => {
-    const specialPassword = "Nexus !@#$%^&*()_+-=[]{};:'\",.<>/?\\|`~";
+    const specialPassword = 'Nexus !@#$%^&*()_+-=[]{};:\'",.<>/?\\|`~';
 
     await rightClickRow(page, 'archive-source.zip');
     await clickMenuItem(page, 'Delete');
@@ -390,7 +404,10 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await expect(row(page, 'archive-source.zip')).toHaveCount(0);
 
     await rightClickRow(page, 'archive-source.txt');
-    const compress = menu(page).locator('li').filter({ hasText: /^Compress/ }).first();
+    const compress = menu(page)
+      .locator('li')
+      .filter({ hasText: /^Compress/ })
+      .first();
     await expect(compress).toBeVisible();
     await compress.hover();
     await page.getByText('Compress to zip with password...', { exact: true }).click();

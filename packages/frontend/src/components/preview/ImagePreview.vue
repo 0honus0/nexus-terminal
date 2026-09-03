@@ -1,29 +1,35 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import type { FileListItem } from '../../types/sftp.types';
-import FilePreviewDialog from './FilePreviewDialog.vue';
+  import { ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import type { FileListItem } from '../../types/sftp.types';
+  import FilePreviewDialog from './FilePreviewDialog.vue';
 
-const props = withDefaults(defineProps<{
-  file: FileListItem;
-  src: string;
-  active?: boolean;
-}>(), {
-  active: true,
-});
+  const props = withDefaults(
+    defineProps<{
+      file: FileListItem;
+      src: string;
+      active?: boolean;
+    }>(),
+    {
+      active: true,
+    },
+  );
 
-const emit = defineEmits<{
-  close: [];
-}>();
+  const emit = defineEmits<{
+    close: [];
+  }>();
 
-const { t } = useI18n();
-const isLoading = ref(true);
-const hasError = ref(false);
+  const { t } = useI18n();
+  const isLoading = ref(true);
+  const hasError = ref(false);
 
-watch(() => props.src, () => {
-  isLoading.value = true;
-  hasError.value = false;
-});
+  watch(
+    () => props.src,
+    () => {
+      isLoading.value = true;
+      hasError.value = false;
+    },
+  );
 </script>
 
 <template>
@@ -51,22 +57,25 @@ watch(() => props.src, () => {
         :alt="props.file.filename"
         decoding="async"
         @load="isLoading = false"
-        @error="isLoading = false; hasError = true"
-      >
+        @error="
+          isLoading = false;
+          hasError = true;
+        "
+      />
     </div>
   </FilePreviewDialog>
 </template>
 
 <style scoped>
-.file-image-preview-status {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 0.5rem;
-  color: white;
-  background: rgba(20, 20, 20, 0.9);
-}
+  .file-image-preview-status {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 0.5rem;
+    color: white;
+    background: rgba(20, 20, 20, 0.9);
+  }
 </style>

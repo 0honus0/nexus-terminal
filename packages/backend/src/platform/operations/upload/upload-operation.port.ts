@@ -33,7 +33,14 @@ export type UploadEvent =
   | { type: 'ready'; uploadId: string }
   | { type: 'conflict'; uploadId: string; destinationPath: string; filename: string }
   | { type: 'skipped'; uploadId: string; destinationPath: string }
-  | { type: 'chunk-ack'; uploadId: string; chunkIndex: number; bytesWritten: number; totalSize: number; progress: number }
+  | {
+      type: 'chunk-ack';
+      uploadId: string;
+      chunkIndex: number;
+      bytesWritten: number;
+      totalSize: number;
+      progress: number;
+    }
   | { type: 'completed'; uploadId: string; destinationPath: string; item: RemoteFileEntry }
   | { type: 'cancelled'; uploadId: string }
   | { type: 'failed'; uploadId?: string; message: string };

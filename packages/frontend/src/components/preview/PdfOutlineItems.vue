@@ -1,19 +1,19 @@
 <script setup lang="ts">
-export interface PdfOutlineItem {
-  title: string;
-  dest: string | unknown[] | null;
-  url: string | null;
-  items: PdfOutlineItem[];
-}
+  export interface PdfOutlineItem {
+    title: string;
+    dest: string | unknown[] | null;
+    url: string | null;
+    items: PdfOutlineItem[];
+  }
 
-const props = defineProps<{
-  items: PdfOutlineItem[];
-  depth?: number;
-}>();
+  const props = defineProps<{
+    items: PdfOutlineItem[];
+    depth?: number;
+  }>();
 
-const emit = defineEmits<{
-  navigate: [item: PdfOutlineItem];
-}>();
+  const emit = defineEmits<{
+    navigate: [item: PdfOutlineItem];
+  }>();
 </script>
 
 <template>

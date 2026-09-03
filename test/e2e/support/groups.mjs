@@ -58,8 +58,7 @@ function discoverSpecs() {
     const stack = [root];
     while (stack.length > 0) {
       const current = stack.pop();
-      const entries = fs.readdirSync(current, { withFileTypes: true })
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const entries = fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
       for (const entry of entries) {
         const absolute = path.join(current, entry.name);
         if (entry.isDirectory()) stack.push(absolute);
@@ -73,7 +72,11 @@ function discoverSpecs() {
 function familyFor(spec) {
   const [, project, filename = ''] = spec.split('/');
   if (project === 'ui') {
-    if (/^(captcha|change-password|ip-blacklist|ip-whitelist|protected-navigation|session-lifecycle|ssh-key)/.test(filename)) {
+    if (
+      /^(captcha|change-password|ip-blacklist|ip-whitelist|protected-navigation|session-lifecycle|ssh-key)/.test(
+        filename,
+      )
+    ) {
       return 'ui:security';
     }
     if (/^(notification|proxy|system-settings|theme-switching)/.test(filename)) return 'ui:settings';
@@ -221,7 +224,8 @@ function buildCandidate(specs, durations, workers, settings) {
 
 function groupFiles() {
   if (!fs.existsSync(groupsRoot)) return [];
-  return fs.readdirSync(groupsRoot)
+  return fs
+    .readdirSync(groupsRoot)
     .map((name) => {
       const match = /^group-(\d+)\.json$/.exec(name);
       return match ? { id: Number(match[1]), path: path.join(groupsRoot, name) } : null;
@@ -238,7 +242,8 @@ function loadExistingAssignment(specs, workers) {
   const assigned = [];
   for (const file of files) {
     const value = readJson(file.path);
-    if (value.version !== 1 || value.group !== file.id || value.workers !== workers || !Array.isArray(value.specs)) return null;
+    if (value.version !== 1 || value.group !== file.id || value.workers !== workers || !Array.isArray(value.specs))
+      return null;
     groups.push({ id: file.id, specs: [...value.specs] });
     assigned.push(...value.specs);
   }
@@ -268,7 +273,8 @@ function minLoad(groups) {
 function chooseAssignment(specs, durations, workers, settings, force) {
   const candidate = buildCandidate(specs, durations, workers, settings);
   const existingRaw = loadExistingAssignment(specs, workers);
-  if (force || !existingRaw) return { groups: candidate, reason: existingRaw ? 'forced' : 'new-or-worker-count-changed' };
+  if (force || !existingRaw)
+    return { groups: candidate, reason: existingRaw ? 'forced' : 'new-or-worker-count-changed' };
 
   const existing = withLoads(existingRaw, durations);
   const currentMax = maxLoad(existing);
@@ -278,8 +284,8 @@ function chooseAssignment(specs, durations, workers, settings, force) {
   const imbalanceMs = currentMax - currentMin;
 
   if (
-    improvementPercent < settings.rebalance.minImprovementPercent
-    && imbalanceMs < settings.rebalance.minImbalanceMs
+    improvementPercent < settings.rebalance.minImprovementPercent &&
+    imbalanceMs < settings.rebalance.minImbalanceMs
   ) {
     return { groups: existing, reason: `kept-existing (${improvementPercent.toFixed(1)}% predicted improvement)` };
   }
@@ -313,14 +319,19 @@ function generate(args) {
     }
   }
   for (const group of selected.groups) {
-    changed = writeJsonStable(path.join(groupsRoot, `group-${group.id}.json`), serializeGroup(group, workers)) || changed;
+    changed =
+      writeJsonStable(path.join(groupsRoot, `group-${group.id}.json`), serializeGroup(group, workers)) || changed;
   }
 
   const loaded = withLoads(selected.groups, durations);
-  console.log(`[E2E groups] workers=${workers} specs=${specs.length} ${selected.reason}${changed ? ' changed' : ' unchanged'}`);
+  console.log(
+    `[E2E groups] workers=${workers} specs=${specs.length} ${selected.reason}${changed ? ' changed' : ' unchanged'}`,
+  );
   for (const group of loaded) {
     const families = [...new Set(group.specs.map(familyFor))].join(', ');
-    console.log(`[E2E groups] group-${group.id}: specs=${group.specs.length} estimate=${Math.round(group.totalMs / 100) / 10}s families=${families}`);
+    console.log(
+      `[E2E groups] group-${group.id}: specs=${group.specs.length} estimate=${Math.round(group.totalMs / 100) / 10}s families=${families}`,
+    );
   }
 }
 
@@ -338,7 +349,8 @@ function check(args) {
     const value = readJson(file.path);
     if (value.version !== 1) errors.push(`${path.basename(file.path)} has unsupported version`);
     if (value.group !== file.id) errors.push(`${path.basename(file.path)} has group=${value.group}`);
-    if (value.workers !== workers) errors.push(`${path.basename(file.path)} has workers=${value.workers}, expected ${workers}`);
+    if (value.workers !== workers)
+      errors.push(`${path.basename(file.path)} has workers=${value.workers}, expected ${workers}`);
     if (!Array.isArray(value.specs)) {
       errors.push(`${path.basename(file.path)} specs must be an array`);
       continue;
@@ -371,9 +383,11 @@ function matrix(args) {
   const specs = discoverSpecs();
   const settings = loadSettings();
   const workers = resolveWorkers(args, settings, specs.length);
-  process.stdout.write(JSON.stringify({
-    include: Array.from({ length: workers }, (_, index) => ({ group: index + 1 })),
-  }));
+  process.stdout.write(
+    JSON.stringify({
+      include: Array.from({ length: workers }, (_, index) => ({ group: index + 1 })),
+    }),
+  );
 }
 
 async function runGroup(args) {
@@ -390,21 +404,17 @@ async function runGroup(args) {
   const timingsOutput = path.join(e2eRoot, '.tmp', `spec-timings-group-${groupId}.json`);
   console.log(`[E2E groups] running group-${groupId}/${workers} with ${group.specs.length} specs`);
   const detached = process.platform !== 'win32';
-  const child = spawn(
-    process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['playwright', 'test', ...group.specs],
-    {
-      cwd: e2eRoot,
-      detached,
-      env: {
-        ...process.env,
-        E2E_GROUP_ID: String(groupId),
-        E2E_GROUP_WORKERS: String(workers),
-        E2E_TIMINGS_OUTPUT: timingsOutput,
-      },
-      stdio: 'inherit',
+  const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test', ...group.specs], {
+    cwd: e2eRoot,
+    detached,
+    env: {
+      ...process.env,
+      E2E_GROUP_ID: String(groupId),
+      E2E_GROUP_WORKERS: String(workers),
+      E2E_TIMINGS_OUTPUT: timingsOutput,
     },
-  );
+    stdio: 'inherit',
+  });
 
   let receivedSignal;
   let forceKillTimer;
@@ -501,22 +511,37 @@ function updateTimings(args) {
   }
 
   const changed = writeJsonStable(timingsPath, { version: 1, specs: nextSpecs });
-  console.log(`[E2E groups] timings ${changed ? 'updated' : 'unchanged'}: observed=${observed.size} window=${settings.timingWindow}`);
+  console.log(
+    `[E2E groups] timings ${changed ? 'updated' : 'unchanged'}: observed=${observed.size} window=${settings.timingWindow}`,
+  );
 }
 
 function help() {
-  console.log(`Usage:\n  node support/groups.mjs generate [--workers N] [--force]\n  node support/groups.mjs check [--workers N]\n  node support/groups.mjs matrix [--workers N]\n  node support/groups.mjs run --group N [--workers N]\n  node support/groups.mjs update-timings --input-dir PATH`);
+  console.log(
+    `Usage:\n  node support/groups.mjs generate [--workers N] [--force]\n  node support/groups.mjs check [--workers N]\n  node support/groups.mjs matrix [--workers N]\n  node support/groups.mjs run --group N [--workers N]\n  node support/groups.mjs update-timings --input-dir PATH`,
+  );
 }
 
 const args = parseArgs(process.argv.slice(2));
 try {
   switch (args.command) {
-    case 'generate': generate(args); break;
-    case 'check': check(args); break;
-    case 'matrix': matrix(args); break;
-    case 'run': await runGroup(args); break;
-    case 'update-timings': updateTimings(args); break;
-    default: help();
+    case 'generate':
+      generate(args);
+      break;
+    case 'check':
+      check(args);
+      break;
+    case 'matrix':
+      matrix(args);
+      break;
+    case 'run':
+      await runGroup(args);
+      break;
+    case 'update-timings':
+      updateTimings(args);
+      break;
+    default:
+      help();
   }
 } catch (error) {
   console.error(`[E2E groups] ${error?.stack || error}`);

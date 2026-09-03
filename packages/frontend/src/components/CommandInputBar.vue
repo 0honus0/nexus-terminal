@@ -1,426 +1,434 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { storeToRefs } from 'pinia';
-import { useSessionStore } from '../stores/session.store'; 
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
-import { useSettingsStore } from '../stores/settings.store';
-import { useQuickCommandsStore } from '../stores/quickCommands.store';
-import { useCommandHistoryStore } from '../stores/commandHistory.store';
-import QuickCommandsModal from './QuickCommandsModal.vue'; 
-import SuspendedSshSessionsModal from './SuspendedSshSessionsModal.vue'; 
-import StatusMonitorModal from './StatusMonitorModal.vue';
-import { useFileEditorStore } from '../stores/fileEditor.store'; 
-import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
-import { applyTerminalModifiers } from '../utils/terminalModifiers';
+  import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
+  import { useSessionStore } from '../stores/session.store';
+  import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
+  import { useSettingsStore } from '../stores/settings.store';
+  import { useQuickCommandsStore } from '../stores/quickCommands.store';
+  import { useCommandHistoryStore } from '../stores/commandHistory.store';
+  import QuickCommandsModal from './QuickCommandsModal.vue';
+  import SuspendedSshSessionsModal from './SuspendedSshSessionsModal.vue';
+  import StatusMonitorModal from './StatusMonitorModal.vue';
+  import { useFileEditorStore } from '../stores/fileEditor.store';
+  import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+  import { applyTerminalModifiers } from '../utils/terminalModifiers';
 
+  defineOptions({ inheritAttrs: false });
 
-defineOptions({ inheritAttrs: false });
+  const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
+  const emit = defineEmits<{
+    (e: 'toggle-virtual-keyboard'): void;
+    (e: 'consume-virtual-modifiers'): void;
+  }>();
 
-const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
-const emit = defineEmits<{
-  (e: 'toggle-virtual-keyboard'): void;
-  (e: 'consume-virtual-modifiers'): void;
-}>();
+  const { t } = useI18n();
+  const focusSwitcherStore = useFocusSwitcherStore();
+  const settingsStore = useSettingsStore();
+  const quickCommandsStore = useQuickCommandsStore();
+  const commandHistoryStore = useCommandHistoryStore();
+  const sessionStore = useSessionStore(); // +++ 初始化 Session Store +++
+  const fileEditorStore = useFileEditorStore(); // +++ Initialize File Editor Store +++
 
-const { t } = useI18n();
-const focusSwitcherStore = useFocusSwitcherStore();
-const settingsStore = useSettingsStore();
-const quickCommandsStore = useQuickCommandsStore();
-const commandHistoryStore = useCommandHistoryStore();
-const sessionStore = useSessionStore(); // +++ 初始化 Session Store +++
-const fileEditorStore = useFileEditorStore(); // +++ Initialize File Editor Store +++
+  // Get reactive setting from store
+  const { commandInputSyncTarget, showPopupFileManagerBoolean, showPopupFileEditorBoolean } =
+    storeToRefs(settingsStore); // +++ Import showPopupFileEditorBoolean +++
+  // Get reactive state and actions from quick commands store
+  const { selectedIndex: quickCommandsSelectedIndex, flatVisibleCommands: quickCommandsFiltered } =
+    storeToRefs(quickCommandsStore);
+  const { resetSelection: resetQuickCommandsSelection } = quickCommandsStore;
+  // Get reactive state and actions from command history store
+  const { selectedIndex: historySelectedIndex, filteredHistory: historyFiltered } = storeToRefs(commandHistoryStore);
+  const { resetSelection: resetHistorySelection } = commandHistoryStore;
+  // +++ Get active session ID from session store +++
+  const { activeSessionId } = storeToRefs(sessionStore);
+  const { updateSessionCommandInput } = sessionStore;
 
-// Get reactive setting from store
-const { commandInputSyncTarget, showPopupFileManagerBoolean, showPopupFileEditorBoolean } = storeToRefs(settingsStore); // +++ Import showPopupFileEditorBoolean +++
-// Get reactive state and actions from quick commands store
-const { selectedIndex: quickCommandsSelectedIndex, flatVisibleCommands: quickCommandsFiltered } = storeToRefs(quickCommandsStore);
-const { resetSelection: resetQuickCommandsSelection } = quickCommandsStore;
-// Get reactive state and actions from command history store
-const { selectedIndex: historySelectedIndex, filteredHistory: historyFiltered } = storeToRefs(commandHistoryStore);
-const { resetSelection: resetHistorySelection } = commandHistoryStore;
-// +++ Get active session ID from session store +++
-const { activeSessionId } = storeToRefs(sessionStore);
-const { updateSessionCommandInput } = sessionStore;
+  // Props definition is now empty as search results are no longer handled here
+  const props = defineProps<{
+    // No props defined here currently
+    isMobile?: boolean;
+    isVirtualKeyboardVisible?: boolean; // +++ Add prop to receive state +++
+    virtualCtrlActive?: boolean;
+    virtualAltActive?: boolean;
+  }>();
+  // --- 移除本地 commandInput ref ---
+  // const commandInput = ref('');
+  const isSearching = ref(false);
+  const searchTerm = ref('');
+  const showQuickCommands = ref(false); // +++ Add state for modal visibility +++
+  const showSuspendedSshSessionsModal = ref(false); // +++ Add state for suspended SSH sessions modal +++
+  const showStatusMonitorModal = ref(false);
+  // *** 移除本地的搜索结果 ref ***
+  // const searchResultCount = ref(0);
+  // const currentSearchResultIndex = ref(0);
 
-// Props definition is now empty as search results are no longer handled here
-const props = defineProps<{
-  // No props defined here currently
-  isMobile?: boolean;
-  isVirtualKeyboardVisible?: boolean; // +++ Add prop to receive state +++
-  virtualCtrlActive?: boolean;
-  virtualAltActive?: boolean;
-}>();
-// --- 移除本地 commandInput ref ---
-// const commandInput = ref('');
-const isSearching = ref(false);
-const searchTerm = ref('');
-const showQuickCommands = ref(false); // +++ Add state for modal visibility +++
-const showSuspendedSshSessionsModal = ref(false); // +++ Add state for suspended SSH sessions modal +++
-const showStatusMonitorModal = ref(false);
-// *** 移除本地的搜索结果 ref ***
-// const searchResultCount = ref(0);
-// const currentSearchResultIndex = ref(0);
-
-// +++ 计算属性，用于获取和设置当前活动会话的命令输入 +++
-const currentSessionCommandInput = computed({
-  get: () => {
-    if (!activeSessionId.value) return '';
-    const session = sessionStore.sessions.get(activeSessionId.value);
-    return session ? session.commandInputContent.value : '';
-  },
-  set: (newValue) => {
-    if (activeSessionId.value) {
-      updateSessionCommandInput(activeSessionId.value, newValue);
-    }
-  }
-});
-
-// 首次 SSH 握手真正完成前禁止命令输入，避免 workspace 已出现但 shell 尚未就绪时
-// 第一条命令被静默丢弃。成功连接过一次后即使断线也不禁用，以保留立即重连入口。
-const isInitialSshConnecting = computed(() => {
-  if (isSearching.value || !activeSessionId.value) return false;
-  const session = sessionStore.sessions.get(activeSessionId.value);
-  const manager = session?.terminalManager;
-  if (!manager) return false;
-  return !manager.isSshConnected.value && !manager.hasSshConnectedOnce.value;
-});
-
-// 命令和终端搜索共用同一个可见输入框，但分别保留各自内容。
-const activeInputValue = computed({
-  get: () => isSearching.value ? searchTerm.value : currentSessionCommandInput.value,
-  set: (newValue: string) => {
-    if (isSearching.value) {
-      searchTerm.value = newValue;
-    } else {
-      currentSessionCommandInput.value = newValue;
-    }
-  }
-});
-
-const sendCommand = () => {
-  const command = currentSessionCommandInput.value; // 使用计算属性获取值
-  console.log(`[CommandInputBar] Sending command: ${command || '<Enter>'} `);
-  emitWorkspaceEvent('terminal:sendCommand', { command });
-
-  // 如果是空回车，并且有活动会话，则请求滚动到底部
-  if (command.trim() === '' && activeSessionId.value) {
-    console.log(`[CommandInputBar] Empty Enter detected. Requesting scroll to bottom for session: ${activeSessionId.value}`);
-    emitWorkspaceEvent('terminal:scrollToBottomRequest', { sessionId: activeSessionId.value });
-  }
-
-  // 清空 store 中的值
-  if (activeSessionId.value) {
-    updateSessionCommandInput(activeSessionId.value, '');
-  }
-};
-
-const toggleSearch = () => {
-  isSearching.value = !isSearching.value;
-  if (!isSearching.value) {
-    searchTerm.value = ''; // 关闭搜索时清空
-    emitWorkspaceEvent('search:close'); // 通知父组件关闭搜索
-  }
-  nextTick(() => commandInputRef.value?.focus());
-};
-
-const performSearch = () => {
-  emitWorkspaceEvent('search:start', { term: searchTerm.value });
-  // 实际的计数更新逻辑应该由父组件通过 props 或事件传递回来
-};
-
-const findNext = () => {
-  emitWorkspaceEvent('search:findNext');
-};
-
-const findPrevious = () => {
-  emitWorkspaceEvent('search:findPrevious');
-};
-
-// 监听搜索词变化，执行搜索
-watch(searchTerm, (newValue) => {
-  if (isSearching.value) {
-    performSearch();
-  }
-});
-
-//  Watch currentSessionCommandInput and sync searchTerm based on settings
-watch(currentSessionCommandInput, (newValue) => { // 监听计算属性
-  const target = commandInputSyncTarget.value;
-  if (target === 'quickCommands') {
-    quickCommandsStore.setSearchTerm(newValue);
-  } else if (target === 'commandHistory') {
-    commandHistoryStore.setSearchTerm(newValue);
-  }
-  // If target is 'none', do nothing
-});
-
-const commandInputRef = ref<HTMLInputElement | null>(null); // Ref for command input
-
-// Removed debug computed property
-
-const handleCommandInputKeydown = (event: KeyboardEvent) => {
-  // --- 移动到外部：优先处理 Enter 键执行选中项 ---
-  if (!event.altKey && event.key === 'Enter') {
-    const target = commandInputSyncTarget.value;
-    let selectedCommand: string | undefined;
-    let resetSelection: (() => void) | undefined;
-
-    if (target === 'quickCommands' && quickCommandsSelectedIndex.value >= 0) {
-      const commands = quickCommandsFiltered.value;
-      if (quickCommandsSelectedIndex.value < commands.length) {
-        selectedCommand = commands[quickCommandsSelectedIndex.value].command;
-        resetSelection = resetQuickCommandsSelection;
-      }
-    } else if (target === 'commandHistory' && historySelectedIndex.value >= 0) {
-      const history = historyFiltered.value;
-      if (historySelectedIndex.value < history.length) {
-        selectedCommand = history[historySelectedIndex.value].command;
-        resetSelection = resetHistorySelection;
-      }
-    }
-
-    if (selectedCommand !== undefined) {
-      event.preventDefault();
-      console.log(`[CommandInputBar] Enter detected with selection. Sending selected command: ${selectedCommand}`);
-      emitWorkspaceEvent('terminal:sendCommand', { command: selectedCommand }); // 发送选中命令
+  // +++ 计算属性，用于获取和设置当前活动会话的命令输入 +++
+  const currentSessionCommandInput = computed({
+    get: () => {
+      if (!activeSessionId.value) return '';
+      const session = sessionStore.sessions.get(activeSessionId.value);
+      return session ? session.commandInputContent.value : '';
+    },
+    set: (newValue) => {
       if (activeSessionId.value) {
-        updateSessionCommandInput(activeSessionId.value, ''); // 清空输入框
+        updateSessionCommandInput(activeSessionId.value, newValue);
       }
-      resetSelection?.(); // 重置列表选中状态
-      return; // 阻止后续的 Enter 处理
-    }
-    // 如果没有选中项，则继续执行下面的默认 Enter 逻辑
-  }
-  // --- 结束：优先处理 Enter 键执行选中项 ---
+    },
+  });
 
-  if (event.ctrlKey && event.key === 'f') {
-    event.preventDefault(); // 阻止浏览器默认的查找行为
-    if (!isSearching.value) toggleSearch();
-  } else if (event.key === 'ArrowUp') {
+  // 首次 SSH 握手真正完成前禁止命令输入，避免 workspace 已出现但 shell 尚未就绪时
+  // 第一条命令被静默丢弃。成功连接过一次后即使断线也不禁用，以保留立即重连入口。
+  const isInitialSshConnecting = computed(() => {
+    if (isSearching.value || !activeSessionId.value) return false;
+    const session = sessionStore.sessions.get(activeSessionId.value);
+    const manager = session?.terminalManager;
+    if (!manager) return false;
+    return !manager.isSshConnected.value && !manager.hasSshConnectedOnce.value;
+  });
+
+  // 命令和终端搜索共用同一个可见输入框，但分别保留各自内容。
+  const activeInputValue = computed({
+    get: () => (isSearching.value ? searchTerm.value : currentSessionCommandInput.value),
+    set: (newValue: string) => {
+      if (isSearching.value) {
+        searchTerm.value = newValue;
+      } else {
+        currentSessionCommandInput.value = newValue;
+      }
+    },
+  });
+
+  const sendCommand = () => {
+    const command = currentSessionCommandInput.value; // 使用计算属性获取值
+    console.log(`[CommandInputBar] Sending command: ${command || '<Enter>'} `);
+    emitWorkspaceEvent('terminal:sendCommand', { command });
+
+    // 如果是空回车，并且有活动会话，则请求滚动到底部
+    if (command.trim() === '' && activeSessionId.value) {
+      console.log(
+        `[CommandInputBar] Empty Enter detected. Requesting scroll to bottom for session: ${activeSessionId.value}`,
+      );
+      emitWorkspaceEvent('terminal:scrollToBottomRequest', { sessionId: activeSessionId.value });
+    }
+
+    // 清空 store 中的值
+    if (activeSessionId.value) {
+      updateSessionCommandInput(activeSessionId.value, '');
+    }
+  };
+
+  const toggleSearch = () => {
+    isSearching.value = !isSearching.value;
+    if (!isSearching.value) {
+      searchTerm.value = ''; // 关闭搜索时清空
+      emitWorkspaceEvent('search:close'); // 通知父组件关闭搜索
+    }
+    nextTick(() => commandInputRef.value?.focus());
+  };
+
+  const performSearch = () => {
+    emitWorkspaceEvent('search:start', { term: searchTerm.value });
+    // 实际的计数更新逻辑应该由父组件通过 props 或事件传递回来
+  };
+
+  const findNext = () => {
+    emitWorkspaceEvent('search:findNext');
+  };
+
+  const findPrevious = () => {
+    emitWorkspaceEvent('search:findPrevious');
+  };
+
+  // 监听搜索词变化，执行搜索
+  watch(searchTerm, (newValue) => {
+    if (isSearching.value) {
+      performSearch();
+    }
+  });
+
+  //  Watch currentSessionCommandInput and sync searchTerm based on settings
+  watch(currentSessionCommandInput, (newValue) => {
+    // 监听计算属性
     const target = commandInputSyncTarget.value;
     if (target === 'quickCommands') {
-      event.preventDefault();
-      quickCommandsStore.selectPreviousCommand();
+      quickCommandsStore.setSearchTerm(newValue);
     } else if (target === 'commandHistory') {
-      event.preventDefault();
-      commandHistoryStore.selectPreviousCommand();
+      commandHistoryStore.setSearchTerm(newValue);
     }
-  } else if (event.key === 'ArrowDown') {
-    const target = commandInputSyncTarget.value;
-    if (target === 'quickCommands') {
-      event.preventDefault();
-      quickCommandsStore.selectNextCommand();
-    } else if (target === 'commandHistory') {
-      event.preventDefault();
-      commandHistoryStore.selectNextCommand();
-    }
-  } else if (event.ctrlKey && event.key === 'c' && currentSessionCommandInput.value === '') { // 检查计算属性的值
-    // Handle Ctrl+C when input is empty
-    event.preventDefault();
-    console.log('[CommandInputBar] Ctrl+C detected with empty input. Sending SIGINT.');
-    emitWorkspaceEvent('terminal:sendCommand', { command: '\x03' }); // Send ETX character (Ctrl+C)
-  } else if (!event.altKey && event.key === 'Enter') {
-     // Handle regular Enter key press - send current input (empty or not)
-     event.preventDefault(); // Prevent default if needed, e.g., form submission
-     sendCommand(); // Call the existing sendCommand function
- } else {
-   // --- 处理其他按键，取消列表选中状态 ---
-   // 检查按下的键是否是普通输入键或删除键等，而不是导航键或修饰键
-   if (!['ArrowUp', 'ArrowDown', 'Enter', 'Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape'].includes(event.key)) {
-       const target = commandInputSyncTarget.value;
-       if (target === 'quickCommands' && quickCommandsSelectedIndex.value >= 0) {
-           resetQuickCommandsSelection();
-       } else if (target === 'commandHistory' && historySelectedIndex.value >= 0) {
-           resetHistorySelection();
-       }
-   }
- }
-};
+    // If target is 'none', do nothing
+  });
 
-const handleSharedInputKeydown = (event: KeyboardEvent) => {
-  if (props.isMobile && !isSearching.value && (props.virtualCtrlActive || props.virtualAltActive)) {
-    const sequence = applyTerminalModifiers(event.key, {
+  const commandInputRef = ref<HTMLInputElement | null>(null); // Ref for command input
+
+  // Removed debug computed property
+
+  const handleCommandInputKeydown = (event: KeyboardEvent) => {
+    // --- 移动到外部：优先处理 Enter 键执行选中项 ---
+    if (!event.altKey && event.key === 'Enter') {
+      const target = commandInputSyncTarget.value;
+      let selectedCommand: string | undefined;
+      let resetSelection: (() => void) | undefined;
+
+      if (target === 'quickCommands' && quickCommandsSelectedIndex.value >= 0) {
+        const commands = quickCommandsFiltered.value;
+        if (quickCommandsSelectedIndex.value < commands.length) {
+          selectedCommand = commands[quickCommandsSelectedIndex.value].command;
+          resetSelection = resetQuickCommandsSelection;
+        }
+      } else if (target === 'commandHistory' && historySelectedIndex.value >= 0) {
+        const history = historyFiltered.value;
+        if (historySelectedIndex.value < history.length) {
+          selectedCommand = history[historySelectedIndex.value].command;
+          resetSelection = resetHistorySelection;
+        }
+      }
+
+      if (selectedCommand !== undefined) {
+        event.preventDefault();
+        console.log(`[CommandInputBar] Enter detected with selection. Sending selected command: ${selectedCommand}`);
+        emitWorkspaceEvent('terminal:sendCommand', { command: selectedCommand }); // 发送选中命令
+        if (activeSessionId.value) {
+          updateSessionCommandInput(activeSessionId.value, ''); // 清空输入框
+        }
+        resetSelection?.(); // 重置列表选中状态
+        return; // 阻止后续的 Enter 处理
+      }
+      // 如果没有选中项，则继续执行下面的默认 Enter 逻辑
+    }
+    // --- 结束：优先处理 Enter 键执行选中项 ---
+
+    if (event.ctrlKey && event.key === 'f') {
+      event.preventDefault(); // 阻止浏览器默认的查找行为
+      if (!isSearching.value) toggleSearch();
+    } else if (event.key === 'ArrowUp') {
+      const target = commandInputSyncTarget.value;
+      if (target === 'quickCommands') {
+        event.preventDefault();
+        quickCommandsStore.selectPreviousCommand();
+      } else if (target === 'commandHistory') {
+        event.preventDefault();
+        commandHistoryStore.selectPreviousCommand();
+      }
+    } else if (event.key === 'ArrowDown') {
+      const target = commandInputSyncTarget.value;
+      if (target === 'quickCommands') {
+        event.preventDefault();
+        quickCommandsStore.selectNextCommand();
+      } else if (target === 'commandHistory') {
+        event.preventDefault();
+        commandHistoryStore.selectNextCommand();
+      }
+    } else if (event.ctrlKey && event.key === 'c' && currentSessionCommandInput.value === '') {
+      // 检查计算属性的值
+      // Handle Ctrl+C when input is empty
+      event.preventDefault();
+      console.log('[CommandInputBar] Ctrl+C detected with empty input. Sending SIGINT.');
+      emitWorkspaceEvent('terminal:sendCommand', { command: '\x03' }); // Send ETX character (Ctrl+C)
+    } else if (!event.altKey && event.key === 'Enter') {
+      // Handle regular Enter key press - send current input (empty or not)
+      event.preventDefault(); // Prevent default if needed, e.g., form submission
+      sendCommand(); // Call the existing sendCommand function
+    } else {
+      // --- 处理其他按键，取消列表选中状态 ---
+      // 检查按下的键是否是普通输入键或删除键等，而不是导航键或修饰键
+      if (!['ArrowUp', 'ArrowDown', 'Enter', 'Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape'].includes(event.key)) {
+        const target = commandInputSyncTarget.value;
+        if (target === 'quickCommands' && quickCommandsSelectedIndex.value >= 0) {
+          resetQuickCommandsSelection();
+        } else if (target === 'commandHistory' && historySelectedIndex.value >= 0) {
+          resetHistorySelection();
+        }
+      }
+    }
+  };
+
+  const handleSharedInputKeydown = (event: KeyboardEvent) => {
+    if (props.isMobile && !isSearching.value && (props.virtualCtrlActive || props.virtualAltActive)) {
+      const sequence = applyTerminalModifiers(event.key, {
+        ctrl: Boolean(props.virtualCtrlActive),
+        alt: Boolean(props.virtualAltActive),
+      });
+      if (sequence !== null && activeSessionId.value) {
+        event.preventDefault();
+        emit('consume-virtual-modifiers');
+        emitWorkspaceEvent('terminal:input', { sessionId: activeSessionId.value, data: sequence });
+        return;
+      }
+    }
+
+    if (!isSearching.value) {
+      handleCommandInputKeydown(event);
+      return;
+    }
+
+    if (event.ctrlKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      commandInputRef.value?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      toggleSearch();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (event.shiftKey) findPrevious();
+      else findNext();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      findPrevious();
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      findNext();
+    }
+  };
+
+  const handleSharedBeforeInput = (event: InputEvent) => {
+    if (!props.isMobile || isSearching.value || event.isComposing || event.inputType !== 'insertText') return;
+    if (!props.virtualCtrlActive && !props.virtualAltActive) return;
+    if (!event.data || !activeSessionId.value) return;
+
+    const sequence = applyTerminalModifiers(event.data, {
       ctrl: Boolean(props.virtualCtrlActive),
       alt: Boolean(props.virtualAltActive),
     });
-    if (sequence !== null && activeSessionId.value) {
-      event.preventDefault();
-      emit('consume-virtual-modifiers');
-      emitWorkspaceEvent('terminal:input', { sessionId: activeSessionId.value, data: sequence });
-      return;
-    }
-  }
+    if (sequence === null) return;
 
-  if (!isSearching.value) {
-    handleCommandInputKeydown(event);
-    return;
-  }
-
-  if (event.ctrlKey && event.key.toLowerCase() === 'f') {
     event.preventDefault();
-    commandInputRef.value?.focus();
-  } else if (event.key === 'Escape') {
-    event.preventDefault();
-    toggleSearch();
-  } else if (event.key === 'Enter') {
-    event.preventDefault();
-    if (event.shiftKey) findPrevious();
-    else findNext();
-  } else if (event.key === 'ArrowUp') {
-    event.preventDefault();
-    findPrevious();
-  } else if (event.key === 'ArrowDown') {
-    event.preventDefault();
-    findNext();
-  }
-};
+    emit('consume-virtual-modifiers');
+    emitWorkspaceEvent('terminal:input', { sessionId: activeSessionId.value, data: sequence });
+  };
 
-const handleSharedBeforeInput = (event: InputEvent) => {
-  if (!props.isMobile || isSearching.value || event.isComposing || event.inputType !== 'insertText') return;
-  if (!props.virtualCtrlActive && !props.virtualAltActive) return;
-  if (!event.data || !activeSessionId.value) return;
-
-  const sequence = applyTerminalModifiers(event.data, {
-    ctrl: Boolean(props.virtualCtrlActive),
-    alt: Boolean(props.virtualAltActive),
-  });
-  if (sequence === null) return;
-
-  event.preventDefault();
-  emit('consume-virtual-modifiers');
-  emitWorkspaceEvent('terminal:input', { sessionId: activeSessionId.value, data: sequence });
-};
-
-//  Handle blur event on command input
-const handleCommandInputBlur = () => {
+  //  Handle blur event on command input
+  const handleCommandInputBlur = () => {
     // Reset selection in the target store when input loses focus
     const target = commandInputSyncTarget.value;
     if (target === 'quickCommands') {
-        resetQuickCommandsSelection();
+      resetQuickCommandsSelection();
     } else if (target === 'commandHistory') {
-        resetHistorySelection();
+      resetHistorySelection();
     }
-};
+  };
 
-const handleSharedInputBlur = () => {
-  if (!isSearching.value) handleCommandInputBlur();
-};
+  const handleSharedInputBlur = () => {
+    if (!isSearching.value) handleCommandInputBlur();
+  };
 
-// +++ 监听 Store 中的触发器以激活终端搜索 +++
-watch(() => focusSwitcherStore.activateTerminalSearchTrigger, () => {
-    if (focusSwitcherStore.activateTerminalSearchTrigger > 0 && !isSearching.value) {
+  // +++ 监听 Store 中的触发器以激活终端搜索 +++
+  watch(
+    () => focusSwitcherStore.activateTerminalSearchTrigger,
+    () => {
+      if (focusSwitcherStore.activateTerminalSearchTrigger > 0 && !isSearching.value) {
         console.log('[CommandInputBar] Received terminal search activation trigger from store.');
         toggleSearch(); // 调用组件内部的切换搜索方法来激活
+      }
+    },
+  );
+
+  // --- Focus Actions ---
+  const focusCommandInput = (): boolean => {
+    if (isSearching.value) {
+      toggleSearch();
+      return true;
     }
-});
+    if (commandInputRef.value) {
+      commandInputRef.value.focus();
+      return true;
+    }
+    return false;
+  };
 
-// --- Focus Actions ---
-const focusCommandInput = (): boolean => {
-  if (isSearching.value) {
-    toggleSearch();
-    return true;
-  }
-  if (commandInputRef.value) {
-    commandInputRef.value.focus();
-    return true;
-  }
-  return false;
-};
+  const focusSearchInput = (): boolean => {
+    if (!isSearching.value) {
+      toggleSearch();
+      return true;
+    } else if (commandInputRef.value) {
+      commandInputRef.value.focus();
+      return true;
+    }
+    return false;
+  };
 
-const focusSearchInput = (): boolean => {
-  if (!isSearching.value) {
-    toggleSearch();
-    return true;
-  } else if (commandInputRef.value) {
-    commandInputRef.value.focus();
-    return true;
-  }
-  return false;
-};
+  defineExpose({ focusCommandInput, focusSearchInput });
 
-defineExpose({ focusCommandInput, focusSearchInput });
+  // --- Register/Unregister Focus Actions ---
+  let unregisterCommandInputFocus: (() => void) | null = null;
+  let unregisterTerminalSearchFocus: (() => void) | null = null;
 
-// --- Register/Unregister Focus Actions ---
-let unregisterCommandInputFocus: (() => void) | null = null;
-let unregisterTerminalSearchFocus: (() => void) | null = null;
+  onMounted(() => {
+    unregisterCommandInputFocus = focusSwitcherStore.registerFocusAction('commandInput', focusCommandInput);
+    unregisterTerminalSearchFocus = focusSwitcherStore.registerFocusAction('terminalSearch', focusSearchInput);
+  });
 
-onMounted(() => {
-  unregisterCommandInputFocus = focusSwitcherStore.registerFocusAction('commandInput', focusCommandInput);
-  unregisterTerminalSearchFocus = focusSwitcherStore.registerFocusAction('terminalSearch', focusSearchInput);
-});
+  onBeforeUnmount(() => {
+    if (unregisterCommandInputFocus) {
+      unregisterCommandInputFocus();
+    }
+    if (unregisterTerminalSearchFocus) {
+      unregisterTerminalSearchFocus();
+    }
+  });
 
-onBeforeUnmount(() => {
-  if (unregisterCommandInputFocus) {
-    unregisterCommandInputFocus();
-  }
-  if (unregisterTerminalSearchFocus) {
-    unregisterTerminalSearchFocus();
-  }
-});
+  // +++ Functions to control the quick commands modal +++
+  const openQuickCommandsModal = () => {
+    showQuickCommands.value = true;
+  };
 
-// +++ Functions to control the quick commands modal +++
-const openQuickCommandsModal = () => {
-  showQuickCommands.value = true;
-};
+  const closeQuickCommandsModal = () => {
+    showQuickCommands.value = false;
+  };
 
-const closeQuickCommandsModal = () => {
-  showQuickCommands.value = false;
-};
+  // +++ Functions to control the suspended SSH sessions modal +++
+  const openSuspendedSshSessionsModal = () => {
+    showSuspendedSshSessionsModal.value = true;
+  };
 
-// +++ Functions to control the suspended SSH sessions modal +++
-const openSuspendedSshSessionsModal = () => {
-  showSuspendedSshSessionsModal.value = true;
-};
+  const closeSuspendedSshSessionsModal = () => {
+    showSuspendedSshSessionsModal.value = false;
+  };
 
-const closeSuspendedSshSessionsModal = () => {
-  showSuspendedSshSessionsModal.value = false;
-};
+  const openStatusMonitor = () => {
+    showStatusMonitorModal.value = true;
+  };
 
-const openStatusMonitor = () => {
-  showStatusMonitorModal.value = true;
-};
+  const closeStatusMonitor = () => {
+    showStatusMonitorModal.value = false;
+  };
 
-const closeStatusMonitor = () => {
-  showStatusMonitorModal.value = false;
-};
+  const handleCommandBarPointerUp = (event: PointerEvent) => {
+    if (!props.isMobile || event.pointerType === 'mouse') return;
+    const target = event.target instanceof Element ? event.target.closest('button') : null;
+    if (target instanceof HTMLButtonElement) {
+      window.setTimeout(() => target.blur(), 0);
+    }
+  };
 
-const handleCommandBarPointerUp = (event: PointerEvent) => {
-  if (!props.isMobile || event.pointerType === 'mouse') return;
-  const target = event.target instanceof Element ? event.target.closest('button') : null;
-  if (target instanceof HTMLButtonElement) {
-    window.setTimeout(() => target.blur(), 0);
-  }
-};
+  // +++ Function to request opening the file manager modal via event bus +++
+  const openFileManagerModal = () => {
+    if (activeSessionId.value) {
+      console.log(`[CommandInputBar] Emitting fileManager:openModalRequest for session: ${activeSessionId.value}`);
+      emitWorkspaceEvent('fileManager:openModalRequest', { sessionId: activeSessionId.value });
+    } else {
+      console.warn('[CommandInputBar] Cannot open file manager modal: No active session ID.');
+      // Optionally, show a notification to the user
+    }
+  };
 
-// +++ Function to request opening the file manager modal via event bus +++
-const openFileManagerModal = () => {
-  if (activeSessionId.value) {
-    console.log(`[CommandInputBar] Emitting fileManager:openModalRequest for session: ${activeSessionId.value}`);
-    emitWorkspaceEvent('fileManager:openModalRequest', { sessionId: activeSessionId.value });
-  } else {
-    console.warn('[CommandInputBar] Cannot open file manager modal: No active session ID.');
-    // Optionally, show a notification to the user
-  }
-};
+  // +++ Function to request opening the file editor modal +++
+  const openFileEditorModal = () => {
+    if (activeSessionId.value) {
+      console.log(`[CommandInputBar] Triggering popup editor for session: ${activeSessionId.value}`);
+      fileEditorStore.triggerPopup('', activeSessionId.value); // Call store action directly
+    } else {
+      console.warn('[CommandInputBar] Cannot open file editor modal: No active session ID.');
+      // Optionally, show a notification to the user
+    }
+  };
 
-// +++ Function to request opening the file editor modal +++
-const openFileEditorModal = () => {
- if (activeSessionId.value) {
-   console.log(`[CommandInputBar] Triggering popup editor for session: ${activeSessionId.value}`);
-   fileEditorStore.triggerPopup('', activeSessionId.value); // Call store action directly
- } else {
-   console.warn('[CommandInputBar] Cannot open file editor modal: No active session ID.');
-   // Optionally, show a notification to the user
- }
-};
-
-// +++ Handler for command execution from the modal +++
-const handleQuickCommandExecute = (command: string) => {
-  console.log(`[CommandInputBar] Executing quick command: ${command}`);
-  emitWorkspaceEvent('terminal:sendCommand', { command }); // Emit the command to the parent
-  closeQuickCommandsModal(); // Close the modal after selection
-};
+  // +++ Handler for command execution from the modal +++
+  const handleQuickCommandExecute = (command: string) => {
+    console.log(`[CommandInputBar] Executing quick command: ${command}`);
+    emitWorkspaceEvent('terminal:sendCommand', { command }); // Emit the command to the parent
+    closeQuickCommandsModal(); // Close the modal after selection
+  };
 </script>
 
 <template>
@@ -429,8 +437,10 @@ const handleQuickCommandExecute = (command: string) => {
     :class="[$attrs.class, { 'command-bar-root--mobile': props.isMobile }]"
     class="command-bar-root flex items-center bg-background"
     @pointerup="handleCommandBarPointerUp"
-  > <!-- Bind $attrs.class, keep mobile sizing explicit so it cannot consume the whole workspace -->
-    <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0"> <!-- Added px-2 here, ensure full width -->
+  >
+    <!-- Bind $attrs.class, keep mobile sizing explicit so it cannot consume the whole workspace -->
+    <div class="command-bar-inner flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full min-w-0">
+      <!-- Added px-2 here, ensure full width -->
       <!-- 命令输入与终端搜索共用同一个输入框 -->
       <input
         data-testid="command-input"
@@ -502,7 +512,11 @@ const handleQuickCommandExecute = (command: string) => {
           v-if="props.isMobile"
           @click="emit('toggle-virtual-keyboard')"
           class="command-bar-button flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
-          :title="props.isVirtualKeyboardVisible ? t('commandInputBar.hideKeyboard', '隐藏虚拟键盘') : t('commandInputBar.showKeyboard', '显示虚拟键盘')"
+          :title="
+            props.isVirtualKeyboardVisible
+              ? t('commandInputBar.hideKeyboard', '隐藏虚拟键盘')
+              : t('commandInputBar.showKeyboard', '显示虚拟键盘')
+          "
         >
           <i class="fas fa-keyboard text-base" :class="{ 'opacity-50': !props.isVirtualKeyboardVisible }"></i>
         </button>
@@ -518,7 +532,8 @@ const handleQuickCommandExecute = (command: string) => {
         </button>
 
         <!-- Search navigation buttons (Hide on mobile when searching) -->
-        <template v-if="isSearching && !props.isMobile"> <!-- +++ Add !props.isMobile condition +++ -->
+        <template v-if="isSearching && !props.isMobile">
+          <!-- +++ Add !props.isMobile condition +++ -->
           <button
             @click="findPrevious"
             class="command-bar-button flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
@@ -554,7 +569,6 @@ const handleQuickCommandExecute = (command: string) => {
         <!-- Note: On mobile, when searching, only the close button (inside toggleSearch button logic) will be effectively visible in this control group -->
       </div>
     </div>
-
   </div>
   <!-- +++ Quick Commands Modal Instance +++ -->
   <QuickCommandsModal
@@ -563,10 +577,7 @@ const handleQuickCommandExecute = (command: string) => {
     @execute-command="handleQuickCommandExecute"
   />
   <!-- +++ Suspended SSH Sessions Modal Instance +++ -->
-  <SuspendedSshSessionsModal
-    :is-visible="showSuspendedSshSessionsModal"
-    @close="closeSuspendedSshSessionsModal"
-  />
+  <SuspendedSshSessionsModal :is-visible="showSuspendedSshSessionsModal" @close="closeSuspendedSshSessionsModal" />
   <StatusMonitorModal
     :is-visible="showStatusMonitorModal"
     :active-session-id="activeSessionId"
@@ -576,145 +587,99 @@ const handleQuickCommandExecute = (command: string) => {
 </template>
 
 <style scoped>
-.command-bar-root {
-  container-type: size;
-  container-name: command-bar-pane;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-block: 0;
-}
+  .command-bar-root {
+    container-type: size;
+    container-name: command-bar-pane;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-block: 0;
+  }
 
-/*
+  /*
  * Desktop layout panes need the command bar to fill their configured pane height.
  * On mobile it is a sibling of the flexing terminal area; height:100% here would
  * make this non-shrinking child consume the entire workspace and collapse the
  * terminal to zero height. Keep the mobile bar content-sized instead.
  */
-.command-bar-root--mobile {
-  height: auto;
-  min-height: 2.35rem;
-  flex: 0 0 auto;
-  overflow-y: hidden;
-}
+  .command-bar-root--mobile {
+    height: auto;
+    min-height: 2.35rem;
+    flex: 0 0 auto;
+    overflow-y: hidden;
+  }
 
-.command-bar-root--mobile .command-bar-inner {
-  min-height: 0;
-  align-self: auto;
-  padding-block: 0.25rem;
-}
+  .command-bar-root--mobile .command-bar-inner {
+    min-height: 0;
+    align-self: auto;
+    padding-block: 0.25rem;
+  }
 
-/*
+  /*
  * 手机端快捷按钮数量会随功能增长。保持单行高度，把按钮区变成横向可滚动条，
  * 同时给命令输入保留稳定的最小宽度，避免新增按钮后把输入框挤到不可用。
  */
-.command-bar-root--mobile .command-bar-command-input {
-  /* 约等于“输入命令后回车”的完整显示宽度，避免输入框占掉过多快捷按钮空间。 */
-  flex: 0 0 7.25rem !important;
-  width: 7.25rem;
-  min-width: 7.25rem;
-  padding-inline: 0.5rem;
-}
-
-.command-bar-root--mobile .command-bar-controls {
-  min-width: 0;
-  max-width: none;
-  flex: 1 1 0;
-  justify-content: flex-start;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.command-bar-root--mobile .command-bar-controls::-webkit-scrollbar {
-  display: none;
-}
-
-@media (hover: none) {
-  .command-bar-root--mobile .command-bar-button {
-    touch-action: manipulation;
+  .command-bar-root--mobile .command-bar-command-input {
+    /* 约等于“输入命令后回车”的完整显示宽度，避免输入框占掉过多快捷按钮空间。 */
+    flex: 0 0 7.25rem !important;
+    width: 7.25rem;
+    min-width: 7.25rem;
+    padding-inline: 0.5rem;
   }
 
-  .command-bar-root--mobile .command-bar-button:hover:not(:active) {
-    background-color: transparent !important;
-    color: var(--text-secondary-color) !important;
+  .command-bar-root--mobile .command-bar-controls {
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
   }
-}
 
-.command-bar-inner {
-  min-width: 0;
-  min-height: 100%;
-  flex-wrap: nowrap;
-  align-content: center;
-  align-self: center;
-  flex-grow: 1;
-  row-gap: 0;
-  column-gap: 0.3rem;
-  padding: 0.04rem 0.5rem;
-  overflow: hidden;
-}
-.command-bar-input {
-  min-width: 0;
-  height: 1.85rem;
-  min-height: 1.85rem;
-  max-height: 1.85rem;
-  padding-top: 0.24rem;
-  padding-bottom: 0.24rem;
-}
-.command-bar-command-input {
-  flex: 1 1 auto !important;
-  width: auto;
-  min-width: 0;
-}
-.command-bar-controls {
-  min-width: max-content;
-  max-width: max-content;
-  flex: 0 0 max-content;
-  flex-wrap: nowrap;
-  align-items: center;
-  align-content: center;
-  justify-content: flex-end;
-  gap: 0.3rem;
-  overflow: visible;
-}
-.command-bar-button {
-  position: relative;
-  width: 1.85rem !important;
-  height: 1.85rem !important;
-  min-width: 1.85rem;
-  min-height: 1.85rem;
-  flex: 0 0 1.85rem;
-  transition: transform .12s ease, background-color .2s ease, color .2s ease, border-color .2s ease;
-}
-.command-bar-button:active {
-  transform: scale(0.92);
-}
-.command-bar-button i {
-  font-size: 0.85rem !important;
-  line-height: 1;
-  pointer-events: none;
-}
-.command-bar-command-input:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #3b82f6) 18%, transparent);
-}
+  .command-bar-root--mobile .command-bar-controls::-webkit-scrollbar {
+    display: none;
+  }
 
-/* 宽度不够时由 flex 自动从一行变两行；高度不够时滚动，不缩小、不遮挡。 */
-@container command-bar-pane (max-height: 52px) {
+  @media (hover: none) {
+    .command-bar-root--mobile .command-bar-button {
+      touch-action: manipulation;
+    }
+
+    .command-bar-root--mobile .command-bar-button:hover:not(:active) {
+      background-color: transparent !important;
+      color: var(--text-secondary-color) !important;
+    }
+  }
+
   .command-bar-inner {
-    min-height: max-content;
-    align-content: start;
-    padding-block: 0.04rem;
+    min-width: 0;
+    min-height: 100%;
+    flex-wrap: nowrap;
+    align-content: center;
+    align-self: center;
+    flex-grow: 1;
+    row-gap: 0;
+    column-gap: 0.3rem;
+    padding: 0.04rem 0.5rem;
+    overflow: hidden;
   }
-}
-
-@container command-bar-pane (max-width: 280px) {
+  .command-bar-input {
+    min-width: 0;
+    height: 1.85rem;
+    min-height: 1.85rem;
+    max-height: 1.85rem;
+    padding-top: 0.24rem;
+    padding-bottom: 0.24rem;
+  }
   .command-bar-command-input {
-    flex: 1 1 3.5rem !important;
+    flex: 1 1 auto !important;
+    width: auto;
     min-width: 0;
   }
   .command-bar-controls {
@@ -722,6 +687,56 @@ const handleQuickCommandExecute = (command: string) => {
     max-width: max-content;
     flex: 0 0 max-content;
     flex-wrap: nowrap;
+    align-items: center;
+    align-content: center;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    overflow: visible;
   }
-}
+  .command-bar-button {
+    position: relative;
+    width: 1.85rem !important;
+    height: 1.85rem !important;
+    min-width: 1.85rem;
+    min-height: 1.85rem;
+    flex: 0 0 1.85rem;
+    transition:
+      transform 0.12s ease,
+      background-color 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease;
+  }
+  .command-bar-button:active {
+    transform: scale(0.92);
+  }
+  .command-bar-button i {
+    font-size: 0.85rem !important;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .command-bar-command-input:focus {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #3b82f6) 18%, transparent);
+  }
+
+  /* 宽度不够时由 flex 自动从一行变两行；高度不够时滚动，不缩小、不遮挡。 */
+  @container command-bar-pane (max-height: 52px) {
+    .command-bar-inner {
+      min-height: max-content;
+      align-content: start;
+      padding-block: 0.04rem;
+    }
+  }
+
+  @container command-bar-pane (max-width: 280px) {
+    .command-bar-command-input {
+      flex: 1 1 3.5rem !important;
+      min-width: 0;
+    }
+    .command-bar-controls {
+      min-width: max-content;
+      max-width: max-content;
+      flex: 0 0 max-content;
+      flex-wrap: nowrap;
+    }
+  }
 </style>

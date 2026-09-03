@@ -10,8 +10,10 @@ const CLEARED_NAME = 'E2E Proxy Lifecycle Cleared';
 async function cleanup(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/proxies');
   expect(response.ok()).toBeTruthy();
-  const proxies = await response.json() as Array<{ id: number; name: string }>;
-  for (const proxy of proxies.filter((item) => [ORIGINAL_NAME, RENAMED_NAME, UPDATED_NAME, CLEARED_NAME].includes(item.name))) {
+  const proxies = (await response.json()) as Array<{ id: number; name: string }>;
+  for (const proxy of proxies.filter((item) =>
+    [ORIGINAL_NAME, RENAMED_NAME, UPDATED_NAME, CLEARED_NAME].includes(item.name),
+  )) {
     const remove = await request.delete(`/api/v1/proxies/${proxy.id}`);
     expect(remove.ok()).toBeTruthy();
   }
@@ -32,11 +34,13 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     await form.locator('#proxy-port').fill('18080');
     await form.locator('#proxy-username').fill('proxy-user');
     await form.locator('#proxy-password').fill('proxy-password-v1');
-    const createPromise = page.waitForResponse((response) => response.url().endsWith('/api/v1/proxies') && response.request().method() === 'POST');
+    const createPromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/proxies') && response.request().method() === 'POST',
+    );
     await form.getByTestId('proxy-submit').click();
     const create = await createPromise;
     expect(create.status()).toBe(201);
-    proxyId = (await create.json() as { proxy: { id: number } }).proxy.id;
+    proxyId = ((await create.json()) as { proxy: { id: number } }).proxy.id;
     await expect(page.getByTestId(`proxy-row-${proxyId}`)).toContainText(ORIGINAL_NAME);
   });
 
@@ -46,7 +50,9 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     const form = page.getByTestId('proxy-form');
     await expect(form.locator('#proxy-password')).toHaveValue('');
     await form.locator('#proxy-name').fill(RENAMED_NAME);
-    const updatePromise = page.waitForRequest((request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT');
+    const updatePromise = page.waitForRequest(
+      (request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',
+    );
     await form.getByTestId('proxy-submit').click();
     const updateRequest = await updatePromise;
     expect(updateRequest.postDataJSON()).toMatchObject({ name: RENAMED_NAME });
@@ -60,7 +66,9 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     const form = page.getByTestId('proxy-form');
     await form.locator('#proxy-name').fill(UPDATED_NAME);
     await form.locator('#proxy-password').fill('proxy-password-v2');
-    const updatePromise = page.waitForRequest((request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT');
+    const updatePromise = page.waitForRequest(
+      (request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',
+    );
     await form.getByTestId('proxy-submit').click();
     expect((await updatePromise).postDataJSON()).toMatchObject({ name: UPDATED_NAME, password: 'proxy-password-v2' });
     await expect(row).toContainText(UPDATED_NAME);
@@ -72,7 +80,9 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     const form = page.getByTestId('proxy-form');
     await form.locator('#proxy-name').fill(CLEARED_NAME);
     await form.getByTestId('proxy-clear-password').check();
-    const updatePromise = page.waitForRequest((request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT');
+    const updatePromise = page.waitForRequest(
+      (request) => request.url().endsWith(`/api/v1/proxies/${proxyId}`) && request.method() === 'PUT',
+    );
     await form.getByTestId('proxy-submit').click();
     expect((await updatePromise).postDataJSON()).toMatchObject({ name: CLEARED_NAME, password: null });
     await expect(row).toContainText(CLEARED_NAME);
@@ -85,10 +95,12 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     await expect(confirm).toBeVisible();
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(row).toHaveCount(0);
-    await expect.poll(async () => {
-      const response = await context.request.get('/api/v1/proxies');
-      const proxies = await response.json() as Array<{ id: number }>;
-      return proxies.some((item) => item.id === proxyId);
-    }).toBeFalsy();
+    await expect
+      .poll(async () => {
+        const response = await context.request.get('/api/v1/proxies');
+        const proxies = (await response.json()) as Array<{ id: number }>;
+        return proxies.some((item) => item.id === proxyId);
+      })
+      .toBeFalsy();
   });
 });

@@ -37,7 +37,8 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
       await commandInput.press('Enter');
       await commandInput.fill("printf 'Nexus mobile SSH\\n'");
       await commandInput.press('Enter');
-      await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+      await expect
+        .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
         .toContain('Nexus mobile SSH');
       await captureFunctionalScreenshot(page, 'mobile-workspace.png');
     }

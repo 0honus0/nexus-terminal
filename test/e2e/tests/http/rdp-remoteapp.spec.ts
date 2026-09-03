@@ -23,7 +23,7 @@ test('RDP RemoteApp options persist and are forwarded with display-update resize
     },
   });
   expect(created.status(), await created.text()).toBe(201);
-  const connectionId = (await created.json() as { connection: { id: number } }).connection.id;
+  const connectionId = ((await created.json()) as { connection: { id: number } }).connection.id;
 
   const persisted = await request.get(`/api/v1/connections/${connectionId}`);
   expect(persisted.ok()).toBeTruthy();
@@ -41,22 +41,24 @@ test('RDP RemoteApp options persist and are forwarded with display-update resize
   expect(session.status(), await session.text()).toBe(200);
   await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
 
-  await expect.poll(async () => {
-    const response = await request.get(`${TEST_GATEWAY_URL}/control/latest`);
-    if (!response.ok()) return null;
-    return (await response.json() as { latestRequest: unknown }).latestRequest;
-  }).toMatchObject({
-    protocol: 'rdp',
-    connectionConfig: {
-      hostname: '192.0.2.88',
-      port: '3389',
-      width: '1600',
-      height: '1000',
-      dpi: '144',
-      resizeMethod: 'display-update',
-      remoteApp: '||notepad',
-      remoteAppDir: 'C:\\RemoteApps',
-      remoteAppArgs: '/A sample.txt',
-    },
-  });
+  await expect
+    .poll(async () => {
+      const response = await request.get(`${TEST_GATEWAY_URL}/control/latest`);
+      if (!response.ok()) return null;
+      return ((await response.json()) as { latestRequest: unknown }).latestRequest;
+    })
+    .toMatchObject({
+      protocol: 'rdp',
+      connectionConfig: {
+        hostname: '192.0.2.88',
+        port: '3389',
+        width: '1600',
+        height: '1000',
+        dpi: '144',
+        resizeMethod: 'display-update',
+        remoteApp: '||notepad',
+        remoteAppDir: 'C:\\RemoteApps',
+        remoteAppArgs: '/A sample.txt',
+      },
+    });
 });

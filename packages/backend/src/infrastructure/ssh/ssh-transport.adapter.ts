@@ -1,6 +1,9 @@
 import { Client } from 'ssh2';
 import type { ResolvedSshConnection, SshConnectOptions } from '../../platform/connection/ssh-connection';
-import type { RemoteExecutionTransport, RemoteExecutionTransportFactory } from '../../platform/execution/remote-execution.port';
+import type {
+  RemoteExecutionTransport,
+  RemoteExecutionTransportFactory,
+} from '../../platform/execution/remote-execution.port';
 import { connectSshClient, createConnectConfig } from './connection/ssh-client.connector';
 import { connectViaJumpChain } from './connection/ssh-jump.connector';
 import { connectViaProxy } from './connection/ssh-proxy.connector';
@@ -26,9 +29,13 @@ export class SshTransportAdapter implements RemoteExecutionTransportFactory {
       client = await connectViaProxy(connection, timeoutMs, signal);
     } else {
       if (connection.route === 'jump') {
-        console.warn(`[SSH ${connection.displayName}] jump route has no jump hosts; falling back to direct connection.`);
+        console.warn(
+          `[SSH ${connection.displayName}] jump route has no jump hosts; falling back to direct connection.`,
+        );
       } else if (connection.route === 'proxy') {
-        console.warn(`[SSH ${connection.displayName}] proxy route has no proxy details; falling back to direct connection.`);
+        console.warn(
+          `[SSH ${connection.displayName}] proxy route has no proxy details; falling back to direct connection.`,
+        );
       }
       client = new Client();
       await connectSshClient(client, {

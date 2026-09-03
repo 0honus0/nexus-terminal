@@ -48,8 +48,9 @@ test('a marked live SSH session survives WebSocket disconnect and resumes transa
     );
     const resumedNotification = waitForJson(
       recoverySocket,
-      (message) => message.type === 'SSH_SUSPEND_RESUMED_NOTIF'
-        && message.payload?.suspendSessionId === suspended.suspendSessionId,
+      (message) =>
+        message.type === 'SSH_SUSPEND_RESUMED_NOTIF' &&
+        message.payload?.suspendSessionId === suspended.suspendSessionId,
       20_000,
     );
     sendJson(recoverySocket, {
@@ -65,9 +66,11 @@ test('a marked live SSH session survives WebSocket disconnect and resumes transa
     const listAfterPromise = waitForJson(recoverySocket, (message) => message.type === 'SSH_SUSPEND_LIST_RESPONSE');
     sendJson(recoverySocket, { type: 'SSH_SUSPEND_LIST_REQUEST', payload: {} });
     const listAfter = await listAfterPromise;
-    expect((listAfter.payload?.suspendSessions ?? []).some(
-      (session: any) => session.suspendSessionId === suspended.suspendSessionId,
-    )).toBeFalsy();
+    expect(
+      (listAfter.payload?.suspendSessions ?? []).some(
+        (session: any) => session.suspendSessionId === suspended.suspendSessionId,
+      ),
+    ).toBeFalsy();
   } finally {
     await closeWebSocket(recoverySocket);
   }

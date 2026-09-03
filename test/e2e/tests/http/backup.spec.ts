@@ -10,7 +10,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
   await step('prepare data that must survive backup and restore', async () => {
     const currentConnections = await request.get('/api/v1/connections');
     expect(currentConnections.ok()).toBeTruthy();
-    for (const connection of await currentConnections.json() as Array<{ id: number; name?: string }>) {
+    for (const connection of (await currentConnections.json()) as Array<{ id: number; name?: string }>) {
       if (connection.name === BACKUP_CONNECTION_NAME) {
         expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
       }
@@ -48,7 +48,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
 
   await step('destroy the backed up data', async () => {
     const connections = await request.get('/api/v1/connections');
-    const target = (await connections.json() as Array<{ id: number; name?: string }>).find(
+    const target = ((await connections.json()) as Array<{ id: number; name?: string }>).find(
       (connection) => connection.name === BACKUP_CONNECTION_NAME,
     );
     expect(target).toBeTruthy();
@@ -78,7 +78,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
 
     const connections = await request.get('/api/v1/connections');
     expect(connections.ok()).toBeTruthy();
-    const restored = (await connections.json() as Array<{ id: number; name?: string }>).find(
+    const restored = ((await connections.json()) as Array<{ id: number; name?: string }>).find(
       (connection) => connection.name === BACKUP_CONNECTION_NAME,
     );
     expect(restored).toBeTruthy();

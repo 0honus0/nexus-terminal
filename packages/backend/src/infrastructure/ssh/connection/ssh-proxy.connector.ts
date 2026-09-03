@@ -38,21 +38,24 @@ const openSocksTunnel = async (
       reject(abortError());
     };
     signal.addEventListener('abort', onAbort, { once: true });
-    pending.then(({ socket }) => {
-      signal.removeEventListener('abort', onAbort);
-      if (settled || signal.aborted) {
-        socket.destroy();
-        if (!settled) reject(abortError());
-        return;
-      }
-      settled = true;
-      resolve(socket);
-    }, (error) => {
-      signal.removeEventListener('abort', onAbort);
-      if (settled) return;
-      settled = true;
-      reject(error);
-    });
+    pending.then(
+      ({ socket }) => {
+        signal.removeEventListener('abort', onAbort);
+        if (settled || signal.aborted) {
+          socket.destroy();
+          if (!settled) reject(abortError());
+          return;
+        }
+        settled = true;
+        resolve(socket);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        if (settled) return;
+        settled = true;
+        reject(error);
+      },
+    );
   });
 };
 
@@ -62,64 +65,65 @@ const openHttpTunnel = (
   proxy: ResolvedSshProxy,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<net.Socket> => new Promise((resolve, reject) => {
-  if (signal?.aborted) {
-    reject(abortError());
-    return;
-  }
+): Promise<net.Socket> =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
 
-  const options: http.RequestOptions = {
-    method: 'CONNECT',
-    host: proxy.host,
-    port: proxy.port,
-    path: `${destinationHost}:${destinationPort}`,
-    timeout: timeoutMs,
-    agent: false,
-  };
-  if (proxy.username) {
-    options.headers = {
-      'Proxy-Authorization': `Basic ${Buffer.from(`${proxy.username}:${proxy.password || ''}`).toString('base64')}`,
-      'Proxy-Connection': 'Keep-Alive',
-      Host: `${destinationHost}:${destinationPort}`,
+    const options: http.RequestOptions = {
+      method: 'CONNECT',
+      host: proxy.host,
+      port: proxy.port,
+      path: `${destinationHost}:${destinationPort}`,
+      timeout: timeoutMs,
+      agent: false,
     };
-  }
-
-  const request = http.request(options);
-  let settled = false;
-  const cleanup = () => signal?.removeEventListener('abort', onAbort);
-  const fail = (error: Error) => {
-    if (settled) return;
-    settled = true;
-    cleanup();
-    reject(error);
-  };
-  const onAbort = () => {
-    request.destroy();
-    fail(abortError());
-  };
-  signal?.addEventListener('abort', onAbort, { once: true });
-
-  request.once('connect', (response, socket) => {
-    if (settled) {
-      socket.destroy();
-      return;
+    if (proxy.username) {
+      options.headers = {
+        'Proxy-Authorization': `Basic ${Buffer.from(`${proxy.username}:${proxy.password || ''}`).toString('base64')}`,
+        'Proxy-Connection': 'Keep-Alive',
+        Host: `${destinationHost}:${destinationPort}`,
+      };
     }
-    if (response.statusCode !== 200) {
-      socket.destroy();
-      fail(new Error(`HTTP proxy ${proxy.host}:${proxy.port} connection failed (status: ${response.statusCode})`));
-      return;
-    }
-    settled = true;
-    cleanup();
-    resolve(socket);
+
+    const request = http.request(options);
+    let settled = false;
+    const cleanup = () => signal?.removeEventListener('abort', onAbort);
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => {
+      request.destroy();
+      fail(abortError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    request.once('connect', (response, socket) => {
+      if (settled) {
+        socket.destroy();
+        return;
+      }
+      if (response.statusCode !== 200) {
+        socket.destroy();
+        fail(new Error(`HTTP proxy ${proxy.host}:${proxy.port} connection failed (status: ${response.statusCode})`));
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(socket);
+    });
+    request.once('error', (error) => fail(error));
+    request.once('timeout', () => {
+      request.destroy();
+      fail(new Error(`HTTP proxy ${proxy.host}:${proxy.port} connection timed out`));
+    });
+    request.end();
   });
-  request.once('error', (error) => fail(error));
-  request.once('timeout', () => {
-    request.destroy();
-    fail(new Error(`HTTP proxy ${proxy.host}:${proxy.port} connection timed out`));
-  });
-  request.end();
-});
 
 export const connectViaProxy = async (
   connection: ResolvedSshConnection,
@@ -127,11 +131,13 @@ export const connectViaProxy = async (
   signal?: AbortSignal,
 ): Promise<Client> => {
   const proxy = connection.proxy;
-  if (!proxy) throw new Error(`Connection ${connection.displayName} is configured for proxy routing without proxy details.`);
+  if (!proxy)
+    throw new Error(`Connection ${connection.displayName} is configured for proxy routing without proxy details.`);
 
-  const socket = proxy.type === 'SOCKS5'
-    ? await openSocksTunnel(connection.host, connection.port, proxy, timeoutMs, signal)
-    : await openHttpTunnel(connection.host, connection.port, proxy, timeoutMs, signal);
+  const socket =
+    proxy.type === 'SOCKS5'
+      ? await openSocksTunnel(connection.host, connection.port, proxy, timeoutMs, signal)
+      : await openHttpTunnel(connection.host, connection.port, proxy, timeoutMs, signal);
 
   const client = new Client();
   const config: ConnectConfig = {

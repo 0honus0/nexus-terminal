@@ -2,7 +2,5 @@
   "version": 1,
   "group": 6,
   "workers": 8,
-  "specs": [
-    "tests/ssh/file-preview-editor.spec.ts"
-  ]
+  "specs": ["tests/ssh/file-preview-editor.spec.ts"]
 }

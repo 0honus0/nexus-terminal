@@ -25,7 +25,10 @@ async function restoreDefaultPassword(request: APIRequestContext): Promise<void>
   }
 }
 
-test('password change UI updates the real login credential and can restore the test account', async ({ page, context }) => {
+test('password change UI updates the real login credential and can restore the test account', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   let passwordChanged = false;
 
@@ -39,7 +42,9 @@ test('password change UI updates the real login credential and can restore the t
       await form.getByTestId('change-password-current').fill(E2E_ADMIN.password);
       await form.getByTestId('change-password-new').fill(TEMP_PASSWORD);
       await form.getByTestId('change-password-confirm').fill(TEMP_PASSWORD);
-      const responsePromise = page.waitForResponse((response) => response.url().endsWith('/api/v1/auth/password') && response.request().method() === 'PUT');
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/auth/password') && response.request().method() === 'PUT',
+      );
       await form.getByTestId('change-password-submit').click();
       expect((await responsePromise).ok()).toBeTruthy();
       passwordChanged = true;
@@ -52,7 +57,10 @@ test('password change UI updates the real login credential and can restore the t
       expect((await context.request.post('/api/v1/auth/logout')).ok()).toBeTruthy();
       expect(await login(context.request, TEMP_PASSWORD)).toBeTruthy();
       const status = await context.request.get('/api/v1/auth/status');
-      await expect(status.json()).resolves.toMatchObject({ isAuthenticated: true, user: { username: E2E_ADMIN.username } });
+      await expect(status.json()).resolves.toMatchObject({
+        isAuthenticated: true,
+        user: { username: E2E_ADMIN.username },
+      });
     });
 
     await step('restore the standard E2E password for following tests', async () => {

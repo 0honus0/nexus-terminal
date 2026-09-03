@@ -38,18 +38,22 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     const cursor = terminal.locator('.xterm-cursor.xterm-cursor-block').first();
     await expect(cursor).toBeVisible();
     await expect(cursor).not.toHaveClass(/xterm-cursor-blink/);
-    await expect.poll(() => cursor.evaluate((element) => {
-      const style = window.getComputedStyle(element);
-      return {
-        backgroundColor: style.backgroundColor,
-        color: style.color,
-        animationName: style.animationName,
-      };
-    })).toEqual({
-      backgroundColor: 'rgb(255, 255, 255)',
-      color: 'rgb(0, 0, 0)',
-      animationName: 'none',
-    });
+    await expect
+      .poll(() =>
+        cursor.evaluate((element) => {
+          const style = window.getComputedStyle(element);
+          return {
+            backgroundColor: style.backgroundColor,
+            color: style.color,
+            animationName: style.animationName,
+          };
+        }),
+      )
+      .toEqual({
+        backgroundColor: 'rgb(255, 255, 255)',
+        color: 'rgb(0, 0, 0)',
+        animationName: 'none',
+      });
   });
 
   await step('global transfer progress can minimize and restore from the toolbar', async () => {
@@ -68,15 +72,22 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   await step('interactive keystrokes use the low-latency SSH input path', async () => {
     await terminal.click();
     await page.keyboard.type('x');
-    await expect.poll(() => {
-      for (let index = sentTextFrames.length - 1; index >= 0; index -= 1) {
-        try {
-          const frame = JSON.parse(sentTextFrames[index]) as { type?: string; payload?: { data?: string; sequence?: number } };
-          if (frame.type === 'ssh:input' && frame.payload?.data === 'x') return frame;
-        } catch { /* ignore non-JSON text frames */ }
-      }
-      return null;
-    }).toMatchObject({ type: 'ssh:input', payload: { data: 'x' } });
+    await expect
+      .poll(() => {
+        for (let index = sentTextFrames.length - 1; index >= 0; index -= 1) {
+          try {
+            const frame = JSON.parse(sentTextFrames[index]) as {
+              type?: string;
+              payload?: { data?: string; sequence?: number };
+            };
+            if (frame.type === 'ssh:input' && frame.payload?.data === 'x') return frame;
+          } catch {
+            /* ignore non-JSON text frames */
+          }
+        }
+        return null;
+      })
+      .toMatchObject({ type: 'ssh:input', payload: { data: 'x' } });
 
     let interactiveFrame: any = null;
     for (let index = sentTextFrames.length - 1; index >= 0; index -= 1) {
@@ -86,7 +97,9 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
           interactiveFrame = frame;
           break;
         }
-      } catch { /* ignore non-JSON text frames */ }
+      } catch {
+        /* ignore non-JSON text frames */
+      }
     }
     expect(interactiveFrame?.payload?.sequence).toBeUndefined();
     await page.keyboard.press('Control+C');
@@ -112,24 +125,27 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     await expect(commandInput).toBeVisible();
     await commandInput.fill("printf 'NEXUS_TERMINAL_E2E\\n'");
     await commandInput.press('Enter');
-    await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+    await expect
+      .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
       .toContain('NEXUS_TERMINAL_E2E');
   });
 
   await step('shell cwd persists between commands', async () => {
     await commandInput.fill('cd folder-seed');
     await commandInput.press('Enter');
-    await commandInput.fill("printf 'CWD=%s\\n' \"$PWD\"");
+    await commandInput.fill('printf \'CWD=%s\\n\' "$PWD"');
     await commandInput.press('Enter');
-    await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
-      .toContain('CWD=');
-    await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
+    await expect.poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 }).toContain('CWD=');
+    await expect
+      .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
       .toContain('folder-seed');
   });
 });
 
-
-test('terminal font-size wheel change persists when the session is closed before debounce fires', async ({ page, context }) => {
+test('terminal font-size wheel change persists when the session is closed before debounce fires', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const resetAppearance = await context.request.put('/api/v1/appearance', { data: { terminalFontSize: 14 } });
@@ -149,9 +165,14 @@ test('terminal font-size wheel change persists when the session is closed before
   await closeTabButton.click();
   await expect(terminal).toBeHidden();
 
-  await expect.poll(async () => {
-    const appearance = await context.request.get('/api/v1/appearance');
-    expect(appearance.ok()).toBeTruthy();
-    return Number((await appearance.json()).terminalFontSize);
-  }, { timeout: 3_000 }).toBe(15);
+  await expect
+    .poll(
+      async () => {
+        const appearance = await context.request.get('/api/v1/appearance');
+        expect(appearance.ok()).toBeTruthy();
+        return Number((await appearance.json()).terminalFontSize);
+      },
+      { timeout: 3_000 },
+    )
+    .toBe(15);
 });

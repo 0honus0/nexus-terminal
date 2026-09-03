@@ -18,7 +18,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 
   const originalResponse = await context.request.get('/api/v1/appearance');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json() as { windowThemeColor?: string };
+  const original = (await originalResponse.json()) as { windowThemeColor?: string };
   const targetColor = '#1F2937';
 
   try {
@@ -29,8 +29,8 @@ test('PWA window title bar color updates immediately and persists across reload'
     await expect(input).toBeVisible();
     await input.fill(targetColor);
 
-    const savePromise = page.waitForResponse((response) =>
-      response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+    const savePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
     );
     await page.getByTestId('window-theme-color-save').click();
     expect((await savePromise).ok()).toBeTruthy();
@@ -40,7 +40,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 
     const persisted = await context.request.get('/api/v1/appearance');
     expect(persisted.ok()).toBeTruthy();
-    expect((await persisted.json() as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
+    expect(((await persisted.json()) as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByTestId('settings-tab-appearance').click();
@@ -70,7 +70,7 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 
     const response = await context.request.get('/api/v1/appearance');
     expect(response.ok()).toBeTruthy();
-    const body = await response.json() as { customUiTheme?: string };
+    const body = (await response.json()) as { customUiTheme?: string };
     expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#212529');
   });
 
@@ -87,23 +87,26 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
 
     const response = await context.request.get('/api/v1/appearance');
     expect(response.ok()).toBeTruthy();
-    const body = await response.json() as { customUiTheme?: string };
+    const body = (await response.json()) as { customUiTheme?: string };
     expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#ffffff');
   });
 });
 
-test('terminal preset themes load from the API, switch through the UI, and persist across reload', async ({ page, context }) => {
+test('terminal preset themes load from the API, switch through the UI, and persist across reload', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
   expect(language.ok()).toBeTruthy();
 
   const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
   expect(originalAppearanceResponse.ok()).toBeTruthy();
-  const originalAppearance = await originalAppearanceResponse.json() as { activeTerminalThemeId?: number | null };
+  const originalAppearance = (await originalAppearanceResponse.json()) as { activeTerminalThemeId?: number | null };
 
   const themesResponse = await context.request.get('/api/v1/terminal-themes');
   expect(themesResponse.ok()).toBeTruthy();
-  const themes = await themesResponse.json() as Array<{ _id?: string; name: string; isPreset?: boolean }>;
+  const themes = (await themesResponse.json()) as Array<{ _id?: string; name: string; isPreset?: boolean }>;
 
   // Pick a preset that is intentionally not part of the compact frontend sample list.
   // Its presence proves the UI is using the backend seed/API as the runtime source of truth.
@@ -127,17 +130,19 @@ test('terminal preset themes load from the API, switch through the UI, and persi
       await expect(themeRow).toHaveCount(1);
       await expect(themeRow).toBeVisible();
 
-      const savePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+      const savePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
       await themeRow.getByRole('button', { name: 'Apply', exact: true }).click();
       expect((await savePromise).ok()).toBeTruthy();
 
-      await expect.poll(async () => {
-        const response = await context.request.get('/api/v1/appearance');
-        expect(response.ok()).toBeTruthy();
-        return (await response.json() as { activeTerminalThemeId?: number | null }).activeTerminalThemeId;
-      }).toBe(targetThemeId);
+      await expect
+        .poll(async () => {
+          const response = await context.request.get('/api/v1/appearance');
+          expect(response.ok()).toBeTruthy();
+          return ((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId;
+        })
+        .toBe(targetThemeId);
 
       const activeThemeName = customizer
         .getByText('Active Theme:', { exact: true })
@@ -158,7 +163,9 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 
       const response = await context.request.get('/api/v1/appearance');
       expect(response.ok()).toBeTruthy();
-      expect((await response.json() as { activeTerminalThemeId?: number | null }).activeTerminalThemeId).toBe(targetThemeId);
+      expect(((await response.json()) as { activeTerminalThemeId?: number | null }).activeTerminalThemeId).toBe(
+        targetThemeId,
+      );
     });
   } finally {
     const restore = await context.request.put('/api/v1/appearance', {

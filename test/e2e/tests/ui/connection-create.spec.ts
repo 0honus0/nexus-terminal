@@ -12,15 +12,17 @@ const SCRIPT_TAG = 'E2E Script Imported Tag';
 async function cleanupConnections(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
-  const connections = await response.json() as Array<{ id: number; name?: string }>;
-  for (const connection of connections.filter(item => [FORM_NAME, SCRIPT_NAME_ONE, SCRIPT_NAME_TWO].includes(item.name || ''))) {
+  const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+  for (const connection of connections.filter((item) =>
+    [FORM_NAME, SCRIPT_NAME_ONE, SCRIPT_NAME_TWO].includes(item.name || ''),
+  )) {
     expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
   }
 
   const tagsResponse = await request.get('/api/v1/tags');
   expect(tagsResponse.ok()).toBeTruthy();
-  const tags = await tagsResponse.json() as Array<{ id: number; name: string }>;
-  for (const tag of tags.filter(item => item.name === SCRIPT_TAG)) {
+  const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
+  for (const tag of tags.filter((item) => item.name === SCRIPT_TAG)) {
     expect((await request.delete(`/api/v1/tags/${tag.id}`)).ok()).toBeTruthy();
   }
 }
@@ -49,8 +51,9 @@ test('regular connection form tests and creates a persisted working SSH connecti
   await form.locator('#conn-notes').fill('created through the browser form');
 
   await slowStep('test the unsaved connection against the real SSH fixture', async () => {
-    const responsePromise = page.waitForResponse(response =>
-      response.url().endsWith('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/v1/connections/test-unsaved') && response.request().method() === 'POST',
     );
     await form.getByTestId('connection-test-button').click();
     const response = await responsePromise;
@@ -60,13 +63,13 @@ test('regular connection form tests and creates a persisted working SSH connecti
 
   let connectionId = 0;
   await step('submit persists the connection and refreshes the visible list', async () => {
-    const createPromise = page.waitForResponse(response =>
-      response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+    const createPromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
     );
     await form.getByTestId('connection-submit-button').click();
     const create = await createPromise;
     expect(create.status()).toBe(201);
-    connectionId = (await create.json() as { connection: { id: number } }).connection.id;
+    connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
     await expect(form).toBeHidden({ timeout: 15_000 });
     const row = page.getByTestId(`connection-row-${connectionId}`);
     await expect(row).toContainText(FORM_NAME);
@@ -89,15 +92,21 @@ test('script mode creates multiple connections, resolves tags, and preserves not
   await form.getByRole('switch').click();
   const scriptInput = form.locator('#conn-script-input');
   await expect(scriptInput).toBeVisible();
-  await scriptInput.fill([
-    `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port} -name "${SCRIPT_NAME_ONE}" -p "${E2E_SSH.password}" -tags "${SCRIPT_TAG}" -note "script first note"`,
-    `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port} -name "${SCRIPT_NAME_TWO}" -p "${E2E_SSH.password}" -tags "${SCRIPT_TAG}" -note "script second note"`,
-  ].join('\n'));
+  await scriptInput.fill(
+    [
+      `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port} -name "${SCRIPT_NAME_ONE}" -p "${E2E_SSH.password}" -tags "${SCRIPT_TAG}" -note "script first note"`,
+      `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port} -name "${SCRIPT_NAME_TWO}" -p "${E2E_SSH.password}" -tags "${SCRIPT_TAG}" -note "script second note"`,
+    ].join('\n'),
+  );
 
   await step('one script submission creates both connections', async () => {
     let createCount = 0;
     const countCreates = (response: Response) => {
-      if (response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST' && response.status() === 201) {
+      if (
+        response.url().endsWith('/api/v1/connections') &&
+        response.request().method() === 'POST' &&
+        response.status() === 201
+      ) {
         createCount += 1;
       }
     };
@@ -110,20 +119,22 @@ test('script mode creates multiple connections, resolves tags, and preserves not
 
   const connectionsResponse = await context.request.get('/api/v1/connections');
   expect(connectionsResponse.ok()).toBeTruthy();
-  const connections = (await connectionsResponse.json() as Array<{
-    id: number;
-    name: string;
-    notes?: string;
-    tag_ids?: number[];
-  }>).filter(item => item.name === SCRIPT_NAME_ONE || item.name === SCRIPT_NAME_TWO);
+  const connections = (
+    (await connectionsResponse.json()) as Array<{
+      id: number;
+      name: string;
+      notes?: string;
+      tag_ids?: number[];
+    }>
+  ).filter((item) => item.name === SCRIPT_NAME_ONE || item.name === SCRIPT_NAME_TWO);
   expect(connections).toHaveLength(2);
-  expect(connections.find(item => item.name === SCRIPT_NAME_ONE)?.notes).toBe('script first note');
-  expect(connections.find(item => item.name === SCRIPT_NAME_TWO)?.notes).toBe('script second note');
+  expect(connections.find((item) => item.name === SCRIPT_NAME_ONE)?.notes).toBe('script first note');
+  expect(connections.find((item) => item.name === SCRIPT_NAME_TWO)?.notes).toBe('script second note');
 
   const tagsResponse = await context.request.get('/api/v1/tags');
   expect(tagsResponse.ok()).toBeTruthy();
-  const tags = await tagsResponse.json() as Array<{ id: number; name: string }>;
-  const createdTag = tags.find(tag => tag.name === SCRIPT_TAG);
+  const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
+  const createdTag = tags.find((tag) => tag.name === SCRIPT_TAG);
   expect(createdTag).toBeTruthy();
   for (const connection of connections) expect(connection.tag_ids).toContain(createdTag!.id);
 

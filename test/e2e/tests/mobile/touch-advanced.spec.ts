@@ -16,10 +16,7 @@ import { slowStep, step } from '../../support/steps';
 
 const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus_fileEditorDesktopPopupSize';
 
-async function connectMobileSsh(
-  page: Page,
-  request: Parameters<typeof loginAsInitialAdmin>[0],
-): Promise<void> {
+async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
   await loginAsInitialAdmin(request);
   await configureSshE2eSettings(request);
   await resetTestSshFilesystem();
@@ -63,7 +60,10 @@ async function longPressFile(page: Page, filename: string): Promise<Locator> {
   return menu;
 }
 
-function expectBoxInsideViewport(box: { x: number; y: number; width: number; height: number }, viewport: { width: number; height: number }): void {
+function expectBoxInsideViewport(
+  box: { x: number; y: number; width: number; height: number },
+  viewport: { width: number; height: number },
+): void {
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -75,47 +75,57 @@ async function dragPreviewWithTouch(
   from: { x: number; y: number },
   to: { x: number; y: number },
 ): Promise<void> {
-  await target.evaluate((element, points) => {
-    const makeTouch = (point: { x: number; y: number }) => new Touch({
-      identifier: 1,
-      target: element,
-      clientX: point.x,
-      clientY: point.y,
-      screenX: point.x,
-      screenY: point.y,
-      pageX: point.x,
-      pageY: point.y,
-      radiusX: 1,
-      radiusY: 1,
-      force: 1,
-    });
+  await target.evaluate(
+    (element, points) => {
+      const makeTouch = (point: { x: number; y: number }) =>
+        new Touch({
+          identifier: 1,
+          target: element,
+          clientX: point.x,
+          clientY: point.y,
+          screenX: point.x,
+          screenY: point.y,
+          pageX: point.x,
+          pageY: point.y,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+        });
 
-    const startTouch = makeTouch(points.from);
-    element.dispatchEvent(new TouchEvent('touchstart', {
-      bubbles: true,
-      cancelable: true,
-      touches: [startTouch],
-      targetTouches: [startTouch],
-      changedTouches: [startTouch],
-    }));
+      const startTouch = makeTouch(points.from);
+      element.dispatchEvent(
+        new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: [startTouch],
+          targetTouches: [startTouch],
+          changedTouches: [startTouch],
+        }),
+      );
 
-    const moveTouch = makeTouch(points.to);
-    element.dispatchEvent(new TouchEvent('touchmove', {
-      bubbles: true,
-      cancelable: true,
-      touches: [moveTouch],
-      targetTouches: [moveTouch],
-      changedTouches: [moveTouch],
-    }));
+      const moveTouch = makeTouch(points.to);
+      element.dispatchEvent(
+        new TouchEvent('touchmove', {
+          bubbles: true,
+          cancelable: true,
+          touches: [moveTouch],
+          targetTouches: [moveTouch],
+          changedTouches: [moveTouch],
+        }),
+      );
 
-    element.dispatchEvent(new TouchEvent('touchend', {
-      bubbles: true,
-      cancelable: true,
-      touches: [],
-      targetTouches: [],
-      changedTouches: [moveTouch],
-    }));
-  }, { from, to });
+      element.dispatchEvent(
+        new TouchEvent('touchend', {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: [moveTouch],
+        }),
+      );
+    },
+    { from, to },
+  );
 }
 
 async function pinchPreviewWithTouch(
@@ -123,47 +133,57 @@ async function pinchPreviewWithTouch(
   start: [{ x: number; y: number }, { x: number; y: number }],
   end: [{ x: number; y: number }, { x: number; y: number }],
 ): Promise<void> {
-  await target.evaluate((element, points) => {
-    const makeTouch = (identifier: number, point: { x: number; y: number }) => new Touch({
-      identifier,
-      target: element,
-      clientX: point.x,
-      clientY: point.y,
-      screenX: point.x,
-      screenY: point.y,
-      pageX: point.x,
-      pageY: point.y,
-      radiusX: 1,
-      radiusY: 1,
-      force: 1,
-    });
+  await target.evaluate(
+    (element, points) => {
+      const makeTouch = (identifier: number, point: { x: number; y: number }) =>
+        new Touch({
+          identifier,
+          target: element,
+          clientX: point.x,
+          clientY: point.y,
+          screenX: point.x,
+          screenY: point.y,
+          pageX: point.x,
+          pageY: point.y,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+        });
 
-    const startTouches = [makeTouch(1, points.start[0]), makeTouch(2, points.start[1])];
-    element.dispatchEvent(new TouchEvent('touchstart', {
-      bubbles: true,
-      cancelable: true,
-      touches: startTouches,
-      targetTouches: startTouches,
-      changedTouches: startTouches,
-    }));
+      const startTouches = [makeTouch(1, points.start[0]), makeTouch(2, points.start[1])];
+      element.dispatchEvent(
+        new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: startTouches,
+          targetTouches: startTouches,
+          changedTouches: startTouches,
+        }),
+      );
 
-    const endTouches = [makeTouch(1, points.end[0]), makeTouch(2, points.end[1])];
-    element.dispatchEvent(new TouchEvent('touchmove', {
-      bubbles: true,
-      cancelable: true,
-      touches: endTouches,
-      targetTouches: endTouches,
-      changedTouches: endTouches,
-    }));
+      const endTouches = [makeTouch(1, points.end[0]), makeTouch(2, points.end[1])];
+      element.dispatchEvent(
+        new TouchEvent('touchmove', {
+          bubbles: true,
+          cancelable: true,
+          touches: endTouches,
+          targetTouches: endTouches,
+          changedTouches: endTouches,
+        }),
+      );
 
-    element.dispatchEvent(new TouchEvent('touchend', {
-      bubbles: true,
-      cancelable: true,
-      touches: [],
-      targetTouches: [],
-      changedTouches: endTouches,
-    }));
-  }, { start, end });
+      element.dispatchEvent(
+        new TouchEvent('touchend', {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: endTouches,
+        }),
+      );
+    },
+    { start, end },
+  );
 }
 
 test('mobile long-press menu flattens archive actions and creates a real ZIP', async ({ page, context }) => {
@@ -197,9 +217,12 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 
   await slowStep('single tap opens a full-screen mobile editor without touching desktop popup size', async () => {
     const desktopSize = JSON.stringify({ width: 1111, height: 777 });
-    await page.evaluate(([popupSizeKey, value]) => {
-      localStorage.setItem(popupSizeKey, value);
-    }, [DESKTOP_POPUP_SIZE_STORAGE_KEY, desktopSize]);
+    await page.evaluate(
+      ([popupSizeKey, value]) => {
+        localStorage.setItem(popupSizeKey, value);
+      },
+      [DESKTOP_POPUP_SIZE_STORAGE_KEY, desktopSize],
+    );
 
     await fileManagerRow(page, 'plainfile').click();
     const editor = page.getByTestId('file-editor-overlay');
@@ -213,9 +236,11 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     expect(viewport).toBeTruthy();
     expect(Math.abs(popupBox!.width - viewport!.width)).toBeLessThanOrEqual(2);
     expect(Math.abs(popupBox!.height - viewport!.height)).toBeLessThanOrEqual(2);
-    expect(await page.evaluate((popupSizeKey) => localStorage.getItem(popupSizeKey), DESKTOP_POPUP_SIZE_STORAGE_KEY))
-      .toBe(desktopSize);
-    await expect.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
+    expect(
+      await page.evaluate((popupSizeKey) => localStorage.getItem(popupSizeKey), DESKTOP_POPUP_SIZE_STORAGE_KEY),
+    ).toBe(desktopSize);
+    await expect
+      .poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
       .toContain('plain-no-extension');
   });
 
@@ -229,8 +254,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     await searchInput.fill('plain-no-extension');
     await searchInput.press('End');
     await expect(searchInput).toHaveValue('plain-no-extension');
-    await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 })
-      .toBeGreaterThan(0);
+    await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 }).toBeGreaterThan(0);
     await captureFunctionalScreenshot(page, 'mobile-editor-search.png');
   });
 });
@@ -275,9 +299,8 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 
     const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
     expect(remoteRead.ok).toBeTruthy();
-    const body = await remoteRead.json() as { base64: string };
-    expect(Buffer.from(body.base64, 'base64').toString('utf8'))
-      .toBe('# Mobile Markdown E2E\n\n**mobile-save-ok**\n');
+    const body = (await remoteRead.json()) as { base64: string };
+    expect(Buffer.from(body.base64, 'base64').toString('utf8')).toBe('# Mobile Markdown E2E\n\n**mobile-save-ok**\n');
 
     await editor.getByTestId('file-editor-close').click();
     await expect(editor).toBeHidden();
@@ -291,7 +314,10 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
   });
 });
 
-test('mobile virtual keyboard sends modified navigation escape sequences and consumes modifiers', async ({ page, context }) => {
+test('mobile virtual keyboard sends modified navigation escape sequences and consumes modifiers', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
 
   const commandBar = page.getByTestId('command-input-bar');
@@ -306,7 +332,8 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     await commandInput.press('Enter');
     await commandInput.fill("printf 'Nexus mobile virtual keyboard\\n'");
     await commandInput.press('Enter');
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toContain('Nexus mobile virtual keyboard');
     await captureFunctionalScreenshot(page, 'mobile-virtual-keyboard.png');
 
@@ -324,7 +351,9 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
   }
 
   await slowStep('Alt+Left sends the xterm Alt cursor sequence and clears Alt after one key', async () => {
-    await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'ALT_LEFT_BYTES=%s\\n' \"$bytes\"");
+    await commandInput.fill(
+      'bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf \'ALT_LEFT_BYTES=%s\\n\' "$bytes"',
+    );
     await commandInput.press('Enter');
 
     const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
@@ -332,12 +361,15 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     await expect(alt).toHaveClass(/bg-primary/);
     await keyboard.getByRole('button', { name: '←', exact: true }).click();
     await expect(alt).not.toHaveClass(/bg-primary/);
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/ALT_LEFT_BYTES=\s*27\s+91\s+49\s+59\s+51\s+68/);
   });
 
   await slowStep('Ctrl+Alt+Del sends the modified Delete sequence and clears both modifiers', async () => {
-    await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'CTRL_ALT_DEL_BYTES=%s\\n' \"$bytes\"");
+    await commandInput.fill(
+      'bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf \'CTRL_ALT_DEL_BYTES=%s\\n\' "$bytes"',
+    );
     await commandInput.press('Enter');
 
     const ctrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
@@ -349,7 +381,8 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     await keyboard.getByRole('button', { name: 'Del', exact: true }).click();
     await expect(ctrl).not.toHaveClass(/bg-primary/);
     await expect(alt).not.toHaveClass(/bg-primary/);
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/CTRL_ALT_DEL_BYTES=\s*27\s+91\s+51\s+59\s+55\s+126/);
   });
 });
@@ -418,7 +451,10 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 });
 
-test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom, and content panning', async ({ page, context }) => {
+test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom, and content panning', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
@@ -467,10 +503,14 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
   await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
-  await expect.poll(() => outlineToggle.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { color: style.color, backgroundColor: style.backgroundColor };
-  })).toEqual(closedOutlineToggleStyle);
+  await expect
+    .poll(() =>
+      outlineToggle.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { color: style.color, backgroundColor: style.backgroundColor };
+      }),
+    )
+    .toEqual(closedOutlineToggleStyle);
 
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
@@ -493,22 +533,34 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
   const thirdPage = dialog.getByTestId('pdf-page-3');
-  await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await thirdPage.evaluate((element) => element.offsetTop));
+  await scroller.evaluate(
+    (element, top) => element.scrollTo({ top, behavior: 'auto' }),
+    await thirdPage.evaluate((element) => element.offsetTop),
+  );
   await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
 
   await zoomInButton.click();
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
-  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await scroller.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
   await dragPreviewWithTouch(scroller, { x: 185, y: 220 }, { x: 75, y: 212 });
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 
   const zoomBeforePinch = Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', ''));
   await pinchPreviewWithTouch(
     scroller,
-    [{ x: 130, y: 250 }, { x: 220, y: 250 }],
-    [{ x: 90, y: 250 }, { x: 270, y: 250 }],
+    [
+      { x: 130, y: 250 },
+      { x: 220, y: 250 },
+    ],
+    [
+      { x: 90, y: 250 },
+      { x: 270, y: 250 },
+    ],
   );
-  await expect.poll(async () => Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', '')))
+  await expect
+    .poll(async () => Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', '')))
     .toBeGreaterThan(zoomBeforePinch);
   await expect(dialog.getByTestId('pdf-fit-width')).toHaveAttribute('aria-pressed', 'false');
 });
@@ -524,17 +576,26 @@ test('mobile DOCX touch-pans wide content without a desktop scrollbar track', as
   const scroller = dialog.getByTestId('docx-preview-scroller');
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
   await expect(dialog.getByTestId('docx-horizontal-scrollbar')).toBeHidden();
-  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await scroller.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
   await dragPreviewWithTouch(scroller, { x: 300, y: 220 }, { x: 90, y: 215 });
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 });
 
-test('mobile preview close button clears cached state when popup file editing is enabled', async ({ page, context }) => {
+test('mobile preview close button clears cached state when popup file editing is enabled', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  expect((await context.request.put('/api/v1/settings', {
-    data: { showPopupFileEditor: 'true' },
-  })).ok()).toBeTruthy();
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: { showPopupFileEditor: 'true' },
+      })
+    ).ok(),
+  ).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
@@ -563,39 +624,47 @@ test('mobile preview close button clears cached state when popup file editing is
   await expect(reopened.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({ page, context }) => {
+test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
   const filenames = ['mobile-progress-upload-a.bin', 'mobile-progress-upload-b.bin'];
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1000`, { method: 'POST' });
 
   try {
-    await slowStep('throttled uploads expose all floating controls without overflowing the Pixel viewport', async () => {
-      const fileInput = page.getByTestId('file-manager-modal').getByTestId('file-upload-input');
-      await fileInput.setInputFiles(filenames.map((name, index) => ({
-        name,
-        mimeType: 'application/octet-stream',
-        buffer: Buffer.alloc(8 * 1024 * 1024, 0x5a + index),
-      })));
+    await slowStep(
+      'throttled uploads expose all floating controls without overflowing the Pixel viewport',
+      async () => {
+        const fileInput = page.getByTestId('file-manager-modal').getByTestId('file-upload-input');
+        await fileInput.setInputFiles(
+          filenames.map((name, index) => ({
+            name,
+            mimeType: 'application/octet-stream',
+            buffer: Buffer.alloc(8 * 1024 * 1024, 0x5a + index),
+          })),
+        );
 
-      const popup = page.getByTestId('file-upload-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup).toContainText(filenames[0]);
-      await expect(popup).toContainText(filenames[1]);
-      await expect(popup.getByTestId('file-upload-speed')).toBeVisible();
-      await expect(popup.getByTestId('file-upload-progress-hide')).toBeVisible();
-      await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
-      await expect(popup.getByTestId('file-upload-resize-handle')).toBeVisible();
+        const popup = page.getByTestId('file-upload-progress-popup');
+        await expect(popup).toBeVisible({ timeout: 10_000 });
+        await expect(popup).toContainText(filenames[0]);
+        await expect(popup).toContainText(filenames[1]);
+        await expect(popup.getByTestId('file-upload-speed')).toBeVisible();
+        await expect(popup.getByTestId('file-upload-progress-hide')).toBeVisible();
+        await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
+        await expect(popup.getByTestId('file-upload-resize-handle')).toBeVisible();
 
-      const [popupBox, viewport] = await Promise.all([popup.boundingBox(), Promise.resolve(page.viewportSize())]);
-      expect(popupBox).toBeTruthy();
-      expect(viewport).toBeTruthy();
-      expectBoxInsideViewport(popupBox!, viewport!);
-      await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
+        const [popupBox, viewport] = await Promise.all([popup.boundingBox(), Promise.resolve(page.viewportSize())]);
+        expect(popupBox).toBeTruthy();
+        expect(viewport).toBeTruthy();
+        expectBoxInsideViewport(popupBox!, viewport!);
+        await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
-      await popup.getByTestId('file-upload-progress-hide').click();
-      await expect(popup).toBeHidden();
-    });
+        await popup.getByTestId('file-upload-progress-hide').click();
+        await expect(popup).toBeHidden();
+      },
+    );
 
     await step('Progress Display restores the hidden mobile upload window', async () => {
       // Close File Manager so the workspace toggle is accessible. The FileManager
@@ -606,7 +675,10 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
 
       const progressPanel = progressDisplay.locator('.transfer-progress-panel');
-      const [displayBox, viewport] = await Promise.all([progressPanel.boundingBox(), Promise.resolve(page.viewportSize())]);
+      const [displayBox, viewport] = await Promise.all([
+        progressPanel.boundingBox(),
+        Promise.resolve(page.viewportSize()),
+      ]);
       expect(displayBox).toBeTruthy();
       expect(viewport).toBeTruthy();
       expectBoxInsideViewport(displayBox!, viewport!);

@@ -56,13 +56,18 @@ export async function refreshFileManager(page: Page): Promise<void> {
 }
 
 export async function dragLocalFile(page: Page, name: string, size: number, fill: number): Promise<void> {
-  const dataTransfer = await page.evaluateHandle(({ fileName, fileSize, fillByte }) => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([new Uint8Array(fileSize).fill(fillByte)], fileName, {
-      type: 'application/octet-stream',
-    }));
-    return transfer;
-  }, { fileName: name, fileSize: size, fillByte: fill });
+  const dataTransfer = await page.evaluateHandle(
+    ({ fileName, fileSize, fillByte }) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([new Uint8Array(fileSize).fill(fillByte)], fileName, {
+          type: 'application/octet-stream',
+        }),
+      );
+      return transfer;
+    },
+    { fileName: name, fileSize: size, fillByte: fill },
+  );
 
   try {
     const list = activeFileManagerList(page);
@@ -96,6 +101,6 @@ export async function closeProgressDisplay(modal: Locator): Promise<void> {
 export async function remoteFileExists(name: string): Promise<boolean> {
   const response = await fetch(`${E2E_SSH.controlUrl}/files`);
   if (!response.ok) return false;
-  const body = await response.json() as { files: string[] };
+  const body = (await response.json()) as { files: string[] };
   return body.files.includes(name);
 }

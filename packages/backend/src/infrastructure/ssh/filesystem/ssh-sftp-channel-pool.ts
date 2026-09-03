@@ -31,7 +31,11 @@ export class SshSftpChannelPool {
       state.opening = undefined;
       state.filesystem = undefined;
       if (channel) {
-        try { channel.end(); } catch { /* SSH teardown is the final lifecycle backstop. */ }
+        try {
+          channel.end();
+        } catch {
+          /* SSH teardown is the final lifecycle backstop. */
+        }
       }
     }
     this.states.clear();
@@ -58,7 +62,11 @@ export class SshSftpChannelPool {
           return;
         }
         if (this.closed) {
-          try { channel.end(); } catch { /* best effort */ }
+          try {
+            channel.end();
+          } catch {
+            /* best effort */
+          }
           reject(new Error('SFTP channel pool closed while opening a channel.'));
           return;
         }

@@ -28,9 +28,25 @@ export interface DecompressArchiveRequest {
 }
 
 export type ArchiveEvent =
-  | { type: 'progress'; operation: ArchiveOperationKind; requestId: string; fileCount: number; totalFiles?: number; percent?: number; currentFile?: string }
+  | {
+      type: 'progress';
+      operation: ArchiveOperationKind;
+      requestId: string;
+      fileCount: number;
+      totalFiles?: number;
+      percent?: number;
+      currentFile?: string;
+    }
   | { type: 'completed'; operation: ArchiveOperationKind; requestId: string; path: string; warning?: string }
-  | { type: 'failed'; operation: ArchiveOperationKind; requestId: string; message: string; details?: string; code?: ArchiveErrorCode; commandNotFound?: string }
+  | {
+      type: 'failed';
+      operation: ArchiveOperationKind;
+      requestId: string;
+      message: string;
+      details?: string;
+      code?: ArchiveErrorCode;
+      commandNotFound?: string;
+    }
   | { type: 'cancelled'; operation: ArchiveOperationKind; requestId: string };
 
 export interface ArchiveOperation {

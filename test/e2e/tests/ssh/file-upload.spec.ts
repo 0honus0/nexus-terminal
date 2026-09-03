@@ -35,9 +35,10 @@ async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): Promise<
   const dataTransfer = await page.evaluateHandle((descriptors: DragFileDescriptor[]) => {
     const transfer = new DataTransfer();
     for (const descriptor of descriptors) {
-      const content = descriptor.text !== undefined
-        ? new TextEncoder().encode(descriptor.text)
-        : new Uint8Array(descriptor.size ?? 0).fill(descriptor.fill ?? 0x61);
+      const content =
+        descriptor.text !== undefined
+          ? new TextEncoder().encode(descriptor.text)
+          : new Uint8Array(descriptor.size ?? 0).fill(descriptor.fill ?? 0x61);
       transfer.items.add(new File([content], descriptor.name, { type: 'application/octet-stream' }));
     }
     return transfer;
@@ -58,20 +59,28 @@ async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): Promise<
 async function readRemoteText(name: string): Promise<string> {
   const response = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(name)}`);
   expect(response.ok).toBeTruthy();
-  const body = await response.json() as { base64: string };
+  const body = (await response.json()) as { base64: string };
   return Buffer.from(body.base64, 'base64').toString('utf8');
 }
 
 async function waitForRemoteFiles(names: string[], timeout = 45_000): Promise<void> {
-  await expect.poll(async () => {
-    const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-    if (!response.ok) return [];
-    const body = await response.json() as { files: string[] };
-    return names.filter(name => body.files.includes(name));
-  }, { timeout }).toEqual(names);
+  await expect
+    .poll(
+      async () => {
+        const response = await fetch(`${E2E_SSH.controlUrl}/files`);
+        if (!response.ok) return [];
+        const body = (await response.json()) as { files: string[] };
+        return names.filter((name) => body.files.includes(name));
+      },
+      { timeout },
+    )
+    .toEqual(names);
 }
 
-test('file browsing and recursive search remain responsive while upload writes are delayed', async ({ page, context }) => {
+test('file browsing and recursive search remain responsive while upload writes are delayed', async ({
+  page,
+  context,
+}) => {
   await openFileManager(page, context);
 
   const fileName = 'concurrent-file-operations.bin';
@@ -96,14 +105,19 @@ test('file browsing and recursive search remain responsive while upload writes a
     await fileManagerModal.getByTitle('Search files...').click();
     const search = fileManagerModal.getByPlaceholder('Search files...');
     await search.fill('nested');
-    await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({ timeout: 10_000 });
+    await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   await page.goto('/connections');
   await expect(page.getByTestId('connections-add-button')).toBeVisible({ timeout: 10_000 });
 });
 
-test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({ page, context }) => {
+test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({
+  page,
+  context,
+}) => {
   await openFileManager(page, context);
 
   const firstSeed = 'seed-overwritten-by-multi-drag\n';
@@ -130,28 +144,31 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
     await expect.poll(() => readRemoteText('copy-source.txt')).toBe(firstCopy);
   });
 
-  await slowStep('skip plus apply-to-all aborts only later conflicting files while new files still upload', async () => {
-    const skippedSeedBody = 'this-must-not-replace-seed\n';
-    const skippedCopyBody = 'this-must-not-replace-copy\n';
-    const nonConflictName = 'skip-policy-new-file.txt';
+  await slowStep(
+    'skip plus apply-to-all aborts only later conflicting files while new files still upload',
+    async () => {
+      const skippedSeedBody = 'this-must-not-replace-seed\n';
+      const skippedCopyBody = 'this-must-not-replace-copy\n';
+      const nonConflictName = 'skip-policy-new-file.txt';
 
-    await dragLocalFiles(page, [
-      { name: 'seed.txt', text: skippedSeedBody },
-      { name: 'copy-source.txt', text: skippedCopyBody },
-      { name: nonConflictName, text: 'new-file-still-uploads\n' },
-    ]);
+      await dragLocalFiles(page, [
+        { name: 'seed.txt', text: skippedSeedBody },
+        { name: 'copy-source.txt', text: skippedCopyBody },
+        { name: nonConflictName, text: 'new-file-still-uploads\n' },
+      ]);
 
-    const conflictModal = page.getByTestId('upload-conflict-modal');
-    await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-    await conflictModal.getByTestId('upload-conflict-apply-all').check();
-    await conflictModal.getByTestId('upload-conflict-skip').click();
-    await expect(conflictModal).toBeHidden();
+      const conflictModal = page.getByTestId('upload-conflict-modal');
+      await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+      await conflictModal.getByTestId('upload-conflict-apply-all').check();
+      await conflictModal.getByTestId('upload-conflict-skip').click();
+      await expect(conflictModal).toBeHidden();
 
-    await waitForRemoteFiles([nonConflictName]);
-    await expect.poll(() => readRemoteText('seed.txt')).toBe(firstSeed);
-    await expect.poll(() => readRemoteText('copy-source.txt')).toBe(firstCopy);
-    await expect.poll(() => readRemoteText(nonConflictName)).toBe('new-file-still-uploads\n');
-  });
+      await waitForRemoteFiles([nonConflictName]);
+      await expect.poll(() => readRemoteText('seed.txt')).toBe(firstSeed);
+      await expect.poll(() => readRemoteText('copy-source.txt')).toBe(firstCopy);
+      await expect.poll(() => readRemoteText(nonConflictName)).toBe('new-file-still-uploads\n');
+    },
+  );
 });
 
 test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {
@@ -174,10 +191,14 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
 
-      await expect.poll(() => progressPopup.evaluate((element) => {
-        const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
-        return Number.isFinite(zIndex) ? zIndex : 0;
-      })).toBeLessThan(50);
+      await expect
+        .poll(() =>
+          progressPopup.evaluate((element) => {
+            const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+            return Number.isFinite(zIndex) ? zIndex : 0;
+          }),
+        )
+        .toBeLessThan(50);
 
       await progressPopup.getByTestId('file-upload-progress-hide').click();
       await expect(progressPopup).toBeHidden();
@@ -196,11 +217,14 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
     });
 
     await slowStep('all uploaded files arrive with their declared byte sizes', async () => {
-      await waitForRemoteFiles(largeFiles.map(file => file.name), 60_000);
+      await waitForRemoteFiles(
+        largeFiles.map((file) => file.name),
+        60_000,
+      );
       for (const file of largeFiles) {
         const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(file.name)}`);
         expect(response.ok).toBeTruthy();
-        const stats = await response.json() as { size: number };
+        const stats = (await response.json()) as { size: number };
         expect(stats.size).toBe(file.size);
       }
     });
@@ -224,14 +248,17 @@ test('batch upload completes every file under slow SFTP acknowledgements', async
       await dragLocalFiles(page, weakFiles);
       const progressPopup = page.getByTestId('file-upload-progress-popup');
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      await waitForRemoteFiles(weakFiles.map(file => file.name), 60_000);
+      await waitForRemoteFiles(
+        weakFiles.map((file) => file.name),
+        60_000,
+      );
     });
 
     await step('all remote files are byte-complete', async () => {
       for (const file of weakFiles) {
         const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(file.name)}`);
         expect(response.ok).toBeTruthy();
-        const stats = await response.json() as { size: number };
+        const stats = (await response.json()) as { size: number };
         expect(stats.size).toBe(file.size);
       }
     });
@@ -289,26 +316,28 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
     expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
     const headerCenterY = speedBox!.y + speedBox!.height / 2;
-    expect(Math.abs((hideBox!.y + hideBox!.height / 2) - headerCenterY)).toBeLessThanOrEqual(2);
-    expect(Math.abs((cancelAllBox!.y + cancelAllBox!.height / 2) - headerCenterY)).toBeLessThanOrEqual(2);
-    const headerOrder = await popup.getByTestId('file-upload-header-meta').evaluate((header) =>
-      [...header.children].map(element => element.getAttribute('data-testid')).filter(Boolean),
-    );
-    expect(headerOrder.slice(-3)).toEqual([
-      'file-upload-speed',
-      'file-upload-progress-hide',
-      'file-upload-cancel-all',
-    ]);
+    expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
+    expect(Math.abs(cancelAllBox!.y + cancelAllBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
+    const headerOrder = await popup
+      .getByTestId('file-upload-header-meta')
+      .evaluate((header) => [...header.children].map((element) => element.getAttribute('data-testid')).filter(Boolean));
+    expect(headerOrder.slice(-3)).toEqual(['file-upload-speed', 'file-upload-progress-hide', 'file-upload-cancel-all']);
     await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
     const progressBars = popup.getByTestId('file-upload-progress-bar');
     await expect(progressBars.first()).toBeVisible();
-    const progressBarBoxes = await progressBars.evaluateAll(elements => elements.map(element => {
-      const rect = element.getBoundingClientRect();
-      return { x: rect.x, width: rect.width };
-    }));
+    const progressBarBoxes = await progressBars.evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.x, width: rect.width };
+      }),
+    );
     expect(progressBarBoxes.length).toBeGreaterThan(1);
-    expect(Math.max(...progressBarBoxes.map(box => box.x)) - Math.min(...progressBarBoxes.map(box => box.x))).toBeLessThanOrEqual(1);
-    expect(Math.max(...progressBarBoxes.map(box => box.width)) - Math.min(...progressBarBoxes.map(box => box.width))).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...progressBarBoxes.map((box) => box.x)) - Math.min(...progressBarBoxes.map((box) => box.x)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...progressBarBoxes.map((box) => box.width)) - Math.min(...progressBarBoxes.map((box) => box.width)),
+    ).toBeLessThanOrEqual(1);
 
     const resizeHandle = popup.getByTestId('file-upload-resize-handle');
     await expect(resizeHandle).toBeVisible();
@@ -331,10 +360,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
     const hiddenList = modal.getByTestId('hidden-progress-list');
-    const [sourceCardBox, hiddenListBox] = await Promise.all([
-      sourceCard.boundingBox(),
-      hiddenList.boundingBox(),
-    ]);
+    const [sourceCardBox, hiddenListBox] = await Promise.all([sourceCard.boundingBox(), hiddenList.boundingBox()]);
     expect(sourceCardBox).not.toBeNull();
     expect(hiddenListBox).not.toBeNull();
     expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - 2);
@@ -379,7 +405,7 @@ test('cancel all stays responsive with a buffered isolated upload transport', as
   await openFileManager(page, context);
 
   const uploadSocketUrls: string[] = [];
-  page.on('websocket', socket => uploadSocketUrls.push(socket.url()));
+  page.on('websocket', (socket) => uploadSocketUrls.push(socket.url()));
 
   const refreshMarker = 'refresh-after-upload-cancel.txt';
   const fixtureResponse = await fetch(
@@ -401,29 +427,41 @@ test('cancel all stays responsive with a buffered isolated upload transport', as
 
   const uploadNames = Array.from({ length: 4 }, (_, index) => `cancel-all-refresh-${index + 1}.bin`);
   try {
-    await dragLocalFiles(page, uploadNames.map((name, index) => ({
-      name,
-      size: 24 * 1024 * 1024,
-      fill: 0x70 + index,
-    })));
+    await dragLocalFiles(
+      page,
+      uploadNames.map((name, index) => ({
+        name,
+        size: 24 * 1024 * 1024,
+        fill: 0x70 + index,
+      })),
+    );
 
     const popup = page.getByTestId('file-upload-progress-popup');
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
-    await expect.poll(
-      () => uploadSocketUrls.some(socketUrl => new URL(socketUrl).pathname === '/ws/upload'),
-      { timeout: 5_000 },
-    ).toBe(true);
+    await expect
+      .poll(() => uploadSocketUrls.some((socketUrl) => new URL(socketUrl).pathname === '/ws/upload'), {
+        timeout: 5_000,
+      })
+      .toBe(true);
 
     // Prove this regression is exercising a browser upload backlog larger than the old
     // 512 KiB responsiveness cap. Control traffic must stay responsive even when the
     // dedicated upload transport has substantially more data already queued.
-    await expect.poll(
-      () => page.evaluate(() => (globalThis as typeof globalThis & {
-        __NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__?: number;
-      }).__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ ?? 0),
-      { timeout: 5_000 },
-    ).toBeGreaterThan(512 * 1024);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (
+                globalThis as typeof globalThis & {
+                  __NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__?: number;
+                }
+              ).__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ ?? 0,
+          ),
+        { timeout: 5_000 },
+      )
+      .toBeGreaterThan(512 * 1024);
 
     await popup.getByTestId('file-upload-cancel-all').click();
     await expect(popup).toBeHidden({ timeout: 2_000 });
@@ -433,14 +471,19 @@ test('cancel all stays responsive with a buffered isolated upload transport', as
     await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
     expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
 
-    await expect.poll(async () => {
-      const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-      if (!response.ok) return uploadNames;
-      const body = await response.json() as { files: string[] };
-      return body.files.filter(name =>
-        uploadNames.includes(name) || /^\.nexus-upload-.*\.part(?:\.previous)?$/.test(name),
-      );
-    }, { timeout: 10_000 }).toEqual([]);
+    await expect
+      .poll(
+        async () => {
+          const response = await fetch(`${E2E_SSH.controlUrl}/files`);
+          if (!response.ok) return uploadNames;
+          const body = (await response.json()) as { files: string[] };
+          return body.files.filter(
+            (name) => uploadNames.includes(name) || /^\.nexus-upload-.*\.part(?:\.previous)?$/.test(name),
+          );
+        },
+        { timeout: 10_000 },
+      )
+      .toEqual([]);
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
     await cdp.send('Network.emulateNetworkConditions', {
@@ -452,7 +495,6 @@ test('cancel all stays responsive with a buffered isolated upload transport', as
     await cdp.detach();
   }
 });
-
 
 test('Progress Display cancel all keeps immediate file-manager refresh responsive', async ({ page, context }) => {
   await openFileManager(page, context);
@@ -477,11 +519,14 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
 
   const uploadNames = Array.from({ length: 4 }, (_, index) => `progress-cancel-all-refresh-${index + 1}.bin`);
   try {
-    await dragLocalFiles(page, uploadNames.map((name, index) => ({
-      name,
-      size: 24 * 1024 * 1024,
-      fill: 0x50 + index,
-    })));
+    await dragLocalFiles(
+      page,
+      uploadNames.map((name, index) => ({
+        name,
+        size: 24 * 1024 * 1024,
+        fill: 0x50 + index,
+      })),
+    );
 
     const popup = page.getByTestId('file-upload-progress-popup');
     await expect(popup).toBeVisible({ timeout: 10_000 });
@@ -503,14 +548,19 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
     expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
 
-    await expect.poll(async () => {
-      const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-      if (!response.ok) return uploadNames;
-      const body = await response.json() as { files: string[] };
-      return body.files.filter(name =>
-        uploadNames.includes(name) || /^\.nexus-upload-.*\.part(?:\.previous)?$/.test(name),
-      );
-    }, { timeout: 10_000 }).toEqual([]);
+    await expect
+      .poll(
+        async () => {
+          const response = await fetch(`${E2E_SSH.controlUrl}/files`);
+          if (!response.ok) return uploadNames;
+          const body = (await response.json()) as { files: string[] };
+          return body.files.filter(
+            (name) => uploadNames.includes(name) || /^\.nexus-upload-.*\.part(?:\.previous)?$/.test(name),
+          );
+        },
+        { timeout: 10_000 },
+      )
+      .toEqual([]);
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
     await cdp.send('Network.emulateNetworkConditions', {
@@ -523,8 +573,10 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
   }
 });
 
-
-test('cancelled upload stays cancelled when the browser transport drops during a queued binary send', async ({ page, context }) => {
+test('cancelled upload stays cancelled when the browser transport drops during a queued binary send', async ({
+  page,
+  context,
+}) => {
   await openFileManager(page, context);
   const filename = 'cancel-during-transport-drop.bin';
   const cdp = await context.newCDPSession(page);
@@ -563,7 +615,7 @@ test('cancelled upload stays cancelled when the browser transport drops during a
     await expect(popup).toBeHidden();
     const response = await fetch(`${E2E_SSH.controlUrl}/files`);
     expect(response.ok).toBeTruthy();
-    const body = await response.json() as { files: string[] };
+    const body = (await response.json()) as { files: string[] };
     expect(body.files).not.toContain(filename);
   } finally {
     await cdp.send('Network.emulateNetworkConditions', {
@@ -576,8 +628,10 @@ test('cancelled upload stays cancelled when the browser transport drops during a
   }
 });
 
-
-test('cancelled upload cannot be resurrected by a rejected binary send that was already waiting on backpressure', async ({ page, context }) => {
+test('cancelled upload cannot be resurrected by a rejected binary send that was already waiting on backpressure', async ({
+  page,
+  context,
+}) => {
   test.setTimeout(60_000);
   await page.addInitScript(() => {
     const descriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'bufferedAmount');
@@ -598,7 +652,9 @@ test('cancelled upload cannot be resurrected by a rejected binary send that was 
   await openFileManager(page, context);
   const filename = 'cancelled-inflight-send.bin';
 
-  await page.evaluate(() => { (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = true; });
+  await page.evaluate(() => {
+    (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = true;
+  });
   try {
     await dragLocalFiles(page, [{ name: filename, size: 4 * 1024 * 1024, fill: 0x5e }]);
     const popup = page.getByTestId('file-upload-progress-popup');
@@ -607,7 +663,9 @@ test('cancelled upload cannot be resurrected by a rejected binary send that was 
     await page.waitForTimeout(250);
 
     await popup.getByTestId('file-upload-cancel').click();
-    await page.evaluate(() => { (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = true; });
+    await page.evaluate(() => {
+      (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = true;
+    });
 
     // cancelUpload schedules removal after three seconds. A stale pump catch must not
     // overwrite cancelled with paused/error and keep a ghost task alive.
@@ -615,12 +673,14 @@ test('cancelled upload cannot be resurrected by a rejected binary send that was 
     await expect(popup).toBeHidden();
     const response = await fetch(`${E2E_SSH.controlUrl}/files`);
     expect(response.ok).toBeTruthy();
-    const body = await response.json() as { files: string[] };
+    const body = (await response.json()) as { files: string[] };
     expect(body.files).not.toContain(filename);
   } finally {
-    await page.evaluate(() => {
-      (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = false;
-      (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = false;
-    }).catch(() => {});
+    await page
+      .evaluate(() => {
+        (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = false;
+        (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = false;
+      })
+      .catch(() => {});
   }
 });

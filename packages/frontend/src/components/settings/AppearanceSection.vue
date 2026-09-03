@@ -1,19 +1,25 @@
 <template>
   <div v-if="settings" class="bg-background border border-border rounded-lg shadow-sm overflow-hidden">
-    <h2 class="text-lg font-semibold text-foreground px-6 py-4 border-b border-border bg-header/50">{{ $t('settings.category.appearance') }}</h2>
+    <h2 class="text-lg font-semibold text-foreground px-6 py-4 border-b border-border bg-header/50">
+      {{ $t('settings.category.appearance') }}
+    </h2>
     <div class="p-6 space-y-6">
       <!-- Style Customizer -->
       <div class="settings-section-content">
-         <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.appearance.title') }}</h3>
-         <p class="text-sm text-text-secondary mb-4">{{ $t('settings.appearance.description') }}</p>
-         <button @click="openStyleCustomizer"
-                 class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium">
-           {{ t('settings.appearance.customizeButton') }}
-         </button>
+        <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.appearance.title') }}</h3>
+        <p class="text-sm text-text-secondary mb-4">{{ $t('settings.appearance.description') }}</p>
+        <button
+          @click="openStyleCustomizer"
+          class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium"
+        >
+          {{ t('settings.appearance.customizeButton') }}
+        </button>
       </div>
-      <hr class="border-border/50">
+      <hr class="border-border/50" />
       <div class="settings-section-content">
-        <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.appearance.windowThemeColor.title') }}</h3>
+        <h3 class="text-base font-semibold text-foreground mb-3">
+          {{ t('settings.appearance.windowThemeColor.title') }}
+        </h3>
         <p class="text-sm text-text-secondary mb-4">{{ t('settings.appearance.windowThemeColor.description') }}</p>
         <label for="windowThemeColorInput" class="block text-sm font-medium text-foreground mb-2">
           {{ t('settings.appearance.windowThemeColor.label') }}
@@ -25,7 +31,7 @@
             :value="windowThemeColorDraft"
             @input="handleWindowThemeColorPicker"
             class="h-10 w-14 rounded border border-border bg-background cursor-pointer"
-          >
+          />
           <input
             id="windowThemeColorInput"
             data-testid="window-theme-color-input"
@@ -37,7 +43,7 @@
             class="h-10 w-32 px-3 border border-border rounded-md bg-input text-foreground font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             @input="windowThemeColorStatus = null"
             @keyup.enter="saveWindowThemeColor"
-          >
+          />
           <button
             data-testid="window-theme-color-save"
             type="button"
@@ -60,10 +66,18 @@
         <p v-if="!isWindowThemeColorValid" class="text-sm text-error mt-2" data-testid="window-theme-color-invalid">
           {{ t('settings.appearance.windowThemeColor.invalid') }}
         </p>
-        <p v-else-if="windowThemeColorStatus === 'saved'" class="text-sm text-success mt-2" data-testid="window-theme-color-saved">
+        <p
+          v-else-if="windowThemeColorStatus === 'saved'"
+          class="text-sm text-success mt-2"
+          data-testid="window-theme-color-saved"
+        >
           {{ t('settings.appearance.windowThemeColor.saved') }}
         </p>
-        <p v-else-if="windowThemeColorStatus === 'error'" class="text-sm text-error mt-2" data-testid="window-theme-color-error">
+        <p
+          v-else-if="windowThemeColorStatus === 'error'"
+          class="text-sm text-error mt-2"
+          data-testid="window-theme-color-error"
+        >
           {{ t('settings.appearance.windowThemeColor.saveFailed') }}
         </p>
       </div>
@@ -72,68 +86,65 @@
 </template>
 
 <script setup lang="ts">
-import { useSettingsStore } from '../../stores/settings.store';
-import { useAppearanceStore } from '../../stores/appearance.store'; 
-import { useI18n } from 'vue-i18n';
-import { storeToRefs } from 'pinia';
-import { useAppearanceSettings } from '../../composables/settings/useAppearanceSettings';
-import { computed, ref, watch } from 'vue';
+  import { useSettingsStore } from '../../stores/settings.store';
+  import { useAppearanceStore } from '../../stores/appearance.store';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
+  import { useAppearanceSettings } from '../../composables/settings/useAppearanceSettings';
+  import { computed, ref, watch } from 'vue';
 
-const settingsStore = useSettingsStore();
-const { settings } = storeToRefs(settingsStore); 
-const appearanceStore = useAppearanceStore(); 
-const { t } = useI18n();
+  const settingsStore = useSettingsStore();
+  const { settings } = storeToRefs(settingsStore);
+  const appearanceStore = useAppearanceStore();
+  const { t } = useI18n();
 
-const {
-  openStyleCustomizer,
-} = useAppearanceSettings();
+  const { openStyleCustomizer } = useAppearanceSettings();
 
-const DEFAULT_WINDOW_THEME_COLOR = '#343A40';
-const windowThemeColorDraft = ref(DEFAULT_WINDOW_THEME_COLOR);
-const isSavingWindowThemeColor = ref(false);
-const windowThemeColorStatus = ref<'saved' | 'error' | null>(null);
+  const DEFAULT_WINDOW_THEME_COLOR = '#343A40';
+  const windowThemeColorDraft = ref(DEFAULT_WINDOW_THEME_COLOR);
+  const isSavingWindowThemeColor = ref(false);
+  const windowThemeColorStatus = ref<'saved' | 'error' | null>(null);
 
-const normalizeWindowThemeColor = (color: string): string | null => {
-  const value = color.trim();
-  return /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null;
-};
+  const normalizeWindowThemeColor = (color: string): string | null => {
+    const value = color.trim();
+    return /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null;
+  };
 
-const isWindowThemeColorValid = computed(() => normalizeWindowThemeColor(windowThemeColorDraft.value) !== null);
+  const isWindowThemeColorValid = computed(() => normalizeWindowThemeColor(windowThemeColorDraft.value) !== null);
 
-watch(
-  () => appearanceStore.currentWindowThemeColor,
-  (color) => {
-    windowThemeColorDraft.value = color;
-  },
-  { immediate: true },
-);
+  watch(
+    () => appearanceStore.currentWindowThemeColor,
+    (color) => {
+      windowThemeColorDraft.value = color;
+    },
+    { immediate: true },
+  );
 
-const handleWindowThemeColorPicker = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  windowThemeColorDraft.value = target.value.toUpperCase();
-  windowThemeColorStatus.value = null;
-};
+  const handleWindowThemeColorPicker = (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    windowThemeColorDraft.value = target.value.toUpperCase();
+    windowThemeColorStatus.value = null;
+  };
 
-const saveWindowThemeColor = async () => {
-  const color = normalizeWindowThemeColor(windowThemeColorDraft.value);
-  if (!color || isSavingWindowThemeColor.value) return;
-  isSavingWindowThemeColor.value = true;
-  windowThemeColorStatus.value = null;
-  try {
-    await appearanceStore.updateAppearanceSettings({ windowThemeColor: color });
-    windowThemeColorDraft.value = color;
-    windowThemeColorStatus.value = 'saved';
-  } catch (error) {
-    console.error('[AppearanceSection] 保存窗口标题栏颜色失败:', error);
-    windowThemeColorStatus.value = 'error';
-  } finally {
-    isSavingWindowThemeColor.value = false;
-  }
-};
+  const saveWindowThemeColor = async () => {
+    const color = normalizeWindowThemeColor(windowThemeColorDraft.value);
+    if (!color || isSavingWindowThemeColor.value) return;
+    isSavingWindowThemeColor.value = true;
+    windowThemeColorStatus.value = null;
+    try {
+      await appearanceStore.updateAppearanceSettings({ windowThemeColor: color });
+      windowThemeColorDraft.value = color;
+      windowThemeColorStatus.value = 'saved';
+    } catch (error) {
+      console.error('[AppearanceSection] 保存窗口标题栏颜色失败:', error);
+      windowThemeColorStatus.value = 'error';
+    } finally {
+      isSavingWindowThemeColor.value = false;
+    }
+  };
 
-const resetWindowThemeColor = async () => {
-  windowThemeColorDraft.value = DEFAULT_WINDOW_THEME_COLOR;
-  await saveWindowThemeColor();
-};
+  const resetWindowThemeColor = async () => {
+    windowThemeColorDraft.value = DEFAULT_WINDOW_THEME_COLOR;
+    await saveWindowThemeColor();
+  };
 </script>
-

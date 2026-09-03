@@ -16,7 +16,7 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
       },
     });
     expect(response.status()).toBe(201);
-    const body = await response.json() as { command: { id: number; name: string; command: string } };
+    const body = (await response.json()) as { command: { id: number; name: string; command: string } };
     commandId = body.command.id;
     expect(body.command).toMatchObject({ name: 'E2E Quick Command', command: 'echo ${TARGET}' });
   });
@@ -37,7 +37,7 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
 
     const list = await request.get('/api/v1/quick-commands?sortBy=usage_count');
     expect(list.ok()).toBeTruthy();
-    const saved = (await list.json() as Array<{ id: number; name: string; usage_count?: number }>).find(
+    const saved = ((await list.json()) as Array<{ id: number; name: string; usage_count?: number }>).find(
       (item) => item.id === commandId,
     );
     expect(saved).toMatchObject({ name: 'E2E Quick Command Updated' });
@@ -48,13 +48,13 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
     const response = await request.delete(`/api/v1/quick-commands/${commandId!}`);
     expect(response.ok()).toBeTruthy();
     const list = await request.get('/api/v1/quick-commands');
-    expect((await list.json() as Array<{ id: number }>).some((item) => item.id === commandId)).toBeFalsy();
+    expect(((await list.json()) as Array<{ id: number }>).some((item) => item.id === commandId)).toBeFalsy();
   });
 
   await step('audit log records security and connection activity', async () => {
     const response = await request.get('/api/v1/audit-logs?limit=100&offset=0');
     expect(response.ok()).toBeTruthy();
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       logs: Array<{ action_type?: string; details?: Record<string, unknown> }>;
       total: number;
     };

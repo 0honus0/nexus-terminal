@@ -14,7 +14,7 @@ import { step } from '../../support/steps';
 
 const FAVORITE_NAME = 'E2E Folder Seed';
 const FAVORITE_PATH = '/folder-seed';
-const SPECIAL_PATH = "/  特殊 空格'\"$#`()[]{}!&;=,+测试  ";
+const SPECIAL_PATH = '/  特殊 空格\'"$#`()[]{}!&;=,+测试  ';
 const DELETED_CWD_PATH = '/deleted-cwd';
 
 const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
@@ -26,7 +26,7 @@ const favoriteSlot = (page: Page): Locator => manager(page).locator('.file-manag
 async function cleanupFavorite(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/favorite-paths');
   if (!response.ok()) return;
-  const favorites = await response.json() as Array<{ id: string; name?: string; path?: string }>;
+  const favorites = (await response.json()) as Array<{ id: string; name?: string; path?: string }>;
   for (const favorite of favorites.filter((item) => item.name === FAVORITE_NAME || item.path === FAVORITE_PATH)) {
     await request.delete(`/api/v1/favorite-paths/${favorite.id}`);
   }
@@ -42,9 +42,9 @@ async function navigateViaPathInput(page: Page, path: string): Promise<void> {
 }
 
 async function visibleFilenames(page: Page): Promise<string[]> {
-  return activeFileManagerList(page).locator('tbody tr[data-filename]').evaluateAll((rows) =>
-    rows.map((element) => element.getAttribute('data-filename') || ''),
-  );
+  return activeFileManagerList(page)
+    .locator('tbody tr[data-filename]')
+    .evaluateAll((rows) => rows.map((element) => element.getAttribute('data-filename') || ''));
 }
 
 test('common file-manager navigation tools work over real SFTP', async ({ page, context }) => {
@@ -170,7 +170,10 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
   });
 });
 
-test('file-manager and terminal path sync survive shell metacharacters and a deleted terminal cwd', async ({ page, context }) => {
+test('file-manager and terminal path sync survive shell metacharacters and a deleted terminal cwd', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
@@ -187,7 +190,9 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
     await expect(row(page, 'inside.txt')).toBeVisible();
 
     await cdToTerminal.click();
-    await expect(page.getByText(`Terminal directory changed to ${SPECIAL_PATH}`, { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(`Terminal directory changed to ${SPECIAL_PATH}`, { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
 
     await navigateViaPathInput(page, '/');
     await syncFromTerminal.click();
@@ -198,11 +203,16 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
   await step('following the terminal recovers when its current directory was deleted externally', async () => {
     await navigateViaPathInput(page, DELETED_CWD_PATH);
     await cdToTerminal.click();
-    await expect(page.getByText(`Terminal directory changed to ${DELETED_CWD_PATH}`, { exact: true })).toBeVisible({ timeout: 10_000 });
-
-    const removeResponse = await fetch(`${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`, {
-      method: 'POST',
+    await expect(page.getByText(`Terminal directory changed to ${DELETED_CWD_PATH}`, { exact: true })).toBeVisible({
+      timeout: 10_000,
     });
+
+    const removeResponse = await fetch(
+      `${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`,
+      {
+        method: 'POST',
+      },
+    );
     expect(removeResponse.ok).toBeTruthy();
 
     await syncFromTerminal.click();
@@ -218,9 +228,12 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
     expect(recreateResponse.ok).toBeTruthy();
 
     await navigateViaPathInput(page, DELETED_CWD_PATH);
-    const removeResponse = await fetch(`${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`, {
-      method: 'POST',
-    });
+    const removeResponse = await fetch(
+      `${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(DELETED_CWD_PATH)}`,
+      {
+        method: 'POST',
+      },
+    );
     expect(removeResponse.ok).toBeTruthy();
 
     await fileManager.getByTitle('Refresh').click();

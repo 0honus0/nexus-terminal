@@ -13,7 +13,11 @@ export interface RemoteTextFileReadResult {
 const normalizeEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export class RemoteTextFileService {
-  async read(filesystem: RemoteFileSystem, remotePath: string, requestedEncoding?: string): Promise<RemoteTextFileReadResult> {
+  async read(
+    filesystem: RemoteFileSystem,
+    remotePath: string,
+    requestedEncoding?: string,
+  ): Promise<RemoteTextFileReadResult> {
     const stream = await filesystem.openRead(remotePath);
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));

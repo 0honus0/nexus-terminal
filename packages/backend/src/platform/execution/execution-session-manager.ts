@@ -82,8 +82,9 @@ export class ExecutionSessionManager {
   }
 
   async closeByOwner(ownerType: ExecutionSessionOwnerType, ownerId?: string): Promise<void> {
-    const matching = [...this.sessions.entries()].filter(([, session]) =>
-      session.ownerType === ownerType && (ownerId === undefined || session.ownerId === ownerId));
+    const matching = [...this.sessions.entries()].filter(
+      ([, session]) => session.ownerType === ownerType && (ownerId === undefined || session.ownerId === ownerId),
+    );
     for (const [id] of matching) this.sessions.delete(id);
     await Promise.all(matching.map(([, session]) => session.close().catch(() => undefined)));
   }

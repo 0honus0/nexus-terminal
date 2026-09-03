@@ -1,532 +1,536 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
-import type { FileListItem } from '../../types/sftp.types';
-import FilePreviewDialog from './FilePreviewDialog.vue';
-import PdfContinuousPage from './PdfContinuousPage.vue';
-import PdfOutlineItems, { type PdfOutlineItem } from './PdfOutlineItems.vue';
-import PreviewSearchBar from './PreviewSearchBar.vue';
-import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import type { PDFDocumentProxy } from 'pdfjs-dist';
+  import type { FileListItem } from '../../types/sftp.types';
+  import FilePreviewDialog from './FilePreviewDialog.vue';
+  import PdfContinuousPage from './PdfContinuousPage.vue';
+  import PdfOutlineItems, { type PdfOutlineItem } from './PdfOutlineItems.vue';
+  import PreviewSearchBar from './PreviewSearchBar.vue';
+  import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
 
-interface PdfSearchMatch {
-  page: number;
-  occurrence: number;
-}
-
-const props = withDefaults(defineProps<{
-  file: FileListItem;
-  document: PDFDocumentProxy;
-  outline: PdfOutlineItem[];
-  active?: boolean;
-}>(), {
-  active: true,
-});
-
-const emit = defineEmits<{
-  close: [];
-}>();
-
-const { t } = useI18n();
-const currentPage = ref(1);
-const zoomPercent = ref(100);
-const fitWidth = ref(true);
-const pinchScale = ref(1);
-const pinchPreviewPercent = ref<number | null>(null);
-const outlineOpen = ref(false);
-const desktopOutlinePersistent = ref(false);
-const desktopOutlineVisible = ref(true);
-const availablePageWidth = ref(220);
-const pageScalePercents = ref<Record<number, number>>({});
-const mainScrollerRef = ref<HTMLElement | null>(null);
-const searchOpen = ref(false);
-const searchQuery = ref('');
-const searchAppliedQuery = ref('');
-const searchBusy = ref(false);
-const searchMatches = ref<PdfSearchMatch[]>([]);
-const activeSearchIndex = ref(-1);
-
-let resizeObserver: ResizeObserver | null = null;
-let desktopOutlineMediaQuery: MediaQueryList | null = null;
-let scrollFrame = 0;
-let restoreFrame = 0;
-let restoringScrollPosition = false;
-let savedScrollTop = 0;
-let savedScrollLeft = 0;
-let savedCurrentPage = 1;
-let savedNeedsPageAnchor = false;
-let pendingPageJump: { page: number; behavior: ScrollBehavior } | null = null;
-let searchIndexDocument: PDFDocumentProxy | null = null;
-let searchIndexPromise: Promise<void> | null = null;
-let searchPageTextItems: string[][] = [];
-let searchToken = 0;
-let pinchGesture: {
-  startDistance: number;
-  startZoom: number;
-  targetZoom: number;
-} | null = null;
-
-const pageCount = computed(() => props.document.numPages);
-const subtitle = computed(() => t('fileManager.preview.pdfMeta', {
-  pages: pageCount.value,
-}, `PDF · ${pageCount.value} pages`));
-const currentFitZoom = computed(() => (
-  pageScalePercents.value[currentPage.value]
-  ?? pageScalePercents.value[1]
-  ?? 100
-));
-const displayedZoomPercent = computed(() => (
-  pinchPreviewPercent.value
-  ?? (fitWidth.value ? currentFitZoom.value : zoomPercent.value)
-));
-const zoomLabel = computed(() => `${Math.round(displayedZoomPercent.value)}%`);
-const outlineVisible = computed(() => (
-  desktopOutlinePersistent.value ? desktopOutlineVisible.value : outlineOpen.value
-));
-const outlineHidden = computed(() => !outlineVisible.value);
-const activeSearchMatch = computed(() => searchMatches.value[activeSearchIndex.value] ?? null);
-
-const clampPage = (value: number) => Math.min(pageCount.value, Math.max(1, Math.round(value)));
-const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value)));
-
-const updateAvailableWidth = () => {
-  const scroller = mainScrollerRef.value;
-  if (!scroller || !props.active || scroller.clientWidth < 32) return false;
-  const style = getComputedStyle(scroller);
-  const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
-  const nextWidth = Math.max(220, scroller.clientWidth - horizontalPadding);
-  const changed = Math.abs(nextWidth - availablePageWidth.value) > 1;
-  availablePageWidth.value = nextWidth;
-  return changed;
-};
-
-const pageElement = (pageNumber: number) => mainScrollerRef.value?.querySelector<HTMLElement>(
-  `[data-pdf-page-number="${pageNumber}"]`,
-) ?? null;
-
-const applyPageScroll = (page: number, behavior: ScrollBehavior) => {
-  const scroller = mainScrollerRef.value;
-  const element = pageElement(page);
-  if (!scroller || !element) return false;
-  const pageRect = element.getBoundingClientRect();
-  if (pageRect.height < 32) return false;
-  const scrollerRect = scroller.getBoundingClientRect();
-  const top = Math.max(0, scroller.scrollTop + pageRect.top - scrollerRect.top - 8);
-  scroller.scrollTo({ top, left: 0, behavior });
-  return true;
-};
-
-const hasMeasuredPagesThrough = (page: number) => {
-  for (let pageNumber = 1; pageNumber <= page; pageNumber += 1) {
-    if (pageScalePercents.value[pageNumber] == null) return false;
-  }
-  return true;
-};
-
-const finishPendingPageJump = () => {
-  const pending = pendingPageJump;
-  if (!pending || !props.active) return false;
-  if (!hasMeasuredPagesThrough(pending.page)) return false;
-  if (!applyPageScroll(pending.page, pending.behavior)) return false;
-  pendingPageJump = null;
-  savedNeedsPageAnchor = false;
-  return true;
-};
-
-const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'auto') => {
-  const page = clampPage(pageNumber);
-  currentPage.value = page;
-  outlineOpen.value = false;
-  pendingPageJump = { page, behavior };
-  if (!finishPendingPageJump()) void nextTick(finishPendingPageJump);
-};
-
-const updateCurrentPageFromScroll = () => {
-  scrollFrame = 0;
-  if (restoringScrollPosition || pendingPageJump || !props.active) return;
-  const scroller = mainScrollerRef.value;
-  if (!scroller) return;
-  const scrollerRect = scroller.getBoundingClientRect();
-  const focusY = scrollerRect.top + Math.min(scroller.clientHeight * 0.35, 260);
-  const pages = Array.from(scroller.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
-  let bestPage = currentPage.value;
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  for (const element of pages) {
-    const rect = element.getBoundingClientRect();
-    if (rect.height < 32) continue;
-    if (rect.bottom < scrollerRect.top || rect.top > scrollerRect.bottom) continue;
-    const distance = focusY < rect.top
-      ? rect.top - focusY
-      : focusY > rect.bottom
-        ? focusY - rect.bottom
-        : 0;
-    if (distance >= bestDistance) continue;
-    const page = Number(element.dataset.pdfPageNumber);
-    if (!Number.isFinite(page)) continue;
-    bestPage = page;
-    bestDistance = distance;
-    if (distance === 0) break;
+  interface PdfSearchMatch {
+    page: number;
+    occurrence: number;
   }
 
-  currentPage.value = clampPage(bestPage);
-};
+  const props = withDefaults(
+    defineProps<{
+      file: FileListItem;
+      document: PDFDocumentProxy;
+      outline: PdfOutlineItem[];
+      active?: boolean;
+    }>(),
+    {
+      active: true,
+    },
+  );
 
-const queueCurrentPageUpdate = () => {
-  if (restoringScrollPosition || pendingPageJump || !props.active || scrollFrame) return;
-  scrollFrame = requestAnimationFrame(updateCurrentPageFromScroll);
-};
+  const emit = defineEmits<{
+    close: [];
+  }>();
 
-const handlePageInput = (event: Event) => {
-  const input = event.currentTarget as HTMLInputElement;
-  const parsed = Number(input.value);
-  if (Number.isFinite(parsed)) scrollToPage(parsed);
-  input.value = String(currentPage.value);
-};
+  const { t } = useI18n();
+  const currentPage = ref(1);
+  const zoomPercent = ref(100);
+  const fitWidth = ref(true);
+  const pinchScale = ref(1);
+  const pinchPreviewPercent = ref<number | null>(null);
+  const outlineOpen = ref(false);
+  const desktopOutlinePersistent = ref(false);
+  const desktopOutlineVisible = ref(true);
+  const availablePageWidth = ref(220);
+  const pageScalePercents = ref<Record<number, number>>({});
+  const mainScrollerRef = ref<HTMLElement | null>(null);
+  const searchOpen = ref(false);
+  const searchQuery = ref('');
+  const searchAppliedQuery = ref('');
+  const searchBusy = ref(false);
+  const searchMatches = ref<PdfSearchMatch[]>([]);
+  const activeSearchIndex = ref(-1);
 
-const previousPage = () => scrollToPage(currentPage.value - 1);
-const nextPage = () => scrollToPage(currentPage.value + 1);
+  let resizeObserver: ResizeObserver | null = null;
+  let desktopOutlineMediaQuery: MediaQueryList | null = null;
+  let scrollFrame = 0;
+  let restoreFrame = 0;
+  let restoringScrollPosition = false;
+  let savedScrollTop = 0;
+  let savedScrollLeft = 0;
+  let savedCurrentPage = 1;
+  let savedNeedsPageAnchor = false;
+  let pendingPageJump: { page: number; behavior: ScrollBehavior } | null = null;
+  let searchIndexDocument: PDFDocumentProxy | null = null;
+  let searchIndexPromise: Promise<void> | null = null;
+  let searchPageTextItems: string[][] = [];
+  let searchToken = 0;
+  let pinchGesture: {
+    startDistance: number;
+    startZoom: number;
+    targetZoom: number;
+  } | null = null;
 
-const ensureSearchIndex = async () => {
-  if (searchIndexDocument === props.document && searchPageTextItems.length === pageCount.value) return;
-  if (searchIndexPromise && searchIndexDocument === props.document) {
-    await searchIndexPromise;
-    return;
-  }
+  const pageCount = computed(() => props.document.numPages);
+  const subtitle = computed(() =>
+    t(
+      'fileManager.preview.pdfMeta',
+      {
+        pages: pageCount.value,
+      },
+      `PDF · ${pageCount.value} pages`,
+    ),
+  );
+  const currentFitZoom = computed(
+    () => pageScalePercents.value[currentPage.value] ?? pageScalePercents.value[1] ?? 100,
+  );
+  const displayedZoomPercent = computed(
+    () => pinchPreviewPercent.value ?? (fitWidth.value ? currentFitZoom.value : zoomPercent.value),
+  );
+  const zoomLabel = computed(() => `${Math.round(displayedZoomPercent.value)}%`);
+  const outlineVisible = computed(() =>
+    desktopOutlinePersistent.value ? desktopOutlineVisible.value : outlineOpen.value,
+  );
+  const outlineHidden = computed(() => !outlineVisible.value);
+  const activeSearchMatch = computed(() => searchMatches.value[activeSearchIndex.value] ?? null);
 
-  const targetDocument = props.document;
-  searchIndexDocument = targetDocument;
-  searchPageTextItems = Array.from({ length: targetDocument.numPages }, () => []);
-  searchIndexPromise = (async () => {
-    let nextPageIndex = 0;
-    const workerCount = Math.min(4, targetDocument.numPages);
-    await Promise.all(Array.from({ length: workerCount }, async () => {
-      while (nextPageIndex < targetDocument.numPages) {
-        const pageIndex = nextPageIndex;
-        nextPageIndex += 1;
-        const page = await targetDocument.getPage(pageIndex + 1);
-        const textContent = await page.getTextContent();
-        searchPageTextItems[pageIndex] = textContent.items.flatMap((item) => (
-          'str' in item && typeof item.str === 'string' ? [item.str] : []
-        ));
-      }
-    }));
-  })();
+  const clampPage = (value: number) => Math.min(pageCount.value, Math.max(1, Math.round(value)));
+  const clampZoom = (value: number) => Math.min(400, Math.max(25, Math.round(value)));
 
-  try {
-    await searchIndexPromise;
-  } finally {
-    if (searchIndexDocument === targetDocument) searchIndexPromise = null;
-  }
-};
+  const updateAvailableWidth = () => {
+    const scroller = mainScrollerRef.value;
+    if (!scroller || !props.active || scroller.clientWidth < 32) return false;
+    const style = getComputedStyle(scroller);
+    const horizontalPadding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+    const nextWidth = Math.max(220, scroller.clientWidth - horizontalPadding);
+    const changed = Math.abs(nextWidth - availablePageWidth.value) > 1;
+    availablePageWidth.value = nextWidth;
+    return changed;
+  };
 
-const activatePdfSearchIndex = (index: number, behavior: ScrollBehavior = 'smooth') => {
-  const count = searchMatches.value.length;
-  if (count === 0) {
-    activeSearchIndex.value = -1;
-    return;
-  }
-  activeSearchIndex.value = ((index % count) + count) % count;
-  scrollToPage(searchMatches.value[activeSearchIndex.value].page, behavior);
-};
+  const pageElement = (pageNumber: number) =>
+    mainScrollerRef.value?.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`) ?? null;
 
-const runPdfSearch = async (value: string) => {
-  searchQuery.value = value;
-  const query = value.trim().toLocaleLowerCase();
-  const token = ++searchToken;
+  const applyPageScroll = (page: number, behavior: ScrollBehavior) => {
+    const scroller = mainScrollerRef.value;
+    const element = pageElement(page);
+    if (!scroller || !element) return false;
+    const pageRect = element.getBoundingClientRect();
+    if (pageRect.height < 32) return false;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const top = Math.max(0, scroller.scrollTop + pageRect.top - scrollerRect.top - 8);
+    scroller.scrollTo({ top, left: 0, behavior });
+    return true;
+  };
 
-  if (!query) {
+  const hasMeasuredPagesThrough = (page: number) => {
+    for (let pageNumber = 1; pageNumber <= page; pageNumber += 1) {
+      if (pageScalePercents.value[pageNumber] == null) return false;
+    }
+    return true;
+  };
+
+  const finishPendingPageJump = () => {
+    const pending = pendingPageJump;
+    if (!pending || !props.active) return false;
+    if (!hasMeasuredPagesThrough(pending.page)) return false;
+    if (!applyPageScroll(pending.page, pending.behavior)) return false;
+    pendingPageJump = null;
+    savedNeedsPageAnchor = false;
+    return true;
+  };
+
+  const scrollToPage = (pageNumber: number, behavior: ScrollBehavior = 'auto') => {
+    const page = clampPage(pageNumber);
+    currentPage.value = page;
+    outlineOpen.value = false;
+    pendingPageJump = { page, behavior };
+    if (!finishPendingPageJump()) void nextTick(finishPendingPageJump);
+  };
+
+  const updateCurrentPageFromScroll = () => {
+    scrollFrame = 0;
+    if (restoringScrollPosition || pendingPageJump || !props.active) return;
+    const scroller = mainScrollerRef.value;
+    if (!scroller) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const focusY = scrollerRect.top + Math.min(scroller.clientHeight * 0.35, 260);
+    const pages = Array.from(scroller.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+    let bestPage = currentPage.value;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const element of pages) {
+      const rect = element.getBoundingClientRect();
+      if (rect.height < 32) continue;
+      if (rect.bottom < scrollerRect.top || rect.top > scrollerRect.bottom) continue;
+      const distance = focusY < rect.top ? rect.top - focusY : focusY > rect.bottom ? focusY - rect.bottom : 0;
+      if (distance >= bestDistance) continue;
+      const page = Number(element.dataset.pdfPageNumber);
+      if (!Number.isFinite(page)) continue;
+      bestPage = page;
+      bestDistance = distance;
+      if (distance === 0) break;
+    }
+
+    currentPage.value = clampPage(bestPage);
+  };
+
+  const queueCurrentPageUpdate = () => {
+    if (restoringScrollPosition || pendingPageJump || !props.active || scrollFrame) return;
+    scrollFrame = requestAnimationFrame(updateCurrentPageFromScroll);
+  };
+
+  const handlePageInput = (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const parsed = Number(input.value);
+    if (Number.isFinite(parsed)) scrollToPage(parsed);
+    input.value = String(currentPage.value);
+  };
+
+  const previousPage = () => scrollToPage(currentPage.value - 1);
+  const nextPage = () => scrollToPage(currentPage.value + 1);
+
+  const ensureSearchIndex = async () => {
+    if (searchIndexDocument === props.document && searchPageTextItems.length === pageCount.value) return;
+    if (searchIndexPromise && searchIndexDocument === props.document) {
+      await searchIndexPromise;
+      return;
+    }
+
+    const targetDocument = props.document;
+    searchIndexDocument = targetDocument;
+    searchPageTextItems = Array.from({ length: targetDocument.numPages }, () => []);
+    searchIndexPromise = (async () => {
+      let nextPageIndex = 0;
+      const workerCount = Math.min(4, targetDocument.numPages);
+      await Promise.all(
+        Array.from({ length: workerCount }, async () => {
+          while (nextPageIndex < targetDocument.numPages) {
+            const pageIndex = nextPageIndex;
+            nextPageIndex += 1;
+            const page = await targetDocument.getPage(pageIndex + 1);
+            const textContent = await page.getTextContent();
+            searchPageTextItems[pageIndex] = textContent.items.flatMap((item) =>
+              'str' in item && typeof item.str === 'string' ? [item.str] : [],
+            );
+          }
+        }),
+      );
+    })();
+
+    try {
+      await searchIndexPromise;
+    } finally {
+      if (searchIndexDocument === targetDocument) searchIndexPromise = null;
+    }
+  };
+
+  const activatePdfSearchIndex = (index: number, behavior: ScrollBehavior = 'smooth') => {
+    const count = searchMatches.value.length;
+    if (count === 0) {
+      activeSearchIndex.value = -1;
+      return;
+    }
+    activeSearchIndex.value = ((index % count) + count) % count;
+    scrollToPage(searchMatches.value[activeSearchIndex.value].page, behavior);
+  };
+
+  const runPdfSearch = async (value: string) => {
+    searchQuery.value = value;
+    const query = value.trim().toLocaleLowerCase();
+    const token = ++searchToken;
+
+    if (!query) {
+      searchBusy.value = false;
+      searchAppliedQuery.value = '';
+      searchMatches.value = [];
+      activeSearchIndex.value = -1;
+      return;
+    }
+
+    searchBusy.value = true;
+    try {
+      await ensureSearchIndex();
+      if (token !== searchToken) return;
+
+      const matches: PdfSearchMatch[] = [];
+      searchPageTextItems.forEach((items, pageIndex) => {
+        let occurrenceOnPage = 0;
+        for (const item of items) {
+          const text = item.toLocaleLowerCase();
+          let offset = text.indexOf(query);
+          while (offset >= 0) {
+            matches.push({ page: pageIndex + 1, occurrence: occurrenceOnPage });
+            occurrenceOnPage += 1;
+            offset = text.indexOf(query, offset + query.length);
+          }
+        }
+      });
+
+      searchAppliedQuery.value = value.trim();
+      searchMatches.value = matches;
+      if (matches.length > 0) activatePdfSearchIndex(0, 'auto');
+      else activeSearchIndex.value = -1;
+    } finally {
+      if (token === searchToken) searchBusy.value = false;
+    }
+  };
+
+  const openSearch = () => {
+    searchOpen.value = true;
+  };
+
+  const closeSearch = () => {
+    searchOpen.value = false;
+    searchToken += 1;
     searchBusy.value = false;
+    searchQuery.value = '';
     searchAppliedQuery.value = '';
     searchMatches.value = [];
     activeSearchIndex.value = -1;
-    return;
-  }
-
-  searchBusy.value = true;
-  try {
-    await ensureSearchIndex();
-    if (token !== searchToken) return;
-
-    const matches: PdfSearchMatch[] = [];
-    searchPageTextItems.forEach((items, pageIndex) => {
-      let occurrenceOnPage = 0;
-      for (const item of items) {
-        const text = item.toLocaleLowerCase();
-        let offset = text.indexOf(query);
-        while (offset >= 0) {
-          matches.push({ page: pageIndex + 1, occurrence: occurrenceOnPage });
-          occurrenceOnPage += 1;
-          offset = text.indexOf(query, offset + query.length);
-        }
-      }
-    });
-
-    searchAppliedQuery.value = value.trim();
-    searchMatches.value = matches;
-    if (matches.length > 0) activatePdfSearchIndex(0, 'auto');
-    else activeSearchIndex.value = -1;
-  } finally {
-    if (token === searchToken) searchBusy.value = false;
-  }
-};
-
-const openSearch = () => {
-  searchOpen.value = true;
-};
-
-const closeSearch = () => {
-  searchOpen.value = false;
-  searchToken += 1;
-  searchBusy.value = false;
-  searchQuery.value = '';
-  searchAppliedQuery.value = '';
-  searchMatches.value = [];
-  activeSearchIndex.value = -1;
-};
-
-const nextSearchMatch = () => activatePdfSearchIndex(activeSearchIndex.value + 1);
-const previousSearchMatch = () => activatePdfSearchIndex(activeSearchIndex.value - 1);
-
-const syncOutlineLayout = () => {
-  const wasDesktop = desktopOutlinePersistent.value;
-  desktopOutlinePersistent.value = desktopOutlineMediaQuery?.matches ?? false;
-  outlineOpen.value = false;
-  if (!wasDesktop && desktopOutlinePersistent.value) desktopOutlineVisible.value = true;
-};
-
-const toggleOutline = () => {
-  if (desktopOutlinePersistent.value) {
-    desktopOutlineVisible.value = !desktopOutlineVisible.value;
-    return;
-  }
-  outlineOpen.value = !outlineOpen.value;
-};
-
-const anchorAfterZoom = (pageNumber: number) => {
-  void nextTick(() => requestAnimationFrame(() => scrollToPage(pageNumber, 'auto')));
-};
-
-const zoomIn = () => {
-  const anchorPage = currentPage.value;
-  zoomPercent.value = clampZoom(displayedZoomPercent.value + 25);
-  fitWidth.value = false;
-  anchorAfterZoom(anchorPage);
-};
-
-const zoomOut = () => {
-  const anchorPage = currentPage.value;
-  zoomPercent.value = clampZoom(displayedZoomPercent.value - 25);
-  fitWidth.value = false;
-  anchorAfterZoom(anchorPage);
-};
-
-const setFitWidth = () => {
-  const anchorPage = currentPage.value;
-  fitWidth.value = true;
-  anchorAfterZoom(anchorPage);
-};
-
-const handlePageScale = (pageNumber: number, percent: number) => {
-  pageScalePercents.value = {
-    ...pageScalePercents.value,
-    [pageNumber]: percent,
   };
-  if (pendingPageJump) {
-    void nextTick(() => requestAnimationFrame(() => {
-      if (!finishPendingPageJump()) return;
-      queueCurrentPageUpdate();
-    }));
-    return;
-  }
-  queueCurrentPageUpdate();
-};
 
-const touchDistance = (first: Touch, second: Touch) => Math.hypot(
-  second.clientX - first.clientX,
-  second.clientY - first.clientY,
-);
+  const nextSearchMatch = () => activatePdfSearchIndex(activeSearchIndex.value + 1);
+  const previousSearchMatch = () => activatePdfSearchIndex(activeSearchIndex.value - 1);
 
-const handlePdfTouchStart = (event: TouchEvent) => {
-  if (event.touches.length !== 2) {
-    pinchGesture = null;
-    return;
-  }
-  const distance = touchDistance(event.touches[0], event.touches[1]);
-  if (distance <= 0) return;
-  const startZoom = displayedZoomPercent.value;
-  pinchGesture = {
-    startDistance: distance,
-    startZoom,
-    targetZoom: startZoom,
+  const syncOutlineLayout = () => {
+    const wasDesktop = desktopOutlinePersistent.value;
+    desktopOutlinePersistent.value = desktopOutlineMediaQuery?.matches ?? false;
+    outlineOpen.value = false;
+    if (!wasDesktop && desktopOutlinePersistent.value) desktopOutlineVisible.value = true;
   };
-};
 
-const handlePdfTouchMove = (event: TouchEvent) => {
-  if (!pinchGesture || event.touches.length !== 2) return;
-  const distance = touchDistance(event.touches[0], event.touches[1]);
-  if (distance <= 0) return;
-  event.preventDefault();
-  pinchGesture.targetZoom = clampZoom(
-    pinchGesture.startZoom * (distance / pinchGesture.startDistance),
-  );
-  pinchPreviewPercent.value = pinchGesture.targetZoom;
-  pinchScale.value = pinchGesture.targetZoom / pinchGesture.startZoom;
-};
-
-const commitPinchZoom = () => {
-  if (!pinchGesture) return;
-  const anchorPage = currentPage.value;
-  const { startZoom, targetZoom } = pinchGesture;
-  pinchGesture = null;
-  pinchPreviewPercent.value = null;
-  if (Math.abs(targetZoom - startZoom) < 2) {
-    pinchScale.value = 1;
-    return;
-  }
-  fitWidth.value = false;
-  zoomPercent.value = targetZoom;
-  void nextTick(() => requestAnimationFrame(() => {
-    pinchScale.value = 1;
-    scrollToPage(anchorPage, 'auto');
-  }));
-};
-
-const handlePdfTouchEnd = (event: TouchEvent) => {
-  if (event.touches.length < 2) commitPinchZoom();
-};
-
-const resolveOutlineDestination = async (item: PdfOutlineItem) => {
-  let destination: unknown = item.dest;
-  if (typeof destination === 'string') {
-    destination = await props.document.getDestination(destination);
-  }
-  if (!Array.isArray(destination) || destination.length === 0) return;
-
-  const target = destination[0];
-  if (typeof target === 'number') {
-    scrollToPage(target + 1);
-    return;
-  }
-
-  if (target && typeof target === 'object') {
-    try {
-      const pageIndex = await props.document.getPageIndex(target as any);
-      scrollToPage(pageIndex + 1);
-    } catch (error) {
-      console.warn('[PdfPreview] Failed to resolve outline destination', error);
+  const toggleOutline = () => {
+    if (desktopOutlinePersistent.value) {
+      desktopOutlineVisible.value = !desktopOutlineVisible.value;
+      return;
     }
-  }
-};
+    outlineOpen.value = !outlineOpen.value;
+  };
 
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key === 'PageUp') {
-    event.preventDefault();
-    previousPage();
-  } else if (event.key === 'PageDown') {
-    event.preventDefault();
-    nextPage();
-  }
-};
+  const anchorAfterZoom = (pageNumber: number) => {
+    void nextTick(() => requestAnimationFrame(() => scrollToPage(pageNumber, 'auto')));
+  };
 
-watch(() => props.active, (active) => {
-  if (!active) {
-    const scroller = mainScrollerRef.value;
-    savedScrollTop = scroller?.scrollTop ?? savedScrollTop;
-    savedScrollLeft = scroller?.scrollLeft ?? savedScrollLeft;
-    savedCurrentPage = currentPage.value;
-    savedNeedsPageAnchor = Boolean(pendingPageJump);
-    restoringScrollPosition = false;
+  const zoomIn = () => {
+    const anchorPage = currentPage.value;
+    zoomPercent.value = clampZoom(displayedZoomPercent.value + 25);
+    fitWidth.value = false;
+    anchorAfterZoom(anchorPage);
+  };
+
+  const zoomOut = () => {
+    const anchorPage = currentPage.value;
+    zoomPercent.value = clampZoom(displayedZoomPercent.value - 25);
+    fitWidth.value = false;
+    anchorAfterZoom(anchorPage);
+  };
+
+  const setFitWidth = () => {
+    const anchorPage = currentPage.value;
+    fitWidth.value = true;
+    anchorAfterZoom(anchorPage);
+  };
+
+  const handlePageScale = (pageNumber: number, percent: number) => {
+    pageScalePercents.value = {
+      ...pageScalePercents.value,
+      [pageNumber]: percent,
+    };
+    if (pendingPageJump) {
+      void nextTick(() =>
+        requestAnimationFrame(() => {
+          if (!finishPendingPageJump()) return;
+          queueCurrentPageUpdate();
+        }),
+      );
+      return;
+    }
+    queueCurrentPageUpdate();
+  };
+
+  const touchDistance = (first: Touch, second: Touch) =>
+    Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+
+  const handlePdfTouchStart = (event: TouchEvent) => {
+    if (event.touches.length !== 2) {
+      pinchGesture = null;
+      return;
+    }
+    const distance = touchDistance(event.touches[0], event.touches[1]);
+    if (distance <= 0) return;
+    const startZoom = displayedZoomPercent.value;
+    pinchGesture = {
+      startDistance: distance,
+      startZoom,
+      targetZoom: startZoom,
+    };
+  };
+
+  const handlePdfTouchMove = (event: TouchEvent) => {
+    if (!pinchGesture || event.touches.length !== 2) return;
+    const distance = touchDistance(event.touches[0], event.touches[1]);
+    if (distance <= 0) return;
+    event.preventDefault();
+    pinchGesture.targetZoom = clampZoom(pinchGesture.startZoom * (distance / pinchGesture.startDistance));
+    pinchPreviewPercent.value = pinchGesture.targetZoom;
+    pinchScale.value = pinchGesture.targetZoom / pinchGesture.startZoom;
+  };
+
+  const commitPinchZoom = () => {
+    if (!pinchGesture) return;
+    const anchorPage = currentPage.value;
+    const { startZoom, targetZoom } = pinchGesture;
+    pinchGesture = null;
+    pinchPreviewPercent.value = null;
+    if (Math.abs(targetZoom - startZoom) < 2) {
+      pinchScale.value = 1;
+      return;
+    }
+    fitWidth.value = false;
+    zoomPercent.value = targetZoom;
+    void nextTick(() =>
+      requestAnimationFrame(() => {
+        pinchScale.value = 1;
+        scrollToPage(anchorPage, 'auto');
+      }),
+    );
+  };
+
+  const handlePdfTouchEnd = (event: TouchEvent) => {
+    if (event.touches.length < 2) commitPinchZoom();
+  };
+
+  const resolveOutlineDestination = async (item: PdfOutlineItem) => {
+    let destination: unknown = item.dest;
+    if (typeof destination === 'string') {
+      destination = await props.document.getDestination(destination);
+    }
+    if (!Array.isArray(destination) || destination.length === 0) return;
+
+    const target = destination[0];
+    if (typeof target === 'number') {
+      scrollToPage(target + 1);
+      return;
+    }
+
+    if (target && typeof target === 'object') {
+      try {
+        const pageIndex = await props.document.getPageIndex(target as any);
+        scrollToPage(pageIndex + 1);
+      } catch (error) {
+        console.warn('[PdfPreview] Failed to resolve outline destination', error);
+      }
+    }
+  };
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'PageUp') {
+      event.preventDefault();
+      previousPage();
+    } else if (event.key === 'PageDown') {
+      event.preventDefault();
+      nextPage();
+    }
+  };
+
+  watch(
+    () => props.active,
+    (active) => {
+      if (!active) {
+        const scroller = mainScrollerRef.value;
+        savedScrollTop = scroller?.scrollTop ?? savedScrollTop;
+        savedScrollLeft = scroller?.scrollLeft ?? savedScrollLeft;
+        savedCurrentPage = currentPage.value;
+        savedNeedsPageAnchor = Boolean(pendingPageJump);
+        restoringScrollPosition = false;
+        if (scrollFrame) cancelAnimationFrame(scrollFrame);
+        scrollFrame = 0;
+        if (restoreFrame) cancelAnimationFrame(restoreFrame);
+        restoreFrame = 0;
+        outlineOpen.value = false;
+        pinchGesture = null;
+        pinchPreviewPercent.value = null;
+        pinchScale.value = 1;
+        return;
+      }
+
+      restoringScrollPosition = true;
+      currentPage.value = clampPage(savedCurrentPage);
+      void nextTick(() => {
+        restoreFrame = requestAnimationFrame(() => {
+          restoreFrame = 0;
+          if (updateAvailableWidth()) savedNeedsPageAnchor = true;
+          if (savedNeedsPageAnchor) {
+            restoringScrollPosition = false;
+            scrollToPage(savedCurrentPage, 'auto');
+            return;
+          }
+          const scroller = mainScrollerRef.value;
+          scroller?.scrollTo({
+            top: savedScrollTop,
+            left: savedScrollLeft,
+            behavior: 'auto',
+          });
+          restoreFrame = requestAnimationFrame(() => {
+            restoreFrame = 0;
+            currentPage.value = clampPage(savedCurrentPage);
+            restoringScrollPosition = false;
+            queueCurrentPageUpdate();
+          });
+        });
+      });
+    },
+  );
+
+  watch(
+    () => props.document,
+    () => {
+      const preservedPage = clampPage(currentPage.value);
+      searchToken += 1;
+      searchIndexDocument = null;
+      searchIndexPromise = null;
+      searchPageTextItems = [];
+      searchMatches.value = [];
+      activeSearchIndex.value = -1;
+      searchAppliedQuery.value = '';
+      searchBusy.value = false;
+      pageScalePercents.value = {};
+      if (searchQuery.value.trim()) void runPdfSearch(searchQuery.value);
+      void nextTick(() => {
+        updateAvailableWidth();
+        window.setTimeout(() => scrollToPage(preservedPage, 'auto'), 80);
+      });
+    },
+  );
+
+  onMounted(() => {
+    desktopOutlineMediaQuery = window.matchMedia('(min-width: 640px)');
+    syncOutlineLayout();
+    desktopOutlineMediaQuery.addEventListener('change', syncOutlineLayout);
+    resizeObserver = new ResizeObserver(() => {
+      if (!updateAvailableWidth()) return;
+      anchorAfterZoom(currentPage.value);
+    });
+    if (mainScrollerRef.value) resizeObserver.observe(mainScrollerRef.value);
+    updateAvailableWidth();
+    queueCurrentPageUpdate();
+  });
+
+  onBeforeUnmount(() => {
+    searchToken += 1;
     if (scrollFrame) cancelAnimationFrame(scrollFrame);
     scrollFrame = 0;
     if (restoreFrame) cancelAnimationFrame(restoreFrame);
     restoreFrame = 0;
-    outlineOpen.value = false;
-    pinchGesture = null;
-    pinchPreviewPercent.value = null;
-    pinchScale.value = 1;
-    return;
-  }
-
-  restoringScrollPosition = true;
-  currentPage.value = clampPage(savedCurrentPage);
-  void nextTick(() => {
-    restoreFrame = requestAnimationFrame(() => {
-      restoreFrame = 0;
-      if (updateAvailableWidth()) savedNeedsPageAnchor = true;
-      if (savedNeedsPageAnchor) {
-        restoringScrollPosition = false;
-        scrollToPage(savedCurrentPage, 'auto');
-        return;
-      }
-      const scroller = mainScrollerRef.value;
-      scroller?.scrollTo({
-        top: savedScrollTop,
-        left: savedScrollLeft,
-        behavior: 'auto',
-      });
-      restoreFrame = requestAnimationFrame(() => {
-        restoreFrame = 0;
-        currentPage.value = clampPage(savedCurrentPage);
-        restoringScrollPosition = false;
-        queueCurrentPageUpdate();
-      });
-    });
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    desktopOutlineMediaQuery?.removeEventListener('change', syncOutlineLayout);
+    desktopOutlineMediaQuery = null;
   });
-});
-
-watch(() => props.document, () => {
-  const preservedPage = clampPage(currentPage.value);
-  searchToken += 1;
-  searchIndexDocument = null;
-  searchIndexPromise = null;
-  searchPageTextItems = [];
-  searchMatches.value = [];
-  activeSearchIndex.value = -1;
-  searchAppliedQuery.value = '';
-  searchBusy.value = false;
-  pageScalePercents.value = {};
-  if (searchQuery.value.trim()) void runPdfSearch(searchQuery.value);
-  void nextTick(() => {
-    updateAvailableWidth();
-    window.setTimeout(() => scrollToPage(preservedPage, 'auto'), 80);
-  });
-});
-
-onMounted(() => {
-  desktopOutlineMediaQuery = window.matchMedia('(min-width: 640px)');
-  syncOutlineLayout();
-  desktopOutlineMediaQuery.addEventListener('change', syncOutlineLayout);
-  resizeObserver = new ResizeObserver(() => {
-    if (!updateAvailableWidth()) return;
-    anchorAfterZoom(currentPage.value);
-  });
-  if (mainScrollerRef.value) resizeObserver.observe(mainScrollerRef.value);
-  updateAvailableWidth();
-  queueCurrentPageUpdate();
-});
-
-onBeforeUnmount(() => {
-  searchToken += 1;
-  if (scrollFrame) cancelAnimationFrame(scrollFrame);
-  scrollFrame = 0;
-  if (restoreFrame) cancelAnimationFrame(restoreFrame);
-  restoreFrame = 0;
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-  desktopOutlineMediaQuery?.removeEventListener('change', syncOutlineLayout);
-  desktopOutlineMediaQuery = null;
-});
 </script>
 
 <template>
-  <FilePreviewDialog
-    :file="props.file"
-    :subtitle="subtitle"
-    :active="props.active"
-    @close="emit('close')"
-  >
+  <FilePreviewDialog :file="props.file" :subtitle="subtitle" :active="props.active" @close="emit('close')">
     <template #toolbar>
       <div class="pdf-toolbar flex items-center gap-1">
         <PreviewSearchBar
@@ -562,8 +566,10 @@ onBeforeUnmount(() => {
           :value="currentPage"
           :aria-label="t('fileManager.preview.pdfCurrentPage', 'Current page')"
           @change="handlePageInput"
+        />
+        <span class="text-xs text-text-secondary"
+          >/ <span data-testid="pdf-page-count">{{ pageCount }}</span></span
         >
-        <span class="text-xs text-text-secondary">/ <span data-testid="pdf-page-count">{{ pageCount }}</span></span>
         <button
           type="button"
           data-testid="pdf-next-page"
@@ -654,11 +660,7 @@ onBeforeUnmount(() => {
           </button>
         </header>
         <div data-testid="pdf-outline" class="min-h-0 flex-1 overflow-y-auto p-2">
-          <PdfOutlineItems
-            v-if="props.outline.length"
-            :items="props.outline"
-            @navigate="resolveOutlineDestination"
-          />
+          <PdfOutlineItems v-if="props.outline.length" :items="props.outline" @navigate="resolveOutlineDestination" />
           <p v-else class="px-2 py-3 text-xs text-text-secondary">
             {{ t('fileManager.preview.pdfNoOutline', 'This PDF does not contain a document outline.') }}
           </p>
@@ -708,107 +710,107 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.pdf-toolbar {
-  min-width: 0;
-}
-
-.pdf-toolbar-button {
-  display: flex;
-  height: 2rem;
-  width: 2rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: 0.375rem;
-  color: var(--text-color-secondary);
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.pdf-toolbar-button.pdf-toolbar-button-active {
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  color: var(--color-primary);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .pdf-toolbar-button:hover:not(:disabled) {
-    background: var(--color-border);
-    color: var(--text-color-primary);
-  }
-}
-
-.pdf-toolbar-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1px var(--color-primary);
-}
-
-.pdf-toolbar-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.pdf-outline-drawer {
-  transition: transform 160ms ease-out;
-}
-
-.pdf-pages-column {
-  transform-origin: top center;
-  will-change: transform;
-}
-
-@media (max-width: 639px) {
-  .pdf-preview-root {
-    padding-bottom: 3.35rem;
-  }
-
   .pdf-toolbar {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 30;
-    min-height: 3.35rem;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    border-top: 1px solid var(--color-border);
-    background: var(--color-header);
-    padding: 0.3rem 0.35rem;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .pdf-toolbar-button,
-  .pdf-page-input,
-  .pdf-fit-width {
-    height: 2.75rem;
-    min-height: 2.75rem;
+    min-width: 0;
   }
 
   .pdf-toolbar-button {
-    width: 2.75rem;
-    min-width: 2.75rem;
-    font-size: 1.2rem;
+    display: flex;
+    height: 2rem;
+    width: 2rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    color: var(--text-color-secondary);
+    font-size: 1rem;
+    line-height: 1;
   }
 
-  .pdf-page-input {
-    width: 3.25rem;
-    min-width: 3.25rem;
-    font-size: 0.875rem;
+  .pdf-toolbar-button.pdf-toolbar-button-active {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
   }
 
-  .pdf-fit-width {
-    margin-left: 0;
-    min-width: max-content;
-    padding-right: 0.65rem;
-    padding-left: 0.65rem;
+  @media (hover: hover) and (pointer: fine) {
+    .pdf-toolbar-button:hover:not(:disabled) {
+      background: var(--color-border);
+      color: var(--text-color-primary);
+    }
   }
 
-  .pdf-toolbar-divider {
-    margin-right: 0.15rem;
-    margin-left: 0.15rem;
+  .pdf-toolbar-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px var(--color-primary);
+  }
+
+  .pdf-toolbar-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 
   .pdf-outline-drawer {
-    bottom: 3.35rem;
+    transition: transform 160ms ease-out;
   }
-}
+
+  .pdf-pages-column {
+    transform-origin: top center;
+    will-change: transform;
+  }
+
+  @media (max-width: 639px) {
+    .pdf-preview-root {
+      padding-bottom: 3.35rem;
+    }
+
+    .pdf-toolbar {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 30;
+      min-height: 3.35rem;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      border-top: 1px solid var(--color-border);
+      background: var(--color-header);
+      padding: 0.3rem 0.35rem;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .pdf-toolbar-button,
+    .pdf-page-input,
+    .pdf-fit-width {
+      height: 2.75rem;
+      min-height: 2.75rem;
+    }
+
+    .pdf-toolbar-button {
+      width: 2.75rem;
+      min-width: 2.75rem;
+      font-size: 1.2rem;
+    }
+
+    .pdf-page-input {
+      width: 3.25rem;
+      min-width: 3.25rem;
+      font-size: 0.875rem;
+    }
+
+    .pdf-fit-width {
+      margin-left: 0;
+      min-width: max-content;
+      padding-right: 0.65rem;
+      padding-left: 0.65rem;
+    }
+
+    .pdf-toolbar-divider {
+      margin-right: 0.15rem;
+      margin-left: 0.15rem;
+    }
+
+    .pdf-outline-drawer {
+      bottom: 3.35rem;
+    }
+  }
 </style>
