@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import type { AuthenticatedWebSocket } from '../../../interfaces/websocket/types';
+import type { WorkspaceClient } from '../workspace-client';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
 import { ArchiveOperationService } from '../../../platform/operations/archive/archive-operation.service';
 import type {
@@ -65,7 +65,7 @@ export class WorkspaceArchiveAdapter {
     };
   }
 
-  private sendEvent(ws: AuthenticatedWebSocket | undefined, event: ArchiveOperationEvent): void {
+  private sendEvent(ws: WorkspaceClient | undefined, event: ArchiveOperationEvent): void {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     if (event.type === 'progress') {

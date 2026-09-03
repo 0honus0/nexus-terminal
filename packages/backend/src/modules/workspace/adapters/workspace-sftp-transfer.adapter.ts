@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import type { AuthenticatedWebSocket } from '../../../interfaces/websocket/types';
+import type { WorkspaceClient } from '../workspace-client';
 import type { WorkspaceSession } from '../workspace-session';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
 import { SftpTransferOperationService } from '../../../platform/operations/transfer/sftp-transfer-operation.service';
@@ -88,7 +88,7 @@ export class WorkspaceSftpTransferAdapter {
     };
   }
 
-  private sendEvent(ws: AuthenticatedWebSocket | undefined, event: SftpTransferEvent): void {
+  private sendEvent(ws: WorkspaceClient | undefined, event: SftpTransferEvent): void {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     if (event.type === 'progress') {

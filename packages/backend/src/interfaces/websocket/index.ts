@@ -10,9 +10,6 @@ import { cleanupClientConnection } from './utils';
 
 export {
   AuthenticatedWebSocket,
-  DockerContainer,
-  DockerStats,
-  PortInfo,
   SshSuspendClientToServerMessages,
   SshSuspendServerToClientMessages,
   SuspendedSessionInfo,

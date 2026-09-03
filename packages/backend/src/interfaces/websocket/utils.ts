@@ -1,4 +1,3 @@
-import { PortInfo } from './types';
 import type { WorkspaceSession } from '../../modules/workspace/workspace-session';
 import {
   workspaceArchiveService,
@@ -11,62 +10,6 @@ import {
 import { sshSuspendService } from '../../modules/ssh-suspend/ssh-suspend.service';
 import { disposeTerminalTransport } from './terminal-binary-protocol';
 import { executionSessionManager } from '../../platform/execution/execution-session-manager';
-
-// --- 解析 Ports 字符串的辅助函数 ---
-export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
-  if (!portsString) {
-    return [];
-  }
-  const ports: PortInfo[] = [];
-  const entries = portsString.split(', ');
-
-  for (const entry of entries) {
-    const parts = entry.split('->');
-    let publicPart = '';
-    let privatePart = '';
-
-    if (parts.length === 2) {
-      publicPart = parts[0];
-      privatePart = parts[1];
-    } else if (parts.length === 1) {
-      privatePart = parts[0];
-    } else {
-      console.warn(`[WebSocket] Skipping unparsable port entry: ${entry}`);
-      continue;
-    }
-
-    const privateMatch = privatePart.match(/^(\d+)\/(tcp|udp|\w+)$/);
-    if (!privateMatch) {
-      //  console.warn(`[WebSocket] Skipping unparsable private port part: ${privatePart}`);
-      continue;
-    }
-    const privatePort = parseInt(privateMatch[1], 10);
-    const type = privateMatch[2];
-
-    let ip: string | undefined = undefined;
-    let publicPort: number | undefined = undefined;
-
-    if (publicPart) {
-      const publicMatch = publicPart.match(/^(?:([\d.:a-fA-F]+):)?(\d+)$/);
-      if (publicMatch) {
-        ip = publicMatch[1] || undefined;
-        publicPort = parseInt(publicMatch[2], 10);
-      } else {
-        //   console.warn(`[WebSocket] Skipping unparsable public port part: ${publicPart}`);
-      }
-    }
-
-    if (!isNaN(privatePort)) {
-      ports.push({
-        IP: ip,
-        PrivatePort: privatePort,
-        PublicPort: publicPort,
-        Type: type,
-      });
-    }
-  }
-  return ports;
-}
 
 /**
  * 清理指定会话 ID 关联的所有资源

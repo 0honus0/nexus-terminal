@@ -1361,39 +1361,48 @@ Validation after F4.5:
 
 ### F5 — WebSocket transport/router decomposition
 
-Current large files:
+Status (2026-09-03): locally complete; remote validation pending commit/push.
 
-- `websocket/connection.ts` ~840 lines;
-- `websocket/handlers/ssh.handler.ts` ~886 lines;
-- `websocket/handlers/sftp.handler.ts` ~415 lines;
-- `websocket/handlers/docker.handler.ts` ~396 lines.
+The old monolithic WebSocket connection/handler structure has been physically decomposed rather than wrapped.
 
-Target:
+Current structure:
 
 ```text
-websocket/
-  server.ts
-  upgrade.ts
-  router.ts
-  protocol.ts
-  connection-lifecycle.ts
-  upload-transport.ts
-  handlers/
-    workspace-session.handler.ts
-    terminal.handler.ts
-    filesystem.handler.ts
-    archive.handler.ts
-    transfer.handler.ts
-    docker.handler.ts
-    suspend.handler.ts
+interfaces/websocket/
+├── connection.ts                         # ~105 lines; transport selection + lifecycle binding only
+├── router.ts                             # JSON message routing
+├── transports/
+│   └── upload-binary.transport.ts        # NXUP binary framing/binding
+└── handlers/
+    ├── workspace-session.handler.ts      # SSH session creation/connection
+    ├── terminal.handler.ts               # terminal input/cwd/resize/status protocol
+    ├── filesystem.handler.ts             # filesystem/archive/copy protocol mapping
+    ├── upload.handler.ts                 # upload protocol mapping
+    ├── docker.handler.ts                 # thin Workspace -> RemoteDockerService mapping
+    ├── suspend.handler.ts                # suspend/resume protocol transaction
+    └── rdp.handler.ts
 ```
 
-Required outcome:
+Important changes:
 
-- handlers validate protocol, call application services, send responses/events;
-- handlers do not implement SSH/SFTP/transfer/archive algorithms;
-- connection lifecycle cleanup is centralized and idempotent;
-- terminal shell integration/backpressure stays Workspace-only and does not contaminate ExecutionSession.
+- `connection.ts` was reduced from ~840 lines to ~105 lines; it no longer owns the JSON switch, upload binary parser, or suspend transaction implementation.
+- Added `router.ts` for explicit JSON message routing.
+- Moved NXUP binary parsing and dedicated upload transport binding to `transports/upload-binary.transport.ts`.
+- Moved all suspend/resume WebSocket message handling and auto-termination notifications into `suspend.handler.ts`.
+- Split the old ~881-line SSH handler into `workspace-session.handler.ts` and `terminal.handler.ts`.
+- Moved the shell prompt/cwd integration state machine out of the protocol layer into `modules/workspace/services/workspace-shell-integration.service.ts` so ordinary connect and suspend-resume share the same Workspace runtime behavior.
+- Split the old SFTP handler into `filesystem.handler.ts` and `upload.handler.ts`.
+- Added `platform/docker/remote-docker.service.ts`; the Docker WebSocket handler dropped from ~396 lines to ~118 lines and no longer executes/parses Docker CLI itself.
+- Added `modules/workspace/workspace-client.ts`; Workspace sessions/adapters no longer import WebSocket interface types. `modules/workspace` now has zero imports from `interfaces/websocket`.
+- Removed Docker machine-domain types and port parsing from the WebSocket interface layer.
+- Architecture guard: `interfaces/websocket` now has no direct `ssh2`, `SFTPWrapper`, `executeSshCommand`, `docker ps`, or `docker stats` implementation dependencies.
+
+Focused F5 validation:
+
+- backend build: PASS;
+- protocol + suspend/resume + upload binary + remote Docker regression: **9 passed / 2 local zip skips / 0 failed**;
+- the previously expected SFTP-initialization-close warnings in late-disconnect/suspend tests remain non-fatal and assertions pass;
+- F4.5 directory-layout commit `59390d4c` remote Actions run `33721482914` is **SUCCESS**.
 
 ### F6 — Service composition / dependency ownership
 

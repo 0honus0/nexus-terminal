@@ -20,40 +20,6 @@ export interface AuthenticatedWebSocket extends WebSocket {
   sessionId?: string;
 }
 
-export interface PortInfo {
-  IP?: string;
-  PrivatePort: number;
-  PublicPort?: number;
-  Type: 'tcp' | 'udp' | string;
-}
-
-// --- Docker Interfaces (Ensure this matches frontend and DockerService) ---
-// Stats 接口
-export interface DockerStats {
-  ID: string;
-  Name: string;
-  CPUPerc: string;
-  MemUsage: string;
-  MemPerc: string;
-  NetIO: string;
-  BlockIO: string;
-  PIDs: string;
-}
-
-// Container 接口 (包含 stats)
-export interface DockerContainer {
-  id: string; // 使用小写 id 以匹配前端期望
-  Names: string[];
-  Image: string;
-  ImageID: string;
-  Command: string;
-  Created: number;
-  State: string;
-  Status: string;
-  Ports: PortInfo[];
-  Labels: Record<string, string>;
-  stats?: DockerStats | null; // 可选的 stats 字段
-}
 // --- SSH Suspend Mode WebSocket Message Types ---
 
 // Client -> Server

@@ -1,7 +1,7 @@
 import type { ClientChannel } from 'ssh2';
 import type { StringDecoder } from 'string_decoder';
 import type { ExecutionSession } from '../../platform/execution/execution-session';
-import type { AuthenticatedWebSocket } from '../../interfaces/websocket/types';
+import type { WorkspaceClient } from './workspace-client';
 
 /**
  * Runtime state for one interactive Workspace connection.
@@ -10,8 +10,8 @@ import type { AuthenticatedWebSocket } from '../../interfaces/websocket/types';
  * disappear while Agent/System execution sessions continue independently.
  */
 export interface WorkspaceSession {
-  ws: AuthenticatedWebSocket;
-  uploadWs?: AuthenticatedWebSocket;
+  ws: WorkspaceClient;
+  uploadWs?: WorkspaceClient;
   executionSession: ExecutionSession;
   sshShellStream?: ClientChannel;
   dbConnectionId: number;

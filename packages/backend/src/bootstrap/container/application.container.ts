@@ -6,6 +6,7 @@ import { WorkspaceStatusMonitorService } from '../../modules/workspace/workspace
 import { AuditLogService } from '../../modules/audit/audit.service';
 import { NotificationService } from '../../modules/notifications/notification.service';
 import { DockerService } from '../../platform/docker/docker.service';
+import { RemoteDockerService } from '../../platform/docker/remote-docker.service';
 import { settingsService } from '../../modules/settings/settings.service';
 import { ArchiveOperationService } from '../../platform/operations/archive/archive-operation.service';
 import { WorkspaceArchiveAdapter } from '../../modules/workspace/adapters/workspace-archive.adapter';
@@ -27,4 +28,5 @@ export const statusMonitorService = new WorkspaceStatusMonitorService(workspaceS
 export const auditLogService = new AuditLogService();
 export const notificationService = new NotificationService();
 export const dockerService = new DockerService();
+export const remoteDockerService = new RemoteDockerService();
 export { settingsService, workspaceSessionRegistry };
