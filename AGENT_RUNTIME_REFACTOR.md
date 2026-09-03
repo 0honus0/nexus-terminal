@@ -1239,6 +1239,18 @@ Required outcome:
 - `ssh2` `SFTPWrapper`/`Stats` do not leak into controllers/application code;
 - Agent and Workspace can both call the same filesystem abstraction with different ExecutionSessions.
 
+F3 status (2026-09-03): locally complete and ready for remote validation.
+
+- Added transport-neutral `filesystem/remote-filesystem.ts` with metadata/directory/read-stream primitives.
+- `SftpFileSystem` implements the RemoteFileSystem boundary while `SftpChannelFileSystem` remains the ssh2 adapter.
+- Added `filesystem/directory-archive.service.ts`; HTTP ZIP streaming no longer recursively traverses raw SFTP handles.
+- Added `workspace/workspace-filesystem.service.ts` to resolve Workspace ownership and expose canonical filesystem/removal services.
+- `sftp/sftp.controller.ts` no longer imports `ssh2`, `SFTPWrapper`, `Stats`, Workspace registry/session types, or implements SFTP stat/realpath/readdir/read-stream helpers.
+- Direct FileManager filesystem commands now obtain `SftpFileSystem`/`FileRemovalService` through `WorkspaceFilesystemService` instead of constructing them in the WebSocket handler.
+- Added `test/e2e/tests/ssh/filesystem-foundation.spec.ts`, exercising download ticket, HTTP Range, inline streaming and directory ZIP over the real fake-SSH fixture without Chromium.
+- Backend build passes. Focused filesystem + SSH protocol regression: **7 passed, 2 skipped, 0 failed**; skipped cases require host `zip` and remain covered by remote Actions.
+- F2 remote Actions run `33713989053` for `4da44507` is **SUCCESS**.
+
 ### F4 — Operation services: archive, upload and transfers
 
 Current issue:
@@ -1326,9 +1338,9 @@ Target:
 
 Important: this is not a DI-framework project. Keep composition explicit and simple.
 
-### F7 — Foundation E2E and final gate
+### F7 — Foundation E2E gate
 
-Before any Agent feature code begins, require:
+After F1-F6 are complete, establish a green foundation baseline before the broader maintainability pass:
 
 1. backend and frontend production builds pass;
 2. direct/proxy/jump SSH behavior remains covered;
@@ -1339,13 +1351,15 @@ Before any Agent feature code begins, require:
 7. no raw business-layer `Client.exec()` returns;
 8. no core operation service calls `WebSocket.send`;
 9. no fake Workspace registry/session is created to reuse a core service;
-10. full remote GitHub Actions E2E is green.
+10. remote GitHub Actions E2E is green.
 
-Only after F1-F7 pass may M2 AI foundation work begin.
+F7 is a checkpoint, not permission to begin Agent work. Continue directly to F8.
 
-### Large modules noted but NOT foundation blockers
+### F8 — Backend maintainability / large-module decomposition
 
-These deserve later cleanup, but should not derail the execution-foundation milestone unless a foundation refactor directly touches them:
+Per user direction, the previously non-blocking large controller/service cleanup is now part of the pre-Agent backend refactor. The goal is not line-count reduction by itself; each change must improve ownership, dependency direction, testability, error boundaries or reuse.
+
+Current high-value targets include:
 
 ```text
 auth/auth.controller.ts             ~1069
@@ -1357,14 +1371,39 @@ settings/settings.service.ts        ~641
 connections/connections.controller  ~589
 ```
 
-Connection service/controller may be touched by F2 credential resolution where necessary. Auth/appearance/settings should not be rewritten merely for line-count reduction before Agent work.
+Required F8 principles:
+
+- controllers stay transport-focused: request validation/mapping, status codes and response serialization;
+- authentication domain logic moves out of `auth.controller.ts` into explicit application/domain services;
+- appearance/settings persistence, validation and runtime side effects are separated instead of living in monolithic service/controller pairs;
+- notification orchestration, channel dispatch and persistence/configuration ownership are separated where currently mixed;
+- connection CRUD/import-export/test/credential responsibilities remain separated after F2 rather than accumulating again in one service;
+- application services use the canonical composition root instead of constructing stateful dependencies themselves;
+- shared error/result semantics are introduced where repeated controller-local `try/catch + message.includes(...)` branching exists;
+- no compatibility facade is retained solely to preserve an obsolete monolith when all callers can migrate cleanly;
+- behavior must be protected by focused API/E2E tests before deleting old paths.
+
+F8 is complete only when the reviewed large modules have explicit responsibilities and there are no obvious controller/service god objects that future Agent/API work would need to route through.
+
+### F9 — Final pre-Agent regression gate
+
+Because F8 changes broad backend structure after the F7 foundation checkpoint, run the complete gate again before Agent work:
+
+1. backend/frontend production builds pass;
+2. focused auth/settings/appearance/notification/connection tests pass;
+3. all F7 architecture guards still hold;
+4. full local/remote E2E coverage is green;
+5. `git diff --check` and repository architecture scans are clean;
+6. no new duplicate stateful service construction or transport-to-domain dependency inversion has been introduced.
+
+Only after F1-F9 pass may M2 AI / Agent foundation work begin.
 
 
 ### 2026-09-03 backend-wide foundation review / F1 Workspace boundary
 
 - Remote Actions run `33712260822` for commit `e2b79642` completed **SUCCESS**. Docker smoke and all 8 Playwright groups are green; this is the current remote baseline for subsequent foundation slices.
-- Per user direction, AI/Agent feature work is now explicitly blocked until the backend foundation F1-F7 plan is complete.
-- Completed a backend-wide architecture scan. Agent-blocking refactors are now explicitly tracked in section 21: Workspace/runtime ownership, SSH connection factory, filesystem application boundary, operation-service WebSocket decoupling, WebSocket router decomposition, service composition and final E2E gate.
+- Per user direction, AI/Agent feature work is now explicitly blocked until the backend pre-Agent F1-F9 plan is complete.
+- Completed a backend-wide architecture scan. Pre-Agent refactors are now explicitly tracked in section 21: Workspace/runtime ownership, SSH connection factory, filesystem application boundary, operation-service WebSocket decoupling, WebSocket router decomposition, service composition, foundation E2E, broad backend maintainability cleanup, and the final regression gate.
 - Moved interactive runtime state out of `websocket/types.ts`: the old `ClientState` symbol is gone. Added `workspace/workspace-session.ts` and `workspace/workspace-session-registry.ts`.
 - Deleted `websocket/state.ts`. Long-lived application service construction moved to `runtime/service-container.ts`; WebSocket transport now consumes the composition root rather than owning the state/service container.
 - All Workspace-facing services (SFTP session/upload/archive/transfer/status, SSH/Docker/SFTP handlers, HTTP SFTP target lookup and cleanup) now use `WorkspaceSessionRegistry` instead of a raw `Map<string, ClientState>`.

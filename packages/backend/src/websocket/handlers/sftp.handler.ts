@@ -1,8 +1,12 @@
 import { AuthenticatedWebSocket } from '../types';
-import { archiveService, workspaceSessionRegistry, sftpTransferService, sftpUploadService } from '../../runtime/service-container';
+import {
+  archiveService,
+  workspaceFilesystemService,
+  workspaceSessionRegistry,
+  sftpTransferService,
+  sftpUploadService,
+} from '../../runtime/service-container';
 import WebSocket from 'ws';
-import { SftpFileSystem } from '../../filesystem/sftp-file-system';
-import { FileRemovalService } from '../../filesystem/file-removal.service';
 
 const DIRECT_FILESYSTEM_TYPES = new Set([
   'sftp:readdir',
@@ -66,10 +70,11 @@ export async function handleSftpOperation(
     return;
   }
 
-  const filesystem = new SftpFileSystem(state.executionSession);
-  const removal = new FileRemovalService(state.executionSession);
-
   try {
+    const filesystemTarget = workspaceFilesystemService.forSession(sessionId);
+    if (!filesystemTarget) throw new Error('SSH 会话未就绪');
+    const { filesystem, removal } = filesystemTarget;
+
     switch (type) {
       case 'sftp:readdir': {
         if (!payload?.path) throw new Error("Missing 'path' in payload for readdir");

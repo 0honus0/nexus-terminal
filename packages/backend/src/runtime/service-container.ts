@@ -8,10 +8,12 @@ import { DockerService } from '../docker/docker.service';
 import { settingsService } from '../settings/settings.service';
 import { ArchiveService } from '../archive/archive.service';
 import { SftpTransferService } from '../transfers/sftp-transfer.service';
+import { WorkspaceFilesystemService } from '../workspace/workspace-filesystem.service';
 
 // Application composition root. Protocol modules consume services from here but
 // do not own their state or lifecycle.
 export const workspaceSftpSessionService = new WorkspaceSftpSessionService(workspaceSessionRegistry);
+export const workspaceFilesystemService = new WorkspaceFilesystemService(workspaceSessionRegistry, workspaceSftpSessionService);
 export const sftpUploadService = new SftpUploadService(workspaceSessionRegistry);
 export const archiveService = new ArchiveService(workspaceSessionRegistry);
 export const sftpTransferService = new SftpTransferService(workspaceSessionRegistry);

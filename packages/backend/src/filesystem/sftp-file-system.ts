@@ -1,10 +1,11 @@
 import path from 'node:path';
 import * as jschardet from 'jschardet';
 import * as iconv from 'iconv-lite';
-import type { Stats } from 'ssh2';
+import type { Readable } from 'node:stream';
 import { SftpChannelFileSystem } from './sftp-channel-file-system';
 import type { ExecutionSession } from '../execution/execution-session';
 import type { FileAttributes, FileEntry, FileSearchResult, ReadFileResult, RealPathResult } from './types';
+import type { RemoteDirectoryEntry, RemoteFileMetadata, RemoteFileSystem, RemoteReadRange } from './remote-filesystem';
 
 const SEARCH_CONCURRENCY = 8;
 const SEARCH_MAX_RESULTS = 500;
@@ -15,12 +16,40 @@ const SEARCH_MAX_QUERY_LENGTH = 256;
  * Reusable remote filesystem facade backed by one ExecutionSession.
  * It contains no WebSocket or UI state and is shared by Workspace and Agent callers.
  */
-export class SftpFileSystem {
+export class SftpFileSystem implements RemoteFileSystem {
   constructor(private readonly session: ExecutionSession) {}
 
   async ensureControl(): Promise<SftpChannelFileSystem> {
     if (!this.session.isReady) throw new Error('SSH 会话未就绪');
     return new SftpChannelFileSystem(await this.session.sftp.ensure('control'));
+  }
+
+  async metadata(remotePath: string, options?: { followSymbolicLinks?: boolean }): Promise<RemoteFileMetadata> {
+    const filesystem = await this.ensureControl();
+    const stats = options?.followSymbolicLinks ? await filesystem.stat(remotePath) : await filesystem.lstat(remotePath);
+    return SftpChannelFileSystem.toAttributes(stats);
+  }
+
+  async resolvePath(remotePath: string): Promise<string> {
+    const filesystem = await this.ensureControl();
+    return filesystem.realpath(remotePath);
+  }
+
+  async readDirectory(remotePath: string): Promise<RemoteDirectoryEntry[]> {
+    const filesystem = await this.ensureControl();
+    const entries = await filesystem.list(remotePath);
+    return entries.map((entry) => ({
+      name: entry.filename,
+      longname: entry.longname,
+      metadata: SftpChannelFileSystem.toAttributes(entry.attrs),
+    }));
+  }
+
+  async openRead(remotePath: string, range?: RemoteReadRange): Promise<Readable> {
+    const filesystem = await this.ensureControl();
+    return range
+      ? filesystem.channel.createReadStream(remotePath, { start: range.start, end: range.end })
+      : filesystem.channel.createReadStream(remotePath);
   }
 
   async list(remotePath: string): Promise<FileEntry[]> {

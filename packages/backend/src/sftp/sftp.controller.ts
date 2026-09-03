@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import path from 'path';
-import type { Readable } from 'node:stream';
-import { workspaceSessionRegistry, workspaceSftpSessionService } from '../runtime/service-container';
-import { Archiver, ZipArchive } from 'archiver';
-import { SFTPWrapper, Stats } from 'ssh2';
-import type { WorkspaceSession } from '../workspace/workspace-session';
+import { workspaceFilesystemService } from '../runtime/service-container';
+import type { RemoteFileSystem } from '../filesystem/remote-filesystem';
+import { isRemoteFileMissingError } from '../filesystem/remote-filesystem';
+import { directoryArchiveService } from '../filesystem/directory-archive.service';
 import {
   DownloadTicketCapacityError,
   DOWNLOAD_TICKET_TTL_SECONDS,
@@ -18,89 +17,8 @@ import {
   type DownloadTicketLease,
 } from './download-ticket';
 
-const pendingSftpInitializations = new Map<string, Promise<void>>();
-
-const getSftpStats = (sftp: SFTPWrapper, remotePath: string): Promise<Stats> =>
-  new Promise((resolve, reject) => {
-    sftp.stat(remotePath, (err, stats) => {
-      if (err) return reject(err);
-      resolve(stats);
-    });
-  });
-
-const getSftpRealPath = (sftp: SFTPWrapper, remotePath: string): Promise<string> =>
-  new Promise((resolve, reject) => {
-    sftp.realpath(remotePath, (err, resolvedPath) => {
-      if (err) return reject(err);
-      resolve(resolvedPath);
-    });
-  });
-
-const readSftpDirectory = (sftp: SFTPWrapper, remotePath: string): Promise<any[]> =>
-  new Promise((resolve, reject) => {
-    sftp.readdir(remotePath, (err, entries) => {
-      if (err) return reject(err);
-      resolve(entries);
-    });
-  });
-
-const addDirectoryToArchive = async (
-  sftp: SFTPWrapper,
-  archive: Archiver,
-  remotePath: string,
-  archivePath: string,
-  ancestorRealPaths: ReadonlySet<string> = new Set(),
-  activeStreams: Set<Readable> = new Set(),
-  isAborted: () => boolean = () => false,
-): Promise<void> => {
-  if (isAborted()) return;
-  const realPath = await getSftpRealPath(sftp, remotePath);
-  if (isAborted()) return;
-  if (ancestorRealPaths.has(realPath)) {
-    console.warn(`SFTP 归档：跳过循环软链接 ${remotePath} -> ${realPath}`);
-    return;
-  }
-
-  const nextAncestors = new Set(ancestorRealPaths);
-  nextAncestors.add(realPath);
-  const entries = await readSftpDirectory(sftp, remotePath);
-  if (isAborted()) return;
-
-  for (const entry of entries) {
-    if (isAborted()) return;
-    const currentRemotePath = path.posix.join(remotePath, entry.filename);
-    const currentArchivePath = path.posix.join(archivePath, entry.filename);
-    const targetStats: Stats = entry.attrs.isSymbolicLink() ? await getSftpStats(sftp, currentRemotePath) : entry.attrs;
-
-    if (targetStats.isDirectory()) {
-      archive.append(Buffer.alloc(0), { name: `${currentArchivePath}/` });
-      await addDirectoryToArchive(
-        sftp,
-        archive,
-        currentRemotePath,
-        currentArchivePath,
-        nextAncestors,
-        activeStreams,
-        isAborted,
-      );
-    } else if (targetStats.isFile()) {
-      const fileStream = sftp.createReadStream(currentRemotePath);
-      activeStreams.add(fileStream);
-      const forgetStream = () => activeStreams.delete(fileStream);
-      fileStream.once('end', forgetStream);
-      fileStream.once('close', forgetStream);
-      fileStream.on('error', (streamError: Error) => {
-        forgetStream();
-        console.error(`SFTP 归档：读取 ${currentRemotePath} 失败:`, streamError);
-        archive.emit('error', streamError);
-      });
-      archive.append(fileStream, { name: currentArchivePath });
-    }
-  }
-};
-
 const streamDirectoryArchive = async (
-  sftp: SFTPWrapper,
+  filesystem: RemoteFileSystem,
   remotePath: string,
   userId: number,
   res: Response,
@@ -111,83 +29,24 @@ const streamDirectoryArchive = async (
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${baseName}.zip"`);
 
-  const archive = new ZipArchive({ zlib: { level: 6 } });
-  const activeStreams = new Set<Readable>();
+  const handle = directoryArchiveService.createZip(filesystem, remotePath);
   let completed = false;
-  let aborted = false;
-  const abortDownload = () => {
-    if (completed || aborted) return;
-    aborted = true;
-    for (const stream of activeStreams) stream.destroy();
-    activeStreams.clear();
-    archive.abort();
-  };
   res.once('close', () => {
-    if (!res.writableEnded) abortDownload();
+    if (!completed && !res.writableEnded) handle.cancel();
   });
-  res.once('finish', () => {
-    completed = true;
+  res.once('finish', () => { completed = true; });
+  handle.archive.on('warning', (error: Error) => {
+    console.warn(`Remote archive warning (用户 ${userId}, 路径 ${remotePath}):`, error);
   });
-  archive.on('warning', (err: Error) => {
-    console.warn(`Archiver warning (用户 ${userId}, 路径 ${remotePath}):`, err);
+  handle.archive.on('error', (error: Error) => {
+    console.error(`Remote archive error (用户 ${userId}, 路径 ${remotePath}):`, error);
+    if (!res.headersSent) res.status(500).json({ message: `创建压缩文件时出错: ${error.message}` });
+    else if (!res.writableEnded) res.end();
   });
-  archive.on('error', (err: Error) => {
-    console.error(`Archiver error (用户 ${userId}, 路径 ${remotePath}):`, err);
-    if (!res.headersSent) {
-      res.status(500).json({ message: `创建压缩文件时出错: ${err.message}` });
-    } else if (!res.writableEnded) {
-      res.end();
-    }
-  });
-  archive.pipe(res);
-
-  await addDirectoryToArchive(sftp, archive, remotePath, '', new Set(), activeStreams, () => aborted);
-  if (!aborted) await archive.finalize();
+  handle.archive.pipe(res);
+  await handle.start();
 };
 
-const ensureSftpReady = async (sessionId: string, state: WorkspaceSession): Promise<boolean> => {
-  if (state.executionSession.sftp.control) return true;
-  if (!state.executionSession.isReady) return false;
-
-  let pending = pendingSftpInitializations.get(sessionId);
-  if (!pending) {
-    pending = workspaceSftpSessionService.initialize(sessionId);
-    pendingSftpInitializations.set(sessionId, pending);
-  }
-  try {
-    await pending;
-  } catch (error) {
-    console.error(`SFTP 下载：重建会话 ${sessionId} 失败:`, error);
-  } finally {
-    if (pendingSftpInitializations.get(sessionId) === pending) {
-      pendingSftpInitializations.delete(sessionId);
-    }
-  }
-  return Boolean(state.executionSession.sftp.control);
-};
-
-const resolveDownloadTarget = async (
-  userId: number,
-  connectionId: number,
-  requestedSessionId?: string,
-): Promise<{ sessionId: string; state: WorkspaceSession } | null> => {
-  if (requestedSessionId) {
-    const exactState = workspaceSessionRegistry.get(requestedSessionId);
-    if (exactState?.ws.userId === userId && exactState.dbConnectionId === connectionId) {
-      if (await ensureSftpReady(requestedSessionId, exactState)) {
-        return { sessionId: requestedSessionId, state: exactState };
-      }
-    }
-  }
-
-  for (const [sessionId, state] of workspaceSessionRegistry.entries()) {
-    if (state.ws.userId !== userId || state.dbConnectionId !== connectionId) continue;
-    if (state.executionSession.sftp.control || await ensureSftpReady(sessionId, state)) {
-      return { sessionId, state };
-    }
-  }
-  return null;
-};
 
 interface SftpDownloadQuery {
   connectionId?: string;
@@ -272,15 +131,15 @@ export const createDownloadTicket = async (
     return;
   }
 
-  const target = await resolveDownloadTarget(userId, connectionId, requestedSessionId);
-  if (!target?.state.executionSession.sftp.control) {
+  const target = await workspaceFilesystemService.resolveActive(userId, connectionId, requestedSessionId);
+  if (!target) {
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。' });
     return;
   }
 
   try {
-    const stats = await getSftpStats(target.state.executionSession.sftp.control, remotePath);
-    if (!stats.isFile()) {
+    const metadata = await target.filesystem.metadata(remotePath, { followSymbolicLinks: true });
+    if (!metadata.isFile) {
       res.status(400).json({ message: '短时下载票据仅支持文件。' });
       return;
     }
@@ -290,8 +149,8 @@ export const createDownloadTicket = async (
       connectionId,
       sessionId: target.sessionId,
       remotePath,
-      fileSize: stats.size,
-      fileMtime: stats.mtime,
+      fileSize: metadata.size,
+      fileMtime: Math.floor(metadata.mtime / 1000),
     });
     res.setHeader('Cache-Control', 'private, no-store');
     res.status(201).json({
@@ -304,8 +163,9 @@ export const createDownloadTicket = async (
       res.status(429).json({ message: error.message });
       return;
     }
-    res.status(error.message?.includes('No such file') ? 404 : 500).json({
-      message: error.message?.includes('No such file') ? '远程文件未找到。' : '创建下载票据失败。',
+    const notFound = isRemoteFileMissingError(error);
+    res.status(notFound ? 404 : 500).json({
+      message: notFound ? '远程文件未找到。' : '创建下载票据失败。',
     });
   }
 };
@@ -371,47 +231,47 @@ export const downloadFile = async (
     disposition = req.query.disposition === 'inline' ? 'inline' : 'attachment';
   }
 
-  const target = await resolveDownloadTarget(userId, targetDbConnectionId, requestedSessionId);
-  if (!target?.state.executionSession.sftp.control) {
+  const target = await workspaceFilesystemService.resolveActive(userId, targetDbConnectionId, requestedSessionId);
+  if (!target) {
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
     return;
   }
-  const userSftpSession = target.state.executionSession.sftp.control;
+  const filesystem = target.filesystem;
 
   try {
-    const stats = await getSftpStats(userSftpSession, remotePath);
+    const metadata = await filesystem.metadata(remotePath, { followSymbolicLinks: true });
 
-    if (lease && (stats.size !== lease.fileSize || stats.mtime !== lease.fileMtime)) {
+    if (lease && (metadata.size !== lease.fileSize || Math.floor(metadata.mtime / 1000) !== lease.fileMtime)) {
       invalidateDownloadTicket(lease);
       res.status(410).json({ message: '远程文件已变化，请重新发起下载。' });
       return;
     }
 
-    if (stats.isDirectory()) {
+    if (metadata.isDirectory) {
       if (lease) {
         invalidateDownloadTicket(lease);
         res.status(410).json({ message: '下载链接对应的文件已变化。' });
         return;
       }
-      await streamDirectoryArchive(userSftpSession, remotePath, userId, res);
+      await streamDirectoryArchive(filesystem, remotePath, userId, res);
       return;
     }
 
-    if (!stats.isFile()) {
+    if (!metadata.isFile) {
       if (lease) invalidateDownloadTicket(lease);
       res.status(400).json({ message: '指定的路径不是一个文件。' });
       return;
     }
 
-    if (disposition === 'inline' && stats.size > MAX_INLINE_PREVIEW_SIZE) {
+    if (disposition === 'inline' && metadata.size > MAX_INLINE_PREVIEW_SIZE) {
       res.status(413).json({ message: '文件过大，无法进行内联预览。' });
       return;
     }
 
-    const range = parseByteRange(req.headers.range, stats.size);
+    const range = parseByteRange(req.headers.range, metadata.size);
     if (range === 'invalid') {
       res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Content-Range', `bytes */${stats.size}`);
+      res.setHeader('Content-Range', `bytes */${metadata.size}`);
       res.status(416).end();
       return;
     }
@@ -428,11 +288,11 @@ export const downloadFile = async (
 
     if (range) {
       res.status(206);
-      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${stats.size}`);
+      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${metadata.size}`);
       res.setHeader('Content-Length', String(range.end - range.start + 1));
     } else {
       res.status(200);
-      res.setHeader('Content-Length', String(stats.size));
+      res.setHeader('Content-Length', String(metadata.size));
     }
 
     if (req.method === 'HEAD') {
@@ -440,9 +300,7 @@ export const downloadFile = async (
       return;
     }
 
-    const readStream = range
-      ? userSftpSession.createReadStream(remotePath, { start: range.start, end: range.end })
-      : userSftpSession.createReadStream(remotePath);
+    const readStream = await filesystem.openRead(remotePath, range || undefined);
     if (lease) attachDownloadStream(lease, readStream);
 
     let streamFailed = false;
@@ -469,7 +327,7 @@ export const downloadFile = async (
   } catch (error: any) {
     console.error(`SFTP 下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
-      const notFound = error.message?.includes('No such file');
+      const notFound = isRemoteFileMissingError(error);
       if (lease && notFound) invalidateDownloadTicket(lease);
       res.status(notFound ? 404 : 500).json({
         message: notFound ? '远程文件未找到。' : `处理下载请求时出错: ${error.message}`,
@@ -502,64 +360,34 @@ export const downloadDirectory = async (
 
   console.log(`SFTP 文件夹下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
 
-  // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
-  let targetState: WorkspaceSession | null = null;
-  const targetDbConnectionId = parseInt(connectionId, 10); // 将查询参数字符串转换为数字
-
-  if (isNaN(targetDbConnectionId)) {
+  const targetDbConnectionId = Number(connectionId);
+  if (!Number.isSafeInteger(targetDbConnectionId) || targetDbConnectionId <= 0) {
     res.status(400).json({ message: '无效的 connectionId。' });
     return;
   }
 
-  console.log(`SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
-  if (requestedSessionId) {
-    const exactState = workspaceSessionRegistry.get(requestedSessionId);
-    if (exactState?.ws.userId === userId && exactState.dbConnectionId === targetDbConnectionId) {
-      await ensureSftpReady(requestedSessionId, exactState);
-      targetState = exactState;
-    }
-  }
-  for (const [sessionId, state] of workspaceSessionRegistry.entries()) {
-    if (targetState) break;
-    // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
-    if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.executionSession.sftp.control) {
-      targetState = state;
-      console.log(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
-      break;
-    }
-  }
-
-  if (!targetState || !targetState.executionSession.sftp.control) {
-    console.warn(`SFTP 文件夹下载失败：未找到用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的活动 SFTP 会话。`);
+  const target = await workspaceFilesystemService.resolveActive(userId, targetDbConnectionId, requestedSessionId);
+  if (!target) {
     res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
     return;
   }
 
-  const userSftpSession = targetState.executionSession.sftp.control; // 获取正确的 SFTP 实例
-
   try {
-    // 跟随软链接验证目标是否为目录
-    const stats = await getSftpStats(userSftpSession, remotePath);
-
-    if (!stats.isDirectory()) {
+    const metadata = await target.filesystem.metadata(remotePath, { followSymbolicLinks: true });
+    if (!metadata.isDirectory) {
       res.status(400).json({ message: '指定的路径不是一个目录。' });
       return;
     }
 
-    await streamDirectoryArchive(userSftpSession, remotePath, userId, res);
-
+    await streamDirectoryArchive(target.filesystem, remotePath, userId, res);
     console.log(`SFTP 文件夹下载完成 (用户 ${userId}, 路径 ${remotePath})`);
   } catch (error: any) {
     console.error(`SFTP 文件夹下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
     if (!res.headersSent) {
-      if (error.code === 'ENOENT' || error.message?.includes('No such file')) {
-        // 检查 SFTP 错误码或消息
-        res.status(404).json({ message: '远程目录未找到。' });
-      } else {
-        res.status(500).json({ message: `处理文件夹下载请求时出错: ${error.message}` });
-      }
-    } else {
-      res.end(); // 如果头已发送，尝试结束响应
+      if (isRemoteFileMissingError(error)) res.status(404).json({ message: '远程目录未找到。' });
+      else res.status(500).json({ message: `处理文件夹下载请求时出错: ${error.message}` });
+    } else if (!res.writableEnded) {
+      res.end();
     }
   }
 };
