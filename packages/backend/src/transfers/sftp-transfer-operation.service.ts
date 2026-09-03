@@ -1,17 +1,21 @@
 import * as pathModule from 'path';
-import { WebSocket } from 'ws';
 import type { SFTPWrapper, Stats, OpenMode } from 'ssh2';
-import type { WorkspaceSession } from '../workspace/workspace-session';
-import type { WorkspaceSessionRegistry } from '../workspace/workspace-session-registry';
 import { SftpChannelFileSystem } from '../filesystem/sftp-channel-file-system';
+import type { FileEntry } from '../filesystem/types';
+import type {
+  SftpCrossCopySource,
+  SftpTransferCancelResult,
+  SftpTransferContext,
+  SftpTransferEventSink,
+} from './sftp-transfer.types';
 
 const SFTP_TRANSFER_CHUNK_SIZE = 32 * 1024;
 const SFTP_TRANSFER_CONCURRENCY = 64;
 const SFTP_TRANSFER_PROGRESS_INTERVAL_MS = 200;
 
 interface SftpTransferTracker {
-  sessionId: string;
-  state: WorkspaceSession;
+  ownerKey: string;
+  emit: SftpTransferEventSink;
   requestId: string;
   totalBytes: number;
   transferredBytes: number;
@@ -24,82 +28,56 @@ interface SftpTransferTracker {
   lastEmittedAt: number;
 }
 
-/** Workspace transfer orchestration. The SFTP primitives it uses are shared with Agent filesystem code. */
-export class SftpTransferService {
+/** Transport-neutral SFTP transfer operations reusable by Workspace and Agent callers. */
+export class SftpTransferOperationService {
   private readonly cancelledTransferIds = new Set<string>();
-  private readonly activeTransferKeys = new Set<string>();
-
-  constructor(private readonly workspaceSessionRegistry: WorkspaceSessionRegistry) {}
+  private readonly activeTransfers = new Map<string, SftpTransferContext>();
 
   private filesystem(sftp: SFTPWrapper): SftpChannelFileSystem {
     return new SftpChannelFileSystem(sftp);
   }
 
-  cleanupSession(sessionId: string): void {
+  cleanupOwner(ownerKey: string): void {
     for (const key of [...this.cancelledTransferIds]) {
-      if (key.startsWith(`${sessionId}:`)) this.cancelledTransferIds.delete(key);
+      if (key.startsWith(`${ownerKey}:`)) this.cancelledTransferIds.delete(key);
     }
-    for (const key of [...this.activeTransferKeys]) {
-      if (key.startsWith(`${sessionId}:`)) this.activeTransferKeys.delete(key);
+    for (const key of [...this.activeTransfers.keys()]) {
+      if (key.startsWith(`${ownerKey}:`)) this.activeTransfers.delete(key);
     }
   }
 
-  private transferCancellationKey(sessionId: string, requestId: string): string {
-    return `${sessionId}:${requestId}`;
+  private transferCancellationKey(ownerKey: string, requestId: string): string {
+    return `${ownerKey}:${requestId}`;
   }
   private assertTransferNotCancelled(tracker: SftpTransferTracker | undefined): void {
     if (!tracker) return;
-    if (this.cancelledTransferIds.has(this.transferCancellationKey(tracker.sessionId, tracker.requestId))) {
+    if (this.cancelledTransferIds.has(this.transferCancellationKey(tracker.ownerKey, tracker.requestId))) {
       throw new Error('SFTP_TRANSFER_CANCELLED');
     }
   }
   private isTransferCancelledError(error: unknown): boolean {
     return error instanceof Error && error.message.includes('SFTP_TRANSFER_CANCELLED');
   }
-  private sendTransferCancelled(state: WorkspaceSession | undefined, requestId: string): void {
-    if (state?.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:transfer:cancelled',
-          requestId,
-          payload: { requestId },
-        }),
-      );
-    }
-  }
-  async cancelTransfer(sessionId: string, requestId: string): Promise<void> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
-    const key = this.transferCancellationKey(sessionId, requestId);
-    if (!this.activeTransferKeys.has(key)) {
-      // The task already finished (or never started). Acknowledge the user's request
-      // without leaving a cancellation marker that has no owner to clear it.
-      this.sendTransferCancelled(state, requestId);
-      return;
-    }
+  async cancel(ownerKey: string, requestId: string): Promise<SftpTransferCancelResult> {
+    const key = this.transferCancellationKey(ownerKey, requestId);
+    const context = this.activeTransfers.get(key);
+    if (!context) return { active: false };
     // Keep cancellation attached to the real transfer lifecycle. A single SFTP read/write
     // may remain blocked for much longer than 30 seconds; a TTL would let the task resume.
     this.cancelledTransferIds.add(key);
-    if (state?.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:transfer:cancelling',
-          requestId,
-          payload: { requestId },
-        }),
-      );
-    }
+    context.emit({ type: 'cancelling', requestId });
+    return { active: true };
   }
   private createTransferTracker(
-    sessionId: string,
-    state: WorkspaceSession,
+    context: SftpTransferContext,
     sources: string[],
     requestId: string,
   ): SftpTransferTracker {
     // Do not block transfer startup just to calculate progress. Top-level metadata is
     // collected by the copy loop itself, so a single file needs only one source stat.
     const tracker: SftpTransferTracker = {
-      sessionId,
-      state,
+      ownerKey: context.ownerKey,
+      emit: context.emit,
       requestId,
       totalBytes: 0,
       transferredBytes: 0,
@@ -143,20 +121,16 @@ export class SftpTransferService {
     const now = Date.now();
     if (!force && now - tracker.lastEmittedAt < SFTP_TRANSFER_PROGRESS_INTERVAL_MS) return;
     tracker.lastEmittedAt = now;
-    tracker.state.ws.send(
-      JSON.stringify({
-        type: 'sftp:transfer:progress',
-        requestId: tracker.requestId,
-        payload: {
-          transferredBytes: tracker.transferredBytes,
-          totalBytes: tracker.totalBytes,
-          completedFiles: tracker.completedFiles,
-          totalFiles: tracker.totalFiles,
-          totalKnown: tracker.totalKnown,
-          currentFile: tracker.currentFile,
-        },
-      }),
-    );
+    tracker.emit({
+      type: 'progress',
+      requestId: tracker.requestId,
+      transferredBytes: tracker.transferredBytes,
+      totalBytes: tracker.totalBytes,
+      completedFiles: tracker.completedFiles,
+      totalFiles: tracker.totalFiles,
+      totalKnown: tracker.totalKnown,
+      ...(tracker.currentFile ? { currentFile: tracker.currentFile } : {}),
+    });
   }
   private beginTransferFile(tracker: SftpTransferTracker | undefined, remotePath: string): void {
     if (!tracker) return;
@@ -173,147 +147,118 @@ export class SftpTransferService {
     tracker.completedFiles += 1;
     this.emitTransferProgress(tracker, true);
   }
-  async copy(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP Copy] SFTP 未准备好，无法在 ${sessionId} 上执行 copy (ID: ${requestId})`);
-      state?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: 'SFTP 会话未就绪', requestId: requestId }));
+  async copy(
+    context: SftpTransferContext,
+    sources: string[],
+    destinationDir: string,
+    requestId: string,
+  ): Promise<void> {
+    const { ownerKey, session, emit } = context;
+    if (!session.isReady) {
+      emit({ type: 'copy-error', requestId, message: 'SFTP 会话未就绪' });
       return;
     }
-    const sftp = state.executionSession.sftp.control;
-    console.debug(
-      `[SFTP ${sessionId}] Received copy request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`,
-    );
 
-    const copiedItemsDetails: any[] = []; // Store details of successfully copied items
+    let sftp: SFTPWrapper;
+    try {
+      sftp = await session.sftp.ensure('control');
+    } catch (error) {
+      emit({ type: 'copy-error', requestId, message: `SFTP 会话未就绪: ${error instanceof Error ? error.message : String(error)}` });
+      return;
+    }
+
+    console.debug(`[SFTP ${ownerKey}] copy request ${requestId}: ${sources.join(', ')} -> ${destinationDir}`);
+    const copiedItemsDetails: FileEntry[] = [];
     let firstError: Error | null = null;
-    const transferKey = this.transferCancellationKey(sessionId, requestId);
-    this.activeTransferKeys.add(transferKey);
+    const transferKey = this.transferCancellationKey(ownerKey, requestId);
+    this.activeTransfers.set(transferKey, context);
 
     try {
-      const tracker = this.createTransferTracker(sessionId, state, sources, requestId);
+      const tracker = this.createTransferTracker(context, sources, requestId);
       this.assertTransferNotCancelled(tracker);
 
       for (const sourcePath of sources) {
         this.assertTransferNotCancelled(tracker);
         const sourceName = pathModule.basename(sourcePath);
-        const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/'); // Ensure forward slashes
-
-        if (sourcePath === destPath) {
-          console.warn(
-            `[SFTP ${sessionId}] Skipping copy: source and destination are the same (${sourcePath}) (ID: ${requestId})`,
-          );
-          continue; // Skip if source and destination are identical
-        }
+        const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/');
+        if (sourcePath === destPath) continue;
 
         try {
           const stats = await this.filesystem(sftp).stat(sourcePath);
           this.registerTopLevelTransferEntry(tracker, stats);
           if (stats.isDirectory()) {
-            console.log(`[SFTP ${sessionId}] Copying directory ${sourcePath} to ${destPath} (ID: ${requestId})`);
             await this.copyDirectoryRecursive(sftp, sourcePath, destPath, new Set(), tracker);
           } else if (stats.isFile()) {
-            console.log(`[SFTP ${sessionId}] Copying file ${sourcePath} to ${destPath} (ID: ${requestId})`);
             this.beginTransferFile(tracker, sourcePath);
             await this.copyFile(sftp, sourcePath, destPath, stats.size, tracker);
             this.completeTransferFile(tracker);
           } else {
-            // Handle symlinks or other types if necessary, for now just skip/warn
-            console.warn(
-              `[SFTP ${sessionId}] Skipping copy of unsupported file type: ${sourcePath} (ID: ${requestId})`,
-            );
             continue;
           }
-          // Get stats of the *newly copied* item
           const copiedStats = await this.filesystem(sftp).lstat(destPath);
           copiedItemsDetails.push(SftpChannelFileSystem.toFileEntry(destPath, copiedStats));
-        } catch (copyErr: any) {
-          console.error(`[SFTP ${sessionId}] Error copying ${sourcePath} to ${destPath} (ID: ${requestId}):`, copyErr);
-          firstError = copyErr; // Store the first error encountered
-          break; // Stop processing further sources on error
+        } catch (error) {
+          firstError = error instanceof Error ? error : new Error(String(error));
+          break;
         }
       }
 
-      if (firstError) {
-        throw firstError; // Throw the first error to be caught below
-      }
-
+      if (firstError) throw firstError;
       this.assertTransferNotCancelled(tracker);
       this.finalizeTransferTracker(tracker);
-
-      // Send success message with details of copied items
-      console.log(
-        `[SFTP ${sessionId}] Copy operation completed successfully (ID: ${requestId}). Copied items: ${copiedItemsDetails.length}`,
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:copy:success',
-          payload: { destination: destinationDir, items: copiedItemsDetails },
-          requestId: requestId,
-        }),
-      );
-    } catch (error: any) {
+      emit({ type: 'copy-success', requestId, destination: destinationDir, items: copiedItemsDetails });
+    } catch (error) {
       const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
-      if (cancelled) {
-        console.log(`[SFTP ${sessionId}] Copy operation cancelled (ID: ${requestId}).`);
-        this.sendTransferCancelled(state, requestId);
-        return;
-      }
-      console.error(`[SFTP ${sessionId}] Copy operation failed (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({ type: 'sftp:copy:error', payload: `复制操作失败: ${error.message}`, requestId: requestId }),
-      );
+      if (cancelled) emit({ type: 'cancelled', requestId });
+      else emit({ type: 'copy-error', requestId, message: `复制操作失败: ${error instanceof Error ? error.message : String(error)}` });
     } finally {
-      this.activeTransferKeys.delete(transferKey);
+      this.activeTransfers.delete(transferKey);
       this.cancelledTransferIds.delete(transferKey);
     }
   }
+
   async copyAcrossSessions(
-    destinationSessionId: string,
-    sourceSessionId: string,
+    context: SftpTransferContext,
+    source: SftpCrossCopySource,
     sources: string[],
     destinationDir: string,
     requestId: string,
   ): Promise<void> {
-    const destinationState = this.workspaceSessionRegistry.get(destinationSessionId);
-    const sourceState = this.workspaceSessionRegistry.get(sourceSessionId);
-    const fail = (message: string) => {
-      destinationState?.ws.send(JSON.stringify({ type: 'sftp:copy:error', payload: message, requestId }));
-    };
-
-    if (!destinationState?.executionSession.sftp.control) {
-      fail('目标 SFTP 会话未就绪');
+    const { ownerKey, session: destinationSession, emit } = context;
+    if (!destinationSession.isReady) {
+      emit({ type: 'copy-error', requestId, message: '目标 SFTP 会话未就绪' });
       return;
     }
-    if (!sourceState?.executionSession.sftp.control) {
-      fail('源 SFTP 会话未就绪或已断开');
-      return;
-    }
-    if (destinationState.ws.userId === undefined || sourceState.ws.userId !== destinationState.ws.userId) {
-      fail('无权访问源 SFTP 会话');
+    if (!source.session.isReady) {
+      emit({ type: 'copy-error', requestId, message: '源 SFTP 会话未就绪或已断开' });
       return;
     }
 
-    const sourceSftp = sourceState.executionSession.sftp.control;
-    const destinationSftp = destinationState.executionSession.sftp.control;
-    const copiedItemsDetails: any[] = [];
-    const transferKey = this.transferCancellationKey(destinationSessionId, requestId);
-    this.activeTransferKeys.add(transferKey);
+    let sourceSftp: SFTPWrapper;
+    let destinationSftp: SFTPWrapper;
+    try {
+      [sourceSftp, destinationSftp] = await Promise.all([
+        source.session.sftp.ensure('control'),
+        destinationSession.sftp.ensure('control'),
+      ]);
+    } catch (error) {
+      emit({ type: 'copy-error', requestId, message: `跨主机复制失败: ${error instanceof Error ? error.message : String(error)}` });
+      return;
+    }
+
+    const copiedItemsDetails: FileEntry[] = [];
+    const transferKey = this.transferCancellationKey(ownerKey, requestId);
+    this.activeTransfers.set(transferKey, context);
 
     try {
-      const tracker = this.createTransferTracker(destinationSessionId, destinationState, sources, requestId);
+      const tracker = this.createTransferTracker(context, sources, requestId);
       this.assertTransferNotCancelled(tracker);
-
       for (const sourcePath of sources) {
         this.assertTransferNotCancelled(tracker);
-        if (typeof sourcePath !== 'string' || !sourcePath.startsWith('/')) {
-          throw new Error('源路径无效');
-        }
-        const sourceName = pathModule.basename(sourcePath);
-        const destPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/');
+        if (typeof sourcePath !== 'string' || !sourcePath.startsWith('/')) throw new Error('源路径无效');
+        const destPath = pathModule.join(destinationDir, pathModule.basename(sourcePath)).replace(/\\/g, '/');
         const stats = await this.filesystem(sourceSftp).stat(sourcePath);
         this.registerTopLevelTransferEntry(tracker, stats);
-
         if (stats.isDirectory()) {
           await this.copyDirectoryBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath, new Set(), tracker);
         } else if (stats.isFile()) {
@@ -321,65 +266,58 @@ export class SftpTransferService {
           await this.copyFileBetweenSftp(sourceSftp, destinationSftp, sourcePath, destPath, stats.size, tracker);
           this.completeTransferFile(tracker);
         } else {
-          console.warn(`[SFTP Cross Copy] Skipping unsupported type: ${sourcePath}`);
           continue;
         }
-
         const copiedStats = await this.filesystem(destinationSftp).lstat(destPath);
         copiedItemsDetails.push(SftpChannelFileSystem.toFileEntry(destPath, copiedStats));
       }
-
       this.assertTransferNotCancelled(tracker);
       this.finalizeTransferTracker(tracker);
-
-      destinationState.ws.send(
-        JSON.stringify({
-          type: 'sftp:copy:success',
-          payload: {
-            destination: destinationDir,
-            items: copiedItemsDetails,
-            sourceSessionId,
-            crossHost: true,
-          },
-          requestId,
-        }),
-      );
-    } catch (error: any) {
+      emit({
+        type: 'copy-success',
+        requestId,
+        destination: destinationDir,
+        items: copiedItemsDetails,
+        sourceOwnerKey: source.ownerKey,
+        crossHost: true,
+      });
+    } catch (error) {
       const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
-      if (cancelled) {
-        console.log(`[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Cancelled (ID: ${requestId}).`);
-        this.sendTransferCancelled(destinationState, requestId);
-        return;
-      }
-      console.error(
-        `[SFTP Cross Copy ${sourceSessionId} -> ${destinationSessionId}] Failed (ID: ${requestId}):`,
-        error,
-      );
-      fail(`跨主机复制失败: ${error.message}`);
+      if (cancelled) emit({ type: 'cancelled', requestId });
+      else emit({ type: 'copy-error', requestId, message: `跨主机复制失败: ${error instanceof Error ? error.message : String(error)}` });
     } finally {
-      this.activeTransferKeys.delete(transferKey);
+      this.activeTransfers.delete(transferKey);
       this.cancelledTransferIds.delete(transferKey);
     }
   }
-  async move(sessionId: string, sources: string[], destinationDir: string, requestId: string): Promise<void> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
-    if (!state || !state.executionSession.sftp.control) {
-      console.warn(`[SFTP Move] SFTP 未准备好，无法在 ${sessionId} 上执行 move (ID: ${requestId})`);
-      state?.ws.send(JSON.stringify({ type: 'sftp:move:error', payload: 'SFTP 会话未就绪', requestId: requestId }));
+
+  async move(
+    context: SftpTransferContext,
+    sources: string[],
+    destinationDir: string,
+    requestId: string,
+  ): Promise<void> {
+    const { ownerKey, session, emit } = context;
+    if (!session.isReady) {
+      emit({ type: 'move-error', requestId, message: 'SFTP 会话未就绪' });
       return;
     }
-    const sftp = state.executionSession.sftp.control;
-    console.debug(
-      `[SFTP ${sessionId}] Received move request (ID: ${requestId}) Sources: ${sources.join(', ')}, Dest: ${destinationDir}`,
-    );
 
-    const movedItemsDetails: any[] = [];
+    let sftp: SFTPWrapper;
+    try {
+      sftp = await session.sftp.ensure('control');
+    } catch (error) {
+      emit({ type: 'move-error', requestId, message: `SFTP 会话未就绪: ${error instanceof Error ? error.message : String(error)}` });
+      return;
+    }
+
+    const movedItemsDetails: FileEntry[] = [];
     let firstError: Error | null = null;
-    const transferKey = this.transferCancellationKey(sessionId, requestId);
-    this.activeTransferKeys.add(transferKey);
+    const transferKey = this.transferCancellationKey(ownerKey, requestId);
+    this.activeTransfers.set(transferKey, context);
     const tracker: SftpTransferTracker = {
-      sessionId,
-      state,
+      ownerKey,
+      emit,
       requestId,
       totalBytes: 0,
       transferredBytes: 0,
@@ -393,92 +331,40 @@ export class SftpTransferService {
     this.emitTransferProgress(tracker, true);
 
     try {
-      // Ensure destination directory exists (important for move)
-      try {
-        await this.filesystem(sftp).ensureDirectory(destinationDir);
-      } catch (ensureErr: any) {
-        console.error(
-          `[SFTP ${sessionId}] Failed to ensure destination directory ${destinationDir} exists for move (ID: ${requestId}):`,
-          ensureErr,
-        );
-        throw new Error(`无法创建或访问目标目录: ${ensureErr.message}`);
-      }
-
+      await this.filesystem(sftp).ensureDirectory(destinationDir);
       this.assertTransferNotCancelled(tracker);
       for (const oldPath of sources) {
         this.assertTransferNotCancelled(tracker);
-        const sourceName = pathModule.basename(oldPath);
-        const newPath = pathModule.join(destinationDir, sourceName).replace(/\\/g, '/'); // Ensure forward slashes
-
-        if (oldPath === newPath) {
-          console.warn(
-            `[SFTP ${sessionId}] Skipping move: source and destination are the same (${oldPath}) (ID: ${requestId})`,
-          );
-          continue; // Skip if source and destination are identical
-        }
-
+        const newPath = pathModule.join(destinationDir, pathModule.basename(oldPath)).replace(/\\/g, '/');
+        if (oldPath === newPath) continue;
         try {
-          // --- 移动前检查目标是否存在 ---
           let targetExists = false;
           try {
             await this.filesystem(sftp).lstat(newPath);
             targetExists = true;
-          } catch (statErr: any) {
-            if (!SftpChannelFileSystem.isMissing(statErr)) {
-              // 如果 stat 失败不是因为 "No such file"，则抛出未知错误
-              throw new Error(`检查目标路径 ${newPath} 状态时出错: ${statErr.message}`);
-            }
-            // 如果是 "No such file"，则 targetExists 保持 false，可以继续移动
+          } catch (error) {
+            if (!SftpChannelFileSystem.isMissing(error)) throw error;
           }
-
-          if (targetExists) {
-            console.error(`[SFTP ${sessionId}] Move failed: Target path ${newPath} already exists (ID: ${requestId})`);
-            throw new Error(`目标路径 ${pathModule.basename(newPath)} 已存在`);
-          }
-
-          console.log(`[SFTP ${sessionId}] Moving ${oldPath} to ${newPath} (ID: ${requestId})`);
+          if (targetExists) throw new Error(`目标路径 ${pathModule.basename(newPath)} 已存在`);
           this.beginTransferFile(tracker, oldPath);
-          await this.filesystem(sftp).rename(oldPath, newPath); // Use helper for rename logic
+          await this.filesystem(sftp).rename(oldPath, newPath);
           this.completeTransferFile(tracker);
-
-          // Get stats of the *moved* item at the new location
           const movedStats = await this.filesystem(sftp).lstat(newPath);
           movedItemsDetails.push(SftpChannelFileSystem.toFileEntry(newPath, movedStats));
-        } catch (moveErr: any) {
-          console.error(`[SFTP ${sessionId}] Error moving ${oldPath} to ${newPath} (ID: ${requestId}):`, moveErr);
-          firstError = moveErr;
-          break; // Stop on first error for move
+        } catch (error) {
+          firstError = error instanceof Error ? error : new Error(String(error));
+          break;
         }
       }
-
-      if (firstError) {
-        throw firstError;
-      }
-
+      if (firstError) throw firstError;
       this.assertTransferNotCancelled(tracker);
-      console.log(
-        `[SFTP ${sessionId}] Move operation completed successfully (ID: ${requestId}). Moved items: ${movedItemsDetails.length}`,
-      );
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:move:success',
-          payload: { sources: sources, destination: destinationDir, items: movedItemsDetails },
-          requestId: requestId,
-        }),
-      );
-    } catch (error: any) {
+      emit({ type: 'move-success', requestId, sources, destination: destinationDir, items: movedItemsDetails });
+    } catch (error) {
       const cancelled = this.isTransferCancelledError(error) || this.cancelledTransferIds.has(transferKey);
-      if (cancelled) {
-        console.log(`[SFTP ${sessionId}] Move operation cancelled (ID: ${requestId}).`);
-        this.sendTransferCancelled(state, requestId);
-        return;
-      }
-      console.error(`[SFTP ${sessionId}] Move operation failed (ID: ${requestId}):`, error);
-      state.ws.send(
-        JSON.stringify({ type: 'sftp:move:error', payload: `移动操作失败: ${error.message}`, requestId: requestId }),
-      );
+      if (cancelled) emit({ type: 'cancelled', requestId });
+      else emit({ type: 'move-error', requestId, message: `移动操作失败: ${error instanceof Error ? error.message : String(error)}` });
     } finally {
-      this.activeTransferKeys.delete(transferKey);
+      this.activeTransfers.delete(transferKey);
       this.cancelledTransferIds.delete(transferKey);
     }
   }

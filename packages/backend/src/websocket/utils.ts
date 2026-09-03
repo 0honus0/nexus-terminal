@@ -1,10 +1,10 @@
 import { PortInfo } from './types';
 import type { WorkspaceSession } from '../workspace/workspace-session';
 import {
-  archiveService,
+  workspaceArchiveService,
   workspaceSessionRegistry,
-  sftpTransferService,
-  sftpUploadService,
+  workspaceSftpTransferService,
+  workspaceSftpUploadService,
   statusMonitorService,
   workspaceSftpSessionService,
 } from '../runtime/service-container';
@@ -106,9 +106,9 @@ export const cleanupClientConnection = async (sessionId: string | undefined): Pr
     if (statusMonitorService) statusMonitorService.clearSession(sessionId);
 
     // 2. 先清理依赖执行通道/SFTP 的后台文件任务，再释放 SFTP channels。
-    await archiveService.cleanupSession(sessionId);
-    sftpTransferService.cleanupSession(sessionId);
-    await sftpUploadService.cleanupSession(sessionId);
+    await workspaceArchiveService.cleanupSession(sessionId);
+    workspaceSftpTransferService.cleanupSession(sessionId);
+    await workspaceSftpUploadService.cleanupSession(sessionId);
     workspaceSftpSessionService.closeChannels(sessionId);
 
     // 恢复事务尚未提交时，连接归还挂起服务，保留日志以便重试。

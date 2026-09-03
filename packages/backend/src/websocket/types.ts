@@ -231,51 +231,6 @@ export type SshSuspendServerToClientMessages =
   | SshMarkedForSuspendAck
   | SshUnmarkedForSuspendAck;
 
-// C -> S: Request to compress files/directories
-export interface SftpCompressRequestPayload {
-  sources: string[]; // Array of source paths (relative to targetDirectory)
-  destinationArchiveName: string; // Desired name for the archive file
-  format: 'zip' | 'targz' | 'tarbz2'; // Archive format
-  targetDirectory: string; // The directory where sources are located and where the archive will be created
-  password?: string; // Optional password for ZIP archives only. Never persist or log this value.
-  requestId: string;
-}
-
-// S -> C: Compression success
-export interface SftpCompressSuccessPayload {
-  message: string;
-  requestId: string;
-  warning?: string;
-}
-
-// S -> C: Compression error
-export interface SftpCompressErrorPayload {
-  error: string;
-  details?: string; // Stderr output or specific error details
-  code?: 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT';
-  requestId: string;
-}
-
-// C -> S: Request to decompress an archive
-export interface SftpDecompressRequestPayload {
-  archivePath: string; // Full path to the archive file
-  password?: string; // Optional password for ZIP archives only. Never persist or log this value.
-  requestId: string;
-}
-
-// S -> C: Decompression success
-export interface SftpDecompressSuccessPayload {
-  message: string;
-  requestId: string;
-}
-
-// S -> C: Decompression error
-export interface SftpDecompressErrorPayload {
-  error: string;
-  details?: string; // Stderr output or specific error details
-  code?: 'PASSWORD_REQUIRED' | 'INVALID_PASSWORD' | 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT';
-  requestId: string;
-}
 // S -> C: SFTP Upload Progress (New)
 export interface SftpUploadProgressPayload {
   uploadId: string; // To correlate with the specific upload

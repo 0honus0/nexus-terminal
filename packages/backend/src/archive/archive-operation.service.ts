@@ -1,19 +1,18 @@
-import { WebSocket } from 'ws';
 import * as pathModule from 'path';
-import type { AuthenticatedWebSocket } from '../websocket/types';
-import type { WorkspaceSession } from '../workspace/workspace-session';
-import type { WorkspaceSessionRegistry } from '../workspace/workspace-session-registry';
 import type { CommandSession } from '../execution/command-session';
+import type { ExecutionSession } from '../execution/execution-session';
 import { quotePosixShellArg } from '../utils/shell';
 import { FileRemovalService } from '../filesystem/file-removal.service';
 import type {
-  SftpCompressRequestPayload,
-  SftpCompressSuccessPayload,
-  SftpCompressErrorPayload,
-  SftpDecompressRequestPayload,
-  SftpDecompressSuccessPayload,
-  SftpDecompressErrorPayload,
-} from '../websocket/types';
+  ArchiveCancelResult,
+  ArchiveEventSink,
+  ArchiveOperationContext,
+  ArchiveOperationKind,
+  CompressArchiveErrorCode,
+  CompressArchiveRequest,
+  DecompressArchiveErrorCode,
+  DecompressArchiveRequest,
+} from './archive.types';
 
 const ARCHIVE_TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
 const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
@@ -39,7 +38,7 @@ const validateArchivePassword = (password: string | undefined): ArchivePasswordV
 };
 
 interface ActiveArchiveOperation {
-  sessionId: string;
+  context: ArchiveOperationContext;
   requestId: string;
   workspacePath?: string;
   commandSession: CommandSession;
@@ -48,59 +47,58 @@ interface ActiveArchiveOperation {
 }
 
 interface PendingArchiveOperation {
-  sessionId: string;
+  context: ArchiveOperationContext;
   requestId: string;
   cancelled: boolean;
   preflightSession?: CommandSession;
 }
 
-/** Archive lifecycle isolated from WebSocket transport and reusable by future Agent tasks. */
-export class ArchiveService {
+/** Transport-neutral archive lifecycle reusable by Workspace and future Agent tasks. */
+export class ArchiveOperationService {
   private readonly activeArchives = new Map<string, ActiveArchiveOperation>();
   private readonly pendingArchives = new Map<string, PendingArchiveOperation>();
 
-  constructor(private readonly workspaceSessionRegistry: WorkspaceSessionRegistry) {}
-
-  async cleanupSession(sessionId: string): Promise<void> {
+  async cleanupOwner(ownerKey: string): Promise<void> {
     const requestIds = new Set<string>();
     for (const operation of this.activeArchives.values()) {
-      if (operation.sessionId === sessionId) requestIds.add(operation.requestId);
+      if (operation.context.ownerKey === ownerKey) requestIds.add(operation.requestId);
     }
     for (const operation of this.pendingArchives.values()) {
-      if (operation.sessionId === sessionId) requestIds.add(operation.requestId);
+      if (operation.context.ownerKey === ownerKey) requestIds.add(operation.requestId);
     }
-    await Promise.allSettled([...requestIds].map((requestId) => this.cancelArchive(sessionId, requestId, false)));
+    await Promise.allSettled([...requestIds].map((requestId) => this.cancel(ownerKey, requestId)));
   }
 
-  async compress(sessionId: string, payload: SftpCompressRequestPayload): Promise<void> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
+  async compress(context: ArchiveOperationContext, payload: CompressArchiveRequest): Promise<void> {
+    const { ownerKey, session, emit } = context;
     const { sources, destinationArchiveName, format, targetDirectory, password, requestId } = payload;
-    const archiveKey = `${sessionId}:${requestId}`;
+    const archiveKey = `${ownerKey}:${requestId}`;
 
-    if (!state?.executionSession.isReady) {
-      this.sendCompressError(state?.ws, 'SSH 会话未就绪', requestId);
+    if (!session.isReady) {
+      this.emitError(emit, 'compress', 'SSH 会话未就绪', requestId);
       return;
     }
 
     const passwordError = validateArchivePassword(password);
     if (passwordError) {
-      this.sendCompressError(state.ws, passwordError.message, requestId, undefined, passwordError.code);
+      this.emitError(emit, 'compress', passwordError.message, requestId, undefined, passwordError.code);
       return;
     }
     if (password !== undefined && format !== 'zip') {
-      this.sendCompressError(state.ws, '只有 ZIP 格式支持密码保护', requestId);
+      this.emitError(emit, 'compress', '只有 ZIP 格式支持密码保护', requestId);
       return;
     }
 
     const requiredCommand = format === 'zip' ? 'zip' : 'tar';
-    const pendingArchive: PendingArchiveOperation = { sessionId, requestId, cancelled: false };
+    const pendingArchive: PendingArchiveOperation = { context, requestId, cancelled: false };
     this.pendingArchives.set(archiveKey, pendingArchive);
     try {
-      if (!(await this.checkCommandExists(state, sessionId, requiredCommand, pendingArchive))) {
+      if (!(await this.checkCommandExists(session, ownerKey, requiredCommand, pendingArchive))) {
         this.pendingArchives.delete(archiveKey);
         if (!pendingArchive.cancelled) {
-          this.sendCompressError(
-            state.ws,
+          this.emitError(
+            emit,
+            'compress',
             `命令 '${requiredCommand}' 在服务器上未找到`,
             requestId,
             `Command '${requiredCommand}' not found on server.`,
@@ -111,7 +109,7 @@ export class ArchiveService {
     } catch (checkError: any) {
       this.pendingArchives.delete(archiveKey);
       if (!pendingArchive.cancelled) {
-        this.sendCompressError(state.ws, `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
+        this.emitError(emit, 'compress', `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
       }
       return;
     }
@@ -130,7 +128,7 @@ export class ArchiveService {
       const relativePath = pathModule.posix.relative(targetDirectory, source);
       if (relativePath === '..' || relativePath.startsWith('../')) {
         this.pendingArchives.delete(archiveKey);
-        this.sendCompressError(state.ws, `压缩源路径不在目标目录内: ${source}`, requestId);
+        this.emitError(emit, 'compress', `压缩源路径不在目标目录内: ${source}`, requestId);
         return;
       }
       const normalized = relativePath === '' || relativePath === '.' ? pathModule.posix.basename(source) : relativePath;
@@ -180,11 +178,11 @@ export class ArchiveService {
     ].join('; ');
 
     try {
-      const commandSession = await state.executionSession.commands.start({ command, id: `archive:${requestId}` });
+      const commandSession = await session.commands.start({ command, id: `archive:${requestId}` });
       this.pendingArchives.delete(archiveKey);
       if (pendingArchive.cancelled) {
         void this.stopArchiveCommandSession(commandSession).then(() =>
-          this.removeRemoteArchiveWorkspace(sessionId, workspacePath),
+          this.removeRemoteArchiveWorkspace(session, ownerKey, workspacePath),
         );
         return;
       }
@@ -204,7 +202,7 @@ export class ArchiveService {
           const now = Date.now();
           if (!force && now - lastProgressTime < 1000) return;
           lastProgressTime = now;
-          this.sendArchiveProgress(state.ws, 'compress', requestId, fileCount, lastSeenFileName, totalFiles);
+          this.emitProgress(emit, 'compress', requestId, fileCount, lastSeenFileName, totalFiles);
         };
         const consumeOutput = (chunk: string, remainder: string): string => {
           const lines = `${remainder}${chunk}`.split(/\r?\n/);
@@ -236,7 +234,7 @@ export class ArchiveService {
 
         const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
       const operation: ActiveArchiveOperation = {
-        sessionId,
+        context,
         requestId,
         workspacePath,
         commandSession,
@@ -270,18 +268,17 @@ export class ArchiveService {
               (archiveWarningCode !== undefined
                 ? `ZIP 完成时返回警告代码 ${archiveWarningCode}，部分在压缩期间变化或消失的文件可能未包含在归档中。`
                 : undefined);
-            const successPayload: SftpCompressSuccessPayload = {
-              message: warningDetails ? '压缩完成，但存在警告' : '压缩成功',
+            this.emitSuccess(
+              emit,
+              'compress',
               requestId,
-              ...(warningDetails ? { warning: warningDetails } : {}),
-            };
-            if (state.ws.readyState === WebSocket.OPEN) {
-              state.ws.send(JSON.stringify({ type: 'sftp:compress:success', requestId, payload: successPayload }));
-            }
+              warningDetails ? '压缩完成，但存在警告' : '压缩成功',
+              warningDetails,
+            );
           } else {
-            void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
+            void this.removeRemoteArchiveWorkspace(session, ownerKey, workspacePath);
             const details = stderrData.trim() || `压缩命令退出，代码: ${exitCode ?? 'N/A'}`;
-            this.sendCompressError(state.ws, '压缩失败', requestId, details);
+            this.emitError(emit, 'compress', '压缩失败', requestId, details);
           }
       });
       commandSession.on('error', (streamError: Error) => {
@@ -290,19 +287,18 @@ export class ArchiveService {
         clearInterval(heartbeatInterval);
         if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
         if (operation.cancelled) return;
-        void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
-        this.sendCompressError(state.ws, '压缩命令流错误', requestId, streamError.message);
+        void this.removeRemoteArchiveWorkspace(session, ownerKey, workspacePath);
+        this.emitError(emit, 'compress', '压缩命令流错误', requestId, streamError.message);
       });
     } catch (execError: any) {
       this.pendingArchives.delete(archiveKey);
-      void this.removeRemoteArchiveWorkspace(sessionId, workspacePath);
+      void this.removeRemoteArchiveWorkspace(session, ownerKey, workspacePath);
       if (!pendingArchive.cancelled)
-        this.sendCompressError(state.ws, `执行压缩时发生意外错误: ${execError.message}`, requestId);
+        this.emitError(emit, 'compress', `执行压缩时发生意外错误: ${execError.message}`, requestId);
     }
   }
-  async cancelArchive(sessionId: string, requestId: string, notifyClient = true): Promise<void> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
-    const archiveKey = `${sessionId}:${requestId}`;
+  async cancel(ownerKey: string, requestId: string): Promise<ArchiveCancelResult> {
+    const archiveKey = `${ownerKey}:${requestId}`;
     const operation = this.activeArchives.get(archiveKey);
     const pending = this.pendingArchives.get(archiveKey);
 
@@ -313,7 +309,11 @@ export class ArchiveService {
       clearInterval(operation.heartbeatInterval);
       await this.stopArchiveCommandSession(operation.commandSession);
       if (operation.workspacePath) {
-        cleaned = await this.removeRemoteArchiveWorkspace(sessionId, operation.workspacePath);
+        cleaned = await this.removeRemoteArchiveWorkspace(
+          operation.context.session,
+          operation.context.ownerKey,
+          operation.workspacePath,
+        );
       }
     } else if (pending) {
       // Cancellation remains attached to the actual request until preflight exits.
@@ -322,27 +322,19 @@ export class ArchiveService {
       await pending.preflightSession?.terminate();
     }
 
-    if (notifyClient && state?.ws.readyState === WebSocket.OPEN) {
-      state.ws.send(
-        JSON.stringify({
-          type: 'sftp:archive:cancelled',
-          requestId,
-          payload: { requestId, cleaned },
-        }),
-      );
-    }
+    return { found: Boolean(operation || pending), cleaned };
   }
   private async stopArchiveCommandSession(commandSession: CommandSession): Promise<void> {
     await commandSession.terminate({ signal: 'TERM', graceMs: 1500, forceMs: 4000 });
   }
-  async decompress(sessionId: string, payload: SftpDecompressRequestPayload): Promise<void> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
+  async decompress(context: ArchiveOperationContext, payload: DecompressArchiveRequest): Promise<void> {
+    const { ownerKey, session, emit } = context;
     const { archivePath, password, requestId } = payload;
-    const archiveKey = `${sessionId}:${requestId}`;
+    const archiveKey = `${ownerKey}:${requestId}`;
 
-    if (!state || !state.executionSession.isReady) {
-      console.warn(`[SFTP Decompress] SSH 客户端未准备好，无法在 ${sessionId} 上执行 decompress (ID: ${requestId})`);
-      this.sendDecompressError(state?.ws, 'SSH 会话未就绪', requestId);
+    if (!session.isReady) {
+      console.warn(`[Archive ${ownerKey}] execution session is not ready for decompress (ID: ${requestId})`);
+      this.emitError(emit, 'decompress', 'SSH 会话未就绪', requestId);
       return;
     }
 
@@ -350,11 +342,11 @@ export class ArchiveService {
 
     const passwordError = validateArchivePassword(password);
     if (passwordError) {
-      this.sendDecompressError(state.ws, passwordError.message, requestId, undefined, passwordError.code);
+      this.emitError(emit, 'decompress', passwordError.message, requestId, undefined, passwordError.code);
       return;
     }
     if (password !== undefined && !lowerArchivePath.endsWith('.zip')) {
-      this.sendDecompressError(state.ws, '只有 ZIP 格式支持密码解压', requestId);
+      this.emitError(emit, 'decompress', '只有 ZIP 格式支持密码解压', requestId);
       return;
     }
 
@@ -371,19 +363,20 @@ export class ArchiveService {
     ) {
       requiredCommand = 'tar';
     } else {
-      this.sendDecompressError(state.ws, `不支持的压缩文件格式: ${archivePath}`, requestId);
+      this.emitError(emit, 'decompress', `不支持的压缩文件格式: ${archivePath}`, requestId);
       return;
     }
 
-    const pendingArchive: PendingArchiveOperation = { sessionId, requestId, cancelled: false };
+    const pendingArchive: PendingArchiveOperation = { context, requestId, cancelled: false };
     this.pendingArchives.set(archiveKey, pendingArchive);
     try {
-      const commandExists = await this.checkCommandExists(state, sessionId, requiredCommand, pendingArchive);
+      const commandExists = await this.checkCommandExists(session, ownerKey, requiredCommand, pendingArchive);
       if (!commandExists) {
         this.pendingArchives.delete(archiveKey);
         if (!pendingArchive.cancelled) {
-          this.sendDecompressError(
-            state.ws,
+          this.emitError(
+            emit,
+            'decompress',
             `命令 '${requiredCommand}' 在服务器上未找到`,
             requestId,
             `Command '${requiredCommand}' not found on server.`,
@@ -394,7 +387,7 @@ export class ArchiveService {
     } catch (checkError: any) {
       this.pendingArchives.delete(archiveKey);
       if (!pendingArchive.cancelled) {
-        this.sendDecompressError(state.ws, `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
+        this.emitError(emit, 'decompress', `检查命令 '${requiredCommand}' 时出错`, requestId, checkError.message);
       }
       return;
     }
@@ -403,7 +396,7 @@ export class ArchiveService {
       return;
     }
 
-    console.debug(`[SFTP Decompress ${sessionId}] Received request for ${archivePath} (ID: ${requestId})`);
+    console.debug(`[SFTP Decompress ${ownerKey}] Received request for ${archivePath} (ID: ${requestId})`);
 
     const extractDir = pathModule.posix.dirname(archivePath);
     const archiveBasename = pathModule.posix.basename(archivePath);
@@ -449,14 +442,14 @@ export class ArchiveService {
       const countCommand = `total=$(tar -tjf ${quotedArchiveBasename} 2>/dev/null | wc -l); printf '${ARCHIVE_TOTAL_MARKER}%s\n' "$total"`;
       command = `${cdCommand} && ${countCommand} && tar -xjvf ${quotedArchiveBasename}`;
     } else {
-      this.sendDecompressError(state.ws, `不支持的压缩文件格式: ${archivePath}`, requestId);
+      this.emitError(emit, 'decompress', `不支持的压缩文件格式: ${archivePath}`, requestId);
       return;
     }
 
     if (password === undefined) {
-      console.log(`[SFTP Decompress ${sessionId}] Executing command: ${command} (ID: ${requestId})`);
+      console.log(`[SFTP Decompress ${ownerKey}] Executing command: ${command} (ID: ${requestId})`);
     } else {
-      console.log(`[SFTP Decompress ${sessionId}] Executing password-protected ZIP extraction (ID: ${requestId})`);
+      console.log(`[SFTP Decompress ${ownerKey}] Executing password-protected ZIP extraction (ID: ${requestId})`);
     }
 
     if (pendingArchive.cancelled) {
@@ -466,7 +459,7 @@ export class ArchiveService {
 
     // --- 执行命令 ---
     try {
-      const commandSession = await state.executionSession.commands.start({ command, id: `archive:${requestId}` });
+      const commandSession = await session.commands.start({ command, id: `archive:${requestId}` });
       this.pendingArchives.delete(archiveKey);
       if (pendingArchive.cancelled) {
         void this.stopArchiveCommandSession(commandSession);
@@ -492,7 +485,7 @@ export class ArchiveService {
           const now = Date.now();
           if (!force && now - lastProgressTime < 1000) return;
           lastProgressTime = now;
-          this.sendArchiveProgress(state.ws, 'decompress', requestId, fileCount, lastSeenFileName, totalFiles);
+          this.emitProgress(emit, 'decompress', requestId, fileCount, lastSeenFileName, totalFiles);
         };
 
         const consumeOutput = (chunk: string, remainder: string): string => {
@@ -517,7 +510,7 @@ export class ArchiveService {
 
       const heartbeatInterval = setInterval(() => sendProgress(true), 10000);
       const operation: ActiveArchiveOperation = {
-        sessionId,
+        context,
         requestId,
         commandSession,
         heartbeatInterval,
@@ -562,35 +555,27 @@ export class ArchiveService {
               /incorrect password|bad password/i.test(trimmedStderr));
 
           if (passwordRequired) {
-            console.log(`[SFTP Decompress ${sessionId}] ZIP requires a password (ID: ${requestId}).`);
-            this.sendDecompressError(state.ws, '该 ZIP 文件需要密码', requestId, undefined, 'PASSWORD_REQUIRED');
+            console.log(`[SFTP Decompress ${ownerKey}] ZIP requires a password (ID: ${requestId}).`);
+            this.emitError(emit, 'decompress', '该 ZIP 文件需要密码', requestId, undefined, 'PASSWORD_REQUIRED');
             return;
           }
           if (invalidPassword) {
-            console.warn(`[SFTP Decompress ${sessionId}] ZIP password was rejected (ID: ${requestId}).`);
-            this.sendDecompressError(state.ws, 'ZIP 密码不正确', requestId, undefined, 'INVALID_PASSWORD');
+            console.warn(`[SFTP Decompress ${ownerKey}] ZIP password was rejected (ID: ${requestId}).`);
+            this.emitError(emit, 'decompress', 'ZIP 密码不正确', requestId, undefined, 'INVALID_PASSWORD');
             return;
           }
 
           console.log(
-            `[SFTP Decompress ${sessionId}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${trimmedStderr}`,
+            `[SFTP Decompress ${ownerKey}] Command finished with code ${code} (ID: ${requestId}). Stderr: ${trimmedStderr}`,
           );
           if (code === 0 && !this.isErrorInStdErr(stderrData)) {
             // 检查退出码和 stderr
-            console.log(`[SFTP Decompress ${sessionId}] Decompression successful (ID: ${requestId}).`);
-            const successPayload: SftpDecompressSuccessPayload = {
-              message: '解压成功',
-              requestId: requestId,
-            };
-            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-              state.ws.send(
-                JSON.stringify({ type: 'sftp:decompress:success', requestId: requestId, payload: successPayload }),
-              ); // Ensure requestId is included
-            }
+            console.log(`[SFTP Decompress ${ownerKey}] Decompression successful (ID: ${requestId}).`);
+            this.emitSuccess(emit, 'decompress', requestId, '解压成功');
           } else {
             const errorDetails = stderrData.trim() || `解压命令退出，代码: ${code ?? 'N/A'}`;
-            console.error(`[SFTP Decompress ${sessionId}] Decompression failed (ID: ${requestId}): ${errorDetails}`);
-            this.sendDecompressError(state.ws, '解压失败', requestId, errorDetails);
+            console.error(`[SFTP Decompress ${ownerKey}] Decompression failed (ID: ${requestId}): ${errorDetails}`);
+            this.emitError(emit, 'decompress', '解压失败', requestId, errorDetails);
           }
       });
       commandSession.on('error', (streamErr: Error) => {
@@ -599,42 +584,42 @@ export class ArchiveService {
         clearInterval(heartbeatInterval);
         if (this.activeArchives.get(archiveKey) === operation) this.activeArchives.delete(archiveKey);
         if (operation.cancelled) return;
-        console.error(`[SFTP Decompress ${sessionId}] Command stream error (ID: ${requestId}):`, streamErr);
-        this.sendDecompressError(state.ws, '解压命令流错误', requestId, streamErr.message);
+        console.error(`[SFTP Decompress ${ownerKey}] Command stream error (ID: ${requestId}):`, streamErr);
+        this.emitError(emit, 'decompress', '解压命令流错误', requestId, streamErr.message);
       });
     } catch (execError: any) {
       this.pendingArchives.delete(archiveKey);
       console.error(
-        `[SFTP Decompress ${sessionId}] Decompress command caught unexpected error during exec setup (ID: ${requestId}):`,
+        `[SFTP Decompress ${ownerKey}] Decompress command caught unexpected error during exec setup (ID: ${requestId}):`,
         execError,
       );
       if (!pendingArchive.cancelled)
-        this.sendDecompressError(state.ws, `执行解压时发生意外错误: ${execError.message}`, requestId);
+        this.emitError(emit, 'decompress', `执行解压时发生意外错误: ${execError.message}`, requestId);
     }
   }
   private async checkCommandExists(
-    state: WorkspaceSession,
-    sessionId: string,
+    session: ExecutionSession,
+    ownerKey: string,
     commandName: string,
     pendingArchive?: PendingArchiveOperation,
   ): Promise<boolean> {
-    if (!state.executionSession.isReady) throw new Error('SSH client is not available.');
+    if (!session.isReady) throw new Error('SSH client is not available.');
 
     const checkCommands = [`command -v ${commandName}`, `which ${commandName}`];
     for (let index = 0; index < checkCommands.length; index += 1) {
       if (pendingArchive?.cancelled) throw new Error('ARCHIVE_CANCELLED');
 
       const checkCmd = checkCommands[index];
-      console.log(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
+      console.log(`[SFTP Command Check ${ownerKey}] Executing: ${checkCmd}`);
 
       let commandSession: CommandSession;
       try {
-        commandSession = await state.executionSession.commands.start({
+        commandSession = await session.commands.start({
           command: checkCmd,
           id: `archive-preflight:${pendingArchive?.requestId ?? commandName}:${index}`,
         });
       } catch (error) {
-        console.error(`[SFTP Command Check ${sessionId}] Failed to start exec for "${checkCmd}":`, error);
+        console.error(`[SFTP Command Check ${ownerKey}] Failed to start exec for "${checkCmd}":`, error);
         continue;
       }
 
@@ -674,84 +659,53 @@ export class ArchiveService {
       if (pendingArchive?.cancelled) throw new Error('ARCHIVE_CANCELLED');
       if (result.timedOut) throw new Error(`Command check timed out for '${commandName}'`);
       if (result.error) {
-        console.error(`[SFTP Command Check ${sessionId}] Stream error for "${checkCmd}":`, result.error);
+        console.error(`[SFTP Command Check ${ownerKey}] Stream error for "${checkCmd}":`, result.error);
         continue;
       }
       if (result.exitCode === 0 && output.trim() !== '') {
         console.log(
-          `[SFTP Command Check ${sessionId}] Command '${commandName}' found using "${checkCmd}". Output: ${output.trim()}`,
+          `[SFTP Command Check ${ownerKey}] Command '${commandName}' found using "${checkCmd}". Output: ${output.trim()}`,
         );
         return true;
       }
 
       console.log(
-        `[SFTP Command Check ${sessionId}] Command '${commandName}' not found with "${checkCmd}" (code: ${result.exitCode}, output: "${output.trim()}").`,
+        `[SFTP Command Check ${ownerKey}] Command '${commandName}' not found with "${checkCmd}" (code: ${result.exitCode}, output: "${output.trim()}").`,
       );
     }
 
     return false;
   }
-  private sendCompressError(
-    ws: AuthenticatedWebSocket | undefined,
+  private emitError(
+    emit: ArchiveEventSink,
+    operation: ArchiveOperationKind,
     error: string,
     requestId: string,
     details?: string,
-    code?: SftpCompressErrorPayload['code'],
+    code?: CompressArchiveErrorCode | DecompressArchiveErrorCode,
   ): void {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const payload: SftpCompressErrorPayload = { error, requestId };
-      if (details) payload.details = details;
-      if (code) payload.code = code;
-      // 检查是否是命令未找到的特定错误
-      if (error.includes('在服务器上未找到')) {
-        ws.send(
-          JSON.stringify({
-            type: 'sftp:command_not_found',
-            payload: {
-              operation: 'compress',
-              command: error.match(/'([^']+)'/)?.[1] || 'unknown',
-              message: details || error,
-            },
-            requestId,
-          }),
-        );
-      } else {
-        ws.send(JSON.stringify({ type: 'sftp:compress:error', requestId, payload }));
-      }
-    } else {
-      console.warn(`[SFTP Compress] WebSocket closed or invalid, cannot send error for request ${requestId}.`);
-    }
+    const commandNotFound = error.includes('在服务器上未找到')
+      ? error.match(/'([^']+)'/)?.[1] || 'unknown'
+      : undefined;
+    emit({
+      type: 'error',
+      operation,
+      error,
+      requestId,
+      ...(details ? { details } : {}),
+      ...(code ? { code } : {}),
+      ...(commandNotFound ? { commandNotFound } : {}),
+    });
   }
-  private sendDecompressError(
-    ws: AuthenticatedWebSocket | undefined,
-    error: string,
+
+  private emitSuccess(
+    emit: ArchiveEventSink,
+    operation: ArchiveOperationKind,
     requestId: string,
-    details?: string,
-    code?: SftpDecompressErrorPayload['code'],
+    message: string,
+    warning?: string,
   ): void {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const payload: SftpDecompressErrorPayload = { error, requestId };
-      if (details) payload.details = details;
-      if (code) payload.code = code;
-      // 检查是否是命令未找到的特定错误
-      if (error.includes('在服务器上未找到')) {
-        ws.send(
-          JSON.stringify({
-            type: 'sftp:command_not_found',
-            payload: {
-              operation: 'decompress',
-              command: error.match(/'([^']+)'/)?.[1] || 'unknown',
-              message: details || error,
-            },
-            requestId,
-          }),
-        );
-      } else {
-        ws.send(JSON.stringify({ type: 'sftp:decompress:error', requestId, payload }));
-      }
-    } else {
-      console.warn(`[SFTP Decompress] WebSocket closed or invalid, cannot send error for request ${requestId}.`);
-    }
+    emit({ type: 'success', operation, requestId, message, ...(warning ? { warning } : {}) });
   }
   private appendBoundedOutput(existing: string, chunk: string, maxLength = 65536): string {
     const combined = existing + chunk;
@@ -793,25 +747,26 @@ export class ArchiveService {
     }
     return null;
   }
-  private sendArchiveProgress(
-    ws: AuthenticatedWebSocket | undefined,
-    operation: 'compress' | 'decompress',
+  private emitProgress(
+    emit: ArchiveEventSink,
+    operation: ArchiveOperationKind,
     requestId: string,
     fileCount: number,
     currentFile?: string,
     totalFiles?: number,
   ): void {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const percent =
-        totalFiles && totalFiles > 0 ? Math.min(100, Math.round((fileCount / totalFiles) * 100)) : undefined;
-      ws.send(
-        JSON.stringify({
-          type: `sftp:${operation}:progress`,
-          requestId,
-          payload: { requestId, fileCount, totalFiles, percent, currentFile },
-        }),
-      );
-    }
+    const percent = totalFiles && totalFiles > 0
+      ? Math.min(100, Math.round((fileCount / totalFiles) * 100))
+      : undefined;
+    emit({
+      type: 'progress',
+      operation,
+      requestId,
+      fileCount,
+      ...(totalFiles !== undefined ? { totalFiles } : {}),
+      ...(percent !== undefined ? { percent } : {}),
+      ...(currentFile ? { currentFile } : {}),
+    });
   }
   private isErrorInStdErr(stderr: string): boolean {
     if (!stderr || stderr.trim().length === 0) {
@@ -847,14 +802,17 @@ export class ArchiveService {
     return errorPatterns.some((pattern) => lowerStderr.includes(pattern));
   }
 
-  private async removeRemoteArchiveWorkspace(sessionId: string, workspacePath: string): Promise<boolean> {
-    const state = this.workspaceSessionRegistry.get(sessionId);
-    if (!state?.executionSession.isReady) return false;
+  private async removeRemoteArchiveWorkspace(
+    session: ExecutionSession,
+    ownerKey: string,
+    workspacePath: string,
+  ): Promise<boolean> {
+    if (!session.isReady) return false;
     try {
-      await new FileRemovalService(state.executionSession).removePath(workspacePath);
+      await new FileRemovalService(session).removePath(workspacePath);
       return true;
     } catch (error) {
-      console.warn(`[Archive ${sessionId}] Failed to remove workspace ${workspacePath}:`, error);
+      console.warn(`[Archive ${ownerKey}] Failed to remove workspace ${workspacePath}:`, error);
       return false;
     }
   }

@@ -1250,15 +1250,14 @@ F3 status (2026-09-03): locally complete and ready for remote validation.
 - Added `test/e2e/tests/ssh/filesystem-foundation.spec.ts`, exercising download ticket, HTTP Range, inline streaming and directory ZIP over the real fake-SSH fixture without Chromium.
 - Backend build passes. Focused filesystem + SSH protocol regression: **7 passed, 2 skipped, 0 failed**; skipped cases require host `zip` and remain covered by remote Actions.
 - F2 remote Actions run `33713989053` for `4da44507` is **SUCCESS**.
+- F3 remote Actions run `33717671851` for `2af79999` is **SUCCESS**.
 
 ### F4 — Operation services: archive, upload and transfers
 
-Current issue:
+Current remaining issue:
 
-- `archive/archive.service.ts` still sends WebSocket messages directly;
-- `transfers/sftp-transfer.service.ts` still sends WebSocket messages directly and resolves Workspace identity internally;
-- `uploads/sftp-upload.service.ts` mixes upload engine state with WebSocket notification framing;
-- `transfers/transfers.service.ts` (~1.2k lines) mixes task registry/orchestration, credential/connect logic, rsync/scp strategy selection, progress and cancellation.
+- Workspace archive/SFTP copy/upload operations have been separated from WebSocket transport in F4-A;
+- `transfers/transfers.service.ts` (~1.05k lines) still mixes server-to-server task registry/orchestration, credential/connect logic, rsync/scp strategy selection, progress and cancellation.
 
 Target split:
 
@@ -1287,6 +1286,19 @@ Rules:
 - Workspace adapters translate operation events into the existing protocol;
 - future Agent tools consume the core operations directly without faking a Workspace session;
 - transfer connection establishment uses F2's SSH connection factory.
+
+F4-A status (2026-09-03): operation/transport separation complete for Workspace file operations; server-to-server transfer refactor remains.
+
+- Replaced `archive/archive.service.ts` with transport-neutral `ArchiveOperationService` + typed archive events and `WorkspaceArchiveAdapter`.
+- Archive request/error/progress domain types moved out of `websocket/types.ts` into `archive/archive.types.ts`.
+- Replaced Workspace-bound `SftpTransferService` with `SftpTransferOperationService` + `WorkspaceSftpTransferAdapter`; same-session copy, cross-session copy, move, progress and cancellation now operate on explicit `ExecutionSession` contexts.
+- Cross-session same-user authorization is now a Workspace-adapter concern instead of core transfer logic.
+- Replaced Workspace-bound `SftpUploadService` with `SftpUploadOperationService` + `WorkspaceSftpUploadAdapter`; upload state, directory preparation, conflict handling, chunk ACKs, finalize and cancellation emit typed events.
+- Upload chunk/cancel ownership now verifies `ownerKey`, preventing a guessed upload ID from being used through another Workspace session.
+- Architecture guards show **zero WebSocket/Workspace symbols** in all three core operation services.
+- Added browser-free `upload-foundation.spec.ts`; real SSH `upload:start -> ready -> NXUP binary chunk -> ACK -> success -> readback` passes.
+- Focused cross-session transfer + upload foundation regression: **2 passed / 0 failed**. Broader archive protocol regression: **7 passed / 2 local zip skips**; archive UI-only test cannot launch locally because the Playwright Chromium binary is absent and remains covered by remote Actions.
+- E2E group manifest now contains **66 specs** and passes group consistency checks.
 
 ### F5 — WebSocket transport/router decomposition
 
