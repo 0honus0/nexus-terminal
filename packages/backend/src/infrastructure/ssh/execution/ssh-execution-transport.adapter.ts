@@ -14,6 +14,7 @@ import {
 } from '../../../platform/execution/remote-execution.port';
 import { SshCommandSessionAdapter } from './ssh-command-session.adapter';
 import { SshShellSessionAdapter } from './ssh-shell-session.adapter';
+import { SshSftpChannelPool } from '../filesystem/ssh-sftp-channel-pool';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -23,11 +24,13 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   private readonly commandSessions = new Set<SshCommandSessionAdapter>();
   private readonly shellSessions = new Set<SshShellSessionAdapter>();
   private open = true;
+  private readonly sftpPool: SshSftpChannelPool;
 
   constructor(
     public readonly connectionId: number,
     private readonly client: Client,
   ) {
+    this.sftpPool = new SshSftpChannelPool(client);
     client.on('error', (error: Error) => this.events.emit('error', error));
     client.on('close', () => {
       this.open = false;
@@ -95,8 +98,9 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
     });
   }
 
-  fileSystem(_role: RemoteFileSystemRole): Promise<RemoteFileSystem> {
-    return Promise.reject(new Error('SFTP filesystem migration is not complete yet.'));
+  async fileSystem(role: RemoteFileSystemRole): Promise<RemoteFileSystem> {
+    this.assertOpen();
+    return this.sftpPool.fileSystem(role);
   }
 
   onClose(listener: () => void): () => void {
@@ -112,6 +116,7 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
   async close(): Promise<void> {
     if (!this.open) return;
     this.open = false;
+    this.sftpPool.closeAll();
     for (const session of this.commandSessions) session.destroy();
     this.commandSessions.clear();
     for (const shell of this.shellSessions) shell.close();

@@ -1,8 +1,11 @@
-import type { Readable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 
 export interface RemoteFileMetadata {
   size: number;
+  uid: number;
+  gid: number;
   mode: number;
+  accessedAt: number;
   modifiedAt: number;
   isFile: boolean;
   isDirectory: boolean;
@@ -11,6 +14,7 @@ export interface RemoteFileMetadata {
 
 export interface RemoteDirectoryEntry {
   name: string;
+  longName?: string;
   metadata: RemoteFileMetadata;
 }
 
@@ -19,21 +23,36 @@ export interface RemoteReadRange {
   end?: number;
 }
 
+export interface RemoteWriteOptions {
+  mode?: number;
+  highWaterMark?: number;
+  flags?: 'w' | 'a';
+}
+
+/** Technology-neutral remote filesystem port. */
 export interface RemoteFileSystem {
   metadata(path: string, options?: { followSymbolicLinks?: boolean }): Promise<RemoteFileMetadata>;
+  exists(path: string): Promise<boolean>;
   resolvePath(path: string): Promise<string>;
   readDirectory(path: string): Promise<RemoteDirectoryEntry[]>;
   openRead(path: string, range?: RemoteReadRange): Promise<Readable>;
-  writeFile(path: string, content: Uint8Array): Promise<void>;
+  openWrite(path: string, options?: RemoteWriteOptions): Promise<Writable>;
   createDirectory(path: string): Promise<void>;
-  remove(path: string): Promise<void>;
+  ensureDirectory(path: string): Promise<void>;
+  removeFile(path: string, options?: { ignoreMissing?: boolean }): Promise<void>;
+  removeDirectory(path: string): Promise<void>;
   rename(sourcePath: string, destinationPath: string): Promise<void>;
+  /** Replace destination with source, using the strongest atomic rename supported by the transport. */
+  replaceFile(sourcePath: string, destinationPath: string): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
 }
 
 export type RemoteFileSystemRole = 'control' | 'transfer' | 'background';
 
-export interface RemoteFileSystemProvider {
-  get(sessionId: string, role: RemoteFileSystemRole): Promise<RemoteFileSystem>;
-  closeSession(sessionId: string): Promise<void>;
-}
+export const isRemoteFileMissingError = (error: unknown): boolean => {
+  if (!error) return false;
+  const value = error as { code?: unknown; message?: unknown };
+  if (value.code === 2 || value.code === 'ENOENT') return true;
+  const message = typeof value.message === 'string' ? value.message.toLowerCase() : '';
+  return message.includes('no such file') || message.includes('not found');
+};

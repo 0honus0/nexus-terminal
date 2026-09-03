@@ -1,6 +1,16 @@
 export type ArchiveFormat = 'zip' | 'targz' | 'tarbz2';
+export type ArchiveOperationKind = 'compress' | 'decompress';
 
-export interface ArchiveRequest {
+export type ArchiveErrorCode =
+  | 'PASSWORD_REQUIRED'
+  | 'INVALID_PASSWORD'
+  | 'PASSWORD_TOO_LONG'
+  | 'INVALID_PASSWORD_FORMAT'
+  | 'COMMAND_NOT_FOUND'
+  | 'UNSUPPORTED_FORMAT';
+
+export interface CompressArchiveRequest {
+  ownerId: string;
   sessionId: string;
   requestId: string;
   sourcePaths: readonly string[];
@@ -9,12 +19,23 @@ export interface ArchiveRequest {
   password?: string;
 }
 
+export interface DecompressArchiveRequest {
+  ownerId: string;
+  sessionId: string;
+  requestId: string;
+  archivePath: string;
+  password?: string;
+}
+
 export type ArchiveEvent =
-  | { type: 'progress'; requestId: string; progress: number }
-  | { type: 'completed'; requestId: string; archivePath: string }
-  | { type: 'failed'; requestId: string; message: string };
+  | { type: 'progress'; operation: ArchiveOperationKind; requestId: string; fileCount: number; totalFiles?: number; percent?: number; currentFile?: string }
+  | { type: 'completed'; operation: ArchiveOperationKind; requestId: string; path: string; warning?: string }
+  | { type: 'failed'; operation: ArchiveOperationKind; requestId: string; message: string; details?: string; code?: ArchiveErrorCode; commandNotFound?: string }
+  | { type: 'cancelled'; operation: ArchiveOperationKind; requestId: string };
 
 export interface ArchiveOperation {
-  run(request: ArchiveRequest, emit: (event: ArchiveEvent) => void): Promise<void>;
-  cancel(requestId: string): Promise<boolean>;
+  compress(request: CompressArchiveRequest, emit: (event: ArchiveEvent) => void): Promise<void>;
+  decompress(request: DecompressArchiveRequest, emit: (event: ArchiveEvent) => void): Promise<void>;
+  cancel(ownerId: string, requestId: string): Promise<boolean>;
+  cancelOwner(ownerId: string): Promise<void>;
 }
