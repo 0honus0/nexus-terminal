@@ -3,7 +3,7 @@
   "group": 4,
   "workers": 8,
   "specs": [
-    "tests/ssh/execution-foundation.spec.ts",
+    "tests/auth/setup-login.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/backup-ui.spec.ts",

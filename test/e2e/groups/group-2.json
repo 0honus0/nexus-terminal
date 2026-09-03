@@ -7,7 +7,6 @@
     "tests/ssh/docker-manager-ui.spec.ts",
     "tests/ssh/protocol.spec.ts",
     "tests/ssh/status-docker-protocol.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
     "tests/ui/notification-delivery.spec.ts",
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
