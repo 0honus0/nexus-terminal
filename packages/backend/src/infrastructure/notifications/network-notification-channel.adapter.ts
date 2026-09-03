@@ -3,9 +3,6 @@ import nodemailer from 'nodemailer';
 import type { NotificationChannelPort } from '../../modules/notifications/notification-channel.port';
 import type {
   EmailConfig,
-  NotificationChannelConfig,
-  NotificationChannelType,
-  NotificationTestResult,
   PreparedNotification,
   TelegramConfig,
   WebhookConfig,
@@ -16,21 +13,6 @@ export class NetworkNotificationChannelAdapter implements NotificationChannelPor
     if (n.channelType === 'email') return this.sendEmail(n.config as EmailConfig, n.subject ?? n.payload.event, n.body);
     if (n.channelType === 'telegram') return this.sendTelegram(n.config as TelegramConfig, n.body);
     return this.sendWebhook(n.config as WebhookConfig, n.body);
-  }
-  async test(type: NotificationChannelType, config: NotificationChannelConfig): Promise<NotificationTestResult> {
-    try {
-      const payload: PreparedNotification = {
-        channelType: type,
-        config,
-        subject: 'Nexus Terminal Test Notification',
-        body: 'This is a test notification from Nexus Terminal.',
-        payload: { event: 'SETTINGS_UPDATED', timestamp: Date.now(), details: { test: true } },
-      };
-      await this.send(payload);
-      return { success: true, message: '测试通知发送成功！' };
-    } catch (error) {
-      return { success: false, message: `测试通知发送失败: ${error instanceof Error ? error.message : String(error)}` };
-    }
   }
   private async sendWebhook(c: WebhookConfig, body: string) {
     if (!c.url) throw new Error('Webhook URL is required.');

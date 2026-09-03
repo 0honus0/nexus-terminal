@@ -15,6 +15,7 @@ export interface SshResourceStatus {
   checkedAt: number;
 }
 const keyFor = (host: string, port: number) => `${host.trim().toLowerCase()}:${port}`;
+const RESOURCE_CONNECT_TIMEOUT_MS = 5_000;
 export class SshResourceStatusService {
   private cache: { fingerprint: string; expiresAt: number; value: SshResourceStatus[] } | null = null;
   private inFlight: { fingerprint: string; promise: Promise<SshResourceStatus[]> } | null = null;
@@ -78,7 +79,12 @@ export class SshResourceStatusService {
       let sessionId: string | undefined;
       try {
         const connection = await this.resolver.resolveStored(candidate.id);
-        const session = await this.sessions.connect({ ownerType: 'system', ownerId: `resource:${key}`, connection });
+        const session = await this.sessions.connect({
+          ownerType: 'system',
+          ownerId: `resource:${key}`,
+          connection,
+          connect: { timeoutMs: RESOURCE_CONNECT_TIMEOUT_MS },
+        });
         sessionId = session.id;
         const status = await this.collector.collect(session, key);
         return {

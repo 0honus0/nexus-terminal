@@ -1,5 +1,4 @@
 import type { AuditLogService } from '../audit/audit.service';
-import type { NotificationChannelPort } from './notification-channel.port';
 import type { NotificationService } from './notification.service';
 import type { NotificationSettingsRepository } from './notification.repository.port';
 import type {
@@ -12,7 +11,6 @@ import type {
 export class NotificationSettingsService {
   constructor(
     private readonly repository: NotificationSettingsRepository,
-    private readonly channels: NotificationChannelPort,
     private readonly audit: AuditLogService,
     private readonly notifications: NotificationService,
   ) {}
@@ -52,7 +50,7 @@ export class NotificationSettingsService {
     return true;
   }
   test(channelType: NotificationChannelType, config: NotificationChannelConfig) {
-    return this.channels.test(channelType, config);
+    return this.notifications.testChannel(channelType, config);
   }
   private validate(input: UpdateNotificationSetting, partial = false) {
     if (!partial && (!input.name || !input.channelType || !input.config)) throw new Error('通知设置缺少必要字段。');

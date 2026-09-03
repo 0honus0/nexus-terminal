@@ -132,11 +132,19 @@ export class WorkspaceShellIntegrationService {
   }
 
   async requestDirectoryChange(sessionId: string, requestId: string, requestedPath: string): Promise<void> {
-    if (!requestId || !requestedPath.startsWith('/') || CONTROL_CHARS.test(requestedPath)) {
+    if (!requestId || !requestedPath.startsWith('/')) {
       this.events.publish(sessionId, {
         type: 'directory-change-error',
         requestId,
         message: '无效的终端目录切换请求。',
+      });
+      return;
+    }
+    if (CONTROL_CHARS.test(requestedPath)) {
+      this.events.publish(sessionId, {
+        type: 'directory-change-error',
+        requestId,
+        message: '终端目录路径不能包含控制字符。',
       });
       return;
     }

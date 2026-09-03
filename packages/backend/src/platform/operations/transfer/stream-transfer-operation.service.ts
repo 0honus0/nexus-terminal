@@ -1,6 +1,4 @@
 import path from 'node:path';
-import { Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
 import type { RemoteFileSystem, RemoteFileMetadata } from '../../filesystem/remote-filesystem';
 import type { RemoteFileEntry } from '../../filesystem/file-entry';
@@ -27,6 +25,8 @@ interface TransferTracker {
 }
 
 const PROGRESS_INTERVAL_MS = 150;
+const POSITIONED_COPY_CHUNK_BYTES = 32 * 1024;
+const POSITIONED_COPY_CONCURRENCY = 32;
 
 export class StreamTransferOperationService implements TransferOperation {
   private readonly active = new Map<string, ActiveTransfer>();
@@ -233,20 +233,54 @@ export class StreamTransferOperationService implements TransferOperation {
     await destinationFs.ensureDirectory(path.posix.dirname(destinationPath));
     const temporaryPath = `${destinationPath}.nexus-transfer-${tracker.requestId}.part`;
     await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
-    const source = await sourceFs.openRead(sourcePath);
-    const destination = await destinationFs.openWrite(temporaryPath, {
-      mode: metadata.mode,
-      highWaterMark: 1024 * 1024,
-    });
-    const progress = new Transform({
-      transform: (chunk, _encoding, callback) => {
-        tracker.transferredBytes += Buffer.byteLength(chunk);
-        this.emitProgress(tracker);
-        callback(null, chunk);
-      },
-    });
+
+    const reader = await sourceFs.openPositionedReader(sourcePath);
+    let writer;
     try {
-      await pipeline(source, progress, destination, { signal });
+      writer = await destinationFs.openPositionedWriter(temporaryPath, { mode: metadata.mode });
+    } catch (error) {
+      await reader.close().catch(() => undefined);
+      throw error;
+    }
+    try {
+      const fileSize = Math.max(0, metadata.size);
+      let nextPosition = 0;
+      const workerCount = Math.min(
+        POSITIONED_COPY_CONCURRENCY,
+        Math.max(1, Math.ceil(fileSize / POSITIONED_COPY_CHUNK_BYTES)),
+      );
+      const worker = async () => {
+        while (true) {
+          this.throwIfAborted(signal);
+          const position = nextPosition;
+          if (position >= fileSize) return;
+          const blockLength = Math.min(POSITIONED_COPY_CHUNK_BYTES, fileSize - position);
+          nextPosition += blockLength;
+
+          let blockOffset = 0;
+          while (blockOffset < blockLength) {
+            this.throwIfAborted(signal);
+            const chunk = await reader.read(position + blockOffset, blockLength - blockOffset);
+            if (chunk.byteLength === 0) throw new Error(`Unexpected end of file while reading ${sourcePath}.`);
+            this.throwIfAborted(signal);
+            await writer.write(position + blockOffset, chunk);
+            blockOffset += chunk.byteLength;
+            tracker.transferredBytes += chunk.byteLength;
+            this.emitProgress(tracker);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+      this.throwIfAborted(signal);
+    } catch (error) {
+      await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+      throw error;
+    } finally {
+      await Promise.allSettled([reader.close(), writer.close()]);
+    }
+
+    try {
+      this.throwIfAborted(signal);
       await destinationFs.replaceFile(temporaryPath, destinationPath);
     } catch (error) {
       await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);

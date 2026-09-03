@@ -11,6 +11,7 @@ import type { SettingsService } from '../../../modules/settings/settings.service
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
+import { fromLegacySettingValue } from '../legacy-api/settings-http.mapper';
 
 export interface SettingsRouterDependencies {
   backup: BackupService;
@@ -107,11 +108,12 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
       const filtered: Record<string, string> = {};
       for (const [key, value] of Object.entries(request.body as Record<string, unknown>)) {
         if (!ALLOWED_SETTING_KEYS.has(key)) continue;
-        if (typeof value !== 'string') {
-          response.status(400).json({ message: `设置 ${key} 必须是字符串` });
+        const normalized = fromLegacySettingValue(value);
+        if (normalized === null) {
+          response.status(400).json({ message: `设置 ${key} 必须是字符串、数字或布尔值` });
           return;
         }
-        filtered[key] = value;
+        filtered[key] = normalized;
       }
       for (const [key, bounds] of Object.entries(BOUNDED_INTEGER_SETTINGS)) {
         if (!(key in filtered)) continue;

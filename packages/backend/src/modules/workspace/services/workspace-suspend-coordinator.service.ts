@@ -15,6 +15,7 @@ import type { WorkspaceTerminalService } from './workspace-terminal.service';
 interface SuspendMark {
   userId: number;
   logIdentifier: string;
+  ready: Promise<void>;
 }
 interface PendingResume {
   userId: number;
@@ -52,13 +53,28 @@ export class WorkspaceSuspendCoordinatorService {
   async markForSuspend(workspaceId: string, userId: number, initialBuffer?: string): Promise<void> {
     const session = this.workspaces.requireSession(workspaceId);
     if (session.userId !== userId) throw new Error('无权挂起此会话。');
-    if (this.marks.has(workspaceId)) return;
+    const existing = this.marks.get(workspaceId);
+    if (existing) {
+      if (existing.userId !== userId) throw new Error('无权挂起此会话。');
+      await existing.ready;
+      return;
+    }
+
     const logIdentifier = workspaceId;
-    try {
+    const ready = (async () => {
       if (initialBuffer) await this.logs.append(logIdentifier, initialBuffer);
       await this.logs.flush(logIdentifier);
-      this.marks.set(workspaceId, { userId, logIdentifier });
+    })();
+    const mark: SuspendMark = { userId, logIdentifier, ready };
+
+    // Publish the pending mark before awaiting log I/O. Browser reload/close can race the
+    // MARK request; disconnect must wait for this same transaction instead of treating the
+    // workspace as unmarked and closing its transport.
+    this.marks.set(workspaceId, mark);
+    try {
+      await ready;
     } catch (error) {
+      if (this.marks.get(workspaceId) === mark) this.marks.delete(workspaceId);
       await this.logs.delete(logIdentifier).catch(() => undefined);
       throw error;
     }
@@ -67,6 +83,8 @@ export class WorkspaceSuspendCoordinatorService {
     const mark = this.marks.get(workspaceId);
     if (!mark) return;
     if (mark.userId !== userId) throw new Error('无权取消此会话的挂起标记。');
+    await mark.ready.catch(() => undefined);
+    if (this.marks.get(workspaceId) !== mark) return;
     this.marks.delete(workspaceId);
     await this.logs.delete(mark.logIdentifier).catch(() => undefined);
   }
@@ -77,31 +95,46 @@ export class WorkspaceSuspendCoordinatorService {
   async handleClientDisconnect(workspaceId: string): Promise<{ suspended: boolean; suspendSessionId?: string }> {
     const session = this.workspaces.getSession(workspaceId);
     if (!session) return { suspended: false };
-    const mark = this.marks.get(workspaceId);
-    await this.status.clearSession(workspaceId);
-    await this.operations.cleanup(workspaceId);
+
+    let mark = this.marks.get(workspaceId);
+    if (mark) {
+      try {
+        await mark.ready;
+      } catch {
+        mark = undefined;
+      }
+      if (mark && this.marks.get(workspaceId) !== mark) mark = undefined;
+    }
+
+    this.status.clear(workspaceId);
     this.terminal.detach(workspaceId);
     if (!mark) {
+      await this.operations.cleanup(workspaceId);
       this.shellIntegration.clear(workspaceId);
       this.events.clear(workspaceId);
       await this.workspaces.closeSession(workspaceId);
       return { suspended: false };
     }
+
     this.marks.delete(workspaceId);
     const snapshot = this.shellIntegration.snapshot(workspaceId);
     this.shellIntegration.clear(workspaceId);
     this.events.clear(workspaceId);
+
     let detached;
     try {
       detached = this.workspaces.detach(workspaceId);
     } catch (error) {
+      await this.operations.cleanup(workspaceId).catch(() => undefined);
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       throw error;
     }
     if (!detached) {
+      await this.operations.cleanup(workspaceId).catch(() => undefined);
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       return { suspended: false };
     }
+
     const suspendSessionId = await this.suspended.takeOver({
       userId: session.userId,
       originalSessionId: session.id,
@@ -113,10 +146,15 @@ export class WorkspaceSuspendCoordinatorService {
       ...this.toSuspendSnapshot(snapshot),
     });
     if (!suspendSessionId) {
+      await this.operations.cleanup(workspaceId).catch(() => undefined);
       await detached.transport.close().catch(() => undefined);
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       return { suspended: false };
     }
+
+    // The transport is now owned by SshSuspendService and immediately visible as `hanging`.
+    // Cleanup of ancillary file operations must not delay the user-visible suspend handoff.
+    await this.operations.cleanup(workspaceId).catch(() => undefined);
     return { suspended: true, suspendSessionId };
   }
 

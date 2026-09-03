@@ -5,6 +5,9 @@ import type {
   RemoteDirectoryEntry,
   RemoteFileMetadata,
   RemoteFileSystem,
+  RemotePositionedReader,
+  RemotePositionedWriteOptions,
+  RemotePositionedWriter,
   RemoteReadRange,
   RemoteWriteOptions,
 } from '../../../platform/filesystem/remote-filesystem';
@@ -70,6 +73,59 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       ...(options.mode !== undefined ? { mode: options.mode } : {}),
       ...(options.highWaterMark !== undefined ? { highWaterMark: options.highWaterMark } : {}),
     });
+  }
+
+  async openPositionedReader(remotePath: string): Promise<RemotePositionedReader> {
+    const channel = await this.channelProvider();
+    const handle = await call<Buffer>((callback) => channel.open(remotePath, 'r', callback));
+    let closed = false;
+    return {
+      read: async (position, length) => {
+        if (closed) throw new Error(`Remote reader is closed: ${remotePath}`);
+        if (!Number.isSafeInteger(position) || position < 0 || !Number.isSafeInteger(length) || length < 0) {
+          throw new Error('Remote positioned read requires non-negative integer position and length.');
+        }
+        if (length === 0) return new Uint8Array();
+        const buffer = Buffer.allocUnsafe(length);
+        const bytesRead = await new Promise<number>((resolve, reject) => {
+          channel.read(handle, buffer, 0, length, position, (error, count) => error ? reject(error) : resolve(count));
+        });
+        return buffer.subarray(0, bytesRead);
+      },
+      close: async () => {
+        if (closed) return;
+        closed = true;
+        await callVoid((callback) => channel.close(handle, callback));
+      },
+    };
+  }
+
+  async openPositionedWriter(
+    remotePath: string,
+    options: RemotePositionedWriteOptions = {},
+  ): Promise<RemotePositionedWriter> {
+    const channel = await this.channelProvider();
+    const handle = await call<Buffer>((callback) =>
+      options.mode === undefined
+        ? channel.open(remotePath, 'w', callback)
+        : channel.open(remotePath, 'w', options.mode, callback));
+    let closed = false;
+    return {
+      write: async (position, data) => {
+        if (closed) throw new Error(`Remote writer is closed: ${remotePath}`);
+        if (!Number.isSafeInteger(position) || position < 0) {
+          throw new Error('Remote positioned write requires a non-negative integer position.');
+        }
+        const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+        if (buffer.length === 0) return;
+        await callVoid((callback) => channel.write(handle, buffer, 0, buffer.length, position, callback));
+      },
+      close: async () => {
+        if (closed) return;
+        closed = true;
+        await callVoid((callback) => channel.close(handle, callback));
+      },
+    };
   }
 
   async createDirectory(remotePath: string): Promise<void> {

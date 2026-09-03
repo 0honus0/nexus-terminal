@@ -66,6 +66,24 @@ const optionalInteger = (value: number | string | null | undefined): number | nu
   return Number.isInteger(parsed) ? parsed : Number.NaN;
 };
 
+const normalizeLegacyCreateRoute = (
+  dto: LegacyConnectionWriteDto,
+  proxyId: number | null | undefined,
+): LegacyConnectionWriteDto['proxy_type'] => {
+  if (dto.proxy_type === 'proxy' && proxyId == null) return null;
+  if (dto.proxy_type === 'jump' && !dto.jump_chain?.length) return null;
+  return dto.proxy_type;
+};
+
+const normalizeLegacyUpdateRoute = (
+  dto: LegacyConnectionWriteDto,
+  proxyId: number | null | undefined,
+): LegacyConnectionWriteDto['proxy_type'] => {
+  if (dto.proxy_type === 'proxy' && dto.proxy_id !== undefined && proxyId == null) return null;
+  if (dto.proxy_type === 'jump' && dto.jump_chain !== undefined && !dto.jump_chain?.length) return null;
+  return dto.proxy_type;
+};
+
 const mapRdpOptionsFromLegacy = (
   value: LegacyRdpOptionsDto | null | undefined,
 ): RdpConnectionOptions | null | undefined => {
@@ -87,24 +105,27 @@ const mapRdpOptionsToLegacy = (value: RdpConnectionOptions | null): LegacyRdpOpt
       }
     : null;
 
-export const fromLegacyConnectionCreateDto = (dto: LegacyConnectionWriteDto): CreateConnectionInput => ({
-  name: dto.name,
-  type: dto.type as CreateConnectionInput['type'],
-  host: dto.host as string,
-  port: dto.port === undefined ? undefined : Number(dto.port),
-  username: dto.username as string,
-  authMethod: dto.auth_method,
-  password: dto.password,
-  privateKey: dto.private_key,
-  passphrase: dto.passphrase,
-  sshKeyId: optionalInteger(dto.ssh_key_id),
-  proxyId: optionalInteger(dto.proxy_id),
-  route: dto.proxy_type,
-  tagIds: dto.tag_ids,
-  notes: dto.notes,
-  jumpChain: dto.jump_chain,
-  rdpOptions: mapRdpOptionsFromLegacy(dto.rdp_options),
-});
+export const fromLegacyConnectionCreateDto = (dto: LegacyConnectionWriteDto): CreateConnectionInput => {
+  const proxyId = optionalInteger(dto.proxy_id);
+  return {
+    name: dto.name,
+    type: dto.type as CreateConnectionInput['type'],
+    host: dto.host as string,
+    port: dto.port === undefined ? undefined : Number(dto.port),
+    username: dto.username as string,
+    authMethod: dto.auth_method,
+    password: dto.password,
+    privateKey: dto.private_key,
+    passphrase: dto.passphrase,
+    sshKeyId: optionalInteger(dto.ssh_key_id),
+    proxyId,
+    route: normalizeLegacyCreateRoute(dto, proxyId),
+    tagIds: dto.tag_ids,
+    notes: dto.notes,
+    jumpChain: dto.jump_chain,
+    rdpOptions: mapRdpOptionsFromLegacy(dto.rdp_options),
+  };
+};
 
 export const fromLegacyConnectionUpdateDto = (dto: LegacyConnectionWriteDto): UpdateConnectionInput => {
   const result: UpdateConnectionInput = {};
@@ -119,7 +140,10 @@ export const fromLegacyConnectionUpdateDto = (dto: LegacyConnectionWriteDto): Up
   if (dto.passphrase !== undefined) result.passphrase = dto.passphrase;
   if (dto.ssh_key_id !== undefined) result.sshKeyId = optionalInteger(dto.ssh_key_id) ?? null;
   if (dto.proxy_id !== undefined) result.proxyId = optionalInteger(dto.proxy_id) ?? null;
-  if (dto.proxy_type !== undefined) result.route = dto.proxy_type;
+  if (dto.proxy_type !== undefined) {
+    const proxyId = optionalInteger(dto.proxy_id);
+    result.route = normalizeLegacyUpdateRoute(dto, proxyId);
+  }
   if (dto.tag_ids !== undefined) result.tagIds = dto.tag_ids;
   if (dto.notes !== undefined) result.notes = dto.notes;
   if (dto.jump_chain !== undefined) result.jumpChain = dto.jump_chain;

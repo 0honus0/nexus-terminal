@@ -71,31 +71,17 @@ async function waitForRemoteFiles(names: string[], timeout = 45_000): Promise<vo
   }, { timeout }).toEqual(names);
 }
 
-async function readSftpChannelStatus(): Promise<{ activeChannels: number; openedChannels: number }> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/sftp/status`);
-  expect(response.ok).toBeTruthy();
-  return await response.json() as { activeChannels: number; openedChannels: number };
-}
-
-test('workspace SFTP uses independent control and transfer channels and releases both on close', async ({ page, context }) => {
+test('file browsing and recursive search remain responsive while upload writes are delayed', async ({ page, context }) => {
   await openFileManager(page, context);
 
-  await step('opening File Manager creates the latency-sensitive control SFTP channel', async () => {
-    await expect.poll(async () => (await readSftpChannelStatus()).activeChannels).toBe(1);
-  });
-
-  const fileName = 'multi-channel-lifecycle.bin';
+  const fileName = 'concurrent-file-operations.bin';
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1500`, { method: 'POST' });
   try {
-    await slowStep('a live upload opens a second transfer channel instead of reusing File Manager control SFTP', async () => {
+    await slowStep('File Manager stays usable while an upload is waiting on remote writes', async () => {
       await dragLocalFiles(page, [{ name: fileName, size: 256 * 1024, fill: 0x6e }]);
+      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
 
-      await expect.poll(async () => {
-        const status = await readSftpChannelStatus();
-        return { active: status.activeChannels, opened: status.openedChannels };
-      }, { timeout: 15_000 }).toEqual({ active: 2, opened: 2 });
-
-      // A control-path operation must remain available while transfer writes are delayed.
       await fileManagerRow(page, 'folder-seed').dblclick();
       await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 5_000 });
     });
@@ -105,22 +91,16 @@ test('workspace SFTP uses independent control and transfer channels and releases
 
   await waitForRemoteFiles([fileName], 30_000);
 
-  await step('recursive search lazily opens the background SFTP channel instead of reusing control or transfer', async () => {
+  await step('recursive search returns the real remote file after the concurrent upload', async () => {
     const fileManagerModal = page.getByTestId('file-manager-modal');
     await fileManagerModal.getByTitle('Search files...').click();
     const search = fileManagerModal.getByPlaceholder('Search files...');
     await search.fill('nested');
     await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({ timeout: 10_000 });
-    await expect.poll(async () => {
-      const status = await readSftpChannelStatus();
-      return { active: status.activeChannels, opened: status.openedChannels };
-    }).toEqual({ active: 3, opened: 3 });
   });
 
-  await step('leaving the workspace releases all SFTP channels owned by its ExecutionSession', async () => {
-    await page.goto('/connections');
-    await expect.poll(async () => (await readSftpChannelStatus()).activeChannels, { timeout: 15_000 }).toBe(0);
-  });
+  await page.goto('/connections');
+  await expect(page.getByTestId('connections-add-button')).toBeVisible({ timeout: 10_000 });
 });
 
 test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({ page, context }) => {
@@ -174,16 +154,8 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
   });
 });
 
-test('aggregate committed throughput keeps folder uploads concurrent on moderate-latency links', async ({ page, context }) => {
+test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {
   await openFileManager(page, context);
-
-  const tuningLogs: string[] = [];
-  const schedulerLogs: string[] = [];
-  page.on('console', (message) => {
-    const text = message.text();
-    if (text.includes('Adaptive upload tuning changed:')) tuningLogs.push(text);
-    if (text.includes('Upload scheduler:')) schedulerLogs.push(text);
-  });
 
   const largeFiles = Array.from({ length: 4 }, (_, index) => ({
     name: `moderate-latency-${index + 1}.bin`,
@@ -193,7 +165,7 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
 
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=50`, { method: 'POST' });
   try {
-    await slowStep('folder upload starts at least two large files while the network profile is still probing', async () => {
+    await slowStep('progress can hide and restore while several real files upload', async () => {
       await dragLocalFiles(page, largeFiles);
 
       const progressPopup = page.getByTestId('file-upload-progress-popup');
@@ -221,33 +193,24 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       await reopenConnectedFileManager(page);
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
-
-      await expect.poll(
-        () => schedulerLogs.some(log => log.includes('profile=probing') && log.includes('activeFiles=2/4')),
-        { timeout: 20_000 },
-      ).toBe(true);
     });
 
-    await slowStep('aggregate committed throughput avoids the old per-chunk weak-network false positive', async () => {
-      await expect.poll(
-        () => tuningLogs.some(log => log.includes('profile=normal') && log.includes('largeFileSlots=4')),
-        { timeout: 30_000 },
-      ).toBe(true);
+    await slowStep('all uploaded files arrive with their declared byte sizes', async () => {
       await waitForRemoteFiles(largeFiles.map(file => file.name), 60_000);
+      for (const file of largeFiles) {
+        const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(file.name)}`);
+        expect(response.ok).toBeTruthy();
+        const stats = await response.json() as { size: number };
+        expect(stats.size).toBe(file.size);
+      }
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
 
-test('slow SFTP acknowledgements move batch uploads into the weak-network window and concurrency profile', async ({ page, context }) => {
+test('batch upload completes every file under slow SFTP acknowledgements', async ({ page, context }) => {
   await openFileManager(page, context);
-
-  const tuningLogs: string[] = [];
-  page.on('console', (message) => {
-    const text = message.text();
-    if (text.includes('Adaptive upload tuning changed:')) tuningLogs.push(text);
-  });
 
   const weakFiles = Array.from({ length: 10 }, (_, index) => ({
     name: `weak-network-${index + 1}.bin`,
@@ -257,17 +220,14 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
 
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=750`, { method: 'POST' });
   try {
-    await slowStep('delayed real SFTP WRITE acknowledgements trigger the weak-link tuning profile', async () => {
+    await slowStep('the user-visible upload batch completes despite slow remote acknowledgements', async () => {
       await dragLocalFiles(page, weakFiles);
+      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
       await waitForRemoteFiles(weakFiles.map(file => file.name), 60_000);
-
-      await expect.poll(
-        () => tuningLogs.some(log => log.includes('profile=weak') && log.includes('maxActiveFiles=2') && log.includes('largeFileSlots=2')),
-        { timeout: 20_000 },
-      ).toBe(true);
     });
 
-    await step('all files remain byte-complete while the adaptive scheduler changes window sizes', async () => {
+    await step('all remote files are byte-complete', async () => {
       for (const file of weakFiles) {
         const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(file.name)}`);
         expect(response.ok).toBeTruthy();

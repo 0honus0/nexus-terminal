@@ -220,7 +220,6 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   );
   const notificationSettings = new NotificationSettingsService(
     notificationRepository,
-    notificationChannels,
     audit,
     notifications,
   );
