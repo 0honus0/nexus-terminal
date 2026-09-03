@@ -1,8 +1,10 @@
 import { loadRuntimeConfig } from '../config/runtime-config';
 import { createBackendApplication } from './application';
+import { initializeEnvironment } from './environment';
 
 export const main = async (): Promise<void> => {
-  const config = loadRuntimeConfig();
+  const environment = await initializeEnvironment();
+  const config = loadRuntimeConfig(environment.dataDirectory);
   const application = createBackendApplication(config);
 
   const shutdown = async (): Promise<void> => {

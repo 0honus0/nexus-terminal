@@ -11,7 +11,7 @@ export interface BackendApplication {
 }
 
 export const createBackendApplication = (config: RuntimeConfig): BackendApplication => {
-  const services = createCompositionRoot();
+  const services = createCompositionRoot(config);
   const httpApplication = createHttpApplication({
     systemHealthService: services.modules.systemHealth,
   });
@@ -20,23 +20,34 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
   return {
     server,
     services,
-    start: () => new Promise<void>((resolve, reject) => {
-      const onError = (error: Error) => reject(error);
-      server.once('error', onError);
-      server.listen(config.port, config.host, () => {
-        server.off('error', onError);
-        resolve();
-      });
-    }),
+    start: async () => {
+      await services.initialize();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const onError = (error: Error) => reject(error);
+          server.once('error', onError);
+          server.listen(config.port, config.host, () => {
+            server.off('error', onError);
+            resolve();
+          });
+        });
+      } catch (error) {
+        await services.dispose();
+        throw error;
+      }
+    },
     stop: async () => {
-      await new Promise<void>((resolve, reject) => {
-        if (!server.listening) {
-          resolve();
-          return;
-        }
-        server.close((error) => error ? reject(error) : resolve());
-      });
-      await services.dispose();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          if (!server.listening) {
+            resolve();
+            return;
+          }
+          server.close((error) => error ? reject(error) : resolve());
+        });
+      } finally {
+        await services.dispose();
+      }
     },
   };
 };
