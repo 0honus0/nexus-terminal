@@ -516,19 +516,19 @@ jobs:
           node test/e2e/support/groups.mjs generate
           node test/e2e/support/groups.mjs check
 
-      - name: Commit refreshed E2E timing data
+      - name: Commit refreshed E2E group balance
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- test/e2e/groups; then
-            echo "No E2E grouping changes to commit."
+          if git diff --quiet -- ':(glob)test/e2e/groups/group-*.json'; then
+            echo "E2E group assignment is unchanged; timing-only updates will not create a commit."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add test/e2e/groups
-          git commit -m "chore(e2e): refresh group timings [skip ci]"
+          git commit -m "chore(e2e): rebalance test groups [skip ci]"
           if ! git push origin "HEAD:$GITHUB_REF_NAME"; then
             echo "::warning::E2E timing refresh could not be pushed; a newer branch update may have won the race."
           fi
