@@ -101,10 +101,12 @@ export async function closeConnectedFileManager(page: Page): Promise<void> {
 }
 
 export async function reopenConnectedFileManager(page: Page): Promise<void> {
-  const openButton = page.getByTestId('open-file-manager-button');
-  await expect(openButton).toBeVisible({ timeout: 20_000 });
-  await openButton.click();
   const modal = page.getByTestId('file-manager-modal');
+  if (!(await modal.isVisible())) {
+    const openButton = page.getByTestId('open-file-manager-button');
+    await expect(openButton).toBeVisible({ timeout: 20_000 });
+    await openButton.click();
+  }
   await expect(modal).toBeVisible();
   await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
 }

@@ -38,7 +38,7 @@ export class RemoteTextFileService {
     const normalizedEncoding = this.resolveRequestedEncoding(encoding);
     const original = await filesystem.metadata(remotePath).catch(() => null);
     const stream = await filesystem.openWrite(remotePath, original ? { mode: original.mode } : undefined);
-    stream.end(iconv.encode(content, normalizedEncoding));
+    stream.end(this.encodeContent(content, normalizedEncoding));
     await finished(stream);
     const metadata = await filesystem.metadata(remotePath).catch(() => null);
     return metadata ? toRemoteFileEntry(remotePath, metadata) : null;
@@ -50,6 +50,10 @@ export class RemoteTextFileService {
   }
 
   private detectEncoding(data: Buffer): string {
+    if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) return 'utf-8';
+    if (data.length >= 2 && data[0] === 0xff && data[1] === 0xfe) return 'utf16le';
+    if (data.length >= 2 && data[0] === 0xfe && data[1] === 0xff) return 'utf16be';
+
     const detection = jschardet.detect(data);
     let detected = normalizeEncoding(detection.encoding || 'utf-8');
     if (detected === 'windows1252') detected = 'cp1252';
@@ -57,5 +61,12 @@ export class RemoteTextFileService {
     if (detected === 'utf8' || detected === 'ascii') return 'utf-8';
     if (['gbk', 'gb2312', 'gb18030', 'big5', 'euctw'].includes(detected)) return 'gb18030';
     return iconv.encodingExists(detected) ? detected : 'utf-8';
+  }
+  private encodeContent(content: string, encoding: string): Buffer {
+    const contentWithoutBom = content.startsWith('\uFEFF') ? content.slice(1) : content;
+    const encoded = iconv.encode(contentWithoutBom, encoding);
+    if (encoding === 'utf16le') return Buffer.concat([Buffer.from([0xff, 0xfe]), encoded]);
+    if (encoding === 'utf16be') return Buffer.concat([Buffer.from([0xfe, 0xff]), encoded]);
+    return encoded;
   }
 }

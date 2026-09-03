@@ -18,7 +18,6 @@ import {
   openFileManager,
   openProgressDisplay,
   refreshFileManager,
-  remoteFileExists,
   rightClickRow,
   row,
 } from './progress-display.helpers';
@@ -159,9 +158,10 @@ test('overlapping archive requests are rejected without retargeting the active t
       await expect(popup).toContainText('archive-source.zip');
       await expect(page.getByText('Another archive operation is already running.', { exact: true })).toBeVisible();
 
-      await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 15_000 }).toBe(true);
-      await page.waitForTimeout(2_600);
-      expect(await remoteFileExists('archive-second.zip')).toBe(false);
+      await expect(popup).toBeHidden({ timeout: 15_000 });
+      await refreshFileManager(page);
+      await expect(row(page, 'archive-source.zip')).toBeVisible();
+      await expect(row(page, 'archive-second.zip')).toHaveCount(0);
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
@@ -192,7 +192,9 @@ test('closing and reopening the file manager preserves an in-flight archive task
     await expect(fileManagerModal).toBeVisible();
     await expect(popup).toBeVisible();
     await expect(popup).toContainText('archive-source.zip');
-    await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 15_000 }).toBe(true);
+    await expect(popup).toBeHidden({ timeout: 15_000 });
+    await refreshFileManager(page);
+    await expect(row(page, 'archive-source.zip')).toBeVisible();
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
   }
@@ -248,7 +250,9 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await task.getByTestId('hidden-progress-cancel').click();
     await expect(task).toBeHidden({ timeout: 10_000 });
     await closeProgressDisplay(modal);
-    await expect.poll(() => remoteFileExists('archive-source.zip'), { timeout: 8_000 }).toBe(false);
+    await reopenConnectedFileManager(page);
+    await refreshFileManager(page);
+    await expect(row(page, 'archive-source.zip')).toHaveCount(0);
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
     await context.request.put('/api/v1/settings/sidebar', { data: originalSidebar });

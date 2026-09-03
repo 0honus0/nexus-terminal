@@ -1132,11 +1132,18 @@ const controlServer = http.createServer(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks).toString('utf8');
+      let parsed = null;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        // Invalid JSON is handled by the strict validation below.
+      }
       const valid =
         req.headers['x-e2e-webhook'] === 'delivery' &&
-        body.includes('\"source\":\"nexus-e2e\"') &&
-        body.includes('\"event\":') &&
-        body.includes('\"details\":');
+        parsed?.source === 'nexus-e2e' &&
+        parsed?.event === 'SETTINGS_UPDATED' &&
+        parsed?.details?.message === 'This is a test notification from Nexus Terminal (webhook).' &&
+        parsed?.details?.test === true;
       res.writeHead(valid ? 204 : 422, { 'content-type': 'application/json' });
       res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));
       return;

@@ -50,8 +50,10 @@ export async function goToParent(page: Page): Promise<void> {
 }
 
 export async function refreshFileManager(page: Page): Promise<void> {
-  await rightClickRow(page, 'seed.txt');
-  await clickMenuItem(page, 'Refresh');
+  const modal = page.getByTestId('file-manager-modal');
+  await expect(modal).toBeVisible();
+  await modal.locator('button:has(i.fa-sync-alt)').click();
+  await expect(activeFileManagerList(page)).toBeVisible();
 }
 
 export async function dragLocalFile(page: Page, name: string, size: number, fill: number): Promise<void> {

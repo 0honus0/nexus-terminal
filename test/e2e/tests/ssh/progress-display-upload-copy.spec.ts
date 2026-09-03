@@ -12,7 +12,6 @@ import {
   openFileManager,
   openProgressDisplay,
   refreshFileManager,
-  remoteFileExists,
   rightClickRow,
   row,
   menu,
@@ -71,9 +70,10 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await expect(page.getByTestId('file-upload-progress-popup')).toBeHidden();
       await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
 
-      await page.waitForTimeout(1_000);
-      await expect.poll(() => remoteFileExists(filename), { timeout: 10_000 }).toBe(false);
       await closeProgressDisplay(modal);
+      await reopenConnectedFileManager(page);
+      await refreshFileManager(page);
+      await expect(row(page, filename)).toHaveCount(0);
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
