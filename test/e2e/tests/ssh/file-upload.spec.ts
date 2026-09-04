@@ -495,55 +495,58 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
   }
 });
 
-test('cancelled upload stays cancelled after a temporary network disconnect', async ({ page, context }) => {
-  await openFileManager(page, context);
-  const filename = 'cancel-during-transport-drop.bin';
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Network.enable');
-  await cdp.send('Network.emulateNetworkConditions', {
-    offline: false,
-    latency: 0,
-    downloadThroughput: -1,
-    uploadThroughput: 128 * 1024,
-  });
+test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconnectable', async ({
+  page,
+  context,
+  request,
+}) => {
+  test.slow();
+  const stressCycles = 32;
+  let activePage = page;
+  await openFileManager(activePage, context);
 
   try {
-    await dragLocalFiles(page, [{ name: filename, size: 32 * 1024 * 1024, fill: 0x4d }]);
-    const popup = visibleProgressCenter(page);
-    const task = uploadProgressTask(page, filename);
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(task).toBeVisible();
-    await page.waitForTimeout(400);
-    await closeConnectedFileManager(page);
+    for (let cycle = 1; cycle <= stressCycles; cycle += 1) {
+      const filename = `cancel-reset-reconnect-${String(cycle).padStart(2, '0')}.bin`;
+      const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
+      expect(delayResponse.ok).toBeTruthy();
 
-    await task.getByTestId('transfer-progress-cancel').click();
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: true,
-      latency: 0,
-      downloadThroughput: 0,
-      uploadThroughput: 0,
-    });
-    await page.waitForTimeout(350);
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 0,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-    });
+      await dragLocalFiles(activePage, [{ name: filename, size: 2 * 1024 * 1024, fill: 0x40 + (cycle % 32) }]);
+      const task = uploadProgressTask(activePage, filename);
+      await expect(task, `cycle ${cycle}: upload task should start before teardown`).toBeVisible({ timeout: 10_000 });
+      await task.getByTestId('transfer-progress-cancel').click();
 
-    await page.waitForTimeout(3_500);
-    await expect(popup).toBeVisible();
-    await expect(task).toHaveAttribute('data-task-status', 'cancelled');
-    await reopenConnectedFileManager(page);
-    await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
-    await expect(fileManagerRow(page, filename)).toHaveCount(0);
+      // Deliberately overlap browser transport loss, upload cancellation, Backend runtime teardown,
+      // session clearing, and SSH-server reset. This is the churn that previously made a later
+      // /ws/workspace upgrade intermittently fall through the shared dev/E2E WebSocket proxy.
+      await context.setOffline(true);
+      const resetResponse = await request.post('/api/v1/__e2e/reset', {
+        data: { mode: 'seed' },
+      });
+      expect(
+        resetResponse.ok(),
+        `cycle ${cycle}: Backend E2E reset failed: ${await resetResponse.text()}`,
+      ).toBeTruthy();
+      await resetTestSshFilesystem();
+
+      // A new browser page models the next E2E case: old Workspace/upload sockets are gone, while
+      // the same long-lived Vite ingress must accept a brand-new Workspace control upgrade.
+      await activePage.close();
+      await context.setOffline(false);
+      await loginAsInitialAdmin(context.request);
+      await configureSshE2eSettings(context.request);
+      const connectionId = await ensureTestSshConnection(context.request);
+      activePage = await context.newPage();
+      await connectTestSshFromConnectionsPage(activePage, connectionId);
+      await openConnectedFileManager(activePage);
+      await expect(
+        activePage.getByTestId('command-input'),
+        `cycle ${cycle}: fresh Workspace control socket should reconnect after teardown`,
+      ).toBeEnabled();
+    }
   } finally {
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 0,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-    });
-    await cdp.detach();
+    await context.setOffline(false).catch(() => undefined);
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    if (!activePage.isClosed()) await activePage.close();
   }
 });
