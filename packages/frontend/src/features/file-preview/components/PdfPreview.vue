@@ -169,11 +169,13 @@
       restoreTimer = window.setTimeout(() => {
         restoreTimer = 0;
         restoringScroll = false;
+        queueCurrentPageUpdate();
       }, 450);
     } else {
       restoreFrame = requestAnimationFrame(() => {
         restoreFrame = 0;
         restoringScroll = false;
+        queueCurrentPageUpdate();
       });
     }
     return true;

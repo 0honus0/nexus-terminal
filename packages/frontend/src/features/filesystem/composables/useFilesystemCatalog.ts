@@ -11,6 +11,13 @@ const favoritesLoaded = ref(false);
 const historyLoaded = ref(false);
 let favoritesLoad: Promise<void> | undefined;
 let historyLoad: Promise<void> | undefined;
+let historyMutation: Promise<void> = Promise.resolve();
+
+const enqueueHistoryMutation = (operation: () => Promise<void>): Promise<void> => {
+  const next = historyMutation.then(operation, operation);
+  historyMutation = next.catch(() => undefined);
+  return next;
+};
 
 const sortFavorites = () => {
   favorites.value = [...favorites.value].sort((a, b) => {
@@ -85,6 +92,7 @@ export function useFilesystemCatalog() {
   }
 
   async function loadHistory(force = false): Promise<void> {
+    await historyMutation;
     if (historyLoaded.value && !force) return;
     if (historyLoad && !force) return historyLoad;
     loadingHistory.value = true;
@@ -104,20 +112,26 @@ export function useFilesystemCatalog() {
   async function recordPath(path: string): Promise<void> {
     const value = path.trim();
     if (!value) return;
-    await filesystemCatalogApi.addHistory(value);
-    history.value = await filesystemCatalogApi.listHistory();
-    historyLoaded.value = true;
+    return enqueueHistoryMutation(async () => {
+      await filesystemCatalogApi.addHistory(value);
+      history.value = await filesystemCatalogApi.listHistory();
+      historyLoaded.value = true;
+    });
   }
 
   async function removeHistory(id: number): Promise<void> {
-    await filesystemCatalogApi.removeHistory(id);
-    history.value = history.value.filter((item) => item.id !== id);
+    return enqueueHistoryMutation(async () => {
+      await filesystemCatalogApi.removeHistory(id);
+      history.value = history.value.filter((item) => item.id !== id);
+    });
   }
 
   async function clearHistory(): Promise<void> {
-    await filesystemCatalogApi.clearHistory();
-    history.value = [];
-    historyLoaded.value = true;
+    return enqueueHistoryMutation(async () => {
+      await filesystemCatalogApi.clearHistory();
+      history.value = [];
+      historyLoaded.value = true;
+    });
   }
 
   return {

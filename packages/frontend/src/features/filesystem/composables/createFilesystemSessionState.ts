@@ -20,9 +20,13 @@ export function createFilesystemSessionState(channel: FilesystemChannel, initial
     void catalog.recordPath(path).catch(() => undefined);
   };
 
-  const stopPathWatch = watch(browser.path, (path) => {
-    if (initialRecorded) recordPath(path);
-  });
+  const stopPathWatch = watch(
+    browser.path,
+    (path) => {
+      if (initialRecorded) recordPath(path);
+    },
+    { flush: 'sync' },
+  );
 
   const ensureLoaded = async (): Promise<void> => {
     if (!browser.loaded.value) {

@@ -1154,7 +1154,11 @@
           {{ t('fileManager.actions.openAsText') }}
         </button>
         <button v-if="download" class="context-item" @click="download(contextEntries())">
-          {{ t('fileManager.actions.download') }}
+          {{
+            context.entry.metadata.isDirectory
+              ? t('fileManager.actions.downloadFolder')
+              : t('fileManager.actions.download')
+          }}
         </button>
         <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
         <button
