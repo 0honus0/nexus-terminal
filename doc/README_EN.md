@@ -5,7 +5,7 @@
 [![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url]
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](../LICENSE)
 
-[中文](../README.md) | [English](./README_EN.md)
+[中文](./README.md) | [English](./README_EN.md)
 
 [docker-url]: https://github.com/0honus0/nexus-terminal/pkgs/container/nexus-terminal
 
@@ -55,7 +55,7 @@ A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions
 
 ## Documentation
 
-[Features](./FEATURES.md) · [Usage](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [E2E](../test/e2e/README.md) · [中文](../README.md)
+[Features](./FEATURES.md) · [Usage](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Software requirements](./software-requirements/README.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [E2E](./testing/E2E.md) · [Engineering constraints](./software-requirements/engineering-constraints.md) · [中文](./README.md)
 
 ## License
 

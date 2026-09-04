@@ -2,7 +2,7 @@
 
 > 本文定义 Nexus Terminal Frontend 重构后的长期架构，是前端目录、依赖方向、组件归属、状态归属、Workspace / Agent 运行时边界以及 HTTP / WebSocket contract 边界的权威说明。
 >
-> 详细的旧前端依赖扫描、循环依赖证据和业务清单见 [`FRONTEND_DEPENDENCY_ANALYSIS.md`](./FRONTEND_DEPENDENCY_ANALYSIS.md)。旧文件到新 owner 的执行清单见 [`FRONTEND_MIGRATION_MANIFEST.md`](./FRONTEND_MIGRATION_MANIFEST.md)。Backend clean architecture 与 legacy compatibility 现状见 [`BACKEND_REFACTOR_REPORT.md`](./BACKEND_REFACTOR_REPORT.md)。
+> 本文只描述当前长期 Frontend 架构。历史重构计划、迁移清单、临时 handoff 和旧依赖审计已在重构完成后退役；产品行为追溯由 [软件需求](../software-requirements/README.md) 保存，强制工程边界由 [工程约束表](../software-requirements/engineering-constraints.md) 唯一定义。
 
 ## 1. Architecture goals
 
@@ -752,83 +752,31 @@ Settings page 组合：
 
 Settings screen 不再拥有一个万能 `settings.store.ts`。
 
-## 17. Rewrite rules
+## 17. Source ownership notes
 
-Feature restoration 必须遵守：
+Source directories do not carry their own README policy files. Durable placement guidance is recorded here; mandatory rules continue to come from the [engineering constraint table](../software-requirements/engineering-constraints.md).
 
-- 旧源码仅作为 user-visible behavior / E2E / visual baseline reference；
-- 不 wholesale copy old store/composable/component；
-- 不保留 old file boundary 作为兼容层；
-- 不建立旧 path re-export；
-- duplicated state/fetch/mutation logic 要合并；
-- circular dependency 必须通过 ownership/ports 拆掉；
-- user-visible selector 与行为应保留，除非明确批准 UI change；
-- 功能组件使用 foundation/shared primitives，但不把业务逻辑下沉到基础组件。
+| Area                      | Permanent ownership guidance                                                                                                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/bootstrap/`          | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                                                                             |
+| `app/pages/dashboard/`    | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                                                                              |
+| `app/pages/settings/`     | Application composition surface for Security, Preferences, Appearance, Backup, and runtime-specific settings; domain settings remain with their feature owner.                                                                                             |
+| `foundation/async/`       | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                                                                                |
+| `foundation/browser/`     | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes.                                                                                                                                                        |
+| `foundation/interaction/` | Business-neutral pointer/touch/drag/resize/wheel mechanics. Guacamole/remote-desktop input remains owned by the Remote Desktop feature.                                                                                                                    |
+| `runtimes/workspace/`     | Owns Workspace lifecycle, connection/session binding, protocol adapters, layout composition, reconnect orchestration, and suspend handoff. It is a composition owner, not a reusable capability owner.                                                     |
+| `runtimes/agent/`         | Reserved for a future independent Agent runtime. It may consume public capability ports but must not reuse Workspace raw sockets/session/runtime state. No Agent product behavior is treated as implemented until the public contract is formally defined. |
+| `shared/components/`      | Cross-feature composite UI only when no stronger feature owner exists; it is not a dumping ground for product components.                                                                                                                                  |
+| `shared/feedback/`        | Cross-feature feedback primitives such as toast/confirm/alert with no domain policy.                                                                                                                                                                       |
+| `shared/focus/`           | Cross-feature focus/shortcut infrastructure with no feature-owned business behavior.                                                                                                                                                                       |
 
-## 18. Refactor sequence
+The mandatory frontend ownership and Agent boundaries are referenced by [EC-FE-001](../software-requirements/engineering-constraints.md#ec-fe-001), [EC-GEN-003](../software-requirements/engineering-constraints.md#ec-gen-003), [EC-RUNTIME-003](../software-requirements/engineering-constraints.md#ec-runtime-003), [EC-RUNTIME-004](../software-requirements/engineering-constraints.md#ec-runtime-004), and [EC-RUNTIME-005](../software-requirements/engineering-constraints.md#ec-runtime-005).
 
-固定顺序：
+## 18. Current validation model
 
-1. 冻结业务 inventory、component ownership、dependency graph；
-2. 保留完整旧 frontend backup；
-3. 维持独立可编译 clean skeleton；
-4. 完成 foundation/shared UI infrastructure；
-5. 还原 App shell 与 visual baseline；
-6. 重写 Auth/Security/Preferences/Appearance；
-7. 重写 Tags/SSH Keys/Proxies/Connections；
-8. 重写 Notifications/Audit/System Overview/Backup；
-9. 重写 Quick Commands/Command History；
-10. 重写 Terminal/Filesystem/File Editor/File Preview/Transfers/Status/Docker/Remote Desktop/Suspend capability；
-11. 使用这些 capability 组合 Workspace runtime；
-12. 独立实现 Agent runtime，不依赖 Workspace internals；
-13. Frontend 功能行为完成后统一对齐 Backend clean HTTP contract；
-14. 再统一对齐 clean WebSocket protocol；
-15. 删除 Backend legacy HTTP/WS compatibility layer；
-16. 完成 architecture/test-policy/build/E2E gates。
+Architecture/static invariants are checked through the repository build and architecture guard. User-reachable behavior is validated through the real E2E system documented in [E2E](../testing/E2E.md). The mandatory verification and E2E policies are defined only by [EC-VER-001](../software-requirements/engineering-constraints.md#ec-ver-001) and the [EC-E2E-*](../software-requirements/engineering-constraints.md#ec-e2e-001) constraint rows.
 
-HTTP/WS contract migration 被明确放在 frontend UI/functionality rewrite 之后，以避免 UI 重构和 external protocol migration 同时改变。
-
-## 19. Testing and validation
-
-自动化 product behavior test 仅允许真实 E2E，遵守 [工程约束表](../software-requirements/engineering-constraints.md)。
-
-Frontend architecture invariant 使用 build/static architecture check，而不是新增 unit/component/internal implementation test。
-
-正常架构改动至少验证：
-
-```bash
-npm run check:test-policy
-npm run build:frontend
-npm --prefix packages/backend run check:architecture
-```
-
-User-facing behavior 改动运行对应真实 E2E；完整 browser evidence 以 GitHub Actions 的 pinned environment 为准。
-
-E2E 不得：
-
-- import frontend/backend internal source；
-- 直接断言 Pinia/localStorage/internal fixture；
-- 依赖其他 test case 先运行；
-- 用 mock successful business response 替代真实 product surface。
-
-## 20. Completion criteria
-
-Frontend clean rewrite 完成必须同时满足：
-
-1. 旧 root `components/stores/composables/views/utils/types` 组织方式不再作为 compatibility structure 存在；
-2. dependency graph 无循环；
-3. feature cross-import 仅经过 public surface；
-4. feature model 无 HTTP snake_case DTO；
-5. components/store 无 legacy WS type string；
-6. Terminal/Filesystem/Transfer 等 capability 不依赖 Workspace internal runtime；
-7. Agent 不依赖 Workspace internal runtime；
-8. App 是唯一完整 composition root；
-9. Backend Module / Platform 不因 frontend migration 承担 UI-specific responsibility；
-10. `interfaces/http/legacy-api/` 已删除且 production 不依赖历史 HTTP compatibility；
-11. `interfaces/websocket/legacy-api/` 已删除且 production 只使用 clean Workspace/upload/remote-desktop contract；
-12. frontend build、architecture guard、test-policy 和相关 E2E 全部通过。
-
-最终依赖图：
+Current dependency model:
 
 ```text
 Browser UI
@@ -837,7 +785,7 @@ Feature components / App pages
    ↓
 Feature clean models + capability ports
    ↓
-Workspace runtime / Agent runtime adapters
+Workspace runtime / future Agent runtime adapters
    ↓
 Typed frontend HTTP / WS contract
    ↓
@@ -848,4 +796,4 @@ Backend Modules
 Platform capabilities
 ```
 
-Frontend 不再认识 Backend Infrastructure shape，也不再承担历史 wire compatibility。
+Frontend does not depend on Backend Infrastructure shapes and does not own historical wire compatibility.

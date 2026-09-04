@@ -126,7 +126,7 @@ function syncRunnerFiles(config) {
   );
 
   replaceRequired(
-    'test/e2e/README.md',
+    'doc/testing/E2E.md',
     /ghcr\.io\/0honus0\/nexus-terminal-e2e-runner:playwright-[^`\s]+/,
     `ghcr.io/0honus0/nexus-terminal-e2e-runner:${tag}`,
     'documented E2E runner image',

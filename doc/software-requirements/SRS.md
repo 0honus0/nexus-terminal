@@ -5,7 +5,7 @@
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库的 Git 历史、Legacy Functional Requirement、Git-derived Requirement、重构过程文档、工程约束与当前代码 owner 分析整理。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计/约束”组织；历史证据通过链接追溯，不在主需求表重复堆叠。
+本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
 
 ## 2. 需求解释规则
 
@@ -52,9 +52,8 @@
 - [FR 追溯表](traceability/functional-requirements.md)
 - [GREQ 追溯表](traceability/git-requirements.md)
 - [Git 历史证据索引](traceability/git-history.md)
-- [原始 FR 文档](../LEGACY_FRONTEND_FUNCTIONAL_REQUIREMENTS.md)
-- [原始 GREQ Catalog](../LEGACY_FRONTEND_GIT_REQUIREMENT_CATALOG.md)
 - [Frontend Architecture](../architecture/FRONTEND.md)
+- [Backend Architecture](../architecture/BACKEND.md)
 - [Engineering Constraints](engineering-constraints.md)
 
 ## 6. 当前范围说明

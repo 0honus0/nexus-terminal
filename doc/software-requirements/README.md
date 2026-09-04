@@ -39,6 +39,6 @@ doc/software-requirements/
 - 主需求表只引用 FR/GREQ 链接，不复制完整历史说明。
 - FR/GREQ 表均使用稳定显式 anchor，可双向跳转。
 - GREQ 中识别到的 commit hash 链接到 GitHub 对应 commit。
-- 原始重构文档继续作为底层证据保留，不在本目录复制一份形成第二事实源。
+- 历史行为证据由 FR/GREQ 与 Git 历史索引保留；已完成使命的重构过程文档不作为长期事实源继续维护。
 
 统计：**123 条 FR / SRS 主需求，104 条 GREQ。**
