@@ -1,15 +1,20 @@
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseCheckbox, BaseModal } from '@/foundation/ui';
-  defineProps<{ visible: boolean; path?: string }>();
+  const props = defineProps<{ visible: boolean; path?: string }>();
   const emit = defineEmits<{ resolve: [strategy: 'overwrite' | 'skip', applyToAll: boolean] }>();
   const { t } = useI18n();
   const all = ref(false);
+  watch(
+    () => [props.visible, props.path] as const,
+    ([visible], previous) => {
+      if (visible && (!previous || !previous[0] || previous[1] !== props.path)) all.value = false;
+    },
+  );
 </script>
 <template>
   <BaseModal
-    data-testid="upload-conflict-modal"
     :visible="visible"
     :z-index="70"
     :title="t('fileManager.uploadConflict.title')"

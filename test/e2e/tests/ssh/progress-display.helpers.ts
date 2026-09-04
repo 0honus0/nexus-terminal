@@ -70,7 +70,7 @@ export async function goIntoFolder(page: Page, folder: string): Promise<void> {
 }
 
 export async function goToParent(page: Page): Promise<void> {
-  await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
+  await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 

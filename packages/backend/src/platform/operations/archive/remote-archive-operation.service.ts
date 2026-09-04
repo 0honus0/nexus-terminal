@@ -29,7 +29,7 @@ const INVALID_PASSWORD_MARKER = '__NEXUS_ARCHIVE_INVALID_PASSWORD__';
 const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
 
 export class RemoteArchiveOperationService implements ArchiveOperation {
-  private readonly activeByOwner = new Map<string, ActiveArchive>();
+  private readonly activeByOwner = new Map<string, Map<string, ActiveArchive>>();
 
   constructor(private readonly sessions: Pick<ExecutionSessionManager, 'require'>) {}
 
@@ -221,8 +221,8 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
   }
 
   async cancel(ownerId: string, requestId: string): Promise<boolean> {
-    const active = this.activeByOwner.get(ownerId);
-    if (!active || active.requestId !== requestId) return false;
+    const active = this.activeByOwner.get(ownerId)?.get(requestId);
+    if (!active) return false;
     active.cancelled = true;
     active.preflightAbort.abort();
     await active.command?.terminate({ signal: 'TERM', graceMs: 800, forceMs: 2_500 }).catch(() => undefined);
@@ -230,13 +230,13 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
   }
 
   async cancelOwner(ownerId: string): Promise<void> {
-    const active = this.activeByOwner.get(ownerId);
-    if (active) await this.cancel(ownerId, active.requestId);
+    const active = [...(this.activeByOwner.get(ownerId)?.values() ?? [])];
+    await Promise.allSettled(active.map((operation) => this.cancel(ownerId, operation.requestId)));
   }
 
   private begin(ownerId: string, requestId: string, operation: ArchiveOperationKind): ActiveArchive {
-    const existing = this.activeByOwner.get(ownerId);
-    if (existing) throw new Error(`Another archive operation is already running (${existing.requestId}).`);
+    const ownerOperations = this.activeByOwner.get(ownerId) ?? new Map<string, ActiveArchive>();
+    if (ownerOperations.has(requestId)) throw new Error(`Archive request is already running (${requestId}).`);
     const active: ActiveArchive = {
       ownerId,
       requestId,
@@ -244,12 +244,16 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       preflightAbort: new AbortController(),
       cancelled: false,
     };
-    this.activeByOwner.set(ownerId, active);
+    ownerOperations.set(requestId, active);
+    this.activeByOwner.set(ownerId, ownerOperations);
     return active;
   }
 
   private finish(active: ActiveArchive): void {
-    if (this.activeByOwner.get(active.ownerId) === active) this.activeByOwner.delete(active.ownerId);
+    const ownerOperations = this.activeByOwner.get(active.ownerId);
+    if (!ownerOperations || ownerOperations.get(active.requestId) !== active) return;
+    ownerOperations.delete(active.requestId);
+    if (!ownerOperations.size) this.activeByOwner.delete(active.ownerId);
   }
 
   private emitCancelled(emit: (event: ArchiveEvent) => void, active: ActiveArchive): void {

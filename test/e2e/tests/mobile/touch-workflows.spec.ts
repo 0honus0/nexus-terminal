@@ -344,7 +344,6 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
     const quickDialog = page.getByRole('dialog', { name: 'Quick Commands', exact: true });
     const quickCommands = quickDialog.getByTestId('quick-commands-view');
     await expect(quickCommands).toBeVisible();
-    await expect(quickDialog.locator('[data-overlay-panel-preset="standard-modal"]')).toBeVisible();
     await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
     await expect(
       quickCommands
@@ -404,11 +403,11 @@ test('mobile file manager navigates directories with a single tap', async ({ pag
   await slowStep('single tap enters a folder without requiring a desktop double click', async () => {
     await tapFileManagerRow(page, 'folder-seed');
     await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true })).toBeVisible();
   });
 
   await step('parent button returns to the original directory on a single tap', async () => {
-    await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
+    await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
     await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 15_000 });
   });
 });

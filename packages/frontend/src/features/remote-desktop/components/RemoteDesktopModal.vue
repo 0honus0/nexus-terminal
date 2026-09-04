@@ -78,7 +78,7 @@
   };
   const modalPanelStyle = computed(() =>
     fullscreen.value
-      ? { position: 'fixed' as const, inset: '0', width: '100vw', height: '100vh' }
+      ? { position: 'fixed' as const, inset: '0', width: '100vw', height: '100vh', boxShadow: 'none' }
       : { width: `${modalWidth.value}px`, height: `${modalHeight.value}px` },
   );
 

@@ -310,7 +310,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
 
-    await editor.getByTestId('file-editor-close').click();
+    await preview.getByTitle('Close', { exact: true }).click();
     await expect(editor).toBeHidden();
   });
 
@@ -412,7 +412,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
     const [panelBox, tabsBox, viewport] = await Promise.all([
-      dialog.locator('section').boundingBox(),
+      dialog.getByRole('dialog').boundingBox(),
       tabs.boundingBox(),
       Promise.resolve(page.viewportSize()),
     ]);
@@ -472,7 +472,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
   await expect(dialog.locator('[data-pdf-page]')).toHaveCount(3);
 
-  const closeButton = dialog.getByRole('button', { name: 'Close preview', exact: true });
+  const closeButton = dialog.getByTitle('Close preview', { exact: true });
   const closeBox = await closeButton.boundingBox();
   expect(closeBox).toBeTruthy();
   expect(closeBox!.width).toBeGreaterThanOrEqual(40);
@@ -621,7 +621,7 @@ test('mobile preview close button clears cached state when popup file editing is
   await worksheetTab(dialog, 'Second').click();
   await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
 
-  await dialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await dialog.getByTitle('Close preview', { exact: true }).click();
   await expect(dialog).toBeHidden();
 
   await tapFileManagerRow(page, filename);

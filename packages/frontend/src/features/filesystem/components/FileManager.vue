@@ -378,6 +378,9 @@
     event.stopPropagation();
     void activate(entry);
   };
+  const preserveListFocusOnMouseOpen = (event: MouseEvent): void => {
+    if (document.activeElement === listScroller.value) event.preventDefault();
+  };
   const PARENT_CURSOR = '__parent__';
   const keyboardPaths = computed(() => [
     ...(browser.path.value === '/' ? [] : [PARENT_CURSOR]),
@@ -1075,7 +1078,11 @@
             />
           </td>
           <td class="file-row-cell px-3 py-2" :style="columnStyle('name')">
-            <button class="flex w-full items-center gap-2 text-left" :data-file-path="entry.path">
+            <button
+              class="flex w-full items-center gap-2 text-left"
+              :data-file-path="entry.path"
+              @mousedown="preserveListFocusOnMouseOpen"
+            >
               <span>{{ entry.metadata.isDirectory ? '📁' : entry.metadata.isSymbolicLink ? '🔗' : '📄' }}</span
               ><span>{{ displayEntryName(entry) }}</span>
             </button>

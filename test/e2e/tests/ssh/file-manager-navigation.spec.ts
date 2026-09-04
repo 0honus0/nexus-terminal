@@ -102,6 +102,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Name sorting toggles between ascending and descending order', async () => {
     const nameHeader = manager(page).getByRole('columnheader').filter({ hasText: 'Name' }).first();
+    if (!(await nameHeader.innerText()).includes('▲')) await nameHeader.click();
     await expect(nameHeader).toContainText('▲');
     const ascending = await visibleFilenames(page);
     expect(ascending.indexOf('copy-source.txt')).toBeLessThan(ascending.indexOf('seed.txt'));
@@ -114,7 +115,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Typing an absolute path navigates directly to the remote directory', async () => {
     await navigateViaPathInput(page, FAVORITE_PATH);
-    await expect(manager(page).getByTitle('Parent directory', { exact: true })).toBeVisible();
+    await expect(manager(page).getByTitle('Parent Directory', { exact: true })).toBeVisible();
     await expect(row(page, 'seed.txt')).toHaveCount(0);
 
     await navigateViaPathInput(page, '/');
@@ -129,7 +130,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
     await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
-    await expect(manager(page).getByTitle('Parent directory', { exact: true })).toBeVisible();
+    await expect(manager(page).getByTitle('Parent Directory', { exact: true })).toBeVisible();
   });
 
   await step('Favorite paths can be added, used for navigation, and deleted', async () => {

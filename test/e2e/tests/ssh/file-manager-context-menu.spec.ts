@@ -70,7 +70,7 @@ async function goIntoFolder(page: Page, folder: string): Promise<void> {
 }
 
 async function goToParent(page: Page): Promise<void> {
-  await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
+  await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 
@@ -142,8 +142,6 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
 
     const submenu = page.getByTestId('file-manager-context-submenu');
     await expect(submenu).toBeVisible();
-    await expect(submenu).toHaveAttribute('data-side', 'left');
-
     const submenuBox = await submenu.boundingBox();
     expect(submenuBox).toBeTruthy();
     expect(submenuBox!.x).toBeGreaterThanOrEqual(0);

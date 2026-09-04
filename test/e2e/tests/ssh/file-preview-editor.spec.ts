@@ -475,7 +475,7 @@ test('preview close button clears cached tabs when popup file editing is enabled
     await expect(xlsxDialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
     await expect(xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
 
-    await xlsxDialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+    await xlsxDialog.getByTitle('Close preview', { exact: true }).click();
     await expect(xlsxDialog).toBeHidden();
     await expect(fileList).toBeFocused();
   });
@@ -511,7 +511,7 @@ test('preview close button preserves cached tabs when popup file editing is disa
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = documentPopup(page);
     await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await pdfDialog.getByRole('button', { name: 'Next page', exact: true }).click();
+    await pdfDialog.getByTitle('Next page', { exact: true }).click();
     await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
     await hidePreview(page, 'preview.pdf');
 
@@ -519,7 +519,7 @@ test('preview close button preserves cached tabs when popup file editing is disa
     const xlsxDialog = documentPopup(page);
     await expect(xlsxDialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
     await expect(xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
-    await xlsxDialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+    await xlsxDialog.getByTitle('Close preview', { exact: true }).click();
     await expect(xlsxDialog).toBeHidden();
   });
 
@@ -556,7 +556,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
+    await dialog.getByTitle('Next page', { exact: true }).click();
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await hidePreview(page, filename);
   });
@@ -901,7 +901,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
         viewport: { width: 1440, height: 900 },
       });
 
-      await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
+      await dialog.getByTitle('Next page', { exact: true }).click();
       await expect(spreadsheetPageIndicator(dialog)).toHaveText('2/2');
       await expect(spreadsheetPageRange(dialog)).toContainText('25');
       await expect(spreadsheetPageRange(dialog)).toContainText('40');

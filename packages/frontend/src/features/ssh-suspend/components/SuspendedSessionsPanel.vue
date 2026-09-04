@@ -124,7 +124,11 @@
 </script>
 
 <template>
-  <section class="suspended-sessions-panel flex h-full min-h-0 flex-col">
+  <section
+    class="suspended-sessions-panel flex h-full min-h-0 flex-col"
+    role="region"
+    :aria-label="t('suspendedSshSessions.modalTitle')"
+  >
     <div class="border-b border-border p-3">
       <BaseInput v-model="data.search.value" :placeholder="t('suspendedSshSessions.searchPlaceholder')" />
     </div>

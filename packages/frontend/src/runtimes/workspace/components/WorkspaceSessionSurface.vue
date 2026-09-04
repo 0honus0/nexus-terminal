@@ -1,7 +1,15 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseModal, BaseSelect } from '@/foundation/ui';
+  import {
+    BaseButton,
+    BaseCheckbox,
+    BaseFormField,
+    BaseInput,
+    BaseModal,
+    BaseSelect,
+    OverlayPanel,
+  } from '@/foundation/ui';
   import { useResizeHandle } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
   import { FilePreview, previewKindFor } from '@/features/file-preview/public';
@@ -1080,30 +1088,25 @@
       />
     </BaseModal>
 
-    <BaseModal
+    <OverlayPanel
       data-testid="document-popup"
       :data-document-mode="documentMode"
       :visible="documentPopupVisible"
       :keep-mounted="true"
-      :title="documentMode === 'preview' ? t('fileManager.preview.openFiles') : t('settings.popupEditor.title')"
+      teleport
+      :z-index="50"
+      :close-on-backdrop="true"
       :close-on-escape="true"
       :focus-on-open="true"
       :restore-focus="true"
-      panel-class="!max-h-none !max-w-none"
+      panel-class="flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none"
       :panel-style="documentMode === 'preview' ? previewPopupStyle : editorPopupStyle"
       :overlay-class="mobile ? '!p-0' : ''"
+      role="dialog"
+      :aria-modal="true"
+      :aria-label="documentMode === 'preview' ? t('fileManager.preview.openFiles') : t('settings.popupEditor.title')"
       @close="hideDocumentPopup"
     >
-      <template #header-actions>
-        <BaseButton
-          class="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
-          size="sm"
-          variant="ghost"
-          :title="t('common.close')"
-          @click="closeDocumentPopup"
-          >×</BaseButton
-        >
-      </template>
       <div class="relative flex h-full min-h-0 flex-col">
         <div v-if="showPopupFileEditor" class="flex items-center gap-1 border-b border-border bg-header/50 px-2 py-1">
           <BaseButton
@@ -1117,6 +1120,15 @@
             :variant="documentMode === 'preview' ? 'primary' : 'ghost'"
             @click="documentMode = 'preview'"
             >{{ t('workspace.documents.preview') }}</BaseButton
+          >
+          <BaseButton
+            v-if="documentMode === 'editor'"
+            class="ml-auto min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
+            size="sm"
+            variant="ghost"
+            :title="t('common.close')"
+            @click="closeDocumentPopup"
+            >×</BaseButton
           >
         </div>
         <FileEditor
@@ -1154,7 +1166,7 @@
           @hide="hidePreview"
         />
       </div>
-    </BaseModal>
+    </OverlayPanel>
 
     <BaseModal
       :visible="Boolean(archiveDialog)"

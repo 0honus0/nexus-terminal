@@ -127,7 +127,7 @@ test('file browsing and recursive search remain responsive while upload writes a
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 
-  await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
+  await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
   await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
 
   await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
@@ -161,7 +161,7 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
   await slowStep('dragging ten Windows-style files snapshots and uploads all DataTransfer items', async () => {
     await dragLocalFiles(page, tenFiles);
 
-    const conflictModal = page.getByTestId('upload-conflict-modal');
+    const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
     await expect(conflictModal).toBeVisible({ timeout: 20_000 });
     await conflictModal
       .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
@@ -188,12 +188,12 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
         { name: nonConflictName, text: 'new-file-still-uploads\n' },
       ]);
 
-      const conflictModal = page.getByTestId('upload-conflict-modal');
+      const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
       await expect(conflictModal).toBeVisible({ timeout: 20_000 });
       await conflictModal
         .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
         .check();
-      await conflictModal.getByRole('button', { name: 'Skip', exact: true }).click();
+      await conflictModal.getByRole('button', { name: 'Skip this file', exact: true }).click();
       await expect(conflictModal).toBeHidden();
 
       await waitForVisibleFiles(page, [nonConflictName]);

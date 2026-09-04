@@ -55,7 +55,7 @@
   const keyboardVisible = ref(false);
   const quickCommandsVisible = ref(false);
   const statusVisible = ref(false);
-  const panes: WorkspacePaneName[] = ['terminal', 'fileManager', 'editor', 'statusMonitor', 'dockerManager'];
+  const panes: WorkspacePaneName[] = ['terminal', 'fileManager', 'editor', 'dockerManager'];
   const paneLabel = (pane: WorkspacePaneName) => t(`layout.pane.${pane}`);
   const executeQuickCommand = (intent: ExecuteCommandIntent) => {
     emit('command', intent.command, Boolean(intent.allSessions));

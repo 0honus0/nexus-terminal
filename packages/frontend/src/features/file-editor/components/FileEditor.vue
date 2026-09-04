@@ -241,6 +241,9 @@
         ><BaseButton size="sm" :disabled="!session.active.value || !session.active.value.dirty" @click="save">{{
           session.active.value?.saveState === 'saving' ? t('fileManager.saving') : t('common.save')
         }}</BaseButton>
+        <span v-if="session.active.value?.saveState === 'saved'" role="status" class="text-xs text-success"
+          >✅ {{ t('fileManager.saveSuccess') }}</span
+        >
       </div>
     </div>
     <BaseSpinner v-if="session.loading.value" class="m-6" />

@@ -183,7 +183,7 @@
       .map((session) => ({
         id: session.id,
         label: session.connection.name || session.connection.host,
-        tasks: session.transferController.tasks.value,
+        tasks: session.transferController.tasks.value.filter((task) => task.status !== 'cancelled'),
       })),
   );
   const progressDisplaySources = computed<ProgressSource[]>(() => {
@@ -276,10 +276,11 @@
         destination: { scopeId: target.id, path: targetPath },
       });
 
-      if (snapshot.operation === 'copy') return;
-
       const task = await target.transferController.waitForTask(taskId);
-      if (task.status !== 'completed') return;
+      if (task.status === 'completed' || task.status === 'partial') {
+        await target.filesystemState.browser.refresh();
+      }
+      if (snapshot.operation === 'copy' || task.status !== 'completed') return;
 
       if (sameSession) {
         registry.fileClipboard.clear(snapshot.generation);
