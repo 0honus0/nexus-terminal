@@ -3,18 +3,16 @@
   "group": 3,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
-    "tests/http/auth-2fa.spec.ts",
-    "tests/http/auth-api.spec.ts",
-    "tests/http/backup.spec.ts",
-    "tests/http/connections-tags.spec.ts",
-    "tests/http/quick-commands-audit.spec.ts",
-    "tests/http/rdp-remoteapp.spec.ts",
-    "tests/http/terminal-themes.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
-    "tests/ssh/progress-display-archive.spec.ts"
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/upload-protocol.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }
