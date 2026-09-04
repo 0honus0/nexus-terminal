@@ -3,7 +3,8 @@
   "group": 8,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
+    "tests/ssh/file-manager-context-menu.spec.ts",
+    "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts"
   ]
 }

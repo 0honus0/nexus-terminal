@@ -9,7 +9,6 @@
     "tests/mobile/terminal-touch.spec.ts",
     "tests/mobile/touch-advanced.spec.ts",
     "tests/mobile/touch-workflows.spec.ts",
-    "tests/ssh/file-manager-context-menu.spec.ts",
     "tests/ssh/cross-session-transfer.spec.ts"
   ]
 }
