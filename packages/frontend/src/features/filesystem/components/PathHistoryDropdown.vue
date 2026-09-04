@@ -46,8 +46,24 @@
       >
         {{ item.path }}
       </button>
-      <BaseButton size="sm" variant="ghost" @click="emit('copy', item.path)">{{ t('pathHistory.copy') }}</BaseButton>
-      <BaseButton size="sm" variant="ghost" @click="emit('remove', item.id)">{{ t('pathHistory.delete') }}</BaseButton>
+      <BaseButton
+        size="sm"
+        variant="ghost"
+        class="shrink-0"
+        :title="t('pathHistory.copy')"
+        :aria-label="t('pathHistory.copy')"
+        @click="emit('copy', item.path)"
+        >⧉</BaseButton
+      >
+      <BaseButton
+        size="sm"
+        variant="ghost"
+        class="shrink-0"
+        :title="t('pathHistory.delete')"
+        :aria-label="t('pathHistory.delete')"
+        @click="emit('remove', item.id)"
+        >×</BaseButton
+      >
     </div>
   </div>
 </template>
