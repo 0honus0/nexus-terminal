@@ -4,7 +4,6 @@
   "workers": 8,
   "specs": [
     "tests/auth/setup-login.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",

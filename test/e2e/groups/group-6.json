@@ -3,6 +3,7 @@
   "group": 6,
   "workers": 8,
   "specs": [
+    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts"
   ]
 }

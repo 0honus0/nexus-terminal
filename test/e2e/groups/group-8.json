@@ -5,6 +5,8 @@
   "specs": [
     "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/cross-session-transfer.spec.ts",
-    "tests/ssh/file-upload.spec.ts"
+    "tests/ssh/file-upload.spec.ts",
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }

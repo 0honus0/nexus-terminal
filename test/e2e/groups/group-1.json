@@ -15,6 +15,6 @@
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
     "tests/ui/theme-switching.spec.ts",
-    "tests/ssh/progress-display-archive-cancel.spec.ts"
+    "tests/ssh/progress-display-copy-cancel.spec.ts"
   ]
 }
