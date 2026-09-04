@@ -15,13 +15,15 @@ export const remoteDesktopApi: RemoteDesktopSessionPort = {
       })
     ).data;
   },
-  tunnelUrl(session, display) {
-    const q = new URLSearchParams({
+  tunnelUrl() {
+    return createWebSocketUrl('/ws/remote-desktop');
+  },
+  tunnelData(session, display) {
+    return new URLSearchParams({
       token: session.token,
       width: String(display.width),
       height: String(display.height),
       dpi: String(display.dpi),
-    });
-    return createWebSocketUrl(`/ws/remote-desktop?${q}`);
+    }).toString();
   },
 };

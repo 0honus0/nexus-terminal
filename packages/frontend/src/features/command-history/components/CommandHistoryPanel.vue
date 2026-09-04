@@ -106,12 +106,12 @@
         v-for="(entry, index) in filtered"
         :key="entry.id"
         :data-history-id="entry.id"
-        class="flex items-center gap-2 p-3"
+        class="flex flex-wrap items-center gap-2 p-3"
         :class="selectedIndex === index ? 'bg-primary/10' : ''"
       >
         <button
           data-testid="command-history-execute"
-          class="min-w-0 flex-1 truncate text-left font-mono text-sm"
+          class="min-w-32 flex-1 truncate text-left font-mono text-sm"
           @click="emit('execute', { command: entry.command })"
         >
           {{ entry.command }}</button

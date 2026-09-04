@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
+import { closeConnectedFileManager, reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
 import {
   clickMenuItem,
   closeProgressDisplay,
@@ -33,6 +33,7 @@ test('copy remains cancelled after a long remote write stall', async ({ page, co
     await clickMenuItem(page, 'Paste');
 
     await expect(page.getByTestId('transfer-progress-center')).toBeVisible({ timeout: 10_000 });
+    await closeConnectedFileManager(page);
     await hideVisibleProgressCenter(page);
     const modal = await openProgressDisplay(page);
     const task = hiddenTask(modal, sourceName);

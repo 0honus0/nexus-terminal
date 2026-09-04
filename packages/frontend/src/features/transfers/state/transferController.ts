@@ -274,7 +274,9 @@ export function createTransferController(channel: TransferChannel) {
     upsert({
       id,
       kind: request.kind,
-      label: request.sources[0]?.path.split('/').pop() ?? request.kind,
+      label:
+        (request.kind === 'compress' ? request.destination.path : request.sources[0]?.path)?.split('/').pop() ??
+        request.kind,
       status: 'queued',
       progress: 0,
       bytesWritten: 0,

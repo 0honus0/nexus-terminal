@@ -119,6 +119,7 @@ export function createFilePreviewSession(defaultSource?: FilePreviewSource): Fil
       refreshing: false,
     };
     tabs.value.push(tab);
+    tab = tabs.value[tabs.value.length - 1]!;
     sources.set(tab.id, source);
     activeId.value = tab.id;
     await loadInitial(tab, source);

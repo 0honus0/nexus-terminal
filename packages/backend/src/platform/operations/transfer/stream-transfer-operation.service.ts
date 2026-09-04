@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
-import type { RemoteFileSystem, RemoteFileMetadata } from '../../filesystem/remote-filesystem';
+import type { RemoteFileSystem, RemoteFileMetadata, RemotePositionedWriter } from '../../filesystem/remote-filesystem';
 import type { RemoteFileEntry } from '../../filesystem/file-entry';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
 import type { TransferEvent, TransferOperation, TransferRequest } from './transfer-operation.port';
@@ -235,13 +235,18 @@ export class StreamTransferOperationService implements TransferOperation {
     await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
 
     const reader = await sourceFs.openPositionedReader(sourcePath);
-    let writer;
+    let writer: RemotePositionedWriter;
     try {
       writer = await destinationFs.openPositionedWriter(temporaryPath, { mode: metadata.mode });
     } catch (error) {
       await reader.close().catch(() => undefined);
       throw error;
     }
+    const abortOpenHandles = () => {
+      void Promise.allSettled([reader.close(), writer.close()]);
+    };
+    signal.addEventListener('abort', abortOpenHandles, { once: true });
+    if (signal.aborted) abortOpenHandles();
     try {
       const fileSize = Math.max(0, metadata.size);
       let nextPosition = 0;
@@ -276,6 +281,7 @@ export class StreamTransferOperationService implements TransferOperation {
       await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
       throw error;
     } finally {
+      signal.removeEventListener('abort', abortOpenHandles);
       await Promise.allSettled([reader.close(), writer.close()]);
     }
 

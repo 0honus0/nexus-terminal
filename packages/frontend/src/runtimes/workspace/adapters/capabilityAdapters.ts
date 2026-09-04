@@ -344,7 +344,32 @@ interface TransferChannelAdapter extends TransferChannel {
   dispose(): void;
 }
 
-const MAX_ACTIVE_UPLOAD_STREAMS = 6;
+const UPLOAD_SCHEDULER_MIN_STREAMS = 6;
+const UPLOAD_SCHEDULER_STREAM_CEILING = 12;
+const UPLOAD_SCHEDULER_MIN_CAPACITY_UNITS = 8;
+const UPLOAD_SCHEDULER_CAPACITY_CEILING = 24;
+
+const uploadReservationUnits = (size: number): number => {
+  if (size <= 1024 * 1024) return 1;
+  if (size <= 16 * 1024 * 1024) return 2;
+  if (size <= 64 * 1024 * 1024) return 4;
+  return 6;
+};
+
+const uploadSchedulerPolicy = (): { streamLimit: number; capacityUnits: number } => {
+  const detected = typeof navigator === 'undefined' ? 4 : Number(navigator.hardwareConcurrency || 4);
+  const hardwareConcurrency = Number.isFinite(detected) ? Math.max(1, Math.min(16, Math.round(detected))) : 4;
+  return {
+    streamLimit: Math.max(
+      UPLOAD_SCHEDULER_MIN_STREAMS,
+      Math.min(UPLOAD_SCHEDULER_STREAM_CEILING, Math.ceil(hardwareConcurrency * 1.5)),
+    ),
+    capacityUnits: Math.max(
+      UPLOAD_SCHEDULER_MIN_CAPACITY_UNITS,
+      Math.min(UPLOAD_SCHEDULER_CAPACITY_CEILING, hardwareConcurrency * 2),
+    ),
+  };
+};
 
 export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: string): TransferChannelAdapter => {
   const handlers = new Set<(event: TransferEvent) => void>();
@@ -463,11 +488,28 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   };
 
+  const activeUploadCapacityUnits = (): number =>
+    [...activeUploads].reduce((total, id) => {
+      const request = uploads.get(id);
+      return total + (request ? uploadReservationUnits(request.file.size) : 0);
+    }, 0);
+
   function pumpUploadQueue(): void {
     if (!workspaceAvailable) return;
-    while (activeUploads.size < MAX_ACTIVE_UPLOAD_STREAMS && queuedUploads.length > 0) {
-      const request = queuedUploads.shift()!;
-      if (uploads.get(request.id) !== request) continue;
+    const policy = uploadSchedulerPolicy();
+    while (queuedUploads.length > 0) {
+      const request = queuedUploads[0]!;
+      if (uploads.get(request.id) !== request) {
+        queuedUploads.shift();
+        continue;
+      }
+
+      const reservation = uploadReservationUnits(request.file.size);
+      const hasStreamCapacity = activeUploads.size < policy.streamLimit;
+      const hasWeightedCapacity = activeUploadCapacityUnits() + reservation <= policy.capacityUnits;
+      if (activeUploads.size > 0 && (!hasStreamCapacity || !hasWeightedCapacity)) return;
+
+      queuedUploads.shift();
       activeUploads.add(request.id);
       void startUploadRequest(request).catch((cause) => {
         if (uploads.get(request.id) !== request) return;

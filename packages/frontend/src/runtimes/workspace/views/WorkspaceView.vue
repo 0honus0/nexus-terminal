@@ -176,7 +176,9 @@
   const hiddenProgressSources = computed<ProgressSource[]>(() =>
     registry.orderedSessions.value
       .filter(
-        (session) => progressVisibility.value[session.id] === false && session.transferController.tasks.value.length,
+        (session) =>
+          progressVisibility.value[session.id] === false &&
+          session.transferController.tasks.value.some((task) => task.status !== 'cancelled'),
       )
       .map((session) => ({
         id: session.id,

@@ -385,10 +385,14 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
     const hiddenList = modal.getByTestId('hidden-progress-list');
-    const [sourceCardBox, hiddenListBox] = await Promise.all([sourceCard.boundingBox(), hiddenList.boundingBox()]);
+    const [sourceCardBox, hiddenListBox, hiddenListPaddingRight] = await Promise.all([
+      sourceCard.boundingBox(),
+      hiddenList.boundingBox(),
+      hiddenList.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight) || 0),
+    ]);
     expect(sourceCardBox).not.toBeNull();
     expect(hiddenListBox).not.toBeNull();
-    expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - 2);
+    expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - hiddenListPaddingRight - 1);
     const sourceTasks = sourceCard.getByTestId('hidden-progress-task');
     await expect(sourceTasks.first()).toBeVisible();
     expect(await sourceTasks.count()).toBeGreaterThan(1);

@@ -5,5 +5,6 @@ export interface RemoteDesktopSessionPort {
     protocol: RemoteDesktopProtocol,
     display: RemoteDesktopDisplay,
   ): Promise<RemoteDesktopSession>;
-  tunnelUrl(session: RemoteDesktopSession, display: RemoteDesktopDisplay): string;
+  tunnelUrl(): string;
+  tunnelData(session: RemoteDesktopSession, display: RemoteDesktopDisplay): string;
 }

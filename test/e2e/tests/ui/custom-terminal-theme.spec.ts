@@ -135,6 +135,9 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
           response.request().method() === 'DELETE',
       );
       await row.getByTestId('terminal-theme-delete').click();
+      const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+      await expect(confirm).toBeVisible();
+      await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
       expect((await deletePromise).ok()).toBeTruthy();
       await expect(row).toHaveCount(0, { timeout: 15_000 });
       expect((await context.request.get(`/api/v1/terminal-themes/${createdThemeId}`)).status()).toBe(404);

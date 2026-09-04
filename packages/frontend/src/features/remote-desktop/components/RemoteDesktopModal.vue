@@ -242,7 +242,7 @@
       )
         return;
 
-      const tunnel = new Guacamole.WebSocketTunnel(props.sessionPort.tunnelUrl(session, spec));
+      const tunnel = new Guacamole.WebSocketTunnel(props.sessionPort.tunnelUrl());
       const nextClient = new Guacamole.Client(tunnel);
       tunnel.onerror = (status: Status) => {
         failConnection(generation, status.message || t('remoteDesktopModal.errors.tunnelError'));
@@ -264,7 +264,7 @@
       nextClient.onerror = (status: Status) => {
         failConnection(generation, status.message || t('remoteDesktopModal.errors.clientError'));
       };
-      nextClient.connect();
+      nextClient.connect(props.sessionPort.tunnelData(session, spec));
       resizeObserver = new ResizeObserver(sendSize);
       resizeObserver.observe(display.value);
     } catch (cause) {
@@ -342,6 +342,7 @@
   };
   const closeModal = async () => {
     await exitFullscreen();
+    fullscreen.value = false;
     minimized.value = false;
     vncText.value = '';
     vncTextFocused.value = false;
@@ -408,6 +409,7 @@
     () => [props.visible, props.connection?.id, props.connection?.type] as const,
     ([visible, connectionId, protocol], previous) => {
       if (visible) {
+        fullscreen.value = document.fullscreenElement === panel.value;
         const changedConnection = previous?.[1] !== connectionId || previous?.[2] !== protocol;
         if (!previous?.[0] || changedConnection) {
           minimized.value = false;
@@ -422,6 +424,7 @@
         vncText.value = '';
         vncTextFocused.value = false;
         void exitFullscreen();
+        fullscreen.value = false;
         disconnect();
       }
     },

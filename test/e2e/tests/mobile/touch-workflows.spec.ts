@@ -319,7 +319,7 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
 
     await page.getByTestId('rdp-window-close').click();
-    await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
+    await expect(page.getByTestId('remote-desktop-modal')).toBeHidden();
     await openConnection();
 
     await expect(page.getByTestId('rdp-touch-mode-touchpad')).toHaveAttribute('aria-pressed', 'true');
@@ -341,8 +341,8 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
     await expect(quickCommandsButton).toBeVisible();
     await quickCommandsButton.click();
 
-    const quickCommands = page.getByTestId('quick-commands-view');
     const quickDialog = page.getByTestId('quick-commands-dialog');
+    const quickCommands = quickDialog.getByTestId('quick-commands-view');
     await expect(quickCommands).toBeVisible();
     await expect(quickDialog.locator('[data-overlay-panel-preset="standard-modal"]')).toBeVisible();
     await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
@@ -383,7 +383,7 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', 
     await expect(keyboard).toBeVisible();
     const ctrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
     await ctrl.click();
-    await expect(ctrl).toHaveClass(/bg-primary/);
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
   });
 
   await slowStep('Ctrl+C delivers ASCII ETX and consumes the one-shot modifier', async () => {
@@ -392,7 +392,7 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', 
     const ctrl = page
       .locator('.mobile-virtual-keyboard.virtual-keyboard-bar')
       .getByRole('button', { name: 'Ctrl', exact: true });
-    await expect(ctrl).not.toHaveClass(/bg-primary/);
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toMatch(/CTRL_BYTE=\s*3/);
   });
 });

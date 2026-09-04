@@ -333,13 +333,13 @@
               :key="command.id"
               :data-command-id="command.id"
               :class="[
-                'quick-command-row flex items-center gap-2 px-3',
+                'quick-command-row flex flex-wrap items-center gap-2 px-3',
                 rowClass,
                 selectedId === command.id ? 'bg-primary/10' : '',
               ]"
               @contextmenu.prevent="openContext($event, command)"
             >
-              <button data-testid="quick-command-execute" class="min-w-0 flex-1 text-left" @click="run(command)">
+              <button data-testid="quick-command-execute" class="min-w-32 flex-1 text-left" @click="run(command)">
                 <span class="block truncate font-medium">{{ displayText(command) }}</span>
                 <code v-if="!compact && secondaryText(command)" class="block truncate text-xs text-text-secondary">{{
                   secondaryText(command)
@@ -363,13 +363,13 @@
           :key="command.id"
           :data-command-id="command.id"
           :class="[
-            'quick-command-row flex items-center gap-2 px-3',
+            'quick-command-row flex flex-wrap items-center gap-2 px-3',
             rowClass,
             selectedId === command.id ? 'bg-primary/10' : '',
           ]"
           @contextmenu.prevent="openContext($event, command)"
         >
-          <button data-testid="quick-command-execute" class="min-w-0 flex-1 text-left" @click="run(command)">
+          <button data-testid="quick-command-execute" class="min-w-32 flex-1 text-left" @click="run(command)">
             <span class="block truncate font-medium">{{ displayText(command) }}</span>
             <code v-if="!compact && secondaryText(command)" class="block truncate text-xs text-text-secondary">{{
               secondaryText(command)

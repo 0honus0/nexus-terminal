@@ -71,6 +71,11 @@
             ? 'primary'
             : 'ghost'
         "
+        :aria-pressed="
+          'modifier' in key
+            ? (key.modifier === 'ctrl' && props.ctrlActive) || (key.modifier === 'alt' && props.altActive)
+            : undefined
+        "
         @pointerdown.prevent
         @click="send(key)"
         >{{ key.label }}</BaseButton

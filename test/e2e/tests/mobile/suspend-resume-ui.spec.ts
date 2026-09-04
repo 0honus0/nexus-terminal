@@ -79,10 +79,6 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
   });
 
   await slowStep('Suspended Sessions UI resumes the hanging shell instead of opening a new SSH shell', async () => {
-    const openButton = page.getByTestId('open-suspended-sessions-button');
-    await expect(openButton).toBeVisible({ timeout: 20_000 });
-    await openButton.click();
-
     const manager = page.getByTestId('suspended-sessions-view');
     await expect(manager).toBeVisible();
     const hanging = manager

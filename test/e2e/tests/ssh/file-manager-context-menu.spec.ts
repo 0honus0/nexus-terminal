@@ -36,13 +36,21 @@ async function openCurrentDirectoryContextMenu(page: Page): Promise<void> {
   await expect(menu(page)).toBeVisible();
 }
 
-async function confirmAction(page: Page, actionType: string, value?: string): Promise<void> {
+async function confirmAction(
+  page: Page,
+  actionType: 'file' | 'mkdir' | 'rename' | 'chmod',
+  value: string,
+): Promise<void> {
   const modal = page.getByTestId('file-manager-action-modal');
   await expect(modal).toHaveAttribute('data-action-type', actionType);
-  if (value !== undefined) {
-    await modal.locator(`#fileManagerActionInput-${actionType}`).fill(value);
-  }
+  await modal.locator(`#fileManagerActionInput-${actionType}`).fill(value);
   await modal.getByTestId('file-manager-action-confirm').click();
+}
+
+async function confirmDelete(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Please confirm' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
 }
 
 async function goIntoFolder(page: Page, folder: string): Promise<void> {
@@ -104,11 +112,13 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
     const target = sidebarList.locator('tr[data-filename="archive-source.txt"]');
     await expect(target).toBeVisible({ timeout: 20_000 });
 
-    const targetBox = await target.boundingBox();
+    const [targetBox, sidebarBox] = await Promise.all([target.boundingBox(), rightSidebar.boundingBox()]);
     const viewport = page.viewportSize();
     expect(targetBox).toBeTruthy();
+    expect(sidebarBox).toBeTruthy();
     expect(viewport).toBeTruthy();
-    expect(targetBox!.x).toBeGreaterThan(viewport!.width - 230);
+    expect(targetBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x);
+    expect(targetBox!.x + targetBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width + 1);
 
     await target.click({
       button: 'right',
@@ -278,14 +288,14 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   await step('New File creates a real SFTP file', async () => {
     await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'New File');
-    await confirmAction(page, 'newFile', 'created-by-menu.txt');
+    await confirmAction(page, 'file', 'created-by-menu.txt');
     await expect(row(page, 'created-by-menu.txt')).toBeVisible();
   });
 
   await step('New Folder creates a real SFTP directory', async () => {
     await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'New Folder');
-    await confirmAction(page, 'newFolder', 'created-folder');
+    await confirmAction(page, 'mkdir', 'created-folder');
     await expect(row(page, 'created-folder')).toBeVisible();
   });
 
@@ -384,7 +394,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   await step('Delete removes a real remote file', async () => {
     await rightClickRow(page, 'archive-source.txt');
     await clickMenuItem(page, 'Delete');
-    await confirmAction(page, 'delete');
+    await confirmDelete(page);
     await expect(row(page, 'archive-source.txt')).toHaveCount(0);
   });
 
@@ -399,7 +409,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
 
     await rightClickRow(page, 'archive-source.zip');
     await clickMenuItem(page, 'Delete');
-    await confirmAction(page, 'delete');
+    await confirmDelete(page);
     await expect(row(page, 'archive-source.zip')).toHaveCount(0);
 
     await rightClickRow(page, 'archive-source.txt');
@@ -432,7 +442,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
 
     await rightClickRow(page, 'archive-source.txt');
     await clickMenuItem(page, 'Delete');
-    await confirmAction(page, 'delete');
+    await confirmDelete(page);
     await expect(row(page, 'archive-source.txt')).toHaveCount(0);
 
     await rightClickRow(page, 'archive-source.zip');

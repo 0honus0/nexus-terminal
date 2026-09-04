@@ -516,8 +516,16 @@
     resetArchivePassword();
   };
   const compressionDestination = (entries: RemoteFileEntry[], format: ArchiveCompressionFormat): string => {
-    const base = entries.length === 1 ? entries[0]!.name.replace(/\.(zip|tar\.gz|tgz|tar\.bz2|tbz2)$/i, '') : 'archive';
-    return `${parentPath(entries[0]!.path).replace(/\/$/, '')}/${base || 'archive'}.${format}`.replace(/^\/\//, '/');
+    const parent = parentPath(entries[0]!.path);
+    let base = 'archive';
+    if (entries.length === 1) {
+      const sourceName = entries[0]!.name;
+      base = sourceName.startsWith('.') ? sourceName : sourceName.replace(/\.[^./]+$/, '') || sourceName;
+    } else {
+      const parentName = parent.split('/').filter(Boolean).pop();
+      if (parentName && parentName !== 'root') base = parentName;
+    }
+    return `${parent.replace(/\/$/, '')}/${base}.${format}`.replace(/^\/\//, '/');
   };
   const archivePasswordFailureMessage = (code: ArchiveTransferErrorCode, fallback: string): string => {
     if (code === 'INVALID_PASSWORD') return t('fileManager.archivePassword.wrongPassword');

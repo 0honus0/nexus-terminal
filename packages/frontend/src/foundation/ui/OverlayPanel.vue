@@ -50,12 +50,18 @@
   const emit = defineEmits<{ (event: 'close'): void }>();
   const panelRef = ref<HTMLElement | null>(null);
   let previouslyFocused: HTMLElement | null = null;
+  let backdropPointerStarted = false;
   const panelPresetClass = computed(() =>
     props.preset === 'standard-modal' ? 'max-h-[85dvh] min-h-0 max-w-lg flex flex-col overflow-hidden p-4' : '',
   );
 
+  const handleOverlayPointerDown = (event: PointerEvent) => {
+    backdropPointerStarted = event.target === event.currentTarget;
+  };
   const handleBackdropClick = () => {
-    if (props.closeOnBackdrop && props.backdropTrigger === 'click') emit('close');
+    const startedOnBackdrop = backdropPointerStarted;
+    backdropPointerStarted = false;
+    if (startedOnBackdrop && props.closeOnBackdrop && props.backdropTrigger === 'click') emit('close');
   };
   const handleBackdropMouseDown = () => {
     if (props.closeOnBackdrop && props.backdropTrigger === 'mousedown') emit('close');
@@ -104,6 +110,7 @@
       class="fixed inset-0 flex items-center justify-center bg-overlay p-4"
       :class="props.overlayClass"
       :style="{ zIndex: props.zIndex }"
+      @pointerdown="handleOverlayPointerDown"
       @click.self="handleBackdropClick"
       @mousedown.self="handleBackdropMouseDown"
     >

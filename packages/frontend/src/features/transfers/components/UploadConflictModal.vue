@@ -11,6 +11,7 @@
   <BaseModal
     data-testid="upload-conflict-modal"
     :visible="visible"
+    :z-index="70"
     :title="t('fileManager.uploadConflict.title')"
     @close="emit('resolve', 'skip', false)"
     ><div class="space-y-4">

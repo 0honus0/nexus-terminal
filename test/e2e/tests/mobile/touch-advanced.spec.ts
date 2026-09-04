@@ -260,7 +260,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 
   await slowStep('single tap keeps Markdown preview-first behavior on mobile', async () => {
     await tapFileManagerRow(page, filename);
-    const preview = page.getByRole('dialog', { name: filename });
+    const preview = page.getByTestId('document-popup');
     await expect(preview).toBeVisible({ timeout: 20_000 });
     await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(preview.locator('strong')).toHaveText('preview-ok');
@@ -272,7 +272,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
   });
 
   await slowStep('Edit switches the preview to mobile CodeMirror and Save persists real SFTP bytes', async () => {
-    const preview = page.getByRole('dialog', { name: filename });
+    const preview = page.getByTestId('document-popup');
     await preview.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(preview).toBeHidden();
 
@@ -297,7 +297,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
 
   await step('reopening the file renders the just-saved Markdown preview', async () => {
     await tapFileManagerRow(page, filename);
-    const preview = page.getByRole('dialog', { name: filename });
+    const preview = page.getByTestId('document-popup');
     await expect(preview.getByRole('heading', { name: 'Mobile Markdown E2E' })).toBeVisible({ timeout: 20_000 });
     await expect(preview.locator('strong')).toHaveText('mobile-save-ok');
   });
@@ -382,7 +382,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
 
   await slowStep('single tap opens the spreadsheet preview with both sheet tabs visible', async () => {
     await tapFileManagerRow(page, filename);
-    const dialog = page.getByRole('dialog', { name: filename });
+    const dialog = page.getByTestId('document-popup');
     await expect(dialog).toBeVisible({ timeout: 20_000 });
     const preview = dialog.getByTestId('spreadsheet-preview');
     const tabs = dialog.getByTestId('spreadsheet-sheet-tabs');
@@ -405,7 +405,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 
   await step('tapping the second sheet replaces the narrow-grid content and resets scroll offsets', async () => {
-    const dialog = page.getByRole('dialog', { name: filename });
+    const dialog = page.getByTestId('document-popup');
     const scroller = dialog.getByTestId('spreadsheet-scroll-container');
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
@@ -448,7 +448,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
 
   const filename = 'preview.pdf';
   await tapFileManagerRow(page, filename);
-  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  const dialog = page.getByTestId('document-popup');
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
   await expect(dialog.getByTestId('pdf-continuous-pages').locator('[data-pdf-page-number]')).toHaveCount(3);
@@ -559,7 +559,7 @@ test('mobile DOCX touch-pans wide content without a desktop scrollbar track', as
 
   const filename = 'preview.docx';
   await tapFileManagerRow(page, filename);
-  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  const dialog = page.getByTestId('document-popup');
   await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
   const scroller = dialog.getByTestId('docx-preview-scroller');
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
@@ -591,7 +591,7 @@ test('mobile preview close button clears cached state when popup file editing is
 
   const filename = 'preview.xlsx';
   await tapFileManagerRow(page, filename);
-  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  const dialog = page.getByTestId('document-popup');
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   const tabCloseButton = dialog.getByRole('button', { name: 'Close tab preview.xlsx', exact: true });
   const tabCloseBox = await tabCloseButton.boundingBox();
@@ -605,7 +605,7 @@ test('mobile preview close button clears cached state when popup file editing is
   await expect(dialog).toBeHidden();
 
   await tapFileManagerRow(page, filename);
-  const reopened = page.getByRole('dialog', { name: filename, exact: true });
+  const reopened = page.getByTestId('document-popup');
   await expect(reopened).toBeVisible({ timeout: 20_000 });
   await expect(reopened.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
   await expect(reopened.getByTestId('spreadsheet-sheet-0')).toHaveAttribute('aria-pressed', 'true');
@@ -674,10 +674,8 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 
       await source.getByTestId('hidden-progress-restore').click();
       await expect(progressDisplay).toBeHidden();
-      await reopenConnectedFileManager(page);
       const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
       await expect(popup).toBeVisible();
-      await closeConnectedFileManager(page);
       await popup.getByTestId('transfer-progress-cancel-all').click();
       await expect
         .poll(() =>

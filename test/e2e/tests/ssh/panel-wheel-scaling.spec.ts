@@ -311,8 +311,9 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
 
     await ctrlWheel(list, 100);
     await expect.poll(() => readScale(list, 'data-row-scale')).toBe(0.92);
-    // Close immediately, well before the normal 240ms debounce window expires.
-    await sidebar.locator('button[title="Close Sidebar"]').click();
+    // Close immediately through the current sidebar rail toggle, well before the normal 240ms debounce window expires.
+    await sidebarToggle.click();
+    await expect(sidebar).toBeHidden();
     expect((await persisted).ok()).toBeTruthy();
 
     await sidebarToggle.click();

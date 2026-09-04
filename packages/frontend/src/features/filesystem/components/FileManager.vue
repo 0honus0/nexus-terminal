@@ -671,10 +671,9 @@
     window.setTimeout(() => closePathHistory(), 120);
   };
   const navigatePathDraft = async (path = pathDraft.value) => {
-    const targetPath = path.trim();
-    if (!targetPath) return;
+    if (!path.trim()) return;
     closePathHistory();
-    await browser.load(targetPath);
+    await browser.load(path);
   };
   const handlePathInputKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -1278,6 +1277,8 @@
     </BaseContextMenu>
 
     <BaseModal
+      data-testid="file-manager-action-modal"
+      :data-action-type="action"
       :visible="Boolean(action)"
       :title="
         action === 'mkdir'
@@ -1291,10 +1292,14 @@
       @close="action = null"
     >
       <form class="space-y-4" @submit.prevent="submit">
-        <BaseFormField :label="t('common.value')"><BaseInput v-model="value" autofocus /></BaseFormField>
+        <BaseFormField :label="t('common.value')"
+          ><BaseInput :id="`fileManagerActionInput-${action}`" v-model="value" autofocus
+        /></BaseFormField>
         <div class="flex justify-end gap-2">
           <BaseButton type="button" @click="action = null">{{ t('common.cancel') }}</BaseButton
-          ><BaseButton type="submit" variant="primary">{{ t('common.confirm') }}</BaseButton>
+          ><BaseButton data-testid="file-manager-action-confirm" type="submit" variant="primary">{{
+            t('common.confirm')
+          }}</BaseButton>
         </div>
       </form>
     </BaseModal>

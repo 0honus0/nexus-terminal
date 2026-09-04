@@ -3,6 +3,7 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
   configureSshE2eSettings,
+  closeConnectedFileManager,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
   fileManagerRow,
@@ -112,6 +113,7 @@ test('existing copy progress popup hides and restores through Progress Display',
     await step('the minimize-style action hides the popup and Progress Display restores it', async () => {
       const center = visibleProgressCenter(page);
       await expect(center.getByTestId('transfer-progress-task')).toBeVisible();
+      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
       await openProgressDisplayAndRestorePopup(page, center, sourceName);
     });
@@ -146,6 +148,7 @@ test('existing archive progress popup hides and restores through Progress Displa
     await step('the minimize-style action hides the archive popup and Progress Display restores it', async () => {
       const center = visibleProgressCenter(page);
       await expect(visibleProgressTask(page, 'archive-source.zip')).toBeVisible();
+      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
       await openProgressDisplayAndRestorePopup(page, center, 'archive-source.zip');
     });

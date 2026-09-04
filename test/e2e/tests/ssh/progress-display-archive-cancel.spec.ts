@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { E2E_SSH } from '../../support/ssh';
+import { closeConnectedFileManager, reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
 import {
   openFileManager,
   refreshFileManager,
@@ -20,6 +20,7 @@ test('archive remains cancelled while remote command preparation is stalled', as
     const popup = visibleProgressCenter(page);
     const task = visibleProgressTask(page, 'archive-source.zip');
     await expect(popup).toBeVisible({ timeout: 10_000 });
+    await closeConnectedFileManager(page);
     await task.getByTestId('transfer-progress-cancel').click();
     await expect(task).toHaveAttribute('data-task-status', 'cancelled', { timeout: 10_000 });
 
@@ -29,6 +30,7 @@ test('archive remains cancelled while remote command preparation is stalled', as
     await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);
 
+    await reopenConnectedFileManager(page);
     await refreshFileManager(page);
     await expect(row(page, 'archive-source.zip')).toHaveCount(0);
   } finally {

@@ -94,7 +94,7 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
 
     const historyView = page.getByTestId('command-history-view').filter({ visible: true }).first();
-    const historyItem = historyView.locator('li[title]').filter({ hasText: marker }).first();
+    const historyItem = historyView.locator('li[data-history-id]').filter({ hasText: marker }).first();
     await expect(historyItem).toBeVisible({ timeout: 20_000 });
     const before = markerCount(await rows.innerText(), marker);
     await historyItem.getByTestId('command-history-execute').click();

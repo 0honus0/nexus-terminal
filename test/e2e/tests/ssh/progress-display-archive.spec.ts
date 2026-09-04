@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import {
+  closeConnectedFileManager,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -40,6 +41,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
       const popup = visibleProgressCenter(page);
       await expect(popup).toBeVisible({ timeout: 10_000 });
       await expect(visibleProgressTask(page, 'archive-source.zip')).toHaveAttribute('data-task-kind', 'compress');
+      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
 
       const modal = await openProgressDisplay(page);
@@ -49,6 +51,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
       await expect(modal).toBeHidden();
       await reopenConnectedFileManager(page);
       await expect(popup).toBeVisible();
+      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
       const reopenedModal = await openProgressDisplay(page);
       task = hiddenTask(reopenedModal, 'archive-source.zip');
@@ -67,8 +70,9 @@ test('registered archive progress supports hide, restore, and real cancel for co
 
       await rightClickRow(page, 'archive-source.txt');
       await clickMenuItem(page, 'Delete');
-      const actionModal = page.getByTestId('file-manager-action-modal');
-      await actionModal.getByTestId('file-manager-action-confirm').click();
+      const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+      await expect(confirm).toBeVisible();
+      await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect(row(page, 'archive-source.txt')).toHaveCount(0);
     });
 
@@ -82,6 +86,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
         const popup = visibleProgressCenter(page);
         await expect(popup).toBeVisible({ timeout: 10_000 });
         await expect(visibleProgressTask(page, 'archive-source.zip')).toHaveAttribute('data-task-kind', 'decompress');
+        await closeConnectedFileManager(page);
         await hideVisibleProgressCenter(page);
 
         const modal = await openProgressDisplay(page);
@@ -180,6 +185,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
   test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { showPopupFileManager: false } })).ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
@@ -216,8 +222,8 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await expect(task).toHaveAttribute('data-task-kind', 'compress');
 
     // FileManager presentation may unmount, but the session-owned transfer task remains in the shared ProgressCenter.
-    await sidebar.locator('button[title="Close Sidebar"]').click();
-    await expect(sidebarList).toHaveCount(0);
+    await sidebarToggle.click();
+    await expect(sidebarList).toBeHidden();
     await expect(popup).toBeVisible();
     await expect(task).toBeVisible();
     await task.getByTestId('transfer-progress-cancel').click();
