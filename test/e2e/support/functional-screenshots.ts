@@ -1,19 +1,12 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
 
 const e2eRoot = path.resolve(__dirname, '..');
-const manifestPath = path.join(__dirname, 'functional-screenshot-manifest.json');
 const defaultOutputDir = path.join(e2eRoot, '.tmp', 'functional-screenshots');
-let manifestPromise: Promise<Set<string>> | null = null;
 
 export const functionalScreenshotsEnabled = (): boolean =>
   /^(1|true|yes)$/i.test(process.env.E2E_CAPTURE_SCREENSHOTS ?? '');
-
-async function screenshotManifest(): Promise<Set<string>> {
-  manifestPromise ??= readFile(manifestPath, 'utf8').then((raw) => new Set(JSON.parse(raw) as string[]));
-  return manifestPromise;
-}
 
 function screenshotOutputDir(): string {
   const configured = process.env.E2E_SCREENSHOT_OUTPUT_DIR?.trim();
@@ -28,9 +21,8 @@ export async function captureFunctionalScreenshot(
 ): Promise<boolean> {
   if (!functionalScreenshotsEnabled()) return false;
 
-  const manifest = await screenshotManifest();
-  if (!manifest.has(filename)) {
-    throw new Error(`Functional screenshot ${filename} is not listed in ${path.basename(manifestPath)}`);
+  if (path.basename(filename) !== filename || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(filename)) {
+    throw new Error(`Functional screenshot filename must be a plain .png basename: ${filename}`);
   }
 
   const outputDir = screenshotOutputDir();

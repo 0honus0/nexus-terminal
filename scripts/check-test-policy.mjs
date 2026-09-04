@@ -83,6 +83,35 @@ for (const file of specFiles) {
   }
 }
 
+const screenshotDeclarations = new Map();
+const screenshotCallPattern = /\bcaptureFunctionalScreenshot\s*\(/g;
+const screenshotDeclarationPattern = /\bcaptureFunctionalScreenshot\s*\(\s*[^,\n]+,\s*(["'])([^"'\n]+)\1/g;
+const screenshotFilenamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/;
+for (const file of specFiles) {
+  const text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+  const calls = [...text.matchAll(screenshotCallPattern)].length;
+  const declarations = [...text.matchAll(screenshotDeclarationPattern)];
+  if (calls !== declarations.length) {
+    failures.push(
+      `${file}: every captureFunctionalScreenshot call must declare a literal screenshot filename in the owning E2E spec`,
+    );
+  }
+
+  for (const match of declarations) {
+    const filename = match[2];
+    if (!screenshotFilenamePattern.test(filename)) {
+      failures.push(`${file}: invalid functional screenshot filename ${filename}`);
+      continue;
+    }
+    const previous = screenshotDeclarations.get(filename);
+    if (previous) {
+      failures.push(`${file}: functional screenshot filename ${filename} is already declared by ${previous}`);
+      continue;
+    }
+    screenshotDeclarations.set(filename, file);
+  }
+}
+
 const timingsPath = path.join(repoRoot, 'test/e2e/groups/timings.json');
 if (fs.existsSync(timingsPath)) {
   const timings = JSON.parse(fs.readFileSync(timingsPath, 'utf8'));
@@ -99,5 +128,5 @@ if (failures.length) {
 }
 
 console.log(
-  `Test policy check passed: ${specFiles.length} E2E spec files, no non-E2E test cases, no application-source imports, no forbidden fixture oracles.`,
+  `Test policy check passed: ${specFiles.length} E2E spec files, ${screenshotDeclarations.size} unique functional screenshot declarations, no non-E2E test cases, no application-source imports, no forbidden fixture oracles.`,
 );

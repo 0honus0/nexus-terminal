@@ -8,7 +8,6 @@ const e2eRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(e2eRoot, '../..');
 const stagingDir = path.join(e2eRoot, '.tmp', 'manual-functional-screenshots');
 const targetDir = path.join(repoRoot, 'doc', 'imgs', 'e2e');
-const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'functional-screenshot-manifest.json'), 'utf8'));
 
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
@@ -25,21 +24,23 @@ const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['pla
 
 if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
 
-const actual = fs
+const screenshots = fs
   .readdirSync(stagingDir)
   .filter((name) => name.endsWith('.png'))
   .sort();
-const expected = [...manifest].sort();
-const missing = expected.filter((name) => !actual.includes(name));
-const unexpected = actual.filter((name) => !expected.includes(name));
-if (missing.length || unexpected.length) {
-  if (missing.length) console.error(`Missing functional screenshots: ${missing.join(', ')}`);
-  if (unexpected.length) console.error(`Unexpected functional screenshots: ${unexpected.join(', ')}`);
+
+if (screenshots.length === 0) {
+  console.error('No functional screenshots were produced by the E2E run.');
   process.exit(1);
 }
 
 fs.mkdirSync(targetDir, { recursive: true });
-for (const filename of expected) {
+for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
+  if (entry.isFile() && entry.name.endsWith('.png')) fs.rmSync(path.join(targetDir, entry.name));
+}
+for (const filename of screenshots) {
   fs.copyFileSync(path.join(stagingDir, filename), path.join(targetDir, filename));
 }
-console.log(`Updated ${expected.length} functional screenshots in ${targetDir}`);
+
+console.log(`Updated ${screenshots.length} functional screenshots in ${targetDir}:`);
+for (const filename of screenshots) console.log(`- ${filename}`);

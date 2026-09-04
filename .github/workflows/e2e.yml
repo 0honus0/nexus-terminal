@@ -117,7 +117,8 @@ jobs:
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             before_sha="${{ github.event.before }}"
             if [[ -n "$before_sha" && ! "$before_sha" =~ ^0+$ ]] \
-              && ! git diff --quiet "$before_sha" "$GITHUB_SHA" -- test/e2e/support/functional-screenshot-manifest.json; then
+              && git diff -U0 "$before_sha" "$GITHUB_SHA" -- test/e2e/tests \
+                | grep -E '^[+-].*captureFunctionalScreenshot\(' >/dev/null; then
               screenshots_requested=true
             fi
           fi
@@ -433,14 +434,32 @@ jobs:
           path: test/e2e/.tmp/functional-screenshots-merged
           merge-multiple: true
 
-      - name: Verify and stage functional screenshots
+      - name: Stage functional screenshots
         shell: bash
         run: |
           set -euo pipefail
           screenshot_root="test/e2e/.tmp/functional-screenshots-merged"
-          node test/e2e/support/verify-functional-screenshots.mjs "$screenshot_root"
+          mapfile -t screenshots < <(find "$screenshot_root" -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort)
+          if (( ${#screenshots[@]} == 0 )); then
+            echo "::error::Screenshot capture was requested but the E2E run produced no functional screenshots."
+            exit 1
+          fi
+
           mkdir -p doc/imgs/e2e
-          cp "$screenshot_root"/*.png doc/imgs/e2e/
+          find doc/imgs/e2e -maxdepth 1 -type f -name '*.png' -delete
+          for screenshot in "${screenshots[@]}"; do
+            cp "$screenshot_root/$screenshot" "doc/imgs/e2e/$screenshot"
+          done
+
+          {
+            echo "## Functional screenshots"
+            echo
+            echo "Collected ${#screenshots[@]} screenshot checkpoints from this E2E run:"
+            echo
+            for screenshot in "${screenshots[@]}"; do
+              echo "- \`$screenshot\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit environment and screenshot refresh
         shell: bash
