@@ -48,10 +48,23 @@ export default defineConfig({
         changeOrigin: true, // 对于静态资源通常也建议开启
         // 通常不需要重写静态资源的路径
       },
-      '/ws': {
-        target: 'ws://localhost:3001', // 后端 WebSocket 服务器地址
+      // Keep the clean WebSocket families on independent proxy instances. Upload sockets can
+      // be numerous and short-lived under cancellation/network-failure tests; sharing one broad
+      // /ws proxy lets that churn affect later Workspace control upgrades in the dev/E2E ingress.
+      '/ws/workspace': {
+        target: 'ws://localhost:3001',
         ws: true,
-        // 保留浏览器访问前端时的 Host，供后端进行同源 WebSocket 校验。
+        // Preserve the browser-facing Host so Backend same-origin validation sees the real origin.
+        changeOrigin: false,
+      },
+      '/ws/uploads': {
+        target: 'ws://localhost:3001',
+        ws: true,
+        changeOrigin: false,
+      },
+      '/ws/remote-desktop': {
+        target: 'ws://localhost:3001',
+        ws: true,
         changeOrigin: false,
       },
     },
