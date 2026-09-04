@@ -76,6 +76,7 @@
   const pathDraft = ref(props.initialPath ?? '/');
   const pathHistoryOpen = ref(false);
   const pathHistoryIndex = ref(-1);
+  let pathHistoryCloseTimer: number | undefined;
   const root = ref<HTMLElement | null>(null);
   const pathInput = ref<{ focus?: () => void; select?: () => void } | null>(null);
   const searchInput = ref<{ focus?: () => void } | null>(null);
@@ -273,6 +274,7 @@
       window.clearInterval(remoteDragScrollTimer);
       remoteDragScrollTimer = undefined;
     }
+    if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
     if (ownsFilesystemState) filesystemState.dispose();
     stopListScrollerWatch();
     listResizeObserver?.disconnect();
@@ -340,7 +342,13 @@
       if (entry.metadata.isDirectory) await browser.open(entry);
       else emit('openFile', entry);
     } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+      feedback.notifyError(
+        entry.metadata.isSymbolicLink
+          ? t('fileManager.errors.readFileFailed')
+          : cause instanceof Error
+            ? cause.message
+            : String(cause),
+      );
     }
   };
   const openContextAt = (clientX: number, clientY: number, entry: RemoteFileEntry): void => {
@@ -663,12 +671,20 @@
     }
   };
   const openPathHistory = async () => {
+    if (pathHistoryCloseTimer !== undefined) {
+      window.clearTimeout(pathHistoryCloseTimer);
+      pathHistoryCloseTimer = undefined;
+    }
     pathHistoryOpen.value = true;
     pathHistoryIndex.value = -1;
     catalog.historySearch.value = pathDraft.value;
     await catalog.loadHistory().catch(() => undefined);
   };
   const closePathHistory = (restore = false) => {
+    if (pathHistoryCloseTimer !== undefined) {
+      window.clearTimeout(pathHistoryCloseTimer);
+      pathHistoryCloseTimer = undefined;
+    }
     pathHistoryOpen.value = false;
     pathHistoryIndex.value = -1;
     if (restore) pathDraft.value = browser.path.value;
@@ -678,7 +694,11 @@
     pathHistoryIndex.value = -1;
   };
   const deferClosePathHistory = () => {
-    window.setTimeout(() => closePathHistory(), 120);
+    if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
+    pathHistoryCloseTimer = window.setTimeout(() => {
+      pathHistoryCloseTimer = undefined;
+      closePathHistory();
+    }, 120);
   };
   const navigatePathDraft = async (path = pathDraft.value) => {
     if (!path.trim()) return;

@@ -428,8 +428,8 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await submenu.getByRole('button', { name: 'Compress to zip with password...', exact: true }).click();
 
     let passwordDialog = page.getByRole('dialog', { name: 'Create password-protected zip' });
-    let passwordInput = passwordDialog.getByLabel('Password', { exact: true });
-    let passwordConfirm = passwordDialog.getByLabel('Confirm password', { exact: true });
+    let passwordInput = passwordDialog.getByLabel(/^Password\b/);
+    let passwordConfirm = passwordDialog.getByLabel(/^Confirm password\b/);
     let submit = passwordDialog.getByRole('button', { name: 'Create zip', exact: true });
     await expect(passwordDialog).toBeVisible();
 
@@ -456,7 +456,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await rightClickRow(page, 'archive-source.zip');
     await clickMenuItem(page, 'Decompress');
     passwordDialog = page.getByRole('dialog', { name: 'zip password required' });
-    passwordInput = passwordDialog.getByLabel('Password', { exact: true });
+    passwordInput = passwordDialog.getByLabel(/^Password\b/);
     submit = passwordDialog.getByRole('button', { name: 'Extract', exact: true });
     await expect(passwordDialog).toBeVisible({ timeout: 30_000 });
 

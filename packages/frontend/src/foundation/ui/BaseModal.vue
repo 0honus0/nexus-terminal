@@ -15,6 +15,7 @@
       panelClass?: string;
       panelStyle?: StyleValue;
       overlayClass?: string;
+      contentClass?: string;
       ariaLabel?: string;
     }>(),
     {
@@ -28,6 +29,7 @@
       panelClass: '',
       panelStyle: undefined,
       overlayClass: '',
+      contentClass: '',
       ariaLabel: undefined,
     },
   );
@@ -64,7 +66,7 @@
       <slot name="header-actions" />
     </header>
 
-    <div class="min-h-0 flex-1 overflow-auto py-4">
+    <div class="min-h-0 flex-1 overflow-auto py-4" :class="props.contentClass">
       <slot />
     </div>
 

@@ -1046,6 +1046,7 @@
       :visible="fileManagerPopupVisible"
       :title="t('fileManager.modalTitle')"
       panel-class="h-[min(900px,94vh)] w-[min(1200px,96vw)]"
+      content-class="!overflow-visible"
       @close="fileManagerPopupVisible = false"
     >
       <template #header-actions>
