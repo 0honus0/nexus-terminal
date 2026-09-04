@@ -1,6 +1,6 @@
 # Nexus Backend Architecture
 
-> Mandatory engineering rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md). If explanatory text differs from that register, the constraint register is authoritative.
+> Mandatory engineering rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md). If explanatory text differs from that register, the constraint register is authoritative.
 
 This document describes the backend architecture after the clean-skeleton migration. It is the placement and dependency reference for future backend work, including future AI/Agent features.
 
@@ -30,7 +30,7 @@ stored connection configuration
           └── Agent ExecutionSession
 ```
 
-The two runtimes are modeled as separate owners of transport/session state. The non-sharing rule for raw runtime resources is registered in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#workspace-execution-and-agent-boundaries).
+The two runtimes are modeled as separate owners of transport/session state. The non-sharing rule for raw runtime resources is registered in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-runtime-003).
 
 The JavaScript baseline is ES2025. Backend and Remote Gateway currently compile with TypeScript 7; the Vue frontend uses the project-pinned TypeScript 6 toolchain.
 
@@ -73,7 +73,7 @@ A placement test:
 
 If yes, it probably belongs in `platform`.
 
-The Platform layer stays technology-neutral; its enforced dependency restrictions are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#dependency-and-module-architecture).
+The Platform layer stays technology-neutral; its enforced dependency restrictions are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-arch-001).
 
 ### `infrastructure/` — concrete technologies
 
@@ -93,7 +93,7 @@ Examples:
 - `system/` — local Node host metrics;
 - `diagnostics/` — process/database diagnostic probes.
 
-Concrete objects are constructed by `bootstrap`. Infrastructure implements Platform ports and Module-owned technology/persistence ports; the exact dependency restrictions are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#dependency-and-module-architecture).
+Concrete objects are constructed by `bootstrap`. Infrastructure implements Platform ports and Module-owned technology/persistence ports; the exact dependency restrictions are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-arch-001).
 
 ### `modules/` — Nexus product/application behavior
 
@@ -141,13 +141,13 @@ Current Interface responsibilities include:
 - managing WebSocket upgrade, heartbeat and frame-level backpressure;
 - calling injected Module services.
 
-Product resource ownership, persistence, and machine-operation algorithms remain in their owning Module/Platform/Infrastructure layers. The enforceable boundary rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#layer-responsibility-constraints).
+Product resource ownership, persistence, and machine-operation algorithms remain in their owning Module/Platform/Infrastructure layers. The enforceable boundary rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-layer-001).
 
 #### Clean frontend contracts
 
 The temporary frontend-compatibility directories have been deleted. HTTP routes now validate/map clean camelCase Interface DTOs directly, while persistence-specific shapes remain behind Module/Repository boundaries. WebSocket routes use only the clean Workspace/upload/remote-desktop protocols.
 
-The deleted `interfaces/http/legacy-api/` and `interfaces/websocket/legacy-api/` paths are not permanent extension points and must not be recreated. The current rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#legacy-frontend-compatibility).
+The deleted `interfaces/http/legacy-api/` and `interfaces/websocket/legacy-api/` paths are not permanent extension points and must not be recreated. The current rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-legacy-001).
 
 Permanent transport code such as HTTP streaming, WebSocket upgrade/auth/heartbeat/backpressure and transparent Remote Gateway forwarding remains in the normal Interface/Platform owners.
 
@@ -179,7 +179,7 @@ Interfaces receive dependencies; they never import Bootstrap.
 - cryptographic interfaces;
 - genuinely shared types.
 
-The project-wide ownership rule for generic locations such as `shared`, `utils`, and `helpers` is centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#general-engineering).
+The project-wide ownership rule for generic locations such as `shared`, `utils`, and `helpers` is centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-gen-003).
 
 ## Workspace service responsibilities
 
@@ -231,7 +231,7 @@ transfer    upload/copy/bulk data
 background  recursive scans/search/background work
 ```
 
-Technology-specific SFTP pooling is implemented in Infrastructure. The runtime-resource ownership constraints are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#workspace-execution-and-agent-boundaries).
+Technology-specific SFTP pooling is implemented in Infrastructure. The runtime-resource ownership constraints are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-runtime-003).
 
 ## Suspend/resume ownership
 
@@ -292,9 +292,9 @@ Current CompositionRoot exposure is:
 compositionRoot.modules.diagnostics;
 ```
 
-The intended Agent integration point is that diagnostics service. The corresponding access restrictions are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#diagnostics-constraints).
+The intended Agent integration point is that diagnostics service. The corresponding access restrictions are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-diag-003).
 
-Diagnostic actor types are `system`, `agent` and `user`. Actor/scope policy and redaction are applied by `SystemDiagnosticsService`. The complete security constraints for diagnostic access and output are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#diagnostics-constraints).
+Diagnostic actor types are `system`, `agent` and `user`. Actor/scope policy and redaction are applied by `SystemDiagnosticsService`. The complete security constraints for diagnostic access and output are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-diag-003).
 
 ## Architecture guard
 
@@ -304,11 +304,11 @@ Run:
 npm --prefix packages/backend run check:architecture
 ```
 
-The guard checks the dependency graph, including layer edges, source cycles and module-level cycles. The temporary compatibility-import exceptions were removed when the compatibility directories were deleted. The rules it enforces are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#dependency-and-module-architecture).
+The guard checks the dependency graph, including layer edges, source cycles and module-level cycles. The temporary compatibility-import exceptions were removed when the compatibility directories were deleted. The rules it enforces are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-arch-001).
 
 ## Verification and testing
 
-Architecture verification and user-facing E2E are intentionally separate. The concrete verification commands and E2E policy are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#verification-commands) and [E2E](../testing/E2E.md). The repository does not maintain a second lower-level automated test suite.
+Architecture verification and user-facing E2E are intentionally separate. The concrete verification commands and E2E policy are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-ver-001) and [E2E](../testing/E2E.md). The repository does not maintain a second lower-level automated test suite.
 
 ## Placement guide
 
@@ -328,7 +328,7 @@ A practical ownership guide for locating code:
 
 ## Future AI/Agent integration
 
-The intended AI/Agent integration follows the same application/module/capability split. The normative ownership constraints are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#workspace-execution-and-agent-boundaries).
+The intended AI/Agent integration follows the same application/module/capability split. The normative ownership constraints are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-runtime-003).
 
 Expected dependency direction:
 

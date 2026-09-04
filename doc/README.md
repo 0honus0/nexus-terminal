@@ -9,7 +9,7 @@
 
 ## 工程文档
 
-- [工程约束](./ENGINEERING_CONSTRAINTS.md)：整个仓库唯一的强制工程约束登记表。
+- [工程约束](./software-requirements/engineering-constraints.md)：整个仓库唯一的强制工程约束登记表。
 - [Backend 架构](./architecture/BACKEND.md)
 - [后端重构报告与前端迁移参考](./architecture/BACKEND_REFACTOR_REPORT.md)
 - [Frontend 架构](./architecture/FRONTEND.md)

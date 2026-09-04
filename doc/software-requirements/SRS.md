@@ -41,11 +41,11 @@
 | [Docker 管理](requirements/docker.md)                              |           2 |         4 |
 | [RDP / VNC 远程桌面](requirements/remote-desktop.md)               |           7 |         4 |
 | [移动端交互](requirements/mobile.md)                               |           4 |         0 |
-| [架构与跨模块约束](requirements/architecture.md)                   |           4 |         0 |
+| [架构与跨模块需求](requirements/architecture.md)                   |           4 |         0 |
 
-## 4. 系统级特殊设计与非功能约束
+## 4. 系统级特殊设计与非功能需求
 
-见 [特殊设计与系统级约束](design/special-designs.md)。
+见 [特殊设计与系统级要求](design/special-designs.md)。强制工程约束以 [Engineering Constraints](engineering-constraints.md) 为唯一规范源，本 SRS 仅通过 `EC-*` 引用适用规则。
 
 ## 5. 可追溯性
 
@@ -55,7 +55,7 @@
 - [原始 FR 文档](../LEGACY_FRONTEND_FUNCTIONAL_REQUIREMENTS.md)
 - [原始 GREQ Catalog](../LEGACY_FRONTEND_GIT_REQUIREMENT_CATALOG.md)
 - [Frontend Architecture](../architecture/FRONTEND.md)
-- [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md)
+- [Engineering Constraints](engineering-constraints.md)
 
 ## 6. 当前范围说明
 

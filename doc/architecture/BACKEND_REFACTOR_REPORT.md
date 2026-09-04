@@ -2,7 +2,7 @@
 
 > 本文是本轮 Backend clean-skeleton 重构的结果报告，也是接下来 Frontend contract / state / API 重构的主要参考文档。
 >
-> 永久工程约束统一记录在 [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md)。本文保留 Backend 重构与 Frontend contract 迁移过程中的历史证据，不替代约束登记表。
+> 永久工程约束统一记录在 [Engineering Constraints](../software-requirements/engineering-constraints.md)。本文保留 Backend 重构与 Frontend contract 迁移过程中的历史证据，不替代约束登记表。
 >
 > **当前状态更新：** Frontend clean HTTP/WS contract 已完成对齐；`interfaces/http/legacy-api/` 与 `interfaces/websocket/legacy-api/` 已在 production import 归零后删除。本文后续标为 legacy compatibility 的章节属于迁移前/迁移中快照，用于解释删除路径与历史 contract，不代表当前 production 仍存在这些目录。
 

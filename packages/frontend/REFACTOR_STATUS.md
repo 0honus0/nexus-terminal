@@ -32,7 +32,7 @@ Read in this order:
 2. [`../../doc/architecture/FRONTEND_DEPENDENCY_ANALYSIS.md`](../../doc/architecture/FRONTEND_DEPENDENCY_ANALYSIS.md) — old dependency/business analysis and cycle evidence.
 3. [`../../doc/architecture/FRONTEND_MIGRATION_MANIFEST.md`](../../doc/architecture/FRONTEND_MIGRATION_MANIFEST.md) — old-source-to-new-owner rewrite manifest.
 4. [`../../doc/architecture/BACKEND_REFACTOR_REPORT.md`](../../doc/architecture/BACKEND_REFACTOR_REPORT.md) — backend clean semantic/API/WS reference.
-5. [`../../doc/ENGINEERING_CONSTRAINTS.md`](../../doc/ENGINEERING_CONSTRAINTS.md) — mandatory repository constraints.
+5. [`../../doc/software-requirements/engineering-constraints.md`](../../doc/software-requirements/engineering-constraints.md) — mandatory repository constraints.
 
 ## 3. Non-negotiable decisions
 

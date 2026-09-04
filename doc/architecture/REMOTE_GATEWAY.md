@@ -51,4 +51,4 @@ From the repository root:
 npm run build:remote-gateway
 ```
 
-Mandatory project-wide engineering rules live in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md).
+Mandatory project-wide engineering rules live in [Engineering Constraints](../software-requirements/engineering-constraints.md).

@@ -2,7 +2,7 @@
 
 > This document is the architecture input for the frontend rewrite. Feature implementation must not resume until the ownership and dependency rules in this document are treated as the target graph.
 >
-> Source baseline analyzed: clean `HEAD` frontend source extracted outside the worktree, existing E2E suite, `doc/architecture/FRONTEND.md`, `doc/architecture/BACKEND_REFACTOR_REPORT.md`, and `doc/ENGINEERING_CONSTRAINTS.md`.
+> Source baseline analyzed: clean `HEAD` frontend source extracted outside the worktree, existing E2E suite, `doc/architecture/FRONTEND.md`, `doc/architecture/BACKEND_REFACTOR_REPORT.md`, and `doc/software-requirements/engineering-constraints.md`.
 
 ## 1. Why the old frontend cannot be reorganized by file moves
 

@@ -790,7 +790,7 @@ HTTP/WS contract migration 被明确放在 frontend UI/functionality rewrite 之
 
 ## 19. Testing and validation
 
-自动化 product behavior test 仅允许真实 E2E，遵守 [`ENGINEERING_CONSTRAINTS.md`](../ENGINEERING_CONSTRAINTS.md)。
+自动化 product behavior test 仅允许真实 E2E，遵守 [工程约束表](../software-requirements/engineering-constraints.md)。
 
 Frontend architecture invariant 使用 build/static architecture check，而不是新增 unit/component/internal implementation test。
 

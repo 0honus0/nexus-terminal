@@ -76,7 +76,7 @@ Read in this order:
 
 1. `doc/FRONTEND_REFACTOR_CURRENT_HANDOFF.md` — this file.
 2. `packages/frontend/REFACTOR_STATUS.md` — persistent phase ledger.
-3. `doc/ENGINEERING_CONSTRAINTS.md` — repository constraints.
+3. `doc/software-requirements/engineering-constraints.md` — repository constraints.
 4. `doc/architecture/FRONTEND.md` — authoritative frontend architecture.
 5. `doc/architecture/FRONTEND_DEPENDENCY_ANALYSIS.md` — old dependency/cycle analysis.
 6. `doc/architecture/FRONTEND_MIGRATION_MANIFEST.md` — old source to new owner mapping.

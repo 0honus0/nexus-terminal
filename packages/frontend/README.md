@@ -11,7 +11,7 @@ Frontend 的正式架构、目录边界、依赖方向、组件归属、Workspac
 - [Frontend Rewrite Migration Manifest](../../doc/architecture/FRONTEND_MIGRATION_MANIFEST.md)
 - [Frontend Clean Refactor Plan](../../doc/architecture/FRONTEND_REFACTOR_PLAN.md)
 - [Backend Refactor Report](../../doc/architecture/BACKEND_REFACTOR_REPORT.md)
-- [Engineering Constraints](../../doc/ENGINEERING_CONSTRAINTS.md)
+- [Engineering Constraints](../../doc/software-requirements/engineering-constraints.md)
 
 Frontend build:
 

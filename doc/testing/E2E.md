@@ -1,6 +1,6 @@
 # Nexus Terminal E2E
 
-> Mandatory engineering rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md). If explanatory text differs from that register, the constraint register is authoritative.
+> Mandatory engineering rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md). If explanatory text differs from that register, the constraint register is authoritative.
 
 Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end coverage.
 
@@ -58,7 +58,7 @@ npm run test:e2e:list
 npm --prefix test/e2e run test:docs
 ```
 
-GitHub Actions provides the canonical complete browser E2E environment with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, and focused development checks. The project-wide requirement is recorded in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#e2e-testing).
+GitHub Actions provides the canonical complete browser E2E environment with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, and focused development checks. The project-wide requirement is recorded in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001).
 
 ## Parallel groups
 
@@ -137,7 +137,7 @@ npm --prefix test/e2e ci
 npm --prefix test/e2e exec -- playwright install chromium
 ```
 
-On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. The canonical complete-E2E environment is documented in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#e2e-testing).
+On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. The canonical complete-E2E environment is documented in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001).
 
 ## Test reset baseline
 
@@ -151,4 +151,4 @@ Runtime databases, reports, traces, screenshots, videos, logs, PID files, caches
 
 ## Engineering constraints
 
-E2E rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#e2e-testing). That document is authoritative when adding, moving, grouping, or optimizing tests.
+E2E rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001). That document is authoritative when adding, moving, grouping, or optimizing tests.

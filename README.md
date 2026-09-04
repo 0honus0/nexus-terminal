@@ -55,7 +55,7 @@ docker compose up -d
 
 ## 文档
 
-[功能](./doc/FEATURES.md) · [使用](./doc/USAGE.md) · [部署与更新](./doc/DEPLOYMENT.md) · [工程文档](./doc/README.md) · [工程约束](./doc/ENGINEERING_CONSTRAINTS.md) · [English](./doc/README_EN.md)
+[功能](./doc/FEATURES.md) · [使用](./doc/USAGE.md) · [部署与更新](./doc/DEPLOYMENT.md) · [工程文档](./doc/README.md) · [工程约束](./doc/software-requirements/engineering-constraints.md) · [English](./doc/README_EN.md)
 
 ## License
 
