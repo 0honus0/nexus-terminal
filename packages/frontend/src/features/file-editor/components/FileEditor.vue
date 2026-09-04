@@ -1,12 +1,20 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseContextMenu, BaseSelect, BaseSpinner } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
-  import MonacoEditor from './MonacoEditor.vue';
-  import CodeMirrorMobileEditor from './CodeMirrorMobileEditor.vue';
+  const MonacoEditor = defineAsyncComponent({
+    loader: () => import('./MonacoEditor.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
+  const CodeMirrorMobileEditor = defineAsyncComponent({
+    loader: () => import('./CodeMirrorMobileEditor.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
   import { createFileEditorSession, type FileEditorSessionController } from '../composables/useFileEditorSession';
   import type { FileDocumentPort } from '../ports/file-document-port';
   import type { EditorLineEnding } from '../model/editor';
@@ -72,8 +80,8 @@
     },
   });
   const root = ref<HTMLElement | null>(null);
-  const mobileEditor = ref<InstanceType<typeof CodeMirrorMobileEditor> | null>(null);
-  const desktopEditor = ref<InstanceType<typeof MonacoEditor> | null>(null);
+  const mobileEditor = ref<{ focus?: () => void; openSearch?: () => void } | null>(null);
+  const desktopEditor = ref<{ focus?: () => void } | null>(null);
   const context = ref<{ id: string; x: number; y: number } | null>(null);
   let unregisterFocus: (() => void) | undefined;
 

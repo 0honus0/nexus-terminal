@@ -1,13 +1,29 @@
 <script setup lang="ts">
-  import { nextTick, ref, watch } from 'vue';
+  import { defineAsyncComponent, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseSpinner } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import ImagePreview from './ImagePreview.vue';
-  import MarkdownPreview from './MarkdownPreview.vue';
-  import PdfPreview from './PdfPreview.vue';
-  import SpreadsheetPreview from './SpreadsheetPreview.vue';
-  import DocxPreview from './DocxPreview.vue';
+  const MarkdownPreview = defineAsyncComponent({
+    loader: () => import('./MarkdownPreview.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
+  const PdfPreview = defineAsyncComponent({
+    loader: () => import('./PdfPreview.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
+  const SpreadsheetPreview = defineAsyncComponent({
+    loader: () => import('./SpreadsheetPreview.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
+  const DocxPreview = defineAsyncComponent({
+    loader: () => import('./DocxPreview.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
   import { createFilePreviewSession, type FilePreviewSessionController } from '../composables/useFilePreviewTabs';
   import type { FilePreviewSource } from '../ports/file-preview-source';
 

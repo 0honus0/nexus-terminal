@@ -1,12 +1,17 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BasePanel, BaseSpinner } from '@/foundation/ui';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
-  import StatusCharts, { type StatusMetric } from './StatusCharts.vue';
+  const StatusCharts = defineAsyncComponent({
+    loader: () => import('./StatusCharts.vue'),
+    loadingComponent: BaseSpinner,
+    delay: 120,
+  });
   import { useStatusMonitor, type StatusMonitorSessionController } from '../composables/useStatusMonitor';
+  type StatusMetric = 'cpu' | 'memory' | 'swap' | 'disk' | 'network';
   import {
     formatStatusDiskPair,
     formatStatusMemoryPair,

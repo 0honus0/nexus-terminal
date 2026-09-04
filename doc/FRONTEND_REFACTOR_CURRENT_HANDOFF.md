@@ -701,3 +701,11 @@ Behavior/GREQ discovery, clean HTTP/WS migration and whole-layer compatibility d
 Run formatting/format-check, test-policy, frontend architecture+i18n+Vue typecheck, backend architecture+typecheck, `git diff --check`, and all three root production builds. If root npm install/build stalls on audit/fund network requests, rerun the same root command with `npm_config_audit=false npm_config_fund=false` rather than changing dependencies.
 
 Only after that frozen worktree is PASS may the existing repository E2E suite run. Adjust existing selectors only for selector-only failures; add no tests. After E2E, measure final bundle/chunk output and review splitting/trimming. Agent remains last and must not be invented while Backend exposes no Agent public surface.
+
+## 17. Final size and Agent review
+
+The post-E2E size review keeps every behavior-backed capability and splits only optional heavy presentation/runtime dependencies. File Preview now lazy-loads Markdown/PDF/Spreadsheet/DOCX renderers; File Editor lazy-loads desktop Monaco or mobile CodeMirror; Status Monitor lazy-loads Chart.js through `StatusCharts`. Unused component re-exports were removed so these dynamic imports form real chunk boundaries instead of being pulled back into the Workspace session through feature barrels.
+
+On the final local production build for this split, the Workspace `session` chunk fell from roughly **4.88 MB minified / 1.45 MB gzip** to roughly **878 kB minified / 337 kB gzip**. Monaco is an independent roughly **2.67 MB / 687 kB gzip** on-demand chunk; PDF, Spreadsheet, DOCX, StatusCharts and CodeMirror are also independent on-demand chunks. The previous >3 MB application chunk warning is therefore gone without removing functionality. Terminal/xterm remains eager because Terminal is the primary Workspace path.
+
+Agent review is intentionally **no implementation** at this stage. `runtimes/agent/` contains only its architecture boundary README, App exposes no Agent route, and Backend `interfaces/` exposes no Agent HTTP/WebSocket public surface. Backend's existing `agent` owner/diagnostic types are future capability foundations, not an Agent product contract. Do not invent an Agent UI, protocol, session lifecycle or Workspace-internal reuse until Backend exposes an explicit clean Agent public surface.
