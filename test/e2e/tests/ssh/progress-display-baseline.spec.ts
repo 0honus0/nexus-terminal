@@ -13,6 +13,7 @@ import {
   E2E_SSH,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
+import { hideVisibleProgressCenter, visibleProgressCenter, visibleProgressTask } from './progress-display.helpers';
 
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
@@ -98,21 +99,18 @@ test('existing copy progress popup hides and restores through Progress Display',
       await openCurrentDirectoryContextMenu(page);
       await clickMenuItem(page, 'Paste');
 
-      const popup = page.getByTestId('file-transfer-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup.locator('h4')).toContainText('·');
-      await expect(popup).toContainText(sourceName);
-      await expectPopupBelowApplicationModals(popup);
+      const center = visibleProgressCenter(page);
+      await expect(center).toBeVisible({ timeout: 10_000 });
+      const task = visibleProgressTask(page, sourceName);
+      await expect(task).toContainText('Copy');
+      await expectPopupBelowApplicationModals(center);
     });
 
     await step('the minimize-style action hides the popup and Progress Display restores it', async () => {
-      const popup = page.getByTestId('file-transfer-progress-popup');
-      await expect(popup.locator('ul')).toBeVisible();
-      await expect(popup.getByTestId('file-transfer-progress-hide').locator('i')).toHaveClass(/fa-minus/);
-      await expect(popup.getByTestId('file-transfer-progress-minimize')).toHaveCount(0);
-      await popup.getByTestId('file-transfer-progress-hide').click();
-      await expect(popup).toBeHidden();
-      await openProgressDisplayAndRestorePopup(page, popup, sourceName);
+      const center = visibleProgressCenter(page);
+      await expect(center.getByTestId('transfer-progress-task')).toBeVisible();
+      await hideVisibleProgressCenter(page);
+      await openProgressDisplayAndRestorePopup(page, center, sourceName);
     });
 
     await expect(row(page, sourceName)).toBeVisible({ timeout: 30_000 });
@@ -128,28 +126,25 @@ test('existing archive progress popup hides and restores through Progress Displa
   try {
     await slowStep('compress creates the existing archive progress popup', async () => {
       await rightClickRow(page, 'archive-source.txt');
-      const compress = menu(page)
-        .locator('li')
-        .filter({ hasText: /^Compress/ })
-        .first();
+      const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
       await expect(compress).toBeVisible();
       await compress.hover();
-      await page.getByText('Compress to zip', { exact: true }).click();
+      await page
+        .getByTestId('file-manager-context-submenu')
+        .getByRole('button', { name: 'Compress to zip', exact: true })
+        .click();
 
-      const popup = page.getByTestId('archive-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup).toContainText('archive-source.zip');
-      await expectPopupBelowApplicationModals(popup);
+      const center = visibleProgressCenter(page);
+      await expect(center).toBeVisible({ timeout: 10_000 });
+      await expect(visibleProgressTask(page, 'archive-source.zip')).toContainText('Compress');
+      await expectPopupBelowApplicationModals(center);
     });
 
     await step('the minimize-style action hides the archive popup and Progress Display restores it', async () => {
-      const popup = page.getByTestId('archive-progress-popup');
-      await expect(popup.locator('.archive-progress-body')).toBeVisible();
-      await expect(popup.getByTestId('archive-progress-hide').locator('i')).toHaveClass(/fa-minus/);
-      await expect(popup.getByTestId('archive-progress-minimize')).toHaveCount(0);
-      await popup.getByTestId('archive-progress-hide').click();
-      await expect(popup).toBeHidden();
-      await openProgressDisplayAndRestorePopup(page, popup, 'archive-source.zip');
+      const center = visibleProgressCenter(page);
+      await expect(visibleProgressTask(page, 'archive-source.zip')).toBeVisible();
+      await hideVisibleProgressCenter(page);
+      await openProgressDisplayAndRestorePopup(page, center, 'archive-source.zip');
     });
 
     await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });

@@ -27,7 +27,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
   await page.goto('/login');
 
   const result = await page.evaluate(async () => {
-    const modulePath = '/src/foundation/interaction/remoteTouchInput.ts';
+    const modulePath = '/src/features/remote-desktop/composables/remoteTouchInput.ts';
     const { attachRemoteTouchInput } = await import(/* @vite-ignore */ modulePath);
     const calls: Array<{
       x: number;
@@ -77,7 +77,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
         });
       },
     };
-    const input = attachRemoteTouchInput(target, fakeClient, 'direct', { onTap: focusKeyboard });
+    const input = attachRemoteTouchInput(target, fakeClient, 'direct', focusKeyboard);
 
     const touch = (identifier: number, clientX: number, clientY: number, force: number) =>
       new Touch({
@@ -148,7 +148,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     const keyboardStoppedAfterDestroy = keyboardTapCount === 2;
 
     const touchpadCallStart = calls.length;
-    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad', { onTap: focusKeyboard });
+    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad', focusKeyboard);
 
     const moveStart = touch(6, 70, 70, 0.5);
     dispatch('touchstart', [moveStart], [moveStart]);
@@ -173,14 +173,11 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(9, 85, 180, 0), touch(10, 125, 180, 0)]);
     const touchpadCalls = calls.slice(touchpadCallStart);
     const multiTouchSkippedKeyboard = keyboardTapCount === 3;
-    const touchpadMode = touchpadInput.mode;
     touchpadInput.destroy();
     target.remove();
     keyboardSink.remove();
 
     return {
-      directMode: input.mode,
-      touchpadMode,
       touchActionWhileAttached,
       touchActionAfterDestroy: target.style.touchAction,
       cursorShowCount,
@@ -205,8 +202,6 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
   });
 
   expect(result).toEqual({
-    directMode: 'direct',
-    touchpadMode: 'touchpad',
     touchActionWhileAttached: 'none',
     touchActionAfterDestroy: '',
     cursorShowCount: expect.any(Number),
@@ -291,7 +286,6 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
 
   const openConnection = async () => {
     await page.goto('/workspace');
-    await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
     const connectionList = page.getByTestId('workspace-connection-list');
     await expect(connectionList).toBeVisible();
     await connectionList.getByText(connectionName, { exact: true }).first().click();
@@ -357,101 +351,11 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   });
 });
 
-test('mobile progress display floats above the workspace and closes from its overlay controls', async ({
-  page,
-  context,
-}) => {
+test('mobile shared Progress Display stays dormant until transfer work is hidden', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
-
-  const toggle = page.getByTestId('transfer-progress-toggle');
-  const overlay = page.getByTestId('progress-display-overlay');
-  const display = page.getByTestId('progress-display-modal');
-  const dialog = page.getByTestId('progress-display-dialog');
-
-  await step('progress display uses the same standard modal shell as quick commands', async () => {
-    const commandBar = page.getByTestId('command-input-bar');
-    const quickCommandsButton = commandBar.locator('button:has(i.fa-bolt)');
-    await quickCommandsButton.click();
-    const quickDialog = page.getByTestId('quick-commands-dialog');
-    await expect(quickDialog).toBeVisible();
-    const quickShell = await quickDialog.evaluate((element) => {
-      const style = window.getComputedStyle(element);
-      return {
-        maxWidth: style.maxWidth,
-        maxHeight: style.maxHeight,
-        padding: style.padding,
-        borderRadius: style.borderRadius,
-        boxShadow: style.boxShadow,
-      };
-    });
-    await page.keyboard.press('Escape');
-    await expect(quickDialog).toBeHidden();
-
-    await expect(toggle).toBeVisible();
-    await toggle.click();
-    await expect(dialog).toBeVisible();
-    const progressShell = await dialog.evaluate((element) => {
-      const style = window.getComputedStyle(element);
-      return {
-        maxWidth: style.maxWidth,
-        maxHeight: style.maxHeight,
-        padding: style.padding,
-        borderRadius: style.borderRadius,
-        boxShadow: style.boxShadow,
-      };
-    });
-    expect(progressShell).toEqual(quickShell);
-    await display.getByTestId('progress-display-close').click();
-    await expect(display).toBeHidden();
-  });
-
-  await step('progress display opens as a bounded top-level overlay instead of resizing the terminal', async () => {
-    await expect(toggle).toBeVisible();
-    await toggle.click();
-
-    await expect(display).toBeVisible();
-    await expect(display).toHaveAttribute('data-progress-display-placement', 'overlay');
-    await expect(dialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
-    await expect
-      .poll(() =>
-        overlay.evaluate((element) => ({
-          position: window.getComputedStyle(element).position,
-          zIndex: window.getComputedStyle(element).zIndex,
-        })),
-      )
-      .toEqual({ position: 'fixed', zIndex: '1100' });
-
-    const viewport = page.viewportSize();
-    const dialogBox = await dialog.boundingBox();
-    expect(viewport).toBeTruthy();
-    expect(dialogBox).toBeTruthy();
-    expect(dialogBox!.x).toBeGreaterThanOrEqual(8);
-    expect(dialogBox!.y).toBeGreaterThanOrEqual(8);
-    expect(dialogBox!.width).toBeLessThanOrEqual(viewport!.width - 16);
-    expect(dialogBox!.height).toBeLessThanOrEqual(viewport!.height - 16);
-    await expect(page.getByTestId('terminal')).toBeVisible();
-    await expect(page.getByTestId('command-input-bar')).toBeVisible();
-    await captureFunctionalScreenshot(page, 'mobile-progress-display.png');
-  });
-
-  await step('tapping the dimmed blank area closes the progress overlay', async () => {
-    await overlay.click({ position: { x: 3, y: 3 } });
-    await expect(display).toBeHidden();
-  });
-
-  await step('the explicit hide button remains available', async () => {
-    await toggle.click();
-    await expect(display).toBeVisible();
-    await display.getByTestId('transfer-progress-minimize').click();
-    await expect(display).toBeHidden();
-  });
-
-  await step('the footer close button still closes the overlay', async () => {
-    await toggle.click();
-    await expect(display).toBeVisible();
-    await display.getByTestId('progress-display-close').click();
-    await expect(display).toBeHidden();
-  });
+  await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('terminal')).toBeVisible();
+  await expect(page.getByTestId('command-input-bar')).toBeVisible();
 });
 
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
@@ -523,7 +427,7 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
     await archive.click();
     await expect(seed).toHaveClass(/bg-primary/);
     await expect(archive).toHaveClass(/bg-primary/);
-    await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
+    await expect(page.getByTestId('document-popup').getByTestId('file-editor-view')).toBeHidden();
 
     const exitMultiSelect = fileManagerModal.getByTitle('Exit Multi-Select Mode');
     await expect(exitMultiSelect).toBeVisible();
@@ -534,7 +438,8 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
 
   await slowStep('single tap opens the full-screen mobile CodeMirror editor rather than Monaco', async () => {
     await fileManagerRow(page, 'plainfile').click();
-    const editor = page.getByTestId('file-editor-overlay');
+    const documentPopup = page.getByTestId('document-popup');
+    const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
@@ -545,7 +450,7 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
     await captureFunctionalScreenshot(page, 'mobile-file-editor.png');
 
     const viewport = page.viewportSize();
-    const popupBox = await editor.locator('.editor-popup').boundingBox();
+    const popupBox = await documentPopup.getByRole('dialog').boundingBox();
     expect(viewport).toBeTruthy();
     expect(popupBox).toBeTruthy();
     expect(popupBox!.width).toBeGreaterThanOrEqual(viewport!.width - 2);

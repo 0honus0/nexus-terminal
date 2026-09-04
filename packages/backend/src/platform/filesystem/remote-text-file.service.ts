@@ -7,6 +7,7 @@ import { toRemoteFileEntry } from './file-entry';
 
 export interface RemoteTextFileReadResult {
   rawContentBase64: string;
+  content: string;
   encodingUsed: string;
 }
 
@@ -25,8 +26,8 @@ export class RemoteTextFileService {
     const encodingUsed = requestedEncoding
       ? this.resolveRequestedEncoding(requestedEncoding)
       : this.detectEncoding(data);
-    iconv.decode(data, encodingUsed);
-    return { rawContentBase64: data.toString('base64'), encodingUsed };
+    const content = iconv.decode(data, encodingUsed);
+    return { rawContentBase64: data.toString('base64'), content, encodingUsed };
   }
 
   async write(

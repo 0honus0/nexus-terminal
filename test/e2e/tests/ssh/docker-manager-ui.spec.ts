@@ -61,7 +61,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
             try {
               const message = JSON.parse(frame);
               return (
-                message.type === 'docker:command' &&
+                message.type === 'docker.command' &&
                 message.payload?.command === 'stop' &&
                 message.payload?.containerId === CONTAINER_ID
               );

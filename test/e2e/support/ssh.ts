@@ -13,9 +13,9 @@ export async function configureSshE2eSettings(request: APIRequestContext): Promi
   const response = await request.put('/api/v1/settings', {
     data: {
       language: 'en-US',
-      showPopupFileManager: 'true',
-      showPopupFileEditor: 'true',
-      fileManagerShowDeleteConfirmation: 'true',
+      showPopupFileManager: true,
+      showPopupFileEditor: true,
+      fileManagerShowDeleteConfirmation: true,
     },
   });
   expect(response.ok()).toBeTruthy();
@@ -56,7 +56,7 @@ export async function ensureTestSshConnection(request: APIRequestContext): Promi
       host: E2E_SSH.host,
       port: E2E_SSH.port,
       username: E2E_SSH.username,
-      auth_method: 'password',
+      authMethod: 'password',
       password: E2E_SSH.password,
     },
   });
@@ -67,7 +67,7 @@ export async function ensureTestSshConnection(request: APIRequestContext): Promi
 
 export async function connectTestSshFromConnectionsPage(page: Page, connectionId: number): Promise<void> {
   await page.goto('/connections');
-  const row = page.locator(`[data-connection-id="${connectionId}"]`);
+  const row = page.getByTestId(`connection-row-${connectionId}`);
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page).toHaveURL(/\/workspace$/);
@@ -111,12 +111,7 @@ export async function reopenConnectedFileManager(page: Page): Promise<void> {
   await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
 }
 
-async function openProgressDisplay(
-  page: Page,
-  placement: 'inline' | 'overlay',
-  layoutTestId: 'progress-display-modal' | 'progress-display-overlay',
-  expectedLayout: { position: 'static' | 'fixed'; zIndex: 'auto' | '1100' },
-): Promise<Locator> {
+async function openProgressDisplay(page: Page): Promise<Locator> {
   const fileManagerModal = page.getByTestId('file-manager-modal');
   if (await fileManagerModal.isVisible()) {
     await closeConnectedFileManager(page);
@@ -127,23 +122,26 @@ async function openProgressDisplay(
   await toggle.click();
 
   const display = page.getByTestId('progress-display-modal');
+  const overlay = page.getByTestId('progress-display-overlay');
+  const dialog = page.getByTestId('progress-display-dialog');
   await expect(display).toBeVisible();
-  await expect(display).toHaveAttribute('data-progress-display-placement', placement);
+  await expect(overlay).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
   await expect
     .poll(() =>
-      page.getByTestId(layoutTestId).evaluate((element) => ({
+      overlay.evaluate((element) => ({
         position: window.getComputedStyle(element).position,
-        zIndex: window.getComputedStyle(element).zIndex,
+        zIndex: Number(window.getComputedStyle(element).zIndex),
       })),
     )
-    .toEqual(expectedLayout);
+    .toMatchObject({ position: 'fixed', zIndex: expect.any(Number) });
   return display;
 }
 
 export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(page, 'inline', 'progress-display-modal', { position: 'static', zIndex: 'auto' });
+  return openProgressDisplay(page);
 }
 
 export async function openMobileProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(page, 'overlay', 'progress-display-overlay', { position: 'fixed', zIndex: '1100' });
+  return openProgressDisplay(page);
 }

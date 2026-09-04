@@ -189,7 +189,6 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       backup: dependencies.backup,
       connectionExport: dependencies.connectionExport,
       settings: dependencies.settings,
-      appearance: dependencies.appearance,
       ipBlacklist: dependencies.ipBlacklist,
       audit: dependencies.audit,
       notifications: dependencies.notifications,

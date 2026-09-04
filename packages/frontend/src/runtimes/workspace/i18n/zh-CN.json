@@ -1,0 +1,124 @@
+{
+  "workspace": {
+    "terminal": {
+      "reconnectingMsg": "正在尝试重新连接..."
+    },
+    "title": "工作区",
+    "sessions": "{count} 个会话",
+    "transfer": {
+      "targetWorkspace": "工作区",
+      "destination": "目标路径"
+    },
+    "documents": {
+      "editor": "编辑器",
+      "preview": "预览"
+    },
+    "archive": {
+      "format": "格式"
+    },
+    "errors": {
+      "suspendedConnectionNotSsh": "该挂起会话关联的连接已不再是 SSH 连接。"
+    },
+    "sessionState": {
+      "idle": "空闲",
+      "connecting": "连接中",
+      "connected": "已连接",
+      "reconnecting": "重新连接中",
+      "disconnected": "已断开",
+      "error": "错误"
+    }
+  },
+  "layoutConfigurator": {
+    "title": "布局管理器",
+    "availablePanes": "可用面板",
+    "layoutPreview": "主布局预览（拖拽到此处）",
+    "resetDefault": "恢复默认",
+    "noAvailablePanes": "所有面板都已在布局中",
+    "emptyLayout": "布局为空，请从左侧拖拽面板或添加容器。",
+    "leftSidebar": "左侧栏面板",
+    "rightSidebar": "右侧栏面板",
+    "dropHere": "从可用面板拖拽到此处",
+    "saveError": "保存布局时出错，请稍后再试。",
+    "confirmClearLayout": "确定要清空整个布局吗？所有面板将返回可用列表。",
+    "lockLayout": "锁定布局",
+    "lockUpdateError": "更新布局锁定状态失败。",
+    "confirmClose": "有未保存的更改，确定要关闭吗？",
+    "confirmReset": "确定要恢复默认布局和侧栏配置吗？当前更改将丢失。"
+  },
+  "layoutNodeEditor": {
+    "containerLabel": "容器 ({direction})",
+    "horizontal": "水平",
+    "vertical": "垂直",
+    "toggleDirection": "切换方向",
+    "addHorizontalContainer": "添加水平容器",
+    "addVerticalContainer": "添加垂直容器",
+    "removeNode": "移除此节点",
+    "dragHandle": "拖拽调整顺序或移动",
+    "dropHere": "将面板或容器拖拽到此处",
+    "pane": "面板",
+    "container": "容器",
+    "addPane": "添加面板",
+    "addContainer": "添加容器",
+    "size": "大小",
+    "emptyContainer": "空容器"
+  },
+  "commandInputBar": {
+    "placeholder": "输入命令后回车",
+    "searchPlaceholder": "在终端中搜索...",
+    "openSearch": "打开终端搜索",
+    "closeSearch": "关闭终端搜索",
+    "findPrevious": "查找上一个",
+    "findNext": "查找下一个",
+    "configureFocusSwitch": "配置焦点切换器",
+    "clearTerminal": "清空终端"
+  },
+  "layout": {
+    "loading": "加载中...",
+    "configure": "配置布局",
+    "pane": {
+      "connections": "连接列表",
+      "terminal": "终端",
+      "commandBar": "命令栏",
+      "fileManager": "文件管理器",
+      "editor": "编辑器",
+      "statusMonitor": "状态监视器",
+      "commandHistory": "命令历史",
+      "quickCommands": "快捷指令",
+      "dockerManager": "Docker 管理器",
+      "suspendedSshSessions": "挂起会话管理",
+      "preview": "预览"
+    },
+    "panes": {
+      "suspendedSshSessions": "挂起会话管理器"
+    },
+    "noActiveSession": {
+      "title": "无活动会话",
+      "message": "请先连接一个会话",
+      "fileManagerSidebar": "文件管理器需要活动会话",
+      "statusMonitorSidebar": "状态监视器需要活动会话"
+    }
+  },
+  "terminalTabBar": {
+    "selectServerTitle": "选择要连接的服务器",
+    "progressDisplay": "进度显示"
+  },
+  "tabs": {
+    "contextMenu": {
+      "close": "关闭标签页",
+      "closeOthers": "关闭其他标签页",
+      "closeRight": "关闭右侧标签页",
+      "closeLeft": "关闭左侧标签页",
+      "suspendSession": "挂起会话",
+      "unmarkForSuspend": "取消挂起"
+    },
+    "closeTabTooltip": "关闭标签页",
+    "newTabTooltip": "新建连接标签页",
+    "security": "安全",
+    "ipControl": "IP 控制",
+    "workspace": "工作区",
+    "system": "系统",
+    "dataManagement": "数据管理",
+    "appearance": "外观",
+    "about": "关于"
+  }
+}

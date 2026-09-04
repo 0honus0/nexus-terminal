@@ -1,0 +1,34 @@
+{
+  "sshKeys": {
+    "selector": {
+      "selectPlaceholder": "Select an SSH key...",
+      "useDirectInput": "Or input key content directly",
+      "manageKeysTitle": "Manage SSH Keys",
+      "loadingKeys": "Loading keys...",
+      "noKey": "No SSH Key",
+      "manage": "Manage"
+    },
+    "modal": {
+      "title": "SSH Key Management",
+      "addKey": "Add Key",
+      "keyName": "Key Name",
+      "actions": "Actions",
+      "loading": "Loading...",
+      "noKeys": "No SSH keys found. Please add one.",
+      "close": "Close",
+      "addTitle": "Add New SSH Key",
+      "editTitle": "Edit SSH Key",
+      "privateKey": "Private Key Content",
+      "passphrase": "Passphrase",
+      "cancel": "Cancel",
+      "saveChanges": "Save Changes",
+      "edit": "Edit",
+      "delete": "Delete",
+      "errorFetchDetails": "Failed to fetch key details",
+      "errorRequiredFields": "Key name and private key content cannot be empty.",
+      "confirmDelete": "Are you sure you want to delete the key \"{name}\"? This cannot be undone.",
+      "keyUpdateNote": "Leave the private key blank to keep the existing key. Entering a new private key replaces it.",
+      "passphraseUpdateNote": "Leave the passphrase blank to keep the existing passphrase. Enter a new value to update it."
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "proxies": {
+    "title": "代理管理",
+    "addProxy": "添加新代理",
+    "loading": "正在加载代理...",
+    "error": "加载代理列表失败: {error}",
+    "noProxies": "还没有任何代理配置。点击'添加新代理'来创建一个吧！",
+    "actions": {
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "form": {
+      "title": "添加新代理",
+      "titleEdit": "编辑代理",
+      "name": "名称:",
+      "type": "类型:",
+      "host": "主机/IP:",
+      "port": "端口:",
+      "username": "用户名:",
+      "password": "密码:",
+      "optional": "可选",
+      "confirm": "确认添加",
+      "confirmEdit": "确认编辑",
+      "adding": "正在添加...",
+      "saving": "正在保存...",
+      "cancel": "取消",
+      "errorRequiredFields": "请填写所有必填字段。",
+      "errorPort": "端口号必须在 1 到 65535 之间。",
+      "errorAdd": "添加代理失败: {error}",
+      "errorUpdate": "更新代理失败: {error}",
+      "passwordUpdateNote": "将密码留空以保留现有密码。",
+      "clearStoredPassword": "清除已保存密码"
+    },
+    "prompts": {
+      "confirmDelete": "确定要删除代理 \"{name}\" 吗？此操作不可撤销。"
+    },
+    "errors": {
+      "deleteFailed": "删除代理失败: {error}"
+    },
+    "updatedAt": "最后更新"
+  }
+}

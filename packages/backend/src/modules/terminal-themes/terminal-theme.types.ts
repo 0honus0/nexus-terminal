@@ -1,8 +1,8 @@
 export type TerminalThemeData = Record<string, string | undefined>;
 
-/** User-visible terminal theme model. `_id` is retained for API compatibility. */
+/** User-visible terminal theme model. */
 export interface TerminalTheme {
-  _id: string;
+  id: number;
   name: string;
   themeData: TerminalThemeData;
   isPreset: boolean;

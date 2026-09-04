@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type StyleValue } from 'vue';
 
   defineOptions({ inheritAttrs: false });
 
@@ -11,9 +11,13 @@
       overlay?: boolean;
       zIndex?: number;
       closeOnBackdrop?: boolean;
+      closeOnEscape?: boolean;
+      focusOnOpen?: boolean;
+      restoreFocus?: boolean;
       backdropTrigger?: 'click' | 'mousedown';
       overlayClass?: string;
       panelClass?: string;
+      panelStyle?: StyleValue;
       panelTestId?: string;
       preset?: 'default' | 'standard-modal';
       surface?: boolean;
@@ -29,6 +33,9 @@
       overlay: true,
       zIndex: 50,
       closeOnBackdrop: true,
+      closeOnEscape: false,
+      focusOnOpen: false,
+      restoreFocus: false,
       backdropTrigger: 'click',
       overlayClass: '',
       panelClass: '',
@@ -40,21 +47,50 @@
     },
   );
 
-  const emit = defineEmits<{
-    (event: 'close'): void;
-  }>();
-
+  const emit = defineEmits<{ (event: 'close'): void }>();
+  const panelRef = ref<HTMLElement | null>(null);
+  let previouslyFocused: HTMLElement | null = null;
   const panelPresetClass = computed(() =>
-    props.preset === 'standard-modal' ? 'max-w-lg max-h-[85dvh] min-h-0 flex flex-col overflow-hidden p-4' : '',
+    props.preset === 'standard-modal' ? 'max-h-[85dvh] min-h-0 max-w-lg flex flex-col overflow-hidden p-4' : '',
   );
 
   const handleBackdropClick = () => {
     if (props.closeOnBackdrop && props.backdropTrigger === 'click') emit('close');
   };
-
   const handleBackdropMouseDown = () => {
     if (props.closeOnBackdrop && props.backdropTrigger === 'mousedown') emit('close');
   };
+  const restorePreviousFocus = () => {
+    const target = previouslyFocused;
+    previouslyFocused = null;
+    if (props.restoreFocus && target?.isConnected) void nextTick(() => target.focus({ preventScroll: true }));
+  };
+  const handleDocumentKeydown = (event: KeyboardEvent) => {
+    if (!props.visible || !props.closeOnEscape || event.defaultPrevented || event.key !== 'Escape') return;
+    event.preventDefault();
+    emit('close');
+  };
+
+  watch(
+    () => props.visible,
+    (visible, wasVisible) => {
+      if (visible && !wasVisible) {
+        if (props.restoreFocus) {
+          const active = document.activeElement;
+          previouslyFocused = active instanceof HTMLElement && !panelRef.value?.contains(active) ? active : null;
+        }
+        if (props.focusOnOpen) void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
+      } else if (!visible && wasVisible) {
+        restorePreviousFocus();
+      }
+    },
+  );
+
+  onMounted(() => document.addEventListener('keydown', handleDocumentKeydown, true));
+  onBeforeUnmount(() => {
+    document.removeEventListener('keydown', handleDocumentKeydown, true);
+    if (props.visible) restorePreviousFocus();
+  });
 </script>
 
 <template>
@@ -73,14 +109,17 @@
     >
       <div
         v-if="props.surface"
+        ref="panelRef"
         :data-testid="props.panelTestId"
         :data-overlay-panel-preset="props.preset"
         class="relative w-full rounded-lg border border-border bg-background text-foreground shadow-xl"
         :class="[panelPresetClass, props.panelClass]"
+        :style="props.panelStyle"
         :role="props.role"
         :aria-modal="props.ariaModal"
         :aria-label="props.ariaLabel"
         :aria-labelledby="props.ariaLabelledby"
+        :tabindex="props.focusOnOpen ? -1 : undefined"
       >
         <slot />
       </div>

@@ -52,13 +52,13 @@ export const createTagsRouter = (dependencies: { tags: TagService; audit: AuditL
     '/:id/connections',
     route(async (request, response) => {
       const id = parsePositiveId(String(request.params.id));
-      const ids = request.body?.connection_ids;
+      const ids = request.body?.connectionIds;
       if (!id) {
         response.status(400).json({ message: '无效的标签 ID。' });
         return;
       }
       if (!Array.isArray(ids) || !ids.every(Number.isInteger)) {
-        response.status(400).json({ message: 'connection_ids 必须是一个数字数组。' });
+        response.status(400).json({ message: 'connectionIds 必须是一个数字数组。' });
         return;
       }
       try {

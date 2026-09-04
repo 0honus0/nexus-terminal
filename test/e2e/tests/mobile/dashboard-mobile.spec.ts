@@ -14,13 +14,17 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
 
   const originalSettingsResponse = await context.request.get('/api/v1/settings');
   expect(originalSettingsResponse.ok()).toBeTruthy();
-  const originalSettings = (await originalSettingsResponse.json()) as Record<string, string | undefined>;
+  const originalSettings = (await originalSettingsResponse.json()) as {
+    language?: string;
+    dashboardShowLocalResources?: boolean;
+    dashboardShowRemoteResources?: boolean;
+  };
 
   const normalizedSettings = await context.request.put('/api/v1/settings', {
     data: {
       language: 'zh-CN',
-      dashboardShowLocalResources: 'true',
-      dashboardShowRemoteResources: 'true',
+      dashboardShowLocalResources: true,
+      dashboardShowRemoteResources: true,
     },
   });
   expect(normalizedSettings.ok()).toBeTruthy();
@@ -94,8 +98,8 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
     const restoreSettings = await context.request.put('/api/v1/settings', {
       data: {
         language: originalSettings.language ?? 'en-US',
-        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? 'true',
-        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? 'true',
+        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
       },
     });
     expect(restoreSettings.ok()).toBeTruthy();

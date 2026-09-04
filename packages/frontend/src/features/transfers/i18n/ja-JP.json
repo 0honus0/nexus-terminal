@@ -1,0 +1,119 @@
+{
+  "progressCenter": {
+    "title": "進捗表示",
+    "hiddenTitle": "非表示の進捗",
+    "empty": "非表示の進捗タスクはありません。",
+    "hide": "進捗を非表示",
+    "running": "実行中",
+    "cancelling": "キャンセル中",
+    "unknownSession": "不明なセッション",
+    "serverTransfers": "サーバー間転送タスク",
+    "kind": {
+      "upload": "アップロード",
+      "download": "ダウンロード",
+      "copy": "コピー",
+      "move": "移動",
+      "compress": "圧縮",
+      "decompress": "展開",
+      "transfer": "転送",
+      "other": "タスク"
+    },
+    "cancelAll": "すべてキャンセル",
+    "status": {
+      "queued": "待機中",
+      "preparing": "準備中",
+      "running": "実行中",
+      "paused": "一時停止",
+      "cancelling": "キャンセル中",
+      "cancelled": "キャンセル済み",
+      "skipped": "スキップ済み",
+      "completed": "完了",
+      "error": "失敗",
+      "partial": "一部完了"
+    },
+    "resize": "進捗ウィンドウのサイズを変更",
+    "restore": "表示を復元",
+    "sourceSummary": "{count} 件のタスク · {active} 件実行中",
+    "speed": "速度"
+  },
+  "transferProgressModal": {
+    "title": "ファイル転送進捗",
+    "loading": "転送タスクを読み込み中...",
+    "errorLoadingTitle": "読み込みエラー",
+    "errorLoading": "転送タスクの読み込みに失敗しました：{error}",
+    "error": {
+      "unknown": "不明なエラー",
+      "cancelFailed": "タスクの终止に失敗しました。",
+      "removeFailed": "タスク履歴の削除に失敗しました。"
+    },
+    "noTasks": "現在アクティブな転送タスクはありません。",
+    "task": {
+      "idLabel": "タスク",
+      "createdAt": "作成日時",
+      "overallProgress": "全体進捗"
+    },
+    "status": {
+      "queued": "待機中",
+      "inProgress": "進行中",
+      "completed": "完了",
+      "failed": "失敗",
+      "partiallyCompleted": "一部完了",
+      "connecting": "接続中",
+      "transferring": "転送中",
+      "cancelling": "终止中",
+      "cancelled": "终止済み"
+    },
+    "confirmCancel": "この転送タスクを终止してもよろしいですか？",
+    "cancelRequested": "终止リクエストを送信しました。",
+    "removeSuccess": "タスク履歴を削除しました。",
+    "removeTaskTooltip": "タスク履歴を削除",
+    "removeButton": "削除",
+    "cancelTaskTooltip": "タスクを终止",
+    "cancellingTooltip": "终止中...",
+    "cancelButton": "终止",
+    "cancellingButton": "终止中",
+    "subTasks": {
+      "titleToggle": "{count} 個のサブタスクを表示",
+      "noSubTasks": "サブタスクはありません。"
+    },
+    "subTask": {
+      "source": "送信元ファイル",
+      "connectionId": "宛先接続",
+      "status": "状態",
+      "method": "方法",
+      "error": "エラー"
+    },
+    "connectionIdFallback": "接続ID: {connectionId}",
+    "unknownFileName": "[ファイル名不明]",
+    "unknownSourceServer": "[送信元サーバー不明]",
+    "unknownTargetPath": "[宛先パス不明]",
+    "taskIdFallback": "タスクID: {taskId}"
+  },
+  "sendFilesModal": {
+    "title": "ファイル送信",
+    "searchConnectionsPlaceholder": "接続を検索...",
+    "targetPathLabel": "ターゲットパス",
+    "targetPathPlaceholder": "目的のパス",
+    "transferMethodLabel": "転送方法",
+    "transferMethodAuto": "自動",
+    "loadingConnections": "接続を読み込み中...",
+    "noConnections": "利用可能な接続がありません。まず接続を追加してください。",
+    "noConnectionsFound": "検索に一致する接続が見つかりませんでした。",
+    "untaggedConnections": "タグなし",
+    "itemsToSendTitle": "送信するアイテム:",
+    "noItemsSelected": "送信するアイテムが選択されていません。",
+    "sendButton": "送信",
+    "cancelButton": "キャンセル",
+    "errorFetchingData": "モーダルデータの取得中にエラーが発生しました。",
+    "errorFetchingConnections": "接続データの取得中にエラーが発生しました。",
+    "errorFetchingTags": "タグデータの取得中にエラーが発生しました。",
+    "validationError": "少なくとも1つの接続を選択し、ターゲットパスを指定してください。",
+    "transferInitiated": "転送タスクが作成されました",
+    "transferInitiatedGeneric": "転送タスクが正常に作成されました。",
+    "transferFailedError": "転送の開始に失敗しました。もう一度お試しください。",
+    "selectAll": "表示中を選択",
+    "clearSelection": "選択を解除",
+    "methodRsync": "rsync",
+    "methodScp": "scp"
+  }
+}

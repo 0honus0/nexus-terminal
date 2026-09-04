@@ -29,15 +29,15 @@ test('custom terminal theme supports create, conflict, update, export, import, a
   const cleanupByName = async (...names: string[]) => {
     const list = await request.get('/api/v1/terminal-themes');
     expect(list.ok()).toBeTruthy();
-    const themes = (await list.json()) as Array<{ _id?: string; name: string; isPreset: boolean }>;
-    for (const theme of themes.filter((item) => !item.isPreset && names.includes(item.name) && item._id)) {
-      expect((await request.delete(`/api/v1/terminal-themes/${theme._id}`)).ok()).toBeTruthy();
+    const themes = (await list.json()) as Array<{ id?: number; name: string; preset: boolean }>;
+    for (const theme of themes.filter((item) => !item.preset && names.includes(item.name) && item.id)) {
+      expect((await request.delete(`/api/v1/terminal-themes/${theme.id}`)).ok()).toBeTruthy();
     }
   };
 
   await cleanupByName(THEME_NAME, UPDATED_NAME, IMPORTED_NAME);
-  let themeId = '';
-  let importedId = '';
+  let themeId = 0;
+  let importedId = 0;
 
   try {
     await step('create a custom theme and fetch it by id', async () => {
@@ -46,17 +46,17 @@ test('custom terminal theme supports create, conflict, update, export, import, a
       });
       expect(create.status()).toBe(201);
       const created = (await create.json()) as {
-        _id: string;
+        id: number;
         name: string;
-        isPreset: boolean;
+        preset: boolean;
         themeData: Record<string, string>;
       };
-      themeId = created._id;
-      expect(created).toMatchObject({ name: THEME_NAME, isPreset: false, themeData: initialTheme });
+      themeId = created.id;
+      expect(created).toMatchObject({ name: THEME_NAME, preset: false, themeData: initialTheme });
 
       const read = await request.get(`/api/v1/terminal-themes/${themeId}`);
       expect(read.ok()).toBeTruthy();
-      await expect(read.json()).resolves.toMatchObject({ _id: themeId, name: THEME_NAME, themeData: initialTheme });
+      await expect(read.json()).resolves.toMatchObject({ id: themeId, name: THEME_NAME, themeData: initialTheme });
     });
 
     await step('duplicate names are rejected without overwriting the existing theme', async () => {
@@ -102,23 +102,23 @@ test('custom terminal theme supports create, conflict, update, export, import, a
       });
       expect(imported.status()).toBe(201);
       const body = (await imported.json()) as {
-        _id: string;
+        id: number;
         name: string;
-        isPreset: boolean;
+        preset: boolean;
         themeData: Record<string, string>;
       };
-      importedId = body._id;
-      expect(body).toMatchObject({ name: IMPORTED_NAME, isPreset: false, themeData: updatedTheme });
+      importedId = body.id;
+      expect(body).toMatchObject({ name: IMPORTED_NAME, preset: false, themeData: updatedTheme });
     });
 
     await step('custom themes delete cleanly and no longer resolve by id', async () => {
       expect((await request.delete(`/api/v1/terminal-themes/${themeId}`)).ok()).toBeTruthy();
       expect((await request.get(`/api/v1/terminal-themes/${themeId}`)).status()).toBe(404);
-      themeId = '';
+      themeId = 0;
 
       expect((await request.delete(`/api/v1/terminal-themes/${importedId}`)).ok()).toBeTruthy();
       expect((await request.get(`/api/v1/terminal-themes/${importedId}`)).status()).toBe(404);
-      importedId = '';
+      importedId = 0;
     });
   } finally {
     if (themeId) await request.delete(`/api/v1/terminal-themes/${themeId}`).catch(() => undefined);

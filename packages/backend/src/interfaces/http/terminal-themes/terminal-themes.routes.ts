@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import multer from 'multer';
 import type { TerminalThemeService } from '../../../modules/terminal-themes/terminal-theme.service';
-import type { TerminalThemeData } from '../../../modules/terminal-themes/terminal-theme.types';
+import type { TerminalTheme, TerminalThemeData } from '../../../modules/terminal-themes/terminal-theme.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
+
+const terminalThemeDto = (theme: TerminalTheme) => ({
+  id: theme.id,
+  name: theme.name,
+  themeData: theme.themeData,
+  preset: theme.isPreset,
+});
 
 export const createTerminalThemesRouter = (themes: TerminalThemeService): Router => {
   const router = Router();
@@ -14,7 +21,7 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await themes.list());
+      response.json((await themes.list()).map(terminalThemeDto));
     }),
   );
   router.post(
@@ -35,9 +42,11 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
         response
           .status(201)
           .json(
-            await themes.import(
-              data,
-              typeof request.body?.name === 'string' && request.body.name ? request.body.name : fallbackName,
+            terminalThemeDto(
+              await themes.import(
+                data,
+                typeof request.body?.name === 'string' && request.body.name ? request.body.name : fallbackName,
+              ),
             ),
           );
       } catch (error) {
@@ -54,7 +63,7 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
     '/',
     route(async (request, response) => {
       try {
-        response.status(201).json(await themes.create(request.body));
+        response.status(201).json(terminalThemeDto(await themes.create(request.body)));
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') ? 409 : 400).json({ message: '创建终端主题失败', error: message });
@@ -91,7 +100,7 @@ export const createTerminalThemesRouter = (themes: TerminalThemeService): Router
         response.status(404).json({ message: '未找到指定的主题' });
         return;
       }
-      response.json(theme);
+      response.json(terminalThemeDto(theme));
     }),
   );
   router.put(

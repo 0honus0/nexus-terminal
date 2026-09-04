@@ -1,12 +1,24 @@
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import type { Tag, TagRepository } from '../../../modules/tags/tag.repository.port';
+
+type TagRow = { id: number; name: string; created_at: number; updated_at: number };
+const mapTag = (row: TagRow): Tag => ({
+  id: row.id,
+  name: row.name,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 export class SqliteTagRepository implements TagRepository {
   constructor(private readonly db: RelationalDatabase) {}
-  list(): Promise<Tag[]> {
-    return this.db.queryAll('SELECT * FROM tags ORDER BY name ASC');
+  async list(): Promise<Tag[]> {
+    return (await this.db.queryAll<TagRow>('SELECT id,name,created_at,updated_at FROM tags ORDER BY name ASC')).map(
+      mapTag,
+    );
   }
-  get(id: number): Promise<Tag | null> {
-    return this.db.queryOne('SELECT * FROM tags WHERE id=?', [id]);
+  async get(id: number): Promise<Tag | null> {
+    const row = await this.db.queryOne<TagRow>('SELECT id,name,created_at,updated_at FROM tags WHERE id=?', [id]);
+    return row ? mapTag(row) : null;
   }
   async create(name: string): Promise<number> {
     const now = Math.floor(Date.now() / 1000);

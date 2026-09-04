@@ -23,6 +23,7 @@ COPY packages/frontend/package.json packages/frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY packages/frontend/src ./src
 COPY packages/frontend/public ./public
+COPY packages/frontend/scripts ./scripts
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./
 RUN npm run build
 

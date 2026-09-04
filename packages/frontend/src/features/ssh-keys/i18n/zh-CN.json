@@ -1,0 +1,34 @@
+{
+  "sshKeys": {
+    "selector": {
+      "selectPlaceholder": "选择一个 SSH 密钥...",
+      "useDirectInput": "或直接输入密钥内容",
+      "manageKeysTitle": "管理 SSH 密钥",
+      "loadingKeys": "正在加载密钥...",
+      "noKey": "不使用 SSH 密钥",
+      "manage": "管理"
+    },
+    "modal": {
+      "title": "SSH 密钥管理",
+      "addKey": "添加密钥",
+      "keyName": "密钥名称",
+      "actions": "操作",
+      "loading": "加载中...",
+      "noKeys": "没有找到 SSH 密钥。请添加一个。",
+      "close": "关闭",
+      "addTitle": "添加新 SSH 密钥",
+      "editTitle": "编辑 SSH 密钥",
+      "privateKey": "私钥内容",
+      "passphrase": "私钥密码",
+      "cancel": "取消",
+      "saveChanges": "保存更改",
+      "edit": "编辑",
+      "delete": "删除",
+      "errorFetchDetails": "获取密钥详情失败",
+      "errorRequiredFields": "密钥名称和私钥内容不能为空。",
+      "confirmDelete": "确定要删除密钥 \"{name}\" 吗？此操作不可撤销。",
+      "keyUpdateNote": "私钥留空将保留现有私钥；输入新的私钥内容会替换现有私钥。",
+      "passphraseUpdateNote": "密码短语留空将保留现有密码短语；输入新值会更新密码短语。"
+    }
+  }
+}

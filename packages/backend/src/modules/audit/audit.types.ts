@@ -57,7 +57,7 @@ export type AuditLogActionType =
 export interface AuditLogEntry {
   id: number;
   timestamp: number; // Unix timestamp (seconds)
-  action_type: AuditLogActionType;
+  actionType: AuditLogActionType;
   details: string | null; // JSON string or null
 }
 

@@ -3,21 +3,18 @@ import multer from 'multer';
 import type { BackupService } from '../../../modules/backup/backup.service';
 import type { ConnectionExportService } from '../../../modules/connections/connection-export.service';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../../shared/errors/backup.errors';
-import type { AppearanceSettingsService } from '../../../modules/appearance/appearance-settings.service';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
 import type { IpBlacklistService } from '../../../modules/auth/ip-blacklist.service';
 import type { NotificationService } from '../../../modules/notifications/notification.service';
 import type { SettingsService } from '../../../modules/settings/settings.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
-import { errorMessage } from '../shared/http-utils';
+import { errorMessage, isRecord } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
-import { fromLegacySettingValue } from '../legacy-api/settings-http.mapper';
 
 export interface SettingsRouterDependencies {
   backup: BackupService;
   connectionExport: ConnectionExportService;
   settings: SettingsService;
-  appearance: AppearanceSettingsService;
   ipBlacklist: IpBlacklistService;
   audit: AuditLogService;
   notifications: NotificationService;
@@ -30,8 +27,6 @@ const ALLOWED_SETTING_KEYS = new Set([
   'loginBanDuration',
   'showPopupFileEditor',
   'shareFileEditorTabs',
-  'ipWhitelistEnabled',
-  'autoCopyOnSelect',
   'dockerStatusIntervalSeconds',
   'dockerDefaultExpand',
   'statusMonitorIntervalSeconds',
@@ -53,20 +48,110 @@ const ALLOWED_SETTING_KEYS = new Set([
   'ipBlacklistEnabled',
   'layoutLocked',
   'terminalScrollbackLimit',
-  'spreadsheetPreviewMaxRows',
   'spreadsheetPreviewRowsPerPage',
   'spreadsheetPreviewMaxColumns',
   'fileManagerShowDeleteConfirmation',
-  'terminalEnableRightClickPaste',
+  'terminalRightClickCopyPaste',
   'showStatusMonitorIpAddress',
   'quickCommandsCollapsibleSearch',
+  'quickCommandsCompactMode',
+  'quickCommandRowSizeMultiplier',
 ]);
 
 const BOUNDED_INTEGER_SETTINGS: Record<string, { min: number; max: number }> = {
   remoteHostRefreshIntervalSeconds: { min: 1, max: 86400 },
-  spreadsheetPreviewMaxRows: { min: 10, max: 2000 },
   spreadsheetPreviewRowsPerPage: { min: 10, max: 2000 },
   spreadsheetPreviewMaxColumns: { min: 5, max: 200 },
+};
+
+const BOOLEAN_SETTING_KEYS = new Set([
+  'showPopupFileEditor',
+  'shareFileEditorTabs',
+  'showPopupFileManager',
+  'dockerDefaultExpand',
+  'dashboardShowLocalResources',
+  'dashboardShowRemoteResources',
+  'workspaceSidebarPersistent',
+  'showStatusMonitorIpAddress',
+  'quickCommandsCollapsibleSearch',
+  'quickCommandsCompactMode',
+  'terminalRightClickCopyPaste',
+  'layoutLocked',
+  'fileManagerShowDeleteConfirmation',
+  'ipBlacklistEnabled',
+]);
+
+const NUMBER_SETTING_KEYS = new Set([
+  'maxLoginAttempts',
+  'loginBanDuration',
+  'dockerStatusIntervalSeconds',
+  'statusMonitorIntervalSeconds',
+  'remoteHostRefreshIntervalSeconds',
+  'statusMonitorScale',
+  'terminalScrollbackLimit',
+  'fileManagerRowSizeMultiplier',
+  'quickCommandRowSizeMultiplier',
+  'spreadsheetPreviewRowsPerPage',
+  'spreadsheetPreviewMaxColumns',
+  'rdpModalWidth',
+  'rdpModalHeight',
+  'vncModalWidth',
+  'vncModalHeight',
+]);
+
+const JSON_OBJECT_SETTING_KEYS = new Set(['sidebarPaneWidths', 'fileManagerColWidths']);
+
+const parseStoredSetting = (key: string, value: string): unknown => {
+  if (BOOLEAN_SETTING_KEYS.has(key)) return value === 'true';
+  if (NUMBER_SETTING_KEYS.has(key)) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : undefined;
+  }
+  if (JSON_OBJECT_SETTING_KEYS.has(key)) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return isRecord(parsed) ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return value;
+};
+
+const settingsDto = (settings: Record<string, string>): Record<string, unknown> => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(settings)) {
+    if (!ALLOWED_SETTING_KEYS.has(key)) continue;
+    const parsed = parseStoredSetting(key, value);
+    if (parsed !== undefined) result[key] = parsed;
+  }
+  return result;
+};
+
+const storedSettingValue = (key: string, value: unknown): string => {
+  if (BOOLEAN_SETTING_KEYS.has(key)) {
+    if (typeof value !== 'boolean') throw new Error(`设置 ${key} 必须是布尔值`);
+    return String(value);
+  }
+  if (NUMBER_SETTING_KEYS.has(key)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`设置 ${key} 必须是有限数字`);
+    return String(value);
+  }
+  if (JSON_OBJECT_SETTING_KEYS.has(key)) {
+    if (!isRecord(value)) throw new Error(`设置 ${key} 必须是对象`);
+    if (key === 'sidebarPaneWidths' && !Object.values(value).every((width) => typeof width === 'string'))
+      throw new Error('sidebarPaneWidths 的值必须是字符串');
+    if (
+      key === 'fileManagerColWidths' &&
+      !Object.values(value).every((width) => typeof width === 'number' && Number.isFinite(width))
+    )
+      throw new Error('fileManagerColWidths 的值必须是有限数字');
+    return JSON.stringify(value);
+  }
+  if (typeof value !== 'string') throw new Error(`设置 ${key} 必须是字符串`);
+  if (key === 'commandInputSyncTarget' && !['none', 'quickCommands', 'commandHistory'].includes(value))
+    throw new Error('commandInputSyncTarget 无效');
+  return value;
 };
 
 const publicCaptcha = async (settings: SettingsService) => {
@@ -94,7 +179,7 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await dependencies.settings.getAllSettings());
+      response.json(settingsDto(await dependencies.settings.getAllSettings()));
     }),
   );
 
@@ -106,14 +191,14 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         return;
       }
       const filtered: Record<string, string> = {};
-      for (const [key, value] of Object.entries(request.body as Record<string, unknown>)) {
-        if (!ALLOWED_SETTING_KEYS.has(key)) continue;
-        const normalized = fromLegacySettingValue(value);
-        if (normalized === null) {
-          response.status(400).json({ message: `设置 ${key} 必须是字符串、数字或布尔值` });
-          return;
+      try {
+        for (const [key, value] of Object.entries(request.body as Record<string, unknown>)) {
+          if (!ALLOWED_SETTING_KEYS.has(key)) continue;
+          filtered[key] = storedSettingValue(key, value);
         }
-        filtered[key] = normalized;
+      } catch (error) {
+        response.status(400).json({ message: errorMessage(error) });
+        return;
       }
       for (const [key, bounds] of Object.entries(BOUNDED_INTEGER_SETTINGS)) {
         if (!(key in filtered)) continue;
@@ -126,7 +211,7 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
       if (Object.keys(filtered).length) await dependencies.settings.setMultipleSettings(filtered);
       const updatedKeys = Object.keys(filtered);
       if (updatedKeys.length) {
-        if (updatedKeys.includes('ipWhitelist') || updatedKeys.includes('ipWhitelistEnabled')) {
+        if (updatedKeys.includes('ipWhitelist')) {
           await dependencies.audit.logAction('IP_WHITELIST_UPDATED', { updatedKeys });
         } else {
           await dependencies.audit.logAction('SETTINGS_UPDATED', { updatedKeys });
@@ -134,24 +219,6 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         }
       }
       response.json({ message: '设置已成功更新' });
-    }),
-  );
-
-  router.get(
-    '/appearance',
-    route(async (_request, response) => {
-      response.json(await dependencies.appearance.get());
-    }),
-  );
-  router.put(
-    '/appearance',
-    route(async (request, response) => {
-      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
-        response.status(400).json({ message: '无效的请求体，应为 JSON 对象' });
-        return;
-      }
-      await dependencies.appearance.update(request.body);
-      response.json({ message: '外观设置已成功更新' });
     }),
   );
 
@@ -240,24 +307,6 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
       }
       await dependencies.ipBlacklist.removeFromBlacklist(ip);
       response.json({ message: `IP 地址 ${ip} 已从黑名单中移除` });
-    }),
-  );
-
-  router.get(
-    '/auto-copy-on-select',
-    route(async (_request, response) => {
-      response.json({ enabled: await dependencies.settings.getAutoCopyOnSelect() });
-    }),
-  );
-  router.put(
-    '/auto-copy-on-select',
-    route(async (request, response) => {
-      if (typeof request.body?.enabled !== 'boolean') {
-        response.status(400).json({ message: '无效的请求体，"enabled" 必须是一个布尔值' });
-        return;
-      }
-      await dependencies.settings.setAutoCopyOnSelect(request.body.enabled);
-      response.json({ message: '终端选中自动复制设置已成功更新' });
     }),
   );
 

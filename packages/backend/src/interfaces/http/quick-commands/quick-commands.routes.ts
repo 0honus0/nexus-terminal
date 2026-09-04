@@ -20,7 +20,7 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
   router.get(
     '/',
     route(async (request, response) => {
-      response.json(await commands.list(request.query.sortBy === 'usage_count' ? 'usage_count' : 'name'));
+      response.json(await commands.list(request.query.sortBy === 'usageCount' ? 'usageCount' : 'name'));
     }),
   );
   router.post(
@@ -85,7 +85,8 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         response.status(404).json({ message: '未找到要更新的快捷指令' });
         return;
       }
-      response.json({ message: '快捷指令已更新', command: await commands.get(id) });
+      const command = await commands.get(id);
+      response.json({ message: '快捷指令已更新', command });
     }),
   );
   router.post(
@@ -96,8 +97,12 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         response.status(400).json({ message: '无效的 ID' });
         return;
       }
-      await commands.incrementUsage(id);
-      response.json({ message: '使用次数已记录 (或指令不存在)' });
+      if (!(await commands.incrementUsage(id))) {
+        response.status(404).json({ message: '未找到快捷指令' });
+        return;
+      }
+      const command = await commands.get(id);
+      response.json({ message: '使用次数已记录', command });
     }),
   );
   router.delete(

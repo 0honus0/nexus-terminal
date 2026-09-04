@@ -74,6 +74,13 @@ export class WorkspaceFilesystemService {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     return this.textFiles.read(fs, this.absolute(remotePath), encoding);
   }
+  async readBinary(workspaceId: string, remotePath: string): Promise<Uint8Array> {
+    const fs = await this.filesystem(this.sessions.require(workspaceId));
+    const stream = await fs.openRead(this.absolute(remotePath));
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  }
   async writeFile(workspaceId: string, remotePath: string, content: string, encoding = 'utf-8') {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     return this.textFiles.write(fs, this.absolute(remotePath), content, encoding);

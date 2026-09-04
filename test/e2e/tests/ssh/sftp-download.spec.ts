@@ -1,7 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
-import { closeWebSocket, openSshSession, waitForSftpReady } from '../../support/ws';
+import { closeWebSocket, openWorkspaceSession, waitForFilesystemReady } from '../../support/ws';
 
 const query = (values: Record<string, string | number>): string =>
   new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)])).toString();
@@ -12,10 +12,10 @@ test('HTTP download ticket, Range, inline file, and directory ZIP work for an ac
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `filesystem-${crypto.randomUUID()}`);
+  const session = await openWorkspaceSession(request, connectionId, `filesystem-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
+    await waitForFilesystemReady(session.socket);
 
     const ticketResponse = await request.post('/api/v1/sftp/download-ticket', {
       data: {

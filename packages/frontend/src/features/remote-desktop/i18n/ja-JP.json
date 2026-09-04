@@ -1,0 +1,46 @@
+{
+  "remoteDesktopModal": {
+    "title": "リモートデスクトップ",
+    "titlePlaceholder": "リモートデスクトップ接続",
+    "status": {
+      "fetchingToken": "接続トークンを取得中...",
+      "connectingWs": "WebSocket に接続中...",
+      "idle": "アイドル",
+      "connectingRdp": "リモートデスクトップに接続中...",
+      "connectingVnc": "Connecting VNC...",
+      "waiting": "サーバーの応答を待機中...",
+      "connected": "接続済み",
+      "disconnecting": "切断中...",
+      "disconnected": "切断済み",
+      "unknownState": "不明な状態",
+      "connecting": "接続中...",
+      "error": "エラー"
+    },
+    "errors": {
+      "missingInfo": "接続情報または表示要素がありません。",
+      "tunnelError": "トンネルエラー",
+      "clientError": "クライアントエラー",
+      "connectionFailed": "接続に失敗しました",
+      "inputError": "入力リスナーの設定中にエラーが発生しました。",
+      "noConnection": "接続情報が提供されていません。",
+      "tokenError": "トークンの取得に失敗しました"
+    },
+    "reconnectTooltip": "リモートデスクトップに再接続",
+    "touchModeLabel": "タッチ",
+    "touchModeDirect": "直接操作",
+    "touchModeTouchpad": "タッチパッド",
+    "mobileKeyboardInputLabel": "リモートデスクトップのキーボード入力",
+    "touchHintDirect": "タップ：クリックしてキーボード表示 · 長押し：右クリック · ダブルタップ後にドラッグ：ドラッグ",
+    "touchHintTouchpad": "1本指：ポインター移動 · タップ：左クリックしてキーボード表示 · 2本指タップ：右クリック · 2本指スワイプ：スクロール",
+    "resize": "ウィンドウサイズを変更",
+    "restoreWindow": "リモートデスクトップウィンドウを復元"
+  },
+  "vncModal": {
+    "title": "VNCセッション",
+    "textInputPlaceholder": "VNC に送信するテキストをここに入力",
+    "sendButtonTitle": "VNC にテキストを送信 (キーボード入力をシミュレート)",
+    "errors": {
+      "simulateInputError": "キーボード入力のシミュレート中にエラーが発生しました: {error}"
+    }
+  }
+}

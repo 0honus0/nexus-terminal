@@ -1,0 +1,182 @@
+{
+  "settings": {
+    "popupFileManager": {
+      "title": "弹窗文件管理器",
+      "enableLabel": "启用弹窗文件管理器",
+      "description": "启用后，命令输入栏将显示文件管理器按钮，点击可打开弹窗式文件管理器。",
+      "success": {
+        "saved": "弹窗文件管理器设置已保存。"
+      },
+      "error": {
+        "saveFailed": "保存弹窗文件管理器设置失败。"
+      }
+    },
+    "timezone": {
+      "title": "时区设置",
+      "selectLabel": "选择时区:",
+      "description": "通知中的时间戳将根据此时区进行格式化。",
+      "success": {
+        "saved": "时区设置已成功保存。"
+      },
+      "error": {
+        "saveFailed": "保存时区设置失败。"
+      }
+    },
+    "popupEditor": {
+      "title": "弹窗文件编辑器",
+      "enableLabel": "打开文件时显示弹窗编辑器",
+      "description": "此开关同时控制编辑器与预览的关闭缓存行为。开启后，打开文件使用弹窗编辑器，点击编辑器或预览右上角关闭按钮会清空对应工作区的全部标签和内容缓存；关闭后不启用弹窗编辑器，预览关闭按钮仅隐藏并保留缓存。点击空白背景或按 Esc 始终只隐藏并保留缓存。",
+      "saveButton": "保存设置",
+      "success": {
+        "saved": "弹窗编辑器设置已成功保存。"
+      },
+      "error": {
+        "saveFailed": "保存弹窗编辑器设置失败。"
+      }
+    },
+    "shareEditorTabs": {
+      "title": "编辑器标签页",
+      "enableLabel": "在所有会话间共享编辑器标签页",
+      "description": "如果启用，所有 SSH 会话将共享同一组打开的文件编辑器标签页。如果禁用，每个会话将拥有自己独立的一组标签页。",
+      "saveButton": "保存设置",
+      "success": {
+        "saved": "编辑器标签页共享设置已成功保存。"
+      },
+      "error": {
+        "saveFailed": "保存编辑器标签页共享设置失败。"
+      }
+    },
+    "language": {
+      "title": "语言设置",
+      "selectLabel": "界面语言:",
+      "saveButton": "保存语言",
+      "success": {
+        "saved": "语言设置已成功保存。"
+      },
+      "error": {
+        "saveFailed": "保存语言设置失败。"
+      }
+    },
+    "docker": {
+      "title": "Docker 管理器设置",
+      "refreshIntervalLabel": "状态刷新间隔 (秒):",
+      "refreshIntervalHint": "获取 Docker 容器状态和统计信息的频率（最小为 1）。",
+      "defaultExpandLabel": "默认展开容器详情",
+      "saveButton": "保存 Docker 设置",
+      "success": {
+        "saved": "Docker 设置已成功保存。"
+      },
+      "error": {
+        "saveFailed": "保存 Docker 设置失败。",
+        "invalidInterval": "刷新间隔必须是正整数。"
+      }
+    },
+    "statusMonitor": {
+      "title": "状态监控设置",
+      "refreshIntervalLabel": "状态刷新间隔 (秒):",
+      "refreshIntervalHint": "获取服务器 CPU、内存、磁盘等状态的频率（最小为 1）。",
+      "saveButton": "保存状态监控设置",
+      "success": {
+        "saved": "状态监控设置已成功保存。"
+      },
+      "error": {
+        "saveFailed": "保存状态监控设置失败。",
+        "invalidInterval": "刷新间隔必须是正整数。"
+      }
+    },
+    "workspace": {
+      "title": "工作区与终端",
+      "sidebarPersistentTitle": "侧边栏行为",
+      "sidebarPersistentLabel": "弹出后固定侧边栏 (不自动收回)",
+      "sidebarPersistentDescription": "开启后，点击侧边栏外部区域不会自动收回侧边栏。",
+      "success": {
+        "sidebarPersistentSaved": "侧边栏设置已保存。",
+        "showConnectionTagsSaved": "连接标签显示设置已保存。",
+        "showQuickCommandTagsSaved": "快捷指令标签显示设置已保存。",
+        "quickCommandsCollapsibleSearchSaved": "快捷指令搜索框显示方式已保存。"
+      },
+      "error": {
+        "sidebarPersistentSaveFailed": "保存侧边栏设置失败。",
+        "showConnectionTagsSaveFailed": "保存连接标签显示设置失败。",
+        "showQuickCommandTagsSaveFailed": "保存快捷指令标签显示设置失败。",
+        "quickCommandsCollapsibleSearchSaveFailed": "保存快捷指令搜索框显示方式失败。"
+      },
+      "showConnectionTagsTitle": "显示连接标签",
+      "showConnectionTagsLabel": "在连接列表中显示标签",
+      "showConnectionTagsDescription": "关闭后将隐藏连接列表中的标签，并从搜索中排除标签。",
+      "showQuickCommandTagsTitle": "显示快捷指令标签",
+      "showQuickCommandTagsLabel": "在快捷指令列表中显示标签",
+      "showQuickCommandTagsDescription": "关闭后将隐藏快捷指令列表中的标签，并从搜索中排除标签。",
+      "quickCommandsCollapsibleSearchTitle": "快捷指令搜索框",
+      "quickCommandsCollapsibleSearchLabel": "默认将搜索框折叠为搜索按钮",
+      "quickCommandsCollapsibleSearchDescription": "默认关闭。开启后快捷指令面板只显示搜索按钮，点击后再展开搜索框。",
+      "spreadsheetPreviewLimits": {
+        "title": "电子表格预览",
+        "rowsLabel": "每页行数",
+        "columnsLabel": "最大预览列数",
+        "hint": "工作表按行分页，因此全部行都可继续翻页查看。提高每页行数和列数上限会占用更多浏览器内存。",
+        "saved": "电子表格预览设置已保存。",
+        "saveFailed": "保存电子表格预览设置失败。",
+        "invalidRows": "每页行数必须是 10–2000 之间的整数。",
+        "invalidColumns": "列数必须是 5–200 之间的整数。"
+      },
+      "fileManagerDeleteConfirmTitle": "文件管理器删除确认",
+      "fileManagerShowDeleteConfirmationLabel": "删除文件或文件夹前显示确认",
+      "fileManagerDeleteConfirmSuccess": "文件管理器删除确认设置已保存。",
+      "fileManagerDeleteConfirmError": "保存文件管理器删除确认设置失败。",
+      "quickCommandsCompactModeLabel": "紧凑显示快捷指令行",
+      "terminalRightClickCopyPasteTitle": "终端右键复制/粘贴",
+      "terminalRightClickCopyPasteLabel": "启用终端右键复制/粘贴",
+      "terminalRightClickCopyPasteDescription": "终端有选区时右键复制；没有选区时右键粘贴剪贴板文本。"
+    },
+    "statusMonitorShowIp": {
+      "title": "状态监视器显示IP地址",
+      "enableLabel": "在状态监视器中显示IP地址"
+    },
+    "dashboardResources": {
+      "title": "首页系统资源",
+      "description": "控制仪表盘是否显示 Nexus 本机和活动 SSH 主机的资源统计。",
+      "localLabel": "显示本机资源",
+      "localHint": "显示 Nexus 所在服务器的 CPU、内存和根磁盘使用率。",
+      "remoteLabel": "显示远程资源",
+      "remoteHint": "仅订阅当前已连接 SSH 会话的资源状态，不主动探测离线主机。",
+      "refreshIntervalLabel": "SSH 资源刷新间隔（秒）",
+      "refreshIntervalHint": "仅用于首页 SSH 资源快照，与状态监视器刷新间隔相互独立。",
+      "error": {
+        "saveFailed": "保存首页系统资源设置失败。",
+        "invalidInterval": "SSH 资源刷新间隔必须是 1–86400 之间的整数。"
+      }
+    },
+    "terminalScrollback": {
+      "title": "终端回滚行数",
+      "limitLabel": "最大行数",
+      "limitHint": "设置终端保留的最大输出行数，范围 0–100000。0 使用默认值 5000。此设置将在下次打开终端时生效。",
+      "saveButton": "保存",
+      "success": {
+        "saved": "终端回滚行数设置已保存。"
+      },
+      "error": {
+        "saveFailed": "保存终端回滚行数设置失败。",
+        "invalidInput": "请输入 0–100000 之间的整数。"
+      }
+    },
+    "commandInputSync": {
+      "title": "命令输入同步",
+      "selectLabel": "同步目标:",
+      "targetNone": "无",
+      "targetQuickCommands": "快捷指令",
+      "targetCommandHistory": "命令历史",
+      "description": "将命令输入栏的内容实时同步到所选面板的搜索框。键盘上下选中后使用 Enter 使用指令",
+      "success": {
+        "saved": "同步目标已保存。"
+      },
+      "error": {
+        "saveFailed": "保存同步目标失败。"
+      }
+    },
+    "preferences": {
+      "saved": "偏好设置已保存。",
+      "saveFailed": "保存偏好设置失败：{error}"
+    }
+  }
+}

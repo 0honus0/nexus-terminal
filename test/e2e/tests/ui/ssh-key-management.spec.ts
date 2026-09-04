@@ -86,8 +86,8 @@ test('SSH key management UI adds, renames without replacing private key, and del
     const row = modal.locator(`tr[data-key-id="${keyId}"]`);
     await expect(row).toContainText(EDITED_NAME);
     await row.getByTestId('ssh-key-delete').click();
-    const confirm = page.getByRole('dialog').filter({ hasText: EDITED_NAME });
-    await expect(confirm).toBeVisible();
+    const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+    await expect(confirm).toContainText(EDITED_NAME);
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(row).toHaveCount(0);
     await expect.poll(async () => (await listKeys(context.request)).some((item) => item.id === keyId)).toBeFalsy();

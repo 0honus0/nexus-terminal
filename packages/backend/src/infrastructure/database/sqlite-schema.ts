@@ -9,6 +9,14 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
+export const createSettingsMigrationsTableSQL = `
+CREATE TABLE IF NOT EXISTS settings_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+`;
+
 export const createAuditLogsTableSQL = `
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

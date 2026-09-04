@@ -1,7 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
-import { closeWebSocket, openAuthenticatedWebSocket, sendJson, waitForJson } from '../../support/ws';
+import { closeWebSocket, openWorkspaceSession, requestWorkspace, waitForJson } from '../../support/ws';
 
 test('the first directory change waits for a real shell prompt instead of reporting foreground activity', async ({
   request,
@@ -10,48 +10,29 @@ test('the first directory change waits for a real shell prompt instead of report
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   const targetPath = '/folder-seed';
-  const socket = await openAuthenticatedWebSocket(request);
-  const requestMessages: Array<{ type?: string; requestId?: string; payload?: any }> = [];
+  const workspace = await openWorkspaceSession(request, connectionId, `cwd-${crypto.randomUUID()}`);
 
   try {
-    socket.on('message', (data: Buffer, isBinary: boolean) => {
-      if (isBinary) return;
-      try {
-        const parsed = JSON.parse(data.toString('utf8'));
-        if (parsed.requestId) requestMessages.push(parsed);
-      } catch {
-        /* terminal output is ignored */
-      }
-    });
-
-    const connectedPromise = waitForJson(socket, (message) => message.type === 'ssh:connected');
-    sendJson(socket, {
-      type: 'ssh:connect',
-      payload: { connectionId: String(connectionId), clientSessionId: `cwd-${crypto.randomUUID()}` },
-    });
-    await connectedPromise;
-
-    // Historical race: issue the first cwd change immediately after ssh:connected.
+    // Historical race: issue the first cwd change immediately after workspace.connect completes.
     const requestId = `cwd-${crypto.randomUUID()}`;
-    const finalPromise = waitForJson(
-      socket,
-      (message) =>
-        message.requestId === requestId &&
-        (message.type === 'ssh:change_directory:result' || message.type === 'ssh:change_directory:error'),
+    const changedPromise = waitForJson(
+      workspace.socket,
+      (message) => message.type === 'terminal.directoryChanged' && message.payload?.requestId === requestId,
       20_000,
     );
-    sendJson(socket, { type: 'ssh:change_directory', payload: { path: targetPath }, requestId });
-    const final = await finalPromise;
-
-    expect(final.type).toBe('ssh:change_directory:result');
-    expect(final.payload).toMatchObject({ path: targetPath });
-    expect(
-      requestMessages.some(
-        (message) => message.requestId === requestId && message.type === 'ssh:change_directory:error',
-      ),
-    ).toBeFalsy();
+    const failedPromise = waitForJson(
+      workspace.socket,
+      (message) => message.type === 'terminal.directoryChangeFailed' && message.payload?.requestId === requestId,
+      1_000,
+    ).catch(() => null);
+    await expect(
+      requestWorkspace(workspace.socket, 'terminal.changeDirectory', { path: targetPath }, requestId),
+    ).resolves.toMatchObject({ queued: true });
+    const changed = await changedPromise;
+    expect(changed.payload).toMatchObject({ path: targetPath });
+    expect(await failedPromise).toBeNull();
   } finally {
-    await closeWebSocket(socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
@@ -59,31 +40,26 @@ test('directory changes reject terminal control characters before writing to the
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const socket = await openAuthenticatedWebSocket(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `cwd-control-${crypto.randomUUID()}`);
 
   try {
-    const connectedPromise = waitForJson(socket, (message) => message.type === 'ssh:connected');
-    sendJson(socket, {
-      type: 'ssh:connect',
-      payload: { connectionId: String(connectionId), clientSessionId: `cwd-control-${crypto.randomUUID()}` },
-    });
-    await connectedPromise;
-
     const requestId = `cwd-control-${crypto.randomUUID()}`;
-    const errorPromise = waitForJson(
-      socket,
-      (message) => message.requestId === requestId && message.type === 'ssh:change_directory:error',
+    const failedPromise = waitForJson(
+      workspace.socket,
+      (message) => message.type === 'terminal.directoryChangeFailed' && message.payload?.requestId === requestId,
       10_000,
     );
-    sendJson(socket, {
-      type: 'ssh:change_directory',
-      payload: { path: '/folder-seed\nsecond-command' },
-      requestId,
-    });
-    const response = await errorPromise;
-
-    expect(response.payload?.error).toContain('控制字符');
+    await expect(
+      requestWorkspace(
+        workspace.socket,
+        'terminal.changeDirectory',
+        { path: '/folder-seed\nsecond-command' },
+        requestId,
+      ),
+    ).resolves.toMatchObject({ queued: true });
+    const failed = await failedPromise;
+    expect(failed.payload?.message).toContain('控制字符');
   } finally {
-    await closeWebSocket(socket);
+    await closeWebSocket(workspace.socket);
   }
 });

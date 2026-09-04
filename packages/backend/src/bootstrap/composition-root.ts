@@ -23,6 +23,7 @@ import { SqlitePathHistoryRepository } from '../infrastructure/database/reposito
 import { SqliteProxyRepository } from '../infrastructure/database/repositories/sqlite-proxy.repository';
 import { SqliteQuickCommandRepository } from '../infrastructure/database/repositories/sqlite-quick-command.repository';
 import { SqliteQuickCommandTagRepository } from '../infrastructure/database/repositories/sqlite-quick-command-tag.repository';
+import { SqliteSettingsMigrationRepository } from '../infrastructure/database/repositories/sqlite-settings-migration.repository';
 import { SqliteSettingsRepository } from '../infrastructure/database/repositories/sqlite-settings.repository';
 import { SqliteSshKeyRepository } from '../infrastructure/database/repositories/sqlite-ssh-key.repository';
 import { SqliteTagRepository } from '../infrastructure/database/repositories/sqlite-tag.repository';
@@ -191,6 +192,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const passwordHasher = new BcryptPasswordHasher();
 
   const settingsRepository = new SqliteSettingsRepository(database);
+  const settingsMigrationRepository = new SqliteSettingsMigrationRepository(database);
   const auditRepository = new SqliteAuditLogRepository(database);
   const userRepository = new SqliteUserRepository(database);
   const sshKeyRepository = new SqliteSshKeyRepository(database);
@@ -208,7 +210,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const appearanceRepository = new SqliteAppearanceSettingsRepository(database);
   const blacklistRepository = new SqliteIpBlacklistRepository(database);
 
-  const settings = new SettingsService(settingsRepository);
+  const settings = new SettingsService(settingsRepository, settingsMigrationRepository);
   const audit = new AuditLogService(auditRepository);
   const notificationChannels = new NetworkNotificationChannelAdapter();
   const notificationFormatter = new NotificationFormatter();

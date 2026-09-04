@@ -9,6 +9,7 @@ import type { SecretCipher } from '../../shared/security/crypto.port';
 
 const TABLES = [
   'settings',
+  'settings_migrations',
   'notification_settings',
   'proxies',
   'ssh_keys',

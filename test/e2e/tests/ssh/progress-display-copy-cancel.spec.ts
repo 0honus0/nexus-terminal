@@ -4,6 +4,7 @@ import {
   clickMenuItem,
   closeProgressDisplay,
   goIntoFolder,
+  hideVisibleProgressCenter,
   hiddenTask,
   openCurrentDirectoryContextMenu,
   openFileManager,
@@ -31,9 +32,8 @@ test('copy remains cancelled after a long remote write stall', async ({ page, co
     await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'Paste');
 
-    const popup = page.getByTestId('file-transfer-progress-popup');
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await popup.getByTestId('file-transfer-progress-hide').click();
+    await expect(page.getByTestId('transfer-progress-center')).toBeVisible({ timeout: 10_000 });
+    await hideVisibleProgressCenter(page);
     const modal = await openProgressDisplay(page);
     const task = hiddenTask(modal, sourceName);
     await expect(task).toBeVisible();

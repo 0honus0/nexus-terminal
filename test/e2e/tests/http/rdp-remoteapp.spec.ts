@@ -11,10 +11,10 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
       port: 3389,
       username: 'rdp-http-user',
       password: 'rdp-http-password',
-      rdp_options: {
-        remote_app: '||notepad',
-        remote_app_dir: 'C:\\RemoteApps',
-        remote_app_args: '/A sample.txt',
+      rdpOptions: {
+        remoteApp: '||notepad',
+        remoteAppDirectory: 'C:\\RemoteApps',
+        remoteAppArguments: '/A sample.txt',
       },
     },
   });
@@ -26,10 +26,10 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
   await expect(persisted.json()).resolves.toMatchObject({
     id: connectionId,
     type: 'RDP',
-    rdp_options: {
-      remote_app: 'notepad',
-      remote_app_dir: 'C:\\RemoteApps',
-      remote_app_args: '/A sample.txt',
+    rdpOptions: {
+      remoteApp: 'notepad',
+      remoteAppDirectory: 'C:\\RemoteApps',
+      remoteAppArguments: '/A sample.txt',
     },
   });
 

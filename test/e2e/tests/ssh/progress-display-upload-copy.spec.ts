@@ -8,6 +8,7 @@ import {
   goToParent,
   hiddenSource,
   hiddenTask,
+  hideVisibleProgressCenter,
   openCurrentDirectoryContextMenu,
   openFileManager,
   openProgressDisplay,
@@ -16,6 +17,8 @@ import {
   row,
   menu,
   clickMenuItem,
+  visibleProgressCenter,
+  visibleProgressTask,
 } from './progress-display.helpers';
 
 test('registered upload progress can hide, restore, and cancel from Progress Display', async ({ page, context }) => {
@@ -26,12 +29,10 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
   try {
     await slowStep('upload starts in a floating window and Hide removes the whole window', async () => {
       await dragLocalFile(page, filename, 12 * 1024 * 1024, 0x51);
-      const popup = page.getByTestId('file-upload-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup).toContainText(filename);
-      await expect(popup.locator('h4')).toContainText('·');
-      await popup.getByTestId('file-upload-progress-hide').click();
-      await expect(popup).toBeHidden();
+      const center = visibleProgressCenter(page);
+      await expect(center).toBeVisible({ timeout: 10_000 });
+      await expect(visibleProgressTask(page, filename)).toContainText('Upload');
+      await hideVisibleProgressCenter(page);
     });
 
     await step(
@@ -50,13 +51,11 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
         await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
 
         await source.getByTestId('hidden-progress-restore').click();
-        const popup = page.getByTestId('file-upload-progress-popup');
         await expect(modal).toBeHidden();
         await reopenConnectedFileManager(page);
-        await expect(popup).toBeVisible();
+        await expect(visibleProgressCenter(page)).toBeVisible();
 
-        await popup.getByTestId('file-upload-progress-hide').click();
-        await expect(popup).toBeHidden();
+        await hideVisibleProgressCenter(page);
         const reopenedModal = await openProgressDisplay(page);
         await expect(hiddenTask(reopenedModal, filename)).toBeVisible();
       },
@@ -67,7 +66,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       const task = hiddenTask(modal, filename);
       await task.getByTestId('hidden-progress-cancel').click();
       await expect(task).toBeHidden({ timeout: 10_000 });
-      await expect(page.getByTestId('file-upload-progress-popup')).toBeHidden();
+      await expect(page.getByTestId('transfer-progress-center')).toBeHidden();
       await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
 
       await closeProgressDisplay(modal);
@@ -98,11 +97,10 @@ test('registered copy progress hides and cancels through the shared Progress Dis
       await openCurrentDirectoryContextMenu(page);
       await clickMenuItem(page, 'Paste');
 
-      const popup = page.getByTestId('file-transfer-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup).toContainText(sourceName);
-      await popup.getByTestId('file-transfer-progress-hide').click();
-      await expect(popup).toBeHidden();
+      const center = visibleProgressCenter(page);
+      await expect(center).toBeVisible({ timeout: 10_000 });
+      await expect(visibleProgressTask(page, sourceName)).toContainText('Copy');
+      await hideVisibleProgressCenter(page);
     });
 
     await slowStep('shared Cancel stops the copy provider without affecting the source file', async () => {

@@ -1,0 +1,62 @@
+{
+  "quickCommands": {
+    "searchPlaceholder": "名前またはコマンドを検索...",
+    "expandSearch": "検索を展開",
+    "add": "追加",
+    "switchToName": "コマンドを表示中。クリックして名前を表示",
+    "switchToCommand": "名前を表示中。クリックしてコマンドを表示",
+    "sortByName": "名前",
+    "sortByUsage": "使用頻度",
+    "usageCount": "使用回数",
+    "empty": "クイックコマンドはありません。'+'ボタンをクリックして作成してください！",
+    "addFirst": "最初のクイックコマンドを追加",
+    "confirmDelete": "クイックコマンド\"{name}\"を削除しますか？",
+    "form": {
+      "titleAdd": "クイックコマンドの追加",
+      "titleEdit": "クイックコマンドの編集",
+      "name": "名前:",
+      "namePlaceholder": "オプション。素早く認識するために使用",
+      "command": "コマンド:",
+      "commandPlaceholder": "例：",
+      "errorCommandRequired": "コマンドは空にできません",
+      "add": "追加",
+      "tags": "タグ:",
+      "tagsPlaceholder": "タグを選択または作成...",
+      "variablesTitle": "変数管理",
+      "noVariables": "変数はまだありません。下のボタンをクリックして追加してください。",
+      "variableNamePlaceholder": "変数名",
+      "variableValuePlaceholder": "変数値",
+      "addVariable": "+ 変数を追加",
+      "execute": "実行",
+      "warningUndefinedVariables": "警告：コマンドテンプレートに未定義の変数があります: {variables}",
+      "errorNoActiveSession": "コマンドを実行するためのアクティブなSSHセッションがありません。"
+    },
+    "untagged": "タグなし",
+    "tags": {
+      "clickToEditTag": "クリックしてタグ名を編集",
+      "removeSelection": "このコマンドからタグを外す",
+      "deleteGlobally": "このタグをグローバルに削除",
+      "confirmDelete": "タグ「{name}」をグローバルに削除しますか？",
+      "deleteFailed": "タグ「{name}」の削除に失敗しました: {error}",
+      "renameHint": "タグ名を変更",
+      "createFromUntagged": "このタグなしグループにタグを作成",
+      "renameFailed": "タグ名の変更に失敗しました: {error}",
+      "createFailed": "タグの作成と割り当てに失敗しました: {error}",
+      "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}"
+    },
+    "actions": {
+      "sendToAllSessions": "すべてのセッションに送信",
+      "copy": "コピー"
+    },
+    "notifications": {
+      "sentToAllSessions": "コマンドは {count} 個のセッションに送信されました。",
+      "noActiveSshSessions": "コマンドを送信するアクティブな SSH セッションはありません。",
+      "copied": "コマンドをコピーしました。",
+      "copyFailed": "コマンドをコピーできません。"
+    },
+    "sortByLastUsed": "最終使用",
+    "displayName": "名前",
+    "displayCommand": "コマンド",
+    "compactMode": "コンパクト"
+  }
+}

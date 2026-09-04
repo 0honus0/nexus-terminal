@@ -9,6 +9,9 @@ export const parsePositiveId = (value: string): number | null => {
 
 export const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export const destroySession = (request: Request): Promise<void> =>
   new Promise((resolve, reject) => request.session.destroy((error) => (error ? reject(error) : resolve())));
 

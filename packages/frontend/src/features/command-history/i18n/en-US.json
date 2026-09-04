@@ -1,0 +1,24 @@
+{
+  "commandHistory": {
+    "searchPlaceholder": "Search history...",
+    "clear": "Clear",
+    "copy": "Copy",
+    "delete": "Delete",
+    "loading": "Loading...",
+    "empty": "No history records",
+    "confirmClear": "Are you sure you want to clear all history?",
+    "copied": "Copied to clipboard",
+    "copyFailed": "Copy failed",
+    "actions": {
+      "sendToAllSessions": "Send to All Sessions"
+    },
+    "notifications": {
+      "sentToAllSessions": "Command sent to {count} sessions.",
+      "noActiveSshSessions": "No active SSH sessions to send command to."
+    },
+    "addFailed": "Command was sent, but saving it to history failed: {error}",
+    "loadFailed": "Failed to load command history: {error}",
+    "deleteFailed": "Failed to delete history entry: {error}",
+    "clearFailed": "Failed to clear command history: {error}"
+  }
+}

@@ -9,7 +9,7 @@ test('data management UI exports a real backup file and imports it through the f
 }) => {
   await loginAsInitialAdmin(context.request);
   await page.goto('/settings');
-  await page.getByTestId('settings-tab-dataManagement').click();
+  await page.getByRole('tab', { name: 'Data Management', exact: true }).click();
   const section = page.getByTestId('data-management-settings');
   await expect(section).toBeVisible();
 

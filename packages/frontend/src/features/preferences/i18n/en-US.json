@@ -1,0 +1,182 @@
+{
+  "settings": {
+    "popupFileManager": {
+      "title": "Popup File Manager",
+      "enableLabel": "Enable Popup File Manager",
+      "description": "When enabled, the file manager button will be displayed in the command input bar, allowing you to open the popup file manager.",
+      "success": {
+        "saved": "Popup File Manager settings saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save Popup File Manager settings."
+      }
+    },
+    "timezone": {
+      "title": "Timezone Settings",
+      "selectLabel": "Select Timezone:",
+      "description": "Timestamps in notifications will be formatted according to this timezone.",
+      "success": {
+        "saved": "Timezone setting saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save timezone setting."
+      }
+    },
+    "popupEditor": {
+      "title": "Popup File Editor",
+      "enableLabel": "Show popup editor when opening files",
+      "description": "This setting also controls editor and preview close-cache behavior. When enabled, files open in the popup editor and the editor or preview close button clears all tabs and cached content in that workspace. When disabled, the popup editor is disabled and preview close buttons only hide while preserving cache. Clicking the blank backdrop or pressing Escape always only hides and preserves cache.",
+      "saveButton": "Save Setting",
+      "success": {
+        "saved": "Popup editor setting saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save popup editor setting."
+      }
+    },
+    "shareEditorTabs": {
+      "title": "Editor Tabs",
+      "enableLabel": "Share editor tabs across all sessions",
+      "description": "If enabled, all SSH sessions will share the same set of open file editor tabs. If disabled, each session will have its own independent set of tabs.",
+      "saveButton": "Save Setting",
+      "success": {
+        "saved": "Editor tab sharing setting saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save editor tab sharing setting."
+      }
+    },
+    "language": {
+      "title": "Language Settings",
+      "selectLabel": "Interface Language:",
+      "saveButton": "Save Language",
+      "success": {
+        "saved": "Language settings saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save language settings."
+      }
+    },
+    "docker": {
+      "title": "Docker Manager Settings",
+      "refreshIntervalLabel": "Status Refresh Interval (seconds):",
+      "refreshIntervalHint": "How often to fetch Docker container status and stats (minimum 1).",
+      "defaultExpandLabel": "Expand container details by default",
+      "saveButton": "Save Docker Settings",
+      "success": {
+        "saved": "Docker settings saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save Docker settings.",
+        "invalidInterval": "Refresh interval must be a positive integer."
+      }
+    },
+    "statusMonitor": {
+      "title": "Status Monitor Settings",
+      "refreshIntervalLabel": "Status Refresh Interval (seconds):",
+      "refreshIntervalHint": "How often to fetch server CPU, memory, disk, etc. status (minimum 1).",
+      "saveButton": "Save Status Monitor Settings",
+      "success": {
+        "saved": "Status monitor settings saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save status monitor settings.",
+        "invalidInterval": "Refresh interval must be a positive integer."
+      }
+    },
+    "workspace": {
+      "title": "Workspace & Terminal",
+      "sidebarPersistentTitle": "Sidebar Behavior",
+      "sidebarPersistentLabel": "Pin sidebar when opened (prevent auto-collapse)",
+      "sidebarPersistentDescription": "When enabled, clicking outside the sidebar will not automatically collapse it.",
+      "success": {
+        "sidebarPersistentSaved": "Sidebar setting saved.",
+        "showConnectionTagsSaved": "Connection tags visibility setting saved.",
+        "showQuickCommandTagsSaved": "Quick command tags visibility setting saved.",
+        "quickCommandsCollapsibleSearchSaved": "Quick command search display setting saved."
+      },
+      "error": {
+        "sidebarPersistentSaveFailed": "Failed to save sidebar setting.",
+        "showConnectionTagsSaveFailed": "Failed to save connection tags visibility setting.",
+        "showQuickCommandTagsSaveFailed": "Failed to save quick command tags visibility setting.",
+        "quickCommandsCollapsibleSearchSaveFailed": "Failed to save quick command search display setting."
+      },
+      "showConnectionTagsTitle": "Show Connection Tags",
+      "showConnectionTagsLabel": "Show tags in connection list",
+      "showConnectionTagsDescription": "Disable to hide tags in the connection list and exclude them from search.",
+      "showQuickCommandTagsTitle": "Show Quick Command Tags",
+      "showQuickCommandTagsLabel": "Show tags in quick command list",
+      "showQuickCommandTagsDescription": "Disable to hide tags in the quick command list and exclude them from search.",
+      "quickCommandsCollapsibleSearchTitle": "Quick Command Search",
+      "quickCommandsCollapsibleSearchLabel": "Collapse the search box into a search button by default",
+      "quickCommandsCollapsibleSearchDescription": "Disabled by default. When enabled, the Quick Commands panel shows a search button until you click it to expand the search box.",
+      "spreadsheetPreviewLimits": {
+        "title": "Spreadsheet Preview",
+        "rowsLabel": "Rows per page",
+        "columnsLabel": "Maximum columns",
+        "hint": "Rows are paged so the full worksheet remains available. Higher page sizes and column limits use more browser memory.",
+        "saved": "Spreadsheet preview settings saved.",
+        "saveFailed": "Failed to save spreadsheet preview settings.",
+        "invalidRows": "Rows per page must be an integer between 10 and 2000.",
+        "invalidColumns": "Columns must be an integer between 5 and 200."
+      },
+      "fileManagerDeleteConfirmTitle": "File Manager Delete Confirmation",
+      "fileManagerShowDeleteConfirmationLabel": "Confirm before deleting files or folders",
+      "fileManagerDeleteConfirmSuccess": "File manager delete confirmation setting saved.",
+      "fileManagerDeleteConfirmError": "Failed to save file manager delete confirmation setting.",
+      "quickCommandsCompactModeLabel": "Compact quick command rows",
+      "terminalRightClickCopyPasteTitle": "Terminal right-click copy/paste",
+      "terminalRightClickCopyPasteLabel": "Enable terminal right-click copy/paste",
+      "terminalRightClickCopyPasteDescription": "Right-click copies the current selection; when there is no selection, right-click pastes clipboard text."
+    },
+    "statusMonitorShowIp": {
+      "title": "Status Monitor: Show IP Address",
+      "enableLabel": "Show IP address in status monitor"
+    },
+    "dashboardResources": {
+      "title": "Dashboard system resources",
+      "description": "Control whether the dashboard shows resource statistics for the Nexus host and active SSH hosts.",
+      "localLabel": "Show local resources",
+      "localHint": "Show CPU, memory, and root disk usage for the server running Nexus.",
+      "remoteLabel": "Show remote resources",
+      "remoteHint": "Subscribe only to currently connected SSH sessions; offline hosts are not probed.",
+      "refreshIntervalLabel": "SSH resource refresh interval (seconds)",
+      "refreshIntervalHint": "Used only for dashboard SSH resource snapshots and kept separate from the status monitor interval.",
+      "error": {
+        "saveFailed": "Failed to save dashboard resource settings.",
+        "invalidInterval": "SSH resource refresh interval must be an integer from 1 to 86400."
+      }
+    },
+    "terminalScrollback": {
+      "title": "Terminal Scrollback Limit",
+      "limitLabel": "Maximum Lines",
+      "limitHint": "Set the maximum output history from 0 to 100000 lines. 0 uses the default 5000. This takes effect when the next terminal is opened.",
+      "saveButton": "Save",
+      "success": {
+        "saved": "Terminal scrollback limit setting saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save terminal scrollback limit setting.",
+        "invalidInput": "Please enter an integer from 0 to 100000."
+      }
+    },
+    "commandInputSync": {
+      "title": "Command Input Sync",
+      "selectLabel": "Sync Target:",
+      "targetNone": "None",
+      "targetQuickCommands": "Quick Commands",
+      "targetCommandHistory": "Command History",
+      "description": "Sync the content of the command input bar to the search box of the selected panel in real-time. After selecting with the up/down keys, press Enter to execute the command.",
+      "success": {
+        "saved": "Sync target saved."
+      },
+      "error": {
+        "saveFailed": "Failed to save sync target."
+      }
+    },
+    "preferences": {
+      "saved": "Preferences saved.",
+      "saveFailed": "Failed to save preferences: {error}"
+    }
+  }
+}

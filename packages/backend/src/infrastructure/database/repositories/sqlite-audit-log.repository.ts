@@ -1,6 +1,15 @@
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import type { AuditLogRepository } from '../../../modules/audit/audit.repository.port';
 import type { AuditLogActionType, AuditLogEntry } from '../../../modules/audit/audit.types';
+
+type AuditLogRow = { id: number; timestamp: number; action_type: AuditLogActionType; details: string | null };
+const mapAuditLog = (row: AuditLogRow): AuditLogEntry => ({
+  id: row.id,
+  timestamp: row.timestamp,
+  actionType: row.action_type,
+  details: row.details,
+});
+
 export class SqliteAuditLogRepository implements AuditLogRepository {
   constructor(private readonly db: RelationalDatabase) {}
   async add(actionType: AuditLogActionType, details?: Record<string, unknown> | string | null) {
@@ -54,10 +63,12 @@ export class SqliteAuditLogRepository implements AuditLogRepository {
     const total =
       (await this.db.queryOne<{ total: number }>(`SELECT COUNT(*) AS total FROM audit_logs${clause}`, params))?.total ??
       0;
-    const logs = await this.db.queryAll<AuditLogEntry>(
-      `SELECT * FROM audit_logs${clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
-      [...params, options.limit, options.offset],
-    );
+    const logs = (
+      await this.db.queryAll<AuditLogRow>(
+        `SELECT id,timestamp,action_type,details FROM audit_logs${clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+        [...params, options.limit, options.offset],
+      )
+    ).map(mapAuditLog);
     return { logs, total };
   }
 }

@@ -7,7 +7,7 @@ test.describe('authenticated WebSocket', () => {
 
     const outcome = await page.evaluate(async () => {
       return await new Promise<'opened' | 'rejected' | 'timeout'>((resolve) => {
-        const socket = new WebSocket('ws://127.0.0.1:4173/ws');
+        const socket = new WebSocket('ws://127.0.0.1:4173/ws/workspace');
         const timeout = window.setTimeout(() => {
           socket.close();
           resolve('timeout');
@@ -47,20 +47,34 @@ test.describe('authenticated WebSocket', () => {
     });
 
     const response = await page.evaluate(async () => {
-      return await new Promise<{ type?: string; payload?: unknown }>((resolve, reject) => {
-        const socket = new WebSocket('ws://127.0.0.1:4173/ws');
+      return await new Promise<{
+        type?: string;
+        requestId?: string;
+        payload?: { ok?: boolean; error?: string };
+      }>((resolve, reject) => {
+        const socket = new WebSocket('ws://127.0.0.1:4173/ws/workspace');
         const timeout = window.setTimeout(() => {
           socket.close();
           reject(new Error('Timed out waiting for WebSocket response'));
         }, 5_000);
 
-        socket.addEventListener('open', () => socket.send('not-json'), { once: true });
+        socket.addEventListener(
+          'open',
+          () => socket.send(JSON.stringify({ type: 'e2e.unsupported', requestId: 'e2e-route-check', payload: {} })),
+          { once: true },
+        );
         socket.addEventListener(
           'message',
           (event) => {
             window.clearTimeout(timeout);
             socket.close();
-            resolve(JSON.parse(String(event.data)) as { type?: string; payload?: unknown });
+            resolve(
+              JSON.parse(String(event.data)) as {
+                type?: string;
+                requestId?: string;
+                payload?: { ok?: boolean; error?: string };
+              },
+            );
           },
           { once: true },
         );
@@ -75,8 +89,15 @@ test.describe('authenticated WebSocket', () => {
       });
     });
 
-    expect(response.type).toBe('error');
-    expect(observedFrames.some((frame) => frame.direction === 'sent' && frame.payload === 'not-json')).toBeTruthy();
+    expect(response).toMatchObject({
+      type: 'response',
+      requestId: 'e2e-route-check',
+      payload: { ok: false },
+    });
+    expect(response.payload?.error).toContain('Unsupported Workspace operation');
+    expect(
+      observedFrames.some((frame) => frame.direction === 'sent' && String(frame.payload).includes('e2e.unsupported')),
+    ).toBeTruthy();
     expect(observedFrames.some((frame) => frame.direction === 'received')).toBeTruthy();
   });
 });

@@ -17,8 +17,7 @@ export type E2eWebSocket = any;
 
 export async function openAuthenticatedWebSocket(
   request: APIRequestContext,
-  url = 'ws://127.0.0.1:4173/ws',
-  options: { autoAcknowledgeTerminalFrames?: boolean } = {},
+  url = 'ws://127.0.0.1:4173/ws/workspace',
 ): Promise<E2eWebSocket> {
   const state = await request.storageState();
   const cookies = state.cookies
@@ -27,22 +26,6 @@ export async function openAuthenticatedWebSocket(
     .join('; ');
 
   const socket = new WebSocket(url, { headers: { Cookie: cookies } });
-  // Mirror the real frontend transport contract: every NXTM terminal frame is
-  // acknowledged after receipt. Resume commits intentionally wait for cached
-  // terminal-frame ACKs before sending ssh:connected / RESUMED notifications.
-  socket.on('message', (data: Buffer, isBinary: boolean) => {
-    if (
-      options.autoAcknowledgeTerminalFrames === false ||
-      !isBinary ||
-      data.length < 16 ||
-      data.subarray(0, 4).toString('ascii') !== 'NXTM'
-    )
-      return;
-    const sequence = data.readUInt32BE(12);
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'ssh:output:ack', payload: { sequence } }));
-    }
-  });
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`WebSocket open timeout: ${url}`)), 10_000);
     socket.once('open', () => {
@@ -89,59 +72,70 @@ export function waitForJson(
   });
 }
 
-export async function openSshSession(
-  request: APIRequestContext,
-  connectionId: number,
-  clientSessionId = `e2e-${crypto.randomUUID()}`,
-): Promise<{ socket: E2eWebSocket; sessionId: string }> {
-  const socket = await openAuthenticatedWebSocket(request);
-  const connectedPromise = waitForJson(socket, (message) => message.type === 'ssh:connected', 20_000);
-  sendJson(socket, {
-    type: 'ssh:connect',
-    payload: { connectionId: String(connectionId), clientSessionId },
+export function waitForBinary(socket: E2eWebSocket, timeoutMs = 15_000): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off('message', onMessage);
+      reject(new Error('Timed out waiting for WebSocket binary message'));
+    }, timeoutMs);
+    const onMessage = (data: Buffer, isBinary: boolean) => {
+      if (!isBinary) return;
+      clearTimeout(timeout);
+      socket.off('message', onMessage);
+      resolve(Buffer.from(data));
+    };
+    socket.on('message', onMessage);
   });
-  const connected = await connectedPromise;
-  return { socket, sessionId: String(connected.payload?.sessionId) };
 }
 
-export async function requestJson(
+export async function requestWorkspace<T = unknown>(
   socket: E2eWebSocket,
   type: string,
-  payload: unknown,
-  successType: string,
-  errorType: string,
+  payload: Record<string, unknown> = {},
   requestId = crypto.randomUUID(),
   timeoutMs = 20_000,
-): Promise<JsonWsMessage> {
+): Promise<T> {
   const responsePromise = waitForJson(
     socket,
-    (message) => message.requestId === requestId && (message.type === successType || message.type === errorType),
+    (message) => message.type === 'response' && message.requestId === requestId,
     timeoutMs,
   );
   sendJson(socket, { type, payload, requestId });
   const response = await responsePromise;
-  if (response.type === errorType) {
-    throw new Error(`${type} failed: ${JSON.stringify(response.payload)}`);
-  }
-  return response;
+  if (!response.payload?.ok) throw new Error(`${type} failed: ${String(response.payload?.error ?? 'unknown error')}`);
+  return response.payload.data as T;
 }
 
-export async function waitForSftpReady(socket: E2eWebSocket): Promise<void> {
+export async function openWorkspaceSession(
+  request: APIRequestContext,
+  connectionId: number,
+  workspaceId = `e2e-${crypto.randomUUID()}`,
+): Promise<{ socket: E2eWebSocket; workspaceId: string }> {
+  const socket = await openAuthenticatedWebSocket(request);
+  const connected = await requestWorkspace<{ workspaceId: string }>(socket, 'workspace.connect', {
+    connectionId,
+    workspaceId,
+    viewport: { columns: 100, rows: 30 },
+  });
+  return { socket, workspaceId: connected.workspaceId };
+}
+
+export async function waitForFilesystemReady(socket: E2eWebSocket): Promise<void> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const requestId = `sftp-ready-${attempt}-${crypto.randomUUID()}`;
-    const responsePromise = waitForJson(
-      socket,
-      (message) =>
-        message.requestId === requestId &&
-        (message.type === 'sftp:readdir:success' || message.type === 'sftp:readdir:error'),
-      2_000,
-    );
-    sendJson(socket, { type: 'sftp:readdir', payload: { path: '/' }, requestId });
-    const response = await responsePromise;
-    if (response.type === 'sftp:readdir:success') return;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    try {
+      await requestWorkspace(
+        socket,
+        'filesystem.list',
+        { path: '/' },
+        `filesystem-ready-${attempt}-${crypto.randomUUID()}`,
+        2_000,
+      );
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   }
-  throw new Error('SFTP did not become ready');
+  throw new Error('Filesystem did not become ready');
 }
 
 export async function closeWebSocket(socket: E2eWebSocket): Promise<void> {

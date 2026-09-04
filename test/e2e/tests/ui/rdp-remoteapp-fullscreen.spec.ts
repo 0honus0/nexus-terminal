@@ -85,10 +85,10 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(persisted.json()).resolves.toMatchObject({
         id: connectionId,
         type: 'RDP',
-        rdp_options: {
-          remote_app: 'notepad',
-          remote_app_dir: 'C:\\Work',
-          remote_app_args: '/A readme.txt',
+        rdpOptions: {
+          remoteApp: 'notepad',
+          remoteAppDirectory: 'C:\\Work',
+          remoteAppArguments: '/A readme.txt',
         },
       });
     });
@@ -113,52 +113,25 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
     });
 
-    await step('Progress Display stays in normal layout and RDP always renders above it', async () => {
+    await step('RDP opens from the clean Workspace without rendering an empty Progress Display', async () => {
       await page.goto('/workspace');
-      const progressToggle = page.getByTestId('transfer-progress-toggle');
-      await expect(progressToggle).toBeVisible();
-      await progressToggle.click();
+      await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
 
-      const progressDisplay = page.getByTestId('progress-display-modal');
-      await expect(progressDisplay).toBeVisible();
-      await expect(progressDisplay).toHaveAttribute('data-progress-display-placement', 'inline');
-      await expect
-        .poll(() =>
-          progressDisplay.evaluate((element) => ({
-            position: window.getComputedStyle(element).position,
-            zIndex: window.getComputedStyle(element).zIndex,
-          })),
-        )
-        .toEqual({ position: 'static', zIndex: 'auto' });
-
-      await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
       const connectionList = page.getByTestId('workspace-connection-list');
       await expect(connectionList).toBeVisible();
       await connectionList.getByText(CONNECTION_NAME, { exact: true }).first().click();
 
       const modal = page.getByTestId('remote-desktop-modal');
       await expect(modal).toBeVisible();
-      await expect(progressDisplay).toBeVisible();
-      await expect
-        .poll(async () => {
-          const box = await modal.boundingBox();
-          if (!box) return false;
-          return modal.evaluate(
-            (element, point) => {
-              const top = document.elementFromPoint(point.x, point.y);
-              return Boolean(top && element.contains(top));
-            },
-            { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-          );
-        })
-        .toBe(true);
+      await expect(page.getByTestId('progress-display-modal')).toHaveCount(0);
     });
 
     await step('browser fullscreen is borderless, hides Nexus chrome, and Escape restores the window', async () => {
       const panel = page.getByTestId('remote-desktop-panel');
-      const fullscreen = page.getByTestId('rdp-browser-fullscreen');
+      const fullscreen = panel.getByRole('button', { name: 'Fullscreen', exact: true });
       const header = page.getByTestId('rdp-window-header');
       const footer = page.getByTestId('rdp-window-footer');
+      await expect(panel).toBeVisible();
       await expect(fullscreen).toBeVisible();
       await expect(header).toBeVisible();
       await expect(footer).toBeVisible();
@@ -230,7 +203,6 @@ async function createRemoteConnection(
 
 async function openRemoteConnection(page: Page, name: string, modalTestId: string): Promise<void> {
   await page.goto('/workspace');
-  await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
   const connectionList = page.getByTestId('workspace-connection-list');
   await expect(connectionList).toBeVisible();
   await connectionList.getByText(name, { exact: true }).first().click();
@@ -342,8 +314,8 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
       await context.request.put('/api/v1/settings', {
         data: {
           language: 'en-US',
-          rdpModalWidth: '1024',
-          rdpModalHeight: '768',
+          rdpModalWidth: 1024,
+          rdpModalHeight: 768,
         },
       })
     ).ok(),
@@ -358,8 +330,9 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
       minimize: 'rdp-window-minimize',
       restore: 'rdp-window-restore',
     });
-    await page.getByTestId('rdp-window-close').click();
-    await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
+    const modal = page.getByTestId('remote-desktop-modal');
+    await modal.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(modal).toBeHidden();
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }
@@ -373,8 +346,8 @@ test('VNC pointer resize and restore-button dragging share the same window seman
       await context.request.put('/api/v1/settings', {
         data: {
           language: 'en-US',
-          vncModalWidth: '900',
-          vncModalHeight: '650',
+          vncModalWidth: 900,
+          vncModalHeight: 650,
         },
       })
     ).ok(),
@@ -389,8 +362,9 @@ test('VNC pointer resize and restore-button dragging share the same window seman
       minimize: 'vnc-window-minimize',
       restore: 'vnc-window-restore',
     });
-    await page.getByTestId('vnc-window-close').click();
-    await expect(page.getByTestId('vnc-modal')).toHaveCount(0);
+    const modal = page.getByTestId('vnc-modal');
+    await modal.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(modal).toBeHidden();
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }

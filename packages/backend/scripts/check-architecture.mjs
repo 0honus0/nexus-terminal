@@ -85,23 +85,6 @@ for (const file of sourceFiles) {
       }
     }
 
-    if (target) {
-      const targetRelative = path.relative(srcRoot, target).split(path.sep).join('/');
-      if (targetRelative.startsWith('interfaces/http/legacy-api/') && !relativeFile.startsWith('interfaces/http/')) {
-        failures.push(
-          `${relativeFile}: legacy HTTP compatibility layer may only be imported from interfaces/http (${specifier})`,
-        );
-      }
-      if (
-        targetRelative.startsWith('interfaces/websocket/legacy-api/') &&
-        !relativeFile.startsWith('interfaces/websocket/')
-      ) {
-        failures.push(
-          `${relativeFile}: legacy WebSocket compatibility layer may only be imported from interfaces/websocket (${specifier})`,
-        );
-      }
-    }
-
     if ((fromLayer === 'platform' || fromLayer === 'modules') && ['express', 'ws', 'ssh2'].includes(specifier)) {
       failures.push(`${relativeFile}: ${fromLayer} may not import technology package ${specifier}`);
     }

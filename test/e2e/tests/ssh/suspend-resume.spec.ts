@@ -4,73 +4,63 @@ import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/s
 import {
   closeWebSocket,
   openAuthenticatedWebSocket,
-  openSshSession,
-  sendJson,
-  waitForJson,
-  waitForSftpReady,
+  openWorkspaceSession,
+  requestWorkspace,
+  waitForFilesystemReady,
 } from '../../support/ws';
 
 test('a marked live SSH session survives WebSocket disconnect and resumes the same shell', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const original = await openSshSession(request, connectionId, `suspend-${crypto.randomUUID()}`);
+  const original = await openWorkspaceSession(request, connectionId, `suspend-${crypto.randomUUID()}`);
 
-  const markPromise = waitForJson(original.socket, (message) => message.type === 'SSH_MARKED_FOR_SUSPEND_ACK');
-  sendJson(original.socket, {
-    type: 'SSH_MARK_FOR_SUSPEND',
-    payload: { sessionId: original.sessionId },
-  });
-  const marked = await markPromise;
-  expect(marked.payload).toMatchObject({ success: true });
+  await requestWorkspace(original.socket, 'suspend.mark');
   await closeWebSocket(original.socket);
 
   const recoverySocket = await openAuthenticatedWebSocket(request);
   try {
-    let suspended: any | undefined;
+    type SuspendedSession = {
+      id: string;
+      originalWorkspaceId: string;
+      connectionId: number;
+      connectionName: string;
+      status: 'active' | 'disconnected';
+    };
+    let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
-      const listPromise = waitForJson(recoverySocket, (message) => message.type === 'SSH_SUSPEND_LIST_RESPONSE', 3_000);
-      sendJson(recoverySocket, { type: 'SSH_SUSPEND_LIST_REQUEST', payload: {} });
-      const list = await listPromise;
-      suspended = (list.payload?.suspendSessions ?? []).find(
-        (session: any) => session.originalSessionId === original.sessionId && session.backendSshStatus === 'hanging',
+      const list = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
       );
       if (!suspended) await new Promise((resolve) => setTimeout(resolve, 150));
     }
     expect(suspended).toBeTruthy();
-    expect(suspended).toMatchObject({ backendSshStatus: 'hanging' });
-
-    const newFrontendSessionId = `resumed-${crypto.randomUUID()}`;
-    const connectedAgain = waitForJson(
-      recoverySocket,
-      (message) => message.type === 'ssh:connected' && message.payload?.sessionId === newFrontendSessionId,
-      20_000,
-    );
-    const resumedNotification = waitForJson(
-      recoverySocket,
-      (message) =>
-        message.type === 'SSH_SUSPEND_RESUMED_NOTIF' &&
-        message.payload?.suspendSessionId === suspended.suspendSessionId,
-      20_000,
-    );
-    sendJson(recoverySocket, {
-      type: 'SSH_SUSPEND_RESUME_REQUEST',
-      payload: { suspendSessionId: suspended.suspendSessionId, newFrontendSessionId },
+    expect(suspended).toMatchObject({
+      originalWorkspaceId: original.workspaceId,
+      connectionId,
+      status: 'active',
     });
 
-    const [reconnected, resumed] = await Promise.all([connectedAgain, resumedNotification]);
-    expect(reconnected.payload?.connectionId).toBe(connectionId);
-    expect(resumed.payload).toMatchObject({ success: true });
-    await waitForSftpReady(recoverySocket);
+    const resumedWorkspaceId = `resumed-${crypto.randomUUID()}`;
+    const resumed = await requestWorkspace<{
+      workspaceId: string;
+      connectionId: number;
+      connectionName: string;
+      resumedFrom: string;
+    }>(recoverySocket, 'suspend.resume', {
+      suspendedSessionId: suspended!.id,
+      workspaceId: resumedWorkspaceId,
+    });
+    expect(resumed).toMatchObject({
+      workspaceId: resumedWorkspaceId,
+      connectionId,
+      resumedFrom: suspended!.id,
+    });
+    await waitForFilesystemReady(recoverySocket);
 
-    const listAfterPromise = waitForJson(recoverySocket, (message) => message.type === 'SSH_SUSPEND_LIST_RESPONSE');
-    sendJson(recoverySocket, { type: 'SSH_SUSPEND_LIST_REQUEST', payload: {} });
-    const listAfter = await listAfterPromise;
-    expect(
-      (listAfter.payload?.suspendSessions ?? []).some(
-        (session: any) => session.suspendSessionId === suspended.suspendSessionId,
-      ),
-    ).toBeFalsy();
+    const listAfter = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
+    expect(listAfter.some((session) => session.id === suspended!.id)).toBeFalsy();
   } finally {
     await closeWebSocket(recoverySocket);
   }

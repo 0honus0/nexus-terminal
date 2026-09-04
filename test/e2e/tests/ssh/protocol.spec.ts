@@ -1,16 +1,57 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem, setTestSshOnline } from '../../support/ssh';
+import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
 import {
   closeWebSocket,
-  openAuthenticatedWebSocket,
-  openSshSession,
-  requestJson,
-  sendJson,
+  type E2eWebSocket,
+  openWorkspaceSession,
+  requestWorkspace,
+  waitForBinary,
   waitForJson,
-  waitForSftpReady,
+  waitForFilesystemReady,
 } from '../../support/ws';
 import { step } from '../../support/steps';
+
+type ArchiveResult = {
+  type: 'completed' | 'failed' | 'cancelled';
+  requestId: string;
+  code?: string;
+  message?: string;
+  path?: string;
+};
+
+const runArchive = async (
+  socket: E2eWebSocket,
+  operation: 'compress' | 'decompress',
+  payload: Record<string, unknown>,
+): Promise<ArchiveResult> => {
+  const requestId = `archive-${crypto.randomUUID()}`;
+  const eventPromise = waitForJson(
+    socket,
+    (message) =>
+      message.type === 'transfer.archive' &&
+      message.payload?.requestId === requestId &&
+      ['completed', 'failed', 'cancelled'].includes(String(message.payload?.type)),
+    30_000,
+  );
+  await requestWorkspace(socket, `transfer.${operation}`, payload, requestId, 30_000);
+  return (await eventPromise).payload as ArchiveResult;
+};
+
+const readRemoteText = async (socket: E2eWebSocket, path: string): Promise<string> =>
+  (
+    await requestWorkspace<{ content: string }>(socket, 'filesystem.readText', {
+      path,
+      encoding: 'utf-8',
+    })
+  ).content;
+
+const rootFileNames = async (socket: E2eWebSocket): Promise<string[]> =>
+  (
+    await requestWorkspace<{ entries: Array<{ name: string }> }>(socket, 'filesystem.list', {
+      path: '/',
+    })
+  ).entries.map((item) => item.name);
 
 test('backend can authenticate to the real SSH test server', async ({ request }) => {
   await loginAsInitialAdmin(request);
@@ -23,7 +64,7 @@ test('backend can authenticate to the real SSH test server', async ({ request })
       host: E2E_SSH.host,
       port: E2E_SSH.port,
       username: E2E_SSH.username,
-      auth_method: 'password',
+      authMethod: 'password',
       password: E2E_SSH.password,
     },
   });
@@ -32,311 +73,181 @@ test('backend can authenticate to the real SSH test server', async ({ request })
   await expect(response.json()).resolves.toMatchObject({ success: true });
 });
 
-test('duplicate ssh:connect stays non-fatal and leaves SFTP usable', async ({ request }) => {
+test('duplicate workspace.connect is rejected without breaking filesystem access', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `duplicate-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `duplicate-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
-    await step('repeat ssh:connect on the same live websocket', async () => {
-      const infoPromise = waitForJson(
-        session.socket,
-        (message) => message.type === 'info' && String(message.payload ?? '').includes('重复连接请求'),
-        10_000,
-      );
-      sendJson(session.socket, {
-        type: 'ssh:connect',
-        payload: { connectionId: String(connectionId), clientSessionId: session.sessionId },
-      });
-      await infoPromise;
+    await waitForFilesystemReady(workspace.socket);
+    await step('repeat workspace.connect on the same live websocket', async () => {
+      await expect(
+        requestWorkspace(workspace.socket, 'workspace.connect', {
+          connectionId,
+          workspaceId: `duplicate-second-${crypto.randomUUID()}`,
+        }),
+      ).rejects.toThrow(/already bound/i);
     });
 
-    await step('SFTP operations still work after the duplicate request', async () => {
-      const root = await requestJson(
-        session.socket,
-        'sftp:readdir',
-        { path: '/' },
-        'sftp:readdir:success',
-        'sftp:readdir:error',
-      );
-      expect(
-        (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename),
-      ).toContain('seed.txt');
+    await step('filesystem operations still work after the rejected duplicate request', async () => {
+      const root = await requestWorkspace<{ entries: Array<{ name: string }> }>(workspace.socket, 'filesystem.list', {
+        path: '/',
+      });
+      expect(root.entries.map((item) => item.name)).toContain('seed.txt');
     });
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
-test('recursive SFTP search stays scoped to the requested path and returns nested paths', async ({ request }) => {
+test('recursive filesystem search stays scoped to the requested path and returns nested paths', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `search-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `search-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
+    await waitForFilesystemReady(workspace.socket);
 
-    const rootSearch = await requestJson(
-      session.socket,
-      'sftp:search',
-      { path: '/', query: 'nested' },
-      'sftp:search:success',
-      'sftp:search:error',
-    );
-    expect(rootSearch.payload).toMatchObject({
+    const rootSearch = await requestWorkspace<{
+      truncated: boolean;
+      entries: Array<{ name: string; relativePath: string; path: string }>;
+    }>(workspace.socket, 'filesystem.search', { path: '/', query: 'nested' });
+    expect(rootSearch).toMatchObject({
       truncated: false,
-      items: expect.arrayContaining([
+      entries: expect.arrayContaining([
         expect.objectContaining({
-          filename: 'folder-seed/nested.txt',
-          basename: 'nested.txt',
+          name: 'nested.txt',
           relativePath: 'folder-seed/nested.txt',
           path: '/folder-seed/nested.txt',
         }),
       ]),
     });
 
-    const scopedSearch = await requestJson(
-      session.socket,
-      'sftp:search',
-      { path: '/folder-seed', query: 'seed.txt' },
-      'sftp:search:success',
-      'sftp:search:error',
-    );
-    expect(scopedSearch.payload).toMatchObject({ items: [] });
+    const scopedSearch = await requestWorkspace<{ entries: unknown[] }>(workspace.socket, 'filesystem.search', {
+      path: '/folder-seed',
+      query: 'seed.txt',
+    });
+    expect(scopedSearch.entries).toEqual([]);
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
-test('late terminal ACK after remote SSH disconnect is non-fatal', async ({ request }) => {
+test('raw terminal output needs no acknowledgement and clean requests remain usable', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const socket = await openAuthenticatedWebSocket(request, 'ws://127.0.0.1:4173/ws', {
-    autoAcknowledgeTerminalFrames: false,
-  });
-  const clientSessionId = `late-ack-${crypto.randomUUID()}`;
+  const workspace = await openWorkspaceSession(request, connectionId, `raw-terminal-${crypto.randomUUID()}`);
 
   try {
-    const terminalFramePromise = new Promise<number>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socket.off('message', onMessage);
-        reject(new Error('Timed out waiting for terminal binary frame'));
-      }, 10_000);
-      const onMessage = (data: Buffer, isBinary: boolean) => {
-        if (!isBinary || data.length < 16 || data.subarray(0, 4).toString('ascii') !== 'NXTM') return;
-        clearTimeout(timeout);
-        socket.off('message', onMessage);
-        resolve(data.readUInt32BE(12));
-      };
-      socket.on('message', onMessage);
-    });
-
-    const connectedPromise = waitForJson(socket, (message) => message.type === 'ssh:connected', 20_000);
-    sendJson(socket, {
-      type: 'ssh:connect',
-      payload: { connectionId: String(connectionId), clientSessionId },
-    });
-    await connectedPromise;
-    sendJson(socket, { type: 'ssh:input', payload: { data: "printf 'LATE_ACK_E2E\\n'\r" } });
-    const delayedSequence = await terminalFramePromise;
-
-    const disconnectedPromise = waitForJson(socket, (message) => message.type === 'ssh:disconnected', 15_000);
-    await setTestSshOnline(false);
-    await disconnectedPromise;
-
-    const genericErrors: string[] = [];
-    const onJsonMessage = (data: Buffer, isBinary: boolean) => {
-      if (isBinary) return;
-      try {
-        const message = JSON.parse(data.toString('utf8')) as { type?: string; payload?: unknown };
-        if (message.type === 'error') genericErrors.push(String(message.payload ?? ''));
-      } catch {
-        // Ignore non-JSON frames; this listener only observes protocol errors.
+    const outputPromise = (async () => {
+      const deadline = Date.now() + 15_000;
+      let output = '';
+      while (Date.now() < deadline) {
+        output += (await waitForBinary(workspace.socket, Math.max(100, deadline - Date.now()))).toString('utf8');
+        if (output.includes('RAW_TERMINAL_E2E')) return output;
       }
-    };
-    socket.on('message', onJsonMessage);
-
-    const listPromise = waitForJson(socket, (message) => message.type === 'SSH_SUSPEND_LIST_RESPONSE', 10_000);
-    sendJson(socket, { type: 'ssh:output:ack', payload: { sequence: delayedSequence } });
-    sendJson(socket, { type: 'SSH_SUSPEND_LIST_REQUEST', payload: {} });
-    await listPromise;
-    socket.off('message', onJsonMessage);
-
-    expect(genericErrors).not.toContain('处理消息时发生内部错误: 无效的终端输出 ACK');
+      throw new Error('Timed out waiting for raw terminal output');
+    })();
+    await requestWorkspace(workspace.socket, 'terminal.input', { data: "printf 'RAW_TERMINAL_E2E\\n'\r" });
+    await expect(outputPromise).resolves.toContain('RAW_TERMINAL_E2E');
+    await expect(requestWorkspace(workspace.socket, 'suspend.list')).resolves.toEqual(expect.any(Array));
   } finally {
-    await setTestSshOnline(true);
-    await closeWebSocket(socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
-test('same-session move treats a missing destination path as available', async ({ request }) => {
+test('same-workspace move treats a missing destination path as available', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `move-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `move-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
+    await waitForFilesystemReady(workspace.socket);
     await step('move a file into an existing directory', async () => {
-      await requestJson(
-        session.socket,
-        'sftp:move',
-        { sources: ['/move-source.txt'], destination: '/folder-seed' },
-        'sftp:move:success',
-        'sftp:move:error',
+      const requestId = `move-${crypto.randomUUID()}`;
+      const completed = waitForJson(
+        workspace.socket,
+        (message) =>
+          message.type === 'transfer.copyMove' &&
+          message.payload?.requestId === requestId &&
+          message.payload?.type === 'completed',
+        20_000,
       );
+      await requestWorkspace(
+        workspace.socket,
+        'transfer.copyMove',
+        { mode: 'move', sources: ['/move-source.txt'], destination: '/folder-seed' },
+        requestId,
+      );
+      await completed;
 
-      const destination = await requestJson(
-        session.socket,
-        'sftp:readfile',
-        { path: '/folder-seed/move-source.txt', encoding: 'utf8' },
-        'sftp:readfile:success',
-        'sftp:readfile:error',
-      );
-      expect(Buffer.from(String(destination.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
-        'move-me',
-      );
+      const destination = await requestWorkspace<{ content: string }>(workspace.socket, 'filesystem.readText', {
+        path: '/folder-seed/move-source.txt',
+        encoding: 'utf-8',
+      });
+      expect(destination.content).toContain('move-me');
 
-      const root = await requestJson(
-        session.socket,
-        'sftp:readdir',
-        { path: '/' },
-        'sftp:readdir:success',
-        'sftp:readdir:error',
-      );
-      expect(
-        (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename),
-      ).not.toContain('move-source.txt');
+      const root = await requestWorkspace<{ entries: Array<{ name: string }> }>(workspace.socket, 'filesystem.list', {
+        path: '/',
+      });
+      expect(root.entries.map((item) => item.name)).not.toContain('move-source.txt');
     });
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
-test('archive commands use the same remote root as SFTP', async ({ request }) => {
+test('archive commands use the same remote root as filesystem operations', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `archive-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `archive-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
-    await step('compress and decompress a file in the SFTP root', async () => {
-      const compressRequestId = `archive-compress-${crypto.randomUUID()}`;
-      const compressResponsePromise = waitForJson(
-        session.socket,
-        (message) =>
-          message.requestId === compressRequestId &&
-          ['sftp:compress:success', 'sftp:compress:error', 'sftp:command_not_found'].includes(String(message.type)),
-        30_000,
-      );
-      sendJson(session.socket, {
-        type: 'sftp:compress',
-        requestId: compressRequestId,
-        payload: { sources: ['/archive-source.txt'], destination: '/archive-source.zip', format: 'zip' },
+    await waitForFilesystemReady(workspace.socket);
+    await step('compress and decompress a file in the filesystem root', async () => {
+      const compressed = await runArchive(workspace.socket, 'compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-source.zip',
+        format: 'zip',
       });
-      const compressResponse = await compressResponsePromise;
-      test.skip(compressResponse.type === 'sftp:command_not_found', 'zip is not installed in this test environment');
-      expect(compressResponse.type).toBe('sftp:compress:success');
+      test.skip(compressed.code === 'COMMAND_NOT_FOUND', 'zip is not installed in this test environment');
+      expect(compressed.type, JSON.stringify(compressed)).toBe('completed');
 
-      await requestJson(
-        session.socket,
-        'sftp:delete_paths',
-        { paths: ['/archive-source.txt'] },
-        'sftp:delete_paths:success',
-        'sftp:delete_paths:error',
-      );
+      await requestWorkspace(workspace.socket, 'filesystem.remove', { paths: ['/archive-source.txt'] });
 
-      const decompressRequestId = `archive-decompress-${crypto.randomUUID()}`;
-      const decompressResponsePromise = waitForJson(
-        session.socket,
-        (message) =>
-          message.requestId === decompressRequestId &&
-          ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
-        30_000,
-      );
-      sendJson(session.socket, {
-        type: 'sftp:decompress',
-        requestId: decompressRequestId,
-        payload: { source: '/archive-source.zip' },
-      });
-      const decompressResponse = await decompressResponsePromise;
-      test.skip(
-        decompressResponse.type === 'sftp:command_not_found',
-        'unzip is not installed in this test environment',
-      );
-      expect(decompressResponse.type).toBe('sftp:decompress:success');
-
-      const restored = await requestJson(
-        session.socket,
-        'sftp:readfile',
-        { path: '/archive-source.txt', encoding: 'utf8' },
-        'sftp:readfile:success',
-        'sftp:readfile:error',
-      );
-      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
-        'archive-me',
-      );
+      const decompressed = await runArchive(workspace.socket, 'decompress', { source: '/archive-source.zip' });
+      test.skip(decompressed.code === 'COMMAND_NOT_FOUND', 'unzip is not installed in this test environment');
+      expect(decompressed.type).toBe('completed');
+      await expect(readRemoteText(workspace.socket, '/archive-source.txt')).resolves.toContain('archive-me');
     });
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
-test('ZIP Unicode Path entries extract Chinese filenames instead of #U escapes', async ({ request }) => {
+test('ZIP Unicode Path entries extract Chinese filenames instead of escaped placeholders', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `archive-unicode-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `archive-unicode-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
-    const requestId = `archive-unicode-${crypto.randomUUID()}`;
-    const responsePromise = waitForJson(
-      session.socket,
-      (message) =>
-        message.requestId === requestId &&
-        ['sftp:decompress:success', 'sftp:decompress:error', 'sftp:command_not_found'].includes(String(message.type)),
-      30_000,
-    );
-    sendJson(session.socket, {
-      type: 'sftp:decompress',
-      requestId,
-      payload: { source: '/中文解压测试.zip' },
-    });
-    const response = await responsePromise;
-    test.skip(response.type === 'sftp:command_not_found', 'unzip is not installed in this test environment');
-    expect(response.type).toBe('sftp:decompress:success');
+    await waitForFilesystemReady(workspace.socket);
+    const response = await runArchive(workspace.socket, 'decompress', { source: '/中文解压测试.zip' });
+    test.skip(response.code === 'COMMAND_NOT_FOUND', 'unzip is not installed in this test environment');
+    expect(response.type).toBe('completed');
 
-    const extracted = await requestJson(
-      session.socket,
-      'sftp:readfile',
-      { path: '/中文解压测试', encoding: 'utf8' },
-      'sftp:readfile:success',
-      'sftp:readfile:error',
-    );
-    expect(Buffer.from(String(extracted.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
-      'unicode-path-e2e',
-    );
-
-    const root = await requestJson(
-      session.socket,
-      'sftp:readdir',
-      { path: '/' },
-      'sftp:readdir:success',
-      'sftp:readdir:error',
-    );
-    const filenames = (Array.isArray(root.payload) ? root.payload : []).map(
-      (item: { filename?: string }) => item.filename,
-    );
+    await expect(readRemoteText(workspace.socket, '/中文解压测试')).resolves.toContain('unicode-path-e2e');
+    const filenames = await rootFileNames(workspace.socket);
     expect(filenames).toContain('中文解压测试');
     expect(filenames).not.toContain('#U4e2d#U6587#U89e3#U538b#U6d4b#U8bd5');
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });
 
@@ -344,142 +255,93 @@ test('password-protected ZIP validates passwords and preserves the normal decomp
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `archive-password-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `archive-password-${crypto.randomUUID()}`);
   const specialPassword = 'Nexus !@#$%^&*()_+-=[]{};:\'",.<>/?\\|`~';
   const maxPassword = 'x'.repeat(128);
 
-  const archiveRequest = async (type: 'sftp:compress' | 'sftp:decompress', payload: Record<string, unknown>) => {
-    const requestId = `archive-password-${crypto.randomUUID()}`;
-    const responsePromise = waitForJson(
-      session.socket,
-      (message) =>
-        message.requestId === requestId &&
-        [`${type}:success`, `${type}:error`, 'sftp:command_not_found'].includes(String(message.type)),
-      30_000,
-    );
-    sendJson(session.socket, { type, requestId, payload });
-    return responsePromise;
-  };
-
   try {
-    await waitForSftpReady(session.socket);
+    await waitForFilesystemReady(workspace.socket);
 
     await step('create a password-protected ZIP with shell-special characters', async () => {
-      const response = await archiveRequest('sftp:compress', {
+      const response = await runArchive(workspace.socket, 'compress', {
         sources: ['/archive-source.txt'],
         destination: '/archive-special.zip',
         format: 'zip',
         password: specialPassword,
       });
-      test.skip(response.type === 'sftp:command_not_found', 'zip is not installed in this test environment');
-      expect(response.type).toBe('sftp:compress:success');
-
-      await requestJson(
-        session.socket,
-        'sftp:delete_paths',
-        { paths: ['/archive-source.txt'] },
-        'sftp:delete_paths:success',
-        'sftp:delete_paths:error',
-      );
+      test.skip(response.code === 'COMMAND_NOT_FOUND', 'zip is not installed in this test environment');
+      expect(response.type).toBe('completed');
+      await requestWorkspace(workspace.socket, 'filesystem.remove', { paths: ['/archive-source.txt'] });
     });
 
     await step('decompress without a password reports PASSWORD_REQUIRED without extracting files', async () => {
-      const response = await archiveRequest('sftp:decompress', { source: '/archive-special.zip' });
-      test.skip(response.type === 'sftp:command_not_found', 'unzip is not installed in this test environment');
-      expect(response.type).toBe('sftp:decompress:error');
-      expect(response.payload?.code).toBe('PASSWORD_REQUIRED');
-
-      const root = await requestJson(
-        session.socket,
-        'sftp:readdir',
-        { path: '/' },
-        'sftp:readdir:success',
-        'sftp:readdir:error',
-      );
-      expect(
-        (Array.isArray(root.payload) ? root.payload : []).map((item: { filename?: string }) => item.filename),
-      ).not.toContain('archive-source.txt');
+      const response = await runArchive(workspace.socket, 'decompress', { source: '/archive-special.zip' });
+      test.skip(response.code === 'COMMAND_NOT_FOUND', 'unzip is not installed in this test environment');
+      expect(response).toMatchObject({ type: 'failed', code: 'PASSWORD_REQUIRED' });
+      expect(await rootFileNames(workspace.socket)).not.toContain('archive-source.txt');
     });
 
     await step('wrong password reports INVALID_PASSWORD and correct special-character password succeeds', async () => {
-      const wrongResponse = await archiveRequest('sftp:decompress', {
-        source: '/archive-special.zip',
-        password: 'definitely-wrong',
-      });
-      expect(wrongResponse.type).toBe('sftp:decompress:error');
-      expect(wrongResponse.payload?.code).toBe('INVALID_PASSWORD');
+      await expect(
+        runArchive(workspace.socket, 'decompress', {
+          source: '/archive-special.zip',
+          password: 'definitely-wrong',
+        }),
+      ).resolves.toMatchObject({ type: 'failed', code: 'INVALID_PASSWORD' });
 
-      const correctResponse = await archiveRequest('sftp:decompress', {
+      const correctResponse = await runArchive(workspace.socket, 'decompress', {
         source: '/archive-special.zip',
         password: specialPassword,
       });
-      expect(correctResponse.type).toBe('sftp:decompress:success');
-
-      const restored = await requestJson(
-        session.socket,
-        'sftp:readfile',
-        { path: '/archive-source.txt', encoding: 'utf8' },
-        'sftp:readfile:success',
-        'sftp:readfile:error',
-      );
-      expect(Buffer.from(String(restored.payload?.rawContentBase64 ?? ''), 'base64').toString('utf8')).toContain(
-        'archive-me',
-      );
+      expect(correctResponse.type).toBe('completed');
+      await expect(readRemoteText(workspace.socket, '/archive-source.txt')).resolves.toContain('archive-me');
     });
 
     await step('128-character password is accepted and round-trips', async () => {
-      const compressResponse = await archiveRequest('sftp:compress', {
+      const compressed = await runArchive(workspace.socket, 'compress', {
         sources: ['/archive-source.txt'],
         destination: '/archive-max-password.zip',
         format: 'zip',
         password: maxPassword,
       });
-      expect(compressResponse.type).toBe('sftp:compress:success');
-
-      await requestJson(
-        session.socket,
-        'sftp:delete_paths',
-        { paths: ['/archive-source.txt'] },
-        'sftp:delete_paths:success',
-        'sftp:delete_paths:error',
-      );
-
-      const decompressResponse = await archiveRequest('sftp:decompress', {
+      expect(compressed.type, JSON.stringify(compressed)).toBe('completed');
+      await requestWorkspace(workspace.socket, 'filesystem.remove', { paths: ['/archive-source.txt'] });
+      const decompressed = await runArchive(workspace.socket, 'decompress', {
         source: '/archive-max-password.zip',
         password: maxPassword,
       });
-      expect(decompressResponse.type).toBe('sftp:decompress:success');
+      expect(decompressed.type).toBe('completed');
     });
 
     await step('129-character and line-break passwords are rejected before shell execution', async () => {
-      const tooLong = await archiveRequest('sftp:compress', {
-        sources: ['/archive-source.txt'],
-        destination: '/archive-too-long.zip',
-        format: 'zip',
-        password: 'x'.repeat(129),
-      });
-      expect(tooLong.type).toBe('sftp:compress:error');
-      expect(tooLong.payload?.code).toBe('PASSWORD_TOO_LONG');
+      await expect(
+        runArchive(workspace.socket, 'compress', {
+          sources: ['/archive-source.txt'],
+          destination: '/archive-too-long.zip',
+          format: 'zip',
+          password: 'x'.repeat(129),
+        }),
+      ).resolves.toMatchObject({ type: 'failed', code: 'PASSWORD_TOO_LONG' });
 
-      const invalidFormat = await archiveRequest('sftp:compress', {
-        sources: ['/archive-source.txt'],
-        destination: '/archive-invalid-password.zip',
-        format: 'zip',
-        password: 'line-one\nline-two',
-      });
-      expect(invalidFormat.type).toBe('sftp:compress:error');
-      expect(invalidFormat.payload?.code).toBe('INVALID_PASSWORD_FORMAT');
+      await expect(
+        runArchive(workspace.socket, 'compress', {
+          sources: ['/archive-source.txt'],
+          destination: '/archive-invalid-password.zip',
+          format: 'zip',
+          password: 'line-one\nline-two',
+        }),
+      ).resolves.toMatchObject({ type: 'failed', code: 'INVALID_PASSWORD_FORMAT' });
 
-      const nullCharacter = await archiveRequest('sftp:compress', {
-        sources: ['/archive-source.txt'],
-        destination: '/archive-null-password.zip',
-        format: 'zip',
-        password: 'before\0after',
-      });
-      expect(nullCharacter.type).toBe('sftp:compress:error');
-      expect(nullCharacter.payload?.code).toBe('INVALID_PASSWORD_FORMAT');
+      await expect(
+        runArchive(workspace.socket, 'compress', {
+          sources: ['/archive-source.txt'],
+          destination: '/archive-null-password.zip',
+          format: 'zip',
+          password: `before${String.fromCharCode(0)}after`,
+        }),
+      ).resolves.toMatchObject({ type: 'failed', code: 'INVALID_PASSWORD_FORMAT' });
     });
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });

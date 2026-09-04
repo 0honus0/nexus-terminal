@@ -1,0 +1,24 @@
+{
+  "focusSwitcher": {
+    "configTitle": "配置焦点切换器",
+    "availableInputs": "可用输入源",
+    "configuredSequence": "已配置序列 (拖拽排序)",
+    "dragHere": "从左侧拖拽输入框到此处",
+    "allInputsConfigured": "所有可用输入源都已配置",
+    "input": {
+      "commandHistorySearch": "命令历史搜索",
+      "quickCommandsSearch": "快捷指令搜索",
+      "fileManagerSearch": "文件管理器搜索",
+      "commandInput": "命令输入",
+      "terminalSearch": "终端内搜索",
+      "connectionListSearch": "连接列表搜索",
+      "fileEditorActive": "文件编辑器",
+      "fileManagerPathInput": "文件管理器路径编辑"
+    },
+    "confirmClose": "有未保存的更改，确定要关闭吗？",
+    "shortcutPlaceholder": "例如 Alt+K",
+    "shortcutSettings": "快捷键设置",
+    "noInputsAvailable": "没有可配置的输入项",
+    "altSwitchHint": "提示：按下 Alt 键可在配置的输入源之间快速切换焦点。"
+  }
+}

@@ -2,13 +2,13 @@ export interface QuickCommand {
   id: number;
   name: string | null;
   command: string;
-  usage_count: number;
-  variables: Record<string, string> | null;
+  usageCount: number;
+  variables: Record<string, string>;
   tagIds: number[];
-  created_at: number;
-  updated_at: number;
+  createdAt: number;
+  updatedAt: number;
 }
-export type QuickCommandSort = 'name' | 'usage_count';
+export type QuickCommandSort = 'name' | 'usageCount';
 export interface QuickCommandRepository {
   create(name: string | null, command: string, variables?: Record<string, string>): Promise<number>;
   update(id: number, name: string | null, command: string, variables?: Record<string, string>): Promise<boolean>;

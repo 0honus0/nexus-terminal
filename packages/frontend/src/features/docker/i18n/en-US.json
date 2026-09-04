@@ -1,0 +1,43 @@
+{
+  "dockerManager": {
+    "loading": "Loading Docker Containers...",
+    "notAvailable": "Docker Not Available on Remote Host",
+    "installHintRemote": "Please ensure Docker is installed and running on the remote host.",
+    "error": {
+      "fetchFailed": "Failed to fetch remote container status",
+      "commandFailed": "Failed to execute remote command '{command}'",
+      "invalidResponse": "Received invalid response from server",
+      "noActiveSession": "No active session",
+      "connectFirst": "Please connect to a session first",
+      "sshDisconnected": "SSH session disconnected.",
+      "sshError": "SSH Connection Error",
+      "sshNotConnected": "SSH session is not connected."
+    },
+    "noContainers": "No running or stopped containers found on remote host.",
+    "header": {
+      "name": "Name",
+      "image": "Image",
+      "status": "Status",
+      "ports": "Ports",
+      "actions": "Actions"
+    },
+    "action": {
+      "restart": "Restart",
+      "stop": "Stop",
+      "start": "Start",
+      "remove": "Remove",
+      "enter": "Enter",
+      "logs": "Logs",
+      "removeConfirm": "Remove {name}?"
+    },
+    "waitingForSsh": "Waiting for SSH connection...",
+    "stats": {
+      "noData": "No stats data available.",
+      "cpu": "CPU %",
+      "memory": "Memory Usage / Limit",
+      "netIO": "Network I/O",
+      "blockIO": "Block I/O",
+      "pids": "PIDs"
+    }
+  }
+}

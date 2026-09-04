@@ -40,12 +40,13 @@ test('common terminal tools work through the real SSH session', async ({ page, c
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
-    data: {
-      showQuickCommandTags: 'false',
-      commandInputSyncTarget: 'none',
-    },
+    data: { commandInputSyncTarget: 'none' },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
+    data: { enabled: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
@@ -114,7 +115,7 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     const historyItem = historyView.locator('li[title]').filter({ hasText: marker }).first();
     await expect(historyItem).toBeVisible({ timeout: 20_000 });
     const before = markerCount(await rows.innerText(), marker);
-    await historyItem.click();
+    await historyItem.getByTestId('command-history-execute').click();
     await expect
       .poll(async () => markerCount(await rows.innerText(), marker), { timeout: 15_000 })
       .toBeGreaterThan(before);
@@ -124,15 +125,15 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     const quickCommandsView = page.getByTestId('quick-commands-view');
     const commandRow = quickCommandsView.locator(`[data-command-id="${quickCommandId}"]`);
     await expect(commandRow).toBeVisible({ timeout: 20_000 });
-    await commandRow.click();
+    await commandRow.getByTestId('quick-command-execute').click();
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('QUICK_UI_E2E');
 
     await expect
       .poll(async () => {
         const response = await context.request.get('/api/v1/quick-commands');
         if (!response.ok()) return 0;
-        const commands = (await response.json()) as Array<{ id: number; usage_count?: number }>;
-        return Number(commands.find((item) => item.id === quickCommandId)?.usage_count ?? 0);
+        const commands = (await response.json()) as Array<{ id: number; usageCount?: number }>;
+        return Number(commands.find((item) => item.id === quickCommandId)?.usageCount ?? 0);
       })
       .toBeGreaterThanOrEqual(1);
   });

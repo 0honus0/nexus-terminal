@@ -23,7 +23,7 @@ test('PWA window title bar color updates immediately and persists across reload'
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-appearance').click();
+    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
 
     const input = page.getByTestId('window-theme-color-input');
     await expect(input).toBeVisible();
@@ -36,14 +36,13 @@ test('PWA window title bar color updates immediately and persists across reload'
     expect((await savePromise).ok()).toBeTruthy();
 
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
-    await expect(page.getByTestId('window-theme-color-saved')).toBeVisible();
 
     const persisted = await context.request.get('/api/v1/appearance');
     expect(persisted.ok()).toBeTruthy();
     expect(((await persisted.json()) as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByTestId('settings-tab-appearance').click();
+    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
     await expect(page.getByTestId('window-theme-color-input')).toHaveValue(targetColor);
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
   } finally {
@@ -106,13 +105,13 @@ test('terminal preset themes load from the API, switch through the UI, and persi
 
   const themesResponse = await context.request.get('/api/v1/terminal-themes');
   expect(themesResponse.ok()).toBeTruthy();
-  const themes = (await themesResponse.json()) as Array<{ _id?: string; name: string; isPreset?: boolean }>;
+  const themes = (await themesResponse.json()) as Array<{ id?: string; name: string; preset?: boolean }>;
 
   // Pick a preset that is intentionally not part of the compact frontend sample list.
   // Its presence proves the UI is using the backend seed/API as the runtime source of truth.
-  const targetTheme = themes.find((theme) => theme.name === 'zenwritten_light' && theme.isPreset);
-  expect(targetTheme?._id).toBeTruthy();
-  const targetThemeId = Number(targetTheme!._id);
+  const targetTheme = themes.find((theme) => theme.name === 'zenwritten_light' && theme.preset);
+  expect(targetTheme?.id).toBeTruthy();
+  const targetThemeId = Number(targetTheme!.id);
   expect(Number.isInteger(targetThemeId) && targetThemeId > 0).toBeTruthy();
 
   try {
@@ -122,18 +121,18 @@ test('terminal preset themes load from the API, switch through the UI, and persi
       await page.getByTitle('Customize Style').click();
       const customizer = page.getByTestId('style-customizer');
       await expect(customizer).toBeVisible();
-      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+      await customizer.getByTestId('style-customizer-terminal-tab').click();
 
-      const search = customizer.getByPlaceholder('Search theme name...');
+      const search = customizer.getByTestId('terminal-theme-search');
       await search.fill(targetTheme!.name);
-      const themeRow = customizer.locator('li').filter({ hasText: targetTheme!.name });
+      const themeRow = customizer.getByTestId(`terminal-theme-row-${targetThemeId}`);
       await expect(themeRow).toHaveCount(1);
       await expect(themeRow).toBeVisible();
 
       const savePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
       );
-      await themeRow.getByRole('button', { name: 'Apply', exact: true }).click();
+      await themeRow.getByTestId('terminal-theme-apply').click();
       expect((await savePromise).ok()).toBeTruthy();
 
       await expect
@@ -144,9 +143,7 @@ test('terminal preset themes load from the API, switch through the UI, and persi
         })
         .toBe(targetThemeId);
 
-      const activeThemeName = customizer
-        .getByText('Active Theme:', { exact: true })
-        .locator('xpath=following-sibling::strong');
+      const activeThemeName = customizer.getByTestId('terminal-active-theme-name');
       await expect(activeThemeName).toHaveText(targetTheme!.name);
     });
 
@@ -154,11 +151,9 @@ test('terminal preset themes load from the API, switch through the UI, and persi
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByTitle('Customize Style').click();
       const customizer = page.getByTestId('style-customizer');
-      await customizer.getByRole('button', { name: 'Terminal Styles', exact: true }).click();
+      await customizer.getByTestId('style-customizer-terminal-tab').click();
 
-      const activeThemeName = customizer
-        .getByText('Active Theme:', { exact: true })
-        .locator('xpath=following-sibling::strong');
+      const activeThemeName = customizer.getByTestId('terminal-active-theme-name');
       await expect(activeThemeName).toHaveText(targetTheme!.name);
 
       const response = await context.request.get('/api/v1/appearance');

@@ -1,0 +1,43 @@
+{
+  "dockerManager": {
+    "loading": "Dockerコンテナをロード中...",
+    "notAvailable": "リモートホストのDockerは利用できません",
+    "installHintRemote": "リモートホストにDockerがインストールされ、実行されていることを確認してください。",
+    "error": {
+      "fetchFailed": "リモートコンテナの状態の取得に失敗しました",
+      "commandFailed": "リモートコマンド'{command}'の実行に失敗しました",
+      "invalidResponse": "無効なサーバー応答を受信しました",
+      "noActiveSession": "アクティブなセッションはありません",
+      "connectFirst": "最初にセッションに接続してください",
+      "sshDisconnected": "SSHセッションが切断されました。",
+      "sshError": "SSH接続エラー",
+      "sshNotConnected": "SSHセッションは接続されていません。"
+    },
+    "noContainers": "リモートホストで実行中または停止中のコンテナは見つかりませんでした。",
+    "header": {
+      "name": "名前",
+      "image": "イメージ",
+      "status": "ステータス",
+      "ports": "ポート",
+      "actions": "操作"
+    },
+    "action": {
+      "restart": "再起動",
+      "stop": "停止",
+      "start": "起動",
+      "remove": "削除",
+      "enter": "入力",
+      "logs": "ログ",
+      "removeConfirm": "{name} を削除しますか？"
+    },
+    "waitingForSsh": "SSH接続を待機中...",
+    "stats": {
+      "noData": "利用可能な統計データはありません。",
+      "cpu": "CPU使用率",
+      "memory": "メモリ使用量/制限",
+      "netIO": "ネットワークI/O",
+      "blockIO": "ブロックI/O",
+      "pids": "プロセス数"
+    }
+  }
+}

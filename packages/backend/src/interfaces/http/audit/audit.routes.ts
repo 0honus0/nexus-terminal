@@ -24,7 +24,7 @@ export const createAuditRouter = (audit: AuditLogService): Router => {
       const result = await audit.getLogs(
         limit,
         offset,
-        typeof q.query.action_type === 'string' ? (q.query.action_type as AuditLogActionType) : undefined,
+        typeof q.query.actionType === 'string' ? (q.query.actionType as AuditLogActionType) : undefined,
         start,
         end,
         typeof q.query.search === 'string' ? q.query.search : undefined,

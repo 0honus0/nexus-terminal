@@ -1,81 +1,86 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
-import { closeWebSocket, openSshSession, requestJson, sendJson, waitForJson, waitForSftpReady } from '../../support/ws';
-
-function encodeUploadChunk(uploadId: string, chunkIndex: number, data: Buffer, isLast: boolean): Buffer {
-  const uploadIdBytes = Buffer.from(uploadId, 'utf8');
-  const frame = Buffer.allocUnsafe(12 + uploadIdBytes.length + data.length);
-  frame.write('NXUP', 0, 4, 'ascii');
-  frame.writeUInt8(1, 4);
-  frame.writeUInt8(isLast ? 1 : 0, 5);
-  frame.writeUInt16BE(uploadIdBytes.length, 6);
-  frame.writeUInt32BE(chunkIndex, 8);
-  uploadIdBytes.copy(frame, 12);
-  data.copy(frame, 12 + uploadIdBytes.length);
-  return frame;
-}
+import {
+  closeWebSocket,
+  openAuthenticatedWebSocket,
+  openWorkspaceSession,
+  requestWorkspace,
+  waitForFilesystemReady,
+  waitForJson,
+} from '../../support/ws';
 
 async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> {
-  const response = await requestJson(
-    socket,
-    'sftp:readfile',
-    { path: remotePath, encoding: 'utf8' },
-    'sftp:readfile:success',
-    'sftp:readfile:error',
-  );
-  return Buffer.from(String(response.payload?.rawContentBase64 ?? ''), 'base64');
+  const response = await requestWorkspace<{ contentBase64: string }>(socket, 'filesystem.readBinary', {
+    path: remotePath,
+  });
+  return Buffer.from(response.contentBase64, 'base64');
 }
 
-test('binary upload reports ready, chunk acknowledgement, success, and readable remote content', async ({
-  request,
-}) => {
+test('raw binary upload reports ready, progress, completion, and readable remote content', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
-  const session = await openSshSession(request, connectionId, `upload-protocol-${crypto.randomUUID()}`);
+  const workspace = await openWorkspaceSession(request, connectionId, `upload-protocol-${crypto.randomUUID()}`);
 
   try {
-    await waitForSftpReady(session.socket);
+    await waitForFilesystemReady(workspace.socket);
     const uploadId = `upload-${crypto.randomUUID()}`;
     const remotePath = '/upload-protocol.bin';
     const payload = Buffer.from('nexus-upload-protocol\n', 'utf8');
 
-    const ready = waitForJson(
-      session.socket,
-      (message) => message.type === 'sftp:upload:ready' && message.payload?.uploadId === uploadId,
+    const readyPromise = waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'transfer.upload' &&
+        message.payload?.uploadId === uploadId &&
+        message.payload?.type === 'ready',
       10_000,
     );
-    sendJson(session.socket, {
-      type: 'sftp:upload:start',
-      payload: { uploadId, remotePath, size: payload.length, conflictPolicy: 'overwrite' },
+    await requestWorkspace(workspace.socket, 'upload.start', {
+      uploadId,
+      destinationPath: remotePath,
+      size: payload.length,
+      conflictPolicy: 'overwrite',
     });
-    await ready;
+    await readyPromise;
 
-    const ack = waitForJson(
-      session.socket,
-      (message) => message.type === 'sftp:upload:chunk:ack' && message.uploadId === uploadId,
+    const progressPromise = waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'transfer.upload' &&
+        message.payload?.uploadId === uploadId &&
+        message.payload?.type === 'progress',
       10_000,
     );
-    const success = waitForJson(
-      session.socket,
-      (message) => message.type === 'sftp:upload:success' && message.uploadId === uploadId,
+    const completedPromise = waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'transfer.upload' &&
+        message.payload?.uploadId === uploadId &&
+        message.payload?.type === 'completed',
       10_000,
     );
-    session.socket.send(encodeUploadChunk(uploadId, 0, payload, true));
+    const uploadSocket = await openAuthenticatedWebSocket(
+      request,
+      `ws://127.0.0.1:4173/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length}`,
+    );
+    uploadSocket.send(payload);
 
-    await expect(ack).resolves.toMatchObject({
+    await expect(progressPromise).resolves.toMatchObject({
       payload: {
         uploadId,
-        chunkIndex: 0,
         bytesWritten: payload.length,
         totalSize: payload.length,
         progress: 100,
       },
     });
-    await expect(success).resolves.toMatchObject({ path: remotePath });
-    await expect(readRemoteFile(session.socket, remotePath)).resolves.toEqual(payload);
+    await expect(completedPromise).resolves.toMatchObject({
+      payload: { uploadId, type: 'completed', destinationPath: remotePath },
+    });
+    await closeWebSocket(uploadSocket);
+    await expect(readRemoteFile(workspace.socket, remotePath)).resolves.toEqual(payload);
   } finally {
-    await closeWebSocket(session.socket);
+    await closeWebSocket(workspace.socket);
   }
 });

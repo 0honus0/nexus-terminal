@@ -16,6 +16,7 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
   private stderrBuffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
   private truncated = false;
   private settled = false;
+  private errorValue?: Error;
 
   constructor(
     public readonly id: string,
@@ -39,6 +40,7 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
     });
     channel.on('error', (error: Error) => {
       if (!this.settled) this.statusValue = 'failed';
+      this.errorValue = error;
       this.events.emit('error', error);
     });
     channel.on('close', (exitCode: number | null, signal?: string | null) => {
@@ -90,11 +92,29 @@ export class SshCommandSessionAdapter implements RemoteCommandSession {
   }
 
   onClose(listener: (event: { exitCode: number | null; signal?: string | null }) => void): () => void {
+    if (this.settled) {
+      const event = { exitCode: this.exitCodeValue ?? null, ...(this.signalValue ? { signal: this.signalValue } : {}) };
+      let active = true;
+      // Preserve live event ordering for late subscribers: a stored error must be able to reject
+      // before the terminal close callback resolves the same operation.
+      queueMicrotask(() => queueMicrotask(() => active && listener(event)));
+      return () => {
+        active = false;
+      };
+    }
     this.events.on('close', listener);
     return () => this.events.off('close', listener);
   }
 
   onError(listener: (error: Error) => void): () => void {
+    if (this.errorValue) {
+      const error = this.errorValue;
+      let active = true;
+      queueMicrotask(() => active && listener(error));
+      return () => {
+        active = false;
+      };
+    }
     this.events.on('error', listener);
     return () => this.events.off('error', listener);
   }

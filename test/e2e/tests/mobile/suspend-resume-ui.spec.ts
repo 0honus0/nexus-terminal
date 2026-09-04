@@ -48,7 +48,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
   await step('mark the active terminal tab for suspend from its context menu', async () => {
     const tab = page
       .getByTestId('terminal-tab-bar')
-      .locator('li[data-session-id]')
+      .locator('[data-session-id]')
       .filter({ hasText: 'E2E SSH' })
       .first();
     await expect(tab).toBeVisible();
@@ -94,7 +94,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await hanging.getByRole('button', { name: 'Resume', exact: true }).click();
 
     await expect(
-      page.getByTestId('terminal-tab-bar').locator('li[data-session-id]').filter({ hasText: 'E2E SSH' }).first(),
+      page.getByTestId('terminal-tab-bar').locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first(),
     ).toBeVisible({ timeout: 30_000 });
     await expect(terminal).toBeVisible({ timeout: 30_000 });
 

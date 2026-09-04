@@ -1,6 +1,13 @@
 import { expect, test } from '../../support/fixtures';
 import { E2E_SSH } from '../../support/ssh';
-import { menu, openFileManager, refreshFileManager, rightClickRow, row } from './progress-display.helpers';
+import {
+  openFileManager,
+  refreshFileManager,
+  row,
+  startZipCompression,
+  visibleProgressCenter,
+  visibleProgressTask,
+} from './progress-display.helpers';
 
 test('archive remains cancelled while remote command preparation is stalled', async ({ page, context }) => {
   test.setTimeout(75_000);
@@ -8,18 +15,13 @@ test('archive remains cancelled while remote command preparation is stalled', as
   await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=1`, { method: 'POST' });
 
   try {
-    await rightClickRow(page, 'archive-source.txt');
-    const compress = menu(page)
-      .locator('li')
-      .filter({ hasText: /^Compress/ })
-      .first();
-    await compress.hover();
-    await page.getByText('Compress to zip', { exact: true }).click();
+    await startZipCompression(page, 'archive-source.txt');
 
-    const popup = page.getByTestId('archive-progress-popup');
+    const popup = visibleProgressCenter(page);
+    const task = visibleProgressTask(page, 'archive-source.zip');
     await expect(popup).toBeVisible({ timeout: 10_000 });
-    await popup.locator('.stop-button').click();
-    await expect(popup).toBeHidden({ timeout: 10_000 });
+    await task.getByTestId('transfer-progress-cancel').click();
+    await expect(task).toHaveAttribute('data-task-status', 'cancelled', { timeout: 10_000 });
 
     // A prolonged remote preflight must not be allowed to forget the user's cancellation
     // before the server eventually becomes responsive again.

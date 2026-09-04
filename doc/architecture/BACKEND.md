@@ -143,20 +143,13 @@ Current Interface responsibilities include:
 
 Product resource ownership, persistence, and machine-operation algorithms remain in their owning Module/Platform/Infrastructure layers. The enforceable boundary rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#layer-responsibility-constraints).
 
-#### Temporary legacy compatibility directories
+#### Clean frontend contracts
 
-The current frontend still uses historical HTTP and WebSocket contracts. Compatibility is deliberately isolated in exactly two temporary directories:
+The temporary frontend-compatibility directories have been deleted. HTTP routes now validate/map clean camelCase Interface DTOs directly, while persistence-specific shapes remain behind Module/Repository boundaries. WebSocket routes use only the clean Workspace/upload/remote-desktop protocols.
 
-```text
-interfaces/http/legacy-api/
-interfaces/websocket/legacy-api/
-```
+The deleted `interfaces/http/legacy-api/` and `interfaces/websocket/legacy-api/` paths are not permanent extension points and must not be recreated. The current rules are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#legacy-frontend-compatibility).
 
-They contain old snake_case DTO mapping, historical message names, NXTM/NXUP binary framing and other current-frontend compatibility behavior.
-
-The compatibility directories are intentionally temporary. Their import restrictions, ownership rules, and deletion condition are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#legacy-frontend-compatibility). The architecture guard enforces the import boundary.
-
-Permanent transport code such as WebSocket upgrade/auth/heartbeat and transparent Remote Gateway forwarding stays outside `legacy-api`.
+Permanent transport code such as HTTP streaming, WebSocket upgrade/auth/heartbeat/backpressure and transparent Remote Gateway forwarding remains in the normal Interface/Platform owners.
 
 ### `bootstrap/` — composition and lifecycle
 
@@ -267,7 +260,7 @@ failure → rollback
   restore suspended ownership and resume shell output
 ```
 
-The legacy NXTM replay/ACK details live only in the WebSocket compatibility layer.
+The current clean Workspace protocol does not use the historical replay/ACK envelope. Resume restores shell integration and replays cached terminal bytes through the active raw-binary terminal transport, while backpressure remains an Interface transport concern.
 
 ## Diagnostics and future Agent self-diagnosis
 
@@ -311,7 +304,7 @@ Run:
 npm --prefix packages/backend run check:architecture
 ```
 
-The guard checks the dependency graph, including layer edges, source cycles, module-level cycles, and legacy compatibility import boundaries. The rules it enforces are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#dependency-and-module-architecture).
+The guard checks the dependency graph, including layer edges, source cycles and module-level cycles. The temporary compatibility-import exceptions were removed when the compatibility directories were deleted. The rules it enforces are centralized in [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md#dependency-and-module-architecture).
 
 ## Verification and testing
 

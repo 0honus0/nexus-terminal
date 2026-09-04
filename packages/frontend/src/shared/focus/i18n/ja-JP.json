@@ -1,0 +1,24 @@
+{
+  "focusSwitcher": {
+    "configTitle": "フォーカススイッチャーの設定",
+    "availableInputs": "利用可能な入力ソース",
+    "configuredSequence": "設定されたシーケンス（ドラッグしてソート）",
+    "dragHere": "左側からここに入力ボックスをドラッグ",
+    "allInputsConfigured": "すべての利用可能な入力ソースが設定されました",
+    "input": {
+      "commandHistorySearch": "コマンド履歴検索",
+      "quickCommandsSearch": "クイックコマンド検索",
+      "fileManagerSearch": "ファイルマネージャー検索",
+      "commandInput": "コマンド入力",
+      "terminalSearch": "ターミナル内検索",
+      "connectionListSearch": "接続リスト検索",
+      "fileEditorActive": "ファイルエディター",
+      "fileManagerPathInput": "ファイルマネージャーパス入力"
+    },
+    "confirmClose": "未保存の変更があります。閉じてもよろしいですか？",
+    "shortcutPlaceholder": "例：Alt + K",
+    "shortcutSettings": "ショートカット設定",
+    "noInputsAvailable": "設定可能な入力項目はありません",
+    "altSwitchHint": "ヒント：Alt キーを押すと、設定された入力ソース間でフォーカスを素早く切り替えることができます。"
+  }
+}

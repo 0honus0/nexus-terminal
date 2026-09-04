@@ -84,12 +84,15 @@ test('regular connection form tests and creates a persisted working SSH connecti
 });
 
 test('script mode creates multiple connections, resolves tags, and preserves notes', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
   await page.goto('/connections');
   await page.getByTestId('connections-add-button').click();
   const form = page.getByTestId('connection-form');
   await expect(form).toBeVisible();
 
-  await form.getByRole('switch').click();
+  const scriptToggle = form.getByRole('switch', { name: 'Script Mode', exact: true });
+  await scriptToggle.click();
+  await expect(scriptToggle).toHaveAttribute('aria-checked', 'true');
   const scriptInput = form.locator('#conn-script-input');
   await expect(scriptInput).toBeVisible();
   await scriptInput.fill(
@@ -124,7 +127,7 @@ test('script mode creates multiple connections, resolves tags, and preserves not
       id: number;
       name: string;
       notes?: string;
-      tag_ids?: number[];
+      tagIds?: number[];
     }>
   ).filter((item) => item.name === SCRIPT_NAME_ONE || item.name === SCRIPT_NAME_TWO);
   expect(connections).toHaveLength(2);
@@ -136,7 +139,7 @@ test('script mode creates multiple connections, resolves tags, and preserves not
   const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
   const createdTag = tags.find((tag) => tag.name === SCRIPT_TAG);
   expect(createdTag).toBeTruthy();
-  for (const connection of connections) expect(connection.tag_ids).toContain(createdTag!.id);
+  for (const connection of connections) expect(connection.tagIds).toContain(createdTag!.id);
 
   for (const connection of connections) {
     const testResponse = await context.request.post(`/api/v1/connections/${connection.id}/test`);

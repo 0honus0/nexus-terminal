@@ -2,7 +2,9 @@
 
 > 本文是本轮 Backend clean-skeleton 重构的结果报告，也是接下来 Frontend contract / state / API 重构的主要参考文档。
 >
-> 永久工程约束统一记录在 [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md)。本文描述当前实现、迁移背景和前端迁移建议，不替代约束登记表。
+> 永久工程约束统一记录在 [Engineering Constraints](../ENGINEERING_CONSTRAINTS.md)。本文保留 Backend 重构与 Frontend contract 迁移过程中的历史证据，不替代约束登记表。
+>
+> **当前状态更新：** Frontend clean HTTP/WS contract 已完成对齐；`interfaces/http/legacy-api/` 与 `interfaces/websocket/legacy-api/` 已在 production import 归零后删除。本文后续标为 legacy compatibility 的章节属于迁移前/迁移中快照，用于解释删除路径与历史 contract，不代表当前 production 仍存在这些目录。
 
 ## 1. 报告范围
 
@@ -16,10 +18,10 @@
 - HTTP / WebSocket 只负责外部协议和 DTO/frame 映射；
 - Workspace 不再持有 WebSocket、`ssh2.Client`、SFTP wrapper、ACK map 等协议/技术对象；
 - Upload / Transfer / Archive / Filesystem / Docker / System Status 等能力已经抽成可被 Workspace 和未来 Agent 复用的 Platform capability；
-- 当前旧前端协议被集中隔离在两个可整体删除的 `legacy-api/` 目录；
-- Architecture Guard 已验证 layer graph、source graph、module graph 都无循环。
+- Frontend clean contract 迁移完成后，两个临时 `legacy-api/` 目录已在 production import 归零后整体删除；
+- Architecture Guard 已验证 layer graph、source graph、module graph 都无循环，并已移除只服务于临时 compatibility directory 的 import 例外。
 
-本轮用户行为基线已经在 GitHub Actions 标准 E2E 环境验证通过。后续 Frontend 重构的目标是在不改变这些用户行为的前提下，逐步删除旧协议兼容层。
+本轮用户行为基线曾在 GitHub Actions 标准 E2E 环境验证。当前重构 worktree 已完成 behavior/GREQ 与 contract cleanup，仍需在最新冻结 worktree 上重新执行最终 static/build gates 与现有 E2E，不能把早期 E2E 结果当作最终证据。
 
 ## 前端开工快速索引
 
@@ -36,39 +38,33 @@
 
 ## 2. 最重要的迁移事实
 
-### 2.1 Backend 内部 clean contract 已经存在，但没有独立 `/api/v2`
+> 本节记录 clean contract 对齐前的迁移起点。当前 `/api/v1` 已由 clean Frontend/Backend Interface contract 直接使用，临时 compatibility directories 已删除。
 
-当前 HTTP 入口仍然是：
+### 2.1 Backend 内部 clean contract 与 `/api/v1`
+
+HTTP 入口保持：
 
 ```text
 /api/v1/*
 ```
 
-Backend Module/Platform 已经使用 clean model，但现有 `/api/v1` Interface 仍通过：
+迁移过程中 `/api/v1` 曾通过 `interfaces/http/legacy-api/` 适配历史 Frontend 字段；该目录现已删除。当前一个 endpoint family 的正式结构是：
 
 ```text
-packages/backend/src/interfaces/http/legacy-api/
-```
-
-适配当前 Frontend 的历史字段。
-
-因此 Frontend 重构时不要假设已经存在另一套可以直接切换的 REST API。实际迁移单位应当是“一个 endpoint family”：
-
-```text
-Frontend historical DTO
-        ↓
 Frontend clean model/client
         ↓
-同步调整对应 HTTP Interface DTO
+clean camelCase `/api/v1` DTO
         ↓
-删除该 family 的 legacy mapper
+Backend HTTP Interface validation / mapping / redaction
         ↓
-Module 保持不变
+Backend Module clean model
 ```
 
-### 2.2 WebSocket 同样没有第二套并行的新 wire protocol
+Persistence row/column mapping 留在 Infrastructure repository/storage 边界，不回流到 HTTP DTO。
 
-Backend 内部已经有 protocol-neutral 的：
+### 2.2 WebSocket clean protocol 已成为唯一 production contract
+
+Backend 内部使用 protocol-neutral 的：
 
 - Workspace services；
 - WorkspaceEventHub；
@@ -79,30 +75,18 @@ Backend 内部已经有 protocol-neutral 的：
 - ServerStatus；
 - Docker capability。
 
-但当前浏览器 wire contract 仍由：
+迁移前浏览器 wire contract 曾由 `interfaces/websocket/legacy-api/` 翻译历史消息/framing；该目录现已删除。Production WebSocket 只暴露 clean `/ws/workspace`、`/ws/uploads`、`/ws/remote-desktop` contract，Terminal/Upload 使用正式 raw-binary transport，Module class/method 名不直接暴露为 wire protocol。
 
-```text
-packages/backend/src/interfaces/websocket/legacy-api/
-```
+### 2.3 Compatibility deletion 的完成状态
 
-翻译成旧消息名、旧 payload 和 NXTM/NXUP binary frames。
-
-Frontend 重构时，新 WebSocket DTO 应围绕这些 clean semantics 重新定义，而不是把 Module class/method 名直接暴露到 wire protocol。
-
-### 2.3 两个 legacy 目录是真正的删除目标
+以下两个临时目录已经整体删除：
 
 ```text
 packages/backend/src/interfaces/http/legacy-api/
 packages/backend/src/interfaces/websocket/legacy-api/
 ```
 
-Frontend contract 重构完成的最终判据不是“旧字段基本不用了”，而是这两个目录可以直接删除，并且：
-
-- Modules 不改；
-- Platform 不改；
-- Infrastructure 不改；
-- Bootstrap 不改；
-- 用户可达 E2E 继续通过。
+删除前 production import 已归零；删除后 compatibility-only architecture-guard exception 也已移除。Business ownership 仍在原有 Modules/Platform/Infrastructure，当前最新 worktree 还需通过最终 static/build gates 与现有 E2E，才构成本轮最终验证证据。
 
 ## 3. 重构后的 Backend 文件夹设计
 

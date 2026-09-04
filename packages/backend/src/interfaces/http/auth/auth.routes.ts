@@ -9,7 +9,6 @@ import type { UserService } from '../../../modules/user/user.service';
 import { createIpBlacklistCheck, requireAuthenticated } from './auth.middleware';
 import { destroySession, errorMessage, regenerateSession, requestIp } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
-import { toLegacyPasskeySummaryDto } from '../legacy-api/passkey-http.mapper';
 
 const REMEMBER_ME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -203,7 +202,7 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
       }
       response.json({
         isAuthenticated: true,
-        user: { id: user.id, username: request.session.username!, isTwoFactorEnabled: user.hasTwoFactor },
+        user: { id: user.id, username: request.session.username!, twoFactorEnabled: user.hasTwoFactor },
       });
     }),
   );
@@ -402,7 +401,7 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/user/passkeys',
     requireAuthenticated,
     route(async (request, response) => {
-      response.json((await dependencies.passkeys.list(request.session.userId!)).map(toLegacyPasskeySummaryDto));
+      response.json(await dependencies.passkeys.list(request.session.userId!));
     }),
   );
 

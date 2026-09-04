@@ -13,6 +13,17 @@ import {
 
 export const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 export const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
+export const visibleProgressCenter = (page: Page): Locator =>
+  page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+export const visibleProgressTask = (page: Page, text: string): Locator =>
+  visibleProgressCenter(page).getByTestId('transfer-progress-task').filter({ hasText: text }).first();
+
+export async function hideVisibleProgressCenter(page: Page): Promise<void> {
+  const center = visibleProgressCenter(page);
+  await expect(center).toBeVisible();
+  await center.getByRole('button', { name: 'Hide progress', exact: true }).click();
+  await expect(center).toBeHidden();
+}
 
 export async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
   await loginAsInitialAdmin(context.request);
@@ -28,6 +39,17 @@ export async function rightClickRow(page: Page, filename: string): Promise<void>
   await expect(target).toBeVisible();
   await target.click({ button: 'right' });
   await expect(menu(page)).toBeVisible();
+}
+
+export async function startZipCompression(page: Page, filename: string): Promise<void> {
+  await rightClickRow(page, filename);
+  const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
+  await expect(compress).toBeVisible();
+  await compress.hover();
+  await page
+    .getByTestId('file-manager-context-submenu')
+    .getByRole('button', { name: 'Compress to zip', exact: true })
+    .click();
 }
 
 export async function clickMenuItem(page: Page, label: string): Promise<void> {
@@ -52,7 +74,7 @@ export async function goToParent(page: Page): Promise<void> {
 export async function refreshFileManager(page: Page): Promise<void> {
   const modal = page.getByTestId('file-manager-modal');
   await expect(modal).toBeVisible();
-  await modal.locator('button:has(i.fa-sync-alt)').click();
+  await modal.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(activeFileManagerList(page)).toBeVisible();
 }
 

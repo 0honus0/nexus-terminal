@@ -8,8 +8,10 @@
   },
   "scripts": {
     "dev": "vite --host",
-    "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "build": "npm run check:architecture && npm run check:i18n && vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "check:i18n": "node ./scripts/check-i18n.mjs",
+    "check:architecture": "node ./scripts/check-architecture.mjs"
   },
   "dependencies": {
     "@babel/runtime": "^8.0.0",

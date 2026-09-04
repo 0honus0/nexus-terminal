@@ -1,0 +1,20 @@
+{
+  "tags": {
+    "title": "Tag Management",
+    "addTag": "Add New Tag",
+    "loading": "Loading tags...",
+    "error": "Failed to load tags: {error}",
+    "noTags": "No tags yet. Click 'Add New Tag' to create one!",
+    "prompts": {
+      "confirmDelete": "Are you sure you want to delete the tag \"{name}\"? This cannot be undone."
+    },
+    "inputPlaceholder": "Type to search or create tags...",
+    "removeSelection": "Remove this tag selection",
+    "deleteTagGlobally": "Delete this tag globally",
+    "createSuccess": "Tag created successfully.",
+    "updateSuccess": "Tag updated successfully.",
+    "deleteSuccess": "Tag \"{name}\" deleted successfully.",
+    "deleteFailed": "Failed to delete tag \"{name}\": {error}",
+    "errorDelete": "Error deleting tag: {error}"
+  }
+}

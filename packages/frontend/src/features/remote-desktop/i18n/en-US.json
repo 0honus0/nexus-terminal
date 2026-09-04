@@ -1,0 +1,46 @@
+{
+  "remoteDesktopModal": {
+    "title": "Remote Desktop",
+    "titlePlaceholder": "Remote Desktop Connection",
+    "status": {
+      "fetchingToken": "Fetching connection token...",
+      "connectingWs": "Connecting WebSocket...",
+      "idle": "Idle",
+      "connectingRdp": "Connecting Remote Desktop...",
+      "connectingVnc": "Connecting VNC...",
+      "waiting": "Waiting for server response...",
+      "connected": "Connected",
+      "disconnecting": "Disconnecting...",
+      "disconnected": "Disconnected",
+      "unknownState": "Unknown State",
+      "connecting": "Connecting...",
+      "error": "Error"
+    },
+    "errors": {
+      "missingInfo": "Connection info or display element missing.",
+      "tunnelError": "Tunnel Error",
+      "clientError": "Client Error",
+      "connectionFailed": "Connection Failed",
+      "inputError": "Error setting up input listeners.",
+      "noConnection": "No connection information provided.",
+      "tokenError": "Failed to retrieve token"
+    },
+    "reconnectTooltip": "Reconnect to the remote desktop",
+    "touchModeLabel": "Touch",
+    "touchModeDirect": "Direct",
+    "touchModeTouchpad": "Touchpad",
+    "mobileKeyboardInputLabel": "Remote desktop keyboard input",
+    "touchHintDirect": "Tap: click + keyboard · Hold: right click · Double-tap and drag: drag",
+    "touchHintTouchpad": "One finger: move · Tap: left click + keyboard · Two-finger tap: right click · Two-finger swipe: scroll",
+    "resize": "Resize window",
+    "restoreWindow": "Restore remote desktop window"
+  },
+  "vncModal": {
+    "title": "VNC Session",
+    "textInputPlaceholder": "Enter text here to send to VNC",
+    "sendButtonTitle": "Send text to VNC (simulates keyboard input)",
+    "errors": {
+      "simulateInputError": "Error simulating keyboard input: {error}"
+    }
+  }
+}

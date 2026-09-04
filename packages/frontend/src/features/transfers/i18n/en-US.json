@@ -1,0 +1,119 @@
+{
+  "progressCenter": {
+    "title": "Progress Display",
+    "hiddenTitle": "Hidden progress",
+    "empty": "There are no hidden progress tasks.",
+    "hide": "Hide progress",
+    "running": "Running",
+    "cancelling": "Cancelling",
+    "unknownSession": "Unknown session",
+    "serverTransfers": "Cross-server transfer tasks",
+    "kind": {
+      "upload": "Upload",
+      "download": "Download",
+      "copy": "Copy",
+      "move": "Move",
+      "compress": "Compress",
+      "decompress": "Decompress",
+      "transfer": "Transfer",
+      "other": "Task"
+    },
+    "cancelAll": "Cancel all",
+    "status": {
+      "queued": "Queued",
+      "preparing": "Preparing",
+      "running": "Running",
+      "paused": "Paused",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled",
+      "skipped": "Skipped",
+      "completed": "Completed",
+      "error": "Failed",
+      "partial": "Partially completed"
+    },
+    "resize": "Resize progress window",
+    "restore": "Restore",
+    "sourceSummary": "{count} tasks · {active} active",
+    "speed": "Speed"
+  },
+  "transferProgressModal": {
+    "title": "File Transfer Progress",
+    "loading": "Loading transfer tasks...",
+    "errorLoadingTitle": "Loading Error",
+    "errorLoading": "Failed to load transfer tasks: {error}",
+    "error": {
+      "unknown": "Unknown error",
+      "cancelFailed": "Failed to cancel task.",
+      "removeFailed": "Failed to remove the task record."
+    },
+    "noTasks": "There are no active transfer tasks currently.",
+    "task": {
+      "idLabel": "Task",
+      "createdAt": "Created at",
+      "overallProgress": "Overall Progress"
+    },
+    "status": {
+      "queued": "Queued",
+      "inProgress": "In Progress",
+      "completed": "Completed",
+      "failed": "Failed",
+      "partiallyCompleted": "Partially Completed",
+      "connecting": "Connecting",
+      "transferring": "Transferring",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled"
+    },
+    "confirmCancel": "Are you sure you want to cancel this transfer task?",
+    "cancelRequested": "Cancel request sent.",
+    "removeSuccess": "Task record removed.",
+    "removeTaskTooltip": "Remove task record",
+    "removeButton": "Remove",
+    "cancelTaskTooltip": "Cancel Task",
+    "cancellingTooltip": "Cancelling...",
+    "cancelButton": "Cancel",
+    "cancellingButton": "Cancelling",
+    "subTasks": {
+      "titleToggle": "View {count} Sub-tasks",
+      "noSubTasks": "No sub-tasks."
+    },
+    "subTask": {
+      "source": "Source File",
+      "connectionId": "Target Connection",
+      "status": "Status",
+      "method": "Method",
+      "error": "Error"
+    },
+    "connectionIdFallback": "Connection ID: {connectionId}",
+    "unknownFileName": "[Unknown File Name]",
+    "unknownSourceServer": "[Unknown Source Server]",
+    "unknownTargetPath": "[Unknown Target Path]",
+    "taskIdFallback": "Task ID: {taskId}"
+  },
+  "sendFilesModal": {
+    "title": "Send Files",
+    "searchConnectionsPlaceholder": "Search connections...",
+    "targetPathLabel": "Target Path",
+    "targetPathPlaceholder": "targetPath",
+    "transferMethodLabel": "Transfer Method",
+    "transferMethodAuto": "Auto",
+    "loadingConnections": "Loading connections...",
+    "noConnections": "No connections available. Please add connections first.",
+    "noConnectionsFound": "No connections found matching your search.",
+    "untaggedConnections": "Untagged",
+    "itemsToSendTitle": "Items to send:",
+    "noItemsSelected": "No items selected to send.",
+    "sendButton": "Send",
+    "cancelButton": "Cancel",
+    "errorFetchingData": "Error fetching data for modal.",
+    "errorFetchingConnections": "Error fetching connections.",
+    "errorFetchingTags": "Error fetching tags.",
+    "validationError": "Please select at least one connection and specify a target path.",
+    "transferInitiated": "Transfer task created",
+    "transferInitiatedGeneric": "Transfer task created successfully.",
+    "transferFailedError": "Failed to initiate transfer. Please try again.",
+    "selectAll": "Select visible",
+    "clearSelection": "Clear selection",
+    "methodRsync": "rsync",
+    "methodScp": "scp"
+  }
+}

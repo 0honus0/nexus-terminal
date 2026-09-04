@@ -1,0 +1,24 @@
+{
+  "focusSwitcher": {
+    "configTitle": "Configure Focus Switcher",
+    "availableInputs": "Available Inputs",
+    "configuredSequence": "Configured Sequence (Drag to Sort)",
+    "dragHere": "Drag inputs from the left here",
+    "allInputsConfigured": "All available inputs are configured",
+    "input": {
+      "commandHistorySearch": "Command History Search",
+      "quickCommandsSearch": "Quick Commands Search",
+      "fileManagerSearch": "File Manager Search",
+      "commandInput": "Command Input",
+      "terminalSearch": "Terminal Search",
+      "connectionListSearch": "Connection List Search",
+      "fileEditorActive": "File Editor",
+      "fileManagerPathInput": "File Manager Path Input"
+    },
+    "confirmClose": "You have unsaved changes. Are you sure you want to close?",
+    "shortcutPlaceholder": "e.g., Alt+K",
+    "shortcutSettings": "Shortcut Settings",
+    "noInputsAvailable": "No configurable inputs available",
+    "altSwitchHint": "Hint: Press the Alt key to quickly switch focus between configured input sources."
+  }
+}

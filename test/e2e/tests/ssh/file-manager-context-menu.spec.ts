@@ -56,13 +56,12 @@ async function goToParent(page: Page): Promise<void> {
 
 async function compressFromMenu(page: Page, source: string, submenuLabel: string, archiveName: string): Promise<void> {
   await rightClickRow(page, source);
-  const compress = menu(page)
-    .locator('li')
-    .filter({ hasText: /^Compress/ })
-    .first();
+  const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
   await expect(compress).toBeVisible();
   await compress.hover();
-  await page.getByText(submenuLabel, { exact: true }).click();
+  const submenu = page.getByTestId('file-manager-context-submenu');
+  await expect(submenu).toBeVisible();
+  await submenu.getByRole('button', { name: submenuLabel, exact: true }).click();
   await expect(row(page, archiveName)).toBeVisible({ timeout: 30_000 });
 }
 
@@ -109,10 +108,7 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
     });
     await expect(menu(page)).toBeVisible();
 
-    const compress = menu(page)
-      .locator('li')
-      .filter({ hasText: /^Compress/ })
-      .first();
+    const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
     await expect(compress).toBeVisible();
     await compress.hover();
 
@@ -141,13 +137,15 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   await step('Open as text reads the remote file', async () => {
     await rightClickRow(page, 'README-e2e.md');
     await clickMenuItem(page, 'Open as text');
-    const editor = page.getByTestId('file-editor-overlay');
-    await expect(editor).toBeVisible();
+    const documentPopup = page.getByTestId('document-popup');
+    await expect(documentPopup).toBeVisible();
+    await expect(documentPopup).toHaveAttribute('data-document-mode', 'editor');
+    const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toContainText('README-e2e.md');
     await expect(editor.locator('.view-lines')).toContainText('Nexus Markdown E2E', { timeout: 20_000 });
     await expect(editor).not.toContainText('Failed to');
-    await editor.getByTestId('file-editor-close').click();
-    await expect(editor).toBeHidden();
+    await documentPopup.getByTitle('Close', { exact: true }).first().click();
+    await expect(documentPopup).toBeHidden();
   });
 
   await step('Download streams a remote file through the browser', async () => {
@@ -396,23 +394,21 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await expect(row(page, 'archive-source.zip')).toHaveCount(0);
 
     await rightClickRow(page, 'archive-source.txt');
-    const compress = menu(page)
-      .locator('li')
-      .filter({ hasText: /^Compress/ })
-      .first();
+    const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
     await expect(compress).toBeVisible();
     await compress.hover();
-    await page.getByText('Compress to zip with password...', { exact: true }).click();
+    const submenu = page.getByTestId('file-manager-context-submenu');
+    await submenu.getByRole('button', { name: 'Compress to zip with password...', exact: true }).click();
 
-    const passwordModal = page.getByTestId('archive-password-modal');
-    const passwordInput = passwordModal.getByTestId('archive-password-input');
-    const passwordConfirm = passwordModal.getByTestId('archive-password-confirm');
-    const submit = passwordModal.getByTestId('archive-password-submit');
-    await expect(passwordModal).toHaveAttribute('data-mode', 'compress');
+    let passwordDialog = page.getByRole('dialog', { name: 'Create password-protected zip' });
+    let passwordInput = passwordDialog.getByLabel('Password', { exact: true });
+    let passwordConfirm = passwordDialog.getByLabel('Confirm password', { exact: true });
+    let submit = passwordDialog.getByRole('button', { name: 'Create zip', exact: true });
+    await expect(passwordDialog).toBeVisible();
 
     await passwordInput.fill('x'.repeat(129));
     await passwordConfirm.fill('x'.repeat(129));
-    await expect(passwordModal.getByTestId('archive-password-error')).toContainText('128');
+    await expect(passwordDialog.getByRole('alert')).toContainText('128');
     await expect(submit).toBeDisabled();
 
     await passwordInput.fill('x'.repeat(128));
@@ -422,7 +418,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await passwordInput.fill(specialPassword);
     await passwordConfirm.fill(specialPassword);
     await submit.click();
-    await expect(passwordModal).toBeHidden();
+    await expect(passwordDialog).toBeHidden();
     await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
 
     await rightClickRow(page, 'archive-source.txt');
@@ -432,17 +428,19 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
 
     await rightClickRow(page, 'archive-source.zip');
     await clickMenuItem(page, 'Decompress');
-    await expect(passwordModal).toBeVisible({ timeout: 30_000 });
-    await expect(passwordModal).toHaveAttribute('data-mode', 'decompress');
+    passwordDialog = page.getByRole('dialog', { name: 'zip password required' });
+    passwordInput = passwordDialog.getByLabel('Password', { exact: true });
+    submit = passwordDialog.getByRole('button', { name: 'Extract', exact: true });
+    await expect(passwordDialog).toBeVisible({ timeout: 30_000 });
 
     await passwordInput.fill('wrong-password');
     await submit.click();
-    await expect(passwordModal).toBeVisible({ timeout: 30_000 });
-    await expect(passwordModal.getByTestId('archive-password-error')).toContainText('Incorrect zip password');
+    await expect(passwordDialog).toBeVisible({ timeout: 30_000 });
+    await expect(passwordDialog.getByRole('alert')).toContainText('Incorrect zip password');
 
     await passwordInput.fill(specialPassword);
     await submit.click();
-    await expect(passwordModal).toBeHidden();
+    await expect(passwordDialog).toBeHidden();
     await expect(row(page, 'archive-source.txt')).toBeVisible({ timeout: 30_000 });
   });
 

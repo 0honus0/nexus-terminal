@@ -1,0 +1,147 @@
+{
+  "settings": {
+    "changePassword": {
+      "title": "パスワードを変更",
+      "currentPassword": "現在のパスワード:",
+      "newPassword": "新しいパスワード:",
+      "confirmPassword": "新しいパスワードを再入力:",
+      "submit": "変更を確定",
+      "success": "パスワードの変更に成功しました！",
+      "error": {
+        "passwordsDoNotMatch": "新しいパスワードと確認用パスワードが一致しません。",
+        "generic": "パスワードの変更に失敗しました。後でもう一度お試しください。",
+        "fieldsRequired": "すべてのパスワード欄を入力してください。"
+      }
+    },
+    "twoFactor": {
+      "title": "2段階認証 (TOTP)",
+      "status": {
+        "enabled": "2段階認証は有効です。",
+        "disabled": "2段階認証は現在無効です。"
+      },
+      "enable": {
+        "button": "2段階認証を有効にする"
+      },
+      "setup": {
+        "scanQrCode": "Authenticator アプリを使用して、以下の QR コードをスキャンしてください:",
+        "orEnterSecret": "または、シークレットキーを手動で入力してください:",
+        "enterCode": "アプリで生成された 6 桁のコードを入力してください:",
+        "verifyButton": "確認して有効にする"
+      },
+      "disable": {
+        "button": "2段階認証を無効にする",
+        "passwordPrompt": "現在のログインパスワードを入力して、無効にすることを確認してください:"
+      },
+      "success": {
+        "activated": "2段階認証が有効になりました！",
+        "disabled": "2段階認証が無効になりました。"
+      },
+      "error": {
+        "setupFailed": "2段階認証の設定情報の取得に失敗しました。",
+        "codeRequired": "コードを入力してください。",
+        "verificationFailed": "無効なコードまたは期限切れのコードです。",
+        "passwordRequiredForDisable": "無効にするには、現在のパスワードを入力する必要があります。",
+        "disableFailed": "2段階認証の無効化に失敗しました。"
+      },
+      "qrCodeAlt": "二要素認証 QR コード"
+    },
+    "ipWhitelist": {
+      "title": "IP ホワイトリスト",
+      "description": "このアプリケーションへのアクセスを許可する IP アドレスまたは範囲を設定します。空白のままにすると、すべての IP が許可されます。",
+      "label": "許可された IP アドレス/範囲 (1 行に 1 つまたはカンマ区切り):",
+      "hint": "IPv4, IPv6 および CIDR をサポート (例: 192.168.1.100, 10.0.0.0/8, 2001:db8::/32)。",
+      "saveButton": "ホワイトリストを保存",
+      "success": {
+        "saved": "IP ホワイトリストを保存しました。"
+      },
+      "error": {
+        "saveFailed": "IP ホワイトリストの保存に失敗しました。"
+      },
+      "enableLabel": "IP ホワイトリストを有効にする",
+      "enabled": "IP ホワイトリストを有効にする"
+    },
+    "passkey": {
+      "title": "Passkey 管理",
+      "description": "Passkey (生体認証またはセキュリティキー) を使用してパスワードなし認証を行い",
+      "nameLabel": "Passkey 名",
+      "namePlaceholder": "例: マイノートパソコン",
+      "registerNewButton": "新しい Passkey を登録",
+      "registeredKeysTitle": "登録済みの Passkey",
+      "unnamedKey": "名前のない Passkey",
+      "createdDate": "作成日",
+      "lastUsedDate": "最終使用日",
+      "noKeysRegistered": "Passkey はまだ登録されていません。",
+      "confirmDelete": "この Passkey を削除しますか？この操作は元に戻せません。",
+      "error": {
+        "nameRequired": "Passkey 名を入力してください。",
+        "cancelled": "Passkey の登録がキャンセルされました。",
+        "genericRegistration": "Passkey を登録できません: {message}",
+        "verificationFailed": "登録に失敗しました: {message}",
+        "userNotLoggedIn": "ユーザーがログインしていないか、ユーザー名が利用できません。",
+        "registrationCancelled": "Passkey の登録がキャンセルされました。",
+        "registrationFailed": "Passkey の登録に失敗しました。",
+        "deleteFailedGeneral": "Passkey の削除に失敗しました。もう一度お試しください。",
+        "fetchFailed": "パスキーの読み込みに失敗しました。",
+        "nameUpdateFailed": "パスキー名の更新に失敗しました。"
+      },
+      "success": {
+        "registered": "新しい Passkey が正常に登録されました！",
+        "deleted": "Passkey が正常に削除されました。",
+        "nameUpdated": "Passkey 名が更新されました。"
+      }
+    },
+    "ipBlacklist": {
+      "title": "IP ブラックリスト管理",
+      "description": "ログイン試行回数制限と自動禁止時間を設定します。ローカルアドレス (127.0.0.1, ::1) は禁止されません。",
+      "maxAttemptsLabel": "最大試行回数:",
+      "banDurationLabel": "禁止時間 (秒):",
+      "saveConfigButton": "構成を保存",
+      "currentBannedTitle": "現在禁止されている IP アドレス",
+      "loadingList": "ブラックリストを読み込み中...",
+      "noBannedIps": "ブラックリストに IP アドレスはありません。",
+      "confirmRemoveIp": "IP アドレス \"{ip}\" をブラックリストから削除しますか？",
+      "table": {
+        "ipAddress": "IP アドレス",
+        "attempts": "試行回数",
+        "lastAttempt": "最終試行時間",
+        "bannedUntil": "禁止終了時間",
+        "actions": "アクション",
+        "removeButton": "削除",
+        "deleting": "削除中..."
+      },
+      "success": {
+        "configUpdated": "ブラックリスト構成を保存しました。"
+      },
+      "error": {
+        "fetchFailed": "ブラックリストの取得に失敗しました",
+        "deleteFailed": "削除に失敗しました",
+        "invalidMaxAttempts": "最大試行回数は正の整数である必要があります。",
+        "invalidBanDuration": "禁止時間は正の整数 (秒) である必要があります。",
+        "updateConfigFailed": "ブラックリスト構成の更新に失敗しました"
+      }
+    },
+    "captcha": {
+      "title": "CAPTCHA 設定",
+      "description": "自動化された攻撃を防ぐために、ログインページに CAPTCHA 検証を設定します。",
+      "enableLabel": "ログインページで CAPTCHA を有効にする",
+      "providerLabel": "CAPTCHA プロバイダー:",
+      "providerNone": "なし (無効)",
+      "hcaptchaHint": "から",
+      "recaptchaHint": "から",
+      "siteKeyLabel": "サイトキー (公開):",
+      "secretKeyLabel": "シークレットキー (非公開):",
+      "secretKeyHint": "このキーは安全に保管してください。サーバーに安全に保存されます。",
+      "saveButton": "CAPTCHA 設定を保存",
+      "success": {
+        "saved": "CAPTCHA 設定を保存しました。"
+      },
+      "error": {
+        "saveFailed": "CAPTCHA 設定の保存に失敗しました。",
+        "hcaptchaKeysRequired": "hCaptcha サイトキーとシークレットキーは検証に必要です。",
+        "recaptchaKeysRequired": "reCAPTCHA サイトキーとシークレットキーは検証に必要です。",
+        "verificationFailed": "CAPTCHA 認証情報検証に失敗しました。サイトキーとシークレットキーを確認してください。",
+        "loadFailed": "CAPTCHA 設定の読み込みに失敗しました。"
+      }
+    }
+  }
+}

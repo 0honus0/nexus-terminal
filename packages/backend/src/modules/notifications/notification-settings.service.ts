@@ -3,8 +3,11 @@ import type { NotificationService } from './notification.service';
 import type { NotificationSettingsRepository } from './notification.repository.port';
 import type {
   CreateNotificationSetting,
+  EmailConfig,
   NotificationChannelConfig,
   NotificationChannelType,
+  TelegramConfig,
+  WebhookConfig,
   NotificationSetting,
   UpdateNotificationSetting,
 } from './notification.types';
@@ -32,7 +35,15 @@ export class NotificationSettingsService {
   }
   async update(id: number, input: UpdateNotificationSetting) {
     this.validate(input, true);
-    const updated = await this.repository.update(id, input);
+    const existing = await this.repository.get(id);
+    if (!existing) return false;
+    if (input.channelType !== undefined && input.channelType !== existing.channelType)
+      throw new Error('通知通道类型创建后不可修改。');
+
+    const normalized: UpdateNotificationSetting = { ...input };
+    if (input.config !== undefined) normalized.config = this.mergeConfig(existing, input.config);
+
+    const updated = await this.repository.update(id, normalized);
     if (!updated) return false;
     const details = { settingId: id, updatedFields: Object.keys(input) };
     await this.audit.logAction('NOTIFICATION_SETTING_UPDATED', details);
@@ -52,6 +63,28 @@ export class NotificationSettingsService {
   test(channelType: NotificationChannelType, config: NotificationChannelConfig) {
     return this.notifications.testChannel(channelType, config);
   }
+  private mergeConfig(existing: NotificationSetting, input: NotificationChannelConfig): NotificationChannelConfig {
+    if (existing.channelType === 'email') {
+      const previous = existing.config as EmailConfig;
+      const next = input as EmailConfig;
+      return {
+        ...previous,
+        ...next,
+        ...(next.smtpPass ? { smtpPass: next.smtpPass } : previous.smtpPass ? { smtpPass: previous.smtpPass } : {}),
+      };
+    }
+    if (existing.channelType === 'telegram') {
+      const previous = existing.config as TelegramConfig;
+      const next = input as TelegramConfig;
+      return {
+        ...previous,
+        ...next,
+        ...(next.botToken ? { botToken: next.botToken } : previous.botToken ? { botToken: previous.botToken } : {}),
+      };
+    }
+    return { ...(existing.config as WebhookConfig), ...(input as WebhookConfig) };
+  }
+
   private validate(input: UpdateNotificationSetting, partial = false) {
     if (!partial && (!input.name || !input.channelType || !input.config)) throw new Error('通知设置缺少必要字段。');
     if (input.enabledEvents !== undefined && !Array.isArray(input.enabledEvents))

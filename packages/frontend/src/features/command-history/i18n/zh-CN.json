@@ -1,0 +1,24 @@
+{
+  "commandHistory": {
+    "searchPlaceholder": "搜索历史记录...",
+    "clear": "清空",
+    "copy": "复制",
+    "delete": "删除",
+    "loading": "加载中...",
+    "empty": "没有历史记录",
+    "confirmClear": "确定要清空所有历史记录吗？",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "复制失败",
+    "actions": {
+      "sendToAllSessions": "发送到全部会话"
+    },
+    "notifications": {
+      "sentToAllSessions": "指令已发送到 {count} 个会话。",
+      "noActiveSshSessions": "没有活动的 SSH 会话可发送指令。"
+    },
+    "addFailed": "指令已发送，但保存到历史记录失败：{error}",
+    "loadFailed": "加载命令历史失败：{error}",
+    "deleteFailed": "删除历史记录失败：{error}",
+    "clearFailed": "清空命令历史失败：{error}"
+  }
+}

@@ -3,13 +3,30 @@ import type {
   QuickCommandTag,
   QuickCommandTagRepository,
 } from '../../../modules/quick-command-tags/quick-command-tag.repository.port';
+
+type QuickCommandTagRow = { id: number; name: string; created_at: number; updated_at: number };
+const mapTag = (row: QuickCommandTagRow): QuickCommandTag => ({
+  id: row.id,
+  name: row.name,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 export class SqliteQuickCommandTagRepository implements QuickCommandTagRepository {
   constructor(private readonly db: RelationalDatabase) {}
-  list(): Promise<QuickCommandTag[]> {
-    return this.db.queryAll('SELECT * FROM quick_command_tags ORDER BY name ASC');
+  async list(): Promise<QuickCommandTag[]> {
+    return (
+      await this.db.queryAll<QuickCommandTagRow>(
+        'SELECT id,name,created_at,updated_at FROM quick_command_tags ORDER BY name ASC',
+      )
+    ).map(mapTag);
   }
-  get(id: number): Promise<QuickCommandTag | null> {
-    return this.db.queryOne('SELECT * FROM quick_command_tags WHERE id=?', [id]);
+  async get(id: number): Promise<QuickCommandTag | null> {
+    const row = await this.db.queryOne<QuickCommandTagRow>(
+      'SELECT id,name,created_at,updated_at FROM quick_command_tags WHERE id=?',
+      [id],
+    );
+    return row ? mapTag(row) : null;
   }
   async create(name: string): Promise<number> {
     const now = Math.floor(Date.now() / 1000);
@@ -56,10 +73,12 @@ export class SqliteQuickCommandTagRepository implements QuickCommandTagRepositor
           );
     });
   }
-  listForCommand(commandId: number): Promise<QuickCommandTag[]> {
-    return this.db.queryAll(
-      'SELECT t.id,t.name,t.created_at,t.updated_at FROM quick_command_tags t JOIN quick_command_tag_associations a ON t.id=a.tag_id WHERE a.quick_command_id=? ORDER BY t.name ASC',
-      [commandId],
-    );
+  async listForCommand(commandId: number): Promise<QuickCommandTag[]> {
+    return (
+      await this.db.queryAll<QuickCommandTagRow>(
+        'SELECT t.id,t.name,t.created_at,t.updated_at FROM quick_command_tags t JOIN quick_command_tag_associations a ON t.id=a.tag_id WHERE a.quick_command_id=? ORDER BY t.name ASC',
+        [commandId],
+      )
+    ).map(mapTag);
   }
 }

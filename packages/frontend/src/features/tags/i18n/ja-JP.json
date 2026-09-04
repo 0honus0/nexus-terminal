@@ -1,0 +1,20 @@
+{
+  "tags": {
+    "title": "タグ管理",
+    "addTag": "新しいタグを追加",
+    "loading": "タグをロード中...",
+    "error": "タグリストのロードに失敗しました: {error}",
+    "noTags": "タグがありません。'新しいタグを追加'をクリックして作成してください。",
+    "prompts": {
+      "confirmDelete": "\"{name}\"タグを削除しますか？この操作は元に戻せません。"
+    },
+    "inputPlaceholder": "検索またはタグを作成...",
+    "removeSelection": "このタグの選択を解除",
+    "deleteTagGlobally": "このタグをグローバルに削除",
+    "createSuccess": "タグが正常に作成されました。",
+    "updateSuccess": "タグが正常に更新されました。",
+    "deleteSuccess": "タグ「{name}」が正常に削除されました。",
+    "deleteFailed": "タグ「{name}」の削除に失敗しました: {error}",
+    "errorDelete": "タグの削除中にエラーが発生しました: {error}"
+  }
+}

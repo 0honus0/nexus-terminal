@@ -1,8 +1,8 @@
 export interface QuickCommandTag {
   id: number;
   name: string;
-  created_at: number;
-  updated_at: number;
+  createdAt: number;
+  updatedAt: number;
 }
 export interface QuickCommandTagRepository {
   list(): Promise<QuickCommandTag[]>;

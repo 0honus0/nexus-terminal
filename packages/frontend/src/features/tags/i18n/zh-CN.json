@@ -1,0 +1,20 @@
+{
+  "tags": {
+    "title": "标签管理",
+    "addTag": "添加新标签",
+    "loading": "正在加载标签...",
+    "error": "加载标签列表失败: {error}",
+    "noTags": "还没有任何标签。点击'添加新标签'来创建一个吧！",
+    "prompts": {
+      "confirmDelete": "确定要删除标签 \"{name}\" 吗？此操作不可撤销。"
+    },
+    "inputPlaceholder": "输入搜索或创建标签...",
+    "removeSelection": "移除此标签选择",
+    "deleteTagGlobally": "全局删除此标签",
+    "createSuccess": "标签创建成功。",
+    "updateSuccess": "标签更新成功。",
+    "deleteSuccess": "标签 \"{name}\" 删除成功。",
+    "deleteFailed": "标签 \"{name}\" 删除失败: {error}",
+    "errorDelete": "删除标签时出错: {error}"
+  }
+}

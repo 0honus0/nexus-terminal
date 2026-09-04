@@ -1,0 +1,42 @@
+{
+  "proxies": {
+    "title": "プロキシ管理",
+    "addProxy": "新しいプロキシを追加",
+    "loading": "プロキシをロード中...",
+    "error": "プロキシリストのロードに失敗しました: {error}",
+    "noProxies": "プロキシがありません。'新しいプロキシを追加'をクリックして作成してください。",
+    "actions": {
+      "edit": "編集",
+      "delete": "削除"
+    },
+    "form": {
+      "title": "新しいプロキシを追加",
+      "titleEdit": "プロキシの編集",
+      "name": "名前:",
+      "type": "タイプ:",
+      "host": "ホスト/IP:",
+      "port": "ポート:",
+      "username": "ユーザー名:",
+      "password": "パスワード:",
+      "optional": "オプション",
+      "confirm": "追加",
+      "confirmEdit": "編集を確定",
+      "adding": "追加中...",
+      "saving": "保存中...",
+      "cancel": "キャンセル",
+      "errorRequiredFields": "すべての必須フィールドを入力してください。",
+      "errorPort": "ポート番号は 1 から 65535 の間である必要があります。",
+      "errorAdd": "プロキシの追加に失敗しました: {error}",
+      "errorUpdate": "プロキシの更新に失敗しました: {error}",
+      "passwordUpdateNote": "パスワードを空のままにして、既存のパスワードを保持します。",
+      "clearStoredPassword": "保存済みパスワードをクリア"
+    },
+    "prompts": {
+      "confirmDelete": "\"{name}\"プロキシを削除しますか？この操作は元に戻せません。"
+    },
+    "errors": {
+      "deleteFailed": "プロキシの削除に失敗しました: {error}"
+    },
+    "updatedAt": "最終更新"
+  }
+}

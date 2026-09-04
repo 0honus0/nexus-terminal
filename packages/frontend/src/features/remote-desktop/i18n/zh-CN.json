@@ -1,0 +1,46 @@
+{
+  "remoteDesktopModal": {
+    "title": "远程桌面",
+    "titlePlaceholder": "远程桌面连接",
+    "status": {
+      "fetchingToken": "正在获取连接令牌...",
+      "connectingWs": "正在连接 WebSocket...",
+      "idle": "空闲",
+      "connectingRdp": "正在连接远程桌面...",
+      "connectingVnc": "正在连接 VNC...",
+      "waiting": "等待服务器响应...",
+      "connected": "已连接",
+      "disconnecting": "正在断开连接...",
+      "disconnected": "已断开连接",
+      "unknownState": "未知状态",
+      "connecting": "连接中...",
+      "error": "错误"
+    },
+    "errors": {
+      "missingInfo": "连接信息或显示元素丢失。",
+      "tunnelError": "通道错误",
+      "clientError": "客户端错误",
+      "connectionFailed": "连接失败",
+      "inputError": "设置输入监听器时出错。",
+      "noConnection": "未提供连接信息。",
+      "tokenError": "获取令牌失败"
+    },
+    "reconnectTooltip": "重新连接到远程桌面",
+    "touchModeLabel": "触控",
+    "touchModeDirect": "直触",
+    "touchModeTouchpad": "触控板",
+    "mobileKeyboardInputLabel": "远程桌面键盘输入",
+    "touchHintDirect": "点按：点击并弹出键盘 · 长按：右键 · 双击后拖动：拖拽",
+    "touchHintTouchpad": "单指：移动鼠标 · 点按：左键并弹出键盘 · 双指点按：右键 · 双指滑动：滚轮",
+    "resize": "调整窗口大小",
+    "restoreWindow": "恢复远程桌面窗口"
+  },
+  "vncModal": {
+    "title": "VNC 会话",
+    "textInputPlaceholder": "在此输入文本以发送到 VNC",
+    "sendButtonTitle": "将文本发送到 VNC (模拟键盘输入)",
+    "errors": {
+      "simulateInputError": "模拟键盘输入时出错: {error}"
+    }
+  }
+}

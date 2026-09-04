@@ -120,14 +120,17 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      fileManagerRowSizeMultiplier: '1.0',
-      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
-      quickCommandRowSizeMultiplier: '1.0',
-      statusMonitorScale: '1.0',
-      showQuickCommandTags: 'false',
+      fileManagerRowSizeMultiplier: 1,
+      fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
+      quickCommandRowSizeMultiplier: 1,
+      statusMonitorScale: 1,
     },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
+    data: { enabled: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
 
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
@@ -164,7 +167,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     async () => {
       const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
       await expect(quickView).toBeVisible({ timeout: 20_000 });
-      const list = quickView.locator('.quick-command-list');
+      const list = quickView.getByTestId('quick-command-list');
       const row = quickView.locator(`[data-command-id="${quickCommandId}"]`);
       await expect(row).toBeVisible({ timeout: 20_000 });
       await expect(list).toHaveAttribute('data-row-scale', '1.00');
@@ -228,18 +231,21 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      quickCommandRowSizeMultiplier: '1.0',
-      showQuickCommandTags: 'false',
+      quickCommandRowSizeMultiplier: 1,
     },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
+    data: { enabled: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-  const list = quickView.locator('.quick-command-list');
+  const list = quickView.getByTestId('quick-command-list');
   await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
   await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
@@ -256,11 +262,15 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      fileManagerRowSizeMultiplier: '1.0',
-      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
+      fileManagerRowSizeMultiplier: 1,
+      fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
     },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
+    data: { enabled: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
   expect(originalSidebarResponse.ok()).toBeTruthy();
   const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
@@ -286,7 +296,7 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
         if (!response.url().includes('/api/v1/settings') || response.request().method() !== 'PUT') return false;
         try {
           const body = response.request().postDataJSON() as Record<string, unknown>;
-          return body.fileManagerRowSizeMultiplier === '0.92';
+          return body.fileManagerRowSizeMultiplier === 0.92;
         } catch {
           return false;
         }
@@ -318,14 +328,17 @@ test('rapid panel scaling persists the newest value when save responses arrive o
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      fileManagerRowSizeMultiplier: '1.0',
-      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
-      quickCommandRowSizeMultiplier: '1.0',
-      statusMonitorScale: '1.0',
-      showQuickCommandTags: 'false',
+      fileManagerRowSizeMultiplier: 1,
+      fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
+      quickCommandRowSizeMultiplier: 1,
+      statusMonitorScale: 1,
     },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
+    data: { enabled: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
@@ -333,7 +346,7 @@ test('rapid panel scaling persists the newest value when save responses arrive o
 
   await step('Quick Commands ignores the late response from the older scale save', async () => {
     const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-    const list = quickView.locator('.quick-command-list');
+    const list = quickView.getByTestId('quick-command-list');
     await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
 

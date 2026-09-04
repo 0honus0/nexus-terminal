@@ -25,7 +25,7 @@ async function connectMobileTerminal(page: Page, request: Parameters<typeof logi
 }
 
 async function dispatchPinch(page: Page, startSpan: number, endSpan: number): Promise<void> {
-  const terminal = page.getByTestId('terminal').locator('.terminal-inner-container');
+  const terminal = page.getByTestId('terminal').getByTestId('terminal-inner');
   const box = await terminal.boundingBox();
   expect(box).toBeTruthy();
   const centerX = box!.x + box!.width / 2;
@@ -112,7 +112,7 @@ async function terminalTextPoint(page: Page, text: string): Promise<{ x: number;
 }
 
 async function longPressTerminal(page: Page, point: { x: number; y: number }): Promise<void> {
-  const terminal = page.getByTestId('terminal').locator('.terminal-inner-container');
+  const terminal = page.getByTestId('terminal').getByTestId('terminal-inner');
   await terminal.evaluate((element, position) => {
     const target = element as HTMLElement;
     const touch = new Touch({
@@ -247,7 +247,7 @@ test('mobile clipboard Paste normalizes CR line endings and executes through the
   await page.evaluate((text) => navigator.clipboard.writeText(text), "printf 'MOBILE_TOUCH_PASTE_OK\\n'\r");
 
   await step('mobile context menu fallback exposes Paste even without a native browser menu', async () => {
-    const inner = terminal.locator('.terminal-inner-container');
+    const inner = terminal.getByTestId('terminal-inner');
     const box = await inner.boundingBox();
     expect(box).toBeTruthy();
     await inner.dispatchEvent('contextmenu', {

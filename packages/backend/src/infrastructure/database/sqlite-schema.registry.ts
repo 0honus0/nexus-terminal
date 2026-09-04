@@ -8,6 +8,7 @@ export interface SqliteTableDefinition {
 /** Current base schema. Historical migrations remain responsible for upgrading existing databases. */
 export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'settings', sql: schema.createSettingsTableSQL },
+  { name: 'settings_migrations', sql: schema.createSettingsMigrationsTableSQL },
   { name: 'audit_logs', sql: schema.createAuditLogsTableSQL },
   { name: 'notification_settings', sql: schema.createNotificationSettingsTableSQL },
   { name: 'users', sql: schema.createUsersTableSQL },

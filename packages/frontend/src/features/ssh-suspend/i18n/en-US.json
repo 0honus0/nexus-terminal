@@ -1,0 +1,55 @@
+{
+  "suspendedSshSessions": {
+    "modalTitle": "Suspended SSH Sessions",
+    "searchPlaceholder": "Search sessions (name, connection...)",
+    "loading": "Loading suspended sessions...",
+    "noResults": "No suspended sessions found matching your criteria.",
+    "tooltip": {
+      "editName": "Click to edit name"
+    },
+    "label": {
+      "originalConnection": "Original Connection",
+      "suspendedAt": "Suspended At",
+      "markedAt": "Marked At"
+    },
+    "disconnectedAt": "Disconnected at {time}",
+    "status": {
+      "marked": "Pending Close",
+      "hanging": "Active",
+      "disconnected": "Disconnected"
+    },
+    "action": {
+      "resume": "Resume",
+      "remove": "Remove",
+      "exportLog": "Export Log"
+    }
+  },
+  "sshSuspend": {
+    "notifications": {
+      "markedForSuspendInfo": "Session {id} is marked for suspend. It will be suspended when the tab closes or the application exits.",
+      "wsNotConnectedError": "WebSocket not connected. Cannot perform suspend/resume action.",
+      "sessionNotFoundError": "Session not found or WebSocket manager unavailable.",
+      "notMarkedWarning": "Session was not marked for suspend.",
+      "fetchListError": "Failed to fetch suspended sessions list: {error}",
+      "resumeErrorInfoNotFound": "Resume error: Suspended session {id} not found in the list.",
+      "resumeErrorConnectionConfigNotFound": "Resume error: Original connection configuration for {id} not found.",
+      "resumeErrorGeneric": "Failed to resume session: {error}",
+      "terminatedSuccess": "Suspended session \"{name}\" terminated successfully.",
+      "terminateError": "Failed to terminate suspended session: {error}",
+      "entryRemovedSuccess": "Suspended session entry \"{name}\" removed successfully.",
+      "entryRemovedError": "Failed to remove suspended session entry: {error}",
+      "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
+      "nameEditedError": "Failed to edit suspended session name: {error}",
+      "markedForSuspendSuccess": "Session {id} successfully marked for suspend.",
+      "markForSuspendError": "Failed to mark session for suspend: {error}",
+      "unmarkedSuccess": "Session {id} unmarked from suspend successfully.",
+      "unmarkError": "Failed to unmark session from suspend: {error}",
+      "defaultSessionName": "Session",
+      "resumeSuccess": "Session \"{name}\" resumed successfully.",
+      "resumeErrorBackend": "Backend failed to resume session: {error}",
+      "autoTerminated": "Suspended session \"{name}\" was auto-terminated by the backend due to: {reason}",
+      "logExportSuccess": "Suspended session log {name} has started downloading.",
+      "logExportError": "Failed to export suspended session log: {error}"
+    }
+  }
+}

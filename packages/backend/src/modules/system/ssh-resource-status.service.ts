@@ -16,9 +16,12 @@ export interface SshResourceStatus {
 }
 const keyFor = (host: string, port: number) => `${host.trim().toLowerCase()}:${port}`;
 const RESOURCE_CONNECT_TIMEOUT_MS = 5_000;
+const RESOURCE_BOOTSTRAP_SAMPLE_DELAY_MS = 500;
+const wait = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 export class SshResourceStatusService {
   private cache: { fingerprint: string; expiresAt: number; value: SshResourceStatus[] } | null = null;
   private inFlight: { fingerprint: string; promise: Promise<SshResourceStatus[]> } | null = null;
+  private readonly bootstrappedKeys = new Set<string>();
   constructor(
     private readonly connections: ConnectionService,
     private readonly resolver: SshConnectionResolver,
@@ -86,7 +89,12 @@ export class SshResourceStatusService {
           connect: { timeoutMs: RESOURCE_CONNECT_TIMEOUT_MS },
         });
         sessionId = session.id;
-        const status = await this.collector.collect(session, key);
+        let status = await this.collector.collect(session, key);
+        if (!this.bootstrappedKeys.has(key)) {
+          await wait(RESOURCE_BOOTSTRAP_SAMPLE_DELAY_MS);
+          status = await this.collector.collect(session, key);
+          this.bootstrappedKeys.add(key);
+        }
         return {
           key,
           connectionId: candidate.id,

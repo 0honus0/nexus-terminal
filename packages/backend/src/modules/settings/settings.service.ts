@@ -7,7 +7,9 @@ import type {
   UpdateCaptchaSettingsDto,
   UpdateSidebarConfigDto,
 } from './settings.types';
+import type { SettingsMigrationRepository } from './settings-migration.repository.port';
 import type { SettingsRepository } from './settings.repository.port';
+import { runSettingsMigrations } from './settings-migrations';
 
 export interface FocusItemConfig {
   shortcut?: string;
@@ -23,7 +25,7 @@ const KEYS = {
   focus: 'focusSwitcherSequence',
   nav: 'navBarVisible',
   layout: 'layoutTree',
-  autoCopy: 'autoCopyOnSelect',
+  terminalRightClickCopyPaste: 'terminalRightClickCopyPaste',
   statusInterval: 'statusMonitorIntervalSeconds',
   remoteRefresh: 'remoteHostRefreshIntervalSeconds',
   blacklist: 'ipBlacklistEnabled',
@@ -89,10 +91,12 @@ const DEFAULT_LAYOUT: Omit<LayoutNode, 'id'> = {
 };
 
 export class SettingsService {
-  constructor(private readonly repository: SettingsRepository) {}
+  constructor(
+    private readonly repository: SettingsRepository,
+    private readonly migrations: SettingsMigrationRepository,
+  ) {}
   async ensureDefaults(): Promise<void> {
     const defaults: Record<string, string> = {
-      ipWhitelistEnabled: 'false',
       ipWhitelist: '',
       maxLoginAttempts: '5',
       loginBanDuration: '300',
@@ -109,7 +113,6 @@ export class SettingsService {
       }),
       [KEYS.nav]: 'true',
       [KEYS.layout]: JSON.stringify(DEFAULT_LAYOUT),
-      [KEYS.autoCopy]: 'false',
       showPopupFileEditor: 'false',
       shareFileEditorTabs: 'true',
       dockerStatusIntervalSeconds: '5',
@@ -120,21 +123,22 @@ export class SettingsService {
       dashboardShowLocalResources: 'true',
       dashboardShowRemoteResources: 'true',
       quickCommandsCollapsibleSearch: 'false',
+      quickCommandsCompactMode: 'false',
+      quickCommandRowSizeMultiplier: '1.0',
       [KEYS.sidebar]: JSON.stringify(DEFAULT_SIDEBAR),
       [KEYS.captcha]: JSON.stringify(DEFAULT_CAPTCHA),
       timezone: 'UTC',
       terminalScrollbackLimit: '5000',
       spreadsheetPreviewRowsPerPage: '500',
       spreadsheetPreviewMaxColumns: '100',
-      terminalEnableRightClickPaste: 'true',
+      [KEYS.terminalRightClickCopyPaste]: 'true',
       [KEYS.showConnectionTags]: 'true',
       [KEYS.showQuickCommandTags]: 'true',
       [KEYS.showStatusIp]: 'true',
     };
-    const existing = await this.getAllSettings();
+    const existing = await runSettingsMigrations(this.repository, this.migrations);
     const missing = Object.fromEntries(Object.entries(defaults).filter(([key]) => existing[key] === undefined));
     if (Object.keys(missing).length) await this.repository.setMany(missing);
-    await this.repository.delete('clearFileEditorTabsOnClose');
   }
   async getAllSettings(): Promise<Record<string, string>> {
     return Object.fromEntries((await this.repository.list()).map((v) => [v.key, v.value]));
@@ -150,15 +154,6 @@ export class SettingsService {
   }
   async deleteSetting(key: string) {
     await this.repository.delete(key);
-  }
-  async getIpWhitelistSettings() {
-    return {
-      enabled: (await this.repository.get('ipWhitelistEnabled')) === 'true',
-      whitelist: (await this.repository.get('ipWhitelist')) ?? '',
-    };
-  }
-  updateIpWhitelistSettings(enabled: boolean, whitelist: string) {
-    return this.repository.setMany({ ipWhitelistEnabled: String(enabled), ipWhitelist: whitelist });
   }
   async isIpBlacklistEnabled() {
     return (await this.repository.get(KEYS.blacklist)) !== 'false';
@@ -189,12 +184,6 @@ export class SettingsService {
   async setLayoutTree(value: string) {
     JSON.parse(value);
     await this.repository.set(KEYS.layout, value);
-  }
-  async getAutoCopyOnSelect() {
-    return (await this.repository.get(KEYS.autoCopy)) === 'true';
-  }
-  setAutoCopyOnSelect(v: boolean) {
-    return this.repository.set(KEYS.autoCopy, String(v));
   }
   async getStatusMonitorIntervalSeconds() {
     return this.readBoundedInt(KEYS.statusInterval, 3, 1, 86400);

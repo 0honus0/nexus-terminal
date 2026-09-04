@@ -19,8 +19,7 @@ const DELETED_CWD_PATH = '/deleted-cwd';
 
 const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
-const currentPath = (page: Page): Locator => manager(page).locator('.file-manager-path-input strong');
-const pathInput = (page: Page): Locator => manager(page).locator('input[data-focus-id="fileManagerPathInput"]');
+const pathInput = (page: Page): Locator => manager(page).getByTestId('file-manager-path-input');
 const favoriteSlot = (page: Page): Locator => manager(page).locator('.file-manager-favorite-slot');
 
 async function cleanupFavorite(request: APIRequestContext): Promise<void> {
@@ -33,12 +32,11 @@ async function cleanupFavorite(request: APIRequestContext): Promise<void> {
 }
 
 async function navigateViaPathInput(page: Page, path: string): Promise<void> {
-  await currentPath(page).click();
   const input = pathInput(page);
   await expect(input).toBeVisible();
   await input.fill(path);
   await input.press('Enter');
-  await expect(currentPath(page)).toHaveText(path, { timeout: 20_000 });
+  await expect(input).toHaveValue(path, { timeout: 20_000 });
 }
 
 async function visibleFilenames(page: Page): Promise<string[]> {
@@ -58,8 +56,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Search filters the visible remote file list and Escape restores it', async () => {
     const fileManager = manager(page);
-    await fileManager.getByTitle('Search files...').click();
-    const search = fileManager.getByPlaceholder('Search files...');
+    const search = fileManager.getByTestId('file-manager-search-input');
     await expect(search).toBeVisible();
     await search.fill('plain');
     await expect(row(page, 'plainfile')).toBeVisible();
@@ -82,8 +79,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]')).toHaveCount(0);
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested-renamed.txt"]')).toBeVisible();
 
-    await fileManager.getByTitle('Search files...').click();
-    const reopenedAfterRename = fileManager.getByPlaceholder('Search files...');
+    const reopenedAfterRename = fileManager.getByTestId('file-manager-search-input');
     await reopenedAfterRename.fill('definitely-no-e2e-match');
     await expect(fileManager.getByText('No search results found', { exact: true })).toBeVisible();
 
@@ -91,16 +87,16 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     const recursivePdf = fileManager.locator('tr[data-file-path="/folder-seed/second-preview.pdf"]');
     await expect(recursivePdf).toBeVisible();
     await recursivePdf.dblclick();
-    const preview = page.getByRole('dialog', { name: 'second-preview.pdf' });
+    const preview = page.getByTestId('document-popup');
+    await expect(preview).toHaveAttribute('data-document-mode', 'preview');
     await expect(preview.getByTestId('pdf-page-count')).toHaveText('3');
-    await expect(currentPath(page)).toHaveText('/');
+    await expect(pathInput(page)).toHaveValue('/');
     await preview.click({ position: { x: 2, y: 2 } });
     await expect(preview).toBeHidden();
 
-    await fileManager.getByTitle('Search files...').click();
-    const reopenedSearch = fileManager.getByPlaceholder('Search files...');
+    const reopenedSearch = fileManager.getByTestId('file-manager-search-input');
     await reopenedSearch.press('Escape');
-    await expect(reopenedSearch).toBeHidden();
+    await expect(reopenedSearch).toHaveValue('');
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
@@ -126,13 +122,13 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
   });
 
   await step('Path history records a visited directory and navigates back to it', async () => {
-    await currentPath(page).click();
+    await pathInput(page).click();
     const history = manager(page).locator('.path-history-dropdown');
     await expect(history).toBeVisible();
     const folderHistory = history.locator(`li[title="${FAVORITE_PATH}"]`);
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
-    await expect(currentPath(page)).toHaveText(FAVORITE_PATH, { timeout: 20_000 });
+    await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
     await expect(row(page, '..')).toBeVisible();
   });
 
@@ -157,7 +153,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await trigger.click();
     favoriteItem = favorites.locator(`li[title="${FAVORITE_PATH}"]`).filter({ hasText: FAVORITE_NAME });
     await favoriteItem.click();
-    await expect(currentPath(page)).toHaveText(FAVORITE_PATH, { timeout: 20_000 });
+    await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
 
     await trigger.click();
     favoriteItem = favorites.locator(`li[title="${FAVORITE_PATH}"]`).filter({ hasText: FAVORITE_NAME });
@@ -196,7 +192,7 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
 
     await navigateViaPathInput(page, '/');
     await syncFromTerminal.click();
-    await expect(currentPath(page)).toHaveText(SPECIAL_PATH, { timeout: 10_000 });
+    await expect(pathInput(page)).toHaveValue(SPECIAL_PATH, { timeout: 10_000 });
     await expect(row(page, 'inside.txt')).toBeVisible();
   });
 
@@ -216,7 +212,7 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
     expect(removeResponse.ok).toBeTruthy();
 
     await syncFromTerminal.click();
-    await expect(currentPath(page)).toHaveText('/', { timeout: 10_000 });
+    await expect(pathInput(page)).toHaveValue('/', { timeout: 10_000 });
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
@@ -237,7 +233,7 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
     expect(removeResponse.ok).toBeTruthy();
 
     await fileManager.getByTitle('Refresh').click();
-    await expect(currentPath(page)).toHaveText('/', { timeout: 10_000 });
+    await expect(pathInput(page)).toHaveValue('/', { timeout: 10_000 });
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 });

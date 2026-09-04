@@ -23,7 +23,8 @@ export const createQuickCommandTagsRouter = (tags: QuickCommandTagService): Rout
       }
       try {
         const id = await tags.create(name);
-        response.status(201).json({ message: '快捷指令标签已添加', tag: await tags.get(id) });
+        const tag = await tags.get(id);
+        response.status(201).json({ message: '快捷指令标签已添加', tag });
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('UNIQUE') || message.includes('已存在') ? 409 : 500).json({ message });
@@ -48,7 +49,8 @@ export const createQuickCommandTagsRouter = (tags: QuickCommandTagService): Rout
           response.status(404).json({ message: '未找到要更新的快捷指令标签' });
           return;
         }
-        response.json({ message: '快捷指令标签已更新', tag: await tags.get(id) });
+        const tag = await tags.get(id);
+        response.json({ message: '快捷指令标签已更新', tag });
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('UNIQUE') || message.includes('已存在') ? 409 : 500).json({ message });

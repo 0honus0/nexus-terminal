@@ -34,7 +34,7 @@ test('password change UI updates the real login credential and can restore the t
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-security').click();
+    await page.getByRole('tab', { name: 'Security', exact: true }).click();
     const form = page.getByTestId('change-password-settings');
     await expect(form).toBeVisible();
 

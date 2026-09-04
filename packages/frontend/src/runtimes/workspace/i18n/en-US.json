@@ -1,0 +1,124 @@
+{
+  "workspace": {
+    "terminal": {
+      "reconnectingMsg": "Attempting to reconnect..."
+    },
+    "title": "Workspace",
+    "sessions": "{count} sessions",
+    "transfer": {
+      "targetWorkspace": "Workspace",
+      "destination": "Destination"
+    },
+    "documents": {
+      "editor": "Editor",
+      "preview": "Preview"
+    },
+    "archive": {
+      "format": "Format"
+    },
+    "errors": {
+      "suspendedConnectionNotSsh": "The suspended session no longer points to an SSH connection."
+    },
+    "sessionState": {
+      "idle": "Idle",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "reconnecting": "Reconnecting",
+      "disconnected": "Disconnected",
+      "error": "Error"
+    }
+  },
+  "layoutConfigurator": {
+    "title": "Layout Configurator",
+    "availablePanes": "Available Panes",
+    "layoutPreview": "Layout Preview",
+    "resetDefault": "Reset to Default",
+    "noAvailablePanes": "All panes are already in the layout",
+    "emptyLayout": "Layout is empty. Drag panes from the left or add a container.",
+    "leftSidebar": "Left Sidebar Panes",
+    "rightSidebar": "Right Sidebar Panes",
+    "dropHere": "Drop panes from available list here",
+    "saveError": "Error saving layout. Please try again later.",
+    "confirmClearLayout": "Are you sure you want to clear the entire layout? All panes will return to the available list.",
+    "lockLayout": "Lock Layout",
+    "lockUpdateError": "Failed to update layout lock status.",
+    "confirmClose": "You have unsaved changes. Are you sure you want to close?",
+    "confirmReset": "Restore the default layout and sidebar configuration? Current changes will be lost."
+  },
+  "layoutNodeEditor": {
+    "containerLabel": "Container ({direction})",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
+    "toggleDirection": "Toggle Direction",
+    "addHorizontalContainer": "Add Horizontal Container",
+    "addVerticalContainer": "Add Vertical Container",
+    "removeNode": "Remove this node",
+    "dragHandle": "Drag to reorder or move",
+    "dropHere": "Drop panes or containers here",
+    "pane": "Pane",
+    "container": "Container",
+    "addPane": "Add Pane",
+    "addContainer": "Add Container",
+    "size": "Size",
+    "emptyContainer": "Empty container"
+  },
+  "commandInputBar": {
+    "placeholder": "Enter command and press Enter to send...",
+    "searchPlaceholder": "Search in terminal...",
+    "openSearch": "Open terminal search",
+    "closeSearch": "Close terminal search",
+    "findPrevious": "Find previous",
+    "findNext": "Find next",
+    "configureFocusSwitch": "Configure Focus Switcher",
+    "clearTerminal": "Clear Terminal"
+  },
+  "layout": {
+    "loading": "Loading...",
+    "configure": "Configure Layout",
+    "pane": {
+      "connections": "Connections",
+      "terminal": "Terminal",
+      "commandBar": "Command Bar",
+      "fileManager": "File Manager",
+      "editor": "Editor",
+      "statusMonitor": "Status Monitor",
+      "commandHistory": "Command History",
+      "quickCommands": "Quick Commands",
+      "dockerManager": "Docker Manager",
+      "suspendedSshSessions": "Suspended Sessions Management",
+      "preview": "Preview"
+    },
+    "panes": {
+      "suspendedSshSessions": "Suspended Session Manager"
+    },
+    "noActiveSession": {
+      "title": "No Active Session",
+      "message": "Please connect to a session first",
+      "fileManagerSidebar": "File Manager requires an active session",
+      "statusMonitorSidebar": "Status Monitor requires an active session"
+    }
+  },
+  "terminalTabBar": {
+    "selectServerTitle": "Select server to connect",
+    "progressDisplay": "Progress Display"
+  },
+  "tabs": {
+    "contextMenu": {
+      "close": "Close Tab",
+      "closeOthers": "Close Other Tabs",
+      "closeRight": "Close Tabs to the Right",
+      "closeLeft": "Close Tabs to the Left",
+      "suspendSession": "Suspend Session",
+      "unmarkForSuspend": "Unmark Suspend"
+    },
+    "closeTabTooltip": "Close Tab",
+    "newTabTooltip": "New Connection Tab",
+    "security": "Security",
+    "ipControl": "IP Control",
+    "workspace": "Workspace",
+    "system": "System",
+    "dataManagement": "Data Management",
+    "appearance": "Appearance",
+    "about": "About"
+  }
+}

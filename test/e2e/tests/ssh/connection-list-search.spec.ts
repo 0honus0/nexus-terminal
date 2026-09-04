@@ -27,7 +27,7 @@ async function recreateSecondaryConnection(request: APIRequestContext): Promise<
       host: SECONDARY_HOST,
       port: 22,
       username: 'search-e2e',
-      auth_method: 'password',
+      authMethod: 'password',
       password: 'not-used-in-this-test',
     },
   });
@@ -39,8 +39,8 @@ async function recreateSecondaryConnection(request: APIRequestContext): Promise<
 test('workspace connection search filters by name and host and restores the full list', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  const settings = await context.request.put('/api/v1/settings', {
-    data: { showConnectionTags: 'false' },
+  const settings = await context.request.put('/api/v1/settings/show-connection-tags', {
+    data: { enabled: false },
   });
   expect(settings.ok()).toBeTruthy();
   await resetTestSshFilesystem();
@@ -51,8 +51,8 @@ test('workspace connection search filters by name and host and restores the full
   await page.getByTitle('Connections', { exact: true }).click();
   const list = page.getByTestId('workspace-connection-list');
   const search = list.locator('input[data-focus-id="connectionListSearch"]');
-  const primaryRow = list.locator(`li[data-conn-id="${primaryId}"]`);
-  const secondaryRow = list.locator(`li[data-conn-id="${secondaryId}"]`);
+  const primaryRow = list.locator(`li[data-connection-id="${primaryId}"]`);
+  const secondaryRow = list.locator(`li[data-connection-id="${secondaryId}"]`);
 
   await step('Connection search filters by display name', async () => {
     await expect(list).toBeVisible({ timeout: 20_000 });

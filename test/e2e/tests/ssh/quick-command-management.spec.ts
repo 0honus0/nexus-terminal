@@ -24,10 +24,10 @@ async function cleanupCommands(request: APIRequestContext): Promise<void> {
 async function findCommand(
   request: APIRequestContext,
   name: string,
-): Promise<{ id: number; command: string; usage_count?: number } | undefined> {
+): Promise<{ id: number; command: string; usageCount?: number } | undefined> {
   const response = await request.get('/api/v1/quick-commands');
   expect(response.ok()).toBeTruthy();
-  return ((await response.json()) as Array<{ id: number; name?: string; command: string; usage_count?: number }>).find(
+  return ((await response.json()) as Array<{ id: number; name?: string; command: string; usageCount?: number }>).find(
     (item) => item.name === name,
   );
 }
@@ -39,7 +39,7 @@ function markerCount(text: string, marker: string): number {
 test('quick command UI creates, searches, executes, edits, and deletes a command', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  const settings = await context.request.put('/api/v1/settings', { data: { showQuickCommandTags: 'false' } });
+  const settings = await context.request.put('/api/v1/settings/show-quick-command-tags', { data: { enabled: false } });
   expect(settings.ok()).toBeTruthy();
   await cleanupCommands(context.request);
   await resetTestSshFilesystem();
@@ -72,19 +72,19 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
     await expect(row).toBeVisible();
     const before = markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1');
-    await row.click();
+    await row.getByTestId('quick-command-execute').click();
     await expect
       .poll(async () => markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1'), { timeout: 15_000 })
       .toBeGreaterThan(before);
     await expect
-      .poll(async () => Number((await findCommand(context.request, ORIGINAL_NAME))?.usage_count ?? 0))
+      .poll(async () => Number((await findCommand(context.request, ORIGINAL_NAME))?.usageCount ?? 0))
       .toBeGreaterThanOrEqual(1);
   });
 
   await step('edit updates both the name and command body', async () => {
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
     await row.click({ button: 'right' });
-    const menu = page.locator('.quick-command-context-menu');
+    const menu = page.getByRole('menu').filter({ visible: true }).first();
     await expect(menu).toBeVisible();
     await menu.getByText('Edit', { exact: true }).click();
 
@@ -105,14 +105,14 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await search.fill('Edited');
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
     await expect(row).toBeVisible();
-    await row.click();
+    await row.getByTestId('quick-command-execute').click();
     await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('QUICK_MANAGED_V2');
 
     await row.click({ button: 'right' });
-    const menu = page.locator('.quick-command-context-menu');
+    const menu = page.getByRole('menu').filter({ visible: true }).first();
     await menu.getByText('Delete', { exact: true }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: EDITED_NAME });
-    await expect(confirm).toBeVisible();
+    const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+    await expect(confirm).toContainText(EDITED_NAME);
     await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(row).toHaveCount(0);
     await expect.poll(async () => await findCommand(context.request, EDITED_NAME)).toBeUndefined();

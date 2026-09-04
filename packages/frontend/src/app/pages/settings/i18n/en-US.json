@@ -1,0 +1,35 @@
+{
+  "settings": {
+    "title": "Settings",
+    "category": {
+      "security": "Security Settings",
+      "appearance": "Appearance Settings",
+      "system": "System Settings",
+      "about": "About",
+      "dataManagement": "Data Management"
+    },
+    "about": {
+      "version": "Version",
+      "checkingUpdate": "Checking for update...",
+      "latestVersion": "Up to date",
+      "updateAvailable": "Update available: {version}!",
+      "error": {
+        "checkFailed": "Failed to check for updates",
+        "checkFailedShort": "Check failed",
+        "noReleases": "No releases found",
+        "rateLimit": "GitHub API rate limit exceeded, please try again later"
+      }
+    },
+    "tabs": {
+      "security": "Security",
+      "ipControl": "IP Control",
+      "workspace": "Workspace",
+      "system": "System",
+      "dataManagement": "Data Management",
+      "appearance": "Appearance",
+      "about": "About"
+    },
+    "loading": "Loading...",
+    "sectionsAriaLabel": "Settings sections"
+  }
+}

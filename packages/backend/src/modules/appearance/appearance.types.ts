@@ -1,5 +1,4 @@
 export interface AppearanceSettings {
-  _id: 'global_appearance';
   customUiTheme: string;
   activeTerminalThemeId: number | null;
   terminalFontFamily: string;
@@ -12,7 +11,7 @@ export interface AppearanceSettings {
   pageBackgroundImage?: string;
   terminalBackgroundEnabled: boolean;
   terminalBackgroundOverlayOpacity: number;
-  terminal_custom_html: string;
+  terminalCustomHtml: string;
   remoteHtmlPresetsUrl: string | null;
   windowThemeColor: string;
   terminalTextStrokeEnabled: boolean;
@@ -23,10 +22,9 @@ export interface AppearanceSettings {
   terminalTextShadowOffsetY: number;
   terminalTextShadowBlur: number;
   terminalTextShadowColor: string;
-  updatedAt: number;
 }
 
-export type UpdateAppearanceInput = Partial<Omit<AppearanceSettings, '_id' | 'updatedAt'>>;
+export type UpdateAppearanceInput = Partial<AppearanceSettings>;
 export type BackgroundKind = 'page' | 'terminal';
 
 export interface HtmlThemeSummary {

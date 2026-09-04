@@ -18,18 +18,19 @@ const map = (row: Row): QuickCommand => ({
   id: row.id,
   name: row.name,
   command: row.command,
-  usage_count: row.usage_count,
-  created_at: row.created_at,
-  updated_at: row.updated_at,
+  usageCount: row.usage_count,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
   variables: parseVariables(row.variables),
   tagIds: row.tag_ids_str ? row.tag_ids_str.split(',').map(Number).filter(Number.isFinite) : [],
 });
-const parseVariables = (value: string | null): Record<string, string> | null => {
-  if (!value) return null;
+const parseVariables = (value: string | null): Record<string, string> => {
+  if (!value) return {};
   try {
-    return JSON.parse(value) as Record<string, string>;
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {};
   } catch {
-    return null;
+    return {};
   }
 };
 const select = `SELECT qc.id,qc.name,qc.command,qc.usage_count,qc.variables,qc.created_at,qc.updated_at,GROUP_CONCAT(qta.tag_id) AS tag_ids_str FROM quick_commands qc LEFT JOIN quick_command_tag_associations qta ON qc.id=qta.quick_command_id`;
@@ -57,7 +58,7 @@ export class SqliteQuickCommandRepository implements QuickCommandRepository {
     return (await this.db.execute('DELETE FROM quick_commands WHERE id=?', [id])).changes > 0;
   }
   async list(sortBy: QuickCommandSort = 'name'): Promise<QuickCommand[]> {
-    const order = sortBy === 'usage_count' ? 'qc.usage_count DESC,qc.name ASC' : 'qc.name ASC';
+    const order = sortBy === 'usageCount' ? 'qc.usage_count DESC,qc.name ASC' : 'qc.name ASC';
     return (await this.db.queryAll<Row>(`${select} GROUP BY qc.id ORDER BY ${order}`)).map(map);
   }
   async incrementUsage(id: number): Promise<boolean> {

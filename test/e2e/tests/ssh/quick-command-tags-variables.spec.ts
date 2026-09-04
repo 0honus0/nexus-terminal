@@ -39,7 +39,14 @@ test('quick command tags and saved variables survive persistence, grouping, rena
   expect(
     (
       await context.request.put('/api/v1/settings', {
-        data: { language: 'en-US', showQuickCommandTags: 'true' },
+        data: { language: 'en-US' },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  expect(
+    (
+      await context.request.put('/api/v1/settings/show-quick-command-tags', {
+        data: { enabled: true },
       })
     ).ok(),
   ).toBeTruthy();
@@ -110,11 +117,11 @@ test('quick command tags and saved variables survive persistence, grouping, rena
       async () => {
         const group = quickView.getByTestId(`quick-command-group-${tagId}`);
         await expect(group).toContainText(TAG_NAME, { timeout: 15_000 });
-        const chevron = group.locator('i').first();
-        if ((await chevron.getAttribute('class'))?.includes('fa-chevron-right')) await chevron.click();
+        const groupToggle = group.locator('button[aria-expanded]').first();
+        if ((await groupToggle.getAttribute('aria-expanded')) === 'false') await groupToggle.click();
         const row = quickView.locator(`[data-command-id="${commandId}"]`);
         await expect(row).toBeVisible();
-        await row.click();
+        await row.getByTestId('quick-command-execute').click();
         await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('QC_TAG_VARIABLE_NEXUS');
 
         const response = await context.request.get('/api/v1/quick-commands');

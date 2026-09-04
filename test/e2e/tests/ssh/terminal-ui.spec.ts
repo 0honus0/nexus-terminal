@@ -25,7 +25,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   const terminal = page.getByTestId('terminal');
   const commandInput = page.getByTestId('command-input');
 
-  await step('terminal remains mounted after ssh:connected', async () => {
+  await step('terminal remains mounted after workspace connection', async () => {
     await expect(terminal).toBeVisible({ timeout: 20_000 });
     await expect(terminal.locator('.xterm-screen')).toBeVisible();
     const box = await terminal.boundingBox();
@@ -56,20 +56,11 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       });
   });
 
-  await step('global transfer progress can minimize and restore from the toolbar', async () => {
-    const transferToggle = page.getByTestId('transfer-progress-toggle');
-    await transferToggle.click();
-    const progressPanel = page.locator('.transfer-progress-panel');
-    await expect(progressPanel).toBeVisible();
-    await progressPanel.getByTestId('transfer-progress-minimize').click();
-    await expect(progressPanel).toBeHidden();
-    await transferToggle.click();
-    await expect(progressPanel).toBeVisible();
-    await progressPanel.getByRole('button', { name: 'Close' }).click();
-    await expect(progressPanel).toBeHidden();
+  await step('shared Progress Display stays dormant until there is hidden transfer work', async () => {
+    await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
   });
 
-  await step('interactive keystrokes use the low-latency SSH input path', async () => {
+  await step('interactive keystrokes use the low-latency terminal input path', async () => {
     await terminal.click();
     await page.keyboard.type('x');
     await expect
@@ -80,20 +71,20 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
               type?: string;
               payload?: { data?: string; sequence?: number };
             };
-            if (frame.type === 'ssh:input' && frame.payload?.data === 'x') return frame;
+            if (frame.type === 'terminal.input' && frame.payload?.data === 'x') return frame;
           } catch {
             /* ignore non-JSON text frames */
           }
         }
         return null;
       })
-      .toMatchObject({ type: 'ssh:input', payload: { data: 'x' } });
+      .toMatchObject({ type: 'terminal.input', payload: { data: 'x' } });
 
     let interactiveFrame: any = null;
     for (let index = sentTextFrames.length - 1; index >= 0; index -= 1) {
       try {
         const frame = JSON.parse(sentTextFrames[index]);
-        if (frame?.type === 'ssh:input' && frame?.payload?.data === 'x') {
+        if (frame?.type === 'terminal.input' && frame?.payload?.data === 'x') {
           interactiveFrame = frame;
           break;
         }
@@ -106,7 +97,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   });
 
   await step('terminal Ctrl+wheel ignores tiny direction reversals and changes only on a full step', async () => {
-    const inner = terminal.locator('.terminal-inner-container');
+    const inner = terminal.getByTestId('terminal-inner');
     const initial = Number(await terminal.getAttribute('data-font-size'));
     expect(initial).toBeGreaterThan(0);
 
@@ -157,7 +148,7 @@ test('terminal font-size wheel change persists when the session is closed before
   const terminal = page.getByTestId('terminal');
   await expect(terminal).toBeVisible({ timeout: 20_000 });
   await expect(terminal).toHaveAttribute('data-font-size', '14');
-  const inner = terminal.locator('.terminal-inner-container');
+  const inner = terminal.getByTestId('terminal-inner');
   await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
   await expect(terminal).toHaveAttribute('data-font-size', '15');
 

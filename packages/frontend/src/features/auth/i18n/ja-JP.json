@@ -1,0 +1,44 @@
+{
+  "auth": {
+    "login": {
+      "title": "ユーザーログイン",
+      "username": "ユーザー名",
+      "password": "パスワード",
+      "loginButton": "ログイン",
+      "loggingIn": "ログイン中...",
+      "twoFactorPrompt": "2段階認証コードを入力してください:",
+      "verifyButton": "検証",
+      "rememberMe": "ログイン状態を保持",
+      "loginWithPasskey": "Passkeyでログイン",
+      "captchaPrompt": "以下の認証を完了してください：",
+      "error": {
+        "captchaLoadFailed": "CAPTCHA の読み込みに失敗しました。ページをリロードしてください。",
+        "captchaRequired": "CAPTCHA を完了してください。",
+        "usernameRequiredForPasskey": "Passkey を使用するにはユーザー名が必要です。",
+        "passkeyAuthOptionsFailed": "サーバーから Passkey 認証オプションを取得できませんでした。",
+        "passkeyAuthFailed": "Passkey 認証に失敗しました。もう一度試すか、パスワードを使用してください。",
+        "generic": "ログインに失敗しました。もう一度お試しください。",
+        "twoFactorGeneric": "2段階認証に失敗しました。もう一度お試しください。"
+      },
+      "recaptchaV3Notice": "このサイトは reCAPTCHA によって保護されており、Google のプライバシーポリシーと利用規約が適用されます。"
+    },
+    "setup": {
+      "title": "初期設定",
+      "description": "最初の管理者アカウントを作成します。",
+      "username": "ユーザー名",
+      "usernamePlaceholder": "ユーザー名を入力",
+      "password": "パスワード",
+      "passwordPlaceholder": "パスワードを入力",
+      "confirmPassword": "パスワードを再入力",
+      "confirmPasswordPlaceholder": "パスワードを再入力して確認",
+      "submitButton": "アカウントを作成",
+      "settingUp": "アカウントを作成中...",
+      "success": "アカウントの作成に成功しました！ログインページにリダイレクトしています...",
+      "error": {
+        "passwordsDoNotMatch": "入力したパスワードが一致しません。",
+        "fieldsRequired": "ユーザー名とパスワードは必須です。",
+        "generic": "設定中にエラーが発生しました。サーバーログを確認してください。"
+      }
+    }
+  }
+}

@@ -32,22 +32,6 @@ export class TransfersService {
   remove(taskId: string, userId: string | number) {
     return this.tasks.remove(taskId, userId);
   }
-  // Compatibility method names for the HTTP migration.
-  initiateNewTransfer(payload: InitiateTransferPayload, userId: string | number) {
-    return this.initiate(payload, userId);
-  }
-  cancelTransferTask(taskId: string, userId: string | number) {
-    return Promise.resolve(this.cancel(taskId, userId));
-  }
-  getTransferTaskDetails(taskId: string, userId: string | number) {
-    return Promise.resolve(this.details(taskId, userId));
-  }
-  getAllTransferTasks(userId: string | number) {
-    return Promise.resolve(this.list(userId));
-  }
-  removeTransferTask(taskId: string, userId: string | number) {
-    return this.remove(taskId, userId);
-  }
   private validate(p: InitiateTransferPayload) {
     if (!Number.isInteger(p.sourceConnectionId) || p.sourceConnectionId <= 0)
       throw new Error('sourceConnectionId 无效。');

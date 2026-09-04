@@ -47,6 +47,9 @@ export class WorkspaceOperationsService {
   cancelUpload(workspaceId: string, uploadId: string) {
     return this.uploads.cancel(workspaceId, uploadId);
   }
+  abortUpload(workspaceId: string, uploadId: string, message: string) {
+    return this.uploads.abort(workspaceId, uploadId, message);
+  }
   async runTransfer(
     workspaceId: string,
     sourceWorkspaceId: string,
@@ -71,6 +74,43 @@ export class WorkspaceOperationsService {
       },
       (event) => this.events.publish(workspaceId, { type: 'transfer-event', event }),
     );
+  }
+  startTransfer(
+    workspaceId: string,
+    sourceWorkspaceId: string,
+    sourcePaths: readonly string[],
+    destinationPath: string,
+    requestId: string,
+    mode: TransferMode,
+  ): void {
+    const destination = this.sessions.require(workspaceId),
+      source = this.sessions.require(sourceWorkspaceId);
+    if (source.userId !== destination.userId) throw new Error('无权访问源 SFTP 会话。');
+    void this.transfers
+      .run(
+        {
+          requestId,
+          ownerId: workspaceId,
+          sourceOwnerId: sourceWorkspaceId,
+          sourceSessionId: source.executionSessionId,
+          destinationSessionId: destination.executionSessionId,
+          sourcePaths,
+          destinationPath,
+          mode,
+        },
+        (event) => this.events.publish(workspaceId, { type: 'transfer-event', event }),
+      )
+      .catch((error) =>
+        this.events.publish(workspaceId, {
+          type: 'transfer-event',
+          event: {
+            type: 'failed',
+            requestId,
+            mode,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        }),
+      );
   }
   copy(workspaceId: string, sources: readonly string[], destination: string, requestId: string) {
     return this.runTransfer(workspaceId, workspaceId, sources, destination, requestId, 'copy');
@@ -97,12 +137,48 @@ export class WorkspaceOperationsService {
       this.events.publish(workspaceId, { type: 'archive-event', event }),
     );
   }
+  startCompress(workspaceId: string, input: Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>): void {
+    const session = this.sessions.require(workspaceId);
+    void this.archives
+      .compress({ ...input, ownerId: workspaceId, sessionId: session.executionSessionId }, (event) =>
+        this.events.publish(workspaceId, { type: 'archive-event', event }),
+      )
+      .catch((error) =>
+        this.events.publish(workspaceId, {
+          type: 'archive-event',
+          event: {
+            type: 'failed',
+            operation: 'compress',
+            requestId: input.requestId,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        }),
+      );
+  }
   decompress(workspaceId: string, input: Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>) {
     const session = this.sessions.require(workspaceId);
     return this.archives.decompress(
       { ...input, ownerId: workspaceId, sessionId: session.executionSessionId },
       (event) => this.events.publish(workspaceId, { type: 'archive-event', event }),
     );
+  }
+  startDecompress(workspaceId: string, input: Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>): void {
+    const session = this.sessions.require(workspaceId);
+    void this.archives
+      .decompress({ ...input, ownerId: workspaceId, sessionId: session.executionSessionId }, (event) =>
+        this.events.publish(workspaceId, { type: 'archive-event', event }),
+      )
+      .catch((error) =>
+        this.events.publish(workspaceId, {
+          type: 'archive-event',
+          event: {
+            type: 'failed',
+            operation: 'decompress',
+            requestId: input.requestId,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        }),
+      );
   }
   cancelArchive(workspaceId: string, requestId: string) {
     return this.archives.cancel(workspaceId, requestId);

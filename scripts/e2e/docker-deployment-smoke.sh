@@ -163,7 +163,7 @@ const timer = setTimeout(() => {
 socket.on('connect', () => {
   const key = crypto.randomBytes(16).toString('base64');
   socket.write([
-    'GET /ws/ HTTP/1.1',
+    'GET /ws/workspace HTTP/1.1',
     `Host: 127.0.0.1:${port}`,
     `Origin: http://127.0.0.1:${port}`,
     'Connection: Upgrade',

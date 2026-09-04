@@ -8,9 +8,9 @@ const EDITED_THEME_NAME = 'E2E Custom Terminal Theme UI Edited';
 async function cleanupThemes(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/terminal-themes');
   expect(response.ok()).toBeTruthy();
-  const themes = (await response.json()) as Array<{ _id?: string; name: string; isPreset?: boolean }>;
-  for (const theme of themes.filter((item) => !item.isPreset && [THEME_NAME, EDITED_THEME_NAME].includes(item.name))) {
-    if (theme._id) expect((await request.delete(`/api/v1/terminal-themes/${theme._id}`)).ok()).toBeTruthy();
+  const themes = (await response.json()) as Array<{ id?: string; name: string; preset?: boolean }>;
+  for (const theme of themes.filter((item) => !item.preset && [THEME_NAME, EDITED_THEME_NAME].includes(item.name))) {
+    if (theme.id) expect((await request.delete(`/api/v1/terminal-themes/${theme.id}`)).ok()).toBeTruthy();
   }
 }
 
@@ -34,14 +34,21 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
 
     await step('create a custom terminal theme from the visual editor', async () => {
       await customizer.getByTestId('terminal-theme-add').click();
-      const editor = customizer.getByTestId('terminal-theme-editor');
+      const editor = page.getByTestId('terminal-theme-editor');
       await expect(editor).toBeVisible();
       await editor.getByTestId('terminal-theme-name').fill(THEME_NAME);
-      await editor
-        .getByTestId('terminal-theme-json')
-        .fill(
-          ['background: #101820', 'foreground: #f2f2f2', 'cursor: #ffcc00', 'selectionBackground: #304050'].join('\n'),
-        );
+      await editor.getByTestId('terminal-theme-json').fill(
+        JSON.stringify(
+          {
+            background: '#101820',
+            foreground: '#f2f2f2',
+            cursor: '#ffcc00',
+            selectionBackground: '#304050',
+          },
+          null,
+          2,
+        ),
+      );
 
       const createPromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/terminal-themes') && response.request().method() === 'POST',
@@ -49,7 +56,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
       await editor.getByTestId('terminal-theme-save').click();
       const create = await createPromise;
       expect(create.status()).toBe(201);
-      createdThemeId = Number(((await create.json()) as { _id?: string })._id);
+      createdThemeId = Number(((await create.json()) as { id?: string }).id);
       expect(createdThemeId).toBeGreaterThan(0);
       await expect(editor).toBeHidden({ timeout: 15_000 });
 
@@ -60,14 +67,21 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
     await step('edit updates both the theme name and colors through the same UI', async () => {
       const row = customizer.getByTestId(`terminal-theme-row-${createdThemeId}`);
       await row.getByTestId('terminal-theme-edit').click();
-      const editor = customizer.getByTestId('terminal-theme-editor');
+      const editor = page.getByTestId('terminal-theme-editor');
       await expect(editor).toBeVisible();
       await editor.getByTestId('terminal-theme-name').fill(EDITED_THEME_NAME);
-      await editor
-        .getByTestId('terminal-theme-json')
-        .fill(
-          ['background: #202830', 'foreground: #fafafa', 'cursor: #44dd88', 'selectionBackground: #405060'].join('\n'),
-        );
+      await editor.getByTestId('terminal-theme-json').fill(
+        JSON.stringify(
+          {
+            background: '#202830',
+            foreground: '#fafafa',
+            cursor: '#44dd88',
+            selectionBackground: '#405060',
+          },
+          null,
+          2,
+        ),
+      );
 
       const updatePromise = page.waitForResponse(
         (response) =>
@@ -138,7 +152,7 @@ test('custom terminal theme UI creates, edits, applies, persists, and deletes a 
     const themes = await context.request.get('/api/v1/terminal-themes');
     const availableIds = themes.ok()
       ? new Set(
-          ((await themes.json()) as Array<{ _id?: string }>).map((theme) => Number(theme._id)).filter(Number.isFinite),
+          ((await themes.json()) as Array<{ id?: string }>).map((theme) => Number(theme.id)).filter(Number.isFinite),
         )
       : new Set<number>();
     let restoreId: number | null = originalAppearance.activeTerminalThemeId ?? null;

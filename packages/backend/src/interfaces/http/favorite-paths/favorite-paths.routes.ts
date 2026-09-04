@@ -3,13 +3,14 @@ import type { FavoritePathService } from '../../../modules/favorite-paths/favori
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
+
 export const createFavoritePathsRouter = (service: FavoritePathService): Router => {
   const r = Router();
   r.use(requireAuthenticated);
   r.get(
     '/',
     route(async (q, s) => {
-      s.json(await service.list(q.query.sortBy === 'last_used_at' ? 'last_used_at' : 'name'));
+      s.json(await service.list(q.query.sortBy === 'lastUsedAt' ? 'lastUsedAt' : 'name'));
     }),
   );
   r.post(
@@ -25,7 +26,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
         return;
       }
       const id = await service.add(name, path);
-      s.status(201).json({ message: '收藏路径已添加', favoritePath: await service.get(id) });
+      const favorite = await service.get(id);
+      s.status(201).json({ message: '收藏路径已添加', favoritePath: favorite });
     }),
   );
   r.get(
@@ -56,7 +58,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
         s.status(404).json({ message: '未找到要更新上次使用时间戳的收藏路径' });
         return;
       }
-      s.json({ message: '上次使用时间戳已更新', favoritePath: await service.get(id) });
+      const favorite = await service.get(id);
+      s.json({ message: '上次使用时间戳已更新', favoritePath: favorite });
     }),
   );
   r.put(
@@ -80,7 +83,8 @@ export const createFavoritePathsRouter = (service: FavoritePathService): Router 
         s.status(404).json({ message: '未找到要更新的收藏路径' });
         return;
       }
-      s.json({ message: '收藏路径已更新', favoritePath: await service.get(id) });
+      const favorite = await service.get(id);
+      s.json({ message: '收藏路径已更新', favoritePath: favorite });
     }),
   );
   r.delete(

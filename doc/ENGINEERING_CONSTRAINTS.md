@@ -86,20 +86,15 @@ Additional module rules:
 
 ## Legacy frontend compatibility
 
-Exactly two temporary backend compatibility directories exist for the current frontend contracts:
-
-```text
-packages/backend/src/interfaces/http/legacy-api/
-packages/backend/src/interfaces/websocket/legacy-api/
-```
+The temporary Backend HTTP/WebSocket compatibility layers have been deleted after the clean frontend contracts became authoritative. Production code must not recreate `interfaces/http/legacy-api/` or `interfaces/websocket/legacy-api/`, add frontend wire-compatibility mappers for historical Nexus DTOs, or leak historical transport shapes back into Modules/Platform.
 
 Constraints:
 
-- Historical HTTP snake_case DTOs, old WebSocket message names, NXTM/NXUP framing, and other current-frontend compatibility behavior stay inside these temporary Interface adapters.
-- Modules, Platform, Infrastructure, and Bootstrap must not adopt or import legacy protocol names/shapes.
-- HTTP legacy compatibility may only be consumed by `interfaces/http`; WebSocket legacy compatibility may only be consumed by `interfaces/websocket`.
-- Permanent WebSocket transport concerns such as upgrade/auth/heartbeat and transparent remote-desktop forwarding stay outside the compatibility directory.
-- When the frontend moves to the clean contracts, each `legacy-api/` directory is deleted as a whole. The migration must not require changes to Module or Platform APIs merely to remove these adapters.
+- Frontend-owned Nexus HTTP models and Backend HTTP Interface DTOs use the clean camelCase contracts. Persistence-specific column names may remain private to repository/infrastructure boundaries.
+- WebSocket Interface code uses the clean Workspace/upload/remote-desktop protocols; historical message/framing adapters must not be reintroduced.
+- Modules, Platform, Infrastructure, and Bootstrap must not adopt historical transport names/shapes merely to emulate an old frontend contract.
+- Permanent transport concerns such as HTTP streaming, WebSocket upgrade/auth/heartbeat/backpressure, and transparent Remote Gateway forwarding remain in Interface/Platform owners as defined by the layer rules.
+- Any future compatibility for a genuinely external contract requires an explicit Interface boundary and must not recreate the deleted legacy frontend architecture.
 
 ## E2E testing
 

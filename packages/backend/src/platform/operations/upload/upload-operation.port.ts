@@ -34,7 +34,7 @@ export type UploadEvent =
   | { type: 'conflict'; uploadId: string; destinationPath: string; filename: string }
   | { type: 'skipped'; uploadId: string; destinationPath: string }
   | {
-      type: 'chunk-ack';
+      type: 'progress';
       uploadId: string;
       chunkIndex: number;
       bytesWritten: number;
@@ -50,5 +50,6 @@ export interface UploadOperation {
   start(request: UploadStartRequest, emit: (event: UploadEvent) => void): Promise<void>;
   append(request: UploadChunkRequest): Promise<void>;
   cancel(ownerId: string, uploadId: string): Promise<boolean>;
+  abort(ownerId: string, uploadId: string, message: string): Promise<boolean>;
   cancelOwner(ownerId: string): Promise<void>;
 }

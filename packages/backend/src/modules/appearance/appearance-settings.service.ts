@@ -4,17 +4,12 @@ import type { AppearanceSettings, UpdateAppearanceInput } from './appearance.typ
 import { defaultUiTheme } from './default-ui-theme';
 
 const DEFAULT_REMOTE_HTML_PRESETS_URL = 'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
-const LEGACY_REMOTE_HTML_PRESETS_URLS = new Set([
-  'https://github.com/Heavrnl/nexus-terminal/tree/main/doc/custom_html_theme',
-]);
-
 export interface TerminalThemeLookup {
   get(id: number): Promise<unknown | null>;
   findDefaultThemeId(): Promise<number | null>;
 }
 
 const defaultSettings = (): AppearanceSettings => ({
-  _id: 'global_appearance',
   customUiTheme: JSON.stringify(defaultUiTheme),
   activeTerminalThemeId: null,
   terminalFontFamily: 'Consolas, "Courier New", monospace, "Microsoft YaHei", "微软雅黑"',
@@ -27,7 +22,7 @@ const defaultSettings = (): AppearanceSettings => ({
   pageBackgroundImage: undefined,
   terminalBackgroundEnabled: true,
   terminalBackgroundOverlayOpacity: 0.5,
-  terminal_custom_html: '',
+  terminalCustomHtml: '',
   remoteHtmlPresetsUrl: DEFAULT_REMOTE_HTML_PRESETS_URL,
   windowThemeColor: '#343A40',
   terminalTextStrokeEnabled: false,
@@ -38,11 +33,14 @@ const defaultSettings = (): AppearanceSettings => ({
   terminalTextShadowOffsetY: 2,
   terminalTextShadowBlur: 0,
   terminalTextShadowColor: '#000000',
-  updatedAt: Date.now(),
 });
 
 const storageKey = (key: keyof UpdateAppearanceInput): string =>
-  key === 'remoteHtmlPresetsUrl' ? 'remote_html_presets_url' : key;
+  key === 'remoteHtmlPresetsUrl'
+    ? 'remote_html_presets_url'
+    : key === 'terminalCustomHtml'
+      ? 'terminal_custom_html'
+      : key;
 
 const serialize = (key: keyof UpdateAppearanceInput, value: UpdateAppearanceInput[typeof key]): string => {
   if (key === 'activeTerminalThemeId') return value === null || value === undefined ? 'null' : String(value);
@@ -83,7 +81,6 @@ export class AppearanceSettingsService {
     const defaults = defaultSettings();
     const values: Record<string, string> = {};
     for (const [key, value] of Object.entries(defaults)) {
-      if (key === '_id' || key === 'updatedAt') continue;
       values[storageKey(key as keyof UpdateAppearanceInput)] = serialize(
         key as keyof UpdateAppearanceInput,
         value as never,
@@ -96,11 +93,6 @@ export class AppearanceSettingsService {
       const defaultThemeId = await this.themes.findDefaultThemeId();
       if (defaultThemeId !== null) await this.repository.setMany({ activeTerminalThemeId: String(defaultThemeId) });
     }
-
-    const remote = current.remoteHtmlPresetsUrl?.trim().replace(/\/+$/, '') ?? '';
-    if (!remote || LEGACY_REMOTE_HTML_PRESETS_URLS.has(remote)) {
-      await this.repository.setMany({ remote_html_presets_url: DEFAULT_REMOTE_HTML_PRESETS_URL });
-    }
   }
 
   get(): Promise<AppearanceSettings>;
@@ -111,10 +103,8 @@ export class AppearanceSettingsService {
     const defaults = defaultSettings();
     const activeRaw = values.get('activeTerminalThemeId');
     const parsedActive = activeRaw && activeRaw !== 'null' ? Number.parseInt(activeRaw, 10) : null;
-    const latestUpdatedAt = rows.reduce((latest, row) => Math.max(latest, row.updatedAt), 0);
 
     const settings: AppearanceSettings = {
-      _id: 'global_appearance',
       customUiTheme: values.get('customUiTheme') ?? defaults.customUiTheme,
       activeTerminalThemeId: Number.isInteger(parsedActive) ? parsedActive : null,
       terminalFontFamily: values.get('terminalFontFamily') ?? defaults.terminalFontFamily,
@@ -134,9 +124,8 @@ export class AppearanceSettingsService {
         values.get('terminalBackgroundOverlayOpacity'),
         defaults.terminalBackgroundOverlayOpacity,
       ),
-      terminal_custom_html: values.get('terminal_custom_html') ?? defaults.terminal_custom_html,
-      remoteHtmlPresetsUrl:
-        values.get('remote_html_presets_url') || values.get('remoteHtmlPresetsUrl') || defaults.remoteHtmlPresetsUrl,
+      terminalCustomHtml: values.get('terminal_custom_html') ?? defaults.terminalCustomHtml,
+      remoteHtmlPresetsUrl: values.get('remote_html_presets_url') || defaults.remoteHtmlPresetsUrl,
       windowThemeColor: values.get('windowThemeColor') ?? defaults.windowThemeColor,
       terminalTextStrokeEnabled: values.has('terminalTextStrokeEnabled')
         ? values.get('terminalTextStrokeEnabled') === 'true'
@@ -156,7 +145,6 @@ export class AppearanceSettingsService {
       ),
       terminalTextShadowBlur: parseNumber(values.get('terminalTextShadowBlur'), defaults.terminalTextShadowBlur),
       terminalTextShadowColor: values.get('terminalTextShadowColor') ?? defaults.terminalTextShadowColor,
-      updatedAt: latestUpdatedAt || defaults.updatedAt,
     };
 
     if (cleanBackgroundReferences) await this.clearMissingBackgroundReferences(settings);
@@ -210,8 +198,8 @@ export class AppearanceSettingsService {
         1,
       );
     }
-    if (input.terminal_custom_html !== undefined) {
-      if (typeof input.terminal_custom_html !== 'string' || input.terminal_custom_html.length > 10_240) {
+    if (input.terminalCustomHtml !== undefined) {
+      if (typeof input.terminalCustomHtml !== 'string' || input.terminalCustomHtml.length > 10_240) {
         throw new Error('自定义终端 HTML 过长或格式无效，最多允许 10240 个字符。');
       }
     }

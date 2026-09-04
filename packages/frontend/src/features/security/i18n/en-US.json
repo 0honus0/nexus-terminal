@@ -1,0 +1,147 @@
+{
+  "settings": {
+    "changePassword": {
+      "title": "Change Password",
+      "currentPassword": "Current Password:",
+      "newPassword": "New Password:",
+      "confirmPassword": "Confirm New Password:",
+      "submit": "Change Password",
+      "success": "Password changed successfully!",
+      "error": {
+        "passwordsDoNotMatch": "New password and confirmation do not match.",
+        "generic": "Failed to change password. Please try again later.",
+        "fieldsRequired": "Please fill in all password fields."
+      }
+    },
+    "twoFactor": {
+      "title": "Two-Factor Authentication (TOTP)",
+      "status": {
+        "enabled": "Two-factor authentication is enabled.",
+        "disabled": "Two-factor authentication is currently disabled."
+      },
+      "enable": {
+        "button": "Enable Two-Factor Authentication"
+      },
+      "setup": {
+        "scanQrCode": "Scan the QR code below with your authenticator app:",
+        "orEnterSecret": "Or manually enter the secret key:",
+        "enterCode": "Enter the 6-digit code from your authenticator app:",
+        "verifyButton": "Verify & Activate"
+      },
+      "disable": {
+        "button": "Disable Two-Factor Authentication",
+        "passwordPrompt": "Enter your current password to confirm disabling:"
+      },
+      "success": {
+        "activated": "Two-factor authentication activated successfully!",
+        "disabled": "Two-factor authentication disabled successfully."
+      },
+      "error": {
+        "setupFailed": "Failed to get two-factor setup information.",
+        "codeRequired": "Please enter the verification code.",
+        "verificationFailed": "Invalid or expired verification code.",
+        "passwordRequiredForDisable": "Current password is required to disable.",
+        "disableFailed": "Failed to disable two-factor authentication."
+      },
+      "qrCodeAlt": "Two-factor authentication QR code"
+    },
+    "ipWhitelist": {
+      "title": "IP Whitelist Management",
+      "description": "Configure allowed IP addresses or ranges to access this application. Leave empty to allow all IPs.",
+      "label": "Allowed IP Addresses/Ranges (one per line or comma-separated):",
+      "hint": "Supports IPv4, IPv6, and CIDR (e.g., 192.168.1.100, 10.0.0.0/8, 2001:db8::/32).",
+      "saveButton": "Save Whitelist",
+      "success": {
+        "saved": "IP whitelist saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save IP whitelist."
+      },
+      "enableLabel": "Enable IP whitelist",
+      "enabled": "Enable IP whitelist"
+    },
+    "passkey": {
+      "title": "Passkey Management",
+      "description": "Use Passkeys (biometrics or security keys) for passwordless authentication.",
+      "nameLabel": "Passkey Name",
+      "namePlaceholder": "e.g., My Laptop",
+      "registerNewButton": "Register New Passkey",
+      "registeredKeysTitle": "Registered Passkeys",
+      "unnamedKey": "Unnamed Passkey",
+      "createdDate": "Created",
+      "lastUsedDate": "Last Used",
+      "noKeysRegistered": "No Passkeys registered yet.",
+      "confirmDelete": "Are you sure you want to delete this Passkey? This action cannot be undone.",
+      "error": {
+        "nameRequired": "Please enter a Passkey name.",
+        "cancelled": "Passkey registration was cancelled by the user.",
+        "genericRegistration": "Could not register Passkey: {message}",
+        "verificationFailed": "Registration failed: {message}",
+        "userNotLoggedIn": "User not logged in or username unavailable.",
+        "registrationCancelled": "Passkey registration was cancelled.",
+        "registrationFailed": "Passkey registration failed.",
+        "deleteFailedGeneral": "Failed to delete Passkey. Please try again.",
+        "fetchFailed": "Failed to load Passkeys.",
+        "nameUpdateFailed": "Failed to update Passkey name."
+      },
+      "success": {
+        "registered": "New Passkey registered successfully!",
+        "deleted": "Passkey deleted successfully.",
+        "nameUpdated": "Passkey name updated."
+      }
+    },
+    "ipBlacklist": {
+      "title": "IP Blacklist Management",
+      "description": "Configure login attempt limits and automatic ban duration. Local addresses (127.0.0.1, ::1) will not be banned.",
+      "maxAttemptsLabel": "Max Failed Attempts:",
+      "banDurationLabel": "Ban Duration (seconds):",
+      "saveConfigButton": "Save Configuration",
+      "currentBannedTitle": "Currently Banned IP Addresses",
+      "loadingList": "Loading blacklist...",
+      "noBannedIps": "No IP addresses are currently in the blacklist.",
+      "confirmRemoveIp": "Are you sure you want to remove the IP address \"{ip}\" from the blacklist?",
+      "table": {
+        "ipAddress": "IP Address",
+        "attempts": "Attempts",
+        "lastAttempt": "Last Attempt",
+        "bannedUntil": "Banned Until",
+        "actions": "Actions",
+        "removeButton": "Remove",
+        "deleting": "Deleting..."
+      },
+      "success": {
+        "configUpdated": "Blacklist configuration updated successfully."
+      },
+      "error": {
+        "fetchFailed": "Failed to fetch blacklist",
+        "deleteFailed": "Failed to delete",
+        "invalidMaxAttempts": "Max failed attempts must be a positive integer.",
+        "invalidBanDuration": "Ban duration must be a positive integer (seconds).",
+        "updateConfigFailed": "Failed to update blacklist configuration"
+      }
+    },
+    "captcha": {
+      "title": "CAPTCHA Settings",
+      "description": "Configure CAPTCHA verification for the login page to prevent automated attacks.",
+      "enableLabel": "Enable CAPTCHA on Login Page",
+      "providerLabel": "CAPTCHA Provider:",
+      "providerNone": "None (Disabled)",
+      "hcaptchaHint": "Get keys from",
+      "recaptchaHint": "Get keys from",
+      "siteKeyLabel": "Site Key (Public):",
+      "secretKeyLabel": "Secret Key (Private):",
+      "secretKeyHint": "Keep this secret. It is stored securely on the server.",
+      "saveButton": "Save CAPTCHA Settings",
+      "success": {
+        "saved": "CAPTCHA settings saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save CAPTCHA settings.",
+        "hcaptchaKeysRequired": "hCaptcha Site Key and Secret Key are required for verification.",
+        "recaptchaKeysRequired": "reCAPTCHA Site Key and Secret Key are required for verification.",
+        "verificationFailed": "CAPTCHA credential verification failed. Please check your Site Key and Secret Key.",
+        "loadFailed": "Failed to load CAPTCHA settings."
+      }
+    }
+  }
+}

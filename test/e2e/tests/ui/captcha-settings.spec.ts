@@ -32,7 +32,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-security').click();
+    await page.getByRole('tab', { name: 'Security', exact: true }).click();
     const captcha = page.getByTestId('captcha-settings');
     await expect(captcha).toBeVisible();
     await expect(page.getByTestId('change-password-settings')).toBeVisible();
@@ -60,7 +60,7 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
 
     await step('reload keeps the saved provider visible without exposing the secret', async () => {
       await page.reload();
-      await page.getByTestId('settings-tab-security').click();
+      await page.getByRole('tab', { name: 'Security', exact: true }).click();
       const reloaded = page.getByTestId('captcha-settings');
       await expect(reloaded.getByTestId('captcha-enabled')).toBeChecked();
       await expect(reloaded.getByTestId('captcha-provider')).toHaveValue('hcaptcha');

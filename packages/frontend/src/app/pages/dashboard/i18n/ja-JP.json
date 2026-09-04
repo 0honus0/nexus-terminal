@@ -1,0 +1,61 @@
+{
+  "dashboard": {
+    "recentConnections": "最近の接続",
+    "lastConnected": "最終接続:",
+    "noRecentConnections": "最近の接続記録はありません",
+    "viewAllConnections": "すべての接続を表示",
+    "recentActivity": "最近のアクティビティ",
+    "noRecentActivity": "最近のアクティビティ記録はありません",
+    "viewFullAuditLog": "完全な監査ログを表示",
+    "connectionList": "接続リスト",
+    "noConnections": "接続記録がありません",
+    "sortOptions": {
+      "lastConnected": "最終接続",
+      "name": "名前",
+      "type": "タイプ",
+      "updated": "更新日時",
+      "created": "作成日時"
+    },
+    "filterTags": {
+      "all": "すべてのタグ"
+    },
+    "noConnectionsWithTag": "このタグには接続記録がありません",
+    "noConnectionsMatchSearch": "検索条件に一致する接続はありません。",
+    "searchConnectionsPlaceholder": "接続を検索...",
+    "subtitle": "リモート接続をすばやく確認して開始します",
+    "totalConnections": "接続総数",
+    "usedConnections": "接続履歴あり",
+    "tagCount": "タグ数",
+    "quickConnect": "クイック接続",
+    "quickConnectHint": "接続を検索してすぐに開始",
+    "filterByTag": "タグで絞り込み",
+    "sortBy": "並び順",
+    "manageHint": "接続の追加・編集・一括管理は接続管理で行えます",
+    "recentActivityHint": "最近の監査イベント",
+    "workspaceLabel": "リモートワークスペース",
+    "latestConnection": "最近の接続",
+    "reconnect": "再接続",
+    "protocolDistribution": "接続タイプ",
+    "tagOverview": "タグ概要",
+    "noTags": "タグはありません",
+    "resources": {
+      "title": "システムリソース",
+      "hint": "Nexus ホストと設定済み SSH ホスト",
+      "sshTitle": "SSH リソース",
+      "sshHint": "設定済み SSH ホストの低頻度リソーススナップショット",
+      "live": "リアルタイム",
+      "snapshot": "{seconds}秒更新",
+      "local": "Nexus ホスト",
+      "remote": "リモートホスト",
+      "cpu": "CPU",
+      "memory": "メモリ",
+      "disk": "ルートディスク",
+      "connected": "接続済み",
+      "waiting": "データ待機中",
+      "unavailable": "リソースデータを取得できません",
+      "noRemoteSessions": "設定済み SSH ホストはありません",
+      "remoteSession": "アクティブな SSH セッション",
+      "moreHosts": "他に {count} 台のアクティブホスト"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "dashboard": {
+    "recentConnections": "最近连接",
+    "lastConnected": "上次连接:",
+    "noRecentConnections": "没有最近连接记录",
+    "viewAllConnections": "查看所有连接",
+    "recentActivity": "最近活动",
+    "noRecentActivity": "没有最近活动记录",
+    "viewFullAuditLog": "查看完整审计日志",
+    "connectionList": "连接列表",
+    "noConnections": "没有连接记录",
+    "sortOptions": {
+      "lastConnected": "最近连接",
+      "name": "名称",
+      "type": "类型",
+      "updated": "修改时间",
+      "created": "创建时间"
+    },
+    "filterTags": {
+      "all": "所有标签"
+    },
+    "noConnectionsWithTag": "该标签下没有连接记录",
+    "noConnectionsMatchSearch": "没有连接匹配搜索条件",
+    "searchConnectionsPlaceholder": "搜索连接...",
+    "subtitle": "快速查看并进入你的远程连接",
+    "totalConnections": "连接总数",
+    "usedConnections": "已有连接记录",
+    "tagCount": "标签数量",
+    "quickConnect": "快速连接",
+    "quickConnectHint": "查找连接并直接进入终端",
+    "filterByTag": "按标签筛选",
+    "sortBy": "排序方式",
+    "manageHint": "连接的新增、编辑和批量管理请前往连接管理",
+    "recentActivityHint": "最近的审计事件",
+    "workspaceLabel": "远程工作台",
+    "latestConnection": "最近连接",
+    "reconnect": "重新连接",
+    "protocolDistribution": "连接类型",
+    "tagOverview": "标签概览",
+    "noTags": "暂无标签",
+    "resources": {
+      "title": "系统资源",
+      "hint": "Nexus 本机与已配置 SSH 主机",
+      "sshTitle": "SSH 资源",
+      "sshHint": "已配置 SSH 主机的低频资源快照",
+      "live": "实时",
+      "snapshot": "{seconds} 秒刷新",
+      "local": "Nexus 本机",
+      "remote": "远程主机",
+      "cpu": "CPU",
+      "memory": "内存",
+      "disk": "根磁盘",
+      "connected": "已连接",
+      "waiting": "等待数据",
+      "unavailable": "资源数据暂不可用",
+      "noRemoteSessions": "当前没有已配置 SSH 主机",
+      "remoteSession": "活动 SSH 会话",
+      "moreHosts": "另有 {count} 台活动主机"
+    }
+  }
+}

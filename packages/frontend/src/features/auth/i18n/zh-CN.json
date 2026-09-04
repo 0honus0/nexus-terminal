@@ -1,0 +1,44 @@
+{
+  "auth": {
+    "login": {
+      "title": "用户登录",
+      "username": "用户名",
+      "password": "密码",
+      "loginButton": "登录",
+      "loggingIn": "正在登录...",
+      "twoFactorPrompt": "请输入两步验证码:",
+      "verifyButton": "验证",
+      "rememberMe": "记住我",
+      "loginWithPasskey": "使用 Passkey 登录",
+      "captchaPrompt": "请完成下方的验证：",
+      "error": {
+        "captchaLoadFailed": "加载 CAPTCHA 失败，请尝试刷新页面。",
+        "captchaRequired": "请完成 CAPTCHA 验证。",
+        "usernameRequiredForPasskey": "使用 Passkey 需要输入用户名。",
+        "passkeyAuthOptionsFailed": "从服务器获取 Passkey 认证选项失败。",
+        "passkeyAuthFailed": "Passkey 认证失败。请重试或使用密码登录。",
+        "generic": "登录失败，请重试。",
+        "twoFactorGeneric": "两步验证失败，请重试。"
+      },
+      "recaptchaV3Notice": "此网站受 reCAPTCHA 保护，并适用 Google 隐私政策和服务条款。"
+    },
+    "setup": {
+      "title": "初始设置",
+      "description": "创建第一个管理员账号。",
+      "username": "用户名",
+      "usernamePlaceholder": "输入用户名",
+      "password": "密码",
+      "passwordPlaceholder": "输入密码",
+      "confirmPassword": "确认密码",
+      "confirmPasswordPlaceholder": "再次输入密码确认",
+      "submitButton": "创建账号",
+      "settingUp": "正在创建账号...",
+      "success": "账号创建成功！正在跳转到登录页面...",
+      "error": {
+        "passwordsDoNotMatch": "两次输入的密码不一致。",
+        "fieldsRequired": "用户名和密码不能为空。",
+        "generic": "设置过程中发生错误，请检查服务器日志。"
+      }
+    }
+  }
+}

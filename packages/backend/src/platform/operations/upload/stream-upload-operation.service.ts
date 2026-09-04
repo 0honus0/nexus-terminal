@@ -157,6 +157,11 @@ export class StreamUploadOperationService implements UploadOperation {
       if (this.active.get(key) !== upload || upload.cancelled) return;
       void this.fail(upload, `Upload stream failed: ${error.message}`);
     });
+    if (request.size === 0) {
+      upload.receivedLastChunk = true;
+      await this.complete(upload);
+      return;
+    }
     emit({ type: 'ready', uploadId: request.uploadId });
   }
 
@@ -176,6 +181,13 @@ export class StreamUploadOperationService implements UploadOperation {
     upload.stream.destroy();
     await upload.filesystem.removeFile(upload.temporaryPath, { ignoreMissing: true }).catch(() => undefined);
     upload.emit({ type: 'cancelled', uploadId });
+    return true;
+  }
+
+  async abort(ownerId: string, uploadId: string, message: string): Promise<boolean> {
+    const upload = this.active.get(this.uploadKey(ownerId, uploadId));
+    if (!upload) return false;
+    await this.fail(upload, message);
     return true;
   }
 
@@ -232,7 +244,7 @@ export class StreamUploadOperationService implements UploadOperation {
     if (upload.cancelled || this.active.get(upload.key) !== upload) return;
     upload.bytesWritten += data.length;
     upload.emit({
-      type: 'chunk-ack',
+      type: 'progress',
       uploadId: upload.uploadId,
       chunkIndex: request.chunkIndex,
       bytesWritten: upload.bytesWritten,

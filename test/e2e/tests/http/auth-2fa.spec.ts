@@ -30,7 +30,7 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
     expect(status.ok()).toBeTruthy();
     await expect(status.json()).resolves.toMatchObject({
       isAuthenticated: true,
-      user: { username: E2E_ADMIN.username, isTwoFactorEnabled: true },
+      user: { username: E2E_ADMIN.username, twoFactorEnabled: true },
     });
   });
 
@@ -73,7 +73,7 @@ test('2FA can be enabled, required at login, verified, and disabled', async ({ r
     const status = await request.get('/api/v1/auth/status');
     expect(status.ok()).toBeTruthy();
     await expect(status.json()).resolves.toMatchObject({
-      user: { username: E2E_ADMIN.username, isTwoFactorEnabled: false },
+      user: { username: E2E_ADMIN.username, twoFactorEnabled: false },
     });
   });
 });

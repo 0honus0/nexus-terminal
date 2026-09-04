@@ -1,19 +1,17 @@
 import { Router } from 'express';
 import multer from 'multer';
 import type { ConnectionExportService } from '../../../modules/connections/connection-export.service';
+import type {
+  CreateConnectionInput,
+  UnsavedSshConnectionInput,
+  UpdateConnectionInput,
+} from '../../../modules/connections/connection.types';
 import type { ConnectionService } from '../../../modules/connections/connection.service';
 import type { SshConnectionTestService } from '../../../modules/connections/services/ssh-connection-test.service';
 import type { ProxyService } from '../../../modules/proxies/proxy.service';
 import type { RemoteDesktopSessionService } from '../../../modules/remote-desktop/remote-desktop-session.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
-import {
-  fromLegacyConnectionCreateDto,
-  fromLegacyConnectionUpdateDto,
-  fromLegacyUnsavedSshConnectionDto,
-  toLegacyConnectionDto,
-  type LegacyConnectionWriteDto,
-} from '../legacy-api/connection-http.mapper';
-import { importLegacyConnections } from '../legacy-api/connection-import.compat';
+import { importConnections } from './connection-import';
 import { errorMessage, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
@@ -80,7 +78,7 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         return;
       }
       try {
-        const result = await importLegacyConnections(request.file.buffer, {
+        const result = await importConnections(request.file.buffer, {
           connections: dependencies.connections,
           proxies: dependencies.proxies,
         });
@@ -101,24 +99,35 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.post(
     '/test-unsaved',
     route(async (request, response) => {
-      const body = request.body as LegacyConnectionWriteDto;
-      if (!body?.host || !body.port || !body.username || !body.auth_method) {
+      const body = request.body as Partial<CreateConnectionInput>;
+      if (!body?.host || !Number.isInteger(body.port) || !body.username || !body.authMethod) {
         response
           .status(400)
-          .json({ success: false, message: '缺少必要的连接信息 (host, port, username, auth_method)。' });
+          .json({ success: false, message: '缺少必要的连接信息 (host, port, username, authMethod)。' });
         return;
       }
-      if (body.auth_method === 'password' && body.password === undefined) {
+      if (body.authMethod === 'password' && body.password === undefined) {
         response.status(400).json({ success: false, message: '密码认证方式需要提供 password 字段 (可以为空字符串)。' });
         return;
       }
-      if (body.auth_method === 'key' && !body.ssh_key_id && !body.private_key) {
-        response.status(400).json({ success: false, message: '密钥认证方式需要提供 ssh_key_id 或 private_key。' });
+      if (body.authMethod === 'key' && !body.sshKeyId && !body.privateKey) {
+        response.status(400).json({ success: false, message: '密钥认证方式需要提供 sshKeyId 或 privateKey。' });
         return;
       }
-      const input = fromLegacyUnsavedSshConnectionDto(body);
-      if (!Number.isInteger(input.port) || input.port <= 0) {
-        response.status(400).json({ success: false, message: '端口号必须是有效的数字。' });
+      const port = body.port as number;
+      const input: UnsavedSshConnectionInput = {
+        host: body.host,
+        port,
+        username: body.username,
+        authMethod: body.authMethod,
+        password: body.password,
+        privateKey: body.sshKeyId ? undefined : body.privateKey,
+        passphrase: body.sshKeyId ? undefined : body.passphrase,
+        sshKeyId: body.sshKeyId ?? null,
+        proxyId: body.proxyId ?? null,
+      };
+      if (input.port <= 0 || input.port > 65535) {
+        response.status(400).json({ success: false, message: '端口号必须是 1-65535。' });
         return;
       }
       if (input.proxyId !== null && input.proxyId !== undefined && !Number.isInteger(input.proxyId)) {
@@ -141,14 +150,14 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.post(
     '/add-tag',
     route(async (request, response) => {
-      const connectionIds = request.body?.connection_ids;
-      const tagId = request.body?.tag_id;
+      const connectionIds = request.body?.connectionIds;
+      const tagId = request.body?.tagId;
       if (!Array.isArray(connectionIds) || connectionIds.length === 0 || !connectionIds.every(Number.isInteger)) {
-        response.status(400).json({ message: 'connection_ids 必须是一个非空数字数组。' });
+        response.status(400).json({ message: 'connectionIds 必须是一个非空数字数组。' });
         return;
       }
       if (!Number.isInteger(tagId) || tagId <= 0) {
-        response.status(400).json({ message: 'tag_id 必须是一个有效的正整数。' });
+        response.status(400).json({ message: 'tagId 必须是一个有效的正整数。' });
         return;
       }
       try {
@@ -164,21 +173,21 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json((await dependencies.connections.list()).map(toLegacyConnectionDto));
+      response.json(await dependencies.connections.list());
     }),
   );
 
   router.post(
     '/',
     route(async (request, response) => {
-      const body = request.body as LegacyConnectionWriteDto;
+      const body = request.body as CreateConnectionInput;
       if (!body || typeof body !== 'object' || !body.type || !body.host || !body.username) {
         response.status(400).json({ message: '缺少必要的连接信息 (type, host, username)。' });
         return;
       }
       try {
-        const created = await dependencies.connections.create(fromLegacyConnectionCreateDto(body));
-        response.status(201).json({ message: '连接创建成功。', connection: toLegacyConnectionDto(created) });
+        const created = await dependencies.connections.create(body);
+        response.status(201).json({ message: '连接创建成功。', connection: created });
       } catch (error) {
         const message = errorMessage(error);
         response.status(statusForConnectionError(message)).json({ message });
@@ -276,7 +285,7 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
       }
       try {
         const cloned = await dependencies.connections.clone(id, name);
-        response.status(201).json({ message: '连接克隆成功。', connection: toLegacyConnectionDto(cloned) });
+        response.status(201).json({ message: '连接克隆成功。', connection: cloned });
       } catch (error) {
         const message = errorMessage(error);
         response.status(statusForConnectionError(message)).json({ message });
@@ -297,7 +306,7 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         response.status(404).json({ message: '连接未找到。' });
         return;
       }
-      response.json(toLegacyConnectionDto(connection));
+      response.json(connection);
     }),
   );
 
@@ -310,12 +319,12 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         return;
       }
       try {
-        const updated = await dependencies.connections.update(id, fromLegacyConnectionUpdateDto(request.body ?? {}));
+        const updated = await dependencies.connections.update(id, (request.body ?? {}) as UpdateConnectionInput);
         if (!updated) {
           response.status(404).json({ message: '连接未找到。' });
           return;
         }
-        response.json({ message: '连接更新成功。', connection: toLegacyConnectionDto(updated) });
+        response.json({ message: '连接更新成功。', connection: updated });
       } catch (error) {
         const message = errorMessage(error);
         response.status(statusForConnectionError(message)).json({ message });

@@ -72,7 +72,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
   await slowStep('clicking the filtered history entry re-runs it in the same SSH terminal', async () => {
     const rowA = historyView.locator('li[data-history-id]').filter({ hasText: 'HISTORY_MANAGED_A' }).first();
     const before = markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A');
-    await rowA.click();
+    await rowA.getByTestId('command-history-execute').click();
     await expect
       .poll(async () => markerCount(await terminalRows.innerText(), 'HISTORY_MANAGED_A'), { timeout: 15_000 })
       .toBeGreaterThan(before);

@@ -2,13 +2,53 @@ import { pipeline } from 'node:stream/promises';
 import { Router } from 'express';
 import multer from 'multer';
 import type { AppearanceSettingsService } from '../../../modules/appearance/appearance-settings.service';
+import type { UpdateAppearanceInput } from '../../../modules/appearance/appearance.types';
 import type { BackgroundAssetService } from '../../../modules/appearance/background-asset.service';
 import type { HtmlThemeService } from '../../../modules/appearance/html-theme.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
-import { errorMessage } from '../shared/http-utils';
+import { errorMessage, isRecord } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const backgroundUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+const appearanceKeys = new Set<keyof UpdateAppearanceInput>([
+  'customUiTheme',
+  'activeTerminalThemeId',
+  'terminalFontFamily',
+  'terminalFontSize',
+  'terminalFontSizeMobile',
+  'editorFontSize',
+  'editorFontFamily',
+  'mobileEditorFontSize',
+  'terminalBackgroundImage',
+  'pageBackgroundImage',
+  'terminalBackgroundEnabled',
+  'terminalBackgroundOverlayOpacity',
+  'terminalCustomHtml',
+  'remoteHtmlPresetsUrl',
+  'windowThemeColor',
+  'terminalTextStrokeEnabled',
+  'terminalTextStrokeWidth',
+  'terminalTextStrokeColor',
+  'terminalTextShadowEnabled',
+  'terminalTextShadowOffsetX',
+  'terminalTextShadowOffsetY',
+  'terminalTextShadowBlur',
+  'terminalTextShadowColor',
+]);
+
+const appearanceUpdateInput = (body: unknown): UpdateAppearanceInput => {
+  if (!isRecord(body)) throw new Error('请求体必须是对象。');
+  const input = Object.fromEntries(
+    Object.entries(body).filter(([key]) => appearanceKeys.has(key as keyof UpdateAppearanceInput)),
+  ) as UpdateAppearanceInput;
+  if (body.terminalCustomHtml !== undefined) {
+    if (body.terminalCustomHtml !== null && typeof body.terminalCustomHtml !== 'string')
+      throw new Error('terminalCustomHtml 必须是字符串或 null。');
+    input.terminalCustomHtml = body.terminalCustomHtml ?? '';
+  }
+  return input;
+};
 
 export const createAppearanceRouter = (dependencies: {
   appearance: AppearanceSettingsService;
@@ -27,7 +67,7 @@ export const createAppearanceRouter = (dependencies: {
     '/',
     route(async (request, response) => {
       try {
-        response.json(await dependencies.appearance.update(request.body ?? {}));
+        response.json(await dependencies.appearance.update(appearanceUpdateInput(request.body)));
       } catch (error) {
         response.status(400).json({ message: '更新外观设置失败', error: errorMessage(error) });
       }

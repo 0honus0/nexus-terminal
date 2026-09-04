@@ -1,0 +1,44 @@
+{
+  "auth": {
+    "login": {
+      "title": "User Login",
+      "username": "Username",
+      "password": "Password",
+      "loginButton": "Login",
+      "loggingIn": "Logging in...",
+      "twoFactorPrompt": "Enter your two-factor authentication code:",
+      "verifyButton": "Verify",
+      "rememberMe": "Remember Me",
+      "loginWithPasskey": "Login with Passkey",
+      "captchaPrompt": "Please complete the verification below:",
+      "error": {
+        "captchaLoadFailed": "Failed to load CAPTCHA. Please try refreshing.",
+        "captchaRequired": "Please complete the CAPTCHA verification.",
+        "usernameRequiredForPasskey": "Username is required to use a passkey.",
+        "passkeyAuthOptionsFailed": "Failed to get passkey authentication options from the server.",
+        "passkeyAuthFailed": "Passkey authentication failed. Please try again or use your password.",
+        "generic": "Login failed. Please try again.",
+        "twoFactorGeneric": "Two-factor verification failed. Please try again."
+      },
+      "recaptchaV3Notice": "This site is protected by reCAPTCHA and the Google Privacy Policy and Terms of Service apply."
+    },
+    "setup": {
+      "title": "Initial Setup",
+      "description": "Create the first administrator account.",
+      "username": "Username",
+      "usernamePlaceholder": "Enter username",
+      "password": "Password",
+      "passwordPlaceholder": "Enter password",
+      "confirmPassword": "Confirm Password",
+      "confirmPasswordPlaceholder": "Confirm your password",
+      "submitButton": "Create Account",
+      "settingUp": "Creating account...",
+      "success": "Account created successfully! Redirecting to login...",
+      "error": {
+        "passwordsDoNotMatch": "Passwords do not match.",
+        "fieldsRequired": "Username and password are required.",
+        "generic": "An error occurred during setup. Please check the server logs."
+      }
+    }
+  }
+}

@@ -23,7 +23,7 @@ async function createConnection(request: APIRequestContext, name: string): Promi
       host: E2E_SSH.host,
       port: E2E_SSH.port,
       username: E2E_SSH.username,
-      auth_method: 'password',
+      authMethod: 'password',
       password: E2E_SSH.password,
     },
   });
@@ -51,6 +51,7 @@ test('batch connection edit applies one advanced change to multiple saved connec
       const modal = page.getByTestId('batch-edit-modal');
       await expect(modal).toBeVisible();
       await modal.getByTestId('batch-edit-advanced-toggle').check();
+      await modal.getByTestId('batch-edit-notes-toggle').check();
       await modal.locator('#batch-notes').fill(NOTES);
       await modal.getByTestId('batch-edit-save').click();
       await expect(modal).toBeHidden({ timeout: 15_000 });

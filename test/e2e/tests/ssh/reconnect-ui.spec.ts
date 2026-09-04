@@ -17,19 +17,40 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
   const connectionId = await ensureTestSshConnection(context.request);
 
   let openedWebSockets = 0;
-  let closedWebSockets = 0;
-  let sshConnectedFrames = 0;
+  let workspaceConnectRequests = 0;
+  let workspaceConnectResponses = 0;
+  const pendingWorkspaceConnectRequests = new Set<string>();
   page.on('websocket', (socket) => {
     if (!new URL(socket.url()).pathname.startsWith('/ws')) return;
     openedWebSockets += 1;
-    socket.on('close', () => {
-      closedWebSockets += 1;
+    socket.on('framesent', (event) => {
+      if (typeof event.payload !== 'string') return;
+      try {
+        const message = JSON.parse(event.payload) as { type?: string; requestId?: string };
+        if (message.type === 'workspace.connect' && message.requestId) {
+          workspaceConnectRequests += 1;
+          pendingWorkspaceConnectRequests.add(message.requestId);
+        }
+      } catch {
+        // Ignore non-JSON frames.
+      }
     });
     socket.on('framereceived', (event) => {
       if (typeof event.payload !== 'string') return;
       try {
-        const message = JSON.parse(event.payload) as { type?: string };
-        if (message.type === 'ssh:connected') sshConnectedFrames += 1;
+        const message = JSON.parse(event.payload) as {
+          type?: string;
+          requestId?: string;
+          payload?: { ok?: boolean };
+        };
+        if (
+          message.type === 'response' &&
+          message.requestId &&
+          message.payload?.ok === true &&
+          pendingWorkspaceConnectRequests.delete(message.requestId)
+        ) {
+          workspaceConnectResponses += 1;
+        }
       } catch {
         // Ignore non-JSON frames; terminal output is normally binary.
       }
@@ -45,38 +66,37 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
     await expect(terminal).toBeVisible({ timeout: 20_000 });
     await expect(xtermInput).toBeAttached();
     await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
-    await expect.poll(() => sshConnectedFrames, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
   });
 
-  const initialWebSocketCount = openedWebSockets;
-  const initialConnectedCount = sshConnectedFrames;
+  const initialConnectRequestCount = workspaceConnectRequests;
+  const initialConnectedCount = workspaceConnectResponses;
 
   try {
     await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
       await setTestSshOnline(false);
 
-      // First reconnect is scheduled after 2s. Because the SSH listener is offline,
-      // that WebSocket fails and the next reconnect is scheduled after 4s. Seeing
-      // two fresh frontend WebSockets proves the retry loop continues beyond one shot.
-      await expect.poll(() => openedWebSockets, { timeout: 9_000 }).toBeGreaterThanOrEqual(initialWebSocketCount + 2);
-
-      // Wait until the second failed reconnect WebSocket has actually closed. The next
-      // automatic attempt is now in its 8s backoff window, which gives the keypress test
-      // a deterministic window in which it must beat the timer.
-      await expect.poll(() => closedWebSockets, { timeout: 4_000 }).toBeGreaterThanOrEqual(initialWebSocketCount + 2);
+      // First reconnect is scheduled after 2s and the next after 4s. The clean Workspace
+      // transport may reuse the same already-open /ws/workspace control socket after an
+      // SSH-level connect failure, so business reconnect attempts are counted by their
+      // workspace.connect requests rather than by forcing a new WebSocket per attempt.
+      await expect
+        .poll(() => workspaceConnectRequests, { timeout: 12_000 })
+        .toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
     });
 
     await step('any terminal key interrupts backoff and reconnects immediately', async () => {
       await setTestSshOnline(true);
-      const beforeKeypress = openedWebSockets;
+      const beforeKeypress = workspaceConnectRequests;
 
       await xtermInput.focus();
       await page.keyboard.press('x');
 
-      // The scheduled retry is 8s away. A new WebSocket within 2.5s therefore has to
-      // come from reconnectNow(), which is driven by the terminal keypress.
-      await expect.poll(() => openedWebSockets, { timeout: 2_500 }).toBeGreaterThan(beforeKeypress);
-      await expect.poll(() => sshConnectedFrames, { timeout: 5_000 }).toBeGreaterThan(initialConnectedCount);
+      // The scheduled retry is still in backoff. A fresh workspace.connect request
+      // within 2.5s therefore comes from reconnectNow(), even when the control socket
+      // itself is intentionally reused.
+      await expect.poll(() => workspaceConnectRequests, { timeout: 2_500 }).toBeGreaterThan(beforeKeypress);
+      await expect.poll(() => workspaceConnectResponses, { timeout: 5_000 }).toBeGreaterThan(initialConnectedCount);
 
       await commandInput.fill("printf 'NEXUS_RECONNECTED_E2E\\n'");
       await commandInput.press('Enter');

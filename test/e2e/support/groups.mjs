@@ -84,15 +84,15 @@ function familyFor(spec) {
   }
   if (project !== 'ssh') return project;
 
-  if (/^(file-manager|file-preview)/.test(filename)) return 'ssh:file-manager';
-  if (/^(file-upload|cross-session-transfer)/.test(filename)) return 'ssh:file-transfer';
-  if (/^progress-display/.test(filename)) return 'ssh:progress';
-  if (/^(quick-command|command-history)/.test(filename)) return 'ssh:commands';
-  if (/^(connection|reconnect)/.test(filename)) return 'ssh:connections';
-  if (/^(terminal|panel-wheel)/.test(filename)) return 'ssh:terminal';
-  if (/suspend-resume/.test(filename)) return 'ssh:suspend';
-  if (/docker|protocol/.test(filename)) return 'ssh:protocol';
-  return 'ssh:other';
+  if (/^(file-manager|file-preview)/.test(filename)) return 'workspace:file-manager';
+  if (/^(file-upload|cross-session-transfer)/.test(filename)) return 'workspace:file-transfer';
+  if (/^progress-display/.test(filename)) return 'workspace:progress';
+  if (/^(quick-command|command-history)/.test(filename)) return 'workspace:commands';
+  if (/^(connection|reconnect)/.test(filename)) return 'workspace:connections';
+  if (/^(terminal|panel-wheel)/.test(filename)) return 'workspace:terminal';
+  if (/suspend-resume/.test(filename)) return 'workspace:suspend';
+  if (/docker|protocol/.test(filename)) return 'workspace:protocol';
+  return 'workspace:other';
 }
 
 function median(values) {

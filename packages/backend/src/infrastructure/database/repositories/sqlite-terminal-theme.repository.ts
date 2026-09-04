@@ -86,7 +86,7 @@ const themeValues = (theme: TerminalThemeData): Array<string | null> => [
 ];
 
 const mapRow = (row: ThemeRow): TerminalTheme => ({
-  _id: String(row.id),
+  id: row.id,
   name: row.name,
   themeData: {
     foreground: row.foreground ?? undefined,

@@ -26,7 +26,7 @@ async function createConnection(request: APIRequestContext): Promise<number> {
       host: E2E_SSH.host,
       port: E2E_SSH.port,
       username: E2E_SSH.username,
-      auth_method: 'password',
+      authMethod: 'password',
       password: E2E_SSH.password,
     },
   });

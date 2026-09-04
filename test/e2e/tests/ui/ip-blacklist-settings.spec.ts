@@ -6,20 +6,24 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = (await originalResponse.json()) as Record<string, string | undefined>;
+  const original = (await originalResponse.json()) as {
+    ipBlacklistEnabled?: boolean;
+    maxLoginAttempts?: number;
+    loginBanDuration?: number;
+  };
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
-      ipBlacklistEnabled: 'true',
-      maxLoginAttempts: '5',
-      loginBanDuration: '300',
+      ipBlacklistEnabled: true,
+      maxLoginAttempts: 5,
+      loginBanDuration: 300,
     },
   });
   expect(normalize.ok()).toBeTruthy();
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-ipControl').click();
+    await page.getByRole('tab', { name: 'Security', exact: true }).click();
     const blacklist = page.getByTestId('ip-blacklist-settings');
     const toggle = blacklist.getByTestId('ip-blacklist-toggle');
     await expect(blacklist).toBeVisible();
@@ -31,18 +35,18 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
       await expect
         .poll(async () => {
           const settings = await context.request.get('/api/v1/settings');
-          return ((await settings.json()) as Record<string, string>).ipBlacklistEnabled;
+          return ((await settings.json()) as { ipBlacklistEnabled?: boolean }).ipBlacklistEnabled;
         })
-        .toBe('false');
+        .toBe(false);
 
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'true');
       await expect
         .poll(async () => {
           const settings = await context.request.get('/api/v1/settings');
-          return ((await settings.json()) as Record<string, string>).ipBlacklistEnabled;
+          return ((await settings.json()) as { ipBlacklistEnabled?: boolean }).ipBlacklistEnabled;
         })
-        .toBe('true');
+        .toBe(true);
     });
 
     await step('save login failure threshold and ban duration', async () => {
@@ -52,7 +56,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
       await expect
         .poll(async () => {
           const response = await context.request.get('/api/v1/settings');
-          const data = (await response.json()) as Record<string, string>;
+          const data = (await response.json()) as { maxLoginAttempts?: number; loginBanDuration?: number };
           return [Number(data.maxLoginAttempts), Number(data.loginBanDuration)];
         })
         .toEqual([7, 420]);
@@ -60,17 +64,17 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
 
     await step('reload keeps the saved blacklist thresholds visible', async () => {
       await page.reload();
-      await page.getByTestId('settings-tab-ipControl').click();
+      await page.getByRole('tab', { name: 'Security', exact: true }).click();
       const reloaded = page.getByTestId('ip-blacklist-settings');
-      expect(Number(await reloaded.getByTestId('ip-blacklist-max-attempts').inputValue())).toBe(7);
-      expect(Number(await reloaded.getByTestId('ip-blacklist-ban-duration').inputValue())).toBe(420);
+      await expect(reloaded.getByTestId('ip-blacklist-max-attempts')).toHaveValue('7');
+      await expect(reloaded.getByTestId('ip-blacklist-ban-duration')).toHaveValue('420');
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
       data: {
-        ipBlacklistEnabled: original.ipBlacklistEnabled ?? 'true',
-        maxLoginAttempts: original.maxLoginAttempts ?? '5',
-        loginBanDuration: original.loginBanDuration ?? '300',
+        ipBlacklistEnabled: original.ipBlacklistEnabled ?? true,
+        maxLoginAttempts: original.maxLoginAttempts ?? 5,
+        loginBanDuration: original.loginBanDuration ?? 300,
       },
     });
     expect(restore.ok()).toBeTruthy();

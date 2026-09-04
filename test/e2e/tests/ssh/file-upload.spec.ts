@@ -95,6 +95,15 @@ async function readRemoteText(page: Page, name: string): Promise<string> {
   return (await downloadRemoteFile(page, name)).toString('utf8');
 }
 
+function visibleProgressCenter(page: Page) {
+  return page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+}
+
+function uploadProgressTask(page: Page, name?: string) {
+  const tasks = visibleProgressCenter(page).locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+  return name ? tasks.filter({ hasText: name }).first() : tasks.first();
+}
+
 test('file browsing and recursive search remain responsive while upload writes are delayed', async ({
   page,
   context,
@@ -106,8 +115,9 @@ test('file browsing and recursive search remain responsive while upload writes a
   try {
     await slowStep('File Manager stays usable while an upload is waiting on remote writes', async () => {
       await dragLocalFiles(page, [{ name: fileName, size: 256 * 1024, fill: 0x6e }]);
-      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+      await expect(uploadProgressTask(page, fileName)).toBeVisible();
 
       await fileManagerRow(page, 'folder-seed').dblclick();
       await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 5_000 });
@@ -121,8 +131,7 @@ test('file browsing and recursive search remain responsive while upload writes a
 
   await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
     const fileManagerModal = page.getByTestId('file-manager-modal');
-    await fileManagerModal.getByTitle('Search files...').click();
-    const search = fileManagerModal.getByPlaceholder('Search files...');
+    const search = fileManagerModal.getByTestId('file-manager-search-input');
     await search.fill('nested');
     await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
       timeout: 10_000,
@@ -204,9 +213,10 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
     await slowStep('progress can hide and restore while several real files upload', async () => {
       await dragLocalFiles(page, largeFiles);
 
-      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      await expect(progressPopup.locator('h4')).toContainText('·');
+      const uploadTasks = progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+      await expect(uploadTasks).toHaveCount(largeFiles.length);
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
 
@@ -219,7 +229,7 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
         )
         .toBeLessThan(50);
 
-      await progressPopup.getByTestId('file-upload-progress-hide').click();
+      await progressPopup.getByTestId('transfer-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 
       const progressModal = await openInlineProgressDisplay(page);
@@ -263,8 +273,11 @@ test('batch upload completes every file under slow SFTP acknowledgements', async
   try {
     await slowStep('the user-visible upload batch completes despite slow remote acknowledgements', async () => {
       await dragLocalFiles(page, weakFiles);
-      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+      await expect(
+        progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]'),
+      ).toHaveCount(weakFiles.length);
       await waitForVisibleFiles(
         page,
         weakFiles.map((file) => file.name),
@@ -295,16 +308,14 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
   try {
     await dragLocalFiles(page, files);
 
-    const popup = page.getByTestId('file-upload-progress-popup');
-    const uploadSpeed = popup.getByTestId('file-upload-speed');
-    const cancelAll = popup.getByTestId('file-upload-cancel-all');
-    const hideButton = popup.getByTestId('file-upload-progress-hide');
+    const popup = visibleProgressCenter(page);
+    const uploadSpeed = popup.getByTestId('transfer-progress-speed');
+    const cancelAll = popup.getByTestId('transfer-progress-cancel-all');
+    const hideButton = popup.getByTestId('transfer-progress-hide');
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await expect(cancelAll).toBeVisible();
     await expect(uploadSpeed).toBeVisible();
     await expect(hideButton).toBeVisible();
-    await expect(hideButton.locator('i')).toHaveClass(/fa-minus/);
-    await expect(popup.getByTestId('file-upload-progress-minimize')).toHaveCount(0);
 
     const [popupBox, speedBox, cancelAllBox, hideBox, speedMetrics] = await Promise.all([
       popup.boundingBox(),
@@ -327,18 +338,14 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
     expect(speedBox!.x + speedBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
     expect(hideBox!.width).toBeGreaterThanOrEqual(20);
-    expect(hideBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
-    expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
-    expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
+    expect(cancelAllBox!.x).toBeGreaterThanOrEqual(speedBox!.x + speedBox!.width - 1);
+    expect(hideBox!.x).toBeGreaterThanOrEqual(cancelAllBox!.x + cancelAllBox!.width - 1);
+    expect(hideBox!.x + hideBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
     const headerCenterY = speedBox!.y + speedBox!.height / 2;
     expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
     expect(Math.abs(cancelAllBox!.y + cancelAllBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
-    const headerOrder = await popup
-      .getByTestId('file-upload-header-meta')
-      .evaluate((header) => [...header.children].map((element) => element.getAttribute('data-testid')).filter(Boolean));
-    expect(headerOrder.slice(-3)).toEqual(['file-upload-speed', 'file-upload-progress-hide', 'file-upload-cancel-all']);
     await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
-    const progressBars = popup.getByTestId('file-upload-progress-bar');
+    const progressBars = popup.getByTestId('transfer-progress-bar');
     await expect(progressBars.first()).toBeVisible();
     const progressBarBoxes = await progressBars.evaluateAll((elements) =>
       elements.map((element) => {
@@ -354,7 +361,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
       Math.max(...progressBarBoxes.map((box) => box.width)) - Math.min(...progressBarBoxes.map((box) => box.width)),
     ).toBeLessThanOrEqual(1);
 
-    const resizeHandle = popup.getByTestId('file-upload-resize-handle');
+    const resizeHandle = popup.getByTestId('transfer-progress-resize');
     await expect(resizeHandle).toBeVisible();
     const resizeBox = await resizeHandle.boundingBox();
     expect(resizeBox).not.toBeNull();
@@ -431,9 +438,9 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
       })),
     );
 
-    const popup = page.getByTestId('file-upload-progress-popup');
+    const popup = visibleProgressCenter(page);
     await expect(popup).toBeVisible({ timeout: 10_000 });
-    await popup.getByTestId('file-upload-progress-hide').click();
+    await popup.getByTestId('transfer-progress-hide').click();
     await expect(popup).toBeHidden();
 
     const modal = await openInlineProgressDisplay(page);
@@ -447,7 +454,7 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     await reopenConnectedFileManager(page);
 
     const refreshStartedAt = Date.now();
-    await page.getByTestId('file-manager-modal').locator('button:has(i.fa-sync-alt)').click();
+    await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
     expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
     for (const name of uploadNames) {
@@ -479,12 +486,13 @@ test('cancelled upload stays cancelled after a temporary network disconnect', as
 
   try {
     await dragLocalFiles(page, [{ name: filename, size: 32 * 1024 * 1024, fill: 0x4d }]);
-    const popup = page.getByTestId('file-upload-progress-popup');
+    const popup = visibleProgressCenter(page);
+    const task = uploadProgressTask(page, filename);
     await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(popup).toContainText(filename);
+    await expect(task).toBeVisible();
     await page.waitForTimeout(400);
 
-    await popup.getByTestId('file-upload-cancel').click();
+    await task.getByTestId('transfer-progress-cancel').click();
     await cdp.send('Network.emulateNetworkConditions', {
       offline: true,
       latency: 0,
@@ -500,9 +508,10 @@ test('cancelled upload stays cancelled after a temporary network disconnect', as
     });
 
     await page.waitForTimeout(3_500);
-    await expect(popup).toBeHidden();
+    await expect(popup).toBeVisible();
+    await expect(task).toHaveAttribute('data-task-status', 'cancelled');
     await reopenConnectedFileManager(page);
-    await page.getByTestId('file-manager-modal').locator('button:has(i.fa-sync-alt)').click();
+    await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(fileManagerRow(page, filename)).toHaveCount(0);
   } finally {
     await cdp.send('Network.emulateNetworkConditions', {

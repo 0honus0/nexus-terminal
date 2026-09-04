@@ -4,6 +4,24 @@ import type {
   FavoritePathRepository,
   FavoritePathSort,
 } from '../../../modules/favorite-paths/favorite-path.repository.port';
+
+type FavoritePathRow = {
+  id: number;
+  name: string | null;
+  path: string;
+  last_used_at: number | null;
+  created_at: number;
+  updated_at: number;
+};
+const mapFavoritePath = (row: FavoritePathRow): FavoritePath => ({
+  id: row.id,
+  name: row.name,
+  path: row.path,
+  lastUsedAt: row.last_used_at,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
 export class SqliteFavoritePathRepository implements FavoritePathRepository {
   constructor(private readonly db: RelationalDatabase) {}
   async create(name: string | null, remotePath: string): Promise<number> {
@@ -28,11 +46,13 @@ export class SqliteFavoritePathRepository implements FavoritePathRepository {
   async delete(id: number): Promise<boolean> {
     return (await this.db.execute('DELETE FROM favorite_paths WHERE id=?', [id])).changes > 0;
   }
-  list(sortBy: FavoritePathSort = 'name'): Promise<FavoritePath[]> {
-    const order = sortBy === 'last_used_at' ? 'last_used_at DESC, name ASC' : 'name ASC';
-    return this.db.queryAll(
-      `SELECT id,name,path,last_used_at,created_at,updated_at FROM favorite_paths ORDER BY ${order}`,
-    );
+  async list(sortBy: FavoritePathSort = 'name'): Promise<FavoritePath[]> {
+    const order = sortBy === 'lastUsedAt' ? 'last_used_at DESC, name ASC' : 'name ASC';
+    return (
+      await this.db.queryAll<FavoritePathRow>(
+        `SELECT id,name,path,last_used_at,created_at,updated_at FROM favorite_paths ORDER BY ${order}`,
+      )
+    ).map(mapFavoritePath);
   }
   async touch(id: number): Promise<boolean> {
     return (
@@ -44,9 +64,11 @@ export class SqliteFavoritePathRepository implements FavoritePathRepository {
       ).changes > 0
     );
   }
-  get(id: number): Promise<FavoritePath | null> {
-    return this.db.queryOne('SELECT id,name,path,last_used_at,created_at,updated_at FROM favorite_paths WHERE id=?', [
-      id,
-    ]);
+  async get(id: number): Promise<FavoritePath | null> {
+    const row = await this.db.queryOne<FavoritePathRow>(
+      'SELECT id,name,path,last_used_at,created_at,updated_at FROM favorite_paths WHERE id=?',
+      [id],
+    );
+    return row ? mapFavoritePath(row) : null;
   }
 }

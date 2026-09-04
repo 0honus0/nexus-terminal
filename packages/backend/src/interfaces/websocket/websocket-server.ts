@@ -4,16 +4,12 @@ import express, { type Request, type RequestHandler, type Response } from 'expre
 import ipaddr from 'ipaddr.js';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
-import { mapLegacyRemoteDesktopProxyRequest } from './legacy-api/remote-desktop-request.mapper';
-import { bindLegacyUploadSocket } from './legacy-api/upload-socket.adapter';
-import {
-  LegacyWorkspaceProtocolSession,
-  type LegacyWorkspaceProtocolDependencies,
-} from './legacy-api/workspace-protocol.session';
 import { proxyRemoteDesktop } from './remote-desktop-proxy.transport';
+import { bindUploadStream } from './upload-stream.transport';
+import { WorkspaceProtocolSession, type WorkspaceProtocolDependencies } from './workspace-protocol.session';
 
-const ALLOWED_PATHS = new Set(['/ws', '/ws/', '/ws/upload', '/ws/upload/', '/rdp-proxy', '/ws/rdp-proxy']);
-const SAFE_UPLOAD_WORKSPACE_ID = /^[A-Za-z0-9_-]{8,128}$/;
+const ALLOWED_PATHS = new Set(['/ws/workspace', '/ws/uploads', '/ws/remote-desktop']);
+const SAFE_WORKSPACE_ID = /^[A-Za-z0-9_-]{8,128}$/;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_MISSED_HEARTBEATS = 2;
 
@@ -24,12 +20,12 @@ interface SessionRequest extends Request {
 interface ClientRecord {
   socket: WebSocket;
   kind: 'workspace' | 'upload' | 'remote-desktop';
-  protocol?: LegacyWorkspaceProtocolSession;
+  protocol?: WorkspaceProtocolSession;
   isAlive: boolean;
   missed: number;
 }
 
-export interface WebSocketServerDependencies extends LegacyWorkspaceProtocolDependencies {
+export interface WebSocketServerDependencies extends WorkspaceProtocolDependencies {
   ipWhitelist: IpWhitelistService;
 }
 
@@ -100,10 +96,17 @@ const rejectUpgrade = (socket: Socket, status: number, text: string): void => {
   socket.destroy();
 };
 
-/**
- * HTTP-server WebSocket boundary. It owns upgrade/auth/origin/IP/heartbeat and transport selection only.
- * Current frontend message names and binary frame formats live under ./legacy-api and are deletable as a unit.
- */
+const parsePositiveInteger = (value: string | null): number | null => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseNonNegativeInteger = (value: string | null): number | null => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+};
+
+/** HTTP-server WebSocket boundary: upgrade/auth/origin/IP/heartbeat and clean transport selection only. */
 export const attachWebSocketServer = (options: WebSocketServerOptions): BackendWebSocketServer => {
   const { server, sessionMiddleware, config, dependencies } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
@@ -117,13 +120,12 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       record.missed = 0;
     };
     record.socket.on('pong', alive);
-    // Application traffic is also proof that the browser/proxy path is alive.
     record.socket.on('message', alive);
     record.socket.once('close', () => clients.delete(record));
   };
 
   const onWorkspaceConnection = (socket: WebSocket, userId: number, username: string, clientIp: string): void => {
-    const protocol = new LegacyWorkspaceProtocolSession(socket, { userId, username, clientIp }, dependencies);
+    const protocol = new WorkspaceProtocolSession(socket, { userId, username, clientIp }, dependencies);
     const record: ClientRecord = { socket, kind: 'workspace', protocol, isAlive: true, missed: 0 };
     trackClient(record);
     socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
@@ -131,8 +133,12 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     socket.once('error', () => void protocol.close());
   };
 
-  const onUploadConnection = (socket: WebSocket, userId: number, workspaceId: string): void => {
-    if (!bindLegacyUploadSocket(socket, userId, workspaceId, dependencies)) return;
+  const onUploadConnection = (
+    socket: WebSocket,
+    userId: number,
+    request: { workspaceId: string; uploadId: string; size: number },
+  ): void => {
+    if (!bindUploadStream(socket, userId, request, dependencies)) return;
     trackClient({ socket, kind: 'upload', isAlive: true, missed: 0 });
   };
 
@@ -154,23 +160,28 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     username: string,
     clientIp: string,
   ): void => {
-    if (pathname === '/ws/upload' || pathname === '/ws/upload/') {
-      const workspaceId = url.searchParams.get('sessionId')?.trim() || '';
-      if (!SAFE_UPLOAD_WORKSPACE_ID.test(workspaceId)) {
+    if (pathname === '/ws/uploads') {
+      const workspaceId = url.searchParams.get('workspaceId')?.trim() || '';
+      const uploadId = url.searchParams.get('uploadId')?.trim() || '';
+      const size = parseNonNegativeInteger(url.searchParams.get('size'));
+      if (!SAFE_WORKSPACE_ID.test(workspaceId) || !uploadId || uploadId.length > 512 || size === null) {
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => onUploadConnection(ws, userId, workspaceId));
+      wss.handleUpgrade(request, socket, head, (ws) => onUploadConnection(ws, userId, { workspaceId, uploadId, size }));
       return;
     }
 
-    if (pathname === '/rdp-proxy' || pathname === '/ws/rdp-proxy') {
-      const proxyRequest = mapLegacyRemoteDesktopProxyRequest(url);
-      if (!proxyRequest) {
+    if (pathname === '/ws/remote-desktop') {
+      const token = url.searchParams.get('token')?.trim() || '';
+      const width = parsePositiveInteger(url.searchParams.get('width'));
+      const height = parsePositiveInteger(url.searchParams.get('height'));
+      const dpi = parsePositiveInteger(url.searchParams.get('dpi'));
+      if (!token || width === null || height === null || dpi === null) {
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => onRemoteDesktopConnection(ws, proxyRequest));
+      wss.handleUpgrade(request, socket, head, (ws) => onRemoteDesktopConnection(ws, { token, width, height, dpi }));
       return;
     }
 

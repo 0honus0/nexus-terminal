@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { ExecutionSession } from '../../execution/execution-session';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
-import type { RemoteCommandSession } from '../../execution/remote-execution.port';
+import { CommandExecutionError, type RemoteCommandSession } from '../../execution/remote-execution.port';
 import { quotePosixShellArg } from '../../execution/posix-shell';
 import type {
   ArchiveErrorCode,
@@ -26,6 +26,7 @@ const MAX_PASSWORD_LENGTH = 128;
 const TOTAL_MARKER = '__NEXUS_ARCHIVE_TOTAL__:';
 const PASSWORD_REQUIRED_MARKER = '__NEXUS_ARCHIVE_PASSWORD_REQUIRED__';
 const INVALID_PASSWORD_MARKER = '__NEXUS_ARCHIVE_INVALID_PASSWORD__';
+const ARCHIVE_WARNING_MARKER = '__NEXUS_ARCHIVE_WARNING__:';
 
 export class RemoteArchiveOperationService implements ArchiveOperation {
   private readonly activeByOwner = new Map<string, ActiveArchive>();
@@ -96,7 +97,8 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
         temporary,
         request.password,
       );
-      await this.runArchiveCommand(session, active, command, emit, request.format);
+      const result = await this.runArchiveCommand(session, active, command, emit, request.format);
+      const warning = request.format === 'zip' ? this.parseArchiveWarning(result.stdout, result.stderr) : undefined;
       if (active.cancelled) {
         this.finish(active);
         this.emitCancelled(emit, active);
@@ -105,7 +107,13 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       const filesystem = await session.fileSystem('control');
       await filesystem.replaceFile(temporary, destination);
       this.finish(active);
-      emit({ type: 'completed', operation: 'compress', requestId: request.requestId, path: destination });
+      emit({
+        type: 'completed',
+        operation: 'compress',
+        requestId: request.requestId,
+        path: destination,
+        ...(warning ? { warning } : {}),
+      });
     } catch (error) {
       this.finish(active);
       if (active.cancelled) this.emitCancelled(emit, active);
@@ -352,7 +360,14 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     const count = `total=$(find ${quotedSources} -print 2>/dev/null | wc -l); printf '${TOTAL_MARKER}%s\\n' "$total"`;
     if (format === 'zip') {
       const passwordArg = password !== undefined ? `-P ${quotePosixShellArg(password)} ` : '';
-      return `${cd} && rm -f -- ${output} && ${count} && zip ${passwordArg}-r ${output} ${quotedSources}`;
+      const archive = `zip ${passwordArg}-r ${output} ${quotedSources}`;
+      const preserveValidWarning =
+        `archive_status=0; ${archive} || archive_status=$?; ` +
+        `if [ "$archive_status" -ne 0 ]; then ` +
+        `if [ -s ${output} ] && zip -T ${output} >/dev/null 2>&1; then ` +
+        `printf '${ARCHIVE_WARNING_MARKER}%s\n' "$archive_status" >&2; ` +
+        `else exit "$archive_status"; fi; fi`;
+      return `${cd} && rm -f -- ${output} && ${count} && { ${preserveValidWarning}; }`;
     }
     if (format === 'targz') {
       return `${cd} && rm -f -- ${output} && ${count} && tar -czvf ${output} ${quotedSources}`;
@@ -404,6 +419,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       return result.exitCode === 0;
     } catch (error) {
       if (active.cancelled || active.preflightAbort.signal.aborted) return false;
+      if (error instanceof CommandExecutionError && error.result && error.result.exitCode > 0) return false;
       throw error;
     }
   }
@@ -427,6 +443,21 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
       };
     }
     return null;
+  }
+
+  private parseArchiveWarning(stdout: string, stderr: string): string | undefined {
+    const lines = `${stdout}\n${stderr}`
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const marker = lines.find((line) => line.startsWith(ARCHIVE_WARNING_MARKER));
+    if (!marker) return undefined;
+    const code = marker.slice(ARCHIVE_WARNING_MARKER.length).trim();
+    const details = lines
+      .filter((line) => /^zip warning:/i.test(line))
+      .map((line) => line.replace(/^zip warning:\s*/i, '').trim())
+      .filter(Boolean);
+    return details.length ? details.join('; ') : `zip completed with warning status ${code || 'unknown'}`;
   }
 
   private parseFileLine(line: string, format: ArchiveFormat | 'zip'): string | null {

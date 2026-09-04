@@ -23,14 +23,14 @@ test('full backup restores settings and connection data', async ({ request }) =>
         host: '127.0.0.1',
         port: 22222,
         username: 'e2e',
-        auth_method: 'password',
+        authMethod: 'password',
         password: 'e2e-password',
       },
     });
     expect(create.status()).toBe(201);
 
     const setting = await request.put('/api/v1/settings', {
-      data: { showPopupFileManager: 'true' },
+      data: { showPopupFileManager: true },
     });
     expect(setting.ok()).toBeTruthy();
   });
@@ -53,7 +53,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
     );
     expect(target).toBeTruthy();
     expect((await request.delete(`/api/v1/connections/${target!.id}`)).ok()).toBeTruthy();
-    expect((await request.put('/api/v1/settings', { data: { showPopupFileManager: 'false' } })).ok()).toBeTruthy();
+    expect((await request.put('/api/v1/settings', { data: { showPopupFileManager: false } })).ok()).toBeTruthy();
   });
 
   await slowStep('import the backup and restore the data', async () => {
@@ -74,7 +74,7 @@ test('full backup restores settings and connection data', async ({ request }) =>
   await slowStep('verify settings and encrypted connection credentials survived restore', async () => {
     const settings = await request.get('/api/v1/settings');
     expect(settings.ok()).toBeTruthy();
-    await expect(settings.json()).resolves.toMatchObject({ showPopupFileManager: 'true' });
+    await expect(settings.json()).resolves.toMatchObject({ showPopupFileManager: true });
 
     const connections = await request.get('/api/v1/connections');
     expect(connections.ok()).toBeTruthy();

@@ -215,12 +215,12 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
 
   await slowStep('single tap opens a full-screen mobile editor', async () => {
     await fileManagerRow(page, 'plainfile').click();
-    const editor = page.getByTestId('file-editor-overlay');
+    const documentPopup = page.getByTestId('document-popup');
+    const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
-    await expect(editor.getByTestId('file-editor-resize-handle')).toHaveCount(0);
-    const popup = editor.locator('.editor-popup');
-    const popupBox = await popup.boundingBox();
+    await expect(documentPopup.getByTitle('Resize editor window', { exact: true })).toHaveCount(0);
+    const popupBox = await documentPopup.getByRole('dialog').boundingBox();
     const viewport = page.viewportSize();
     expect(popupBox).toBeTruthy();
     expect(viewport).toBeTruthy();
@@ -232,7 +232,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   });
 
   await step('Search opens CodeMirror search UI and decorates the matching text', async () => {
-    const editor = page.getByTestId('file-editor-overlay');
+    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
     await editor.getByTitle('Search').click();
     const searchPanel = editor.locator('.cm-panel.cm-search');
     await expect(searchPanel).toBeVisible();
@@ -260,7 +260,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     const editBox = await preview.getByRole('button', { name: 'Edit', exact: true }).boundingBox();
     expect(editBox).toBeTruthy();
     expect(editBox!.height).toBeGreaterThanOrEqual(40);
-    await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
+    await expect(page.getByTestId('document-popup').getByTestId('file-editor-view')).toBeHidden();
     await captureFunctionalScreenshot(page, 'mobile-markdown-preview.png');
   });
 
@@ -269,7 +269,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     await preview.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(preview).toBeHidden();
 
-    const editor = page.getByTestId('file-editor-overlay');
+    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
@@ -574,7 +574,7 @@ test('mobile preview close button clears cached state when popup file editing is
   expect(
     (
       await context.request.put('/api/v1/settings', {
-        data: { showPopupFileEditor: 'true' },
+        data: { showPopupFileEditor: true },
       })
     ).ok(),
   ).toBeTruthy();
@@ -628,14 +628,14 @@ test('mobile upload progress stays inside the viewport and restores from Progres
           })),
         );
 
-        const popup = page.getByTestId('file-upload-progress-popup');
+        const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
         await expect(popup).toBeVisible({ timeout: 10_000 });
         await expect(popup).toContainText(filenames[0]);
         await expect(popup).toContainText(filenames[1]);
-        await expect(popup.getByTestId('file-upload-speed')).toBeVisible();
-        await expect(popup.getByTestId('file-upload-progress-hide')).toBeVisible();
-        await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
-        await expect(popup.getByTestId('file-upload-resize-handle')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-speed')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-hide')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-cancel-all')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-resize')).toBeVisible();
 
         const [popupBox, viewport] = await Promise.all([popup.boundingBox(), Promise.resolve(page.viewportSize())]);
         expect(popupBox).toBeTruthy();
@@ -643,7 +643,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expectBoxInsideViewport(popupBox!, viewport!);
         await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
-        await popup.getByTestId('file-upload-progress-hide').click();
+        await popup.getByTestId('transfer-progress-hide').click();
         await expect(popup).toBeHidden();
       },
     );
@@ -656,7 +656,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await expect(source).toBeVisible();
       await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
 
-      const progressPanel = progressDisplay.locator('.transfer-progress-panel');
+      const progressPanel = progressDisplay;
       const [displayBox, viewport] = await Promise.all([
         progressPanel.boundingBox(),
         Promise.resolve(page.viewportSize()),
@@ -668,10 +668,16 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await source.getByTestId('hidden-progress-restore').click();
       await expect(progressDisplay).toBeHidden();
       await reopenConnectedFileManager(page);
-      const popup = page.getByTestId('file-upload-progress-popup');
+      const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
       await expect(popup).toBeVisible();
-      await popup.getByTestId('file-upload-cancel-all').click();
-      await expect(popup).toBeHidden({ timeout: 10_000 });
+      await popup.getByTestId('transfer-progress-cancel-all').click();
+      await expect
+        .poll(() =>
+          popup
+            .locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]')
+            .evaluateAll((tasks) => tasks.map((task) => task.getAttribute('data-task-status'))),
+        )
+        .toEqual(filenames.map(() => 'cancelled'));
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });

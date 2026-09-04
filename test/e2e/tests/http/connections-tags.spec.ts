@@ -22,7 +22,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
         host: E2E_SSH.host,
         port: E2E_SSH.port,
         username: E2E_SSH.username,
-        auth_method: 'password',
+        authMethod: 'password',
         password: E2E_SSH.password,
         notes: 'created by lifecycle e2e',
       },
@@ -31,7 +31,7 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
 
     const assignTag = await request.post('/api/v1/connections/add-tag', {
-      data: { connection_ids: [connectionId], tag_id: tagId },
+      data: { connectionIds: [connectionId], tagId: tagId },
     });
     expect(assignTag.ok()).toBeTruthy();
   });
@@ -64,12 +64,12 @@ test('connection update, tags, clone, credentials, and delete form a complete li
     expect(clone.status()).toBe(201);
     const cloned = (
       (await clone.json()) as {
-        connection: { id: number; name: string; tag_ids?: number[] };
+        connection: { id: number; name: string; tagIds?: number[] };
       }
     ).connection;
     cloneId = cloned.id;
     expect(cloned.name).toBe('E2E Lifecycle SSH Clone');
-    expect(cloned.tag_ids).toContain(tagId);
+    expect(cloned.tagIds).toContain(tagId);
 
     const cloneTest = await request.post(`/api/v1/connections/${cloneId}/test`);
     expect(cloneTest.ok()).toBeTruthy();
@@ -126,7 +126,7 @@ test('new SSH connections appear in resource status immediately', async ({ reque
           host,
           port,
           username: E2E_SSH.username,
-          auth_method: 'password',
+          authMethod: 'password',
           password: E2E_SSH.password,
         },
       });
@@ -160,7 +160,7 @@ test('SSH resource status refreshes at the configured cadence even when collecti
   const connectionName = 'E2E SSH Resource Refresh Cadence';
   const originalSettingsResponse = await request.get('/api/v1/settings');
   expect(originalSettingsResponse.ok()).toBeTruthy();
-  const originalSettings = (await originalSettingsResponse.json()) as Record<string, string | undefined>;
+  const originalSettings = (await originalSettingsResponse.json()) as { remoteHostRefreshIntervalSeconds?: number };
 
   const existingConnections = await request.get('/api/v1/connections');
   expect(existingConnections.ok()).toBeTruthy();
@@ -178,7 +178,7 @@ test('SSH resource status refreshes at the configured cadence even when collecti
         host: E2E_SSH.host,
         port: E2E_SSH.port,
         username: E2E_SSH.username,
-        auth_method: 'password',
+        authMethod: 'password',
         password: E2E_SSH.password,
       },
     });
@@ -186,7 +186,7 @@ test('SSH resource status refreshes at the configured cadence even when collecti
     connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
 
     const intervalUpdate = await request.put('/api/v1/settings', {
-      data: { remoteHostRefreshIntervalSeconds: '2' },
+      data: { remoteHostRefreshIntervalSeconds: 2 },
     });
     expect(intervalUpdate.ok()).toBeTruthy();
 
@@ -211,7 +211,7 @@ test('SSH resource status refreshes at the configured cadence even when collecti
     expect(secondResource!.checkedAt).toBeGreaterThan(firstResource!.checkedAt);
   } finally {
     const restoreSettings = await request.put('/api/v1/settings', {
-      data: { remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? '30' },
+      data: { remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? 30 },
     });
     expect(restoreSettings.ok()).toBeTruthy();
     if (connectionId) {

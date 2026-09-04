@@ -1,0 +1,124 @@
+{
+  "workspace": {
+    "terminal": {
+      "reconnectingMsg": "再接続を試行中..."
+    },
+    "title": "ワークスペース",
+    "sessions": "{count} セッション",
+    "transfer": {
+      "targetWorkspace": "ワークスペース",
+      "destination": "宛先"
+    },
+    "documents": {
+      "editor": "エディター",
+      "preview": "プレビュー"
+    },
+    "archive": {
+      "format": "形式"
+    },
+    "errors": {
+      "suspendedConnectionNotSsh": "中断されたセッションの接続は SSH 接続ではなくなっています。"
+    },
+    "sessionState": {
+      "idle": "待機中",
+      "connecting": "接続中",
+      "connected": "接続済み",
+      "reconnecting": "再接続中",
+      "disconnected": "切断済み",
+      "error": "エラー"
+    }
+  },
+  "layoutConfigurator": {
+    "title": "レイアウトマネージャー",
+    "availablePanes": "利用可能なパネル",
+    "layoutPreview": "メインレイアウトプレビュー (ここにドラッグ)",
+    "resetDefault": "デフォルトに戻す",
+    "noAvailablePanes": "すべてのパネルがレイアウトにあります",
+    "emptyLayout": "レイアウトが空です。左側からパネルをドラッグするか、コンテナーを追加してください。",
+    "leftSidebar": "左サイドバーパネル",
+    "rightSidebar": "右サイドバーパネル",
+    "dropHere": "利用可能なパネルからここにドラッグ",
+    "saveError": "レイアウトの保存中にエラーが発生しました。後でもう一度お試しください。",
+    "confirmClearLayout": "レイアウト全体をクリアしますか？すべてのパネルが利用可能なリストに戻ります。",
+    "lockLayout": "レイアウトをロック",
+    "lockUpdateError": "レイアウトロック状態の更新に失敗しました。",
+    "confirmClose": "未保存の変更があります。閉じてもよろしいですか？",
+    "confirmReset": "デフォルトのレイアウトとサイドバー構成に戻しますか？現在の変更は失われます。"
+  },
+  "layoutNodeEditor": {
+    "containerLabel": "コンテナー ({direction})",
+    "horizontal": "水平",
+    "vertical": "垂直",
+    "toggleDirection": "方向を切り替える",
+    "addHorizontalContainer": "水平コンテナーを追加",
+    "addVerticalContainer": "垂直コンテナーを追加",
+    "removeNode": "このノードを削除",
+    "dragHandle": "ドラッグして順序を調整または移動",
+    "dropHere": "パネルまたはコンテナーをここにドラッグ",
+    "pane": "ペイン",
+    "container": "コンテナー",
+    "addPane": "ペインを追加",
+    "addContainer": "コンテナーを追加",
+    "size": "サイズ",
+    "emptyContainer": "空のコンテナー"
+  },
+  "commandInputBar": {
+    "placeholder": "ここにコマンドを入力して Enter キーを押すと、ターミナルに送信されます...",
+    "searchPlaceholder": "ターミナル内で検索...",
+    "openSearch": "ターミナル検索を開く",
+    "closeSearch": "ターミナル検索を閉じる",
+    "findPrevious": "前を検索",
+    "findNext": "次を検索",
+    "configureFocusSwitch": "フォーカススイッチャーを設定",
+    "clearTerminal": "ターミナルをクリア"
+  },
+  "layout": {
+    "loading": "ロード中...",
+    "configure": "レイアウトを設定",
+    "pane": {
+      "connections": "接続リスト",
+      "terminal": "ターミナル",
+      "commandBar": "コマンドバー",
+      "fileManager": "ファイルマネージャー",
+      "editor": "エディター",
+      "statusMonitor": "ステータスモニター",
+      "commandHistory": "コマンド履歴",
+      "quickCommands": "クイックコマンド",
+      "dockerManager": "Docker マネージャー",
+      "suspendedSshSessions": "中断されたセッション管理",
+      "preview": "プレビュー"
+    },
+    "panes": {
+      "suspendedSshSessions": "中断されたセッション管理者"
+    },
+    "noActiveSession": {
+      "title": "アクティブなセッションはありません",
+      "message": "最初にセッションに接続してください",
+      "fileManagerSidebar": "ファイルマネージャーにはアクティブなセッションが必要です",
+      "statusMonitorSidebar": "ステータスモニターにはアクティブなセッションが必要です"
+    }
+  },
+  "terminalTabBar": {
+    "selectServerTitle": "接続するサーバーを選択",
+    "progressDisplay": "進捗表示"
+  },
+  "tabs": {
+    "contextMenu": {
+      "close": "タブを閉じる",
+      "closeOthers": "他のタブを閉じる",
+      "closeRight": "右側のタブを閉じる",
+      "closeLeft": "左側のタブを閉じる",
+      "suspendSession": "セッションを中断",
+      "unmarkForSuspend": "中断指定を解除"
+    },
+    "closeTabTooltip": "タブを閉じる",
+    "newTabTooltip": "新しい接続タブ",
+    "security": "セキュリティ",
+    "ipControl": "IP 制御",
+    "workspace": "ワークスペース",
+    "system": "システム",
+    "dataManagement": "データ管理",
+    "appearance": "外観",
+    "about": "バージョン情報"
+  }
+}
