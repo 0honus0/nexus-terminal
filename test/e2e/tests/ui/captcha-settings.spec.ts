@@ -32,9 +32,14 @@ test('CAPTCHA settings UI enables a provider, persists public configuration, and
 
   try {
     await page.goto('/settings');
+    const captchaLoadPromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'GET',
+    );
     await page.getByRole('tab', { name: 'Security', exact: true }).click();
+    expect((await captchaLoadPromise).ok()).toBeTruthy();
     const captcha = page.getByTestId('captcha-settings');
     await expect(captcha).toBeVisible();
+    await expect(captcha.getByTestId('captcha-save')).toBeEnabled();
     await expect(page.getByTestId('change-password-settings')).toBeVisible();
     await captureFunctionalScreenshot(page, 'security-settings.png', { viewport: { width: 1440, height: 900 } });
 
