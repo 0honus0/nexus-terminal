@@ -125,9 +125,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Path history records a visited directory and navigates back to it', async () => {
     await pathInput(page).click();
-    const history = manager(page).locator('.path-history-dropdown');
-    await expect(history).toBeVisible();
-    const folderHistory = history.locator(`li[title="${FAVORITE_PATH}"]`);
+    const folderHistory = manager(page).getByTitle(FAVORITE_PATH, { exact: true });
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
     await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });

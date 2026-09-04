@@ -92,9 +92,9 @@
     },
   );
 
-  onMounted(() => document.addEventListener('keydown', handleDocumentKeydown, true));
+  onMounted(() => document.addEventListener('keydown', handleDocumentKeydown));
   onBeforeUnmount(() => {
-    document.removeEventListener('keydown', handleDocumentKeydown, true);
+    document.removeEventListener('keydown', handleDocumentKeydown);
     if (props.visible) restorePreviousFocus();
   });
 </script>

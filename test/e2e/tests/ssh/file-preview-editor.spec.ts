@@ -23,6 +23,7 @@ const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { n
 const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator(`[data-pdf-page="${pageNumber}"]`);
 const pdfCurrentPage = (dialog: Locator): Locator =>
   dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
+const visiblePdfPageCount = (dialog: Locator): Locator => dialog.locator('[data-testid="pdf-page-count"]:visible');
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
 const pdfZoomLabel = (dialog: Locator): Locator =>
   dialog
@@ -262,10 +263,16 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(previewSearchInput(dialog)).toHaveCount(0);
 
     const secondPage = pdfPage(dialog, 2);
-    await scroller.evaluate(
-      (element, top) => element.scrollTo({ top, behavior: 'auto' }),
-      await secondPage.evaluate((element) => element.offsetTop),
-    );
+    await secondPage.evaluate((pageElement) => {
+      const container = pageElement.closest<HTMLElement>('[data-pdf-scroller]');
+      if (!container) throw new Error('PDF scroller is missing');
+      const containerRect = container.getBoundingClientRect();
+      const pageRect = pageElement.getBoundingClientRect();
+      container.scrollTo({
+        top: Math.max(0, container.scrollTop + pageRect.top - containerRect.top),
+        behavior: 'auto',
+      });
+    });
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
 
     const outlineToggle = dialog.getByTitle('Outline', { exact: true });
@@ -408,7 +415,7 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
     await expect(row(page, 'second-preview.pdf')).toBeVisible();
     await row(page, 'second-preview.pdf').dblclick();
     const secondDialog = documentPopup(page);
-    await expect(secondDialog.getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(visiblePdfPageCount(secondDialog)).toHaveText('3');
     const tabs = secondDialog.getByTestId('file-preview-tabs');
     await expect(tabs.getByRole('tab')).toHaveCount(2);
     await expect(tabs.getByRole('tab', { name: 'preview.pdf', exact: true })).toBeVisible();
@@ -418,7 +425,7 @@ test('preview workspace backdrop hiding preserves tabs across directories when p
     );
 
     await tabs.getByRole('tab', { name: 'preview.pdf', exact: true }).click();
-    await expect(documentPopup(page).getByTestId('pdf-page-count')).toHaveText('3');
+    await expect(visiblePdfPageCount(documentPopup(page))).toHaveText('3');
   });
 });
 

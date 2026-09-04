@@ -374,7 +374,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     const fixtureName = 'external-refresh.txt';
     await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(fixtureName)}`, { method: 'POST' });
     await expect(row(page, fixtureName)).toHaveCount(0);
-    await rightClickRow(page, 'seed.txt');
+    await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'Refresh');
     await expect(row(page, fixtureName)).toBeVisible({ timeout: 20_000 });
   });
