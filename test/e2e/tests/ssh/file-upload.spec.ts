@@ -514,6 +514,7 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
       await dragLocalFiles(activePage, [{ name: filename, size: 2 * 1024 * 1024, fill: 0x40 + (cycle % 32) }]);
       const task = uploadProgressTask(activePage, filename);
       await expect(task, `cycle ${cycle}: upload task should start before teardown`).toBeVisible({ timeout: 10_000 });
+      await closeConnectedFileManager(activePage);
       await task.getByTestId('transfer-progress-cancel').click();
 
       // Deliberately overlap browser transport loss, upload cancellation, Backend runtime teardown,
