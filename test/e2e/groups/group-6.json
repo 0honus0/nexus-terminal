@@ -3,7 +3,6 @@
   "group": 6,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
-    "tests/ssh/file-preview-editor.spec.ts"
+    "tests/ssh/file-upload.spec.ts"
   ]
 }

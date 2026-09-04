@@ -3,12 +3,15 @@
   "group": 5,
   "workers": 8,
   "specs": [
-    "tests/mobile/dashboard-mobile.spec.ts",
-    "tests/mobile/ssh-workspace.spec.ts",
-    "tests/mobile/suspend-resume-ui.spec.ts",
-    "tests/mobile/terminal-touch.spec.ts",
-    "tests/mobile/touch-advanced.spec.ts",
-    "tests/mobile/touch-workflows.spec.ts",
+    "tests/ui/audit-log-filtering.spec.ts",
+    "tests/ui/backup-ui.spec.ts",
+    "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/connection-create.spec.ts",
+    "tests/ui/connection-non-ssh-bulk.spec.ts",
+    "tests/ui/custom-terminal-theme.spec.ts",
+    "tests/ui/dashboard-workflows.spec.ts",
+    "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
+    "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
