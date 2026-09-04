@@ -104,9 +104,9 @@ test('dashboard local and remote resource cards can be configured independently'
     await page.goto('/settings');
     await page.getByRole('tab', { name: 'System', exact: true }).click();
 
-    const localToggle = page.getByTestId('dashboard-show-local-resources');
-    const remoteToggle = page.getByTestId('dashboard-show-remote-resources');
-    const refreshInterval = page.getByTestId('dashboard-remote-refresh-interval');
+    const localToggle = page.getByRole('checkbox', { name: 'Show local resources', exact: true });
+    const remoteToggle = page.getByRole('checkbox', { name: 'Show remote resources', exact: true });
+    const refreshInterval = page.getByLabel('SSH resource refresh interval (seconds)', { exact: true });
     const resourceForm = page.locator('form').filter({ has: localToggle });
     await expect(localToggle).toBeChecked();
     await expect(remoteToggle).toBeChecked();
@@ -140,7 +140,7 @@ test('dashboard local and remote resource cards can be configured independently'
       await expect(page.getByTestId('dashboard-system-resources')).toBeVisible();
       await page.goto('/settings');
       await page.getByRole('tab', { name: 'System', exact: true }).click();
-      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveValue('17');
+      await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
     });
 
     await step('disable only local dashboard resources', async () => {
@@ -172,9 +172,9 @@ test('dashboard local and remote resource cards can be configured independently'
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByRole('tab', { name: 'System', exact: true }).click();
-      await expect(page.getByTestId('dashboard-show-local-resources')).toBeChecked();
-      await expect(page.getByTestId('dashboard-show-remote-resources')).not.toBeChecked();
-      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveValue('17');
+      await expect(page.getByRole('checkbox', { name: 'Show local resources', exact: true })).toBeChecked();
+      await expect(page.getByRole('checkbox', { name: 'Show remote resources', exact: true })).not.toBeChecked();
+      await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {

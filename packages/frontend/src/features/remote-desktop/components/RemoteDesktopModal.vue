@@ -78,7 +78,7 @@
   };
   const modalPanelStyle = computed(() =>
     fullscreen.value
-      ? { width: '100vw', height: '100vh' }
+      ? { position: 'fixed' as const, inset: '0', width: '100vw', height: '100vh' }
       : { width: `${modalWidth.value}px`, height: `${modalHeight.value}px` },
   );
 
@@ -487,7 +487,6 @@
           <template v-if="device.hasTouch.value">
             <span class="px-1 text-xs text-text-secondary">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
             <BaseButton
-              data-testid="rdp-touch-mode-direct"
               size="sm"
               :variant="touchMode === 'direct' ? 'primary' : 'ghost'"
               :aria-pressed="touchMode === 'direct'"
@@ -497,7 +496,6 @@
               {{ t('remoteDesktopModal.touchModeDirect') }}
             </BaseButton>
             <BaseButton
-              data-testid="rdp-touch-mode-touchpad"
               size="sm"
               :variant="touchMode === 'touchpad' ? 'primary' : 'ghost'"
               :aria-pressed="touchMode === 'touchpad'"

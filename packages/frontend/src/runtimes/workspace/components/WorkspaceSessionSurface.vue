@@ -330,6 +330,10 @@
     }
   };
 
+  const revealEmbeddedEditor = (): void => {
+    if (props.showPopupFileManager) fileManagerPopupVisible.value = false;
+  };
+
   const openFile = async (path: string) => {
     const previewKind = previewKindFor(path);
     if (props.mobile) {
@@ -349,6 +353,7 @@
         await nextTick();
         await popupEditorRef.value?.open?.(path);
       } else {
+        revealEmbeddedEditor();
         await nextTick();
         await editorApi.value?.open?.(path);
       }
@@ -367,6 +372,7 @@
       await nextTick();
       await popupEditorRef.value?.open?.(path);
     } else {
+      revealEmbeddedEditor();
       await nextTick();
       await editorApi.value?.open?.(path);
     }
@@ -383,6 +389,7 @@
       popupEditorRef.value?.focus?.();
     } else {
       documentPopupVisible.value = false;
+      revealEmbeddedEditor();
       await nextTick();
       await editorApi.value?.open?.(path);
       await nextTick();
@@ -995,14 +1002,7 @@
       @quick-command-compact-mode="emit('quickCommandCompactMode', $event)"
     />
 
-    <input
-      ref="uploadInput"
-      data-testid="file-upload-input"
-      class="hidden"
-      type="file"
-      multiple
-      @change="uploadFiles"
-    />
+    <input ref="uploadInput" class="hidden" type="file" multiple @change="uploadFiles" />
 
     <ProgressCenter
       v-if="transfers.tasks.value.length && progressVisible"
@@ -1063,18 +1063,8 @@
         :column-widths="fileManagerColumnWidths"
         :clipboard-count="clipboardCount"
         :state="session.filesystemState"
-        @open-file="
-          (entry) => {
-            fileManagerPopupVisible = false;
-            openFile(entry.path);
-          }
-        "
-        @open-as-text="
-          (entry) => {
-            fileManagerPopupVisible = false;
-            openFileAsText(entry.path);
-          }
-        "
+        @open-file="(entry) => openFile(entry.path)"
+        @open-as-text="(entry) => openFileAsText(entry.path)"
         @upload="chooseUpload"
         @upload-files="uploadFilesAt"
         @copy-to-clipboard="emit('fileClipboardSet', 'copy', $event)"

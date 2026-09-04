@@ -117,6 +117,7 @@ Constraints:
 17. Rebalancing changes scheduling only; it must not change test semantics, seed mode, test data, prerequisites, or behavior inside a spec.
 18. Docker deployment smoke validates production-style packaging/ingress separately from the main grouped browser suite; it is not a substitute for user-facing functional E2E.
 19. Documentation screenshots reuse real user E2E scenarios instead of creating a parallel screenshot-only implementation-test suite.
+20. **E2E diagnostics may add guarded frontend/backend debug logging, but must not add test-only DOM seams.** Debug logs may be enabled only for E2E/test diagnostics and must not expose credentials, tokens, file contents, or other secrets. Do not add `data-testid`, `data-test`, dedicated IDs/classes/attributes, compatibility UI, or product behavior solely to make E2E selectors easier; prefer real accessible roles/names/labels/text and existing product semantics.
 
 ## Documentation constraints
 

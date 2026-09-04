@@ -862,7 +862,6 @@
     <header class="flex flex-wrap items-center gap-2 border-b border-border p-2">
       <BaseButton
         size="sm"
-        data-testid="file-manager-parent-button"
         data-file-parent
         :variant="keyboardCursor === PARENT_CURSOR ? 'primary' : 'secondary'"
         :title="t('fileManager.actions.parentDirectory')"
@@ -1277,9 +1276,8 @@
     </BaseContextMenu>
 
     <BaseModal
-      data-testid="file-manager-action-modal"
-      :data-action-type="action"
       :visible="Boolean(action)"
+      :close-on-escape="true"
       :title="
         action === 'mkdir'
           ? t('fileManager.modals.titles.newFolder')
@@ -1292,14 +1290,12 @@
       @close="action = null"
     >
       <form class="space-y-4" @submit.prevent="submit">
-        <BaseFormField :label="t('common.value')"
-          ><BaseInput :id="`fileManagerActionInput-${action}`" v-model="value" autofocus
+        <BaseFormField :label="t('common.value')" for-id="fileManagerActionValue"
+          ><BaseInput id="fileManagerActionValue" v-model="value" autofocus
         /></BaseFormField>
         <div class="flex justify-end gap-2">
           <BaseButton type="button" @click="action = null">{{ t('common.cancel') }}</BaseButton
-          ><BaseButton data-testid="file-manager-action-confirm" type="submit" variant="primary">{{
-            t('common.confirm')
-          }}</BaseButton>
+          ><BaseButton type="submit" variant="primary">{{ t('common.confirm') }}</BaseButton>
         </div>
       </form>
     </BaseModal>

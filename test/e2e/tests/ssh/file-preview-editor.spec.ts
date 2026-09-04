@@ -19,6 +19,28 @@ const documentPopup = (page: Page): Locator => page.getByTestId('document-popup'
 const editorView = (page: Page): Locator => documentPopup(page).getByTestId('file-editor-view');
 const previewView = (page: Page): Locator => documentPopup(page).getByTestId('file-preview-view');
 
+const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: /^PDF · \d+ pages$/ });
+const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator(`[data-pdf-page="${pageNumber}"]`);
+const pdfCurrentPage = (dialog: Locator): Locator =>
+  dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
+const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
+const pdfZoomLabel = (dialog: Locator): Locator =>
+  dialog
+    .locator('.pdf-toolbar')
+    .getByText(/^\d+%$/)
+    .first();
+const previewHorizontalScrollbar = (dialog: Locator): Locator =>
+  dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
+const spreadsheetScroller = (dialog: Locator): Locator =>
+  dialog.getByRole('region', { name: 'Spreadsheet', exact: true });
+const worksheetTabs = (dialog: Locator): Locator => dialog.getByRole('tablist', { name: 'Worksheet', exact: true });
+const worksheetTab = (dialog: Locator, name: string): Locator =>
+  worksheetTabs(dialog).getByRole('tab', { name, exact: true });
+const docxScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: 'Word document', exact: true });
+const spreadsheetRows = (dialog: Locator): Locator => spreadsheetScroller(dialog).locator('tbody > tr');
+const spreadsheetPageRange = (dialog: Locator): Locator => dialog.getByText(/^Rows \d+–\d+ of \d+$/).first();
+const spreadsheetPageIndicator = (dialog: Locator): Locator => dialog.getByText(/^\d+\/\d+$/).first();
+
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
   await target.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
 }
@@ -210,12 +232,12 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(dialog).toBeVisible({ timeout: 20_000 });
 
     const preview = dialog.getByTestId('pdf-preview');
-    const scroller = dialog.getByTestId('pdf-page-scroller');
+    const scroller = pdfScroller(dialog);
     await expect(preview).toBeVisible();
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await expect(dialog.getByTestId('pdf-continuous-pages').locator('[data-pdf-page-number]')).toHaveCount(3);
+    await expect(dialog.locator('[data-pdf-page]')).toHaveCount(3);
 
-    const firstPage = dialog.getByTestId('pdf-page-1');
+    const firstPage = pdfPage(dialog, 1);
     await expect(firstPage).toBeVisible();
     await expect
       .poll(() => firstPage.locator('canvas').evaluate((canvas: HTMLCanvasElement) => canvas.width))
@@ -227,28 +249,27 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(pdfSearch).toBeFocused();
     await pdfSearch.fill('target');
     await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/2');
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('target');
     await dialog.getByTestId('preview-search-next').click();
     await expect(dialog.getByTestId('preview-search-count')).toHaveText('2/2');
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
+    await expect(pdfCurrentPage(dialog)).toHaveValue('3');
     await dialog.getByTestId('preview-search-close').click();
     await expect(dialog.getByTestId('preview-search-bar')).toHaveCount(0);
 
-    const secondPage = dialog.getByTestId('pdf-page-2');
+    const secondPage = pdfPage(dialog, 2);
     await scroller.evaluate(
       (element, top) => element.scrollTo({ top, behavior: 'auto' }),
       await secondPage.evaluate((element) => element.offsetTop),
     );
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(dialog)).toHaveValue('2');
 
-    const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
-    const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
-    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+    const outlineToggle = dialog.getByTitle('Outline', { exact: true });
+    const outlineDrawer = pdfOutline(dialog);
     await expect(outlineDrawer).toBeVisible();
     await expect(outlineToggle).toBeVisible();
     await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(dialog.getByTestId('pdf-outline-close')).toBeHidden();
+    await expect(pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true })).toBeHidden();
     const outlineBox = await outlineDrawer.boundingBox();
     const scrollerBox = await scroller.boundingBox();
     expect(outlineBox).toBeTruthy();
@@ -258,32 +279,30 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(outlineBox!.x + outlineBox!.width).toBeLessThanOrEqual(scrollerBox!.x + 1);
 
     await outlineToggle.click();
-    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
     await expect(outlineDrawer).toBeHidden();
     await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
     await expect.poll(async () => (await scroller.boundingBox())?.width ?? 0).toBeGreaterThan(scrollerBox!.width + 180);
 
     await outlineToggle.click();
-    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
     await expect(outlineDrawer).toBeVisible();
     await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
-    const outline = dialog.getByTestId('pdf-outline');
+    const outline = pdfOutline(dialog);
     await expect(outline.getByText('Introduction', { exact: true })).toBeVisible();
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
     await expect(outline.getByText('Details', { exact: true })).toBeVisible();
-    await expect(dialog.getByTestId('pdf-sidebar-thumbnails-tab')).toHaveCount(0);
-    await expect(dialog.locator('[data-testid^="pdf-thumbnail-"]')).toHaveCount(0);
     await outline.getByText('Second Chapter', { exact: true }).click();
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-    await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+    await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await captureFunctionalScreenshot(page, 'file-manager-pdf-preview.png', { viewport: { width: 1440, height: 900 } });
 
-    const zoom = dialog.getByTestId('pdf-zoom-label');
+    const zoom = pdfZoomLabel(dialog);
     const beforeZoom = await zoom.textContent();
-    await dialog.getByTestId('pdf-zoom-in').click();
+    await dialog.getByTitle('Zoom in', { exact: true }).click();
     await expect(zoom).not.toHaveText(beforeZoom ?? '');
-    await dialog.getByTestId('pdf-fit-width').click();
-    await expect(dialog.getByTestId('pdf-fit-width')).toHaveAttribute('aria-pressed', 'true');
+    await dialog.getByRole('button', { name: 'Fit width', exact: true }).click();
+    await expect(dialog.getByRole('button', { name: 'Fit width', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
 
     await closePreview(page, filename);
   });
@@ -296,12 +315,12 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(dialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
     await expect(dialog.getByText('2026', { exact: true })).toBeVisible();
 
-    const preview = dialog.getByTestId('spreadsheet-preview');
-    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
-    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    const preview = spreadsheetScroller(dialog).locator('..');
+    const scroller = spreadsheetScroller(dialog);
+    const sheetTabs = worksheetTabs(dialog);
     await expect(sheetTabs).toBeVisible();
-    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
+    await expect(worksheetTab(dialog, 'E2E')).toHaveText('E2E');
+    await expect(worksheetTab(dialog, 'Second')).toHaveText('Second');
     await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-preview.png', {
       viewport: { width: 1440, height: 900 },
     });
@@ -311,11 +330,11 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(spreadsheetSearch).toBeFocused();
     await spreadsheetSearch.fill('Second Sheet E2E');
     await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/1');
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
-    await expect(dialog.locator('td.spreadsheet-search-active')).toHaveText('Second Sheet E2E');
+    await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
+    await expect(dialog.locator('td[data-search-active="true"]')).toHaveText('Second Sheet E2E');
     await dialog.getByTestId('preview-search-close').click();
-    await dialog.getByTestId('spreadsheet-sheet-0').click();
-    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveAttribute('aria-pressed', 'true');
+    await worksheetTab(dialog, 'E2E').click();
+    await expect(worksheetTab(dialog, 'E2E')).toHaveAttribute('aria-selected', 'true');
 
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
@@ -332,9 +351,9 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
-    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
     await closePreview(page, filename);
@@ -493,7 +512,7 @@ test('preview close button preserves cached tabs when popup file editing is disa
     const pdfDialog = documentPopup(page);
     await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
     await pdfDialog.getByRole('button', { name: 'Next page', exact: true }).click();
-    await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
     await hidePreview(page, 'preview.pdf');
 
     await row(page, 'preview.xlsx').dblclick();
@@ -508,7 +527,7 @@ test('preview close button preserves cached tabs when popup file editing is disa
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = documentPopup(page);
     await expect(pdfDialog.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(2);
-    await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
   });
 });
 
@@ -538,7 +557,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const dialog = documentPopup(page);
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
     await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await hidePreview(page, filename);
   });
 
@@ -546,7 +565,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
-    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
     await hidePreview(page, filename);
   });
@@ -580,11 +599,11 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
 
     await tabs.getByRole('tab', { name: 'preview.pdf' }).click();
     const pdfDialog = documentPopup(page);
-    await expect(pdfDialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
 
     await pdfDialog.getByTestId('file-preview-tabs').getByRole('tab', { name: 'preview.xlsx' }).click();
     const xlsxDialog = documentPopup(page);
-    await expect(xlsxDialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(worksheetTab(xlsxDialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect(xlsxDialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
 
     await xlsxDialog.getByTestId('file-preview-tabs').getByRole('tab', { name: '预览-测试.png' }).click();
@@ -605,9 +624,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
 
-  const dragBottomScrollbar = async (dialog: Locator, scrollbarTestId: string, scrollerTestId: string) => {
-    const scrollbar = dialog.getByTestId(scrollbarTestId);
-    const scroller = dialog.getByTestId(scrollerTestId);
+  const dragBottomScrollbar = async (scrollbar: Locator, scroller: Locator) => {
     await expect(scrollbar).toBeVisible();
     await expect.poll(() => scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
     expect.soft(await scroller.evaluate((element) => getComputedStyle(element).overflowX)).toBe('hidden');
@@ -627,13 +644,13 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
       await row(page, filename).dblclick();
       const dialog = documentPopup(page);
       await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-      for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
-      const { scroller } = await dragBottomScrollbar(dialog, 'pdf-horizontal-scrollbar', 'pdf-page-scroller');
+      for (let index = 0; index < 5; index += 1) await dialog.getByTitle('Zoom in', { exact: true }).click();
+      const { scroller } = await dragBottomScrollbar(previewHorizontalScrollbar(dialog), pdfScroller(dialog));
       await scroller.evaluate((element) => {
         element.scrollLeft = 0;
       });
       const geometry = await scroller.evaluate((element) => {
-        const pageElement = element.querySelector<HTMLElement>('[data-testid^="pdf-page-"]');
+        const pageElement = element.querySelector<HTMLElement>('[data-pdf-page]');
         if (!pageElement) throw new Error('PDF page element is missing');
         const scrollerStyle = getComputedStyle(element);
         const scrollerRect = element.getBoundingClientRect();
@@ -651,11 +668,11 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
         Math.floor(geometry.pageWidth + geometry.horizontalPadding) - 2,
       );
       expect(geometry.pageLeft).toBeGreaterThanOrEqual(geometry.scrollerLeft - 1);
-      await dialog.getByTestId('pdf-fit-width').click();
+      await dialog.getByRole('button', { name: 'Fit width', exact: true }).click();
       await expect
         .poll(() => scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1))
         .toBe(true);
-      await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
+      await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
       await closePreview(page, filename);
     },
   );
@@ -667,15 +684,14 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
     const dialog = documentPopup(page);
     await expect(dialog.getByText('Nexus XLSX E2E', { exact: true })).toBeVisible();
     const { scrollbar, scroller } = await dragBottomScrollbar(
-      dialog,
-      'spreadsheet-horizontal-scrollbar',
-      'spreadsheet-scroll-container',
+      previewHorizontalScrollbar(dialog),
+      spreadsheetScroller(dialog),
     );
     await captureFunctionalScreenshot(page, 'file-manager-preview-horizontal-scroll.png', {
       viewport: { width: 760, height: 860 },
     });
 
-    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    const sheetTabs = worksheetTabs(dialog);
     expect(await sheetTabs.evaluate((element) => getComputedStyle(element).overflowX)).toBe('auto');
     await sheetTabs.evaluate((element) => {
       element.style.width = '120px';
@@ -701,11 +717,11 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
     await expect(dialog.getByText('Compact A1', { exact: true })).toBeVisible();
-    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    const scroller = spreadsheetScroller(dialog);
     await expect.poll(() => scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-    await expect(dialog.getByTestId('spreadsheet-horizontal-scrollbar')).toBeHidden();
+    await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
-    const sheetTabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    const sheetTabs = worksheetTabs(dialog);
     await expect(sheetTabs.locator('button')).toHaveCount(1);
     await expect.poll(() => sheetTabs.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     await closePreview(page, filename);
@@ -718,7 +734,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
     const dialog = documentPopup(page);
     await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
     await expect(dialog.getByText('Wide DOCX Column C', { exact: true })).toBeAttached();
-    await dragBottomScrollbar(dialog, 'docx-horizontal-scrollbar', 'docx-preview-scroller');
+    await dragBottomScrollbar(previewHorizontalScrollbar(dialog), docxScroller(dialog));
   });
 });
 
@@ -772,17 +788,15 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    const outline = dialog.getByTestId('pdf-outline');
+    const outline = pdfOutline(dialog);
     await expect(outline).toBeVisible();
     await outline.getByText('Second Chapter', { exact: true }).click();
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
+    await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await replaceFixture(filename);
     await expect(outline.getByText('Second Chapter', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Refresh preview', exact: true }).click();
-    await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-    await expect(
-      dialog.getByTestId('pdf-outline').getByText('Second Chapter Refreshed', { exact: true }),
-    ).toBeVisible();
+    await expect(pdfCurrentPage(dialog)).toHaveValue('2');
+    await expect(pdfOutline(dialog).getByText('Second Chapter Refreshed', { exact: true })).toBeVisible();
     await closePreview(page, filename);
   });
 
@@ -790,12 +804,12 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
-    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
     await replaceFixture(filename);
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Refresh preview', exact: true }).click();
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect(dialog.getByText('Second Sheet Refreshed', { exact: true })).toBeVisible();
     await closePreview(page, filename);
   });
@@ -871,44 +885,42 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       const dialog = documentPopup(page);
       await expect(dialog).toBeVisible({ timeout: 20_000 });
 
-      const pager = dialog.getByTestId('spreadsheet-pagination');
+      const pager = spreadsheetPageRange(dialog).locator('..');
       await expect(pager).toBeVisible();
-      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
-      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('1');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('24');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('40');
+      await expect(spreadsheetPageIndicator(dialog)).toHaveText('1/2');
+      await expect(spreadsheetPageRange(dialog)).toContainText('1');
+      await expect(spreadsheetPageRange(dialog)).toContainText('24');
+      await expect(spreadsheetPageRange(dialog)).toContainText('40');
 
       await expect(dialog.getByText('E2E-F24', { exact: true })).toBeVisible();
       await expect(dialog.getByText('E2E-A25', { exact: true })).toHaveCount(0);
       await expect(dialog.getByText('E2E-G1', { exact: true })).toHaveCount(0);
-      await expect(dialog.getByTestId('spreadsheet-data-row')).toHaveCount(24);
-      await expect(dialog.locator('.spreadsheet-header-row')).toHaveCount(1);
+      await expect(spreadsheetRows(dialog)).toHaveCount(24);
+      await expect(spreadsheetRows(dialog).first().locator('td.font-semibold')).toHaveCount(6);
       await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-pagination.png', {
         viewport: { width: 1440, height: 900 },
       });
 
-      await dialog.getByTestId('spreadsheet-next-page').click();
-      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('2');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('25');
-      await expect(dialog.getByTestId('spreadsheet-page-range')).toContainText('40');
+      await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
+      await expect(spreadsheetPageIndicator(dialog)).toHaveText('2/2');
+      await expect(spreadsheetPageRange(dialog)).toContainText('25');
+      await expect(spreadsheetPageRange(dialog)).toContainText('40');
       await expect(dialog.getByText('E2E-A25', { exact: true })).toBeVisible();
       await expect(dialog.getByText('E2E-F40', { exact: true })).toBeVisible();
       await expect(dialog.getByText('E2E-A24', { exact: true })).toHaveCount(0);
-      await expect(dialog.getByTestId('spreadsheet-data-row')).toHaveCount(16);
-      await expect(dialog.locator('.spreadsheet-header-row')).toHaveCount(0);
-      await expect(dialog.getByTestId('spreadsheet-placeholder-row')).toHaveCount(0);
-      const lastPageOverflow = await dialog
-        .getByTestId('spreadsheet-scroll-container')
-        .evaluate((element) => element.scrollHeight - element.clientHeight);
+      await expect(spreadsheetRows(dialog)).toHaveCount(16);
+      await expect(spreadsheetRows(dialog).first().locator('td.font-semibold')).toHaveCount(0);
+      const lastPageOverflow = await spreadsheetScroller(dialog).evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      );
       expect(lastPageOverflow).toBeLessThanOrEqual(2);
       await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-compact-last-page.png', {
         viewport: { width: 1440, height: 900 },
       });
 
-      await dialog.getByTestId('spreadsheet-previous-page').click();
-      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
-      await expect(dialog.getByTestId('spreadsheet-data-row')).toHaveCount(24);
+      await dialog.getByRole('button', { name: 'Previous page', exact: true }).click();
+      await expect(spreadsheetPageIndicator(dialog)).toHaveText('1/2');
+      await expect(spreadsheetRows(dialog)).toHaveCount(24);
       await closePreview(page, filename);
     });
   } finally {

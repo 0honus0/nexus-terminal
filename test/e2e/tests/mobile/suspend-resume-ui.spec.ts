@@ -79,13 +79,9 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
   });
 
   await slowStep('Suspended Sessions UI resumes the hanging shell instead of opening a new SSH shell', async () => {
-    const manager = page.getByTestId('suspended-sessions-view');
+    const manager = page.getByRole('region', { name: 'Suspended SSH Sessions', exact: true });
     await expect(manager).toBeVisible();
-    const hanging = manager
-      .locator('li[data-suspend-id]')
-      .filter({ hasText: 'E2E SSH' })
-      .filter({ hasText: 'Active' })
-      .first();
+    const hanging = manager.locator('li').filter({ hasText: 'E2E SSH' }).filter({ hasText: 'Active' }).first();
     await expect(hanging).toBeVisible({ timeout: 20_000 });
     await hanging.getByRole('button', { name: 'Resume', exact: true }).click();
 

@@ -80,7 +80,13 @@
                 <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ task.label }}</span>
                 <span class="shrink-0 text-xs text-text-secondary">{{ t(`progressCenter.kind.${task.kind}`) }}</span>
               </div>
-              <div class="h-1.5 overflow-hidden rounded bg-header">
+              <div
+                role="progressbar"
+                :aria-valuemin="0"
+                :aria-valuemax="100"
+                :aria-valuenow="Math.round(normalizedProgress(task))"
+                class="h-1.5 overflow-hidden rounded bg-header"
+              >
                 <div
                   data-testid="hidden-progress-bar"
                   class="h-full bg-primary"

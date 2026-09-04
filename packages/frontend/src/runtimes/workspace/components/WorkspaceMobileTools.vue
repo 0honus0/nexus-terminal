@@ -133,31 +133,20 @@
           t('terminal.mobile.selectAll')
         }}</BaseButton>
         <BaseButton size="sm" variant="ghost" @click="terminalApi?.openSearch?.()">⌕</BaseButton>
-        <BaseButton
-          data-testid="mobile-quick-commands-button"
-          size="sm"
-          variant="ghost"
-          @click="quickCommandsVisible = true"
-          >{{ t('layout.pane.quickCommands') }}</BaseButton
-        >
-        <BaseButton
-          data-testid="open-status-monitor-button"
-          class="min-h-11"
-          size="sm"
-          variant="ghost"
-          @click="statusVisible = true"
-          >{{ t('layout.pane.statusMonitor') }}</BaseButton
-        >
-        <BaseButton data-testid="mobile-virtual-keyboard-button" size="sm" variant="ghost" @click="toggleKeyboard"
-          >⌨</BaseButton
-        >
+        <BaseButton size="sm" variant="ghost" @click="quickCommandsVisible = true">{{
+          t('layout.pane.quickCommands')
+        }}</BaseButton>
+        <BaseButton class="min-h-11" size="sm" variant="ghost" @click="statusVisible = true">{{
+          t('layout.pane.statusMonitor')
+        }}</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="toggleKeyboard">⌨</BaseButton>
       </template>
     </div>
   </div>
 
   <BaseModal
-    data-testid="quick-commands-dialog"
     :visible="quickCommandsVisible"
+    :close-on-escape="true"
     :title="t('layout.pane.quickCommands')"
     overlay-class="!p-2"
     panel-class="h-[min(82dvh,720px)] w-[min(96vw,620px)]"
@@ -176,7 +165,6 @@
   </BaseModal>
 
   <BaseModal
-    data-testid="status-monitor-modal"
     :visible="statusVisible"
     :title="t('layout.pane.statusMonitor')"
     overlay-class="!p-2"

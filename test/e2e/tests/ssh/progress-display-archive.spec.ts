@@ -90,7 +90,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
         await hideVisibleProgressCenter(page);
 
         const modal = await openProgressDisplay(page);
-        const task = hiddenTask(modal, 'archive-source.zip');
+        const task = hiddenTask(modal, 'archive-source.zip').filter({ hasText: 'Decompress' }).first();
         await expect(task).toContainText('Decompress');
         await expect(task.getByTestId('hidden-progress-cancel')).toBeEnabled();
         await task.getByTestId('hidden-progress-cancel').click();
@@ -115,7 +115,7 @@ test('registered archive progress supports hide, restore, and real cancel for co
   }
 });
 
-test('overlapping archive requests are rejected without retargeting the active task', async ({ page, context }) => {
+test('overlapping archive requests keep independent task ownership', async ({ page, context }) => {
   await openFileManager(page, context);
   const secondSource = 'archive-second.txt';
   const fixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(secondSource)}&size=64`, {
@@ -127,7 +127,7 @@ test('overlapping archive requests are rejected without retargeting the active t
 
   await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=2200`, { method: 'POST' });
   try {
-    await slowStep('second archive request is rejected while the active task keeps ownership', async () => {
+    await slowStep('second archive request keeps separate task ownership', async () => {
       await startZipCompression(page, 'archive-source.txt');
 
       const popup = visibleProgressCenter(page);
@@ -138,15 +138,18 @@ test('overlapping archive requests are rejected without retargeting the active t
       await page.waitForTimeout(700);
       await startZipCompression(page, secondSource);
 
-      // The original task remains the owner; completed work stays inspectable in the clean ProgressCenter.
+      const secondTask = visibleProgressTask(page, 'archive-second.zip');
       await expect(popup).toBeVisible();
+      await expect(activeTask).toHaveAttribute('data-task-kind', 'compress');
+      await expect(secondTask).toHaveAttribute('data-task-kind', 'compress');
       await expect(activeTask).toContainText('archive-source.zip');
-      await expect(page.getByText('Another archive operation is already running.', { exact: true })).toBeVisible();
+      await expect(secondTask).toContainText('archive-second.zip');
 
       await expect(activeTask).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
+      await expect(secondTask).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
       await refreshFileManager(page);
       await expect(row(page, 'archive-source.zip')).toBeVisible();
-      await expect(row(page, 'archive-second.zip')).toHaveCount(0);
+      await expect(row(page, 'archive-second.zip')).toBeVisible();
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
@@ -166,10 +169,8 @@ test('closing and reopening the file manager preserves an in-flight archive task
     await expect(task).toHaveAttribute('data-task-kind', 'compress');
 
     const fileManagerModal = page.getByTestId('file-manager-modal');
-    await fileManagerModal.locator(':scope > div > div').first().locator('button').last().click();
-    await expect(fileManagerModal).toBeHidden();
-
-    await page.getByTestId('open-file-manager-button').click();
+    await closeConnectedFileManager(page);
+    await reopenConnectedFileManager(page);
     await expect(fileManagerModal).toBeVisible();
     await expect(popup).toBeVisible();
     await expect(task).toContainText('archive-source.zip');
@@ -228,9 +229,10 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await expect(task).toBeVisible();
     await task.getByTestId('transfer-progress-cancel').click();
     await expect(task).toHaveAttribute('data-task-status', 'cancelled', { timeout: 10_000 });
-    await reopenConnectedFileManager(page);
-    await refreshFileManager(page);
-    await expect(row(page, 'archive-source.zip')).toHaveCount(0);
+    await sidebarToggle.click();
+    await expect(sidebarList).toBeVisible();
+    await sidebar.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await expect(sidebarList.locator('tr[data-filename="archive-source.zip"]')).toHaveCount(0);
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
     await context.request.put('/api/v1/settings/sidebar', { data: originalSidebar });

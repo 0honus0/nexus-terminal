@@ -169,7 +169,12 @@
       }}</span>
     </div>
 
-    <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+    <div
+      ref="scroller"
+      role="region"
+      :aria-label="t('fileManager.preview.spreadsheet')"
+      class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+    >
       <table v-if="activeSheet" class="spreadsheet-preview min-w-max border-collapse text-xs">
         <tbody>
           <tr v-for="(row, rowIndex) in pageRows" :key="pageStart + rowIndex" :style="rowStyle(rowIndex)">
@@ -206,14 +211,19 @@
     />
 
     <div class="flex flex-col gap-1 border-t border-border bg-background p-2">
-      <div class="flex max-w-full gap-1 overflow-x-auto pb-1">
+      <div
+        role="tablist"
+        :aria-label="t('fileManager.preview.worksheet')"
+        class="flex max-w-full gap-1 overflow-x-auto pb-1"
+      >
         <BaseButton
           v-for="(candidate, index) in sheets"
           :key="candidate.name"
+          role="tab"
           class="min-h-11 sm:min-h-0"
           size="sm"
           :variant="sheetIndex === index ? 'primary' : 'ghost'"
-          :aria-pressed="sheetIndex === index"
+          :aria-selected="sheetIndex === index"
           @click="selectSheet(index)"
           >{{ candidate.name }}</BaseButton
         >
@@ -237,6 +247,7 @@
           <BaseButton
             class="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
             size="sm"
+            :aria-label="t('fileManager.preview.spreadsheetPreviousPage')"
             :disabled="page <= 1"
             @click="goPage(page - 1)"
             >←</BaseButton
@@ -245,6 +256,7 @@
           <BaseButton
             class="min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
             size="sm"
+            :aria-label="t('fileManager.preview.spreadsheetNextPage')"
             :disabled="page >= pageCount"
             @click="goPage(page + 1)"
             >→</BaseButton

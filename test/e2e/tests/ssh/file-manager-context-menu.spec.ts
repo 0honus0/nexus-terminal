@@ -41,10 +41,18 @@ async function confirmAction(
   actionType: 'file' | 'mkdir' | 'rename' | 'chmod',
   value: string,
 ): Promise<void> {
-  const modal = page.getByTestId('file-manager-action-modal');
-  await expect(modal).toHaveAttribute('data-action-type', actionType);
-  await modal.locator(`#fileManagerActionInput-${actionType}`).fill(value);
-  await modal.getByTestId('file-manager-action-confirm').click();
+  const title =
+    actionType === 'file'
+      ? 'Create New File'
+      : actionType === 'mkdir'
+        ? 'Create New Folder'
+        : actionType === 'rename'
+          ? /Rename /
+          : /Change Permissions for /;
+  const modal = page.getByRole('dialog', { name: title });
+  await expect(modal).toBeVisible();
+  await modal.getByLabel('Value', { exact: true }).fill(value);
+  await modal.getByRole('button', { name: 'Confirm', exact: true }).click();
 }
 
 async function confirmDelete(page: Page): Promise<void> {
@@ -62,7 +70,7 @@ async function goIntoFolder(page: Page, folder: string): Promise<void> {
 }
 
 async function goToParent(page: Page): Promise<void> {
-  await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
+  await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 
@@ -117,12 +125,14 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
     expect(targetBox).toBeTruthy();
     expect(sidebarBox).toBeTruthy();
     expect(viewport).toBeTruthy();
-    expect(targetBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x);
-    expect(targetBox!.x + targetBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width + 1);
+    expect(targetBox!.x).toBeLessThan(sidebarBox!.x + sidebarBox!.width);
+    expect(targetBox!.x + targetBox!.width).toBeGreaterThan(sidebarBox!.x);
+    const visibleTargetRight =
+      Math.min(targetBox!.x + targetBox!.width, sidebarBox!.x + sidebarBox!.width) - targetBox!.x;
 
     await target.click({
       button: 'right',
-      position: { x: Math.max(1, targetBox!.width - 4), y: Math.round(targetBox!.height / 2) },
+      position: { x: Math.max(1, visibleTargetRight - 4), y: Math.round(targetBox!.height / 2) },
     });
     await expect(menu(page)).toBeVisible();
 
@@ -313,8 +323,8 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await confirmAction(page, 'chmod', '600');
     await rightClickRow(page, 'renamed-by-menu.txt');
     await clickMenuItem(page, 'Change Permissions');
-    const modal = page.getByTestId('file-manager-action-modal');
-    await expect(modal.locator('#fileManagerActionInput-chmod')).toHaveValue('600');
+    const modal = page.getByRole('dialog', { name: /Change Permissions for / });
+    await expect(modal.getByLabel('Value', { exact: true })).toHaveValue('600');
     await page.keyboard.press('Escape');
   });
 

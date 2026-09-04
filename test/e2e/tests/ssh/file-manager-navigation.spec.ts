@@ -72,10 +72,9 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     const contextMenu = page.getByTestId('file-manager-context-menu');
     await expect(contextMenu).toBeVisible();
     await contextMenu.getByText('Rename', { exact: true }).first().click();
-    const renameModal = page.getByTestId('file-manager-action-modal');
-    await expect(renameModal).toHaveAttribute('data-action-type', 'rename');
-    await renameModal.locator('#fileManagerActionInput-rename').fill('nested-renamed.txt');
-    await renameModal.getByTestId('file-manager-action-confirm').click();
+    const renameModal = page.getByRole('dialog', { name: /Rename / });
+    await renameModal.getByLabel('Value', { exact: true }).fill('nested-renamed.txt');
+    await renameModal.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]')).toHaveCount(0);
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested-renamed.txt"]')).toBeVisible();
 
@@ -93,6 +92,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(pathInput(page)).toHaveValue('/');
     await preview.click({ position: { x: 2, y: 2 } });
     await expect(preview).toBeHidden();
+    await expect(fileManager).toBeVisible();
 
     const reopenedSearch = fileManager.getByTestId('file-manager-search-input');
     await reopenedSearch.press('Escape');
@@ -114,7 +114,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Typing an absolute path navigates directly to the remote directory', async () => {
     await navigateViaPathInput(page, FAVORITE_PATH);
-    await expect(manager(page).getByTestId('file-manager-parent-button')).toBeVisible();
+    await expect(manager(page).getByTitle('Parent directory', { exact: true })).toBeVisible();
     await expect(row(page, 'seed.txt')).toHaveCount(0);
 
     await navigateViaPathInput(page, '/');
@@ -129,7 +129,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
     await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
-    await expect(manager(page).getByTestId('file-manager-parent-button')).toBeVisible();
+    await expect(manager(page).getByTitle('Parent directory', { exact: true })).toBeVisible();
   });
 
   await step('Favorite paths can be added, used for navigation, and deleted', async () => {
@@ -232,7 +232,7 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
     );
     expect(removeResponse.ok).toBeTruthy();
 
-    await fileManager.getByTitle('Refresh').click();
+    await fileManager.getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(pathInput(page)).toHaveValue('/', { timeout: 10_000 });
     await expect(row(page, 'seed.txt')).toBeVisible();
   });

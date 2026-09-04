@@ -45,8 +45,8 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
   });
 
   await slowStep('mobile status monitor opens and receives live SSH status samples', async () => {
-    await page.getByTestId('open-status-monitor-button').click();
-    const modal = page.getByTestId('status-monitor-modal');
+    await page.getByRole('button', { name: 'Status Monitor', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: 'Status Monitor', exact: true });
     await expect(modal).toBeVisible();
     await expect(modal.getByTestId('status-monitor')).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
     await expect(modal.getByTestId('status-monitor')).toContainText('CPU');

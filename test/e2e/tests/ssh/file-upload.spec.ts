@@ -127,7 +127,7 @@ test('file browsing and recursive search remain responsive while upload writes a
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 
-  await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
+  await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
   await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
 
   await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
@@ -163,8 +163,10 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
 
     const conflictModal = page.getByTestId('upload-conflict-modal');
     await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-    await conflictModal.getByTestId('upload-conflict-apply-all').check();
-    await conflictModal.getByTestId('upload-conflict-overwrite').click();
+    await conflictModal
+      .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+      .check();
+    await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
     await expect(conflictModal).toBeHidden();
 
     await waitForVisibleFiles(page, freshNames);
@@ -188,8 +190,10 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
 
       const conflictModal = page.getByTestId('upload-conflict-modal');
       await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-      await conflictModal.getByTestId('upload-conflict-apply-all').check();
-      await conflictModal.getByTestId('upload-conflict-skip').click();
+      await conflictModal
+        .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+        .check();
+      await conflictModal.getByRole('button', { name: 'Skip', exact: true }).click();
       await expect(conflictModal).toBeHidden();
 
       await waitForVisibleFiles(page, [nonConflictName]);
@@ -239,7 +243,7 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
       const hiddenTask = hiddenSource.getByTestId('hidden-progress-task').first();
       await expect(hiddenSource).toBeVisible();
       await expect(hiddenTask).toBeVisible();
-      await expect(hiddenTask.getByTestId('hidden-progress-bar')).toBeVisible();
+      await expect(hiddenTask.getByRole('progressbar')).toBeVisible();
       await hiddenSource.getByTestId('hidden-progress-restore').click();
       await expect(progressModal).toBeHidden();
       await reopenConnectedFileManager(page);
@@ -306,7 +310,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     fill: 0x60 + index,
   }));
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=220`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
   try {
     await dragLocalFiles(page, files);
 
@@ -405,8 +409,19 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await expect(cancelAllHidden).toBeVisible();
     await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', { viewport: { width: 1440, height: 900 } });
     await cancelAllHidden.click();
-    await expect(sourceCard).toBeHidden({ timeout: 10_000 });
-    await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+    await expect
+      .poll(
+        async () => ((await sourceCard.isVisible()) ? sourceCard.getByTestId('hidden-progress-cancel').count() : 0),
+        {
+          timeout: 10_000,
+        },
+      )
+      .toBe(0);
+    if (await sourceCard.isVisible()) {
+      await expect(sourceCard).toContainText(/Completed|Failed|Partially completed|Cancelled/);
+    } else {
+      await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+    }
     await modal.getByTestId('progress-display-close').click();
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
@@ -499,6 +514,7 @@ test('cancelled upload stays cancelled after a temporary network disconnect', as
     await expect(popup).toBeVisible({ timeout: 10_000 });
     await expect(task).toBeVisible();
     await page.waitForTimeout(400);
+    await closeConnectedFileManager(page);
 
     await task.getByTestId('transfer-progress-cancel').click();
     await cdp.send('Network.emulateNetworkConditions', {

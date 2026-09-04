@@ -553,12 +553,13 @@
       <BaseButton size="sm" :title="t('fileManager.preview.pdfZoomIn')" @click="setZoom(displayedZoomPercent + 25)"
         >+</BaseButton
       >
-      <BaseButton size="sm" :variant="fitWidth ? 'primary' : 'ghost'" @click="setFitWidth">{{
+      <BaseButton size="sm" :variant="fitWidth ? 'primary' : 'ghost'" :aria-pressed="fitWidth" @click="setFitWidth">{{
         t('fileManager.preview.pdfFitWidth')
       }}</BaseButton>
       <BaseButton
         size="sm"
         :variant="outlineVisible ? 'primary' : 'ghost'"
+        :aria-expanded="outlineVisible"
         :title="t('fileManager.preview.pdfOutline')"
         @click="desktop ? (desktopOutlineVisible = !desktopOutlineVisible) : (outlineOpen = !outlineOpen)"
         >☷</BaseButton
@@ -575,12 +576,20 @@
       ></button>
       <aside
         v-if="outlineVisible"
+        :aria-label="t('fileManager.preview.pdfOutline')"
         class="z-20 flex w-[min(82vw,18rem)] shrink-0 flex-col border-r border-border bg-header/95 sm:relative sm:w-52 sm:shadow-none"
         :class="desktop ? '' : 'absolute inset-y-0 left-0 shadow-xl'"
       >
         <header class="flex min-h-11 items-center justify-between gap-2 border-b border-border px-3">
           <strong class="truncate text-sm">{{ t('fileManager.preview.pdfOutline') }}</strong>
-          <BaseButton v-if="!desktop" size="sm" variant="ghost" @click="outlineOpen = false">×</BaseButton>
+          <BaseButton
+            v-if="!desktop"
+            size="sm"
+            variant="ghost"
+            :aria-label="t('common.close')"
+            @click="outlineOpen = false"
+            >×</BaseButton
+          >
         </header>
         <div class="min-h-0 flex-1 overflow-y-auto p-2">
           <PdfOutlineItems v-if="outline.length" :items="outline" @navigate="resolveOutlineDestination" />
@@ -591,6 +600,8 @@
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref="scroller"
+          role="region"
+          :aria-label="t('fileManager.preview.pdfMeta', { pages: pageCount })"
           class="pdf-scroller min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-black/15 p-3 sm:p-6"
           data-pdf-scroller
           @scroll.passive="queueCurrentPageUpdate"

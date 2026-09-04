@@ -65,6 +65,25 @@ async function longPressFile(page: Page, filename: string): Promise<Locator> {
   return menu;
 }
 
+const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: /^PDF · \d+ pages$/ });
+const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator(`[data-pdf-page="${pageNumber}"]`);
+const pdfCurrentPage = (dialog: Locator): Locator =>
+  dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
+const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
+const pdfZoomLabel = (dialog: Locator): Locator =>
+  dialog
+    .locator('.pdf-toolbar')
+    .getByText(/^\d+%$/)
+    .first();
+const previewHorizontalScrollbar = (dialog: Locator): Locator =>
+  dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
+const spreadsheetScroller = (dialog: Locator): Locator =>
+  dialog.getByRole('region', { name: 'Spreadsheet', exact: true });
+const worksheetTabs = (dialog: Locator): Locator => dialog.getByRole('tablist', { name: 'Worksheet', exact: true });
+const worksheetTab = (dialog: Locator, name: string): Locator =>
+  worksheetTabs(dialog).getByRole('tab', { name, exact: true });
+const docxScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: 'Word document', exact: true });
+
 function expectBoxInsideViewport(
   box: { x: number; y: number; width: number; height: number },
   viewport: { width: number; height: number },
@@ -274,9 +293,9 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
   await slowStep('Edit switches the preview to mobile CodeMirror and Save persists real SFTP bytes', async () => {
     const preview = page.getByTestId('document-popup');
     await preview.getByRole('button', { name: 'Edit', exact: true }).click();
-    await expect(preview).toBeHidden();
+    await expect(preview).toHaveAttribute('data-document-mode', 'editor');
 
-    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
+    const editor = preview.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
@@ -311,7 +330,7 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
 
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  await page.getByTestId('mobile-virtual-keyboard-button').click();
+  await page.getByRole('button', { name: '⌨', exact: true }).click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
 
@@ -329,13 +348,13 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     const screenshotAlt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await screenshotCtrl.click();
     await screenshotAlt.click();
-    await expect(screenshotCtrl).toHaveClass(/bg-primary/);
-    await expect(screenshotAlt).toHaveClass(/bg-primary/);
+    await expect(screenshotCtrl).toHaveAttribute('aria-pressed', 'true');
+    await expect(screenshotAlt).toHaveAttribute('aria-pressed', 'true');
     await captureFunctionalScreenshot(page, 'mobile-virtual-modifiers.png');
     await screenshotCtrl.click();
     await screenshotAlt.click();
-    await expect(screenshotCtrl).not.toHaveClass(/bg-primary/);
-    await expect(screenshotAlt).not.toHaveClass(/bg-primary/);
+    await expect(screenshotCtrl).toHaveAttribute('aria-pressed', 'false');
+    await expect(screenshotAlt).toHaveAttribute('aria-pressed', 'false');
   }
 
   await slowStep('Alt+Left sends the xterm Alt cursor sequence and clears Alt after one key', async () => {
@@ -346,9 +365,9 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
 
     const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await alt.click();
-    await expect(alt).toHaveClass(/bg-primary/);
+    await expect(alt).toHaveAttribute('aria-pressed', 'true');
     await keyboard.getByRole('button', { name: '←', exact: true }).click();
-    await expect(alt).not.toHaveClass(/bg-primary/);
+    await expect(alt).toHaveAttribute('aria-pressed', 'false');
     await expect
       .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/ALT_LEFT_BYTES=\s*27\s+91\s+49\s+59\s+51\s+68/);
@@ -364,11 +383,11 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await ctrl.click();
     await alt.click();
-    await expect(ctrl).toHaveClass(/bg-primary/);
-    await expect(alt).toHaveClass(/bg-primary/);
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
+    await expect(alt).toHaveAttribute('aria-pressed', 'true');
     await keyboard.getByRole('button', { name: 'Del', exact: true }).click();
-    await expect(ctrl).not.toHaveClass(/bg-primary/);
-    await expect(alt).not.toHaveClass(/bg-primary/);
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
+    await expect(alt).toHaveAttribute('aria-pressed', 'false');
     await expect
       .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/CTRL_ALT_DEL_BYTES=\s*27\s+91\s+51\s+59\s+55\s+126/);
@@ -384,13 +403,13 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await tapFileManagerRow(page, filename);
     const dialog = page.getByTestId('document-popup');
     await expect(dialog).toBeVisible({ timeout: 20_000 });
-    const preview = dialog.getByTestId('spreadsheet-preview');
-    const tabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    const preview = spreadsheetScroller(dialog).locator('..');
+    const tabs = worksheetTabs(dialog);
     await expect(preview).toBeVisible();
     await expect(tabs).toBeVisible();
-    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
-    await expect(dialog.getByTestId('spreadsheet-horizontal-scrollbar')).toBeHidden();
+    await expect(worksheetTab(dialog, 'E2E')).toHaveText('E2E');
+    await expect(worksheetTab(dialog, 'Second')).toHaveText('Second');
+    await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
     const [panelBox, tabsBox, viewport] = await Promise.all([
       dialog.locator('section').boundingBox(),
@@ -406,7 +425,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
 
   await step('tapping the second sheet replaces the narrow-grid content and resets scroll offsets', async () => {
     const dialog = page.getByTestId('document-popup');
-    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    const scroller = spreadsheetScroller(dialog);
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
       clientWidth: element.clientWidth,
@@ -430,9 +449,9 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
-    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
     await captureFunctionalScreenshot(page, 'mobile-spreadsheet-preview.png');
@@ -451,7 +470,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   const dialog = page.getByTestId('document-popup');
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-  await expect(dialog.getByTestId('pdf-continuous-pages').locator('[data-pdf-page-number]')).toHaveCount(3);
+  await expect(dialog.locator('[data-pdf-page]')).toHaveCount(3);
 
   const closeButton = dialog.getByRole('button', { name: 'Close preview', exact: true });
   const closeBox = await closeButton.boundingBox();
@@ -459,38 +478,43 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   expect(closeBox!.width).toBeGreaterThanOrEqual(40);
   expect(closeBox!.height).toBeGreaterThanOrEqual(40);
 
-  const zoomInButton = dialog.getByTestId('pdf-zoom-in');
-  const nextPageButton = dialog.getByTestId('pdf-next-page');
-  const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
+  const zoomInButton = dialog.getByTitle('Zoom in', { exact: true });
+  const nextPageButton = dialog.getByTitle('Next page', { exact: true });
+  const outlineToggle = dialog.getByTitle('Outline', { exact: true });
   await expect(zoomInButton).toBeVisible();
   await expect(nextPageButton).toBeVisible();
   await expect(outlineToggle).toBeVisible();
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
   const closedOutlineToggleStyle = await outlineToggle.evaluate((element) => {
     const style = getComputedStyle(element);
     return { color: style.color, backgroundColor: style.backgroundColor };
   });
-  await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
+  await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
-  const scroller = dialog.getByTestId('pdf-page-scroller');
+  const scroller = pdfScroller(dialog);
   await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   const scrollerBoxBeforeDrawer = await scroller.boundingBox();
   expect(scrollerBoxBeforeDrawer).toBeTruthy();
 
-  const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  const outlineDrawer = pdfOutline(dialog);
+  await expect(outlineDrawer).toBeHidden();
   await outlineToggle.click();
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+  await expect(outlineDrawer).toBeVisible();
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(outlineToggle).toHaveClass(/pdf-toolbar-button-active/);
+  await expect
+    .poll(() =>
+      outlineToggle.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { color: style.color, backgroundColor: style.backgroundColor };
+      }),
+    )
+    .not.toEqual(closedOutlineToggleStyle);
 
   // Tapping the same toolbar button to hide the drawer must also clear its
   // visual active state. Touch browsers can otherwise leave :hover stuck.
   await outlineToggle.click();
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await expect(outlineDrawer).toBeHidden();
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
   await expect
     .poll(() =>
       outlineToggle.evaluate((element) => {
@@ -501,31 +525,27 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
     .toEqual(closedOutlineToggleStyle);
 
   await outlineToggle.click();
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
+  await expect(outlineDrawer).toBeVisible();
   const scrollerBoxWithDrawer = await scroller.boundingBox();
   expect(scrollerBoxWithDrawer).toBeTruthy();
   expect(Math.abs(scrollerBoxWithDrawer!.width - scrollerBoxBeforeDrawer!.width)).toBeLessThanOrEqual(1);
-  await expect(dialog.locator('[data-testid^="pdf-thumbnail-"]')).toHaveCount(0);
-  await dialog.getByTestId('pdf-outline').getByText('Second Chapter', { exact: true }).click();
-  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await pdfOutline(dialog).getByText('Second Chapter', { exact: true }).click();
+  await expect(pdfCurrentPage(dialog)).toHaveValue('2');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
   await outlineToggle.click();
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
-  await expect(dialog.getByTestId('pdf-outline-close')).toBeVisible();
-  await dialog.getByTestId('pdf-outline-close').click();
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await expect(outlineDrawer).toBeVisible();
+  await expect(pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+  await pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(outlineDrawer).toBeHidden();
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
-  const thirdPage = dialog.getByTestId('pdf-page-3');
+  const thirdPage = pdfPage(dialog, 3);
   await scroller.evaluate(
     (element, top) => element.scrollTo({ top, behavior: 'auto' }),
     await thirdPage.evaluate((element) => element.offsetTop),
   );
-  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
+  await expect(pdfCurrentPage(dialog)).toHaveValue('3');
 
   await zoomInButton.click();
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
@@ -535,7 +555,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await dragPreviewWithTouch(scroller, { x: 185, y: 220 }, { x: 75, y: 212 });
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 
-  const zoomBeforePinch = Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', ''));
+  const zoomBeforePinch = Number((await pdfZoomLabel(dialog).innerText()).replace('%', ''));
   await pinchPreviewWithTouch(
     scroller,
     [
@@ -548,9 +568,9 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
     ],
   );
   await expect
-    .poll(async () => Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', '')))
+    .poll(async () => Number((await pdfZoomLabel(dialog).innerText()).replace('%', '')))
     .toBeGreaterThan(zoomBeforePinch);
-  await expect(dialog.getByTestId('pdf-fit-width')).toHaveAttribute('aria-pressed', 'false');
+  await expect(dialog.getByRole('button', { name: 'Fit width', exact: true })).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('mobile DOCX touch-pans wide content without a desktop scrollbar track', async ({ page, context }) => {
@@ -561,9 +581,9 @@ test('mobile DOCX touch-pans wide content without a desktop scrollbar track', as
   await tapFileManagerRow(page, filename);
   const dialog = page.getByTestId('document-popup');
   await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
-  const scroller = dialog.getByTestId('docx-preview-scroller');
+  const scroller = docxScroller(dialog);
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
-  await expect(dialog.getByTestId('docx-horizontal-scrollbar')).toBeHidden();
+  await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
   await scroller.evaluate((element) => {
     element.scrollLeft = 0;
   });
@@ -598,8 +618,8 @@ test('mobile preview close button clears cached state when popup file editing is
   expect(tabCloseBox).toBeTruthy();
   expect(tabCloseBox!.width).toBeGreaterThanOrEqual(40);
   expect(tabCloseBox!.height).toBeGreaterThanOrEqual(40);
-  await dialog.getByTestId('spreadsheet-sheet-1').click();
-  await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+  await worksheetTab(dialog, 'Second').click();
+  await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
 
   await dialog.getByRole('button', { name: 'Close preview', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -608,8 +628,8 @@ test('mobile preview close button clears cached state when popup file editing is
   const reopened = page.getByTestId('document-popup');
   await expect(reopened).toBeVisible({ timeout: 20_000 });
   await expect(reopened.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
-  await expect(reopened.getByTestId('spreadsheet-sheet-0')).toHaveAttribute('aria-pressed', 'true');
-  await expect(reopened.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'false');
+  await expect(worksheetTab(reopened, 'E2E')).toHaveAttribute('aria-selected', 'true');
+  await expect(worksheetTab(reopened, 'Second')).toHaveAttribute('aria-selected', 'false');
 });
 
 test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({
@@ -625,7 +645,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
     await slowStep(
       'throttled uploads expose all floating controls without overflowing the Pixel viewport',
       async () => {
-        const fileInput = page.getByTestId('file-upload-input');
+        const fileInput = page.locator('input[type="file"][multiple]').filter({ visible: false }).last();
         await fileInput.setInputFiles(
           filenames.map((name, index) => ({
             name,

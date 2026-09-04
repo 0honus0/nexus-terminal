@@ -79,14 +79,17 @@ test('quick command search stays visible by default and can be collapsed behind 
       const settings = page.getByTestId('preferences-settings');
       await expect(settings).toBeVisible();
 
-      const checkbox = settings.getByTestId('quick-command-collapsible-search-toggle');
+      const checkbox = settings.getByRole('checkbox', {
+        name: 'Collapse the search box into a search button by default',
+        exact: true,
+      });
       await expect(checkbox).not.toBeChecked();
       await checkbox.check();
 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
-      await settings.getByTestId('preferences-save').click();
+      await settings.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');

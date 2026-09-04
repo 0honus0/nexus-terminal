@@ -63,7 +63,7 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
   const task = source.getByTestId('hidden-progress-task').filter({ hasText: taskText });
   await expect(source).toBeVisible();
   await expect(task).toBeVisible();
-  await expect(task.getByTestId('hidden-progress-bar')).toBeVisible();
+  await expect(task.getByRole('progressbar')).toBeVisible();
   await source.getByTestId('hidden-progress-restore').click();
   await expect(modal).toBeHidden();
   await reopenConnectedFileManager(page);

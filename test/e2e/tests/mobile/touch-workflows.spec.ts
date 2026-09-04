@@ -305,8 +305,8 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await page.goto('/login');
     await openConnection();
 
-    const directMode = page.getByTestId('rdp-touch-mode-direct');
-    const touchpadMode = page.getByTestId('rdp-touch-mode-touchpad');
+    const directMode = page.getByRole('button', { name: 'Direct', exact: true });
+    const touchpadMode = page.getByRole('button', { name: 'Touchpad', exact: true });
 
     await expect(directMode).toBeVisible();
     await expect(directMode).toHaveAttribute('aria-pressed', 'true');
@@ -322,12 +322,12 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await expect(page.getByTestId('remote-desktop-modal')).toBeHidden();
     await openConnection();
 
-    await expect(page.getByTestId('rdp-touch-mode-touchpad')).toHaveAttribute('aria-pressed', 'true');
-    await page.getByTestId('rdp-touch-mode-direct').click();
-    await expect(page.getByTestId('rdp-touch-mode-direct')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Touchpad', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Direct', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.getByTestId('rdp-window-close').click();
     await openConnection();
-    await expect(page.getByTestId('rdp-touch-mode-direct')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }
@@ -337,11 +337,11 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   await connectMobileSsh(page, context.request);
 
   await step('mobile-only quick commands button opens the embedded command list', async () => {
-    const quickCommandsButton = page.getByTestId('mobile-quick-commands-button');
+    const quickCommandsButton = page.getByRole('button', { name: 'Quick Commands', exact: true });
     await expect(quickCommandsButton).toBeVisible();
     await quickCommandsButton.click();
 
-    const quickDialog = page.getByTestId('quick-commands-dialog');
+    const quickDialog = page.getByRole('dialog', { name: 'Quick Commands', exact: true });
     const quickCommands = quickDialog.getByTestId('quick-commands-view');
     await expect(quickCommands).toBeVisible();
     await expect(quickDialog.locator('[data-overlay-panel-preset="standard-modal"]')).toBeVisible();
@@ -375,7 +375,7 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', 
     await commandInput.fill('byte=$(dd bs=1 count=1 2>/dev/null | od -An -t u1); printf \'CTRL_BYTE=%s\\n\' "$byte"');
     await commandInput.press('Enter');
 
-    const keyboardButton = page.getByTestId('mobile-virtual-keyboard-button');
+    const keyboardButton = page.getByRole('button', { name: '⌨', exact: true });
     await expect(keyboardButton).toBeVisible();
     await keyboardButton.click();
 
@@ -404,11 +404,11 @@ test('mobile file manager navigates directories with a single tap', async ({ pag
   await slowStep('single tap enters a folder without requiring a desktop double click', async () => {
     await tapFileManagerRow(page, 'folder-seed');
     await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button')).toBeVisible();
+    await expect(page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true })).toBeVisible();
   });
 
   await step('parent button returns to the original directory on a single tap', async () => {
-    await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
+    await page.getByTestId('file-manager-modal').getByTitle('Parent directory', { exact: true }).click();
     await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 15_000 });
   });
 });

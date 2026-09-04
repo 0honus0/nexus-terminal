@@ -114,7 +114,12 @@
         @next="moveSearch(1)"
       />
     </div>
-    <div ref="scroller" class="docx-scroller min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-4">
+    <div
+      ref="scroller"
+      role="region"
+      :aria-label="t('fileManager.preview.docx')"
+      class="docx-scroller min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-4"
+    >
       <div v-if="rendering" class="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
         <BaseSpinner />
         <span>{{ t('fileManager.preview.loading') }}</span>

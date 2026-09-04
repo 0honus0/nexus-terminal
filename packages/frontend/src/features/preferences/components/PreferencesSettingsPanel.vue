@@ -130,7 +130,6 @@
         >
           <BaseInput
             id="remoteHostRefreshIntervalSeconds"
-            data-testid="dashboard-remote-refresh-interval"
             v-model="form.remoteHostRefreshIntervalSeconds"
             type="number"
             min="1"
@@ -186,12 +185,12 @@
           ><BaseCheckbox v-model="form.showPopupFileManager" />{{ t('settings.popupFileManager.title') }}</label
         >
         <label class="flex items-center gap-2 text-sm"
-          ><BaseCheckbox data-testid="dashboard-show-local-resources" v-model="form.dashboardShowLocalResources" />{{
+          ><BaseCheckbox v-model="form.dashboardShowLocalResources" />{{
             t('settings.dashboardResources.localLabel')
           }}</label
         >
         <label class="flex items-center gap-2 text-sm"
-          ><BaseCheckbox data-testid="dashboard-show-remote-resources" v-model="form.dashboardShowRemoteResources" />{{
+          ><BaseCheckbox v-model="form.dashboardShowRemoteResources" />{{
             t('settings.dashboardResources.remoteLabel')
           }}</label
         >
@@ -209,10 +208,9 @@
           ><BaseCheckbox v-model="form.dockerDefaultExpand" />{{ t('settings.docker.defaultExpandLabel') }}</label
         >
         <label class="flex items-center gap-2 text-sm"
-          ><BaseCheckbox
-            v-model="form.quickCommandsCollapsibleSearch"
-            data-testid="quick-command-collapsible-search-toggle"
-          />{{ t('settings.workspace.quickCommandsCollapsibleSearchLabel') }}</label
+          ><BaseCheckbox v-model="form.quickCommandsCollapsibleSearch" />{{
+            t('settings.workspace.quickCommandsCollapsibleSearchLabel')
+          }}</label
         >
         <label class="flex items-center gap-2 text-sm"
           ><BaseCheckbox v-model="form.quickCommandsCompactMode" />{{
@@ -246,9 +244,7 @@
           }}</label
         >
       </div>
-      <BaseButton data-testid="preferences-save" type="submit" variant="primary" :loading="saving">{{
-        t('common.save')
-      }}</BaseButton>
+      <BaseButton type="submit" variant="primary" :loading="saving">{{ t('common.save') }}</BaseButton>
     </fieldset>
   </form>
 </template>

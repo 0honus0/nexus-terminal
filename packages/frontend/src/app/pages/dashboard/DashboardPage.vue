@@ -254,7 +254,6 @@
             }}</RouterLink>
           </div>
           <div
-            data-testid="dashboard-connection-toolbar"
             class="mb-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 md:grid-cols-[1fr_180px_180px_auto] md:gap-3"
           >
             <BaseInput
