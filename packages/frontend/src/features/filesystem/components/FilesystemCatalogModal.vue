@@ -87,7 +87,15 @@
 </script>
 
 <template>
-  <BaseModal :visible="visible" panel-class="w-[min(720px,94vw)]" @close="emit('close')">
+  <BaseModal
+    :visible="visible"
+    :title="t('favoritePaths.title')"
+    panel-class="w-[min(720px,94vw)]"
+    @close="emit('close')"
+  >
+    <template #header-actions>
+      <BaseButton size="sm" variant="ghost" :aria-label="t('common.close')" @click="emit('close')">×</BaseButton>
+    </template>
     <div class="flex min-h-0 max-h-[70vh] flex-col gap-3">
       <BaseTabs v-model="tab" :items="tabs" />
       <template v-if="tab === 'favorites'">
@@ -156,8 +164,12 @@
     @close="formVisible = false"
   >
     <form class="space-y-4" @submit.prevent="save">
-      <BaseFormField :label="t('favoritePaths.addEditForm.pathLabel')"><BaseInput v-model="form.path" /></BaseFormField>
-      <BaseFormField :label="t('favoritePaths.addEditForm.nameLabel')"><BaseInput v-model="form.name" /></BaseFormField>
+      <BaseFormField :label="t('favoritePaths.addEditForm.pathLabel')" for-id="favoritePathValue">
+        <BaseInput id="favoritePathValue" v-model="form.path" />
+      </BaseFormField>
+      <BaseFormField :label="t('favoritePaths.addEditForm.nameLabel')" for-id="favoritePathName">
+        <BaseInput id="favoritePathName" v-model="form.name" />
+      </BaseFormField>
       <div class="flex justify-end gap-2">
         <BaseButton type="button" @click="formVisible = false">{{ t('common.cancel') }}</BaseButton
         ><BaseButton type="submit" variant="primary">{{ t('common.save') }}</BaseButton>

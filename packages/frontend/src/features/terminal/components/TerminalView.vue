@@ -676,7 +676,7 @@
   defineExpose({
     focus: () => terminal?.focus(),
     fit: fitAndResize,
-    clear: () => terminal?.clear(),
+    clear: () => terminal?.write('\x1b[2J\x1b[3J\x1b[H'),
     serialize: () => (terminal && serializeAddon ? serializeTerminalSnapshot(terminal, serializeAddon) : ''),
     openSearch,
     findNext,

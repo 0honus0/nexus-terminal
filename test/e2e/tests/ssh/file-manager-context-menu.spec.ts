@@ -474,10 +474,10 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   await step('Send to opens the transfer workflow with the selected file', async () => {
     await rightClickRow(page, 'seed.txt');
     await clickMenuItem(page, 'Send to servers');
-    const sendFilesHeading = page.getByRole('heading', { name: 'Send Files' });
-    await expect(sendFilesHeading).toBeVisible();
-    const sendFilesModal = sendFilesHeading.locator('..').locator('..');
+    const sendFilesModal = page.getByRole('dialog', { name: 'Send Files', exact: true });
+    await expect(sendFilesModal).toBeVisible();
     await expect(sendFilesModal.locator('li[title="/seed.txt"]')).toBeVisible();
-    await sendFilesModal.getByRole('button', { name: 'Close modal' }).click();
+    await sendFilesModal.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(sendFilesModal).toBeHidden();
   });
 });

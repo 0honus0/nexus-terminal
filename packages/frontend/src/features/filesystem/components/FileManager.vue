@@ -942,7 +942,13 @@
         @click="syncFromTerminal"
         >←CD</BaseButton
       >
-      <BaseButton size="sm" @click="catalogVisible = true">★</BaseButton>
+      <BaseButton
+        size="sm"
+        :title="t('favoritePaths.title')"
+        :aria-label="t('favoritePaths.title')"
+        @click="catalogVisible = true"
+        >★</BaseButton
+      >
       <BaseButton size="sm" @click="begin('mkdir')">{{ t('fileManager.actions.newFolder') }}</BaseButton>
       <BaseButton size="sm" @click="begin('file')">{{ t('fileManager.actions.newFile') }}</BaseButton>
       <BaseButton data-testid="file-upload-button" size="sm" @click="emit('upload', browser.path.value)">{{

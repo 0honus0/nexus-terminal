@@ -20,7 +20,6 @@ const DELETED_CWD_PATH = '/deleted-cwd';
 const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const pathInput = (page: Page): Locator => manager(page).getByTestId('file-manager-path-input');
-const favoriteSlot = (page: Page): Locator => manager(page).locator('.file-manager-favorite-slot');
 
 async function cleanupFavorite(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/favorite-paths');
@@ -133,32 +132,37 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
   });
 
   await step('Favorite paths can be added, used for navigation, and deleted', async () => {
-    const favorites = favoriteSlot(page);
-    const trigger = favorites.locator('button').first();
-    await trigger.click();
-    await favorites.getByTitle('Add new favorite path').click();
+    const openFavorites = async (): Promise<Locator> => {
+      await manager(page).getByRole('button', { name: 'Favorite Paths', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Favorite Paths', exact: true });
+      await expect(dialog).toBeVisible();
+      return dialog;
+    };
 
-    const addHeading = page.getByRole('heading', { name: 'Add New Favorite Path' });
-    await expect(addHeading).toBeVisible();
-    await page.locator('#favPath-name').fill(FAVORITE_NAME);
-    await page.locator('#favPath-path').fill(FAVORITE_PATH);
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await expect(addHeading).toBeHidden();
+    let favorites = await openFavorites();
+    await favorites.getByRole('button', { name: 'Add new favorite path', exact: true }).click();
 
-    let favoriteItem = favorites.locator(`li[title="${FAVORITE_PATH}"]`).filter({ hasText: FAVORITE_NAME });
+    const addDialog = page.getByRole('dialog', { name: 'Add New Favorite Path', exact: true });
+    await expect(addDialog).toBeVisible();
+    await addDialog.getByLabel('Name (Optional)', { exact: true }).fill(FAVORITE_NAME);
+    await addDialog.getByLabel('Path', { exact: true }).fill(FAVORITE_PATH);
+    await addDialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(addDialog).toBeHidden();
+
+    let favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
     await expect(favoriteItem).toBeVisible();
-    await trigger.click();
+    await favorites.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(favorites).toBeHidden();
 
     await navigateViaPathInput(page, '/');
-    await trigger.click();
-    favoriteItem = favorites.locator(`li[title="${FAVORITE_PATH}"]`).filter({ hasText: FAVORITE_NAME });
-    await favoriteItem.click();
+    favorites = await openFavorites();
+    favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
+    await favoriteItem.getByRole('button', { name: new RegExp(FAVORITE_NAME) }).click();
     await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
 
-    await trigger.click();
-    favoriteItem = favorites.locator(`li[title="${FAVORITE_PATH}"]`).filter({ hasText: FAVORITE_NAME });
-    await favoriteItem.hover();
-    await favoriteItem.getByTitle('Delete').click();
+    favorites = await openFavorites();
+    favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
+    await favoriteItem.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirmDialog = page.getByRole('dialog').filter({ hasText: FAVORITE_NAME });
     await expect(confirmDialog).toBeVisible();
     await confirmDialog.getByRole('button', { name: 'Confirm', exact: true }).click();
