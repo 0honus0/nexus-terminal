@@ -203,6 +203,7 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
 
   await step('following the terminal recovers when its current directory was deleted externally', async () => {
     await navigateViaPathInput(page, DELETED_CWD_PATH);
+    await expect(row(page, 'inside.txt')).toBeVisible();
     await cdToTerminal.click();
     await expect(page.getByText(`Terminal directory changed to ${DELETED_CWD_PATH}`, { exact: true })).toBeVisible({
       timeout: 10_000,
