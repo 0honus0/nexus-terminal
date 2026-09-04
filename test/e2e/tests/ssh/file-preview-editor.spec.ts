@@ -40,6 +40,11 @@ const docxScroller = (dialog: Locator): Locator => dialog.getByRole('region', { 
 const spreadsheetRows = (dialog: Locator): Locator => spreadsheetScroller(dialog).locator('tbody > tr');
 const spreadsheetPageRange = (dialog: Locator): Locator => dialog.getByText(/^Rows \d+–\d+ of \d+$/).first();
 const spreadsheetPageIndicator = (dialog: Locator): Locator => dialog.getByText(/^\d+\/\d+$/).first();
+const previewSearchInput = (dialog: Locator): Locator =>
+  dialog.getByRole('searchbox', { name: 'Search document...', exact: true });
+const previewSearchControls = (dialog: Locator): Locator => previewSearchInput(dialog).locator('..');
+const previewSearchCount = (dialog: Locator, value: string): Locator =>
+  previewSearchControls(dialog).getByText(value, { exact: true });
 
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
   await target.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
@@ -205,8 +210,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(dialog).toBeVisible();
     const image = dialog.locator('img');
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
-    const src = await image.getAttribute('src');
-    expect(src).toContain(encodeURIComponent(filename));
+    await expect(image).toHaveAttribute('alt', filename);
     await closePreview(page, filename);
   });
 
@@ -245,17 +249,17 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
 
     await page.keyboard.press('Control+f');
-    const pdfSearch = dialog.getByTestId('preview-search-input');
+    const pdfSearch = previewSearchInput(dialog);
     await expect(pdfSearch).toBeFocused();
     await pdfSearch.fill('target');
-    await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/2');
+    await expect(previewSearchCount(dialog, '1/2')).toHaveText('1/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('target');
-    await dialog.getByTestId('preview-search-next').click();
-    await expect(dialog.getByTestId('preview-search-count')).toHaveText('2/2');
+    await previewSearchControls(dialog).getByRole('button', { name: '↓', exact: true }).click();
+    await expect(previewSearchCount(dialog, '2/2')).toHaveText('2/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('3');
-    await dialog.getByTestId('preview-search-close').click();
-    await expect(dialog.getByTestId('preview-search-bar')).toHaveCount(0);
+    await dialog.getByTitle('Close search', { exact: true }).click();
+    await expect(previewSearchInput(dialog)).toHaveCount(0);
 
     const secondPage = pdfPage(dialog, 2);
     await scroller.evaluate(
@@ -326,13 +330,13 @@ test('file previews and text editor protect historical file-opening regressions'
     });
 
     await page.keyboard.press('Control+f');
-    const spreadsheetSearch = dialog.getByTestId('preview-search-input');
+    const spreadsheetSearch = previewSearchInput(dialog);
     await expect(spreadsheetSearch).toBeFocused();
     await spreadsheetSearch.fill('Second Sheet E2E');
-    await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/1');
+    await expect(previewSearchCount(dialog, '1/1')).toHaveText('1/1');
     await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect(dialog.locator('td[data-search-active="true"]')).toHaveText('Second Sheet E2E');
-    await dialog.getByTestId('preview-search-close').click();
+    await dialog.getByTitle('Close search', { exact: true }).click();
     await worksheetTab(dialog, 'E2E').click();
     await expect(worksheetTab(dialog, 'E2E')).toHaveAttribute('aria-selected', 'true');
 
@@ -584,13 +588,13 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await expect(tabs.getByRole('tab', { name: 'preview.docx' })).toHaveAttribute('aria-selected', 'true');
 
     await page.keyboard.press('Control+f');
-    const docxSearch = dialog.getByTestId('preview-search-input');
+    const docxSearch = previewSearchInput(dialog);
     await expect(docxSearch).toBeFocused();
     await docxSearch.fill('Column C');
-    await expect(dialog.getByTestId('preview-search-count')).toHaveText('1/1');
+    await expect(previewSearchCount(dialog, '1/1')).toHaveText('1/1');
     await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('Column C');
     await page.keyboard.press('Escape');
-    await expect(dialog.getByTestId('preview-search-bar')).toHaveCount(0);
+    await expect(previewSearchInput(dialog)).toHaveCount(0);
     await expect(dialog).toBeVisible();
 
     await captureFunctionalScreenshot(page, 'file-manager-multi-preview-tabs.png', {
@@ -901,7 +905,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
         viewport: { width: 1440, height: 900 },
       });
 
-      await dialog.getByTitle('Next page', { exact: true }).click();
+      await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
       await expect(spreadsheetPageIndicator(dialog)).toHaveText('2/2');
       await expect(spreadsheetPageRange(dialog)).toContainText('25');
       await expect(spreadsheetPageRange(dialog)).toContainText('40');

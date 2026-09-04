@@ -104,9 +104,11 @@ test('registered archive progress supports hide, restore, and real cancel for co
       },
     );
 
-    await step('Progress Display reopens with no hidden provider tasks', async () => {
+    await step('Progress Display keeps completed archive history while cancelled work stays removed', async () => {
       const modal = await openProgressDisplay(page);
-      await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+      const completed = hiddenTask(modal, 'archive-source.zip').filter({ hasText: 'Compress' }).first();
+      await expect(completed).toContainText('Completed');
+      await expect(hiddenTask(modal, 'archive-source.zip').filter({ hasText: 'Decompress' })).toHaveCount(0);
       await closeProgressDisplay(modal);
     });
   } finally {

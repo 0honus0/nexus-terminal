@@ -351,7 +351,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   await slowStep('Upload keeps a multi-block transfer alive and writes the full remote file', async () => {
     const filename = 'uploaded-large.bin';
     const size = 3 * 1024 * 1024 + 123;
-    await rightClickRow(page, 'seed.txt');
+    await openCurrentDirectoryContextMenu(page);
     const chooserPromise = page.waitForEvent('filechooser');
     await clickMenuItem(page, 'Upload');
     const chooser = await chooserPromise;

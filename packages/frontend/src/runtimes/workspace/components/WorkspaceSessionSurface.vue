@@ -417,12 +417,8 @@
     documentPopupVisible.value = false;
   };
   const hidePreview = () => {
-    if (props.showPopupFileEditor) {
-      previewSession.clear();
-      documentPopupVisible.value = false;
-      return;
-    }
-    documentMode.value = 'editor';
+    if (props.showPopupFileEditor) previewSession.clear();
+    documentPopupVisible.value = false;
   };
 
   const chooseUpload = (path: string) => {

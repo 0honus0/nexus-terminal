@@ -1062,6 +1062,7 @@
           @dragleave="remoteDragTarget === entry.path && (remoteDragTarget = null)"
           @drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
           @contextmenu.stop="openContext($event, entry)"
+          @mousedown="preserveListFocusOnMouseOpen"
           @click="clickEntry($event, entry)"
           @dblclick="doubleClickEntry($event, entry)"
           @pointerdown="longPress.start($event, entry)"

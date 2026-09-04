@@ -102,12 +102,13 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Name sorting toggles between ascending and descending order', async () => {
     const nameHeader = manager(page).getByRole('columnheader').filter({ hasText: 'Name' }).first();
-    if (!(await nameHeader.innerText()).includes('▲')) await nameHeader.click();
+    const nameSortButton = nameHeader.locator('button');
+    if (!(await nameHeader.innerText()).includes('▲')) await nameSortButton.click();
     await expect(nameHeader).toContainText('▲');
     const ascending = await visibleFilenames(page);
     expect(ascending.indexOf('copy-source.txt')).toBeLessThan(ascending.indexOf('seed.txt'));
 
-    await nameHeader.click();
+    await nameSortButton.click();
     await expect(nameHeader).toContainText('▼');
     const descending = await visibleFilenames(page);
     expect(descending.indexOf('seed.txt')).toBeLessThan(descending.indexOf('copy-source.txt'));
