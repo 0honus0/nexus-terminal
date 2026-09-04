@@ -65,6 +65,7 @@ docker compose up -d
 - [软件需求](./software-requirements/README.md)
 - [后继开发工程约束](./software-requirements/engineering-constraints.md)
 - [Frontend 架构](./architecture/FRONTEND.md)
+- [Frontend UI 还原计划](./FRONTEND_UI_RESTORATION_PLAN.md)
 - [Backend 架构](./architecture/BACKEND.md)
 - [Remote Gateway 架构](./architecture/REMOTE_GATEWAY.md)
 - [E2E 测试与诊断](./testing/E2E.md)
