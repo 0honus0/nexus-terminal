@@ -163,8 +163,9 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     favorites = await openFavorites();
     favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
     await favoriteItem.getByRole('button', { name: 'Delete', exact: true }).click();
-    const confirmDialog = page.getByRole('dialog').filter({ hasText: FAVORITE_NAME });
+    const confirmDialog = page.getByRole('dialog', { name: 'Please confirm', exact: true });
     await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText(FAVORITE_NAME);
     await confirmDialog.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(favoriteItem).toHaveCount(0);
   });

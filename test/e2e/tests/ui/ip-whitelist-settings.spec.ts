@@ -21,9 +21,15 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 
     await step('save a multi-line whitelist through the IP control UI', async () => {
       await whitelist.getByTestId('ip-whitelist-input').fill(WHITELIST);
-      const responsePromise = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
-      );
+      const responsePromise = page.waitForResponse((response) => {
+        if (!response.url().endsWith('/api/v1/settings') || response.request().method() !== 'PUT') return false;
+        try {
+          const body = response.request().postDataJSON() as { ipWhitelist?: unknown };
+          return body.ipWhitelist === WHITELIST;
+        } catch {
+          return false;
+        }
+      });
       await whitelist.getByTestId('ip-whitelist-save').click();
       expect((await responsePromise).ok()).toBeTruthy();
       const persisted = await context.request.get('/api/v1/settings');

@@ -178,7 +178,7 @@
 </script>
 
 <template>
-  <BaseModal :visible="visible" :title="t('sendFilesModal.title')" @close="emit('close')">
+  <BaseModal :visible="visible" :title="t('sendFilesModal.title')" :z-index="70" @close="emit('close')">
     <div class="space-y-4">
       <section>
         <h3 class="mb-2 text-sm font-semibold">{{ t('sendFilesModal.itemsToSendTitle') }}</h3>

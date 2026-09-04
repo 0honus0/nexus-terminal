@@ -119,7 +119,12 @@
       <h3 class="text-base font-semibold">{{ t('settings.ipWhitelist.title') }}</h3>
       <form class="max-w-2xl space-y-3" @submit.prevent="saveWhitelist">
         <BaseFormField :label="t('settings.ipWhitelist.label')" for-id="ipWhitelist"
-          ><BaseTextarea id="ipWhitelist" v-model="policy.whitelist" data-testid="ip-whitelist-input" rows="4"
+          ><BaseTextarea
+            id="ipWhitelist"
+            v-model="policy.whitelist"
+            data-testid="ip-whitelist-input"
+            rows="4"
+            :disabled="loading"
         /></BaseFormField>
         <BaseButton data-testid="ip-whitelist-save" type="submit" variant="primary" :loading="loading">{{
           t('common.save')
@@ -150,6 +155,7 @@
               data-testid="ip-blacklist-max-attempts"
               type="number"
               min="1"
+              :disabled="loading"
           /></BaseFormField>
           <BaseFormField :label="t('settings.ipBlacklist.banDurationLabel')" for-id="loginBanDuration"
             ><BaseInput
@@ -158,6 +164,7 @@
               data-testid="ip-blacklist-ban-duration"
               type="number"
               min="1"
+              :disabled="loading"
           /></BaseFormField>
           <BaseButton data-testid="ip-blacklist-save" type="submit" variant="primary" :loading="loading">{{
             t('common.save')
