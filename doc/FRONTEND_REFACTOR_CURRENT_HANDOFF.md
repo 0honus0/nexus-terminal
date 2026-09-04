@@ -536,7 +536,7 @@ Filesystem slice validation is **PASS**: format check, frontend architecture, i1
 
 Transfers / Upload / Archive / Send Files / Progress is now closed through `GREQ-XFER-006` for the current Git/final-old pass:
 
-- uploads preserve exact bytes/relative paths/zero-byte files, prepare directory trees, keep conflicts explicit, use bounded isolated `/ws/uploads` streams and abort incomplete data transports cleanly;
+- uploads preserve exact bytes/relative paths/zero-byte files, prepare directory trees, keep conflicts explicit, use bounded isolated `/ws/uploads` streams with adaptive weighted/fair active-file scheduling, and abort incomplete data transports cleanly;
 - main Workspace disconnect pauses unfinished uploads, closes stale data streams, replays directory preparation after reconnect and restarts unfinished files from byte zero; a dedicated upload-stream failure while control remains healthy is a real file failure, not a fake Workspace reconnect;
 - copy/move uses event-driven long-task completion, cross-Workspace cut remains copy-then-delete with partial outcome on source-delete failure, cancel request transport IDs are separated from business task IDs, and non-replayable operations fail explicitly on Workspace disconnect;
 - archive keeps temporary-output cleanup, valid-warning preservation, Unicode ZIP extraction and typed password-required/invalid-password retry; cancellation remains correlated to the real Backend task lifetime;

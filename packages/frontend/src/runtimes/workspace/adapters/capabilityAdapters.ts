@@ -348,6 +348,12 @@ const UPLOAD_SCHEDULER_MIN_STREAMS = 6;
 const UPLOAD_SCHEDULER_STREAM_CEILING = 12;
 const UPLOAD_SCHEDULER_MIN_CAPACITY_UNITS = 8;
 const UPLOAD_SCHEDULER_CAPACITY_CEILING = 24;
+const UPLOAD_SCHEDULER_MAX_HEAD_BYPASSES = 3;
+
+interface ScheduledUpload {
+  request: UploadRequest;
+  bypassCount: number;
+}
 
 const uploadReservationUnits = (size: number): number => {
   if (size <= 1024 * 1024) return 1;
@@ -375,7 +381,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
   const handlers = new Set<(event: TransferEvent) => void>();
   const uploads = new Map<string, UploadRequest>();
   const uploadSockets = new Map<string, WebSocket>();
-  const queuedUploads: UploadRequest[] = [];
+  const queuedUploads: ScheduledUpload[] = [];
   const activeUploads = new Set<string>();
   const prepareRequests = new Map<string, UploadPrepareRequest>();
   const activeRemoteOperations = new Map<string, 'copy' | 'move' | 'compress' | 'decompress'>();
@@ -393,8 +399,14 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
   };
 
   const removeQueuedUpload = (id: string): void => {
-    const index = queuedUploads.findIndex((request) => request.id === id);
-    if (index >= 0) queuedUploads.splice(index, 1);
+    for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
+      if (queuedUploads[index]?.request.id === id) queuedUploads.splice(index, 1);
+    }
+  };
+
+  const enqueueUpload = (request: UploadRequest): void => {
+    removeQueuedUpload(request.id);
+    queuedUploads.push({ request, bypassCount: 0 });
   };
 
   const forgetUpload = (id: string): UploadRequest | undefined => {
@@ -480,7 +492,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       activeUploads.clear();
       for (const request of [...uploads.values()]) {
         emit({ type: 'resumed', id: request.id });
-        queuedUploads.push(request);
+        enqueueUpload(request);
       }
       pumpUploadQueue();
     } finally {
@@ -497,20 +509,35 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
   function pumpUploadQueue(): void {
     if (!workspaceAvailable) return;
     const policy = uploadSchedulerPolicy();
-    while (queuedUploads.length > 0) {
-      const request = queuedUploads[0]!;
-      if (uploads.get(request.id) !== request) {
-        queuedUploads.shift();
-        continue;
+    let activeCapacityUnits = activeUploadCapacityUnits();
+
+    while (queuedUploads.length > 0 && activeUploads.size < policy.streamLimit) {
+      for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
+        const queued = queuedUploads[index]!;
+        if (uploads.get(queued.request.id) !== queued.request) queuedUploads.splice(index, 1);
+      }
+      if (!queuedUploads.length) return;
+
+      const availableCapacityUnits = policy.capacityUnits - activeCapacityUnits;
+      const head = queuedUploads[0]!;
+      const headReservation = uploadReservationUnits(head.request.file.size);
+      let selectedIndex = 0;
+
+      if (headReservation > availableCapacityUnits) {
+        if (head.bypassCount >= UPLOAD_SCHEDULER_MAX_HEAD_BYPASSES) return;
+        selectedIndex = queuedUploads.findIndex(
+          (queued, index) => index > 0 && uploadReservationUnits(queued.request.file.size) <= availableCapacityUnits,
+        );
+        if (selectedIndex < 0) return;
+        head.bypassCount += 1;
       }
 
+      const [selected] = queuedUploads.splice(selectedIndex, 1);
+      if (!selected) return;
+      const request = selected.request;
       const reservation = uploadReservationUnits(request.file.size);
-      const hasStreamCapacity = activeUploads.size < policy.streamLimit;
-      const hasWeightedCapacity = activeUploadCapacityUnits() + reservation <= policy.capacityUnits;
-      if (activeUploads.size > 0 && (!hasStreamCapacity || !hasWeightedCapacity)) return;
-
-      queuedUploads.shift();
       activeUploads.add(request.id);
+      activeCapacityUnits += reservation;
       void startUploadRequest(request).catch((cause) => {
         if (uploads.get(request.id) !== request) return;
         if (!workspaceAvailable) return;
@@ -682,7 +709,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     },
     async upload(request) {
       uploads.set(request.id, request);
-      queuedUploads.push(request);
+      enqueueUpload(request);
       if (!workspaceAvailable) {
         recoveryPending = true;
         emit({ type: 'paused', id: request.id });
@@ -754,7 +781,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       if (!request) return;
       const retry = { ...request, conflictStrategy: strategy };
       uploads.set(id, retry);
-      queuedUploads.push(retry);
+      enqueueUpload(retry);
       pumpUploadQueue();
     },
     onEvent(handler) {
