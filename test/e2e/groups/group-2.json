@@ -3,12 +3,11 @@
   "group": 2,
   "workers": 8,
   "specs": [
-    "tests/ui/notification-delivery.spec.ts",
-    "tests/ui/notification-settings.spec.ts",
-    "tests/ui/proxy-management.spec.ts",
-    "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts",
     "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/connection-edit-delete.spec.ts",
+    "tests/ssh/connection-list-search.spec.ts",
+    "tests/ssh/connection.spec.ts",
+    "tests/ssh/reconnect-ui.spec.ts",
     "tests/ssh/progress-display-archive-cancel.spec.ts"
   ]
 }
