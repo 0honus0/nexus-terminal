@@ -6,7 +6,7 @@ import {
   type E2eWebSocket,
   openWorkspaceSession,
   requestWorkspace,
-  waitForBinary,
+  waitForBinaryText,
   waitForJson,
   waitForFilesystemReady,
 } from '../../support/ws';
@@ -142,15 +142,7 @@ test('raw terminal output needs no acknowledgement and clean requests remain usa
   const workspace = await openWorkspaceSession(request, connectionId, `raw-terminal-${crypto.randomUUID()}`);
 
   try {
-    const outputPromise = (async () => {
-      const deadline = Date.now() + 15_000;
-      let output = '';
-      while (Date.now() < deadline) {
-        output += (await waitForBinary(workspace.socket, Math.max(100, deadline - Date.now()))).toString('utf8');
-        if (output.includes('RAW_TERMINAL_E2E')) return output;
-      }
-      throw new Error('Timed out waiting for raw terminal output');
-    })();
+    const outputPromise = waitForBinaryText(workspace.socket, 'RAW_TERMINAL_E2E', 15_000);
     await requestWorkspace(workspace.socket, 'terminal.input', { data: "printf 'RAW_TERMINAL_E2E\\n'\r" });
     await expect(outputPromise).resolves.toContain('RAW_TERMINAL_E2E');
     await expect(requestWorkspace(workspace.socket, 'suspend.list')).resolves.toEqual(expect.any(Array));

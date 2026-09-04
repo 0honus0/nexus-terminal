@@ -72,19 +72,38 @@ export function waitForJson(
   });
 }
 
-export function waitForBinary(socket: E2eWebSocket, timeoutMs = 15_000): Promise<Buffer> {
+export function waitForBinaryText(socket: E2eWebSocket, expectedText: string, timeoutMs = 15_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
+    const chunks: Buffer[] = [];
+    const cleanup = () => {
+      clearTimeout(timeout);
       socket.off('message', onMessage);
-      reject(new Error('Timed out waiting for WebSocket binary message'));
+      socket.off('close', onClose);
+      socket.off('error', onError);
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for WebSocket binary text: ${expectedText}`));
     }, timeoutMs);
     const onMessage = (data: Buffer, isBinary: boolean) => {
       if (!isBinary) return;
-      clearTimeout(timeout);
-      socket.off('message', onMessage);
-      resolve(Buffer.from(data));
+      chunks.push(Buffer.from(data));
+      const output = Buffer.concat(chunks).toString('utf8');
+      if (!output.includes(expectedText)) return;
+      cleanup();
+      resolve(output);
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error(`WebSocket closed before binary text was received: ${expectedText}`));
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
     };
     socket.on('message', onMessage);
+    socket.once('close', onClose);
+    socket.once('error', onError);
   });
 }
 
