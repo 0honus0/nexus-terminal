@@ -1,0 +1,12 @@
+# 移动端交互 — 软件需求
+
+[← 返回软件需求总览](../README.md)
+
+> 表内“详细需求”和“特殊设计 / 约束”是规范性需求。FR/GREQ 只作为可追溯来源；点击编号可跳转到原始归纳表。
+
+| 需求编号                                | 功能                       | 详细需求                                                                                                                                                                                                | 特殊设计 / 约束                    | 来源                                                                    | 状态              |
+| --------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------- | ----------------- |
+| <a id="srs-mob-001"></a>**SRS-MOB-001** | Terminal-first layout      | On phones, Workspace prioritizes terminal space while keeping touch-only tools reachable from a mobile command bar/pane selector.                                                                       | 无额外特殊设计；遵循模块公共约束。 | [**FR-MOB-001**](../traceability/functional-requirements.md#fr-mob-001) | 已实现 / 基线保留 |
+| <a id="srs-mob-002"></a>**SRS-MOB-002** | Quick Commands surface     | The mobile command bar can open a touch-friendly Quick Commands surface and dismiss it with normal modal/Escape behavior.                                                                               | 无额外特殊设计；遵循模块公共约束。 | [**FR-MOB-002**](../traceability/functional-requirements.md#fr-mob-002) | 已实现 / 基线保留 |
+| <a id="srs-mob-003"></a>**SRS-MOB-003** | File workflows             | Mobile File Manager supports tap navigation, multi-select without accidental opens, long-press context actions, drag/upload where the platform exposes files, CodeMirror editing and Preview workflows. | 无额外特殊设计；遵循模块公共约束。 | [**FR-MOB-003**](../traceability/functional-requirements.md#fr-mob-003) | 已实现 / 基线保留 |
+| <a id="srs-mob-004"></a>**SRS-MOB-004** | Transfer/progress overlays | Floating progress and shared Progress Display remain within the viewport and can be hidden/restored/cancelled without blocking the underlying Workspace.                                                | 无额外特殊设计；遵循模块公共约束。 | [**FR-MOB-004**](../traceability/functional-requirements.md#fr-mob-004) | 已实现 / 基线保留 |
