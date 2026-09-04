@@ -23,6 +23,23 @@ const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { n
 const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator(`[data-pdf-page="${pageNumber}"]`);
 const pdfCurrentPage = (dialog: Locator): Locator =>
   dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
+const waitForScrollToSettle = async (scroller: Locator): Promise<void> => {
+  await scroller.evaluate(
+    (element) =>
+      new Promise<void>((resolve) => {
+        let previous = element.scrollTop;
+        let stableFrames = 0;
+        const check = () => {
+          const current = element.scrollTop;
+          stableFrames = Math.abs(current - previous) < 0.5 ? stableFrames + 1 : 0;
+          previous = current;
+          if (stableFrames >= 3) resolve();
+          else requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+      }),
+  );
+};
 const visiblePdfPageCount = (dialog: Locator): Locator => dialog.locator('[data-testid="pdf-page-count"]:visible');
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
 const pdfZoomLabel = (dialog: Locator): Locator =>
@@ -261,6 +278,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(pdfCurrentPage(dialog)).toHaveValue('3');
     await dialog.getByTitle('Close search', { exact: true }).click();
     await expect(previewSearchInput(dialog)).toHaveCount(0);
+    await waitForScrollToSettle(scroller);
 
     const secondPage = pdfPage(dialog, 2);
     await secondPage.evaluate((pageElement) => {

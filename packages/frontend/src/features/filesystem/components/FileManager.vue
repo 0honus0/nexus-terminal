@@ -90,6 +90,13 @@
     | { scope: 'entry'; entry: RemoteFileEntry; x: number; y: number }
     | { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
   const context = ref<FileManagerContext | null>(null);
+  const contextDownloadLabel = computed(() => {
+    const value = context.value;
+    if (!value || value.scope !== 'entry') return t('fileManager.actions.download');
+    return value.entry.metadata.isDirectory
+      ? t('fileManager.actions.downloadFolder')
+      : t('fileManager.actions.download');
+  });
   const compressSubmenu = ref<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
   watch(context, (value) => {
     if (!value) compressSubmenu.value = null;
@@ -885,6 +892,7 @@
           data-focus-id="fileManagerPathInput"
           class="w-full"
           @focus="openPathHistory"
+          @click="openPathHistory"
           @input="updatePathHistorySearch"
           @keydown="handlePathInputKeydown"
           @blur="deferClosePathHistory"
@@ -1100,7 +1108,7 @@
           <td class="file-row-cell px-3 py-2" @click.stop @dblclick.stop>
             <div class="flex flex-wrap justify-end gap-1">
               <BaseButton v-if="props.download" size="sm" @click="download([entry])">{{
-                t('fileManager.actions.download')
+                entry.metadata.isDirectory ? t('fileManager.actions.downloadFolder') : t('fileManager.actions.download')
               }}</BaseButton>
               <BaseButton
                 v-if="!entry.metadata.isDirectory && isArchive(entry)"
@@ -1154,11 +1162,7 @@
           {{ t('fileManager.actions.openAsText') }}
         </button>
         <button v-if="download" class="context-item" @click="download(contextEntries())">
-          {{
-            context.entry.metadata.isDirectory
-              ? t('fileManager.actions.downloadFolder')
-              : t('fileManager.actions.download')
-          }}
+          {{ contextDownloadLabel }}
         </button>
         <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
         <button
