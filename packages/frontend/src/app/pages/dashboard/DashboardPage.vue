@@ -254,6 +254,7 @@
             }}</RouterLink>
           </div>
           <div
+            data-testid="dashboard-connection-toolbar"
             class="mb-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 md:grid-cols-[1fr_180px_180px_auto] md:gap-3"
           >
             <BaseInput
@@ -261,10 +262,10 @@
               data-testid="dashboard-connection-search"
               class="col-span-3 md:col-span-1"
               :placeholder="t('dashboard.searchConnectionsPlaceholder')"
-            /><BaseSelect v-model="tagId" data-testid="dashboard-tag-filter"
+            /><BaseSelect v-model="tagId" data-testid="dashboard-tag-filter" class="min-w-0"
               ><option value="">{{ t('dashboard.filterTags.all') }}</option>
               <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option></BaseSelect
-            ><BaseSelect v-model="sort" data-testid="dashboard-sort-by"
+            ><BaseSelect v-model="sort" data-testid="dashboard-sort-by" class="min-w-0"
               ><option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
               <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
               <option value="type">{{ t('dashboard.sortOptions.type') }}</option>

@@ -38,8 +38,8 @@
     v-if="route.name !== 'Workspace' || preferences.values.value.navBarVisible"
     class="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-header px-3 shadow-sm sm:px-6"
   >
-    <nav class="flex w-full items-center justify-between gap-3" :aria-label="t('common.primaryNavigation')">
-      <div class="flex min-w-0 items-center gap-1">
+    <nav class="flex min-w-0 w-full items-center justify-between gap-3" :aria-label="t('common.primaryNavigation')">
+      <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="mr-1 h-10 w-auto shrink-0" />
         <RouterLink class="nav-link" to="/">{{ t('nav.dashboard') }}</RouterLink>
         <RouterLink class="nav-link" to="/workspace">{{ t('nav.terminal') }}</RouterLink>

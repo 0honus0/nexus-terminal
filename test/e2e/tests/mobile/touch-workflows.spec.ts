@@ -23,6 +23,15 @@ async function connectMobileSsh(
   await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
 }
 
+async function tapFileManagerRow(
+  page: Parameters<typeof connectTestSshFromConnectionsPage>[0],
+  filename: string,
+): Promise<void> {
+  const row = fileManagerRow(page, filename);
+  await expect(row).toBeVisible();
+  await row.locator('button[data-file-path]').click();
+}
+
 test('remote touch supports switchable direct and touchpad Guacamole input', async ({ page }) => {
   await page.goto('/login');
 
@@ -298,17 +307,16 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
 
     const directMode = page.getByTestId('rdp-touch-mode-direct');
     const touchpadMode = page.getByTestId('rdp-touch-mode-touchpad');
-    const hint = page.getByTestId('rdp-touch-hint');
 
     await expect(directMode).toBeVisible();
     await expect(directMode).toHaveAttribute('aria-pressed', 'true');
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'false');
-    await expect(hint).toContainText('Tap: click + keyboard');
+    await expect(directMode).toHaveAttribute('title', /Tap: click \+ keyboard/);
 
     await touchpadMode.click();
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
     await expect(directMode).toHaveAttribute('aria-pressed', 'false');
-    await expect(hint).toContainText('One finger: move');
+    await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
 
     await page.getByTestId('rdp-window-close').click();
     await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
@@ -329,15 +337,14 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   await connectMobileSsh(page, context.request);
 
   await step('mobile-only quick commands button opens the embedded command list', async () => {
-    const commandBar = page.getByTestId('command-input-bar');
-    const quickCommandsButton = commandBar.locator('button:has(i.fa-bolt)');
+    const quickCommandsButton = page.getByTestId('mobile-quick-commands-button');
     await expect(quickCommandsButton).toBeVisible();
     await quickCommandsButton.click();
 
     const quickCommands = page.getByTestId('quick-commands-view');
     const quickDialog = page.getByTestId('quick-commands-dialog');
     await expect(quickCommands).toBeVisible();
-    await expect(quickDialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
+    await expect(quickDialog.locator('[data-overlay-panel-preset="standard-modal"]')).toBeVisible();
     await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
     await expect(
       quickCommands
@@ -361,7 +368,6 @@ test('mobile shared Progress Display stays dormant until transfer work is hidden
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
 
-  const commandBar = page.getByTestId('command-input-bar');
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
 
@@ -369,7 +375,7 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', 
     await commandInput.fill('byte=$(dd bs=1 count=1 2>/dev/null | od -An -t u1); printf \'CTRL_BYTE=%s\\n\' "$byte"');
     await commandInput.press('Enter');
 
-    const keyboardButton = commandBar.locator('button:has(i.fa-keyboard)');
+    const keyboardButton = page.getByTestId('mobile-virtual-keyboard-button');
     await expect(keyboardButton).toBeVisible();
     await keyboardButton.click();
 
@@ -396,13 +402,13 @@ test('mobile file manager navigates directories with a single tap', async ({ pag
   await openConnectedFileManager(page);
 
   await slowStep('single tap enters a folder without requiring a desktop double click', async () => {
-    await fileManagerRow(page, 'folder-seed').click();
+    await tapFileManagerRow(page, 'folder-seed');
     await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 15_000 });
-    await expect(fileManagerRow(page, '..')).toBeVisible();
+    await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button')).toBeVisible();
   });
 
-  await step('parent row returns to the original directory on a single tap', async () => {
-    await fileManagerRow(page, '..').click();
+  await step('parent button returns to the original directory on a single tap', async () => {
+    await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
     await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 15_000 });
   });
 });
@@ -419,17 +425,17 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
   const archive = fileManagerRow(page, 'archive-source.txt');
 
   await step('multi-select turns file taps into selections', async () => {
-    const enterMultiSelect = fileManagerModal.getByTitle('Enter Multi-Select Mode');
+    const enterMultiSelect = fileManagerModal.getByRole('button', { name: 'Enter Multi-Select Mode', exact: true });
     await expect(enterMultiSelect).toBeVisible();
     await enterMultiSelect.click();
 
-    await seed.click();
-    await archive.click();
+    await seed.locator('button[data-file-path]').click();
+    await archive.locator('button[data-file-path]').click();
     await expect(seed).toHaveClass(/bg-primary/);
     await expect(archive).toHaveClass(/bg-primary/);
     await expect(page.getByTestId('document-popup').getByTestId('file-editor-view')).toBeHidden();
 
-    const exitMultiSelect = fileManagerModal.getByTitle('Exit Multi-Select Mode');
+    const exitMultiSelect = fileManagerModal.getByRole('button', { name: 'Exit Multi-Select Mode', exact: true });
     await expect(exitMultiSelect).toBeVisible();
     await exitMultiSelect.click();
     await expect(seed).not.toHaveClass(/bg-primary/);
@@ -437,7 +443,7 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
   });
 
   await slowStep('single tap opens the full-screen mobile CodeMirror editor rather than Monaco', async () => {
-    await fileManagerRow(page, 'plainfile').click();
+    await tapFileManagerRow(page, 'plainfile');
     const documentPopup = page.getByTestId('document-popup');
     const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });

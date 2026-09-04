@@ -10,8 +10,9 @@
       margin?: number;
       zIndex?: number;
       panelTestId?: string;
+      blockingLayer?: boolean;
     }>(),
-    { width: 220, margin: 8, zIndex: 80 },
+    { width: 220, margin: 8, zIndex: 80, blockingLayer: true },
   );
   const emit = defineEmits<{ close: [] }>();
   const root = ref<HTMLElement | null>(null);
@@ -32,16 +33,23 @@
   const handleKeydown = (event: KeyboardEvent): void => {
     if (props.visible && event.key === 'Escape') emit('close');
   };
+  const handleDocumentPointerDown = (event: PointerEvent): void => {
+    if (!props.visible || props.blockingLayer || !root.value) return;
+    const target = event.target;
+    if (target instanceof Node && !root.value.contains(target)) emit('close');
+  };
   const handleResize = (): void => void place();
 
   watch(() => [props.visible, props.x, props.y] as const, place);
   onMounted(() => {
     window.addEventListener('keydown', handleKeydown);
     window.addEventListener('resize', handleResize);
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
   });
   onBeforeUnmount(() => {
     window.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('resize', handleResize);
+    document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
   });
 </script>
 
@@ -50,14 +58,15 @@
     <div
       v-if="visible"
       class="fixed inset-0"
+      :class="props.blockingLayer ? '' : 'pointer-events-none'"
       :style="{ zIndex }"
-      @pointerdown.self="emit('close')"
+      @pointerdown.self="props.blockingLayer && emit('close')"
       @contextmenu.prevent
     >
       <div
         ref="root"
         :data-testid="props.panelTestId"
-        class="fixed max-h-[calc(100dvh-1rem)] overflow-y-auto rounded border border-border bg-background p-1 text-sm text-foreground shadow-xl"
+        class="pointer-events-auto fixed max-h-[calc(100dvh-1rem)] overflow-y-auto rounded border border-border bg-background p-1 text-sm text-foreground shadow-xl"
         :style="{ left: `${left}px`, top: `${top}px`, width: `${width}px` }"
         role="menu"
         @pointerdown.stop

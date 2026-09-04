@@ -53,7 +53,6 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       for (const locator of [
         dashboard,
         dashboard.getByTestId('dashboard-overview'),
-        dashboard.getByTestId('dashboard-overview-stats'),
         dashboard.getByTestId('dashboard-local-resources'),
         dashboard.getByTestId('dashboard-connection-list'),
         dashboard.getByTestId('dashboard-system-resources'),
@@ -63,7 +62,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
         await expectHorizontallyInside(locator, viewport.width);
       }
 
-      const statsBox = await dashboard.getByTestId('dashboard-overview-stats').boundingBox();
+      const statsBox = await dashboard.getByTestId('dashboard-overview').boundingBox();
       const localResourcesBox = await dashboard.getByTestId('dashboard-local-resources').boundingBox();
       expect(statsBox).not.toBeNull();
       expect(localResourcesBox).not.toBeNull();

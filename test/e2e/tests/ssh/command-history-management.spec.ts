@@ -25,7 +25,7 @@ test('command history UI searches, copies, re-runs, and deletes real terminal hi
 
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
   const commandInput = page.getByTestId('command-input');
-  const historyView = page.getByTestId('command-history-view');
+  const historyView = page.getByTestId('command-history-view').filter({ visible: true }).first();
   await expect(historyView).toBeVisible({ timeout: 20_000 });
 
   await slowStep('real terminal commands appear in history', async () => {

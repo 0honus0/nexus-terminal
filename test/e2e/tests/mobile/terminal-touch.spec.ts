@@ -221,8 +221,8 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
     await expect(menu.getByRole('button', { name: 'Copy', exact: true })).toBeEnabled();
     await expect(menu.getByRole('button', { name: 'Paste', exact: true })).toBeEnabled();
     await expect(menu.getByRole('button', { name: 'Select All', exact: true })).toBeEnabled();
-    await expect(page.locator('.mobile-terminal-selection-handle--start')).toBeVisible();
-    await expect(page.locator('.mobile-terminal-selection-handle--end')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Adjust selection start', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Adjust selection end', exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'mobile-terminal-selection.png');
   });
 

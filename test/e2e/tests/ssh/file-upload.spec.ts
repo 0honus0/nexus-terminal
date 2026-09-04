@@ -3,6 +3,7 @@ import { expect, test, type BrowserContext, type Page } from '../../support/fixt
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
+  closeConnectedFileManager,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -126,7 +127,7 @@ test('file browsing and recursive search remain responsive while upload writes a
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 
-  await fileManagerRow(page, '..').click();
+  await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
   await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
 
   await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
@@ -229,6 +230,7 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
         )
         .toBeLessThan(50);
 
+      await closeConnectedFileManager(page);
       await progressPopup.getByTestId('transfer-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 
@@ -361,6 +363,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
       Math.max(...progressBarBoxes.map((box) => box.width)) - Math.min(...progressBarBoxes.map((box) => box.width)),
     ).toBeLessThanOrEqual(1);
 
+    await closeConnectedFileManager(page);
     const resizeHandle = popup.getByTestId('transfer-progress-resize');
     await expect(resizeHandle).toBeVisible();
     const resizeBox = await resizeHandle.boundingBox();
@@ -440,6 +443,7 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
 
     const popup = visibleProgressCenter(page);
     await expect(popup).toBeVisible({ timeout: 10_000 });
+    await closeConnectedFileManager(page);
     await popup.getByTestId('transfer-progress-hide').click();
     await expect(popup).toBeHidden();
 

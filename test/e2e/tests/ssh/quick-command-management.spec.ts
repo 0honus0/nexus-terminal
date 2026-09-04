@@ -46,7 +46,7 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  const quickView = page.getByTestId('quick-commands-view');
+  const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
   await expect(quickView).toBeVisible({ timeout: 20_000 });
 

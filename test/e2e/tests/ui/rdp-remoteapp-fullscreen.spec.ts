@@ -128,7 +128,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 
     await step('browser fullscreen is borderless, hides Nexus chrome, and Escape restores the window', async () => {
       const panel = page.getByTestId('remote-desktop-panel');
-      const fullscreen = panel.getByRole('button', { name: 'Fullscreen', exact: true });
+      const fullscreen = panel.getByTestId('rdp-browser-fullscreen');
       const header = page.getByTestId('rdp-window-header');
       const footer = page.getByTestId('rdp-window-footer');
       await expect(panel).toBeVisible();

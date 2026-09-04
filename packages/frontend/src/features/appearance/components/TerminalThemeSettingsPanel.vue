@@ -95,6 +95,13 @@
     return true;
   };
 
+  const finishRawThemeEditing = (): void => {
+    rawThemeEditing.value = false;
+    window.setTimeout(() => {
+      if (!rawThemeEditing.value && editorVisible.value) applyThemeJson();
+    }, 0);
+  };
+
   const saveTheme = async (): Promise<void> => {
     if (!themeName.value.trim()) {
       feedback.notifyWarning(t('styleCustomizer.errorThemeNameRequired'));
@@ -277,10 +284,7 @@
             class="min-h-72 font-mono text-xs"
             spellcheck="false"
             @focus="rawThemeEditing = true"
-            @blur="
-              rawThemeEditing = false;
-              applyThemeJson();
-            "
+            @blur="finishRawThemeEditing"
           />
           <p v-if="themeParseError" class="mt-2 text-sm text-error">{{ themeParseError }}</p>
         </BaseFormField>

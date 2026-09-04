@@ -44,12 +44,15 @@ async function openCurrentDirectoryContextMenu(page: Page): Promise<void> {
 }
 
 async function goIntoFolder(page: Page, folder: string): Promise<void> {
-  await row(page, folder).click();
-  await expect(row(page, '..')).toBeVisible();
+  const target = row(page, folder);
+  const targetPath = await target.getAttribute('data-file-path');
+  expect(targetPath).toBeTruthy();
+  await target.click();
+  await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-path-input')).toHaveValue(targetPath!);
 }
 
 async function refreshFileManager(page: Page): Promise<void> {
-  await rightClickRow(page, 'seed.txt');
+  await openCurrentDirectoryContextMenu(page);
   await clickMenuItem(page, 'Refresh');
 }
 

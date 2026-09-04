@@ -66,7 +66,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     const recursiveResult = fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]');
     await expect(recursiveResult).toBeVisible();
     await expect(recursiveResult).toContainText('folder-seed/nested.txt');
-    await expect(row(page, 'nested.txt')).toHaveCount(0);
+    await expect(fileManager.locator('tr[data-file-path="/nested.txt"]')).toHaveCount(0);
 
     await recursiveResult.click({ button: 'right' });
     const contextMenu = page.getByTestId('file-manager-context-menu');
@@ -114,7 +114,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Typing an absolute path navigates directly to the remote directory', async () => {
     await navigateViaPathInput(page, FAVORITE_PATH);
-    await expect(row(page, '..')).toBeVisible();
+    await expect(manager(page).getByTestId('file-manager-parent-button')).toBeVisible();
     await expect(row(page, 'seed.txt')).toHaveCount(0);
 
     await navigateViaPathInput(page, '/');
@@ -129,7 +129,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
     await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
-    await expect(row(page, '..')).toBeVisible();
+    await expect(manager(page).getByTestId('file-manager-parent-button')).toBeVisible();
   });
 
   await step('Favorite paths can be added, used for navigation, and deleted', async () => {

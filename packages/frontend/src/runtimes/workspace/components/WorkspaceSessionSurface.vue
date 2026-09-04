@@ -420,7 +420,12 @@
     directories: readonly string[] = [],
   ) => {
     try {
-      await transfers.startUploadBatch(files, { scopeId: props.session.id, path }, directories);
+      const taskIds = await transfers.startUploadBatch(files, { scopeId: props.session.id, path }, directories);
+      void Promise.all(taskIds.map((id) => transfers.waitForTask(id))).then(async (tasks) => {
+        if (tasks.some((task) => task.status === 'completed' || task.status === 'partial')) {
+          await props.session.filesystemState.browser.refresh();
+        }
+      });
     } catch (cause) {
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -982,7 +987,14 @@
       @quick-command-compact-mode="emit('quickCommandCompactMode', $event)"
     />
 
-    <input ref="uploadInput" class="hidden" type="file" multiple @change="uploadFiles" />
+    <input
+      ref="uploadInput"
+      data-testid="file-upload-input"
+      class="hidden"
+      type="file"
+      multiple
+      @change="uploadFiles"
+    />
 
     <ProgressCenter
       v-if="transfers.tasks.value.length && progressVisible"

@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
+import { closeConnectedFileManager, reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
 import {
   closeProgressDisplay,
@@ -32,6 +32,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       const center = visibleProgressCenter(page);
       await expect(center).toBeVisible({ timeout: 10_000 });
       await expect(visibleProgressTask(page, filename)).toContainText('Upload');
+      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
     });
 
@@ -55,6 +56,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
         await reopenConnectedFileManager(page);
         await expect(visibleProgressCenter(page)).toBeVisible();
 
+        await closeConnectedFileManager(page);
         await hideVisibleProgressCenter(page);
         const reopenedModal = await openProgressDisplay(page);
         await expect(hiddenTask(reopenedModal, filename)).toBeVisible();
@@ -100,6 +102,7 @@ test('registered copy progress hides and cancels through the shared Progress Dis
       const center = visibleProgressCenter(page);
       await expect(center).toBeVisible({ timeout: 10_000 });
       await expect(visibleProgressTask(page, sourceName)).toContainText('Copy');
+      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
     });
 

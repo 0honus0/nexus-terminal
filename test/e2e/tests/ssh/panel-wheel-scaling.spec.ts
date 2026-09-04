@@ -262,6 +262,7 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
+      showPopupFileManager: false,
       fileManagerRowSizeMultiplier: 1,
       fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
     },
@@ -286,7 +287,11 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
 
     const sidebarToggle = page.getByTestId('sidebar-pane-fileManager');
     await sidebarToggle.click();
-    const sidebar = page.getByTestId('right-sidebar-panel');
+    const sidebar = page
+      .locator('[data-workspace-sidebar]')
+      .filter({ has: page.getByTestId('file-manager-list') })
+      .filter({ visible: true })
+      .first();
     const list = sidebar.getByTestId('file-manager-list');
     await expect(list).toBeVisible();
     await expect(list).toHaveAttribute('data-row-scale', '1.00');

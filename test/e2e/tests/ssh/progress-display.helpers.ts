@@ -62,12 +62,15 @@ export async function openCurrentDirectoryContextMenu(page: Page): Promise<void>
 }
 
 export async function goIntoFolder(page: Page, folder: string): Promise<void> {
-  await row(page, folder).click();
-  await expect(row(page, '..')).toBeVisible();
+  const target = row(page, folder);
+  const targetPath = await target.getAttribute('data-file-path');
+  expect(targetPath).toBeTruthy();
+  await target.click();
+  await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-path-input')).toHaveValue(targetPath!);
 }
 
 export async function goToParent(page: Page): Promise<void> {
-  await row(page, '..').click();
+  await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 

@@ -59,7 +59,7 @@ test('quick command tags and saved variables survive persistence, grouping, rena
   let tagId = 0;
 
   try {
-    const quickView = page.getByTestId('quick-commands-view');
+    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
     const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
     await expect(quickView).toBeVisible({ timeout: 20_000 });
 

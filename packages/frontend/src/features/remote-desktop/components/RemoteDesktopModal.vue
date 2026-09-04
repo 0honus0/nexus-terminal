@@ -484,16 +484,20 @@
           <template v-if="device.hasTouch.value">
             <span class="px-1 text-xs text-text-secondary">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
             <BaseButton
+              data-testid="rdp-touch-mode-direct"
               size="sm"
               :variant="touchMode === 'direct' ? 'primary' : 'ghost'"
+              :aria-pressed="touchMode === 'direct'"
               :title="t('remoteDesktopModal.touchHintDirect')"
               @click="setTouchMode('direct')"
             >
               {{ t('remoteDesktopModal.touchModeDirect') }}
             </BaseButton>
             <BaseButton
+              data-testid="rdp-touch-mode-touchpad"
               size="sm"
               :variant="touchMode === 'touchpad' ? 'primary' : 'ghost'"
+              :aria-pressed="touchMode === 'touchpad'"
               :title="t('remoteDesktopModal.touchHintTouchpad')"
               @click="setTouchMode('touchpad')"
             >

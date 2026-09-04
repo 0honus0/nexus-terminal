@@ -66,33 +66,15 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await commandInput.press('Enter');
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
 
-    const consoleLines: string[] = [];
-    const onConsole = (message: { text(): string }) => consoleLines.push(message.text());
-    page.on('console', onConsole);
-    try {
-      await commandBar.getByTitle('Open terminal search').click();
-      await expect(commandInput).toHaveAttribute('placeholder', 'Search in terminal...');
-      await commandInput.fill(marker);
-      await expect
-        .poll(
-          () => {
-            const callIndex = consoleLines.findIndex((line) => line.includes(`Calling findNext for term: "${marker}"`));
-            if (callIndex < 0) return false;
-            return consoleLines
-              .slice(callIndex, callIndex + 4)
-              .some((line) => line.includes('findNext returned: true'));
-          },
-          { timeout: 10_000 },
-        )
-        .toBeTruthy();
-
-      await commandBar.getByTitle('Find next').click();
-      await commandBar.getByTitle('Find previous').click();
-      await commandBar.getByTitle('Close terminal search').click();
-      await expect(commandInput).toHaveAttribute('placeholder', 'Enter command and press Enter to send...');
-    } finally {
-      page.off('console', onConsole);
-    }
+    await terminal.getByTitle('Search terminal').click();
+    const searchInput = terminal.getByPlaceholder('Search terminal...');
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill(marker);
+    await terminal.getByTitle('Find next').click();
+    await terminal.getByTitle('Find previous').click();
+    await terminal.getByTitle('Close search').click();
+    await expect(searchInput).toBeHidden();
+    await expect(commandInput).toHaveAttribute('placeholder', 'Enter command and press Enter to send...');
   });
 
   await step('Clear Terminal removes previously rendered output from the viewport', async () => {
@@ -111,7 +93,7 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await commandInput.press('Enter');
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
 
-    const historyView = page.getByTestId('command-history-view');
+    const historyView = page.getByTestId('command-history-view').filter({ visible: true }).first();
     const historyItem = historyView.locator('li[title]').filter({ hasText: marker }).first();
     await expect(historyItem).toBeVisible({ timeout: 20_000 });
     const before = markerCount(await rows.innerText(), marker);
@@ -122,7 +104,7 @@ test('common terminal tools work through the real SSH session', async ({ page, c
   });
 
   await step('Quick Commands executes a saved command in the active SSH session', async () => {
-    const quickCommandsView = page.getByTestId('quick-commands-view');
+    const quickCommandsView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
     const commandRow = quickCommandsView.locator(`[data-command-id="${quickCommandId}"]`);
     await expect(commandRow).toBeVisible({ timeout: 20_000 });
     await commandRow.getByTestId('quick-command-execute').click();

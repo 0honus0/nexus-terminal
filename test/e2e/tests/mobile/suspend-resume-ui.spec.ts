@@ -9,10 +9,10 @@ import {
 import { slowStep, step } from '../../support/steps';
 
 type SuspendedSession = {
-  suspendSessionId: string;
-  originalSessionId?: string;
+  id: string;
+  originalWorkspaceId: string;
   connectionName: string;
-  backendSshStatus: 'marked_active' | 'hanging' | 'disconnected_by_backend';
+  status: 'active' | 'disconnected';
 };
 
 async function suspendedSessions(request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<SuspendedSession[]> {
@@ -70,7 +70,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
         async () => {
           const sessions = await suspendedSessions(context.request);
           return sessions.some(
-            (session) => session.originalSessionId === originalSessionId && session.backendSshStatus === 'hanging',
+            (session) => session.originalWorkspaceId === originalSessionId && session.status === 'active',
           );
         },
         { timeout: 30_000 },
@@ -99,13 +99,13 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await expect(terminal).toBeVisible({ timeout: 30_000 });
 
     // A replacement terminal tab is mounted before the resume transaction is
-    // fully committed. Wait for the backend hanging record to disappear so a
-    // command cannot race the final resume/ACK handoff.
+    // fully committed. Wait for the suspended record to disappear so a command
+    // cannot race the final resume handoff.
     await expect
       .poll(
         async () => {
           const sessions = await suspendedSessions(context.request);
-          return sessions.some((session) => session.originalSessionId === originalSessionId);
+          return sessions.some((session) => session.originalWorkspaceId === originalSessionId);
         },
         { timeout: 30_000 },
       )

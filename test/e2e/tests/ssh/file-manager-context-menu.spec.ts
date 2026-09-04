@@ -8,6 +8,7 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
+  reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
@@ -45,12 +46,15 @@ async function confirmAction(page: Page, actionType: string, value?: string): Pr
 }
 
 async function goIntoFolder(page: Page, folder: string): Promise<void> {
-  await row(page, folder).click();
-  await expect(row(page, '..')).toBeVisible();
+  const target = row(page, folder);
+  const targetPath = await target.getAttribute('data-file-path');
+  expect(targetPath).toBeTruthy();
+  await target.click();
+  await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-path-input')).toHaveValue(targetPath!);
 }
 
 async function goToParent(page: Page): Promise<void> {
-  await row(page, '..').click();
+  await page.getByTestId('file-manager-modal').getByTestId('file-manager-parent-button').click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 
@@ -69,6 +73,10 @@ test('keeps the compress submenu inside the viewport in a narrow right sidebar',
   await page.setViewportSize({ width: 900, height: 760 });
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  const inlineFileManager = await context.request.put('/api/v1/settings', {
+    data: { showPopupFileManager: false },
+  });
+  expect(inlineFileManager.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
 
@@ -146,6 +154,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await expect(editor).not.toContainText('Failed to');
     await documentPopup.getByTitle('Close', { exact: true }).first().click();
     await expect(documentPopup).toBeHidden();
+    await reopenConnectedFileManager(page);
   });
 
   await step('Download streams a remote file through the browser', async () => {
@@ -267,14 +276,14 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
   });
 
   await step('New File creates a real SFTP file', async () => {
-    await rightClickRow(page, 'seed.txt');
+    await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'New File');
     await confirmAction(page, 'newFile', 'created-by-menu.txt');
     await expect(row(page, 'created-by-menu.txt')).toBeVisible();
   });
 
   await step('New Folder creates a real SFTP directory', async () => {
-    await rightClickRow(page, 'seed.txt');
+    await openCurrentDirectoryContextMenu(page);
     await clickMenuItem(page, 'New Folder');
     await confirmAction(page, 'newFolder', 'created-folder');
     await expect(row(page, 'created-folder')).toBeVisible();

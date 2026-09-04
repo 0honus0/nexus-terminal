@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
+  closeConnectedFileManager,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -21,6 +22,12 @@ async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsIn
   const connectionId = await ensureTestSshConnection(request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
+}
+
+async function tapFileManagerRow(page: Page, filename: string): Promise<void> {
+  const row = fileManagerRow(page, filename);
+  await expect(row).toBeVisible();
+  await row.locator('button[data-file-path]').click();
 }
 
 async function longPressFile(page: Page, filename: string): Promise<Locator> {
@@ -195,7 +202,7 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
       'Compress to tar.gz',
       'Compress to tar.bz2',
       'Compress to zip with password...',
-      'Send to...',
+      'Send to servers',
     ]) {
       await expect(menu.getByText(label, { exact: true })).toBeVisible();
     }
@@ -214,7 +221,7 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
   await openConnectedFileManager(page);
 
   await slowStep('single tap opens a full-screen mobile editor', async () => {
-    await fileManagerRow(page, 'plainfile').click();
+    await tapFileManagerRow(page, 'plainfile');
     const documentPopup = page.getByTestId('document-popup');
     const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
@@ -252,7 +259,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
   const filename = 'README-e2e.md';
 
   await slowStep('single tap keeps Markdown preview-first behavior on mobile', async () => {
-    await fileManagerRow(page, filename).click();
+    await tapFileManagerRow(page, filename);
     const preview = page.getByRole('dialog', { name: filename });
     await expect(preview).toBeVisible({ timeout: 20_000 });
     await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
@@ -289,7 +296,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
   });
 
   await step('reopening the file renders the just-saved Markdown preview', async () => {
-    await fileManagerRow(page, filename).click();
+    await tapFileManagerRow(page, filename);
     const preview = page.getByRole('dialog', { name: filename });
     await expect(preview.getByRole('heading', { name: 'Mobile Markdown E2E' })).toBeVisible({ timeout: 20_000 });
     await expect(preview.locator('strong')).toHaveText('mobile-save-ok');
@@ -302,10 +309,9 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
 }) => {
   await connectMobileSsh(page, context.request);
 
-  const commandBar = page.getByTestId('command-input-bar');
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  await commandBar.locator('button:has(i.fa-keyboard)').click();
+  await page.getByTestId('mobile-virtual-keyboard-button').click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
 
@@ -375,7 +381,7 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   const filename = 'preview.xlsx';
 
   await slowStep('single tap opens the spreadsheet preview with both sheet tabs visible', async () => {
-    await fileManagerRow(page, filename).click();
+    await tapFileManagerRow(page, filename);
     const dialog = page.getByRole('dialog', { name: filename });
     await expect(dialog).toBeVisible({ timeout: 20_000 });
     const preview = dialog.getByTestId('spreadsheet-preview');
@@ -441,7 +447,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await openConnectedFileManager(page);
 
   const filename = 'preview.pdf';
-  await fileManagerRow(page, filename).click();
+  await tapFileManagerRow(page, filename);
   const dialog = page.getByRole('dialog', { name: filename, exact: true });
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
@@ -552,7 +558,7 @@ test('mobile DOCX touch-pans wide content without a desktop scrollbar track', as
   await openConnectedFileManager(page);
 
   const filename = 'preview.docx';
-  await fileManagerRow(page, filename).click();
+  await tapFileManagerRow(page, filename);
   const dialog = page.getByRole('dialog', { name: filename, exact: true });
   await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
   const scroller = dialog.getByTestId('docx-preview-scroller');
@@ -584,7 +590,7 @@ test('mobile preview close button clears cached state when popup file editing is
   await openConnectedFileManager(page);
 
   const filename = 'preview.xlsx';
-  await fileManagerRow(page, filename).click();
+  await tapFileManagerRow(page, filename);
   const dialog = page.getByRole('dialog', { name: filename, exact: true });
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   const tabCloseButton = dialog.getByRole('button', { name: 'Close tab preview.xlsx', exact: true });
@@ -598,7 +604,7 @@ test('mobile preview close button clears cached state when popup file editing is
   await dialog.getByRole('button', { name: 'Close preview', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  await fileManagerRow(page, filename).click();
+  await tapFileManagerRow(page, filename);
   const reopened = page.getByRole('dialog', { name: filename, exact: true });
   await expect(reopened).toBeVisible({ timeout: 20_000 });
   await expect(reopened.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
@@ -619,7 +625,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
     await slowStep(
       'throttled uploads expose all floating controls without overflowing the Pixel viewport',
       async () => {
-        const fileInput = page.getByTestId('file-manager-modal').getByTestId('file-upload-input');
+        const fileInput = page.getByTestId('file-upload-input');
         await fileInput.setInputFiles(
           filenames.map((name, index) => ({
             name,
@@ -643,6 +649,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expectBoxInsideViewport(popupBox!, viewport!);
         await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
+        await closeConnectedFileManager(page);
         await popup.getByTestId('transfer-progress-hide').click();
         await expect(popup).toBeHidden();
       },
@@ -670,6 +677,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await reopenConnectedFileManager(page);
       const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
       await expect(popup).toBeVisible();
+      await closeConnectedFileManager(page);
       await popup.getByTestId('transfer-progress-cancel-all').click();
       await expect
         .poll(() =>

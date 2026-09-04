@@ -863,6 +863,7 @@
     <header class="flex flex-wrap items-center gap-2 border-b border-border p-2">
       <BaseButton
         size="sm"
+        data-testid="file-manager-parent-button"
         data-file-parent
         :variant="keyboardCursor === PARENT_CURSOR ? 'primary' : 'secondary'"
         :title="t('fileManager.actions.parentDirectory')"
@@ -991,7 +992,7 @@
       >
         <template #head
           ><tr>
-            <th data-testid="file-manager-type-header" class="relative" :style="columnStyle('type')">
+            <th data-testid="file-manager-type-header" class="relative whitespace-nowrap" :style="columnStyle('type')">
               <span
                 v-if="!device.isMobile.value"
                 class="absolute right-0 top-0 h-full w-1 cursor-col-resize"
@@ -1060,6 +1061,8 @@
           @dragleave="remoteDragTarget === entry.path && (remoteDragTarget = null)"
           @drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
           @contextmenu.stop="openContext($event, entry)"
+          @click="clickEntry($event, entry)"
+          @dblclick="doubleClickEntry($event, entry)"
           @pointerdown="longPress.start($event, entry)"
           @pointermove="longPress.move"
           @pointerup="longPress.end"
@@ -1074,12 +1077,7 @@
             />
           </td>
           <td class="file-row-cell px-3 py-2" :style="columnStyle('name')">
-            <button
-              class="flex w-full items-center gap-2 text-left"
-              :data-file-path="entry.path"
-              @click="clickEntry($event, entry)"
-              @dblclick="doubleClickEntry($event, entry)"
-            >
+            <button class="flex w-full items-center gap-2 text-left" :data-file-path="entry.path">
               <span>{{ entry.metadata.isDirectory ? '📁' : entry.metadata.isSymbolicLink ? '🔗' : '📄' }}</span
               ><span>{{ displayEntryName(entry) }}</span>
             </button>
@@ -1093,7 +1091,7 @@
           <td class="file-row-cell px-3 py-2 text-text-secondary" :style="columnStyle('modified')">
             {{ new Date(entry.metadata.modifiedAt).toLocaleString() }}
           </td>
-          <td class="file-row-cell px-3 py-2">
+          <td class="file-row-cell px-3 py-2" @click.stop @dblclick.stop>
             <div class="flex flex-wrap justify-end gap-1">
               <BaseButton v-if="props.download" size="sm" @click="download([entry])">{{
                 t('fileManager.actions.download')
@@ -1259,6 +1257,8 @@
       :x="compressSubmenu.x"
       :y="compressSubmenu.y"
       :width="220"
+      :z-index="90"
+      :blocking-layer="false"
       @close="compressSubmenu = null"
     >
       <div data-testid="file-manager-context-submenu" :data-side="compressSubmenu.side" class="w-full">

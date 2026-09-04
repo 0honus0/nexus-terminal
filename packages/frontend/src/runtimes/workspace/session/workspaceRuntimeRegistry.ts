@@ -176,4 +176,11 @@ export const workspaceRuntimeRegistry = {
   },
 };
 
+const handlePageHide = (event: PageTransitionEvent): void => {
+  if (event.persisted) return;
+  workspaceRuntimeRegistry.disposeAll();
+};
+
+if (typeof window !== 'undefined') window.addEventListener('pagehide', handlePageHide);
+
 export type WorkspaceRuntimeRegistry = typeof workspaceRuntimeRegistry;
