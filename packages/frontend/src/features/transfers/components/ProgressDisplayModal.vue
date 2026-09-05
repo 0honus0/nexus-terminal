@@ -166,6 +166,10 @@
                       <div
                         data-testid="hidden-progress-bar"
                         class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border"
+                        role="progressbar"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        :aria-valuenow="Math.round(normalizedProgress(task))"
                       >
                         <div
                           class="h-full rounded-full bg-primary"
