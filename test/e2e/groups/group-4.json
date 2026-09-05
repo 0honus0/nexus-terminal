@@ -8,6 +8,7 @@
     "tests/ssh/protocol.spec.ts",
     "tests/ssh/status-docker-protocol.spec.ts",
     "tests/ssh/upload-protocol.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts",
     "tests/ssh/panel-wheel-scaling.spec.ts",
     "tests/ssh/terminal-protocol.spec.ts",
     "tests/ssh/terminal-tools-ui.spec.ts",
