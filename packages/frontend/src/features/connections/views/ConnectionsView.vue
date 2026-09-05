@@ -338,14 +338,14 @@
               v-for="c in filtered"
               :key="c.id"
               :data-testid="`connection-row-${c.id}`"
-              class="flex items-center rounded border border-border/50 bg-header/50 p-3 transition duration-150"
+              class="flex flex-col items-stretch rounded border border-border/50 bg-header/50 p-3 transition duration-150 sm:flex-row sm:items-center"
               :class="[
                 selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
                 batch ? 'cursor-pointer hover:bg-border/70' : 'hover:bg-border/30',
               ]"
               @click="batch && toggleSelected(c.id)"
             >
-              <div class="mr-3 min-w-0 flex-1">
+              <div class="mr-0 min-w-0 w-full flex-1 sm:mr-3 sm:w-auto">
                 <span class="flex items-center truncate font-medium" :title="c.name || c.host">
                   <i
                     :class="[
@@ -392,14 +392,17 @@
                   >
                 </div>
               </div>
-              <div class="flex shrink-0 items-center space-x-2" @click.stop>
+              <div
+                class="mt-3 flex w-full shrink-0 flex-wrap items-center gap-2 sm:mt-0 sm:w-auto sm:flex-nowrap sm:gap-0 sm:space-x-2"
+                :class="batch ? 'pointer-events-none' : ''"
+              >
                 <button
                   v-if="c.type === 'SSH'"
                   data-testid="connection-row-test"
                   type="button"
                   :disabled="batch || testing.has(c.id)"
-                  class="flex h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
-                  @click="test(c)"
+                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  @click.stop="test(c)"
                 >
                   <i
                     :class="[
@@ -414,24 +417,24 @@
                   data-testid="connection-row-edit"
                   type="button"
                   :disabled="batch"
-                  class="flex h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
-                  @click="openEdit(c)"
+                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  @click.stop="openEdit(c)"
                 >
                   <i class="fas fa-pencil-alt mr-1" aria-hidden="true" />{{ t('connections.actions.edit') }}
                 </button>
                 <button
                   type="button"
                   :disabled="batch"
-                  class="flex h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
-                  @click="clone(c)"
+                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  @click.stop="clone(c)"
                 >
                   <i class="fas fa-clone mr-1" aria-hidden="true" />{{ t('connections.actions.clone') }}
                 </button>
                 <button
                   type="button"
                   :disabled="batch"
-                  class="flex h-9 items-center justify-center rounded-md bg-button px-4 py-2 text-sm font-medium text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
-                  @click="connect(c)"
+                  class="flex h-9 w-[calc(50%-0.25rem)] shrink-0 items-center justify-center rounded-md bg-button px-4 py-2 text-sm font-medium text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:flex-none"
+                  @click.stop="connect(c)"
                 >
                   {{ t('connections.actions.connect') }}
                 </button>

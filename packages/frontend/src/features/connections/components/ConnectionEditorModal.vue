@@ -98,7 +98,7 @@
 <template>
   <BaseModal
     :visible="visible"
-    panel-class="max-w-2xl max-h-[90vh]"
+    panel-class="!max-w-2xl !max-h-[90vh] !p-6"
     content-class="!overflow-hidden !py-0"
     @close="emit('close')"
   >

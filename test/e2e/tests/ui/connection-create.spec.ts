@@ -5,6 +5,7 @@ import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
 
 const FORM_NAME = 'E2E UI Created SSH';
+const FORM_CLONE_NAME = `${FORM_NAME} Copy`;
 const SCRIPT_NAME_ONE = 'E2E Script SSH One';
 const SCRIPT_NAME_TWO = 'E2E Script SSH Two';
 const SCRIPT_TAG = 'E2E Script Imported Tag';
@@ -14,7 +15,7 @@ async function cleanupConnections(request: APIRequestContext): Promise<void> {
   expect(response.ok()).toBeTruthy();
   const connections = (await response.json()) as Array<{ id: number; name?: string }>;
   for (const connection of connections.filter((item) =>
-    [FORM_NAME, SCRIPT_NAME_ONE, SCRIPT_NAME_TWO].includes(item.name || ''),
+    [FORM_NAME, FORM_CLONE_NAME, SCRIPT_NAME_ONE, SCRIPT_NAME_TWO].includes(item.name || ''),
   )) {
     expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
   }
@@ -81,6 +82,33 @@ test('regular connection form tests and creates a persisted working SSH connecti
     expect(testResponse.ok()).toBeTruthy();
     await expect(testResponse.json()).resolves.toMatchObject({ success: true });
   });
+
+  await step('Clone creates a distinct saved row that preserves the working SSH credential', async () => {
+    const row = page.getByTestId(`connection-row-${connectionId}`);
+    const clonePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/v1/connections/${connectionId}/clone`) && response.request().method() === 'POST',
+    );
+    await row.getByRole('button', { name: 'Clone', exact: true }).click();
+    const clone = await clonePromise;
+    expect(clone.status()).toBe(201);
+    const cloneId = ((await clone.json()) as { connection: { id: number; name: string } }).connection.id;
+    expect(cloneId).not.toBe(connectionId);
+    await expect(page.getByTestId(`connection-row-${cloneId}`)).toContainText(FORM_CLONE_NAME);
+    const cloneTest = await context.request.post(`/api/v1/connections/${cloneId}/test`);
+    expect(cloneTest.ok()).toBeTruthy();
+    await expect(cloneTest.json()).resolves.toMatchObject({ success: true });
+  });
+
+  await step('the row connect action routes the saved connection into Workspace', async () => {
+    const row = page.getByTestId(`connection-row-${connectionId}`);
+    await Promise.all([
+      page.waitForURL(
+        (url) => url.pathname.includes('/workspace') && url.searchParams.get('connectionId') === String(connectionId),
+      ),
+      row.getByRole('button', { name: 'Connect', exact: true }).click(),
+    ]);
+  });
 });
 
 test('script mode creates multiple connections, resolves tags, and preserves notes', async ({ page, context }) => {
@@ -146,4 +174,21 @@ test('script mode creates multiple connections, resolves tags, and preserves not
     expect(testResponse.ok()).toBeTruthy();
     await expect(testResponse.json()).resolves.toMatchObject({ success: true });
   }
+
+  await step('Test All operates on the currently filtered saved SSH rows', async () => {
+    const testedIds = new Set<number>();
+    const expectedIds = new Set(connections.map((connection) => connection.id));
+    const recordTest = (response: Response) => {
+      if (response.request().method() !== 'POST') return;
+      const match = response.url().match(/\/api\/v1\/connections\/(\d+)\/test$/);
+      if (!match || !response.ok()) return;
+      testedIds.add(Number(match[1]));
+    };
+    page.on('response', recordTest);
+    await page.getByTestId('connections-search').fill('E2E Script SSH');
+    await page.getByRole('button', { name: 'Test All', exact: true }).click();
+    await expect.poll(() => testedIds.size, { timeout: 15_000 }).toBe(2);
+    page.off('response', recordTest);
+    expect(testedIds).toEqual(expectedIds);
+  });
 });

@@ -126,7 +126,7 @@
   <BaseModal
     :visible="visible"
     data-testid="batch-edit-modal"
-    panel-class="max-w-xl max-h-[90vh]"
+    panel-class="!max-w-xl !max-h-[90vh] !p-6"
     content-class="!overflow-hidden !py-0"
     @close="emit('close')"
   >
