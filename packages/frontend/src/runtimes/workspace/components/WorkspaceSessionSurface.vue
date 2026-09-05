@@ -113,6 +113,7 @@
     mobileEditorFontSize: [size: number];
     interaction: [];
     openSuspended: [];
+    openFocusConfigurator: [];
     fileManagerRowScale: [scale: number];
     fileManagerColumnWidths: [widths: Record<string, number>];
     quickCommandRowScale: [scale: number];
@@ -772,6 +773,7 @@
         @clear-terminal="terminalApi?.clear?.()"
         @find-terminal-next="terminalApi?.findNext?.()"
         @find-terminal-previous="terminalApi?.findPrevious?.()"
+        @open-focus-configurator="emit('openFocusConfigurator')"
         @terminal-api="terminalApi = $event"
         @editor-api="editorApi = $event"
         @preview-api="previewApi = $event"
@@ -856,6 +858,7 @@
         @clear-terminal="terminalApi?.clear?.()"
         @find-terminal-next="terminalApi?.findNext?.()"
         @find-terminal-previous="terminalApi?.findPrevious?.()"
+        @open-focus-configurator="emit('openFocusConfigurator')"
         @terminal-api="terminalApi = $event"
         @editor-api="editorApi = $event"
         @preview-api="previewApi = $event"
@@ -947,6 +950,7 @@
         @clear-terminal="terminalApi?.clear?.()"
         @find-terminal-next="terminalApi?.findNext?.()"
         @find-terminal-previous="terminalApi?.findPrevious?.()"
+        @open-focus-configurator="emit('openFocusConfigurator')"
         @terminal-api="terminalApi = $event"
         @editor-api="editorApi = $event"
         @preview-api="previewApi = $event"

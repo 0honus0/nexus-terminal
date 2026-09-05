@@ -676,8 +676,6 @@
       @new-session="connectionPickerVisible = true"
       @toggle-header="toggleHeader"
       @open-progress="progressDisplayVisible = true"
-      @open-suspended="suspendedVisible = true"
-      @open-focus-configurator="focusConfiguratorVisible = true"
       @open-layout-configurator="layoutConfiguratorVisible = true"
     />
 
@@ -807,6 +805,7 @@
         @progress-visible="setProgressVisible(session.id, $event)"
         @interaction="session.reconnectNow()"
         @open-suspended="suspendedVisible = true"
+        @open-focus-configurator="focusConfiguratorVisible = true"
         @sidebar-width="saveSidebarWidth"
       />
     </div>

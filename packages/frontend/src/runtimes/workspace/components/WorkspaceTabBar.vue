@@ -27,8 +27,6 @@
     newSession: [];
     toggleHeader: [];
     openProgress: [];
-    openSuspended: [];
-    openFocusConfigurator: [];
     openLayoutConfigurator: [];
   }>();
 
@@ -227,26 +225,6 @@
           @click="emit('openProgress')"
         >
           <i class="fas fa-tasks text-sm" aria-hidden="true"></i>
-        </button>
-        <button
-          v-if="!props.mobile"
-          type="button"
-          class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
-          :title="t('suspendedSshSessions.modalTitle')"
-          :aria-label="t('suspendedSshSessions.modalTitle')"
-          @click="emit('openSuspended')"
-        >
-          <i class="fas fa-pause-circle text-sm" aria-hidden="true"></i>
-        </button>
-        <button
-          v-if="!props.mobile"
-          type="button"
-          class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
-          :title="t('commandInputBar.configureFocusSwitch')"
-          :aria-label="t('commandInputBar.configureFocusSwitch')"
-          @click="emit('openFocusConfigurator')"
-        >
-          <i class="fas fa-keyboard text-sm" aria-hidden="true"></i>
         </button>
         <button
           v-if="!props.mobile"

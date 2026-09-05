@@ -104,6 +104,7 @@
     clearTerminal: [];
     findTerminalNext: [];
     findTerminalPrevious: [];
+    openFocusConfigurator: [];
     terminalApi: [api: TerminalApi | null];
     editorApi: [api: EditorApi | null];
     previewApi: [api: PreviewApi | null];
@@ -220,6 +221,7 @@
         @clear-terminal="emit('clearTerminal')"
         @find-terminal-next="emit('findTerminalNext')"
         @find-terminal-previous="emit('findTerminalPrevious')"
+        @open-focus-configurator="emit('openFocusConfigurator')"
         @terminal-api="emit('terminalApi', $event)"
         @editor-api="emit('editorApi', $event)"
         @preview-api="emit('previewApi', $event)"
@@ -287,6 +289,7 @@
       @open-editor="emit('openEditor')"
       @find-search-next="emit('findTerminalNext')"
       @find-search-previous="emit('findTerminalPrevious')"
+      @open-focus-configurator="emit('openFocusConfigurator')"
       @send="(command, all) => emit('command', command, all)"
       @clear="emit('clearTerminal')"
       @interaction="emit('interaction')"

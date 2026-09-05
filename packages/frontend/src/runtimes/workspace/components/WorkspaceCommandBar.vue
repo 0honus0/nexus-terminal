@@ -45,6 +45,7 @@
     openQuickCommands: [];
     openStatusMonitor: [];
     openSuspended: [];
+    openFocusConfigurator: [];
     toggleVirtualKeyboard: [];
     toggleDockerPane: [];
     returnToTerminal: [];
@@ -262,8 +263,8 @@
         :placeholder="t(terminalSearchOpen ? 'commandInputBar.searchPlaceholder' : 'commandInputBar.placeholder')"
         :disabled="!ready && !terminalSearchOpen"
         :aria-disabled="!ready && !terminalSearchOpen"
-        class="h-[1.85rem] min-h-[1.85rem] min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition-all duration-300 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
-        :class="[mobile ? 'w-[7.25rem] flex-[0_0_7.25rem] px-2' : '', terminalSearchOpen ? 'border-primary/70' : '']"
+        class="command-bar-input command-bar-command-input h-[1.85rem] min-h-[1.85rem] min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition-all duration-300 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+        :class="terminalSearchOpen ? 'border-primary/70' : ''"
         @keydown="handleKeydown"
         @beforeinput="handleBeforeInput"
         @blur="resetTargetSelection"
@@ -316,16 +317,26 @@
             data-testid="toggle-virtual-keyboard"
             type="button"
             class="command-bar-button"
-            :class="{ 'is-active': virtualKeyboardVisible }"
             :title="t(virtualKeyboardVisible ? 'commandInputBar.hideKeyboard' : 'commandInputBar.showKeyboard')"
             :aria-label="t(virtualKeyboardVisible ? 'commandInputBar.hideKeyboard' : 'commandInputBar.showKeyboard')"
             :aria-pressed="Boolean(virtualKeyboardVisible)"
             @click="emit('toggleVirtualKeyboard')"
           >
-            <i class="fas fa-keyboard" aria-hidden="true"></i>
+            <i class="fas fa-keyboard" :class="{ 'opacity-50': !virtualKeyboardVisible }" aria-hidden="true"></i>
           </button>
         </template>
         <button
+          v-if="!mobile"
+          type="button"
+          class="command-bar-button"
+          :title="t('commandInputBar.configureFocusSwitch')"
+          :aria-label="t('commandInputBar.configureFocusSwitch')"
+          @click="emit('openFocusConfigurator')"
+        >
+          <i class="fas fa-keyboard" aria-hidden="true"></i>
+        </button>
+        <button
+          v-if="!mobile"
           type="button"
           class="command-bar-button"
           :title="t(terminalSearchOpen ? 'commandInputBar.closeSearch' : 'commandInputBar.openSearch')"
@@ -334,7 +345,7 @@
         >
           <i :class="terminalSearchOpen ? 'fas fa-times' : 'fas fa-search'" aria-hidden="true"></i>
         </button>
-        <template v-if="terminalSearchOpen">
+        <template v-if="terminalSearchOpen && !mobile">
           <button
             type="button"
             class="command-bar-button"
@@ -354,7 +365,57 @@
             <i class="fas fa-arrow-down" aria-hidden="true"></i>
           </button>
         </template>
+        <button
+          v-if="showFileManagerButton"
+          data-testid="open-file-manager-button"
+          type="button"
+          class="command-bar-button"
+          :title="t('layout.pane.fileManager')"
+          :aria-label="t('layout.pane.fileManager')"
+          @click="emit('openFileManager')"
+        >
+          <i class="fas fa-folder" aria-hidden="true"></i>
+        </button>
+        <button
+          v-if="showEditorButton"
+          type="button"
+          class="command-bar-button"
+          :title="t('layout.pane.editor')"
+          :aria-label="t('layout.pane.editor')"
+          @click="emit('openEditor')"
+        >
+          <i class="fas fa-edit" aria-hidden="true"></i>
+        </button>
         <template v-if="mobile">
+          <button
+            type="button"
+            class="command-bar-button"
+            :title="t(terminalSearchOpen ? 'commandInputBar.closeSearch' : 'commandInputBar.openSearch')"
+            :aria-label="t(terminalSearchOpen ? 'commandInputBar.closeSearch' : 'commandInputBar.openSearch')"
+            @click="toggleTerminalSearch"
+          >
+            <i :class="terminalSearchOpen ? 'fas fa-times' : 'fas fa-search'" aria-hidden="true"></i>
+          </button>
+          <button
+            v-if="terminalSearchOpen"
+            type="button"
+            class="command-bar-button"
+            :title="t('commandInputBar.findPrevious')"
+            :aria-label="t('commandInputBar.findPrevious')"
+            @click="emit('findSearchPrevious')"
+          >
+            <i class="fas fa-arrow-up" aria-hidden="true"></i>
+          </button>
+          <button
+            v-if="terminalSearchOpen"
+            type="button"
+            class="command-bar-button"
+            :title="t('commandInputBar.findNext')"
+            :aria-label="t('commandInputBar.findNext')"
+            @click="emit('findSearchNext')"
+          >
+            <i class="fas fa-arrow-down" aria-hidden="true"></i>
+          </button>
           <button
             data-testid="mobile-docker-pane-toggle"
             type="button"
@@ -380,27 +441,6 @@
           </button>
         </template>
         <button
-          v-if="showFileManagerButton"
-          data-testid="open-file-manager-button"
-          type="button"
-          class="command-bar-button"
-          :title="t('layout.pane.fileManager')"
-          :aria-label="t('layout.pane.fileManager')"
-          @click="emit('openFileManager')"
-        >
-          <i class="fas fa-folder" aria-hidden="true"></i>
-        </button>
-        <button
-          v-if="showEditorButton"
-          type="button"
-          class="command-bar-button"
-          :title="t('layout.pane.editor')"
-          :aria-label="t('layout.pane.editor')"
-          @click="emit('openEditor')"
-        >
-          <i class="fas fa-edit" aria-hidden="true"></i>
-        </button>
-        <button
           v-if="!terminalSearchOpen"
           type="button"
           class="command-bar-button"
@@ -417,30 +457,95 @@
 </template>
 
 <style scoped>
+  .command-bar-root {
+    container-type: size;
+    container-name: command-bar-pane;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-block: 0;
+  }
+
   .command-bar-root--mobile {
+    height: auto;
+    min-height: 2.35rem;
     flex: 0 0 auto;
     overflow-y: hidden;
   }
+
   .command-bar-root--mobile .command-bar-inner {
+    min-height: 0;
+    align-self: auto;
     padding-block: 0.25rem;
   }
-  .command-bar-root--mobile .command-bar-button {
-    width: 2rem;
-    height: 2rem;
-    min-width: 2rem;
-    min-height: 2rem;
-    flex-basis: 2rem;
+
+  .command-bar-root--mobile .command-bar-command-input {
+    width: 7.25rem;
+    min-width: 7.25rem;
+    flex: 0 0 7.25rem !important;
+    padding-inline: 0.5rem;
   }
 
   .mobile-command-controls {
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
   }
+
   .mobile-command-controls::-webkit-scrollbar {
     display: none;
   }
 
+  @media (hover: none) {
+    .command-bar-root--mobile .command-bar-button {
+      touch-action: manipulation;
+    }
+
+    .command-bar-root--mobile .command-bar-button:hover:not(:active) {
+      background-color: transparent;
+      color: var(--text-secondary-color);
+    }
+  }
+
+  .command-bar-inner {
+    min-width: 0;
+    min-height: 100%;
+    flex-wrap: nowrap;
+    align-content: center;
+    align-self: center;
+    flex-grow: 1;
+    row-gap: 0;
+    column-gap: 0.3rem;
+    overflow: hidden;
+    padding: 0.04rem 0.5rem;
+  }
+
+  .command-bar-input {
+    min-width: 0;
+    height: 1.85rem;
+    min-height: 1.85rem;
+    max-height: 1.85rem;
+    padding-top: 0.24rem;
+    padding-bottom: 0.24rem;
+  }
+
+  .command-bar-command-input {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto !important;
+  }
+
   .command-bar-button {
+    position: relative;
     display: flex;
     width: 1.85rem;
     height: 1.85rem;
@@ -458,29 +563,61 @@
       color 0.2s ease,
       border-color 0.2s ease;
   }
+
+  .command-bar-button:hover:not(:disabled) {
+    background: var(--border-color);
+    color: var(--text-color);
+  }
+
+  .command-bar-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 50%, transparent);
+  }
+
+  .command-bar-button:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+
+  .command-bar-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .command-bar-button i {
+    font-size: 0.85rem;
+    line-height: 1;
+    pointer-events: none;
+  }
+
   .command-bar-button.is-active {
     border-color: color-mix(in srgb, var(--primary-color) 55%, var(--border-color));
     background: color-mix(in srgb, var(--primary-color) 20%, transparent);
     color: var(--primary-color);
   }
-  .command-bar-button:hover:not(:disabled) {
-    background: var(--border-color);
-    color: var(--text-color);
+
+  .command-bar-command-input:focus {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
   }
-  .command-bar-button:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 50%, transparent);
+
+  @container command-bar-pane (max-height: 52px) {
+    .command-bar-inner {
+      min-height: max-content;
+      align-content: start;
+      padding-block: 0.04rem;
+    }
   }
-  .command-bar-button:active:not(:disabled) {
-    transform: scale(0.92);
-  }
-  .command-bar-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-  .command-bar-button i {
-    font-size: 0.85rem;
-    line-height: 1;
-    pointer-events: none;
+
+  @container command-bar-pane (max-width: 280px) {
+    .command-bar-command-input {
+      min-width: 0;
+      flex: 1 1 3.5rem !important;
+    }
+
+    .mobile-command-controls {
+      min-width: max-content;
+      max-width: max-content;
+      flex: 0 0 max-content;
+      flex-wrap: nowrap;
+    }
   }
 </style>
