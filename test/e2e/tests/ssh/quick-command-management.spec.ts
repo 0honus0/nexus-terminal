@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import type { Page, TestInfo } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -36,7 +38,66 @@ function markerCount(text: string, marker: string): number {
   return text.split(marker).length - 1;
 }
 
-test('quick command UI creates, searches, executes, edits, and deletes a command', async ({ page, context }) => {
+async function captureQuickCommandsEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
+  const metrics = await page.evaluate(() => {
+    const quickView = [...document.querySelectorAll<HTMLElement>('[data-testid="quick-commands-view"]')].find(
+      (element) => element.getClientRects().length > 0,
+    );
+    const list = quickView?.querySelector<HTMLElement>('[data-testid="quick-command-list"]');
+    const search = quickView?.querySelector<HTMLElement>('[data-testid="quick-command-search"]');
+    const add = quickView?.querySelector<HTMLElement>('[data-testid="quick-command-add"]');
+    const rect = (element: Element | null) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
+    };
+    return {
+      language: document.documentElement.lang,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      pageScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      quickView: rect(quickView ?? null),
+      list: rect(list ?? null),
+      listClientWidth: list?.clientWidth ?? 0,
+      listScrollWidth: list?.scrollWidth ?? 0,
+      listClientHeight: list?.clientHeight ?? 0,
+      listScrollHeight: list?.scrollHeight ?? 0,
+      search: rect(search ?? null),
+      add: rect(add ?? null),
+      commandCount: quickView?.querySelectorAll('[data-command-id]').length ?? 0,
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--app-bg-color').trim(),
+    };
+  });
+  const screenshotPath = testInfo.outputPath(`quick-command-${name}.png`);
+  const metricsPath = testInfo.outputPath(`quick-command-${name}.metrics.json`);
+  await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
+  await writeFile(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, 'utf8');
+  await testInfo.attach(`M09.03-a quick command ${name} screenshot`, {
+    path: screenshotPath,
+    contentType: 'image/png',
+  });
+  await testInfo.attach(`M09.03-a quick command ${name} metrics`, {
+    path: metricsPath,
+    contentType: 'application/json',
+  });
+  console.log(
+    `[M09.03-a quick command ${name} metrics] language=${metrics.language} viewport=${metrics.viewport.width}x${metrics.viewport.height} pageScrollWidth=${metrics.pageScrollWidth} bodyScrollWidth=${metrics.bodyScrollWidth} list=${metrics.listClientWidth}/${metrics.listScrollWidth}/${metrics.listClientHeight}/${metrics.listScrollHeight} commands=${metrics.commandCount}`,
+  );
+  expect(metrics.language).toMatch(/^en(?:-US)?$/);
+  expect(metrics.viewport).toEqual({ width: 1280, height: 800 });
+  expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
+  expect(metrics.bodyScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
+  expect(metrics.quickView?.x).toBeGreaterThanOrEqual(0);
+  expect(metrics.quickView?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
+  expect(metrics.list?.width).toBeGreaterThan(0);
+  expect(metrics.search?.width).toBeGreaterThan(0);
+  expect(metrics.add?.width).toBeGreaterThan(0);
+}
+
+test('quick command UI creates, searches, executes, edits, and deletes a command', async ({
+  page,
+  context,
+}, testInfo) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings/show-quick-command-tags', { data: { enabled: false } });
@@ -49,6 +110,8 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
   await expect(quickView).toBeVisible({ timeout: 20_000 });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await captureQuickCommandsEvidence(page, testInfo, 'before');
 
   let commandId = 0;
   await step('create the command through the workspace UI', async () => {
@@ -107,6 +170,7 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await expect(row).toBeVisible();
     await row.getByTestId('quick-command-execute').click();
     await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('QUICK_MANAGED_V2');
+    await captureQuickCommandsEvidence(page, testInfo, 'after');
 
     await row.click({ button: 'right' });
     const menu = page.getByRole('menu').filter({ visible: true }).first();
