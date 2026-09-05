@@ -18,10 +18,14 @@
   const loading = ref(false);
   const message = ref('');
   const success = ref(false);
+  const handleEnabledChange = (enabled: boolean) => {
+    if (!enabled) form.provider = 'none';
+  };
   const load = async () => {
     loading.value = true;
     try {
       Object.assign(form, await securityApi.getCaptchaConfig(), { hcaptchaSecretKey: '', recaptchaSecretKey: '' });
+      if (!form.enabled) form.provider = 'none';
     } catch (cause) {
       message.value = apiErrorMessage(cause, t('settings.captcha.error.loadFailed'));
     } finally {
@@ -35,6 +39,7 @@
     try {
       await securityApi.updateCaptchaConfig({
         ...form,
+        provider: form.enabled ? form.provider : 'none',
         hcaptchaSecretKey: form.hcaptchaSecretKey || undefined,
         recaptchaSecretKey: form.recaptchaSecretKey || undefined,
       });
@@ -57,7 +62,13 @@
     <p class="mb-4 text-sm text-text-secondary">{{ t('settings.captcha.description') }}</p>
     <form class="space-y-4" @submit.prevent="save">
       <label class="flex items-center text-sm">
-        <BaseCheckbox id="captchaEnabled" v-model="form.enabled" data-testid="captcha-enabled" class="mr-2" />
+        <BaseCheckbox
+          id="captchaEnabled"
+          v-model="form.enabled"
+          data-testid="captcha-enabled"
+          class="mr-2"
+          @update:model-value="handleEnabledChange"
+        />
         <span>{{ t('settings.captcha.enableLabel') }}</span>
       </label>
       <BaseFormField :label="t('settings.captcha.providerLabel')" for-id="captchaProvider">
