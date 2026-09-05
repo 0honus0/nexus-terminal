@@ -308,6 +308,11 @@
       ? { width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh', borderRadius: '0' }
       : { width: 'min(1400px, calc(100vw - 3rem))', height: '94dvh', maxWidth: '1400px', maxHeight: '94dvh' },
   );
+  const documentPopupPanelClass = computed(() =>
+    documentMode.value === 'editor'
+      ? 'flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none !border-0 !bg-[#2d2d2d] !text-[#f0f0f0]'
+      : 'flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none',
+  );
   onMounted(() => window.addEventListener('resize', clampEditorPopupSize));
   onBeforeUnmount(() => window.removeEventListener('resize', clampEditorPopupSize));
   watch(
@@ -1127,7 +1132,7 @@
       :close-on-escape="true"
       :focus-on-open="true"
       :restore-focus="true"
-      panel-class="flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none"
+      :panel-class="documentPopupPanelClass"
       :panel-style="documentMode === 'preview' ? previewPopupStyle : editorPopupStyle"
       :overlay-class="mobile ? '!p-0' : ''"
       role="dialog"
@@ -1136,29 +1141,6 @@
       @close="hideDocumentPopup"
     >
       <div class="relative flex h-full min-h-0 flex-col">
-        <div v-if="showPopupFileEditor" class="flex items-center gap-1 border-b border-border bg-header/50 px-2 py-1">
-          <BaseButton
-            size="sm"
-            :variant="documentMode === 'editor' ? 'primary' : 'ghost'"
-            @click="documentMode = 'editor'"
-            >{{ t('workspace.documents.editor') }}</BaseButton
-          >
-          <BaseButton
-            size="sm"
-            :variant="documentMode === 'preview' ? 'primary' : 'ghost'"
-            @click="documentMode = 'preview'"
-            >{{ t('workspace.documents.preview') }}</BaseButton
-          >
-          <BaseButton
-            v-if="documentMode === 'editor'"
-            class="ml-auto min-h-11 min-w-11 sm:min-h-0 sm:min-w-0"
-            size="sm"
-            variant="ghost"
-            :title="t('common.close')"
-            @click="closeDocumentPopup"
-            >×</BaseButton
-          >
-        </div>
         <FileEditor
           ref="popupEditorRef"
           v-show="documentMode === 'editor'"
@@ -1171,13 +1153,15 @@
           :font-family="editorFontFamily"
           :font-size="editorFontSize"
           :mobile-font-size="mobileEditorFontSize"
+          :show-close-button="showPopupFileEditor"
+          @close="closeDocumentPopup"
           @font-size="emit('editorFontSize', $event)"
           @mobile-font-size="emit('mobileEditorFontSize', $event)"
         />
         <button
           v-if="!mobile && documentMode === 'editor'"
           type="button"
-          class="absolute bottom-0 right-0 z-20 h-5 w-5 cursor-nwse-resize"
+          class="absolute bottom-0 right-0 z-20 h-[15px] w-[15px] cursor-nwse-resize border-l border-t border-[#555] bg-white/20 hover:bg-white/40"
           :title="t('fileEditor.resizePopup')"
           @pointerdown.stop="editorPopupResize.startResize"
         ></button>
