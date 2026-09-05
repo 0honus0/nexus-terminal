@@ -85,10 +85,10 @@
         <article
           v-for="item in items"
           :key="item.id"
-          class="flex items-start justify-between gap-4 rounded-lg border border-border bg-background p-4 shadow-sm transition-shadow duration-200 hover:shadow-md"
+          class="flex flex-col items-start justify-between gap-4 rounded-lg border border-border bg-background p-4 shadow-sm transition-shadow duration-200 hover:shadow-md sm:flex-row"
         >
-          <div class="flex-grow">
-            <strong class="mb-1 block text-base font-semibold text-foreground">{{ item.name }}</strong>
+          <div class="min-w-0 flex-grow">
+            <strong class="mb-1 block break-words text-base font-semibold text-foreground">{{ item.name }}</strong>
             <div class="mb-2 flex items-center space-x-2">
               <span
                 class="rounded-full border border-border bg-header px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
@@ -104,13 +104,13 @@
                 >{{ item.enabled ? t('common.enabled') : t('common.disabled') }}</span
               >
             </div>
-            <small class="mt-1 block text-sm text-text-secondary">{{
+            <small class="mt-1 block break-words text-sm text-text-secondary">{{
               item.enabledEvents.length
                 ? `${t('settings.notifications.triggers')}: ${item.enabledEvents.map((event) => t(`settings.notifications.events.${event}`)).join(', ')}`
                 : t('settings.notifications.noEventsEnabled')
             }}</small>
           </div>
-          <div class="flex shrink-0 items-center space-x-3">
+          <div class="flex w-full shrink-0 items-center justify-end space-x-3 sm:w-auto">
             <button
               type="button"
               class="text-sm font-medium text-link hover:text-link-hover hover:underline"
