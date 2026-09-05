@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`8 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`9 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -254,8 +254,8 @@
 | ID     | 状态                 | 子任务及具体完成条件                                                                                             |
 | ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | M07.01 | ✅ 已完成〔C.1/P3〕  | notification 单列卡片/inline配置/provider字段和事件网格；audit过滤、显式查询、表格/详情/分页恢复                 |
-| M07.02 | ◐ 部分完成〔C.14-b/f〕 | 320px通知长内容/编辑滚动/空错误及Audit长详情、真实分页与筛选后回到第1页/跨页保留过滤已通过；未知action与畸形details仍为fixture能力缺口 |
-| M07.03 | ◐ 部分完成〔C.14-d/f〕 | notification真实增改删、启停、测试发送成功/错误、事件选择持久化及Audit过滤/分页/详情已通过；未知action与畸形details仍待可用真实入口验收 |
+| M07.02 | ✅ 本地完成〔C.16〕 | 320px通知长内容/编辑滚动/空错误及Audit长详情、真实分页与筛选后回到第1页/跨页保留过滤均通过；本轮 `.tmp/manual` 契约验收确认未知 action 直接回退 backend identifier，`{raw, parseError:true}` 畸形 details 仍以 raw 文本可检查，320px 无页面横溢出 |
+| M07.03 | ✅ 本地完成〔C.16〕 | notification 真实增改删、启停、测试发送成功/错误、事件选择持久化及 Audit 过滤/分页/详情均通过；本轮三份既有 UI spec 合计 8/8，未知 action / 畸形 details 通过 backend→frontend 契约形态的临时浏览器验收补齐，不为该边界新增仓库测试代码 |
 
 **验收/架构**：provider配置/查询状态留在各 owner，不为双向联动增加跨feature私有import。复用 `ui/notification-settings.spec.ts`、`ui/notification-delivery.spec.ts`、`ui/audit-log-filtering.spec.ts`；无历史截图的状态同样给可复核证据。
 
@@ -1106,6 +1106,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 环境接手检查：仓库根与 frontend npm scripts 可用；当前无 4173/5173/常用 E2E 端口监听。历史 `/tmp/nexus-*` 证据目录在本次接手主机未发现，因此不把历史临时产物当当前通过证据；后续若启动本地临时服务或产生新 `/tmp` 证据，按用户要求保留，不在本轮清理。
 - `M05 Preferences UI/behavior restore-a`：对照旧 `WorkspaceSettingsSection.vue` / `SystemSettingsSection.vue` 与当前 `features/preferences`，确认新架构把 Workspace 设置压成两列字段/复选框并统一一次 Save，丢失了旧版逐项标题、说明、分隔、独立保存与就地反馈的交互拓扑。已在当前 `features/preferences` owner 内恢复逐项 section 和精确 key patch：System 的语言/时区分别保存；Workspace 的 popup editor/file manager、共享 editor tabs、sidebar、command sync、tag 可见性、Quick Command 搜索/密度、terminal scrollback、Spreadsheet preview、删除确认、右键复制粘贴、Dashboard 资源、Status IP/interval、Docker、layout lock、顶部导航分别保存，保留新架构新增能力且不恢复旧 Settings mega-store。页面加载期间先显示 loading，避免默认值短暂可编辑。三语新增文案后 frontend architecture、i18n（1702 keys / 3 locales / 81 fragments）、`vue-tsc --noEmit`、Vite build（2663 modules）及 `git diff --check` 通过。接手环境中 root 所有的旧 `.vite-temp` 与 `dist` 导致前两次 Vite 写入失败，均未删除：分别保留为 `.vite-temp.root-preserved-20260906-takeover` 与 `dist.root-preserved-20260906-takeover` 后建立当前用户可写输出并通过；不计产品失败。浏览器功能/移动几何的最终结论见下一条 `M05 closure`。
 - `M05 closure`：浏览器运行环境已在当前用户下补齐并保留：Playwright Chromium/FFmpeg cache、`/tmp/nexus-pw-libs`、`/tmp/nexus-pw-apt`，以及接手时 root 所有的旧 E2E `.tmp` / `logs` / `playwright-report` / `test-results` 均只改名保存为 `*.root-preserved-20260906-takeover`，未清理。产品验收结果：`ui/system-settings.spec.ts` 3/3；backup/CAPTCHA/password/IP 5/5；passkey 注册/命名/reload/删除定向 1/1；使用 localhost-base 临时配置后真实 passkey 注册与登录成功，dirty `session-lifecycle.spec.ts` 仅在后半段 `WebAuthn.removeCredential` 的当前 Chromium CDP 参数兼容处停止，不修改该既有 dirty 测试。另用保留在 E2E `.tmp/manual` 与 `/tmp/nexus-m05-manual-20260906` 的临时验收脚本完成连接导出和窄屏检查：UI 实际下载 `nexus_connections_export.zip`；320×667 / 375×812 下 Workspace、Security、IP Control、Data Management、About 均无 document 横向溢出，七 tab 条保持自身横滚；`settings-security-*` / `settings-data-*` 已逐图复核，长说明、输入、文件选择与按钮均保持单列可读。About 对旧 `AboutSection.vue` 源码复核未发现结构/视觉回归。M05 因此达到本地 F/V/A 闭环，正式计数更新为 `8 / 18`；本轮没有新增仓库测试代码。
+- `M07 closure`：Notifications/Audit 本轮无需产品代码修改。既有 `notification-settings.spec.ts`、`notification-delivery.spec.ts`、`audit-log-filtering.spec.ts` 在当前产品上合计 **8/8 passed**，覆盖通知真实 CRUD、启停、事件持久化、真实 webhook 发送成功/失败、320px 长 provider/event/空错误状态，以及 Audit 搜索/action 过滤、真实分页、过滤后回第 1 页、跨页保留过滤、320px 长 details 内部滚动。源码契约复核确认 backend `audit.routes.ts` 会把无法 `JSON.parse` 的 details 转为 `{ raw, parseError: true }`，当前 `AuditLogView.vue` 对该形态显示 raw 信息，并用 i18n default message 对未知 action 回退 backend identifier；保留在 `.tmp/manual/m07-audit-contract.spec.ts` 的临时浏览器契约验收实际显示 `FUTURE_BACKEND_ACTION` 与畸形 raw 文本，320px 无 document 横溢出，截图保留 `/tmp/nexus-m07-audit-contract-20260906.png`。因此历史 fixture 能力缺口已用契约形态验证补齐，不新增仓库测试代码，不引入跨 feature 私有依赖。M07 达到本地 F/V/A 闭环，正式计数更新为 `9 / 18`。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
