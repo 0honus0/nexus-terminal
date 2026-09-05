@@ -813,6 +813,7 @@
     <ProgressDisplayModal
       :visible="progressDisplayVisible"
       :sources="progressDisplaySources"
+      :mobile="device.isMobile.value"
       @close="progressDisplayVisible = false"
       @restore="restoreProgressSource"
       @cancel="cancelProgressTask"
