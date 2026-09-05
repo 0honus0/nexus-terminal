@@ -230,7 +230,7 @@
 | M05.01 | ✅ 已完成〔C.1/P3〕  | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局                                                            |
 | M05.02 | ✅ 已完成〔C.1/P3〕  | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                                                                    |
 | M05.03 | ◐ 部分完成           | 移动源码已审；逐 tab 检查加载、dirty/save/error、开关禁用、长描述/表格/二维码、tab横滚与内容纵滚；System 与 Workspace 设置互不串值                                                      |
-| M05.04 | ◐ 部分完成〔C.14-a/b/c〕 | 密码、passkey真实注册/命名/reload/删除、2FA UI setup/错误/停用、hCaptcha/reCAPTCHA保存切换/reload/secret保护已通过；IP策略、备份及独立导入导出仍待验收 |
+| M05.04 | ◐ 部分完成〔C.14-a/b/c/d〕 | 密码、passkey真实注册/命名/reload/删除、2FA UI setup/错误/停用、hCaptcha/reCAPTCHA与IP白/黑名单保存切换/reload/错误/删除已通过；备份及独立导入导出仍待验收 |
 
 **验收/架构**：SettingsPage 只组合；各 feature 保持唯一设置 owner，不汇总成旧 settings mega-store。复用 `ui/system-settings.spec.ts`、`ui/change-password.spec.ts`、`ui/captcha-settings.spec.ts`、`ui/ip-whitelist-settings.spec.ts`、`ui/ip-blacklist-settings.spec.ts`、`ui/backup-ui.spec.ts` 及相关 HTTP E2E；复核 `system-settings.png`、`security-settings.png`。
 
@@ -1075,6 +1075,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M11.03-d` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`；真实桌面两文件多选Copy→Paste与两文件Cut→Paste、目标刷新及源删除 **1/1**，1280×720 modal/list 无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03d/`，主代理提交`dbc7855c`。M11仍需权限/下载/upload/archive、失败边界及移动专项。
 - `M05.04-b` → `/root/luna_m05_captcha`（Luna max）：`CaptchaPanel.vue`与既有`captcha-settings.spec.ts`完成真实hCaptcha/reCAPTCHA保存、切换、reload、secret不回显及禁用恢复`none` **1/1**；报告`/tmp/nexus-m05-04b-report.md`，主代理提交`7f9e103e`。M05仍需IP策略、备份及独立导入导出。
 - `M05.04-c` → `/root/luna_m05_captcha`（Luna max）：扩展既有`change-password.spec.ts`与`http/auth-2fa.spec.ts`；虚拟Authenticator真实passkey注册/命名/reload/删除 **1/1**，2FA API+Security UI **2/2**，桌面截图/metrics与architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04c-run-20260905`，主代理提交`40c8f468`。IP策略、备份及passkey登录/移动专项仍待验收。
+- `M05.04-d` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/ip-whitelist-settings.spec.ts`与`ui/ip-blacklist-settings.spec.ts`；真实白名单多行保存/清空/reload、黑名单启停/阈值校验/真实失败登录封禁/确认删除 **2/2**，桌面与320px截图/metrics、architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04d-run-20260905/final2`，主代理提交`9b885ad3`。M05仍需备份/独立导入导出及移动专项。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
