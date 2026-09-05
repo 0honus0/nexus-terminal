@@ -10,12 +10,25 @@ import { slowStep, step } from '../../support/steps';
 
 const CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+const hasFrame = (frames: string[], predicate: (message: any) => boolean): boolean =>
+  frames.some((frame) => {
+    try {
+      return predicate(JSON.parse(frame));
+    } catch {
+      return false;
+    }
+  });
+
 test('Docker manager UI renders remote containers, stats, and executes a container action', async ({
   page,
   context,
 }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  const settings = await context.request.put('/api/v1/settings', {
+    data: { dockerStatusIntervalSeconds: 1, dockerDefaultExpand: true },
+  });
+  expect(settings.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
 
@@ -41,41 +54,141 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(row.locator('i.fa-trash-alt')).toBeVisible();
     await expect(row.locator('i.fa-terminal')).toBeVisible();
     await expect(row.locator('i.fa-file-alt')).toBeVisible();
+    await expect(row.getByTestId('docker-expand')).toHaveAttribute('aria-label', 'Collapse');
+
+    const countStatusFrames = () =>
+      sentFrames.reduce((count, frame) => {
+        try {
+          const message = JSON.parse(frame) as { type?: string };
+          return count + (message.type === 'docker.status' ? 1 : 0);
+        } catch {
+          return count;
+        }
+      }, 0);
+    await expect.poll(countStatusFrames, { timeout: 2500 }).toBeGreaterThanOrEqual(2);
   });
 
-  await step('the restored narrow card footer expands live Docker stats returned through SSH', async () => {
-    const manager = page.getByTestId('docker-manager');
-    const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
-    const expand = row.getByRole('button', { name: 'Expand', exact: true });
-    await expect(expand.locator('i.fa-chevron-down')).toBeVisible();
-    await expand.click();
-    await expect(manager).toContainText('12.34%');
-    await expect(manager).toContainText('32MiB / 2GiB');
-    await expect(manager).toContainText('1.2MB / 800kB');
+  await step(
+    'the default-expand preference is applied and users can collapse then restore live Docker stats',
+    async () => {
+      const manager = page.getByTestId('docker-manager');
+      const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+      await expect(manager).toContainText('12.34%');
+      const collapse = row.getByRole('button', { name: 'Collapse', exact: true }).filter({ visible: true }).first();
+      await expect(collapse).toBeVisible();
+      await collapse.click();
+      const expand = row.getByRole('button', { name: 'Expand', exact: true }).filter({ visible: true }).first();
+      await expect(expand).toBeVisible();
+      await expand.click();
+      await expect(
+        row.getByRole('button', { name: 'Collapse', exact: true }).filter({ visible: true }).first(),
+      ).toBeVisible();
+      await expect(manager).toContainText('12.34%');
+      await expect(manager).toContainText('32MiB / 2GiB');
+      await expect(manager).toContainText('1.2MB / 800kB');
+    },
+  );
+
+  await step('Enter and Logs route terminal command intents through the owning Workspace session', async () => {
+    const row = page.getByTestId('docker-manager').getByTestId(`docker-row-${CONTAINER_ID}`);
+    await row.getByRole('button', { name: 'Enter', exact: true }).click();
+    await expect
+      .poll(() =>
+        hasFrame(
+          sentFrames,
+          (message) =>
+            message.type === 'terminal.input' && message.payload?.data === `docker exec -it ${CONTAINER_ID} sh\r`,
+        ),
+      )
+      .toBeTruthy();
+
+    await row.getByRole('button', { name: 'Logs', exact: true }).click();
+    await expect
+      .poll(() =>
+        hasFrame(
+          sentFrames,
+          (message) =>
+            message.type === 'terminal.input' &&
+            message.payload?.data === `docker logs --tail 1000 -f ${CONTAINER_ID}\r`,
+        ),
+      )
+      .toBeTruthy();
   });
 
-  await slowStep('stop sends the container action through the user WebSocket protocol', async () => {
+  await slowStep('restart, stop, and start refresh the container state after real remote Docker commands', async () => {
     const manager = page.getByTestId('docker-manager');
     const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+
+    await row.getByRole('button', { name: 'Restart', exact: true }).click();
+    await expect
+      .poll(() =>
+        hasFrame(
+          sentFrames,
+          (message) =>
+            message.type === 'docker.command' &&
+            message.payload?.command === 'restart' &&
+            message.payload?.containerId === CONTAINER_ID,
+        ),
+      )
+      .toBeTruthy();
+
     await row.getByTestId('docker-stop').click();
-
     await expect
       .poll(
         () =>
-          sentFrames.some((frame) => {
-            try {
-              const message = JSON.parse(frame);
-              return (
-                message.type === 'docker.command' &&
-                message.payload?.command === 'stop' &&
-                message.payload?.containerId === CONTAINER_ID
-              );
-            } catch {
-              return false;
-            }
-          }),
+          hasFrame(
+            sentFrames,
+            (message) =>
+              message.type === 'docker.command' &&
+              message.payload?.command === 'stop' &&
+              message.payload?.containerId === CONTAINER_ID,
+          ),
         { timeout: 15_000 },
       )
       .toBeTruthy();
+    await expect(row).toContainText('Exited (0) 1 second ago', { timeout: 15_000 });
+    await expect(row.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
+    await expect(row.getByRole('button', { name: 'Stop', exact: true })).toBeDisabled();
+    await expect(row.getByRole('button', { name: 'Restart', exact: true })).toBeDisabled();
+
+    await row.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect
+      .poll(() =>
+        hasFrame(
+          sentFrames,
+          (message) =>
+            message.type === 'docker.command' &&
+            message.payload?.command === 'start' &&
+            message.payload?.containerId === CONTAINER_ID,
+        ),
+      )
+      .toBeTruthy();
+    await expect(row).toContainText('Up 10 minutes', { timeout: 15_000 });
+  });
+
+  await slowStep('remove is destructive-confirmed and the accepted action refreshes the container away', async () => {
+    const manager = page.getByTestId('docker-manager');
+    const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
+    const removeButton = row.getByRole('button', { name: 'Remove', exact: true });
+    const removeFrame = (message: any) =>
+      message.type === 'docker.command' &&
+      message.payload?.command === 'remove' &&
+      message.payload?.containerId === CONTAINER_ID;
+
+    await removeButton.click();
+    const firstConfirm = page.getByRole('dialog', { name: 'Please confirm' });
+    await expect(firstConfirm).toBeVisible();
+    await expect(firstConfirm).toContainText('nexus-e2e-container');
+    await firstConfirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(firstConfirm).toBeHidden();
+    expect(hasFrame(sentFrames, removeFrame)).toBeFalsy();
+
+    await removeButton.click();
+    const confirm = page.getByRole('dialog', { name: 'Please confirm' });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect.poll(() => hasFrame(sentFrames, removeFrame), { timeout: 15_000 }).toBeTruthy();
+    await expect(row).toHaveCount(0, { timeout: 15_000 });
+    await expect(manager).toContainText('No running or stopped containers found on remote host.', { timeout: 15_000 });
   });
 });

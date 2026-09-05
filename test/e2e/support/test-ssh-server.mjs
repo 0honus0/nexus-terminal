@@ -29,9 +29,12 @@ const SSH_PORT = 22222;
 const CONTROL_PORT = 22223;
 const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
+const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
 let archiveExecDelayMs = 0;
+let dockerContainerPresent = true;
+let dockerContainerState = 'running';
 const activeSshClients = new Set();
 const activeSftpChannels = new Set();
 let openedSftpChannels = 0;
@@ -468,6 +471,8 @@ async function writeUnicodePathZipFixture(destination, unicodeName) {
 }
 
 async function resetRoot() {
+  dockerContainerPresent = true;
+  dockerContainerState = 'running';
   await fsp.rm(archiveExecHoldPath, { force: true });
   await fsp.rm(rootDir, { recursive: true, force: true });
   await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
@@ -827,17 +832,22 @@ function runRemoteCommand(command, stream) {
     return;
   }
   if (command === "docker ps -a --no-trunc --format '{{json .}}'") {
+    if (!dockerContainerPresent) {
+      finishExec(stream, '');
+      return;
+    }
+    const running = dockerContainerState === 'running';
     finishExec(
       stream,
       `${JSON.stringify({
-        ID: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        ID: DOCKER_CONTAINER_ID,
         Names: 'nexus-e2e-container',
         Image: 'alpine:latest',
         ImageID: 'sha256:e2e',
         Command: 'sleep 3600',
         CreatedAt: 1_700_000_000,
-        State: 'running',
-        Status: 'Up 10 minutes',
+        State: dockerContainerState,
+        Status: running ? 'Up 10 minutes' : 'Exited (0) 1 second ago',
         Ports: '127.0.0.1:8080->80/tcp',
         Labels: 'suite=e2e',
       })}\n`,
@@ -845,6 +855,10 @@ function runRemoteCommand(command, stream) {
     return;
   }
   if (command.startsWith('docker stats ')) {
+    if (!dockerContainerPresent || dockerContainerState !== 'running') {
+      finishExec(stream, '');
+      return;
+    }
     finishExec(
       stream,
       `${JSON.stringify({
@@ -860,7 +874,18 @@ function runRemoteCommand(command, stream) {
     );
     return;
   }
-  if (/^docker\s+(start|stop|restart|pause|unpause|rm)\b/.test(command)) {
+  const dockerAction = command.match(/^docker\s+(start|stop|restart|pause|unpause|rm(?:\s+-f)?)\s+([a-f0-9]+)\s*$/);
+  if (dockerAction) {
+    const action = dockerAction[1];
+    const containerId = dockerAction[2];
+    if (!dockerContainerPresent || containerId !== DOCKER_CONTAINER_ID) {
+      finishExec(stream, '', `Error: No such container: ${containerId}\n`, 1);
+      return;
+    }
+    if (action === 'start' || action === 'restart' || action === 'unpause') dockerContainerState = 'running';
+    else if (action === 'stop') dockerContainerState = 'exited';
+    else if (action === 'pause') dockerContainerState = 'paused';
+    else if (action.startsWith('rm')) dockerContainerPresent = false;
     finishExec(stream, 'nexus-e2e-container\n');
     return;
   }

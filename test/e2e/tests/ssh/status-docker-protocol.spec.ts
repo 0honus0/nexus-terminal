@@ -5,11 +5,14 @@ import { closeWebSocket, openWorkspaceSession, requestWorkspace, waitForJson } f
 
 test('status monitor and Docker protocols work through the live SSH session', async ({ request }) => {
   await loginAsInitialAdmin(request);
+  const settings = await request.put('/api/v1/settings', { data: { statusMonitorIntervalSeconds: 1 } });
+  expect(settings.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   const workspace = await openWorkspaceSession(request, connectionId, `status-${crypto.randomUUID()}`);
 
   try {
+    const startedAt = Date.now();
     const firstStatusPromise = waitForJson(workspace.socket, (message) => message.type === 'status.sample');
     await requestWorkspace(workspace.socket, 'status.start');
     const firstStatus = await firstStatusPromise;
@@ -19,6 +22,16 @@ test('status monitor and Docker protocols work through the live SSH session', as
       (message) => message.type === 'status.sample' && message.payload?.timestamp !== firstTimestamp,
       10_000,
     );
+    const secondTimestamp = secondStatus.payload?.timestamp;
+    const thirdStatus = await waitForJson(
+      workspace.socket,
+      (message) =>
+        message.type === 'status.sample' &&
+        message.payload?.timestamp !== firstTimestamp &&
+        message.payload?.timestamp !== secondTimestamp,
+      10_000,
+    );
+    expect(Date.now() - startedAt).toBeLessThan(2500);
 
     const docker = await requestWorkspace<{
       available: boolean;
@@ -40,6 +53,7 @@ test('status monitor and Docker protocols work through the live SSH session', as
     });
     expect(Number(secondStatus.payload?.netRxRate)).toBeGreaterThan(0);
     expect(Number(secondStatus.payload?.netTxRate)).toBeGreaterThan(0);
+    expect(Number(thirdStatus.payload?.netRxRate)).toBeGreaterThan(0);
 
     expect(docker).toMatchObject({ available: true });
     expect(docker.containers).toHaveLength(1);

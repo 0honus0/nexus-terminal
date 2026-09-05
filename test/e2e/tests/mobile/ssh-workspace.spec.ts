@@ -12,6 +12,22 @@ import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../..
 import { step, slowStep } from '../../support/steps';
 
 test('mobile SSH workspace keeps terminal space and exposes touch-only tools', async ({ page, context }) => {
+  const sentFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') sentFrames.push(event.payload);
+    });
+  });
+  const countStatusControls = (type: 'status.start' | 'status.stop') =>
+    sentFrames.reduce((count, frame) => {
+      try {
+        const message = JSON.parse(frame) as { type?: string };
+        return count + (message.type === type ? 1 : 0);
+      } catch {
+        return count;
+      }
+    }, 0);
+
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
@@ -45,13 +61,52 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
   });
 
   await slowStep('mobile status monitor opens and receives live SSH status samples', async () => {
+    const startsBeforeOpen = countStatusControls('status.start');
+    const stopsBeforeOpen = countStatusControls('status.stop');
     await page.getByRole('button', { name: 'Status Monitor', exact: true }).click();
     const modal = page.getByRole('dialog', { name: 'Status Monitor', exact: true });
     await expect(modal).toBeVisible();
-    await expect(modal.getByTestId('status-monitor')).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
-    await expect(modal.getByTestId('status-monitor')).toContainText('CPU');
+    await expect.poll(() => countStatusControls('status.start'), { timeout: 15_000 }).toBeGreaterThan(startsBeforeOpen);
+    const monitor = modal.getByTestId('status-monitor');
+    await expect(monitor).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
+    await expect(monitor).toContainText('CPU');
+
+    const viewport = page.viewportSize();
+    const modalBox = await modal.boundingBox();
+    expect(viewport).toBeTruthy();
+    expect(modalBox).toBeTruthy();
+    expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+    expect(modalBox!.y).toBeGreaterThanOrEqual(0);
+    expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+
+    await monitor.locator('.metric-cpu').click();
+    const history = monitor.locator('.history-card');
+    await expect(history).toBeVisible();
+    const ranges = history.locator('.range-tabs');
+    await expect(ranges.getByRole('button', { name: '1m', exact: true })).toBeVisible();
+    await expect(ranges.getByRole('button', { name: '30m', exact: true })).toBeVisible();
+    await ranges.getByRole('button', { name: '30m', exact: true }).click();
+    await expect(ranges.getByRole('button', { name: '30m', exact: true })).toHaveClass(/active/);
+    const historyBox = await history.boundingBox();
+    expect(historyBox).toBeTruthy();
+    expect(historyBox!.x).toBeGreaterThanOrEqual(modalBox!.x - 1);
+    expect(historyBox!.x + historyBox!.width).toBeLessThanOrEqual(modalBox!.x + modalBox!.width + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport!.width);
+
     await captureFunctionalScreenshot(page, 'mobile-status-monitor.png');
-    await modal.locator('button').first().click();
+    await modal.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(modal).toBeHidden();
+    await expect.poll(() => countStatusControls('status.stop'), { timeout: 15_000 }).toBeGreaterThan(stopsBeforeOpen);
+
+    const startsBeforeReopen = countStatusControls('status.start');
+    await page.getByRole('button', { name: 'Status Monitor', exact: true }).click();
+    await expect(modal).toBeVisible();
+    await expect
+      .poll(() => countStatusControls('status.start'), { timeout: 15_000 })
+      .toBeGreaterThan(startsBeforeReopen);
+    await expect(modal.getByTestId('status-monitor')).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
+    await modal.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(modal).toBeHidden();
   });
 

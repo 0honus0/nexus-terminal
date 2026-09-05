@@ -116,6 +116,17 @@ async function holdFirstSettingsResponse(
 }
 
 test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ page, context }) => {
+  const sentFrames: string[] = [];
+  const receivedFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') sentFrames.push(event.payload);
+    });
+    socket.on('framereceived', (event) => {
+      if (typeof event.payload === 'string') receivedFrames.push(event.payload);
+    });
+  });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
@@ -147,10 +158,43 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await expect(monitor.locator('.metric-cpu .cpu-water')).toBeVisible();
     await expect(monitor.locator('.network-card')).toBeVisible();
 
+    const countStatusControlFrames = () =>
+      sentFrames.reduce((count, frame) => {
+        try {
+          const message = JSON.parse(frame) as { type?: string };
+          return count + (message.type === 'status.start' || message.type === 'status.stop' ? 1 : 0);
+        } catch {
+          return count;
+        }
+      }, 0);
+    const countStatusSamples = () =>
+      receivedFrames.reduce((count, frame) => {
+        try {
+          const message = JSON.parse(frame) as { type?: string };
+          return count + (message.type === 'status.sample' ? 1 : 0);
+        } catch {
+          return count;
+        }
+      }, 0);
+
+    await expect.poll(countStatusSamples, { timeout: 15_000 }).toBeGreaterThan(0);
+    const controlsBeforeHistory = countStatusControlFrames();
+    const samplesBeforeHistory = countStatusSamples();
+
     await monitor.locator('.metric-cpu').click();
     await expect(monitor.locator('.history-card')).toBeVisible();
     await expect(monitor.locator('.range-tabs button')).toHaveCount(4);
-    await monitor.locator('.metric-cpu').click();
+    await monitor.locator('.network-card').click();
+    await expect(monitor.locator('.history-card')).toContainText('Network trend');
+    await expect.poll(countStatusSamples, { timeout: 10_000 }).toBeGreaterThan(samplesBeforeHistory);
+    expect(countStatusControlFrames()).toBe(controlsBeforeHistory);
+
+    const hostButton = monitor.getByRole('button', { name: '127.0.0.1', exact: true });
+    await expect(hostButton).toBeVisible();
+    await hostButton.click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('127.0.0.1');
+
+    await monitor.locator('.network-card').click();
     await expect(monitor.locator('.history-card')).toHaveCount(0);
 
     const beforeBox = await monitor.boundingBox();
