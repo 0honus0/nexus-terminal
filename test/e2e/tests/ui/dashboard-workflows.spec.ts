@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -8,6 +8,7 @@ const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
 const ALPHA_TAG = 'E2E Dashboard Alpha Tag';
 const BETA_TAG = 'E2E Dashboard Beta Tag';
+const EMPTY_TAG = 'E2E Dashboard Empty Tag';
 const DASHBOARD_DARK_THEME = {
   '--app-bg-color': '#212529',
   '--text-color': '#e9ecef',
@@ -27,6 +28,12 @@ const DASHBOARD_DARK_THEME = {
   '--icon-hover-color': 'var(--link-hover-color)',
   '--split-line-color': 'var(--border-color)',
   '--split-line-hover-color': 'var(--border-color)',
+  '--input-bg-color': '#2b3035',
+  '--input-text-color': 'var(--text-color)',
+  '--input-placeholder-color': 'var(--text-color-secondary)',
+  '--input-disabled-bg-color': '#343a40',
+  '--input-disabled-text-color': '#adb5bd',
+  '--input-disabled-border-color': '#495057',
   '--input-focus-border-color': 'var(--link-active-color)',
   '--input-focus-glow': 'var(--link-active-color)',
   '--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
@@ -49,9 +56,24 @@ async function cleanupDashboardFixtures(request: APIRequestContext): Promise<voi
   const tagsResponse = await request.get('/api/v1/tags');
   expect(tagsResponse.ok()).toBeTruthy();
   const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
-  for (const tag of tags.filter((item) => item.name === ALPHA_TAG || item.name === BETA_TAG)) {
+  for (const tag of tags.filter((item) => [ALPHA_TAG, BETA_TAG, EMPTY_TAG].includes(item.name))) {
     expect((await request.delete(`/api/v1/tags/${tag.id}`)).ok()).toBeTruthy();
   }
+}
+
+async function switchInterfaceToChinese(page: Page): Promise<void> {
+  await page.goto('/settings');
+  await expect(page.getByRole('tab', { name: 'System' })).toBeVisible();
+  await page.getByRole('tab', { name: 'System' }).click();
+  const language = page.locator('#languageSelect');
+  await expect(language).toBeVisible();
+  await language.selectOption('zh-CN');
+  const save = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/settings') && response.request().method() === 'PUT',
+  );
+  await page.getByRole('button', { name: 'Save Language' }).click();
+  expect((await save).ok()).toBeTruthy();
+  await expect(page.getByRole('tab', { name: '系统' })).toBeVisible();
 }
 
 async function createTag(request: APIRequestContext, name: string): Promise<number> {
@@ -149,6 +171,60 @@ test('SSH resource loading state fills the scroll panel without a darker partial
   }
 });
 
+test('resource failures stay inside their panels and do not block quick connect', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalSettingsResponse = await context.request.get('/api/v1/settings');
+  expect(originalSettingsResponse.ok()).toBeTruthy();
+  const originalSettings = (await originalSettingsResponse.json()) as {
+    dashboardShowLocalResources?: boolean;
+    dashboardShowRemoteResources?: boolean;
+  };
+  const enableResources = await context.request.put('/api/v1/settings', {
+    data: { dashboardShowLocalResources: true, dashboardShowRemoteResources: true },
+  });
+  expect(enableResources.ok()).toBeTruthy();
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  await page.route('**/api/v1/system/status', async (route) => {
+    await route.abort('failed');
+  });
+  await page.route('**/api/v1/system/ssh-resources', async (route) => {
+    await route.abort('failed');
+  });
+
+  try {
+    await page.goto('/');
+    const dashboard = page.getByTestId('dashboard-view');
+    const local = dashboard.getByTestId('dashboard-local-resources');
+    const remoteList = dashboard.getByTestId('dashboard-ssh-resource-list');
+    const remoteError = dashboard.getByTestId('dashboard-remote-resources');
+    const connectionList = dashboard.getByTestId('dashboard-connection-list');
+    const row = dashboard.getByTestId(`dashboard-connection-row-${connectionId}`);
+
+    await expect(local).toContainText('Network Error');
+    await expect(remoteError).toContainText('Network Error');
+    await expect(connectionList).toBeVisible();
+    await expect(row).toBeVisible();
+    await expect(dashboard.getByTestId(`dashboard-connect-${connectionId}`)).toBeEnabled();
+
+    const listBox = await remoteList.boundingBox();
+    const errorBox = await remoteError.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(errorBox).not.toBeNull();
+    expect(errorBox!.width).toBeGreaterThanOrEqual(listBox!.width - 32);
+    expect(errorBox!.height).toBeGreaterThanOrEqual(120);
+  } finally {
+    await page.unrouteAll({ behavior: 'wait' });
+    const restoreSettings = await context.request.put('/api/v1/settings', {
+      data: {
+        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
+      },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
+  }
+});
+
 test('dashboard filters connections and persists tag and sort preferences across reloads', async ({
   page,
   context,
@@ -163,6 +239,7 @@ test('dashboard filters connections and persists tag and sort preferences across
     language?: string;
     dashboardShowLocalResources?: boolean;
     dashboardShowRemoteResources?: boolean;
+    remoteHostRefreshIntervalSeconds?: number;
   };
   const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
   expect(originalAppearanceResponse.ok()).toBeTruthy();
@@ -173,9 +250,10 @@ test('dashboard filters connections and persists tag and sort preferences across
 
   const normalizeSettings = await context.request.put('/api/v1/settings', {
     data: {
-      language: 'zh-CN',
+      language: 'en-US',
       dashboardShowLocalResources: true,
       dashboardShowRemoteResources: true,
+      remoteHostRefreshIntervalSeconds: 30,
     },
   });
   expect(normalizeSettings.ok()).toBeTruthy();
@@ -212,11 +290,13 @@ test('dashboard filters connections and persists tag and sort preferences across
 
   const alphaTagId = await createTag(context.request, ALPHA_TAG);
   const betaTagId = await createTag(context.request, BETA_TAG);
+  const emptyTagId = await createTag(context.request, EMPTY_TAG);
   const alphaId = await createConnection(context.request, ALPHA_NAME, 'dashboard-alpha', '192.0.2.10', alphaTagId);
   const betaId = await createConnection(context.request, BETA_NAME, 'dashboard-beta', '192.0.2.20', betaTagId);
   const sshConnectionId = await ensureTestSshConnection(context.request);
 
   try {
+    await switchInterfaceToChinese(page);
     await page.goto('/');
     const dashboard = page.getByTestId('dashboard-view');
     await expect(dashboard).toBeVisible();
@@ -241,12 +321,20 @@ test('dashboard filters connections and persists tag and sort preferences across
       await search.fill('');
     });
 
+    await step('an empty selected tag uses the restored tag-specific empty state', async () => {
+      const filter = dashboard.getByTestId('dashboard-tag-filter');
+      await filter.selectOption(String(emptyTagId));
+      await expect(dashboard.getByText('该标签下没有连接记录', { exact: true })).toBeVisible();
+      await filter.selectOption(String(alphaTagId));
+    });
+
     await step('tag filtering persists across a full page reload', async () => {
       const filter = dashboard.getByTestId('dashboard-tag-filter');
       await filter.selectOption(String(alphaTagId));
       await expect(alphaRow).toBeVisible();
       await expect(betaRow).toBeHidden();
 
+      expect((await context.request.delete(`/api/v1/tags/${emptyTagId}`)).ok()).toBeTruthy();
       await page.reload();
       const reloadedDashboard = page.getByTestId('dashboard-view');
       await expect(reloadedDashboard.getByTestId('dashboard-tag-filter')).toHaveValue(String(alphaTagId));
@@ -305,6 +393,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(resourceList).toBeVisible();
       await expect(localResource).toBeVisible();
       await expect(localResource).toContainText('CPU');
+      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveText('30 秒刷新');
       await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).toBeVisible();
       await expect(page.getByTestId(`dashboard-connection-row-${betaId}`)).toBeVisible();
 
@@ -398,6 +487,7 @@ test('dashboard filters connections and persists tag and sort preferences across
         language: originalSettings.language ?? 'en-US',
         dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
         dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
+        remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? 30,
       },
     });
     expect(restoreSettings.ok()).toBeTruthy();

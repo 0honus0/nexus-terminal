@@ -378,6 +378,7 @@
                 :aria-label="t('dashboard.filterByTag')"
               >
                 <option value="">{{ t('dashboard.filterTags.all') }}</option>
+                <option v-if="loading" disabled>{{ t('common.loading') }}</option>
                 <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
               </select>
               <select
@@ -408,7 +409,10 @@
             </div>
 
             <div class="p-1.5">
-              <ul v-if="filtered.length" class="space-y-2">
+              <div v-if="loading && filtered.length === 0" class="py-14 text-center text-sm text-text-secondary">
+                {{ t('common.loading') }}
+              </div>
+              <ul v-else-if="filtered.length" class="space-y-2">
                 <li
                   v-for="item in filtered"
                   :key="item.id"
@@ -454,7 +458,9 @@
                 </li>
               </ul>
               <div v-else class="py-14 text-center text-sm text-text-secondary">
-                {{ search ? t('dashboard.noConnectionsMatchSearch') : t('dashboard.noConnections') }}
+                <template v-if="search">{{ t('dashboard.noConnectionsMatchSearch') }}</template>
+                <template v-else-if="tagId !== ''">{{ t('dashboard.noConnectionsWithTag') }}</template>
+                <template v-else>{{ t('dashboard.noConnections') }}</template>
               </div>
             </div>
           </div>
@@ -488,6 +494,15 @@
             <div class="flex flex-wrap items-center gap-2 text-[11px]">
               <span class="rounded-full border border-border bg-header/40 px-2.5 py-1 text-text-secondary"
                 >{{ resources.remote.value.length }} {{ t('dashboard.resources.remote') }}</span
+              >
+              <span
+                data-testid="dashboard-remote-refresh-interval"
+                class="rounded-full border border-success/25 bg-success/10 px-2.5 py-1 font-medium text-success"
+                >{{
+                  t('dashboard.resources.snapshot', {
+                    seconds: preferences.values.value.remoteHostRefreshIntervalSeconds,
+                  })
+                }}</span
               >
             </div>
           </header>
@@ -624,7 +639,13 @@
             >
           </div>
         </header>
-        <ol v-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div
+          v-if="loading && activity.length === 0"
+          class="rounded-xl border border-border/70 bg-header/10 py-10 text-center text-sm text-text-secondary"
+        >
+          {{ t('common.loading') }}
+        </div>
+        <ol v-else-if="activity.length" class="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           <li
             v-for="log in activity"
             :key="log.id"
