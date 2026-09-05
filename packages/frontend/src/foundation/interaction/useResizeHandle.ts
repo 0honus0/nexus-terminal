@@ -18,6 +18,8 @@ export interface ResizeHandleOptions {
   onEnd?: (size: ResizeSize) => void;
   widthDirection?: 1 | -1;
   heightDirection?: 1 | -1;
+  widthMultiplier?: number;
+  heightMultiplier?: number;
 }
 
 const clamp = (value: number, min: number, max: number | undefined): number =>
@@ -49,12 +51,12 @@ export function useResizeHandle(options: ResizeHandleOptions) {
     const widthDirection = options.widthDirection ?? 1;
     const heightDirection = options.heightDirection ?? 1;
     options.width.value = clamp(
-      startWidth + (event.clientX - startX) * widthDirection,
+      startWidth + (event.clientX - startX) * widthDirection * (options.widthMultiplier ?? 1),
       resolveLimit(options.minWidth),
       options.maxWidth?.(),
     );
     options.height.value = clamp(
-      startHeight + (event.clientY - startY) * heightDirection,
+      startHeight + (event.clientY - startY) * heightDirection * (options.heightMultiplier ?? 1),
       resolveLimit(options.minHeight),
       options.maxHeight?.(),
     );

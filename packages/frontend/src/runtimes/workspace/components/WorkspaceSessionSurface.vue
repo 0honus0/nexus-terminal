@@ -282,7 +282,7 @@
     try {
       localStorage.setItem(
         EDITOR_POPUP_SIZE_KEY,
-        JSON.stringify({ width: Math.round(editorPopupWidth.value), height: Math.round(editorPopupHeight.value) }),
+        JSON.stringify({ width: editorPopupWidth.value, height: editorPopupHeight.value }),
       );
     } catch {
       // Browser-local presentation state may remain in memory when storage is unavailable.
@@ -295,6 +295,8 @@
     minHeight: editorPopupResponsiveMinHeight,
     maxWidth: editorPopupAvailableWidth,
     maxHeight: editorPopupAvailableHeight,
+    widthMultiplier: 2,
+    heightMultiplier: 2,
     canStart: () => !props.mobile,
     onEnd: persistEditorPopupSize,
   });
