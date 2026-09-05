@@ -1197,7 +1197,117 @@
       </div>
     </OverlayPanel>
 
+    <OverlayPanel
+      v-if="archiveDialog && archivePasswordRequired"
+      :visible="true"
+      :z-index="1100"
+      :close-on-escape="true"
+      panel-class="max-w-md p-5"
+      data-testid="archive-password-modal"
+      :data-mode="archiveDialog.kind"
+      role="dialog"
+      :aria-modal="true"
+      :aria-label="
+        archiveDialog.kind === 'compress'
+          ? t('fileManager.archivePassword.compressTitle')
+          : t('fileManager.archivePassword.decompressTitle')
+      "
+      @close="closeArchiveDialog"
+    >
+      <form @submit.prevent="submitArchive">
+        <div class="mb-4 flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h3 class="text-lg font-semibold">
+              {{
+                archiveDialog.kind === 'compress'
+                  ? t('fileManager.archivePassword.compressTitle')
+                  : t('fileManager.archivePassword.decompressTitle')
+              }}
+            </h3>
+            <p class="mt-1 text-sm text-text-secondary">
+              {{
+                archiveDialog.kind === 'compress'
+                  ? t('fileManager.archivePassword.compressDescription', { count: archiveDialog.entries.length })
+                  : t('fileManager.archivePassword.decompressDescription', {
+                      name: archiveDialog.entries[0]?.name || archiveDialog.entries[0]?.path || 'zip',
+                    })
+              }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 text-text-secondary hover:text-foreground"
+            :aria-label="t('fileManager.modals.buttons.close')"
+            @click="() => closeArchiveDialog()"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium text-text-secondary">{{
+              t('fileManager.archivePassword.password')
+            }}</span>
+            <input
+              v-model="archivePassword"
+              data-testid="archive-password-input"
+              :type="archiveShowPassword ? 'text' : 'password'"
+              :autocomplete="archiveDialog.kind === 'compress' ? 'new-password' : 'current-password'"
+              class="w-full rounded-md border border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+          </label>
+
+          <label v-if="archiveDialog.kind === 'compress'" class="block">
+            <span class="mb-1 block text-sm font-medium text-text-secondary">{{
+              t('fileManager.archivePassword.confirmPassword')
+            }}</span>
+            <input
+              v-model="archiveConfirmPassword"
+              data-testid="archive-password-confirm"
+              :type="archiveShowPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              class="w-full rounded-md border border-border bg-input px-3 py-2 text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            />
+          </label>
+
+          <label class="flex cursor-pointer select-none items-center gap-2 text-sm text-text-secondary">
+            <input v-model="archiveShowPassword" type="checkbox" class="accent-primary" />
+            {{ t('fileManager.archivePassword.showPassword') }}
+          </label>
+
+          <p v-if="archivePasswordError" data-testid="archive-password-error" class="text-sm text-error" role="alert">
+            {{ archivePasswordError }}
+          </p>
+          <p class="text-xs text-text-secondary">{{ t('fileManager.archivePassword.compatibilityNotice') }}</p>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            class="rounded-md border border-border px-4 py-2 text-text-secondary hover:bg-border"
+            @click="() => closeArchiveDialog()"
+          >
+            {{ t('fileManager.modals.buttons.cancel') }}
+          </button>
+          <button
+            data-testid="archive-password-submit"
+            type="submit"
+            :disabled="archivePasswordInvalid"
+            class="rounded-md bg-primary px-4 py-2 text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {{
+              archiveDialog.kind === 'compress'
+                ? t('fileManager.archivePassword.create')
+                : t('fileManager.archivePassword.extract')
+            }}
+          </button>
+        </div>
+      </form>
+    </OverlayPanel>
+
     <BaseModal
+      v-else
       :visible="Boolean(archiveDialog)"
       :title="
         archivePasswordRequired
@@ -1281,7 +1391,7 @@
           {{ t('fileManager.archivePassword.compatibilityNotice') }}
         </p>
         <div class="flex justify-end gap-2">
-          <BaseButton type="button" @click="closeArchiveDialog">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton type="button" @click="() => closeArchiveDialog()">{{ t('common.cancel') }}</BaseButton>
           <BaseButton
             data-testid="archive-password-submit"
             type="submit"
