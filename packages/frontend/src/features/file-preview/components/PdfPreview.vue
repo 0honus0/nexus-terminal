@@ -3,16 +3,22 @@
   import { useI18n } from 'vue-i18n';
   import { GlobalWorkerOptions, getDocument, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist';
   import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-  import { BaseButton } from '@/foundation/ui';
+  import FilePreviewDialog from './FilePreviewDialog.vue';
   import PreviewSearchBar from './PreviewSearchBar.vue';
   import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
   import PdfOutlineItems from './PdfOutlineItems.vue';
   import PdfPage from './PdfPage.vue';
+  import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
+  import type { PreviewFile } from '../model/preview';
   import type { PdfOutlineItem, PdfSearchMatch } from '../model/pdf';
 
   GlobalWorkerOptions.workerSrc = workerUrl;
 
-  const props = withDefaults(defineProps<{ bytes: ArrayBuffer; active?: boolean }>(), { active: true });
+  const props = withDefaults(
+    defineProps<{ file: PreviewFile; session: FilePreviewSessionController; active?: boolean }>(),
+    { active: true },
+  );
+  const emit = defineEmits<{ close: [] }>();
   const { t } = useI18n();
   const root = ref<HTMLElement | null>(null);
   const scroller = ref<HTMLElement | null>(null);
@@ -75,6 +81,7 @@
     () => pinchPreviewPercent.value ?? (fitWidth.value ? currentFitZoom.value : zoomPercent.value),
   );
   const activeSearchMatch = computed(() => searchMatches.value[activeSearchIndex.value] ?? null);
+  const subtitle = computed(() => t('fileManager.preview.pdfMeta', { pages: pageCount.value }));
 
   const mapOutline = (items: Awaited<ReturnType<PDFDocumentProxy['getOutline']>>): PdfOutlineItem[] =>
     items.map((item) => ({
@@ -116,7 +123,7 @@
     outline.value = [];
     pageScalePercents.value = {};
 
-    const task = getDocument({ data: new Uint8Array(props.bytes.slice(0)) });
+    const task = getDocument({ data: new Uint8Array(props.file.bytes.slice(0)) });
     loadingTask = task;
     try {
       const nextDocument = await task.promise;
@@ -426,7 +433,7 @@
     }
   };
 
-  watch(() => props.bytes, loadDocument);
+  watch(() => props.file.bytes, loadDocument);
   watch(searchQuery, (value) => void runSearch(value));
   watch(
     () => props.active,
@@ -499,76 +506,111 @@
 </script>
 
 <template>
-  <div
-    ref="root"
-    data-testid="pdf-preview"
-    class="relative flex h-full min-h-0 flex-col bg-header/50 outline-none"
-    tabindex="0"
-    @keydown="handleKeydown"
-  >
-    <div
-      class="pdf-toolbar flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-background p-2 text-sm"
-    >
-      <PreviewSearchBar
-        :open="searchOpen"
-        :query="searchQuery"
-        :current="activeSearchIndex >= 0 ? activeSearchIndex + 1 : 0"
-        :total="searchMatches.length"
-        :active="active"
-        :busy="searchBusy"
-        @open="openSearch"
-        @close="closeSearch"
-        @update:query="searchQuery = $event"
-        @previous="moveSearch(-1)"
-        @next="moveSearch(1)"
-      />
-      <span class="mx-1 h-5 w-px shrink-0 bg-border"></span>
-      <BaseButton
-        size="sm"
-        :disabled="currentPage <= 1"
-        :title="t('fileManager.preview.pdfPreviousPage')"
-        @click="scrollToPage(currentPage - 1)"
-        >←</BaseButton
-      >
-      <input
-        class="h-8 w-14 shrink-0 rounded border border-border bg-input px-1 text-center text-xs text-foreground"
-        type="number"
-        min="1"
-        :max="pageCount"
-        :value="currentPage"
-        :aria-label="t('fileManager.preview.pdfCurrentPage')"
-        @change="handlePageInput"
-      />
-      <span data-testid="pdf-page-count" class="shrink-0 text-xs text-text-secondary">{{ pageCount }}</span>
-      <BaseButton
-        size="sm"
-        :disabled="currentPage >= pageCount"
-        :title="t('fileManager.preview.pdfNextPage')"
-        @click="scrollToPage(currentPage + 1)"
-        >→</BaseButton
-      >
-      <span class="mx-1 h-5 w-px shrink-0 bg-border"></span>
-      <BaseButton size="sm" :title="t('fileManager.preview.pdfZoomOut')" @click="setZoom(displayedZoomPercent - 25)"
-        >−</BaseButton
-      >
-      <span class="w-14 shrink-0 text-center text-xs text-text-secondary">{{ Math.round(displayedZoomPercent) }}%</span>
-      <BaseButton size="sm" :title="t('fileManager.preview.pdfZoomIn')" @click="setZoom(displayedZoomPercent + 25)"
-        >+</BaseButton
-      >
-      <BaseButton size="sm" :variant="fitWidth ? 'primary' : 'ghost'" :aria-pressed="fitWidth" @click="setFitWidth">{{
-        t('fileManager.preview.pdfFitWidth')
-      }}</BaseButton>
-      <BaseButton
-        size="sm"
-        :variant="outlineVisible ? 'primary' : 'ghost'"
-        :aria-expanded="outlineVisible"
-        :title="t('fileManager.preview.pdfOutline')"
-        @click="desktop ? (desktopOutlineVisible = !desktopOutlineVisible) : (outlineOpen = !outlineOpen)"
-        >☷</BaseButton
-      >
-    </div>
+  <FilePreviewDialog :file="file" :session="session" :subtitle="subtitle" :active="active" @close="emit('close')">
+    <template #toolbar>
+      <div class="pdf-toolbar flex items-center gap-1">
+        <PreviewSearchBar
+          :open="searchOpen"
+          :query="searchQuery"
+          :current="activeSearchIndex >= 0 ? activeSearchIndex + 1 : 0"
+          :total="searchMatches.length"
+          :active="active"
+          :busy="searchBusy"
+          @open="openSearch"
+          @close="closeSearch"
+          @update:query="searchQuery = $event"
+          @previous="moveSearch(-1)"
+          @next="moveSearch(1)"
+        />
+        <span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border"></span>
+        <button
+          type="button"
+          data-testid="pdf-previous-page"
+          class="pdf-toolbar-button"
+          :disabled="currentPage <= 1"
+          :aria-label="t('fileManager.preview.pdfPreviousPage')"
+          @click="scrollToPage(currentPage - 1)"
+        >
+          ‹
+        </button>
+        <input
+          data-testid="pdf-current-page"
+          class="pdf-page-input h-8 w-14 rounded border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          type="number"
+          min="1"
+          :max="pageCount"
+          :value="currentPage"
+          :aria-label="t('fileManager.preview.pdfCurrentPage')"
+          @change="handlePageInput"
+        />
+        <span class="text-xs text-text-secondary"
+          >/ <span data-testid="pdf-page-count">{{ pageCount }}</span></span
+        >
+        <button
+          type="button"
+          data-testid="pdf-next-page"
+          class="pdf-toolbar-button"
+          :disabled="currentPage >= pageCount"
+          :aria-label="t('fileManager.preview.pdfNextPage')"
+          @click="scrollToPage(currentPage + 1)"
+        >
+          ›
+        </button>
+        <span class="pdf-toolbar-divider mx-1 h-5 w-px bg-border"></span>
+        <button
+          type="button"
+          data-testid="pdf-zoom-out"
+          class="pdf-toolbar-button"
+          :aria-label="t('fileManager.preview.pdfZoomOut')"
+          @click="setZoom(displayedZoomPercent - 25)"
+        >
+          −
+        </button>
+        <span data-testid="pdf-zoom-label" class="w-12 text-center text-xs text-text-secondary">
+          {{ Math.round(displayedZoomPercent) }}%
+        </span>
+        <button
+          type="button"
+          data-testid="pdf-zoom-in"
+          class="pdf-toolbar-button"
+          :aria-label="t('fileManager.preview.pdfZoomIn')"
+          @click="setZoom(displayedZoomPercent + 25)"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          data-testid="pdf-fit-width"
+          class="pdf-fit-width ml-1 h-8 rounded-md border border-border px-2 text-xs text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          :class="fitWidth ? 'bg-primary/10 text-primary' : ''"
+          :aria-pressed="fitWidth"
+          @click="setFitWidth"
+        >
+          {{ t('fileManager.preview.pdfFitWidth') }}
+        </button>
+        <button
+          type="button"
+          data-testid="pdf-outline-toggle"
+          class="pdf-toolbar-button"
+          :class="{ 'pdf-toolbar-button-active': outlineVisible }"
+          :aria-expanded="outlineVisible"
+          :aria-pressed="outlineVisible"
+          :aria-label="t('fileManager.preview.pdfOutline')"
+          :title="t('fileManager.preview.pdfOutline')"
+          @click="desktop ? (desktopOutlineVisible = !desktopOutlineVisible) : (outlineOpen = !outlineOpen)"
+        >
+          <i class="fas fa-list-ul" aria-hidden="true"></i>
+        </button>
+      </div>
+    </template>
 
-    <div class="relative flex min-h-0 flex-1 overflow-hidden">
+    <div
+      ref="root"
+      data-testid="pdf-preview"
+      class="pdf-preview-root relative flex h-full min-h-0 w-full overflow-hidden outline-none"
+      tabindex="0"
+      @keydown="handleKeydown"
+    >
       <button
         v-if="outlineOpen && !desktop"
         type="button"
@@ -577,23 +619,27 @@
         @click="outlineOpen = false"
       ></button>
       <aside
-        v-if="outlineVisible"
+        data-testid="pdf-outline-drawer"
         :aria-label="t('fileManager.preview.pdfOutline')"
-        class="z-20 flex w-[min(82vw,18rem)] shrink-0 flex-col border-r border-border bg-header/95 sm:relative sm:w-52 sm:shadow-none"
-        :class="desktop ? '' : 'absolute inset-y-0 left-0 shadow-xl'"
+        class="pdf-outline-drawer absolute inset-y-0 left-0 z-20 flex w-[min(82vw,18rem)] flex-col border-r border-border bg-header/95 shadow-xl sm:relative sm:inset-auto sm:z-auto sm:w-52 sm:shrink-0 sm:translate-x-0 sm:pointer-events-auto sm:shadow-none"
+        :class="outlineOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'"
+        :style="desktop && !desktopOutlineVisible ? { display: 'none' } : undefined"
+        :aria-hidden="desktop ? !desktopOutlineVisible : !outlineOpen"
       >
-        <header class="flex min-h-11 items-center justify-between gap-2 border-b border-border px-3">
-          <strong class="truncate text-sm">{{ t('fileManager.preview.pdfOutline') }}</strong>
-          <BaseButton
+        <header class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
+          <strong class="truncate text-sm font-medium">{{ t('fileManager.preview.pdfOutline') }}</strong>
+          <button
             v-if="!desktop"
-            size="sm"
-            variant="ghost"
+            type="button"
+            data-testid="pdf-outline-close"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-xl text-text-secondary hover:bg-border hover:text-foreground"
             :aria-label="t('common.close')"
             @click="outlineOpen = false"
-            >×</BaseButton
           >
+            ×
+          </button>
         </header>
-        <div class="min-h-0 flex-1 overflow-y-auto p-2">
+        <div data-testid="pdf-outline" class="min-h-0 flex-1 overflow-y-auto p-2">
           <PdfOutlineItems v-if="outline.length" :items="outline" @navigate="resolveOutlineDestination" />
           <p v-else class="px-2 py-3 text-xs text-text-secondary">{{ t('fileManager.preview.pdfNoOutline') }}</p>
         </div>
@@ -602,6 +648,7 @@
       <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref="scroller"
+          data-testid="pdf-page-scroller"
           role="region"
           :aria-label="t('fileManager.preview.pdfMeta', { pages: pageCount })"
           class="pdf-scroller min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-black/15 p-3 sm:p-6"
@@ -616,35 +663,80 @@
           <p v-else-if="error" class="p-4 text-error">{{ error }}</p>
           <div
             v-else-if="document"
+            data-testid="pdf-continuous-pages"
             class="pdf-pages-column flex min-h-full w-max min-w-full flex-col gap-3 sm:gap-4"
             :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})` } : undefined"
           >
             <PdfPage
-              v-for="page in pageCount"
-              :key="page"
+              v-for="pageNumber in pageCount"
+              :key="pageNumber"
               :document="document"
-              :page-number="page"
+              :page-number="pageNumber"
               :available-width="availablePageWidth"
               :fit-width="fitWidth"
               :zoom-percent="zoomPercent"
               :active="active"
               :search-query="searchAppliedQuery"
-              :active-search-occurrence="activeSearchMatch?.page === page ? activeSearchMatch.occurrence : null"
+              :active-search-occurrence="activeSearchMatch?.page === pageNumber ? activeSearchMatch.occurrence : null"
               @scale="handlePageScale"
             />
           </div>
         </div>
         <PreviewHorizontalScrollbar
           :target="scroller"
+          test-id="pdf-horizontal-scrollbar"
           :active="active"
           :label="t('fileManager.preview.horizontalScroll')"
         />
       </div>
     </div>
-  </div>
+  </FilePreviewDialog>
 </template>
 
 <style scoped>
+  .pdf-toolbar {
+    min-width: 0;
+  }
+
+  .pdf-toolbar-button {
+    display: flex;
+    width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    color: var(--text-color-secondary);
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .pdf-toolbar-button.pdf-toolbar-button-active {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .pdf-toolbar-button:hover:not(:disabled) {
+      background: var(--color-border);
+      color: var(--text-color-primary);
+    }
+  }
+
+  .pdf-toolbar-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px var(--color-primary);
+  }
+
+  .pdf-toolbar-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  .pdf-outline-drawer {
+    transition: transform 160ms ease-out;
+  }
+
   .pdf-pages-column {
     transform-origin: top center;
     will-change: transform;
@@ -657,24 +749,58 @@
   }
 
   @media (max-width: 639px) {
+    .pdf-preview-root {
+      padding-bottom: 3.35rem;
+    }
+
     .pdf-toolbar {
-      order: 2;
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 30;
       min-height: 3.35rem;
       overflow-x: auto;
       overscroll-behavior-x: contain;
-      border-top: 1px solid var(--border-color);
-      border-bottom: 0;
-      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+      border-top: 1px solid var(--color-border);
+      background: var(--color-header);
+      padding: 0.3rem 0.35rem;
       -webkit-overflow-scrolling: touch;
     }
 
-    .pdf-toolbar :deep(button),
-    .pdf-toolbar input {
+    .pdf-toolbar-button,
+    .pdf-page-input,
+    .pdf-fit-width {
+      height: 2.75rem;
       min-height: 2.75rem;
     }
 
-    .pdf-toolbar :deep(button) {
+    .pdf-toolbar-button {
+      width: 2.75rem;
       min-width: 2.75rem;
+      font-size: 1.2rem;
+    }
+
+    .pdf-page-input {
+      width: 3.25rem;
+      min-width: 3.25rem;
+      font-size: 0.875rem;
+    }
+
+    .pdf-fit-width {
+      min-width: max-content;
+      margin-left: 0;
+      padding-right: 0.65rem;
+      padding-left: 0.65rem;
+    }
+
+    .pdf-toolbar-divider {
+      margin-right: 0.15rem;
+      margin-left: 0.15rem;
+    }
+
+    .pdf-outline-drawer {
+      bottom: 3.35rem;
     }
   }
 </style>

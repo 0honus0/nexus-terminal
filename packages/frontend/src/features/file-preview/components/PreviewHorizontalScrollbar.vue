@@ -1,129 +1,172 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-  const props = withDefaults(defineProps<{ target: HTMLElement | null; label?: string; active?: boolean }>(), {
-    label: 'Horizontal scroll',
-    active: true,
-  });
-  const track = ref<HTMLElement | null>(null);
+  const props = withDefaults(
+    defineProps<{
+      target: HTMLElement | null;
+      testId: string;
+      label?: string;
+      active?: boolean;
+    }>(),
+    {
+      label: 'Horizontal scroll',
+      active: true,
+    },
+  );
+
+  const trackRef = ref<HTMLElement | null>(null);
   const contentWidth = ref(0);
   const viewportWidth = ref(0);
   const hasOverflow = computed(() => contentWidth.value > viewportWidth.value + 1);
-  let observed: HTMLElement | null = null;
+
+  let observedTarget: HTMLElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let mutationObserver: MutationObserver | null = null;
-  let frame = 0;
+  let refreshFrame = 0;
   let previousTouchAction = '';
-  let previousOverscrollX = '';
+  let previousOverscrollBehaviorX = '';
   let touchGesture: {
     identifier: number;
     startX: number;
     startY: number;
     startScrollLeft: number;
     startScrollTop: number;
-    horizontal: boolean;
+    horizontalPanActive: boolean;
   } | null = null;
 
-  const syncTrack = () => {
-    if (!observed || !track.value || Math.abs(track.value.scrollLeft - observed.scrollLeft) <= 1) return;
-    track.value.scrollLeft = observed.scrollLeft;
+  const syncTrackFromTarget = () => {
+    if (!observedTarget || !trackRef.value) return;
+    if (Math.abs(trackRef.value.scrollLeft - observedTarget.scrollLeft) <= 1) return;
+    trackRef.value.scrollLeft = observedTarget.scrollLeft;
   };
-  const refresh = () => {
-    frame = 0;
-    viewportWidth.value = observed?.clientWidth ?? 0;
-    contentWidth.value = observed ? Math.max(observed.clientWidth, observed.scrollWidth) : 0;
-    syncTrack();
+
+  const refreshMetrics = () => {
+    refreshFrame = 0;
+    if (!observedTarget) {
+      contentWidth.value = 0;
+      viewportWidth.value = 0;
+      return;
+    }
+
+    viewportWidth.value = observedTarget.clientWidth;
+    contentWidth.value = Math.max(observedTarget.clientWidth, observedTarget.scrollWidth);
+    syncTrackFromTarget();
   };
+
   const queueRefresh = () => {
-    if (frame) cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(refresh);
+    if (refreshFrame) cancelAnimationFrame(refreshFrame);
+    refreshFrame = requestAnimationFrame(refreshMetrics);
   };
+
+  const handleTargetScroll = () => syncTrackFromTarget();
+
   const handleTrackScroll = () => {
-    if (!observed || !track.value || Math.abs(observed.scrollLeft - track.value.scrollLeft) <= 1) return;
-    observed.scrollLeft = track.value.scrollLeft;
+    if (!observedTarget || !trackRef.value) return;
+    if (Math.abs(observedTarget.scrollLeft - trackRef.value.scrollLeft) <= 1) return;
+    observedTarget.scrollLeft = trackRef.value.scrollLeft;
   };
-  const gestureTouch = (event: TouchEvent): Touch | null => {
+
+  const findGestureTouch = (event: TouchEvent): Touch | null => {
     if (!touchGesture) return null;
-    return Array.from(event.touches).find((touch) => touch.identifier === touchGesture!.identifier) ?? null;
+    for (const touch of Array.from(event.touches)) {
+      if (touch.identifier === touchGesture.identifier) return touch;
+    }
+    return null;
   };
-  const handleTouchStart = (event: TouchEvent) => {
-    if (!observed || event.touches.length !== 1) {
+
+  const handleTargetTouchStart = (event: TouchEvent) => {
+    if (!observedTarget || event.touches.length !== 1) {
       touchGesture = null;
       return;
     }
-    const touch = event.touches[0]!;
+
+    const touch = event.touches[0];
     touchGesture = {
       identifier: touch.identifier,
       startX: touch.clientX,
       startY: touch.clientY,
-      startScrollLeft: observed.scrollLeft,
-      startScrollTop: observed.scrollTop,
-      horizontal: false,
+      startScrollLeft: observedTarget.scrollLeft,
+      startScrollTop: observedTarget.scrollTop,
+      horizontalPanActive: false,
     };
   };
-  const handleTouchMove = (event: TouchEvent) => {
-    if (!observed || !touchGesture) return;
-    const touch = gestureTouch(event);
+
+  const handleTargetTouchMove = (event: TouchEvent) => {
+    if (!observedTarget || !touchGesture) return;
+    const touch = findGestureTouch(event);
     if (!touch) return;
-    const dx = touch.clientX - touchGesture.startX;
-    const dy = touch.clientY - touchGesture.startY;
-    if (!touchGesture.horizontal) {
-      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-      if (Math.abs(dx) <= Math.abs(dy) || observed.scrollWidth <= observed.clientWidth + 1) return;
-      touchGesture.horizontal = true;
+
+    const deltaX = touch.clientX - touchGesture.startX;
+    const deltaY = touch.clientY - touchGesture.startY;
+    if (!touchGesture.horizontalPanActive) {
+      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+      if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+      if (observedTarget.scrollWidth <= observedTarget.clientWidth + 1) return;
+      touchGesture.horizontalPanActive = true;
     }
+
+    // The preview content deliberately hides its native horizontal scrollbar on
+    // desktop. On touch devices that also removes the browser's horizontal pan
+    // affordance, so mirror the finger movement into the real scroll target.
     event.preventDefault();
-    observed.scrollLeft = touchGesture.startScrollLeft - dx;
-    observed.scrollTop = touchGesture.startScrollTop - dy;
-    syncTrack();
+    observedTarget.scrollLeft = touchGesture.startScrollLeft - deltaX;
+    observedTarget.scrollTop = touchGesture.startScrollTop - deltaY;
+    syncTrackFromTarget();
   };
-  const clearGesture = () => {
+
+  const clearTargetTouchGesture = () => {
     touchGesture = null;
   };
-  const observeChildren = () => {
-    if (!resizeObserver || !observed) return;
-    for (const child of Array.from(observed.children)) resizeObserver.observe(child);
+
+  const observeTargetChildren = () => {
+    if (!resizeObserver || !observedTarget) return;
+    for (const child of Array.from(observedTarget.children)) resizeObserver.observe(child);
   };
-  const detach = () => {
-    observed?.removeEventListener('scroll', syncTrack);
-    observed?.removeEventListener('touchstart', handleTouchStart);
-    observed?.removeEventListener('touchmove', handleTouchMove);
-    observed?.removeEventListener('touchend', clearGesture);
-    observed?.removeEventListener('touchcancel', clearGesture);
-    if (observed) {
-      observed.style.touchAction = previousTouchAction;
-      observed.style.overscrollBehaviorX = previousOverscrollX;
+
+  const detachTarget = () => {
+    observedTarget?.removeEventListener('scroll', handleTargetScroll);
+    observedTarget?.removeEventListener('touchstart', handleTargetTouchStart);
+    observedTarget?.removeEventListener('touchmove', handleTargetTouchMove);
+    observedTarget?.removeEventListener('touchend', clearTargetTouchGesture);
+    observedTarget?.removeEventListener('touchcancel', clearTargetTouchGesture);
+    if (observedTarget) {
+      observedTarget.style.touchAction = previousTouchAction;
+      observedTarget.style.overscrollBehaviorX = previousOverscrollBehaviorX;
     }
     window.removeEventListener('resize', queueRefresh);
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
     resizeObserver = null;
     mutationObserver = null;
-    observed = null;
     touchGesture = null;
+    observedTarget = null;
   };
-  const attach = (target: HTMLElement | null) => {
-    detach();
-    observed = target;
+
+  const attachTarget = (target: HTMLElement | null) => {
+    detachTarget();
+    observedTarget = target;
     if (!target) {
-      refresh();
+      refreshMetrics();
       return;
     }
+
     previousTouchAction = target.style.touchAction;
-    previousOverscrollX = target.style.overscrollBehaviorX;
+    previousOverscrollBehaviorX = target.style.overscrollBehaviorX;
     target.style.touchAction = 'pan-y';
     target.style.overscrollBehaviorX = 'contain';
-    target.addEventListener('scroll', syncTrack, { passive: true });
-    target.addEventListener('touchstart', handleTouchStart, { passive: true });
-    target.addEventListener('touchmove', handleTouchMove, { passive: false });
-    target.addEventListener('touchend', clearGesture, { passive: true });
-    target.addEventListener('touchcancel', clearGesture, { passive: true });
+    target.addEventListener('scroll', handleTargetScroll, { passive: true });
+    target.addEventListener('touchstart', handleTargetTouchStart, { passive: true });
+    target.addEventListener('touchmove', handleTargetTouchMove, { passive: false });
+    target.addEventListener('touchend', clearTargetTouchGesture, { passive: true });
+    target.addEventListener('touchcancel', clearTargetTouchGesture, { passive: true });
     window.addEventListener('resize', queueRefresh, { passive: true });
+
     resizeObserver = new ResizeObserver(queueRefresh);
     resizeObserver.observe(target);
-    observeChildren();
+    observeTargetChildren();
+
     mutationObserver = new MutationObserver(() => {
-      observeChildren();
+      observeTargetChildren();
       queueRefresh();
     });
     mutationObserver.observe(target, {
@@ -132,37 +175,45 @@
       attributes: true,
       attributeFilter: ['class', 'style', 'width', 'height'],
     });
+
     queueRefresh();
   };
 
-  watch(() => props.target, attach);
+  watch(
+    () => props.target,
+    (target) => attachTarget(target),
+  );
   watch(
     () => props.active,
     (active) => {
       if (active) queueRefresh();
     },
   );
-  onMounted(() => attach(props.target));
+
+  onMounted(() => attachTarget(props.target));
+
   onBeforeUnmount(() => {
-    if (frame) cancelAnimationFrame(frame);
-    detach();
+    if (refreshFrame) cancelAnimationFrame(refreshFrame);
+    refreshFrame = 0;
+    detachTarget();
   });
 </script>
 
 <template>
   <div
     v-show="hasOverflow"
-    ref="track"
+    ref="trackRef"
+    :data-testid="props.testId"
     class="preview-horizontal-scrollbar shrink-0 overflow-x-scroll overflow-y-hidden border-t border-border bg-header"
     role="scrollbar"
     aria-orientation="horizontal"
-    :aria-label="label"
+    :aria-label="props.label"
     :aria-valuemin="0"
     :aria-valuemax="Math.max(0, contentWidth - viewportWidth)"
-    :aria-valuenow="Math.round(track?.scrollLeft ?? 0)"
+    :aria-valuenow="Math.round(trackRef?.scrollLeft ?? 0)"
     @scroll="handleTrackScroll"
   >
-    <div class="h-px" :style="{ width: `${contentWidth}px` }" aria-hidden="true"></div>
+    <div class="h-px" :style="{ width: `${contentWidth}px` }" aria-hidden="true" />
   </div>
 </template>
 
@@ -171,10 +222,32 @@
     height: 16px;
     min-height: 16px;
     scrollbar-width: auto;
+    scrollbar-color: color-mix(in srgb, var(--text-color-secondary) 55%, transparent)
+      color-mix(in srgb, var(--color-header) 85%, transparent);
   }
+
   .preview-horizontal-scrollbar::-webkit-scrollbar {
     height: 14px;
   }
+
+  .preview-horizontal-scrollbar::-webkit-scrollbar-track {
+    background: color-mix(in srgb, var(--color-header) 85%, transparent);
+  }
+
+  .preview-horizontal-scrollbar::-webkit-scrollbar-thumb {
+    min-width: 40px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+    background-clip: padding-box;
+  }
+
+  .preview-horizontal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--text-color-secondary) 75%, transparent);
+    background-clip: padding-box;
+  }
+
+  /* Touch devices pan the content directly; keep the bridge mounted but hide the desktop track. */
   @media (hover: none) and (pointer: coarse) {
     .preview-horizontal-scrollbar {
       display: none !important;

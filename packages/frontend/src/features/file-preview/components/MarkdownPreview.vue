@@ -1,10 +1,20 @@
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  const props = defineProps<{ bytes: ArrayBuffer }>();
+  import FilePreviewDialog from './FilePreviewDialog.vue';
+  import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
+  import type { PreviewFile } from '../model/preview';
+
+  const props = withDefaults(
+    defineProps<{ file: PreviewFile; session: FilePreviewSessionController; active?: boolean }>(),
+    { active: true },
+  );
+  const emit = defineEmits<{ close: []; edit: [] }>();
+  const { t } = useI18n();
   const html = computed(() => {
-    const rendered = marked.parse(new TextDecoder().decode(props.bytes), {
+    const rendered = marked.parse(new TextDecoder().decode(props.file.bytes), {
       async: false,
       gfm: true,
       breaks: false,
@@ -31,11 +41,27 @@
     });
   });
 </script>
+
 <template>
-  <article
-    class="markdown-preview mx-auto max-w-5xl overflow-auto px-5 py-6 text-foreground md:px-10 md:py-8"
-    v-html="html"
-  ></article>
+  <FilePreviewDialog
+    :file="file"
+    :session="session"
+    :subtitle="t('fileManager.preview.markdown')"
+    :active="active"
+    @close="emit('close')"
+  >
+    <template #toolbar>
+      <button
+        type="button"
+        class="flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-text-secondary hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8"
+        @click="emit('edit')"
+      >
+        <i class="fas fa-pen" aria-hidden="true"></i>
+        <span>{{ t('fileManager.actions.edit') }}</span>
+      </button>
+    </template>
+    <article class="markdown-preview mx-auto max-w-5xl px-5 py-6 md:px-10 md:py-8" v-html="html"></article>
+  </FilePreviewDialog>
 </template>
 
 <style scoped>

@@ -202,7 +202,9 @@
   <section
     ref="root"
     class="flex min-w-full justify-center"
+    :data-testid="`pdf-page-${pageNumber}`"
     :data-pdf-page="pageNumber"
+    :data-pdf-page-number="pageNumber"
     :aria-label="t('fileManager.preview.pdfPage', { page: pageNumber })"
   >
     <div

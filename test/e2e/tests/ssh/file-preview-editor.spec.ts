@@ -57,7 +57,6 @@ const worksheetTab = (dialog: Locator, name: string): Locator =>
 const docxScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: 'Word document', exact: true });
 const spreadsheetRows = (dialog: Locator): Locator => spreadsheetScroller(dialog).locator('tbody > tr');
 const spreadsheetPageRange = (dialog: Locator): Locator => dialog.getByText(/^Rows \d+–\d+ of \d+$/).first();
-const spreadsheetPageIndicator = (dialog: Locator): Locator => dialog.getByText(/^\d+\/\d+$/).first();
 const previewSearchInput = (dialog: Locator): Locator =>
   dialog.getByRole('searchbox', { name: 'Search document...', exact: true });
 const previewSearchControls = (dialog: Locator): Locator => previewSearchInput(dialog).locator('..');
@@ -325,7 +324,7 @@ test('file previews and text editor protect historical file-opening regressions'
 
     const zoom = pdfZoomLabel(dialog);
     const beforeZoom = await zoom.textContent();
-    await dialog.getByTitle('Zoom in', { exact: true }).click();
+    await dialog.getByTestId('pdf-zoom-in').click();
     await expect(zoom).not.toHaveText(beforeZoom ?? '');
     await dialog.getByRole('button', { name: 'Fit width', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Fit width', exact: true })).toHaveAttribute(
@@ -673,7 +672,7 @@ test('PDF XLSX and DOCX previews use one content scrollbar while XLSX sheet tabs
       await row(page, filename).dblclick();
       const dialog = documentPopup(page);
       await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-      for (let index = 0; index < 5; index += 1) await dialog.getByTitle('Zoom in', { exact: true }).click();
+      for (let index = 0; index < 5; index += 1) await dialog.getByTestId('pdf-zoom-in').click();
       const { scroller } = await dragBottomScrollbar(previewHorizontalScrollbar(dialog), pdfScroller(dialog));
       await scroller.evaluate((element) => {
         element.scrollLeft = 0;
@@ -916,7 +915,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
 
       const pager = spreadsheetPageRange(dialog).locator('..');
       await expect(pager).toBeVisible();
-      await expect(spreadsheetPageIndicator(dialog)).toHaveText('1/2');
+      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
+      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
       await expect(spreadsheetPageRange(dialog)).toContainText('1');
       await expect(spreadsheetPageRange(dialog)).toContainText('24');
       await expect(spreadsheetPageRange(dialog)).toContainText('40');
@@ -925,20 +925,22 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       await expect(dialog.getByText('E2E-A25', { exact: true })).toHaveCount(0);
       await expect(dialog.getByText('E2E-G1', { exact: true })).toHaveCount(0);
       await expect(spreadsheetRows(dialog)).toHaveCount(24);
-      await expect(spreadsheetRows(dialog).first().locator('td.font-semibold')).toHaveCount(6);
+      await expect(spreadsheetRows(dialog).first()).toHaveClass(/spreadsheet-header-row/);
+      await expect(spreadsheetRows(dialog).first().locator('td')).toHaveCount(6);
       await captureFunctionalScreenshot(page, 'file-manager-spreadsheet-pagination.png', {
         viewport: { width: 1440, height: 900 },
       });
 
       await dialog.getByRole('button', { name: 'Next page', exact: true }).click();
-      await expect(spreadsheetPageIndicator(dialog)).toHaveText('2/2');
+      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('2');
+      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
       await expect(spreadsheetPageRange(dialog)).toContainText('25');
       await expect(spreadsheetPageRange(dialog)).toContainText('40');
       await expect(dialog.getByText('E2E-A25', { exact: true })).toBeVisible();
       await expect(dialog.getByText('E2E-F40', { exact: true })).toBeVisible();
       await expect(dialog.getByText('E2E-A24', { exact: true })).toHaveCount(0);
       await expect(spreadsheetRows(dialog)).toHaveCount(16);
-      await expect(spreadsheetRows(dialog).first().locator('td.font-semibold')).toHaveCount(0);
+      await expect(spreadsheetRows(dialog).first()).not.toHaveClass(/spreadsheet-header-row/);
       const lastPageOverflow = await spreadsheetScroller(dialog).evaluate(
         (element) => element.scrollHeight - element.clientHeight,
       );
@@ -948,7 +950,8 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       });
 
       await dialog.getByRole('button', { name: 'Previous page', exact: true }).click();
-      await expect(spreadsheetPageIndicator(dialog)).toHaveText('1/2');
+      await expect(dialog.getByTestId('spreadsheet-current-page')).toHaveText('1');
+      await expect(dialog.getByTestId('spreadsheet-page-count')).toHaveText('2');
       await expect(spreadsheetRows(dialog)).toHaveCount(24);
       await closePreview(page, filename);
     });

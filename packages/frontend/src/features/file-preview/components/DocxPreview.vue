@@ -1,10 +1,12 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { renderAsync } from 'docx-preview';
-  import { BaseSpinner } from '@/foundation/ui';
   import PreviewSearchBar from './PreviewSearchBar.vue';
+  import FilePreviewDialog from './FilePreviewDialog.vue';
   import PreviewHorizontalScrollbar from './PreviewHorizontalScrollbar.vue';
   import { useI18n } from 'vue-i18n';
+  import type { FilePreviewSessionController } from '../composables/useFilePreviewTabs';
+  import type { PreviewFile } from '../model/preview';
   import {
     activatePreviewSearchMatch,
     clearPreviewSearchMatches,
@@ -12,7 +14,11 @@
   } from './previewDomSearch';
 
   const { t } = useI18n();
-  const props = withDefaults(defineProps<{ bytes: ArrayBuffer; active?: boolean }>(), { active: true });
+  const props = withDefaults(
+    defineProps<{ file: PreviewFile; session: FilePreviewSessionController; active?: boolean }>(),
+    { active: true },
+  );
+  const emit = defineEmits<{ close: [] }>();
   const scroller = ref<HTMLElement | null>(null);
   const host = ref<HTMLElement | null>(null);
   const error = ref('');
@@ -54,7 +60,7 @@
     await nextTick();
     host.value?.replaceChildren();
     try {
-      await renderAsync(props.bytes.slice(0), host.value!, undefined, {
+      await renderAsync(props.file.bytes.slice(0), host.value!, undefined, {
         inWrapper: true,
         breakPages: true,
         ignoreLastRenderedPageBreak: false,
@@ -84,7 +90,7 @@
     generation += 1;
   });
   watch(
-    () => props.bytes,
+    () => props.file.bytes,
     () => {
       rendered.value = false;
       if (props.active) void render();
@@ -99,8 +105,14 @@
   watch(searchQuery, () => refreshSearch());
 </script>
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-white text-black">
-    <div class="flex items-center gap-1 border-b border-gray-300 bg-white p-2">
+  <FilePreviewDialog
+    :file="file"
+    :session="session"
+    :subtitle="t('fileManager.preview.docx')"
+    :active="active"
+    @close="emit('close')"
+  >
+    <template #toolbar>
       <PreviewSearchBar
         :open="searchOpen"
         :query="searchQuery"
@@ -113,26 +125,41 @@
         @previous="moveSearch(-1)"
         @next="moveSearch(1)"
       />
-    </div>
-    <div
-      ref="scroller"
-      role="region"
-      :aria-label="t('fileManager.preview.docx')"
-      class="docx-scroller min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-4"
-    >
-      <div v-if="rendering" class="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
-        <BaseSpinner />
-        <span>{{ t('fileManager.preview.loading') }}</span>
+    </template>
+
+    <div data-testid="docx-preview" class="flex h-full min-h-[18rem] flex-col overflow-hidden">
+      <div
+        ref="scroller"
+        data-testid="docx-preview-scroller"
+        role="region"
+        :aria-label="t('fileManager.preview.docx')"
+        class="docx-scroller relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-black/10 p-3 md:p-6"
+      >
+        <div
+          v-if="rendering"
+          class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/80 text-sm text-text-secondary"
+          aria-live="polite"
+        >
+          <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+          <span>{{ t('fileManager.preview.loading') }}</span>
+        </div>
+        <div
+          v-if="error"
+          class="mx-auto max-w-xl rounded-md border border-error/40 bg-error/10 p-4 text-sm text-error"
+          role="alert"
+        >
+          {{ error }}
+        </div>
+        <div ref="host" class="docx-preview-host"></div>
       </div>
-      <p v-if="error" class="text-error">{{ error }}</p>
-      <div ref="host" class="docx-preview-host"></div>
+      <PreviewHorizontalScrollbar
+        :target="scroller"
+        test-id="docx-horizontal-scrollbar"
+        :active="active"
+        :label="t('fileManager.preview.horizontalScroll')"
+      />
     </div>
-    <PreviewHorizontalScrollbar
-      :target="scroller"
-      :active="active"
-      :label="t('fileManager.preview.horizontalScroll')"
-    />
-  </div>
+  </FilePreviewDialog>
 </template>
 
 <style scoped>
@@ -140,15 +167,22 @@
     background: transparent;
     padding: 0;
   }
-  .docx-preview-host :deep(section.docx) {
+  .docx-preview-host :deep(.docx) {
     margin: 0 auto 1rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  }
+  .docx-preview-host :deep(section.docx) {
     overflow: visible;
   }
   .docx-preview-host :deep(mark[data-preview-search-match]) {
-    background: #fff3a3;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--color-warning) 55%, transparent);
+    color: inherit;
+    padding: 0;
   }
   .docx-preview-host :deep(mark[data-preview-search-active]) {
-    outline: 2px solid currentColor;
+    background: color-mix(in srgb, var(--color-primary) 52%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--color-primary) 80%, transparent);
   }
   .docx-scroller {
     touch-action: pan-x pan-y;

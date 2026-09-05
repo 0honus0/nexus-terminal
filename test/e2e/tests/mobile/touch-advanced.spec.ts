@@ -478,9 +478,9 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   expect(closeBox!.width).toBeGreaterThanOrEqual(40);
   expect(closeBox!.height).toBeGreaterThanOrEqual(40);
 
-  const zoomInButton = dialog.getByTitle('Zoom in', { exact: true });
-  const nextPageButton = dialog.getByTitle('Next page', { exact: true });
-  const outlineToggle = dialog.getByTitle('Outline', { exact: true });
+  const zoomInButton = dialog.getByTestId('pdf-zoom-in');
+  const nextPageButton = dialog.getByTestId('pdf-next-page');
+  const outlineToggle = dialog.getByTestId('pdf-outline-toggle');
   await expect(zoomInButton).toBeVisible();
   await expect(nextPageButton).toBeVisible();
   await expect(outlineToggle).toBeVisible();
@@ -496,10 +496,10 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   const scrollerBoxBeforeDrawer = await scroller.boundingBox();
   expect(scrollerBoxBeforeDrawer).toBeTruthy();
 
-  const outlineDrawer = pdfOutline(dialog);
-  await expect(outlineDrawer).toBeHidden();
+  const outlineDrawer = dialog.getByTestId('pdf-outline-drawer');
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await outlineToggle.click();
-  await expect(outlineDrawer).toBeVisible();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
   await expect
     .poll(() =>
@@ -513,7 +513,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   // Tapping the same toolbar button to hide the drawer must also clear its
   // visual active state. Touch browsers can otherwise leave :hover stuck.
   await outlineToggle.click();
-  await expect(outlineDrawer).toBeHidden();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
   await expect
     .poll(() =>
@@ -525,7 +525,7 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
     .toEqual(closedOutlineToggleStyle);
 
   await outlineToggle.click();
-  await expect(outlineDrawer).toBeVisible();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   const scrollerBoxWithDrawer = await scroller.boundingBox();
   expect(scrollerBoxWithDrawer).toBeTruthy();
   expect(Math.abs(scrollerBoxWithDrawer!.width - scrollerBoxBeforeDrawer!.width)).toBeLessThanOrEqual(1);
@@ -534,10 +534,10 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
 
   await outlineToggle.click();
-  await expect(outlineDrawer).toBeVisible();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   await expect(pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true })).toBeVisible();
   await pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(outlineDrawer).toBeHidden();
+  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
 
   const thirdPage = pdfPage(dialog, 3);
