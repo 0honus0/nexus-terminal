@@ -304,7 +304,7 @@
 | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M11.01 | ✅ 已完成〔C.1/P6〕  | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
 | M11.02 | ◐ 部分完成           | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
-| M11.03 | ◐ 部分完成〔C.14-c〕 | 真实SSH导航→外部刷新260+长列表→Name排序→内部滚动→行右键菜单已通过；建删改/权限/下载/copy-cut-paste/multi-select/upload/archive及失败状态仍待验收 |
+| M11.03 | ◐ 部分完成〔C.14-c/e〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复及桌面拖放移动已通过；权限/下载/copy-cut-paste/multi-select/upload/archive及失败状态仍待验收 |
 | M11.04 | ⏳ 待验收            | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
@@ -1070,6 +1070,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M07.02-a` → `/root/luna_m07_notifications`（Luna high）：`NotificationsView.vue`仅修窄屏卡片布局（动作下移、长名称/事件断词、桌面保留横排），既有notification/audit spec增加真实长内容、编辑/滚动、空/错误状态；before `scrollWidth=347`→after `320`，最终通知+Audit **5/5 passed**，test-policy/Prettier通过。报告`/tmp/nexus-m07-02a-report.md`；后续分页及M07.03 CRUD/delivery/error仍待验收。
 - `M11.03-a` → `/root/luna_m11_filesystem`（Luna max）：仅扩展`test/e2e/tests/ssh/file-manager-navigation.spec.ts`；真实SSH导航、外部刷新260+长列表、Name排序、内部滚动、行右键菜单 **1/1**，导航全量 **3/3**，context邻接 **1/1**；architecture/frontend build/test-policy/diff通过，报告`/tmp/nexus-m11-03a-report.md`。后续建删改/权限/下载/copy-cut-paste/multi-select/upload/archive及M11.04移动待验收。
 - `M07.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`test/e2e/tests/ui/notification-delivery.spec.ts`；真实创建启用、事件选择持久化、reload、saved webhook成功、真实失败400反馈、停用/reload、确认删除 **1/1**，通知回归 **5/5**，原有精确基线 **4/4**，Audit邻接 **2/2**；before/after 证据在`/tmp/nexus-m07-03a-final-20260905-004`，test-policy/Prettier/diff通过，主代理提交`a2ffeb21`。M07仍需分页和其他日志状态。
+- `M11.03-c` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`；真实桌面拖放`move-source.txt`到`folder-seed`、任务完成后刷新并验证源目录消失/目标目录出现 **1/1**，1280×720 modal/list 无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03c/`，主代理提交`f5749f8e`。M11仍需权限/下载/剪贴板/多选/上传/archive及移动端边界。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
