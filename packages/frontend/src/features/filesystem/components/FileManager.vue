@@ -1225,35 +1225,6 @@
       </div>
     </header>
 
-    <div
-      v-if="props.clipboardCount || browser.selected.value.size"
-      class="flex flex-wrap gap-2 border-b border-border bg-header/40 px-2 py-1"
-    >
-      <BaseButton v-if="props.clipboardCount" size="sm" variant="primary" @click="emit('paste', browser.path.value)">
-        {{ t('fileManager.actions.paste') }} ({{ props.clipboardCount }})
-      </BaseButton>
-      <template v-if="browser.selected.value.size">
-        <BaseButton size="sm" @click="emit('copyToClipboard', selectedEntries())">{{
-          t('fileManager.actions.copy')
-        }}</BaseButton>
-        <BaseButton size="sm" @click="emit('cutToClipboard', selectedEntries())">{{
-          t('fileManager.actions.cut')
-        }}</BaseButton>
-        <BaseButton size="sm" @click="emit('sendFiles', selectedEntries())">{{
-          t('fileManager.actions.sendFiles')
-        }}</BaseButton>
-        <BaseButton size="sm" @click="emit('compress', selectedEntries())">{{
-          t('fileManager.contextMenu.compress')
-        }}</BaseButton>
-        <BaseButton v-if="props.download" size="sm" @click="download(selectedEntries())">{{
-          t('fileManager.actions.downloadMultiple', { count: browser.selected.value.size })
-        }}</BaseButton>
-        <BaseButton size="sm" variant="danger" @click="remove(selectedEntries())">{{
-          t('fileManager.actions.deleteMultiple', { count: browser.selected.value.size })
-        }}</BaseButton>
-      </template>
-    </div>
-
     <BaseSpinner v-if="browser.loading.value || browser.searching.value" class="m-6" />
     <p v-else-if="browser.error.value" class="p-4 text-error">{{ browser.error.value }}</p>
     <div
