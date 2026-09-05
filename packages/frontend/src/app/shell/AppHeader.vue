@@ -26,8 +26,19 @@
       underline.value.style.opacity = '0';
       return;
     }
-    underline.value.style.left = `${active.offsetLeft}px`;
-    underline.value.style.width = `${active.offsetWidth}px`;
+    const scroller = active.parentElement;
+    if (scroller && scroller.scrollWidth > scroller.clientWidth) {
+      const activeStart = active.offsetLeft;
+      const activeEnd = activeStart + active.offsetWidth;
+      const visibleStart = scroller.scrollLeft;
+      const visibleEnd = visibleStart + scroller.clientWidth;
+      if (activeStart < visibleStart) scroller.scrollLeft = activeStart;
+      else if (activeEnd > visibleEnd) scroller.scrollLeft = activeEnd - scroller.clientWidth;
+    }
+    const navRect = nav.value.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    underline.value.style.left = `${activeRect.left - navRect.left}px`;
+    underline.value.style.width = `${activeRect.width}px`;
     underline.value.style.opacity = '1';
   };
 
@@ -63,10 +74,10 @@
   >
     <nav
       ref="nav"
-      class="relative flex min-w-0 w-full items-center justify-between"
+      class="relative flex min-w-0 w-full items-center gap-1 overflow-x-clip"
       :aria-label="t('common.primaryNavigation')"
     >
-      <div class="flex min-w-0 items-center gap-1">
+      <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="h-10 w-auto shrink-0" />
         <RouterLink class="nav-link inline-flex" to="/">{{ t('nav.dashboard') }}</RouterLink>
         <RouterLink class="nav-link inline-flex" to="/workspace">{{ t('nav.terminal') }}</RouterLink>
