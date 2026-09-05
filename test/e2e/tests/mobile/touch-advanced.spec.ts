@@ -1,4 +1,6 @@
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   closeConnectedFileManager,
@@ -14,6 +16,8 @@ import {
 } from '../../support/ssh';
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
+
+const M11_04A_EVIDENCE_DIR = process.env.M11_04A_EVIDENCE_DIR || '/tmp/nexus-m11-04a';
 
 async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
   await loginAsInitialAdmin(request);
@@ -229,6 +233,69 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
     await page.getByTestId('file-manager-context-menu').getByText('Compress to zip', { exact: true }).click();
     await expect(fileManagerRow(page, 'archive-source.zip')).toBeVisible({ timeout: 30_000 });
   });
+});
+
+test('mobile long-press file menu stays inside narrow 320 and 375 viewports', async ({ page, context }) => {
+  const viewports = [
+    { name: '320x667', width: 320, height: 667 },
+    { name: '375x812', width: 375, height: 812 },
+    { name: '412x915', width: 412, height: 915 },
+  ];
+  await mkdir(M11_04A_EVIDENCE_DIR, { recursive: true });
+  await page.setViewportSize(viewports[0]);
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+  await page.screenshot({ path: path.join(M11_04A_EVIDENCE_DIR, 'm11-04a-before-menu.png') });
+
+  const metrics: Array<Record<string, unknown>> = [];
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    const menu = await longPressFile(page, 'archive-source.txt');
+    for (const label of [
+      'Copy',
+      'Cut',
+      'Compress to zip',
+      'Compress to tar.gz',
+      'Compress to tar.bz2',
+      'Compress to zip with password...',
+      'Rename',
+      'Change Permissions',
+      'Delete',
+    ]) {
+      await expect(menu.getByText(label, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
+
+    const menuBox = await menu.boundingBox();
+    const fileManager = page.getByTestId('file-manager-modal');
+    const fileManagerBox = await fileManager.boundingBox();
+    const menuMetrics = await menu.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    const documentScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(menuBox).toBeTruthy();
+    expect(fileManagerBox).toBeTruthy();
+    expect(menuMetrics.scrollWidth).toBeLessThanOrEqual(menuMetrics.clientWidth + 1);
+    expect(documentScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+    expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+    expect(fileManagerBox!.x).toBeGreaterThanOrEqual(0);
+    expect(fileManagerBox!.y).toBeGreaterThanOrEqual(0);
+    expect(fileManagerBox!.x + fileManagerBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(fileManagerBox!.y + fileManagerBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+    await page.screenshot({ path: path.join(M11_04A_EVIDENCE_DIR, `m11-04a-menu-${viewport.name}.png`) });
+    metrics.push({ viewport, menu: menuBox, fileManager: fileManagerBox, menuMetrics, documentScrollWidth });
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  }
+
+  await writeFile(path.join(M11_04A_EVIDENCE_DIR, 'm11-04a-metrics.json'), JSON.stringify(metrics, null, 2), 'utf8');
 });
 
 test('mobile CodeMirror search opens from the editor header and highlights remote text', async ({ page, context }) => {
