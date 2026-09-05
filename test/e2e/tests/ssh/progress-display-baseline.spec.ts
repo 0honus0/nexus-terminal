@@ -158,3 +158,99 @@ test('existing archive progress popup hides and restores through Progress Displa
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
   }
 });
+
+test('Send Files restores the server-transfer task cards in Progress Display', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const sourceConnectionId = await ensureTestSshConnection(context.request);
+  const targetName = `E2E Send Target ${crypto.randomUUID().slice(0, 8)}`;
+  const targetResponse = await context.request.post('/api/v1/connections', {
+    data: {
+      name: targetName,
+      type: 'SSH',
+      host: E2E_SSH.host,
+      port: 1,
+      username: E2E_SSH.username,
+      authMethod: 'password',
+      password: E2E_SSH.password,
+    },
+  });
+  expect(targetResponse.status()).toBe(201);
+  const targetConnectionId = ((await targetResponse.json()) as { connection: { id: number } }).connection.id;
+
+  try {
+    await connectTestSshFromConnectionsPage(page, sourceConnectionId);
+    await openConnectedFileManager(page);
+
+    await step(
+      'the restored Send Files form requires an explicit destination and keeps SSH target semantics',
+      async () => {
+        await rightClickRow(page, 'seed.txt');
+        await clickMenuItem(page, 'Send to servers');
+
+        const modal = page.getByRole('dialog', { name: 'Send Files', exact: true });
+        await expect(modal).toBeVisible();
+        await expect(modal.locator('li[title="/seed.txt"]')).toBeVisible();
+
+        const targetPath = modal.getByLabel('Target Path', { exact: true });
+        const sendButton = modal.getByRole('button', { name: 'Send', exact: true });
+        await expect(targetPath).toHaveValue('');
+        await expect(sendButton).toBeDisabled();
+
+        const targetRow = modal.locator('li').filter({ hasText: targetName });
+        await expect(targetRow).toBeVisible();
+        await expect(targetRow.locator('i.fa-server')).toBeVisible();
+        await targetRow.click();
+        await targetPath.fill('/server-transfer-e2e');
+        await modal.getByLabel('Transfer Method', { exact: true }).selectOption('scp');
+        await expect(sendButton).toBeEnabled();
+        await sendButton.click();
+        await expect(modal).toBeHidden();
+      },
+    );
+
+    await slowStep(
+      'the central display exposes the real server task, subtask method/error and final remove action',
+      async () => {
+        const display = page.getByTestId('progress-display-modal');
+        await expect(display).toBeVisible({ timeout: 10_000 });
+        await expect(display.getByText('Cross-server transfer tasks', { exact: true })).toBeVisible();
+
+        const taskCard = display.locator('article').filter({ hasText: '/server-transfer-e2e' });
+        await expect(taskCard).toBeVisible({ timeout: 10_000 });
+        await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> /server-transfer-e2e)');
+        await expect(taskCard).toContainText('Created at:');
+
+        const subTasks = taskCard.locator('details');
+        await expect(subTasks).toBeVisible();
+        await subTasks.locator('summary').click();
+        await expect(taskCard).toContainText('Source File: seed.txt');
+        await expect(taskCard).toContainText(`Target Connection: ${targetName}`);
+        await expect(taskCard).toContainText('Method: scp', { timeout: 20_000 });
+        await expect(taskCard.getByText('Failed', { exact: true })).toBeVisible({ timeout: 20_000 });
+        await expect(taskCard).toContainText('Error:');
+
+        await taskCard.getByRole('button', { name: 'Remove', exact: true }).click();
+        await expect(taskCard).toHaveCount(0);
+      },
+    );
+  } finally {
+    const tasksResponse = await context.request.get('/api/v1/transfers/status');
+    if (tasksResponse.ok()) {
+      const tasks = (await tasksResponse.json()) as Array<{
+        taskId: string;
+        payload?: { sourceConnectionId?: number; connectionIds?: number[] };
+      }>;
+      for (const task of tasks) {
+        if (
+          task.payload?.sourceConnectionId === sourceConnectionId &&
+          task.payload.connectionIds?.includes(targetConnectionId)
+        ) {
+          await context.request.delete(`/api/v1/transfers/${encodeURIComponent(task.taskId)}`);
+        }
+      }
+    }
+    await context.request.delete(`/api/v1/connections/${targetConnectionId}`);
+  }
+});

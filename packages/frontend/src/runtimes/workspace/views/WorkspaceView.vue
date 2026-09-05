@@ -187,20 +187,11 @@
         tasks: session.transferController.tasks.value.filter((task) => task.status !== 'cancelled'),
       })),
   );
-  const progressDisplaySources = computed<ProgressSource[]>(() => {
-    const sources = [...hiddenProgressSources.value];
-    if (serverTransfers.progressTasks.length) {
-      sources.push({
-        id: 'server-transfers',
-        label: t('progressCenter.serverTransfers'),
-        tasks: serverTransfers.progressTasks,
-        restorable: false,
-      });
-    }
-    return sources;
-  });
-  const progressDisplayTaskCount = computed(() =>
-    progressDisplaySources.value.reduce((count, source) => count + source.tasks.length, 0),
+  const progressDisplaySources = hiddenProgressSources;
+  const progressDisplayTaskCount = computed(
+    () =>
+      progressDisplaySources.value.reduce((count, source) => count + source.tasks.length, 0) +
+      serverTransfers.progressTasks.length,
   );
   const setProgressVisible = (sessionId: string, visible: boolean) => {
     progressVisibility.value = { ...progressVisibility.value, [sessionId]: visible };
@@ -813,6 +804,9 @@
     <ProgressDisplayModal
       :visible="progressDisplayVisible"
       :sources="progressDisplaySources"
+      :server-transfers="serverTransfers.items"
+      :server-transfers-loading="serverTransfers.loading"
+      :server-transfers-error="serverTransfers.error"
       :mobile="device.isMobile.value"
       @close="progressDisplayVisible = false"
       @restore="restoreProgressSource"

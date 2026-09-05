@@ -1,11 +1,28 @@
 <script setup lang="ts">
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { OverlayPanel } from '@/foundation/ui';
+  import { useConnections } from '@/features/connections/public';
   import type { ProgressSource, TransferTask } from '../model/transfer';
+  import type {
+    ServerTransferSubTaskStatus,
+    ServerTransferTask,
+    ServerTransferTaskStatus,
+  } from '../model/serverTransfer';
 
   const props = withDefaults(
-    defineProps<{ visible: boolean; sources: readonly ProgressSource[]; mobile?: boolean }>(),
+    defineProps<{
+      visible: boolean;
+      sources: readonly ProgressSource[];
+      serverTransfers?: readonly ServerTransferTask[];
+      serverTransfersLoading?: boolean;
+      serverTransfersError?: string;
+      mobile?: boolean;
+    }>(),
     {
+      serverTransfers: () => [],
+      serverTransfersLoading: false,
+      serverTransfersError: '',
       mobile: false,
     },
   );
@@ -16,12 +33,73 @@
     cancelAll: [sourceId: string];
     remove: [sourceId: string, taskId: string];
   }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const connections = useConnections();
 
   const done = (status: TransferTask['status']) =>
     ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
   const activeCount = (source: ProgressSource) => source.tasks.filter((task) => !done(task.status)).length;
   const normalizedProgress = (task: TransferTask) => Math.max(0, Math.min(100, task.progress));
+
+  const displayedServerTransfers = computed(() =>
+    [...props.serverTransfers]
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+      .slice(0, 5),
+  );
+  const serverTaskFinal = (status: ServerTransferTaskStatus): boolean =>
+    ['completed', 'failed', 'partially-completed', 'cancelled'].includes(status);
+  const serverTaskCancellable = (status: ServerTransferTaskStatus): boolean =>
+    ['queued', 'in-progress'].includes(status);
+  const connectionName = (connectionId?: number): string => {
+    if (!connectionId) return t('transferProgressModal.unknownSourceServer');
+    const connection = connections.connections.value.find((item) => item.id === connectionId);
+    return (
+      connection?.name?.trim() || connection?.host || t('transferProgressModal.connectionIdFallback', { connectionId })
+    );
+  };
+  const serverTaskTitle = (task: ServerTransferTask): string => {
+    const sourceConnectionId = task.sourceConnectionId ?? task.payload.sourceConnectionId;
+    const fileName =
+      task.payload.sourceItems[0]?.name ||
+      task.subTasks[0]?.sourceItemName ||
+      t('transferProgressModal.unknownFileName');
+    const targetPath =
+      task.remoteTargetPath || task.payload.remoteTargetPath || t('transferProgressModal.unknownTargetPath');
+    return `${connectionName(sourceConnectionId)} (${fileName} -> ${targetPath})`;
+  };
+  const statusLabel = (status: ServerTransferTaskStatus | ServerTransferSubTaskStatus): string => {
+    const keys: Record<ServerTransferTaskStatus | ServerTransferSubTaskStatus, string> = {
+      queued: 'transferProgressModal.status.queued',
+      'in-progress': 'transferProgressModal.status.inProgress',
+      completed: 'transferProgressModal.status.completed',
+      failed: 'transferProgressModal.status.failed',
+      'partially-completed': 'transferProgressModal.status.partiallyCompleted',
+      connecting: 'transferProgressModal.status.connecting',
+      transferring: 'transferProgressModal.status.transferring',
+      cancelling: 'transferProgressModal.status.cancelling',
+      cancelled: 'transferProgressModal.status.cancelled',
+    };
+    return t(keys[status]);
+  };
+  const statusClasses = (status: ServerTransferTaskStatus | ServerTransferSubTaskStatus) => ({
+    'bg-green-100 text-green-700': status === 'completed',
+    'bg-red-100 text-red-700': status === 'failed',
+    'bg-yellow-100 text-yellow-700': status === 'partially-completed' || status === 'queued' || status === 'cancelling',
+    'bg-blue-100 text-blue-700': status === 'in-progress' || status === 'connecting' || status === 'transferring',
+    'bg-gray-100 text-gray-700': status === 'cancelled',
+  });
+  const formatDate = (value: string): string => {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return date.toLocaleString(locale.value, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
 </script>
 
 <template>
@@ -186,6 +264,142 @@
                     <p v-if="task.warning" class="mb-0 mt-1 text-[11px] text-warning">{{ task.warning }}</p>
                     <p v-if="task.error" class="mb-0 mt-1 text-[11px] text-error">{{ task.error }}</p>
                   </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="space-y-3 border-t border-border pt-4">
+            <h4 class="mb-3 mt-0 text-sm font-semibold">{{ t('progressCenter.serverTransfers') }}</h4>
+
+            <div v-if="serverTransfersLoading && !serverTransfers.length" class="py-10 text-center text-text-secondary">
+              <i class="fas fa-spinner fa-spin mb-2 text-2xl text-primary" aria-hidden="true"></i>
+              <div>{{ t('transferProgressModal.loading') }}</div>
+            </div>
+            <div v-else-if="serverTransfersError" class="rounded-md bg-red-50 p-4 text-center text-red-500">
+              <p class="font-semibold">{{ t('transferProgressModal.errorLoadingTitle') }}</p>
+              <p>{{ t('transferProgressModal.errorLoading', { error: serverTransfersError }) }}</p>
+            </div>
+            <div v-else-if="!serverTransfers.length" class="py-10 text-center text-text-secondary">
+              <i class="far fa-file-lines mb-2 text-4xl text-gray-400" aria-hidden="true"></i>
+              <div>{{ t('transferProgressModal.noTasks') }}</div>
+            </div>
+            <div v-else class="space-y-3">
+              <article
+                v-for="task in displayedServerTransfers"
+                :key="task.taskId"
+                class="rounded-lg border border-border bg-background-alt p-3 shadow-sm transition-shadow hover:shadow-md"
+              >
+                <div class="mb-2 flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <span class="block break-words text-base font-semibold">
+                      {{ t('transferProgressModal.task.idLabel') }}: {{ serverTaskTitle(task) }}
+                    </span>
+                    <span class="text-xs text-text-secondary">
+                      {{ t('transferProgressModal.task.createdAt') }}: {{ formatDate(task.createdAt) }}
+                    </span>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <span :class="['rounded-full px-2.5 py-1 text-xs font-semibold', statusClasses(task.status)]">
+                      {{ statusLabel(task.status) }}
+                    </span>
+                    <button
+                      v-if="
+                        serverTaskCancellable(task.status) ||
+                        serverTaskFinal(task.status) ||
+                        task.status === 'cancelling'
+                      "
+                      type="button"
+                      :disabled="task.status === 'cancelling'"
+                      :class="[
+                        'rounded-md px-2 py-0.5 text-xs text-white transition-colors focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50',
+                        serverTaskFinal(task.status)
+                          ? 'bg-gray-500 hover:bg-gray-600 focus:ring-gray-400'
+                          : 'bg-red-500 hover:bg-red-600 focus:ring-red-400',
+                      ]"
+                      :title="
+                        serverTaskFinal(task.status)
+                          ? t('transferProgressModal.removeTaskTooltip')
+                          : t('transferProgressModal.cancelTaskTooltip')
+                      "
+                      @click="
+                        serverTaskFinal(task.status)
+                          ? emit('remove', 'server-transfers', task.taskId)
+                          : emit('cancel', 'server-transfers', task.taskId)
+                      "
+                    >
+                      <i v-if="task.status === 'cancelling'" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>
+                      {{
+                        task.status === 'cancelling'
+                          ? t('transferProgressModal.cancellingButton')
+                          : serverTaskFinal(task.status)
+                            ? t('transferProgressModal.removeButton')
+                            : t('transferProgressModal.cancelButton')
+                      }}
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="task.overallProgress !== undefined" class="mb-2">
+                  <div class="mb-0.5 flex justify-between text-xs text-text-secondary">
+                    <span>{{ t('transferProgressModal.task.overallProgress') }}</span>
+                    <span>{{ task.overallProgress }}%</span>
+                  </div>
+                  <div
+                    class="h-1.5 w-full overflow-hidden rounded-full bg-border"
+                    role="progressbar"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-valuenow="Math.round(task.overallProgress)"
+                  >
+                    <div
+                      class="h-1.5 rounded-full bg-primary"
+                      :style="{ width: `${Math.max(0, Math.min(100, task.overallProgress))}%` }"
+                    ></div>
+                  </div>
+                </div>
+
+                <details v-if="task.subTasks.length" class="group mt-2">
+                  <summary class="cursor-pointer list-none text-xs font-medium text-primary hover:underline">
+                    {{ t('transferProgressModal.subTasks.titleToggle', { count: task.subTasks.length }) }}
+                    <span class="group-open:hidden">+</span><span class="hidden group-open:inline">-</span>
+                  </summary>
+                  <ul class="ml-1 mt-2 space-y-1.5 border-l border-border pl-3">
+                    <li
+                      v-for="subTask in task.subTasks"
+                      :key="subTask.subTaskId"
+                      class="rounded border border-border bg-background p-1.5 text-xs"
+                    >
+                      <p>
+                        <strong>{{ t('transferProgressModal.subTask.source') }}:</strong> {{ subTask.sourceItemName }}
+                      </p>
+                      <p>
+                        <strong>{{ t('transferProgressModal.subTask.connectionId') }}:</strong>
+                        {{ connectionName(subTask.connectionId) }}
+                      </p>
+                      <div class="flex flex-wrap items-center gap-1">
+                        <strong>{{ t('transferProgressModal.subTask.status') }}:</strong>
+                        <span
+                          :class="['rounded-full px-2 py-0.5 text-xs font-semibold', statusClasses(subTask.status)]"
+                        >
+                          {{ statusLabel(subTask.status) }}
+                        </span>
+                        <span v-if="subTask.progress !== undefined" class="text-xs text-text-secondary">
+                          ({{ subTask.progress }}%)
+                        </span>
+                      </div>
+                      <p v-if="subTask.transferMethodUsed">
+                        <strong>{{ t('transferProgressModal.subTask.method') }}:</strong>
+                        {{ subTask.transferMethodUsed }}
+                      </p>
+                      <p v-if="subTask.status === 'failed' && subTask.message" class="text-red-600">
+                        <strong>{{ t('transferProgressModal.subTask.error') }}:</strong> {{ subTask.message }}
+                      </p>
+                    </li>
+                  </ul>
+                </details>
+                <div v-else class="mt-2 text-xs text-text-secondary">
+                  {{ t('transferProgressModal.subTasks.noSubTasks') }}
                 </div>
               </article>
             </div>
