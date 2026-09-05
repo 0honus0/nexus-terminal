@@ -1082,7 +1082,6 @@
     <OverlayPanel
       data-testid="file-manager-modal"
       :visible="fileManagerPopupVisible"
-      keep-mounted
       teleport
       panel-class="max-w-4xl h-[85vh] flex flex-col overflow-hidden"
       role="dialog"
