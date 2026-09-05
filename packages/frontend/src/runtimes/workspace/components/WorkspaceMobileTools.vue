@@ -151,18 +151,37 @@
     :title="t('layout.pane.quickCommands')"
     overlay-class="!p-2"
     panel-class="h-[min(82dvh,720px)] w-[min(96vw,620px)]"
+    content-class="!overflow-hidden !py-0"
     @close="quickCommandsVisible = false"
   >
-    <QuickCommandsPanel
-      class="h-full min-h-0"
-      :collapsible-search="false"
-      :compact="quickCommandsCompactMode"
-      :show-tags="showQuickCommandTags"
-      :row-scale="quickCommandRowScale"
-      @row-scale="emit('quickCommandRowScale', $event)"
-      @compact-mode="emit('quickCommandCompactMode', $event)"
-      @execute="executeQuickCommand"
-    />
+    <template #header>
+      <h3 class="flex-1 pl-8 text-center text-lg font-semibold">{{ t('layout.pane.quickCommands') }}</h3>
+    </template>
+    <template #header-actions>
+      <button
+        type="button"
+        class="grid h-8 w-8 place-items-center text-text-secondary hover:text-foreground"
+        :title="t('common.close')"
+        :aria-label="t('common.close')"
+        @click="quickCommandsVisible = false"
+      >
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </template>
+    <div class="h-full min-h-0 overflow-hidden rounded border border-border">
+      <QuickCommandsPanel
+        class="h-full min-h-0"
+        :collapsible-search="false"
+        :compact="quickCommandsCompactMode"
+        :show-tags="showQuickCommandTags"
+        :row-scale="quickCommandRowScale"
+        @row-scale="emit('quickCommandRowScale', $event)"
+        @compact-mode="emit('quickCommandCompactMode', $event)"
+        @execute="executeQuickCommand"
+      />
+    </div>
   </BaseModal>
 
   <BaseModal

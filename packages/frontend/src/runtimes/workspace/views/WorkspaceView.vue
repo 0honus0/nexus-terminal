@@ -710,20 +710,37 @@
       </div>
     </OverlayPanel>
 
-    <div v-if="!registry.orderedSessions.value.length" class="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-2">
-      <section class="min-h-0 overflow-hidden rounded-lg border border-border">
-        <WorkspaceConnectionList @open="openConnection" @open-many="openConnections" />
-      </section>
-      <section class="min-h-0 overflow-hidden rounded-lg border border-border">
-        <SuspendedSessionsPanel
-          :can-resume="true"
-          :marked-sessions="markedSuspendedSessions"
-          @resume="resumeSuspended"
-          @resume-marked="resumeMarkedSession"
-          @unmark="toggleSuspendMark"
-        />
-      </section>
-    </div>
+    <template v-if="!registry.orderedSessions.value.length">
+      <div v-if="device.isMobile.value" class="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4">
+        <section class="min-h-0 overflow-hidden rounded-lg border border-border">
+          <WorkspaceConnectionList @open="openConnection" @open-many="openConnections" />
+        </section>
+        <section class="min-h-0 overflow-hidden rounded-lg border border-border">
+          <SuspendedSessionsPanel
+            :can-resume="true"
+            :marked-sessions="markedSuspendedSessions"
+            @resume="resumeSuspended"
+            @resume-marked="resumeMarkedSession"
+            @unmark="toggleSuspendMark"
+          />
+        </section>
+      </div>
+      <div
+        v-else
+        class="mx-2 mb-2 flex min-h-0 flex-1 overflow-hidden rounded-b-md border border-t-0 border-border bg-background"
+      >
+        <aside class="w-[min(360px,32vw)] min-w-[240px] shrink-0 overflow-hidden border-r border-border">
+          <WorkspaceConnectionList @open="openConnection" @open-many="openConnections" />
+        </aside>
+        <section class="flex min-w-0 flex-1 items-center justify-center bg-header p-4 text-center text-text-secondary">
+          <div class="flex flex-col items-center justify-center p-8">
+            <i class="fas fa-plug mb-3 text-4xl text-text-secondary" aria-hidden="true"></i>
+            <span class="mb-2 text-lg font-medium text-text-secondary">{{ t('layout.noActiveSession.title') }}</span>
+            <p class="mt-2 text-xs text-text-secondary">{{ t('layout.noActiveSession.message') }}</p>
+          </div>
+        </section>
+      </div>
+    </template>
 
     <div v-else class="relative min-h-0 flex-1">
       <WorkspaceSessionSurface

@@ -322,6 +322,17 @@
   };
 
   const paneLabel = (name: WorkspacePaneName) => t(`layout.pane.${name}`);
+  const paneIcon = (pane: WorkspacePaneName): string => {
+    if (pane === 'connections') return 'fas fa-network-wired';
+    if (pane === 'fileManager') return 'fas fa-folder-open';
+    if (pane === 'commandHistory') return 'fas fa-history';
+    if (pane === 'quickCommands') return 'fas fa-bolt';
+    if (pane === 'dockerManager') return 'fab fa-docker';
+    if (pane === 'editor') return 'fas fa-file-alt';
+    if (pane === 'statusMonitor') return 'fas fa-tachometer-alt';
+    if (pane === 'suspendedSshSessions') return 'fas fa-pause-circle';
+    return 'fas fa-terminal';
+  };
   const sidebarNode = (name: WorkspacePaneName, side: 'left' | 'right'): WorkspaceLayoutNode => ({
     id: `workspace-sidebar-${side}-${name}`,
     type: 'pane',
@@ -683,12 +694,13 @@
         :key="pane"
         :data-testid="`sidebar-pane-${pane}`"
         type="button"
-        class="grid h-10 place-items-center text-xs hover:bg-primary/10"
-        :class="activeLeftSidebar === pane ? 'bg-primary/15 text-primary' : 'text-text-secondary'"
+        class="mb-1 grid h-10 w-10 place-items-center text-lg text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+        :class="activeLeftSidebar === pane ? 'bg-primary text-white hover:bg-primary-dark hover:text-white' : ''"
         :title="paneLabel(pane)"
+        :aria-label="paneLabel(pane)"
         @click="toggleSidebar('left', pane)"
       >
-        {{ paneLabel(pane).slice(0, 1) }}
+        <i :class="paneIcon(pane)" aria-hidden="true"></i>
       </button>
     </nav>
 
@@ -962,12 +974,13 @@
         :key="pane"
         :data-testid="`sidebar-pane-${pane}`"
         type="button"
-        class="grid h-10 place-items-center text-xs hover:bg-primary/10"
-        :class="activeRightSidebar === pane ? 'bg-primary/15 text-primary' : 'text-text-secondary'"
+        class="mb-1 grid h-10 w-10 place-items-center text-lg text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+        :class="activeRightSidebar === pane ? 'bg-primary text-white hover:bg-primary-dark hover:text-white' : ''"
         :title="paneLabel(pane)"
+        :aria-label="paneLabel(pane)"
         @click="toggleSidebar('right', pane)"
       >
-        {{ paneLabel(pane).slice(0, 1) }}
+        <i :class="paneIcon(pane)" aria-hidden="true"></i>
       </button>
     </nav>
 
