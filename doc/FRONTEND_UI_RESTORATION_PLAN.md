@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-05 当前工作树）**：`7 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M06 Appearance / Themes / Background / PWA、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`8 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -229,8 +229,8 @@
 | ------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M05.01 | ✅ 已完成〔C.1/P3〕  | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局                                                            |
 | M05.02 | ✅ 已完成〔C.1/P3〕  | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                                                                    |
-| M05.03 | ◐ 部分完成〔C.15〕 | 移动源码已审；IP白名单等宽输入、各 tab 加载/dirty/save/error、开关禁用、长描述/表格/二维码、tab横滚与内容纵滚持续对照旧UI；System 与 Workspace 设置互不串值 |
-| M05.04 | ◐ 部分完成〔C.14-a/b/c/d/e〕 | 密码、passkey真实注册/命名/reload/删除、2FA UI setup/错误/停用、hCaptcha/reCAPTCHA、IP白/黑名单及加密备份导入导出/错误密码已通过；移动专项、passkey登录与连接导出仍待验收 |
+| M05.03 | ✅ 本地完成〔C.16〕 | 完成 Workspace/System 对旧逐项 section、标题/说明/分隔、独立保存/反馈、loading/disabled 的真实还原；System/Workspace 精确 key patch 不串值。七 tab 继续横向独立滚动；320/375px 下 Workspace/Security/IP Control/Data Management/About 均无页面横溢出，Security 与 Data 长页实际截图复核通过；About 源码与旧卡片/版本状态/仓库链接拓扑一致 |
+| M05.04 | ✅ 本地完成〔C.16〕 | 既有密码、2FA、CAPTCHA、IP 与加密备份证据继续有效；本轮真实重跑 System 3/3、backup/CAPTCHA/password/IP 5/5，passkey 注册/命名/reload/删除 1/1；真实 passkey 登录已走通。连接导出通过 UI 真实下载 `nexus_connections_export.zip`；dirty 登录 test 的后半段凭据丢失模拟因当前 Chromium CDP 参数不兼容而停在测试层，不计产品失败 |
 
 **验收/架构**：SettingsPage 只组合；各 feature 保持唯一设置 owner，不汇总成旧 settings mega-store。复用 `ui/system-settings.spec.ts`、`ui/change-password.spec.ts`、`ui/captcha-settings.spec.ts`、`ui/ip-whitelist-settings.spec.ts`、`ui/ip-blacklist-settings.spec.ts`、`ui/backup-ui.spec.ts` 及相关 HTTP E2E；复核 `system-settings.png`、`security-settings.png`。
 
@@ -1097,6 +1097,15 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 测试只用于复现或确认关键差异；不以新增测试数量作为完成标准。现有测试扩展可以保留，但未完成的新增测试任务应停止在安全边界，不得阻塞产品还原。
 - 每个产品差异批次仍由主代理独立验收旧新属性和行为；确认无差异时记录“无需产品改动”，再决定是否补最小回归测试。
 - 已完成的原子测试提交和证据继续保留，不因优先级调整回滚；模块最终关闭仍要求功能、视觉、架构三者均有结论。
+
+### C.16 主代理直接接续（2026-09-06）
+
+- 用户确认本轮由主代理直接继续执行；子代理不可用时不再等待或补做模型试验。执行优先级继续遵循 C.15：先完成旧 UI / 行为差异还原，测试代码可暂缓新增，但已有真实验证能力仍用于确认关键结果。
+- 接手 HEAD 为 `5d4f5f85`（`test/agent-runtime-foundation`）。接手时工作树仅有两处未提交 E2E 改动：`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`（SHA256 `25dafc8044690536f677b887c233be1b61d040d12f87587f43b9391e46b42051`）与 `test/e2e/tests/ui/session-lifecycle.spec.ts`（SHA256 `c9710569118f7e3d85dc589e7dd186406fd06b00f0e7b02231718efc108d71b3`）。两者均按既有 dirty 保护处理：不覆盖、不 reset、不随模块提交误暂存。
+- M05 收口后当前正式闭环更新为 `8 / 18`。下一优先级为 M07 / M11，再继续 M00 / M01 / M08–M13，最后 M17。每完成一个步骤即更新本计划；每完成一个正式模块并达到本地 F/V/A 结论后，由主代理进行一次精确路径本地提交，不 push、不 amend、不改写历史。
+- 环境接手检查：仓库根与 frontend npm scripts 可用；当前无 4173/5173/常用 E2E 端口监听。历史 `/tmp/nexus-*` 证据目录在本次接手主机未发现，因此不把历史临时产物当当前通过证据；后续若启动本地临时服务或产生新 `/tmp` 证据，按用户要求保留，不在本轮清理。
+- `M05 Preferences UI/behavior restore-a`：对照旧 `WorkspaceSettingsSection.vue` / `SystemSettingsSection.vue` 与当前 `features/preferences`，确认新架构把 Workspace 设置压成两列字段/复选框并统一一次 Save，丢失了旧版逐项标题、说明、分隔、独立保存与就地反馈的交互拓扑。已在当前 `features/preferences` owner 内恢复逐项 section 和精确 key patch：System 的语言/时区分别保存；Workspace 的 popup editor/file manager、共享 editor tabs、sidebar、command sync、tag 可见性、Quick Command 搜索/密度、terminal scrollback、Spreadsheet preview、删除确认、右键复制粘贴、Dashboard 资源、Status IP/interval、Docker、layout lock、顶部导航分别保存，保留新架构新增能力且不恢复旧 Settings mega-store。页面加载期间先显示 loading，避免默认值短暂可编辑。三语新增文案后 frontend architecture、i18n（1702 keys / 3 locales / 81 fragments）、`vue-tsc --noEmit`、Vite build（2663 modules）及 `git diff --check` 通过。接手环境中 root 所有的旧 `.vite-temp` 与 `dist` 导致前两次 Vite 写入失败，均未删除：分别保留为 `.vite-temp.root-preserved-20260906-takeover` 与 `dist.root-preserved-20260906-takeover` 后建立当前用户可写输出并通过；不计产品失败。浏览器功能/移动几何的最终结论见下一条 `M05 closure`。
+- `M05 closure`：浏览器运行环境已在当前用户下补齐并保留：Playwright Chromium/FFmpeg cache、`/tmp/nexus-pw-libs`、`/tmp/nexus-pw-apt`，以及接手时 root 所有的旧 E2E `.tmp` / `logs` / `playwright-report` / `test-results` 均只改名保存为 `*.root-preserved-20260906-takeover`，未清理。产品验收结果：`ui/system-settings.spec.ts` 3/3；backup/CAPTCHA/password/IP 5/5；passkey 注册/命名/reload/删除定向 1/1；使用 localhost-base 临时配置后真实 passkey 注册与登录成功，dirty `session-lifecycle.spec.ts` 仅在后半段 `WebAuthn.removeCredential` 的当前 Chromium CDP 参数兼容处停止，不修改该既有 dirty 测试。另用保留在 E2E `.tmp/manual` 与 `/tmp/nexus-m05-manual-20260906` 的临时验收脚本完成连接导出和窄屏检查：UI 实际下载 `nexus_connections_export.zip`；320×667 / 375×812 下 Workspace、Security、IP Control、Data Management、About 均无 document 横向溢出，七 tab 条保持自身横滚；`settings-security-*` / `settings-data-*` 已逐图复核，长说明、输入、文件选择与按钮均保持单列可读。About 对旧 `AboutSection.vue` 源码复核未发现结构/视觉回归。M05 因此达到本地 F/V/A 闭环，正式计数更新为 `8 / 18`；本轮没有新增仓库测试代码。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
