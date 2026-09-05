@@ -579,20 +579,28 @@
       <footer
         v-if="!fullscreen"
         :data-testid="connection?.type === 'VNC' ? 'vnc-window-footer' : 'rdp-window-footer'"
-        class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
+        class="flex shrink-0 gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
+        :class="device.isMobile.value ? 'flex-col items-stretch' : 'flex-wrap items-center justify-between'"
       >
-        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div v-if="device.hasTouch.value" class="flex min-w-0 flex-col gap-1">
-            <div class="flex items-center gap-1.5">
+        <div
+          class="flex min-w-0 items-center gap-2"
+          :class="device.isMobile.value ? 'w-full flex-none flex-col items-stretch' : 'flex-1 flex-wrap'"
+        >
+          <div
+            v-if="device.hasTouch.value"
+            class="flex min-w-0 flex-col gap-1"
+            :class="device.isMobile.value ? 'w-full' : ''"
+          >
+            <div class="flex items-center gap-1.5" :class="device.isMobile.value ? 'w-full justify-between' : ''">
               <span class="shrink-0 text-[11px] text-text-muted">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
               <div
-                class="inline-flex overflow-hidden rounded border border-border"
+                class="inline-flex shrink-0 overflow-hidden rounded border border-border"
                 role="group"
                 :aria-label="t('remoteDesktopModal.touchModeLabel')"
               >
                 <button
                   type="button"
-                  class="px-2 py-1 text-[11px] transition-colors"
+                  class="relative z-10 min-h-8 px-2 py-1 text-[11px] transition-colors"
                   :class="
                     touchMode === 'direct' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-hover'
                   "
@@ -605,7 +613,7 @@
                 </button>
                 <button
                   type="button"
-                  class="border-l border-border px-2 py-1 text-[11px] transition-colors"
+                  class="relative z-10 min-h-8 border-l border-border px-2 py-1 text-[11px] transition-colors"
                   :class="
                     touchMode === 'touchpad' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-hover'
                   "
@@ -618,7 +626,10 @@
                 </button>
               </div>
             </div>
-            <span class="text-[10px] leading-tight text-text-muted">
+            <span
+              class="text-[10px] leading-tight text-text-muted"
+              :class="device.isMobile.value ? 'whitespace-normal' : ''"
+            >
               {{
                 t(
                   touchMode === 'direct'
@@ -652,7 +663,10 @@
           </div>
         </div>
 
-        <div class="ml-auto flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <div
+          class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1"
+          :class="device.isMobile.value ? 'ml-0 w-full justify-end border-t border-border/60 pt-2' : 'ml-auto'"
+        >
           <label :for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'" class="text-xs">
             {{ t('common.width') }}:
           </label>
