@@ -1,4 +1,6 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../../support/fixtures';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
@@ -16,6 +18,9 @@ const FAVORITE_NAME = 'E2E Folder Seed';
 const FAVORITE_PATH = '/folder-seed';
 const SPECIAL_PATH = '/  特殊 空格\'"$#`()[]{}!&;=,+测试  ';
 const DELETED_CWD_PATH = '/deleted-cwd';
+const LONG_LIST_COUNT = 260;
+const LONG_FILENAME = `zz-m11-long-name-${'x'.repeat(180)}.txt`;
+const M11_03A_EVIDENCE_DIR = process.env.M11_03A_EVIDENCE_DIR || '/tmp/nexus-m11-03a';
 
 const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
@@ -52,6 +57,42 @@ async function visibleFilenames(page: Page): Promise<string[]> {
   return activeFileManagerList(page)
     .locator('tbody tr[data-filename]')
     .evaluateAll((rows) => rows.map((element) => element.getAttribute('data-filename') || ''));
+}
+
+async function createLongListFixture(): Promise<void> {
+  const names = Array.from(
+    { length: LONG_LIST_COUNT },
+    (_, index) => `m11-long-list-${index.toString().padStart(3, '0')}.txt`,
+  );
+  for (const name of [...names, LONG_FILENAME]) {
+    const response = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(name)}`, { method: 'POST' });
+    expect(response.ok).toBeTruthy();
+  }
+}
+
+async function fileListMetrics(page: Page, filename?: string): Promise<Record<string, number | string | null>> {
+  const list = activeFileManagerList(page);
+  return list.evaluate((element, targetFilename) => {
+    const target = targetFilename
+      ? element.querySelector<HTMLTableRowElement>(`tr[data-filename="${targetFilename}"]`)
+      : null;
+    const nameButton = target?.querySelector<HTMLButtonElement>('.file-row-name button');
+    const rowBox = target?.getBoundingClientRect();
+    const nameBox = nameButton?.getBoundingClientRect();
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      rowTop: rowBox?.top ?? null,
+      rowBottom: rowBox ? rowBox.bottom : null,
+      rowText: target?.textContent ?? null,
+      nameClientWidth: nameButton?.clientWidth ?? null,
+      nameScrollWidth: nameButton?.scrollWidth ?? null,
+      nameTop: nameBox?.top ?? null,
+      nameBottom: nameBox ? nameBox.bottom : null,
+    };
+  }, filename);
 }
 
 test('common file-manager navigation tools work over real SFTP', async ({ page, context }) => {
@@ -178,6 +219,76 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(confirmDialog).toContainText(FAVORITE_NAME);
     await confirmDialog.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(favoriteItem).toHaveCount(0);
+  });
+});
+
+test('refreshes and sorts a long remote list while keeping a long filename actionable', async ({ page, context }) => {
+  await mkdir(M11_03A_EVIDENCE_DIR, { recursive: true });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const fileManager = manager(page);
+  const list = activeFileManagerList(page);
+  const nameHeader = fileManager.getByRole('columnheader').filter({ hasText: 'Name' }).first();
+  const nameSortButton = nameHeader.locator('button');
+
+  await step('real directory navigation returns to the root before refreshing external changes', async () => {
+    await row(page, 'folder-seed').click();
+    await expect(pathInput(page)).toHaveValue('/folder-seed', { timeout: 20_000 });
+    await expect(row(page, 'nested.txt')).toBeVisible();
+    await fileManager.getByTitle('Parent Directory', { exact: true }).click();
+    await expect(pathInput(page)).toHaveValue('/', { timeout: 20_000 });
+    await expect(row(page, 'seed.txt')).toBeVisible();
+  });
+
+  await createLongListFixture();
+  const beforeMetrics = await fileListMetrics(page);
+  await page.screenshot({ path: path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-before-refresh.png') });
+  expect(beforeMetrics.rowText).toBeNull();
+
+  await step('refresh loads the long remote list and sorting preserves the target row', async () => {
+    await fileManager.getByTitle('Refresh', { exact: true }).click();
+    await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    await nameSortButton.click();
+    await nameSortButton.click();
+    await expect(nameHeader).toContainText('▲');
+
+    await list.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const target = row(page, LONG_FILENAME);
+    await expect(target).toBeVisible({ timeout: 20_000 });
+    const afterMetrics = await fileListMetrics(page, LONG_FILENAME);
+    const viewport = page.viewportSize();
+    expect(viewport).toBeTruthy();
+    expect(afterMetrics.scrollHeight).toBeGreaterThan(afterMetrics.clientHeight as number);
+    expect(afterMetrics.scrollWidth).toBeLessThanOrEqual((afterMetrics.clientWidth as number) + 1);
+    expect(afterMetrics.rowText).toContain(LONG_FILENAME);
+    expect(afterMetrics.nameScrollWidth).toBeGreaterThan(afterMetrics.nameClientWidth as number);
+    expect(afterMetrics.rowTop).toBeGreaterThanOrEqual(0);
+    expect(afterMetrics.rowBottom).toBeLessThanOrEqual(viewport!.height);
+
+    await target.click({ button: 'right' });
+    const contextMenu = page.getByTestId('file-manager-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await expect(contextMenu.getByText('Rename', { exact: true })).toBeVisible();
+    const menuBox = await contextMenu.boundingBox();
+    expect(menuBox).toBeTruthy();
+    expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width);
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height);
+    await page.screenshot({ path: path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-after-menu.png') });
+    await page.keyboard.press('Escape');
+    await writeFile(
+      path.join(M11_03A_EVIDENCE_DIR, 'm11-03a-metrics.json'),
+      JSON.stringify({ before: beforeMetrics, after: afterMetrics, viewport }, null, 2),
+      'utf8',
+    );
   });
 });
 
