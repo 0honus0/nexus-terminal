@@ -15,17 +15,17 @@
 
 ### 0.2 当前代码与证据
 
-| 项目                      | 已确认状态                                                                | 接手注意                                                       |
-| ------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| P0–P8 历史实现            | ✅ 已完成；对应模块的已实现子任务继承此结论，详见附录 C.1                 | 不因为本版重新分类就重做；只有新的具体回归证据才重开相关子任务 |
-| P9-A 移动预览壳、连接弹窗 | ✅ 本地实现与指定流程验证完成，详见附录 C.2                               | 仍在工作树；新产品状态尚无最终 canonical 结果                  |
-| P9-B 移动批量选择         | ✅ 本地修复与持久 E2E 完成，详见附录 C.3                                  | 保留四按钮事件边界、批量模式点击穿透及新增窄屏 case            |
-| Markdown 横屏尺寸争议     | ✅ 已诊断：旧新均为 32px，独立编辑保存流程通过                            | 不再为临时复用的竖屏 40px 断言修改旧视觉；原断言也未被弱化     |
-| 98 行移动追溯             | 70 项源码审计、8 项特定流程浏览器验证、20 项待源码审计                    | 这是证据类型分布，**不是 UI 还原率**；源码审计不等于视觉通过   |
-| 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付 | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
-| 全部 28 图及最终全量验收  | ⏳ 待完成                                                                 | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
+| 项目                      | 已确认状态                                                                        | 接手注意                                                       |
+| ------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| P0–P8 历史实现            | ✅ 已完成；对应模块的已实现子任务继承此结论，详见附录 C.1                         | 不因为本版重新分类就重做；只有新的具体回归证据才重开相关子任务 |
+| P9-A 移动预览壳、连接弹窗 | ✅ 本地实现与指定流程验证完成，详见附录 C.2                                       | 仍在工作树；新产品状态尚无最终 canonical 结果                  |
+| P9-B 移动批量选择         | ✅ 本地修复与持久 E2E 完成，详见附录 C.3                                          | 保留四按钮事件边界、批量模式点击穿透及新增窄屏 case            |
+| Markdown 横屏尺寸争议     | ✅ 已诊断：旧新均为 32px，独立编辑保存流程通过                                    | 不再为临时复用的竖屏 40px 断言修改旧视觉；原断言也未被弱化     |
+| 98 行移动追溯             | 历史分布为 70 项源码审计、8 项浏览器验证、20 项待审；后续证据见附录 A 与 C.7–C.12 | 历史分布不是当前完成数或 UI 还原率；以模块任务和逐行证据为准   |
+| 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
+| 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-05 当前工作树）**：`6 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M06 Appearance / Themes / Background / PWA、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一模块按当前执行队列为 **M16 Remote Desktop / VNC / SSH suspend**。
+**逐模块执行进度（2026-09-05 当前工作树）**：`7 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M06 Appearance / Themes / Background / PWA、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -52,8 +52,17 @@
 - `packages/frontend/src/features/appearance/components/TerminalBackgroundSettingsPanel.vue`
 - `packages/backend/src/modules/appearance/appearance-settings.service.ts`
 - `test/e2e/tests/ui/theme-switching.spec.ts`
+- `test/e2e/playwright.config.ts`
+- `test/e2e/support/test-remote-gateway-server.mjs`
+- `test/e2e/tests/mobile/suspend-resume-ui.spec.ts`
+- `test/e2e/tests/mobile/touch-workflows.spec.ts`
+- `test/e2e/tests/ui/rdp-remoteapp-fullscreen.spec.ts`
 
-前一轮子代理因使用额度限制中断。该事实只说明未交付部分需要继续，不代表产品、测试或架构失败。当前已进入逐模块直接执行阶段；每完成一个模块都要立即回写本节计数、模块表、真实命令/case数及注意事项，不再等待Luna/fresh-reader验证。
+该清单仅是保护快照，不是允许修改范围；执行者必须重新读取完整 `git status`/相关 diff，并记录非本任务 dirty 文件校验值，结束后确认未被覆盖。
+
+前一轮子代理因使用额度限制中断。该事实只说明未交付部分需要继续，不代表产品、测试或架构失败。当前按用户最新要求先完成 §5.5 的 fresh-reader planning 与 Luna max 小功能 execution trial，再接续其余模块；历史模块闭环不因此重开。每完成一个模块都要回写本节计数、模块表、真实命令/case数及注意事项。
+
+本轮已执行 `git fetch origin` 与 `git merge --ff-only @{upstream}`：远端分支为 `d0c4cdb1`，本地 HEAD 为 `c67c2c70`，ahead/behind 为 `2/0`，无可合入新提交。该结果是本轮同步快照，后续仍需重新确认；不 reset、不覆盖上述工作树，也不自动 commit/push。
 
 ## 1. 完成定义：功能、UI、架构分别验收
 
@@ -127,10 +136,10 @@
 | M13  | Preview 全部 provider 与外壳              | ✅ P6 + 本地 P9-A   | 13 图相关证据恢复、各 provider 复核      |
 | M14  | Transfers、archive、Progress              | ✅ P7               | ✅ 本地模块闭环；仅待 M17 最终 canonical |
 | M15  | Status/Charts、Docker                     | ✅ P8               | ✅ 本地模块闭环；仅待 M17 最终 canonical |
-| M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8               | 四个旧 owner 待移动源审计与生命周期验证  |
+| M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8               | ✅ 本地模块闭环；仅待 M17 最终 canonical |
 | M17  | 跨模块验收、截图、canonical               | ◐ 历史/局部通过     | 当前产品最终验证与全部 28 图             |
 
-**建议接续顺序**：先 M17.01 恢复完整 mobile 证据；并行 M03.04 窄行调查与剩余 25 行源码审计（M02/M04/M06/M14/M15/M16）；修复确认的差异；完成各模块 `.验收` 项；最后 M17 全量关闭。不要先给所有模块重复开发一遍。
+**建议接续顺序**：先用 M01.03 的“普通密码登录失败提示→正确密码重试”原子切片完成 §5.5 两项试验（不等于关闭 M01）；再恢复 M17.01 mobile 证据，接续 M00/M01/M05/M07–M13 的未闭环子任务；最后 M17 全量关闭。M02/M03/M04/M06/M14/M15/M16 已本地闭环，不沿用旧的 M03.04 调查或“剩余 25 行”清单重复开发；仅具体回归证据可重开。
 
 可并行分工：管理模块 M01–M07、Workspace/terminal M08–M10、文件链 M11–M14、辅助模块 M15–M16。`WorkspaceSessionSurface.vue`、Foundation、全局样式和本进度文档分别指定唯一编辑者；跨组变更先协调，不能两个模型同时重写同一文件。
 
@@ -159,9 +168,19 @@
 | ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | M01.01 | ✅ 已完成〔C.1/P3〕 | 双栏品牌/表单、setup/login card、移动品牌隐藏断点和加载/错误外观                                                      |
 | M01.02 | ◐ 部分完成          | 真实初始设置→登录→受保护页面→退出/失效流程，覆盖密码、2FA、CAPTCHA、passkey 可用/失败分支；当前功能不因隐藏控件而丢失 |
-| M01.03 | ⏳ 待验收           | 窄屏和键盘弹出下 label/error/验证码/确认操作可见且可滚动；旧 logo/banner/表单间距及语言换行对照                       |
+| M01.03 | ◐ 部分完成〔C.13〕  | ✅ M01.03-a普通密码失败→同页重试、三个viewport错误间距已本地验收；真实软键盘、其他认证状态、完整表单/语言对照仍待验   |
 
-**验收/架构**：认证 session 仍由 auth 管理，client 不新增 router/toast/store 依赖。复用 `auth/setup-login.spec.ts`、`http/auth-api.spec.ts`、`http/auth-2fa.spec.ts`、`ui/protected-navigation.spec.ts`；无旧截图的状态用旧源码和真实浏览器证据，不强行添加截图专用测试。
+**验收/架构**：认证 session 仍由 auth 管理，client 不新增 router/toast/store 依赖。复用 `auth/setup-login.spec.ts`、`ui/session-lifecycle.spec.ts`、`http/auth-api.spec.ts`、`http/auth-2fa.spec.ts`、`ui/protected-navigation.spec.ts`；无旧截图的状态用旧源码和真实浏览器证据，不强行添加截图专用测试。
+
+**M01.03 小功能试验的固定切片与验收契约**：
+
+- `M01.03-a`：普通密码登录失败提示→同页正确密码重试，包含桌面1280×800和窄屏320×667、375×812；这三个viewport是同一切片的矩阵，不拆成三个开发任务。真实软键盘、其他认证机制及多语言扩展另列后续任务，不用缩短viewport冒充真实键盘弹出。此切片通过仍不能关闭M01.03或M01。
+- 前提固定为seed管理员、setup完成、未认证、2FA/CAPTCHA/passkey关闭，en-US可见label、默认theme；同时记录实际背景/文字色，不能只写“light/default”。错误文本沿用真实后端message（可能为中文），不把英文label与中文服务器错误混排误判为本切片本地化回归；不改后端文案/翻译策略。跨语言UI由另一个任务固定相应前提再验。
+- F：同一page/context首次真实POST login返回401，停留`/login`、非空alert、GET auth/status仍401，username/password/submit恢复可操作；只修正密码、不reload、不再次page.goto、不API登录，第二次POST200，到Dashboard且GET auth/status200/user正确，登录错误不残留。Remember Me和安全分支保留。可用真实公开API准备fixture，但被测两次登录必须从UI提交。
+- V：每个viewport保存失败状态截图、字段/rememberMe/alert/submit与最近裁切祖先的bbox、可见文字与overflow；检查文字区域非零、没有重叠/横向裁切、提交可真实点击，纵向超出允许自然页面滚动到达。另对照旧LoginView中错误的结构、字号、颜色、对齐、上下间距；比较浏览器实际computed style，不能只对照class字符串或把“能点”当“还原”。无旧运行图时明确“旧源码推导+当前截图”，不声称旧新像素一致。若CSS层叠使间距结论不明，保留该项待验，不猜测旧像素值。
+- A/修改边界：产品仅允许`packages/frontend/src/features/auth/views/LoginView.vue`中有证据的展示修复；优先扩展`test/e2e/tests/ui/session-lifecycle.spec.ts`现有invalid-password case，禁止创建并行测试体系、改全局样式/旧store/transport或重写认证控制器。M01.01是继承基线，不是禁止修复具体回归；发现错误间距差异可在M01.03记录旧新证据后局部修复，其他M01.01内容不重开。若before已满足，不要求产品diff，持久E2E与真实验收也可构成有效交付。
+- 执行包必须明确如何在现有ui项目跑三个viewport（如既有spec内参数化、保留原测试及另两项矩阵），每个run用独立输出目录，使用Playwright `testInfo.outputPath`和attachments保存状态/metrics，trace保留实际失败或需要复核的成功流程；不改共享playwright.config。先`--list`再定向运行本spec，结束复跑整个spec及相邻`auth/setup-login.spec.ts`。原有logout/保护路由case不得丢失。
+- 如需跨owner或遇到基线本身问题，交主代理：`失败操作/真实响应与图 → 旧新归因 → 缺少能力及当前owner → 候选最小改动路径 → 受影响任务/验收 → 请求决策`。不以升级范围完成本小试验。
 
 ### M02 — Dashboard
 
@@ -349,12 +368,12 @@
 
 **Owner**：`features/remote-desktop/`、`features/ssh-suspend/`，Workspace负责session启动/恢复组合。需求：[remote-desktop](software-requirements/requirements/remote-desktop.md)、[workspace](software-requirements/requirements/workspace.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                                 |
-| ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M16.01 | ✅ 已完成〔C.1/P8〕 | consolidated RDP/VNC toolbar/state/footer、连接错误overlay、fullscreen/minimize/resize；mobile两行footer和Direct/Touchpad稳定hit targets             |
-| M16.02 | ✅ 已完成〔C.1/P8〕 | suspended modal/embedded rows、search/status、resume/export/delete/rename/marked外观与现有后台生命周期                                               |
-| M16.03 | ⏳ 待源码补审       | RemoteDesktopModal/VncModal/SuspendedSshSessionsModal/View四行窄屏geometry、列表/动作及canvas/footer相对层级                                         |
-| M16.04 | ⏳ 待验收           | Direct/Touchpad模式不重连地持久化、鼠标/触控/IME/clipboard/text-send、RemoteApp/fullscreen/restore；标记→reload→挂起→恢复同shell及导出/删除/失败重试 |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                                                                                                                                                                                              |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M16.01 | ✅ 已完成〔C.1/P8〕 | consolidated RDP/VNC toolbar/state/footer、连接错误overlay、fullscreen/minimize/resize；mobile两行footer和Direct/Touchpad稳定hit targets                                                                                                                                                                                                          |
+| M16.02 | ✅ 已完成〔C.1/P8〕 | suspended modal/embedded rows、search/status、resume/export/delete/rename/marked外观与现有后台生命周期                                                                                                                                                                                                                                            |
+| M16.03 | ✅ 本地完成〔C.12〕 | RemoteDesktopModal/VncModal/SuspendedSshSessionsModal/View 四行已补审：RDP/VNC继续合并为单一window/session owner，canvas/header/footer/fullscreen/minimize/resize层级不分叉；legacy suspended modal的`max-w-2xl max-h-[85vh]`与内部滚动保留，Panel继续在320px标题换行、300px动作转44px icon-only                                                  |
+| M16.04 | ✅ 本地完成〔C.12〕 | Direct/Touchpad切换已实测不新增`rdp-session`请求且跨显式关闭/重开持久化；真实Guacamole connected tunnel覆盖RDP/VNC双向clipboard与VNC text→key down/up，既有touch/IME、RemoteApp/fullscreen/resize/minimize/restore均绿；Suspend真实链覆盖mark→reload→同shell resume、search/rename、export失败保留+真实下载、remove Cancel/Confirm及移动modal几何 |
 
 **验收/架构**：Guacamole/current remote ports和ssh-suspend controller不替换；不为RDP/VNC各复制一套旧window/session owner。复用 `ui/rdp-remoteapp-fullscreen.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/suspend-resume-ui.spec.ts`、`ssh/suspend-resume.spec.ts`。
 
@@ -394,6 +413,8 @@
 5. **独立可判定**：主代理无需阅读模型聊天历史，仅凭该子任务的prompt、diff、命令、产物就能判定F/V/A。做不到时继续拆分或补任务包。
 
 `Task Split` 固定输出以下字段：`临时ID | 用户结果 | 当前证据/缺口 | owner与允许路径 | 依赖 | F验收 | V验收 | A验收 | 预计命令/产物 | 不在范围`。若任一行的F/V/A仍只能写“正常”“看起来一致”“跑相关测试”，视为拆分未完成，不能进入实现。
+
+相同fixture的不同viewport通常是同一子任务的矩阵，不能通过拆分把原任务必需的窄屏或视觉对照推后，导致本次只验功能。真实软键盘与桌面浏览器viewport模拟必须分开标注。仅为本批次选中的原子任务生成完整prompt与验收卡；其余候选行标为未委派，不必重复长模板。prompt必须包含实际执行命令、输出目录和需复用的注意事项，不能仅在旁边的验收卡给出命令，或依赖上一轮聊天。
 
 #### 5.1.2 原子子任务验收卡
 
@@ -447,11 +468,11 @@
 8. 只报告已运行的命令、exit/case数和实际产物。区分本地通过、源码已审、视觉已审、canonical待验。
 9. 主代理提出具体缺陷后，在同一任务继续修正并验证；不要仅给建议或无理由转交。
 10. 额度/环境等真实阻塞须报告已完成步骤、未完成步骤、保留的证据和可重跑命令，不虚报完成。
-11. 启动前记录实际模型与推理等级；没有真实model runner、runner拒绝该模型或只能启动别的模型时，标记`BLOCKED(model-runner)`，不能把别的模型运行冒充Luna max。
+11. 模型选择由主代理的真实runner调用负责，任务包附调用参数、成功返回的canonical/run标识；执行代理引用该调度凭据，不要求自己再次启动模型或寻找模型CLI。通用身份文案、缺少模型环境变量不等于调度失败；不得自行推断具体底层型号。无调度凭据、runner明确拒绝指定模型或明确降级时才报告`BLOCKED(model-runner)`，不能冒充其他模型。
 12. 浏览器、系统库、输出目录权限等环境预检失败时标记`BLOCKED(environment)`；可修复的环境问题先修复再重试，同一失败不能计入产品case失败数。
 ```
 
-模型选择按任务复杂度：Luna适合逐行证据、检查/日志/Actions跟踪及明确样式修复；Sol适合跨表面交互、runtime组合与复杂provider；主验收模型负责架构归属、任务拆分和最终结论。名称不是强制依赖，其他模型按同一任务契约接手即可。证据代理可以并行检查，多个本地Playwright run必须协调端口与后端测试数据，不能同时抢同一环境。
+按用户最新约束，后续子代理仅允许 `gpt-5.6-luna`，禁止使用Sol或其他模型。当前runner支持推理等级 `low / medium / high / xhigh / max`，不支持Luna `ultra`。日志/清单/已授权Actions跟踪可用low或medium，明确局部实现用high，复杂交互取证与执行试验用xhigh或max；复杂度超出可控范围时由主代理进一步拆任务，不换其他模型。主代理负责架构归属、任务拆分和最终结论。证据代理可以并行检查，多个本地Playwright run必须协调端口与后端测试数据，不能同时抢同一环境。
 
 ### 5.3 记录格式与变更边界
 
@@ -464,6 +485,8 @@
 本节是上述工程约束下的执行检查表，不另设架构规则。指定 Luna max 时使用模型 `gpt-5.6-luna`、推理等级 `max`；新代理只传自包含任务包与必要上下文，不能假设它读过其他代理的结果。主代理负责给出当前文件、证据路径和未提交变更边界。
 
 **启动前硬门槛**：主代理先确认当前执行环境确实暴露可启动模型的runner，并记录实际模型名、推理等级及可追溯run/session标识（runner能提供时）。如果当前工具只有文件/命令/浏览器能力而没有模型启动能力，必须明确记录`BLOCKED(model-runner)`；可以继续审查已有Luna产出，但该审查**不算一次新的Luna运行**。同样先检查目标输出目录可写、Playwright/浏览器可启动、必要系统库存在；环境失败与产品失败分开统计。
+
+**调度凭据与执行身份分开**：上述runner门槛由主代理在启动处验收，不在已启动的子代理内部递归检查。任务包记录实际调用的 `model`、`reasoning_effort`、`fork_turns` 和成功返回的canonical/run；子代理可报告“调度参数为gpt-5.6-luna/max，run为…”，不需要改变自身通用系统身份，也不要求它再次拥有模型选择工具。若工具未暴露服务端最终解析型号，明列该元数据不可独立查询，不用通用“GPT-5”字样或缺少CLI来推断降级。只有无有效启动凭据或runner明确返回拒绝/降级才阻塞模型试验。产品F/V/A仍必须真实完成，不能用调度成功代替。
 
 | 阶段     | Luna max 必须交付                                                  | 主代理验收/失败处理                                        |
 | -------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
@@ -489,7 +512,7 @@
 
 在大批量委派前，必须做一次与产品任务分开的plan自测。目标不是让模型证明“它很聪明”，而是证明**plan本身足够自包含**。
 
-1. **Fresh-reader planning test**：新模型只得到本plan、目标正式任务ID、当前`git status`/必要diff摘要和该模块SRS/architecture路径；不给前一代理聊天记录。要求它只做planning：按§5.1.1拆子功能，并为每个原子子任务生成§5.2完整prompt和§5.1.2验收卡。
+1. **Fresh-reader planning test**：新模型只得到本plan、目标正式任务ID、当前`git status`/必要diff摘要和该模块SRS/architecture路径；不给前一代理聊天记录。要求它只做planning：按§5.1.1拆候选子功能，并为选中委派项生成§5.2完整prompt和§5.1.2验收卡，其余项明确未委派。
 2. **主代理评分**：逐行检查是否正确继承已完成项、owner、dirty保护、需求、F/V/A、矩阵、真实命令、停止条件。任何需要主代理补一句“其实这里还要……”才能执行的内容，都算plan缺口；先修改plan/模块行，再换一个无前序上下文的新模型重做planning test。
 3. **Execution trial**：planning通过后，只选一个风险可控、能真实验收的原子子任务交给Luna max执行。主代理独立检查before、diff、after、命令和F/V/A，不能只看模型总结。
 4. **纠错重试**：若Luna实现不合格，先判断是任务包缺字段、模型执行偏差、产品根因判断错、测试问题还是环境问题。任务包/plan缺陷必须先修文档，再用修正后的完整prompt让同一任务继续；不能只在聊天里追加口头上下文而不回写plan。
@@ -497,18 +520,199 @@
 
 为了检验plan而发现的规则必须写回本节或对应模块，不只留在附录试运行记录。后续模型应能从正式规则重新推导同样结论，而不是依赖记住某次Luna聊天。
 
+### 5.6 主代理分发 / 子代理执行的通用规则
+
+本节把小切片试验提炼为适用于所有模块的操作协议，而非把M01的选择器、色值或401响应推广到其他模块。**一个小功能只能验证本协议在该风险等级可执行，不能证明某模型对全部模块都可靠。** 扩大到跨feature、实时session或文件生命周期任务前仍需独立验收。
+
+| 阶段与负责人     | 必做动作                                                                                                                        | 放行条件 / 下一步                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 主代理：选任务   | 从正式未闭环项选一个用户结果，核查历史完成证据，区分补证据/局部修复/能力缺口；指定一个主owner                                   | 必要断点和状态属于同一验收矩阵，不能拆出去规避验收；共享根因另建依赖           |
+| 主代理：打包     | 用§5.2生成自包含prompt，附当前版本/dirty边界、来源、允许路径、F/V/A、真实命令/产物、调度凭据、端口/文件owner                    | 每项要求都有可观察通过条件；不能只写“还原UI”“跑相关测试”；prompt不依赖历史聊天 |
+| 子代理：接单取证 | 确认任务ID/允许路径，读取必要模块而非反复通读所有附录；预检、保留before、对照旧源码与实际CSS/行为                               | 回报`已确认范围 + 首个证据 + 下一步`，缺信息列具体缺口；不重复生成一份大规划   |
+| 子代理：实施验证 | 单owner内有证据的最小修复可直接实施；before已满足可仅补持久证据；自行运行测试、采图、等待已授权且已启动的服务/Actions并分析日志 | 不通过制造diff证明工作；不越界、不弱化断言、不把环境失败当产品失败             |
+| 主代理：独立验收 | 审产品diff/状态归属、测试是否证明用户结果、before/after图和metrics、实际exit/case数、非本任务文件保护                           | F/V/A分别判定；任一缺证据则不关闭子任务，只下达具体返工项                      |
+| 主代理：合并进度 | 回写正式子任务当前状态、附录证据与未验范围；保留历史已完成项                                                                    | 小切片通过不自动关闭父模块；最终canonical仍归M17                               |
+
+**任务包门槛（分发前逐项勾选）**：
+
+- 一个用户结果、一个主owner、明确任务模式和不在范围；复杂状态另拆，但不能漏掉本结果必要的矩阵。
+- 基线/当前版本和真实差异来源明确；静态类名差异须考虑构建版本、CSS层叠与computed style，不能机械复制旧代码。
+- F定义操作与外部状态结果；V定义旧视觉属性和可达几何；A定义状态/协议/生命周期归属。三项互不替代。
+- 有测试入口/精确执行命令、fixture与可见前提确认、唯一产物目录、失败保留方法和邻接回归；成功截图不依赖失败才保存的默认配置。
+- 文件与测试环境有唯一owner；主代理掌握runner调度证据，子代理不重复验证是否拥有启动自身的能力。禁止未经授权commit/push/dispatch。
+- 明确可自行修复与必须升级的边界；输出限定为证据/方案/结果，不要求子代理长篇复述整个计划。
+
+**失败分类与返工**：
+
+| 分类                        | 谁处理                                                                                 | 不允许的替代做法                                               |
+| --------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 任务包缺字段/歧义           | 主代理修正式规则和完整prompt，原执行者按新版本继续；涉及拆分原则时另做fresh-reader复测 | 只在聊天里补一句，未来模型仍无法执行                           |
+| 执行偏差/缺截图/错误locator | 原子代理按`具体缺陷→预期证据→重跑范围`返工；同一run产物一致                            | 主代理接管编码来掩盖子代理未完成，或删除失败断言               |
+| 环境/测试服务问题           | 子代理诊断并在授权范围恢复，独立报告环境exit；不可恢复才升级                           | 因一次可恢复失败停工，或杀其他任务服务                         |
+| 跨owner/新能力/需求冲突     | 主代理决定归属并拆依赖，再委派Luna xhigh/max；已有范围保持                             | 子代理复活旧store/event bus/mapper，或把业务状态塞进Foundation |
+| 源码/浏览器证据不一致       | 子代理保留反例并查层叠、fixture、语言、设备前提；主代理判归因                          | 用截图文件名、总像素阈值或类名一致强行判通过                   |
+
+**汇报与接续**：长任务在完成预检、首次真实run、确认根因、最终验证后各报一次简短进展；连续约10分钟无产物时主动说明正在执行的命令/分析、已保留证据和下一步，不无声扩大调查范围。返工反馈列具体缺陷，不改变原F/V/A通过标准；若任务包有修订，再执行时必须附完整新版prompt/验收卡，不能只给聊天增量。最终交付统一为`task/run/版本/changed files/根因/F/V/A/命令exit与case数/图与metrics/未验项/dirty保护`；报告的命令必须可重跑，临时产物失效时以持久E2E重建。
+
+**模型分工与证据强度**：后续子代理仅使用Luna low至max，等级按§5.2选择；跨表面/生命周期复杂任务先由主代理明确归属和依赖，再交Luna xhigh/max执行。主代理始终负责规划、架构、分发和验收。历史Sol审计记录仅保留事实，不构成后续使用授权。C.13记录实际试验轮次、退回原因和通过范围，不能把“planning通过”写成“execution通过”，也不能将一次局部通过推广为完整UI或模型通用能力已验证。
+
+### 5.7 Luna max 主代理启动模板与90%工作覆盖目标
+
+用户允许主代理及子代理均使用Luna；主代理推荐max，子代理按§5.2选low至max。主代理不需要更强型号兜底：难题先缩小用户结果、分离跨owner依赖、补证据，再派Luna执行；确实无法裁决的需求或外部授权交用户，不悄悄切换其他模型。
+
+**90%的口径**：这是希望代理团队自主完成工作的目标，不是允许10%的功能坏掉、架构违规或UI差异不记录。批次开始时冻结用户结果清单和验收范围，记录`自主完成且F/V/A通过的用户结果数 / 本批次适用用户结果总数`；拆成多个代码子任务不增加分子，阻塞项仍在分母，确实不适用须有理由。另列关键路径/风险等级，避免用大量简单项掩盖关键流程未完成。历史已完成项不计作本轮新增成果。未达90%也如实交接，不修改分母凑数；只要尚有未关闭项就不能宣称项目完成。一次小功能试验只能证明一次局部闭环，不能据此报告整体自主完成率已达90%。
+
+下面启动提示词可交给新的Luna max主代理；它必须自行从正式模块生成§5.2的具体执行包，而非将整份plan原样扔给执行者：
+
+```text
+角色：主代理，负责规划、架构、委派、独立验收和进度汇总，不把普通实现/测试等待全部揽回自己。
+仓库：先pwd确认。入口：doc/FRONTEND_UI_RESTORATION_PLAN.md。
+先读§0–§3、§5–§6和本批次对应模块/SRS/附录映射；不要重做已完成模块。
+模型限制：子代理仅gpt-5.6-luna，low/medium/high/xhigh/max；不得使用Sol或其他型号，不请求ultra。
+目标：在新架构完整保留功能并还原旧视觉；以90%以上本批次用户结果自主闭环为努力目标，不能牺牲质量或虚报比例。
+启动：核查git状态/HEAD/适用AGENTS，保存dirty保护快照；同步远端仅在已有授权下fetch/ff，不reset、不自动commit/push/dispatch。
+选题：列用户结果、当前完成状态、证据缺口、风险、主owner、依赖；冻结本批次分母。先选一个单owner小切片，不一次派整个复杂模块。
+分发：按§5.1/5.2生成完整prompt和验收卡，附模型调度凭据、允许路径、不可改路径、fixture/矩阵、真实命令/输出目录、F/V/A、停止条件。
+并行：最多按工具实际空位分发，保留主代理席位；同一文件只给一个写者，同一数据库/测试端口只给一个执行者。其他子代理做独立只读审查，不争抢环境。子代理不得自行再生成代理树。
+执行：让子代理取before、实施、运行/等待测试、看截图、分析失败并提交证据。单owner有证据的修复无需每一步请求批准；跨owner/需求冲突先交你裁决。
+验收：自己阅读真实diff与截图/metrics，核查外部用户结果和状态生命周期；可委派独立只读复核，但不能只接受执行者或审查者一句通过。
+返工：按§5.6分类，给具体缺陷与重跑范围；任务包缺口先写回正式规则，再交完整新prompt。连续两次同类失败先停止盲目重跑，检查前提/根因/任务大小再继续，不自动换模型或放宽标准。
+收尾：只有F/V/A均达到该切片要求才标完成；剩余项写清已做/未做/阻塞/证据/下一执行命令。更新原plan，不另建互相矛盾的进度表。
+报告：区分planning通过、execution通过、本地完成和最终canonical；说明自主完成的用户结果分子/分母与关键风险，不以一个试验推断全部模块能力。
+```
+
+**给执行子代理的额外通用约束**：不要为一个小视觉修复搭建通用测试框架或输出全量DOM；只采验收卡要求的目标元素和必要祖先。持久测试保留有长期回归价值的用户行为/视觉断言，调试取证按既有附件机制保存。若测试代码明显大于目标行为所需，先检查能否复用已有步骤、删除重复采集，不降低断言。输出不包含密码、token、cookie等秘密；调试trace如含测试凭据须限制在本地授权证据目录，不上传公开产物。
+
+视觉修复必须有能捕捉原回归的持久检查（项目现有视觉断言或与基线绑定的computed style/几何断言），不能仅把数值保存到metrics却没有验收断言。准确数值来自本任务旧基线和实际工具链，不设所有模块统一间距。纯功能测试修复前后都绿时，报告明确它证明的是功能保留而非视觉差异已被自动捕获。
+
+**批次记录最小模板**（放在该批次报告/原plan记录中，不新增产品调度框架）：
+
+```text
+batch_id / 基线版本 / 冻结时间：
+result_id | 用户结果 | 正式任务ID | applicable及理由 | 风险 | F/V/A证据 | 当前状态
+分母：适用result_id集合；分子：其中本轮自主完成且已独立验收的集合。
+派单：result_id / agent-run / Luna等级及理由 / 允许文件 / prompt版本 / 产物目录。
+资源预约：agent-run / 使用现有配置的服务端口集合 / 测试数据库 / 已有冲突 / 占用中或已释放。
+执行者启动后回报：实际命令、进程或Playwright session标识；结束后回报服务退出和资源释放。
+```
+
+这是一份主代理维护的轻量台账，不要求另建lock server、任意端口或通用manifest。沿用现有测试配置端口；撞端口先等待/协调，不能擅改配置或杀不明进程。中断后重新核实进程归属与端口状态，旧记录不等于仍持锁。low/medium只做只读机械检查或既定命令跟踪；包含产品修复、测试编写、跨语言/theme几何判定的执行包至少high，复杂或试验项用max。所有视觉任务仍需列旧基线的具体属性，不可退化成通用“可读可点”。fixture暂不支持某个必验组合属于缺口/阻塞，不能据此标不适用从分母删除；新批次自行选择的矩阵须有来源和风险理由，不机械套用M01断点或把四种组合都强加所有任务。
+
+### 5.8 完整执行入口：Luna max主代理持续推进与逐模块提交
+
+本节是后续主代理的完整启动提示词，结合§5.1–§5.7执行；接手时优先加载本节，不只使用§5.7的简版模板。用户已明确要求每完成一个模块进行一次本地commit；这项授权不包含push、手动dispatch或历史改写。其他章节的“不自动提交”对子代理仍然有效，主代理的模块提交按本节执行。
+
+```text
+你是本仓库主代理，负责规划、架构一致性、任务分发、独立验收、进度汇总和模块提交。
+
+一、入口与完整目标
+入口：doc/FRONTEND_UI_RESTORATION_PLAN.md。
+先读§0–§3、§5–§6、C.13，再按当前模块读取任务、SRS、新架构文档和旧UI映射，并遵守适用AGENTS.md。
+
+持续完成整份plan中M00–M17的所有适用需求：
+- 功能完整，不删除或弱化现有能力。
+- 视觉与交互还原旧UI。
+- 所有代码均落在新架构，不恢复旧store、event bus、协议兼容层或重复状态owner。
+
+90%是团队自主完成工作的努力目标，不是需求裁剪、降低质量或停止条件。达到90%仍需继续处理剩余需求。
+
+二、模型与职责
+子代理仅允许gpt-5.6-luna：
+- low/medium：机械检查、既定命令、日志和等待。
+- high：明确的局部实现、测试编写。
+- xhigh/max：复杂交互、取证和较难实现。
+禁止Sol或其他型号，不使用ultra。
+
+你负责拆分、架构裁决、完整任务包、独立验收和提交。
+子代理负责取证、实现、测试、截图、失败分析及等待已授权的Actions。
+难题先拆依赖、缩小任务并补证据，不换其他模型。
+子代理不得自行再开代理或commit/push。
+
+三、启动与保护
+1. 检查pwd、HEAD、分支、git status、暂存区和适用AGENTS。
+2. 记录已有dirty文件及必要diff/校验值，禁止覆盖、reset或随意stash。
+3. 如需同步远端，可fetch并在安全条件下ff；分叉或冲突先分析，不强制覆盖。
+4. 继承已完成任务与C.13试验结果，不重复开发或重新进行模型能力试验。
+5. 区分已提交成果、已验收但未提交改动、尚未验收改动。
+
+四、持续分发
+按§5.6/§5.7执行：
+1. 从未闭环模块选择批次，列用户结果、证据缺口、风险、主owner、依赖。
+2. 按§5.2为每个选中原子任务生成自包含prompt和验收卡：
+   当前版本、旧基线、允许/禁止路径、保留能力、F/V/A条件、
+   fixture、必要视口/语言/状态、实际命令、产物目录、停止条件。
+3. 必要窄屏和错误状态属于该任务验收矩阵，不得推到后续规避验收。
+4. 同一文件只有一个写者，同一数据库/测试环境只有一个占用者。
+5. 调度参数和run凭据由你记录；子代理不需要再次拥有模型启动工具。
+
+五、实施与验收
+子代理先保存before证据，再做有证据的最小修复。
+现状已满足时允许仅补持久测试/验收，不为制造diff而改产品。
+禁止测试专用产品DOM、伪造响应、复制旧截图、弱化断言和无关扩改。
+
+你必须独立检查：
+- F：真实用户操作、失败/重试和外部状态结果。
+- V：旧基线具体视觉属性、真实截图、computed style与裁切/滚动几何。
+- A：状态、协议、生命周期仍归当前owner，跨模块走现有public/port。
+- 测试确实执行，命令exit/case数与产物一致，既有改动未被覆盖。
+
+视觉修复应有能捕捉原回归的持久检查，不能只有metrics没有断言。
+不合格则给具体缺陷和重跑范围，让原子代理返工。
+任务包有缺口，先更新正式规则，再提供完整修订prompt。
+连续两次同类失败先查前提、根因和任务大小，不盲目重跑或降低标准。
+
+六、每完成一个模块commit一次
+用户明确授权本次进行本地Git提交：
+1. 一个正式模块完成自身适用任务及本地F/V/A验收后，立即提交一次。
+2. 提交包含该模块实现、相关测试及原plan的完成记录。
+3. 提交前检查实际diff、相关静态检查/测试结果和暂存区。
+4. 按路径或hunk精确暂存，禁止git add .混入其他模块或无关dirty改动。
+5. 多模块共享文件按hunk划分；若无法安全拆分，先协调依赖，不强行制造不完整提交。
+6. 已有未提交成果只有确认属于该模块且完成验收后才可纳入；不得顺带提交未知改动。
+7. 由你执行commit，子代理只交付改动和证据。
+8. 建议提交信息：feat(ui): restore Mxx <模块名>；仅补测试时使用test(ui)。
+9. commit后检查git show --stat和git status，汇报模块、提交SHA及验收结果。
+10. 不制造空提交、不amend已有提交、不改写历史。
+11. commit失败时保留现场并解决，不虚报提交成功。
+
+已完成且已提交的模块不重复提交。
+已本地完成但未提交的模块，先核实归属和有效证据，再单独提交。
+模块仅待M17最终统一验收时，可以提交其本地闭环成果，但不得宣称项目最终完成。
+
+本授权仅包含本地commit，不包含push或手动dispatch。
+执行commit前检查仓库hook可能产生的远程副作用；需要额外授权时先说明。
+
+七、进度与停止条件
+每完成一个子任务，更新原plan的真实状态、证据和未验项。
+每完成一个模块，完成上述commit，再自动进入下一个未闭环模块。
+不要因为完成优先批次、单个模块或达到90%就停止。
+
+局部阻塞时记录原因，继续其他无依赖任务。
+持续推进直到：
+- M00–M17全部适用任务及最终验收完成；或
+- 剩余任务均确实依赖用户决策、额外授权或不可用的外部条件。
+
+最终汇报：
+已完成模块、各模块commit SHA、真实测试结果、未完成/阻塞项及下一步。
+不把planning通过当execution通过，不把本地通过当canonical通过。
+
+现在简要汇报仓库状态、首个模块及分工，然后直接委派执行；不要只输出规划后停止。
+```
+
 ## 6. 验证与截图操作
 
-静态检查从仓库根执行；格式化只作用于changed files。文档-only变更只需文档格式/链接/清单一致性，不重复耗时产品构建。
+静态检查从仓库根执行；格式化只作用于本任务允许修改的文件。`npm run format` 会写入整个 dirty 工作树中的支持文件，并不限于本代理的改动，存在其他人的未提交工作时禁止直接使用；改用下列显式路径命令。`format:check` 是只读检查，可检查整个 dirty 工作树；非本任务格式问题仅报告。文档-only变更只需文档格式/链接/清单一致性，不重复耗时产品构建。
 
 ```bash
-npm run format
+npx prettier --write doc/FRONTEND_UI_RESTORATION_PLAN.md
 npm run format:check
 npm run check:test-policy
 npm --prefix packages/frontend run build
 npm --prefix test/e2e run groups:check
 git diff --check
 ```
+
+产品任务将上面的 Prettier 路径替换为已批准的实际 changed files，子代理不格式化主代理负责的 plan。历史附录中的 `/tmp/nexus-e2e-env.sh`、`/tmp/nexus-pw-libs` 等只是当时环境记录；先 `test -e` 检查，不盲目 source 或重装。当前预检确认本机浏览器缓存 `/root/.cache/ms-playwright` 与系统库/字体可用，无需旧临时 workaround；可用 `PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright`，其他主机必须重新发现实际路径。
 
 目标浏览器示例（从 `test/e2e` 执行；按模块选择既有spec，不为每行增加重复测试）：
 
@@ -568,7 +772,7 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 | `components/ProgressDisplayModal.vue`                          | `packages/frontend/src/features/transfers/components/ProgressDisplayModal.vue`                                                                                                                                                                                                                                                 | M14      | shared progress modal shell, tabs/cards/actions, desktop/mobile dimensions                                     | source + browser reviewed〔C.10〕— hidden source cards expose restore/cancel-all/cancel/remove, server tasks expose queued/in-progress/completed/failed/partial/cancelling/cancelled with method/error details; desktop inline and mobile overlay are bounded/scroll-owned and real hide→restore flows pass                                                                                                                                                    |
 | `components/ProxyList.vue`                                     | `packages/frontend/src/features/proxies/views/ProxiesView.vue`                                                                                                                                                                                                                                                                 | M04      | proxy list/table, actions, spacing and empty/loading states                                                    | source + browser reviewed〔C.8〕— current `ProxiesView.vue`; narrow cards stack without long-host overflow, delete failure stays visible and preserves the row                                                                                                                                                                                                                                                                                                 |
 | `components/QuickCommandsModal.vue`                            | `packages/frontend/src/features/quick-commands/components/QuickCommandsPanel.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceSessionSurface.vue`                                                                                                                                                         | M09      | modal shell, search/list layout, execute controls                                                              | source reviewed — baseline modal body owns vertical overflow at `8ceb5840:components/QuickCommandsModal.vue:59-75`; current mobile tool opens a standard viewport-bounded modal with an independently scrolling panel at `WorkspaceMobileTools.vue:146-176`, containing `QuickCommandsPanel.vue:260-545`; existing mobile quick-command flow is specific browser evidence, not full-state closure                                                              |
-| `components/RemoteDesktopModal.vue`                            | `packages/frontend/src/features/remote-desktop/components/RemoteDesktopModal.vue`                                                                                                                                                                                                                                              | M16      | remote desktop shell, toolbar, restore/minimize/fullscreen controls and canvas sizing                          | pending — mobile owner source review and browser evidence required                                                                                                                                                                                                                                                                                                                                                                                             |
+| `components/RemoteDesktopModal.vue`                            | `packages/frontend/src/features/remote-desktop/components/RemoteDesktopModal.vue`                                                                                                                                                                                                                                              | M16      | remote desktop shell, toolbar, restore/minimize/fullscreen controls and canvas sizing                          | source + browser reviewed〔C.12〕— current consolidated owner retains legacy header/state badge/canvas/footer/fullscreen/minimize/restore/pointer-resize topology; real connected RDP tunnel verifies RemoteApp, bidirectional plain-text clipboard, fullscreen Escape restore and resize without product reconnect, while mobile Direct/Touchpad request-count evidence proves mode toggles do not create a new RDP session                                   |
 | `components/SendFilesModal.vue`                                | `packages/frontend/src/features/transfers/components/SendFilesModal.vue`                                                                                                                                                                                                                                                       | M14      | send-files form/list layout, destination controls and actions                                                  | source + browser reviewed〔C.10〕— source connection excluded; tag/Untagged grouping, search, group selected/indeterminate, target path and Auto/rsync/scp remain in current owner. New real rsync multi-target case proves one success + one refused target → Partially Completed, method/error details, Remove and actual target file; initiation failure keeps modal state for correction/resubmit                                                          |
 | `components/SshKeyManagementModal.vue`                         | `packages/frontend/src/features/ssh-keys/components/SshKeyManagementModal.vue`                                                                                                                                                                                                                                                 | M04      | key list/form modal, actions, status/empty states                                                              | source + browser reviewed〔C.8〕— current key manager is viewport-bounded/table-fixed; 320px long-key create/rename/delete and load/delete error states passed                                                                                                                                                                                                                                                                                                 |
 | `components/SshKeySelector.vue`                                | `packages/frontend/src/features/ssh-keys/components/SshKeySelector.vue`                                                                                                                                                                                                                                                        | M04      | selector dropdown/list sizing, labels and actions                                                              | source + browser reviewed〔C.8〕— selector uses min-width constrained select + fixed manage action; 320px selection and load-error state passed                                                                                                                                                                                                                                                                                                                |
@@ -576,7 +780,7 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 | `components/StatusMonitor.vue`                                 | `packages/frontend/src/features/status-monitor/components/StatusMonitor.vue`                                                                                                                                                                                                                                                   | M15      | resource cards/rows, IP/rate layout and mobile density                                                         | source + browser reviewed〔C.11〕— current monitor retains legacy Server Status header/IP copy, CPU water-wave, memory/swap/disk cards, network rates and selected metric history. Desktop E2E proves live samples, metric switching without extra status.start/stop, IP clipboard copy and bounded persisted wheel scaling; 1-second backend setting produces timely live samples, so presentation state does not own polling cadence                         |
 | `components/StatusMonitorModal.vue`                            | `packages/frontend/src/runtimes/workspace/components/WorkspaceMobileTools.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceLayoutRenderer.vue`<br>`packages/frontend/src/features/status-monitor/components/StatusMonitor.vue`                                                                            | M15      | modal/fullscreen shell and status monitor placement                                                            | source + browser reviewed〔C.11〕— legacy `max-w-2xl h-[min(78dvh,720px)] min-h-[360px]`、p-3 overlay与top-right close geometry在current mobile shell中原样保留，只去掉重复owner；真实mobile modal完全落在viewport，30m range/history可见，document无横溢出，独立打开/关闭分别新增status.start/status.stop，证明无需激活status pane且没有第二轮询器                                                                                                            |
 | `components/StyleCustomizer.vue`                               | `packages/frontend/src/features/appearance/components/AppearanceCustomizerModal.vue`                                                                                                                                                                                                                                           | M06      | customizer modal size, tab strip, footer/actions and live-preview shell                                        | source + browser reviewed〔C.9〕— current four-tab shell preserves mobile fullscreen/desktop bounded geometry, independent content scroll and wrapped footer; 320×667 dialog/document geometry passed with all tabs reachable                                                                                                                                                                                                                                  |
-| `components/SuspendedSshSessionsModal.vue`                     | `packages/frontend/src/features/ssh-suspend/components/SuspendedSessionsModal.vue`<br>`packages/frontend/src/features/ssh-suspend/components/SuspendedSessionsPanel.vue`                                                                                                                                                       | M16      | modal shell, session rows, resume/download/delete FontAwesome actions                                          | pending — mobile owner source review and browser evidence required                                                                                                                                                                                                                                                                                                                                                                                             |
+| `components/SuspendedSshSessionsModal.vue`                     | `packages/frontend/src/features/ssh-suspend/components/SuspendedSessionsModal.vue`<br>`packages/frontend/src/features/ssh-suspend/components/SuspendedSessionsPanel.vue`                                                                                                                                                       | M16      | modal shell, session rows, resume/download/delete FontAwesome actions                                          | source + browser reviewed〔C.12〕— legacy `max-w-2xl max-h-[85vh]` modal shell、independent body scroll、top-right close与current owner一致；真实mobile入口打开后dialog完整落在viewport且document无横溢出，随后embedded链继续验证search/rename/export/remove/resume状态                                                                                                                                                                                        |
 | `components/TabBarContextMenu.vue`                             | `packages/frontend/src/runtimes/workspace/components/WorkspaceTabBar.vue`<br>`packages/frontend/src/foundation/ui/BaseContextMenu.vue`                                                                                                                                                                                         | M08      | tab context menu geometry, item density and states                                                             | source reviewed — baseline menu is fixed and context-triggered at `8ceb5840:components/TabBarContextMenu.vue:65-101`; current tab long-press/context path feeds viewport-clamped `BaseContextMenu` geometry at `WorkspaceTabBar.vue:121-258` and `BaseContextMenu.vue:57-80`; mobile browser verification pending                                                                                                                                              |
 | `components/TagInput.vue`                                      | `packages/frontend/src/features/tags/components/ConnectionTagPicker.vue`<br>`packages/frontend/src/foundation/ui/TokenInput.vue`                                                                                                                                                                                               | M04      | tag token/chip appearance, add/remove controls, keyboard/focus states                                          | source + browser reviewed〔C.8〕— `TokenInput` retains generic exact-Enter/filter/Backspace semantics while `ConnectionTagPicker` owns Tag CRUD; 360px long-tag real flow passed                                                                                                                                                                                                                                                                               |
 | `components/Terminal.vue`                                      | `packages/frontend/src/features/terminal/components/TerminalView.vue`<br>`packages/frontend/src/runtimes/workspace/views/WorkspaceView.vue`                                                                                                                                                                                    | M10      | default terminal theme fallback, xterm geometry, search toolbar, background layers, font/selection visuals     | source reviewed — current `features/terminal/components/TerminalView.vue:682-751`; P5 mobile behavior evidence in 附录 C.2, all states pending                                                                                                                                                                                                                                                                                                                 |
@@ -584,7 +788,7 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 | `components/UINotificationDisplay.vue`                         | `packages/frontend/src/shared/feedback/components/NotificationHost.vue`                                                                                                                                                                                                                                                        | M00      | toast placement, widths, FontAwesome status icons, colors and stacking                                         | source reviewed — current `shared/feedback/components/NotificationHost.vue:18-48`; mobile browser verification pending                                                                                                                                                                                                                                                                                                                                         |
 | `components/UploadConflictModal.vue`                           | `packages/frontend/src/features/transfers/components/UploadConflictModal.vue`                                                                                                                                                                                                                                                  | M14      | conflict modal iconography, file metadata layout and decision buttons                                          | source + browser reviewed〔C.10〕— warning/file metadata/apply-to-all/Skip/Overwrite topology matches legacy; real Windows-style multi-file drag verifies one conflict decision applies to remaining batch while files stay byte-complete                                                                                                                                                                                                                      |
 | `components/VirtualKeyboard.vue`                               | `packages/frontend/src/features/terminal/components/VirtualKeyboard.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceMobileTools.vue`                                                                                                                                                                     | M10      | mobile keyboard rows, modifier states, key dimensions and icons                                                | source reviewed — current `features/terminal/components/VirtualKeyboard.vue:64-133`; P5 mobile behavior evidence in 附录 C.2, all states pending                                                                                                                                                                                                                                                                                                               |
-| `components/VncModal.vue`                                      | `packages/frontend/src/features/remote-desktop/components/RemoteDesktopModal.vue`                                                                                                                                                                                                                                              | M16      | VNC-specific toolbar/state within consolidated remote desktop modal                                            | pending — mobile owner source review and browser evidence required                                                                                                                                                                                                                                                                                                                                                                                             |
+| `components/VncModal.vue`                                      | `packages/frontend/src/features/remote-desktop/components/RemoteDesktopModal.vue`                                                                                                                                                                                                                                              | M16      | VNC-specific toolbar/state within consolidated remote desktop modal                                            | source + browser reviewed〔C.12〕— VNC继续复用RDP同一window/session owner，仅保留协议特定text-send；真实connected Guacamole tunnel验证`VNC`三字符逐字key down/up、双向plain-text clipboard，且pointer resize/minimize/restore沿用同一几何语义，无第二套modal/session状态                                                                                                                                                                                       |
 | `components/WorkspaceConnectionList.vue`                       | `packages/frontend/src/runtimes/workspace/components/WorkspaceConnectionList.vue`                                                                                                                                                                                                                                              | M08      | workspace sidebar connection list, row/action icons, selected/connected states                                 | source reviewed — baseline owns list scrolling, row truncation and viewport-adjusted context menus at `8ceb5840:components/WorkspaceConnectionList.vue:770-981`; current preserves min-h scrolling, grouped/flat truncating rows and viewport-clamped context menus at `WorkspaceConnectionList.vue:226-411`; mobile browser verification pending for context/tag states                                                                                       |
 | `components/common/AlertDialog.vue`                            | `packages/frontend/src/shared/feedback/components/DialogHost.vue`<br>`packages/frontend/src/foundation/ui/BaseModal.vue`                                                                                                                                                                                                       | M00      | alert modal shell, title/body/actions and z-index                                                              | source reviewed — current `shared/feedback/components/DialogHost.vue:26-64`; mobile browser verification pending                                                                                                                                                                                                                                                                                                                                               |
 | `components/common/ConfirmDialog.vue`                          | `packages/frontend/src/shared/feedback/components/DialogHost.vue`<br>`packages/frontend/src/foundation/ui/BaseModal.vue`                                                                                                                                                                                                       | M00      | confirm modal shell, destructive/default actions, dimensions and focus                                         | source reviewed — current `shared/feedback/components/DialogHost.vue:26-64`; mobile browser verification pending                                                                                                                                                                                                                                                                                                                                               |
@@ -624,7 +828,7 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 | `views/QuickCommandsView.vue`                                  | `packages/frontend/src/features/quick-commands/components/QuickCommandsPanel.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceLayoutRenderer.vue`                                                                                                                                                         | M09      | embedded quick-command search/list/tag/execute layout                                                          | source reviewed — baseline uses a full-height scrolling list, truncating rows and narrow container rules at `8ceb5840:views/QuickCommandsView.vue:1-195,891-1023`; current retains min-width truncation, scroll ownership and compact/grouped rows at `QuickCommandsPanel.vue:260-545`; mobile browser verification pending beyond the existing open/execute flow                                                                                              |
 | `views/SettingsView.vue`                                       | `packages/frontend/src/app/pages/settings/SettingsPage.vue`                                                                                                                                                                                                                                                                    | M05      | settings navigation/tabs, page width, section spacing and responsive behavior                                  | source reviewed — current `SettingsPage.vue:34-98`; mobile browser verification pending                                                                                                                                                                                                                                                                                                                                                                        |
 | `views/SetupView.vue`                                          | `packages/frontend/src/features/auth/views/SetupView.vue`                                                                                                                                                                                                                                                                      | M01      | first-run setup card/form geometry, branding and states                                                        | source reviewed — current `SetupView.vue:50-137`; mobile browser verification pending                                                                                                                                                                                                                                                                                                                                                                          |
-| `views/SuspendedSshSessionsView.vue`                           | `packages/frontend/src/features/ssh-suspend/components/SuspendedSessionsPanel.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceLayoutRenderer.vue`                                                                                                                                                        | M16      | embedded suspended-session view rows/cards/actions and polling state                                           | pending — mobile owner source review and browser evidence required                                                                                                                                                                                                                                                                                                                                                                                             |
+| `views/SuspendedSshSessionsView.vue`                           | `packages/frontend/src/features/ssh-suspend/components/SuspendedSessionsPanel.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceLayoutRenderer.vue`                                                                                                                                                        | M16      | embedded suspended-session view rows/cards/actions and polling state                                           | source + browser reviewed〔C.12〕— current embedded Panel preserves legacy search/status/inline rename、Resume/Remove/Export actions及320/300px响应式规则；real mobile lifecycle covers no-result search、rename持久化、export网络失败不删entry、真实日志下载、Remove Cancel/Confirm和same-shell resume；polling仍由`useSuspendedSessions`单一controller按3s/429指数backoff/成功恢复拥有，不在runtime复制                                                      |
 | `views/TagsView.vue`                                           | `packages/frontend/src/features/tags/components/ConnectionTagPicker.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceTagGroupManager.vue`                                                                                                                                                                 | M04      | legacy tag-management surface; verify actual baseline usage before deciding exact new placement                | source + browser reviewed〔C.8〕— legacy `/tags` route was already commented out; current reachable ConnectionTagPicker + WorkspaceTagGroupManager flows replace the dead standalone view and passed 360px E2E                                                                                                                                                                                                                                                 |
 | `views/WorkspaceView.vue`                                      | `packages/frontend/src/runtimes/workspace/views/WorkspaceView.vue`<br>`packages/frontend/src/runtimes/workspace/components/WorkspaceSessionSurface.vue`                                                                                                                                                                        | M08      | entire workspace composition, header visibility, sidebar/panes/tools/mobile layout and overlays                | source reviewed — baseline mobile root uses `100dvh`, a min-height-zero terminal area and non-shrinking command/keyboard siblings at `8ceb5840:views/WorkspaceView.vue:761-954`; current root and session surface preserve dynamic viewport height, mobile no-session stacking, single-pane selection and bottom tools at `WorkspaceView.vue:649-809` and `WorkspaceSessionSurface.vue:695-1039`; existing mobile workspace flows are partial browser evidence |
 
@@ -733,7 +937,7 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 
 M03.04主代理F/V/A结论：**F ✅** — 真实邻接E2E 3/3且Clone/batch/RDP/VNC现有能力未因布局修复被删；动作语义的更完整矩阵仍归M03.05。**V ✅** — before记录的320/375身份宽0与动作越界已消除，最终en-US/zh-CN六视口几何6/6及逐图复核通过。**A ✅** — 产品改动保持在Connections当前owner，未引入legacy store/event bus或共享Foundation业务规则；architecture/i18n/vue-tsc/Vite、test-policy、groups与diff检查已有本轮通过证据。临时geometry spec已删除，不新增测试框架或长期截图清单。因此M03.04可标记本地完成；canonical全组仍由M17统一关闭。
 
-模型runner状态没有随浏览器修复改变：本轮AgentDock只暴露文件、命令、浏览器、任务等工具，容器`PATH`中也没有`codex/openai/claude/gemini`，本机`agentdock` CLI无`run/agent`入口。因此无法诚实地产生“本轮新启动的Luna Max session”或真正fresh-reader新模型上下文。已有C.5的Luna max取证仍是可追溯试运行结果，而本次实现验收由主代理完成；§5.4的`BLOCKED(model-runner)`硬门槛继续有效。**产品子任务M03.04已完成不等于§5.5 plan自测已完成**；fresh-reader planning test与新的独立Luna execution trial仍待具备model runner的环境。
+历史环境记录：当时AgentDock只暴露文件、命令、浏览器、任务等工具，容器`PATH`中没有`codex/openai/claude/gemini`，本机`agentdock` CLI无`run/agent`入口，因此该次不能产生新的Luna Max session，M03.04实现验收由主代理完成，不能冒充§5.5自测。**本轮环境已变化**：当前通过 `collaboration.spawn_agent` 可实际启动 `gpt-5.6-luna`/`max`/`fork_turns=none`，已进入新的独立planning试验；不再沿用历史`BLOCKED(model-runner)`作为当前结论。是否通过仍须分别记录fresh-reader与execution实际交付，不能由runner可用或M03.04产品完成推断。
 
 ### C.6 M03 Connections 模块关闭（2026-09-05）
 
@@ -820,6 +1024,43 @@ M15按SRS-STATUS-001与SRS-DOCKER-001/002重新补审旧`StatusMonitor.vue`、`S
 最终关闭run在当前工作树重新执行上述直接矩阵：SSH三文件共 **6/6 passed (29.5s)**，mobile `ssh-workspace.spec.ts` **1/1 passed (8.5s)**。该最终run发生在responsive Docker locator修正之后，因此没有把中间失败拼成最终通过。随后静态门槛重新通过：`git diff --check`、`format:check`、test-policy（65 E2E specs / 28 functional screenshots）、groups（63 specs / 8 groups）；frontend architecture 254 source files、i18n 1694 keys / 3 locales / 81 fragments、`vue-tsc --noEmit`与Vite build（2663 modules）成功；backend architecture 218 files及`tsc` build成功。
 
 M15模块F/V/A结论：**F ✅** — Status live数据、Settings采样间隔、metric/range、本地history state、IP copy、scale持久与open/close sampler生命周期均有当前工作树直接证据；Docker Settings polling/default-expand、list/stats、expand/collapse、start/stop/restart/remove确认、Enter/Logs terminal intent与empty state也全部经过真实UI/WS/remote exec链。**V ✅** — P8恢复的资源cards/water-wave/network/history层级与Docker table→窄card topology未在本轮改产品；legacy mobile modal关键几何原样保留，真实mobile dialog/history/range验证无横溢出。`mobile-status-monitor.png`仍由M17对最终产品SHA统一canonical刷新。**A ✅** — sampler/history/downsampling继续单一归属`features/status-monitor`，Docker polling/action state继续单一归属`features/docker`，Workspace只组合session/terminal intent；本轮没有产品源改动，只增强现有E2E与E2E SSH Docker fixture。故M15自身本地闭环，仅待M17最终产品SHA/canonical统一复核。
+
+### C.12 M16 Remote Desktop / VNC / SSH suspend 模块关闭（2026-09-05）
+
+M16按SRS-RD-001–007与SRS-WS-005重新补审旧`RemoteDesktopModal.vue`、`VncModal.vue`、`SuspendedSshSessionsModal.vue`、`SuspendedSshSessionsView.vue`四个owner。当前RDP/VNC仍只由`features/remote-desktop/RemoteDesktopModal.vue`拥有Guacamole client、window geometry、fullscreen/minimize/restore、resize、keyboard/mouse/touch与clipboard生命周期，VNC只增加协议特定text-send，没有重新拆出第二套session/modal owner；`sendSize()`只向已连接client发display size，不会重新创建session。移动Direct/Touchpad仍只更新`nexus.rdp.touch-mode`并重新绑定touch handler，不调用`connect()`；hidden keyboard sink在composition期间不清空值。SSH suspend继续由`features/ssh-suspend`单一controller拥有list/rename/export/terminate/remove与polling：默认3秒，429指数backoff到60秒，其他错误至少10秒，成功后恢复3秒；Workspace只负责mark/resume组合。legacy suspended modal的`max-w-2xl max-h-[85vh]`和独立body scroll仍保留，Panel继续保留320px标题wrap与300px动作文字隐藏/至少44px icon-only规则。
+
+未增强前的M16直接基线已在同一工作树通过：UI `rdp-remoteapp-fullscreen.spec.ts` **3/3 passed (11.3s)**，mobile `suspend-resume-ui.spec.ts` **1/1 passed (12.7s)**，SSH `suspend-resume.spec.ts` **1/1 passed (4.5s)**，HTTP `rdp-remoteapp.spec.ts` **1/1 passed (3.7s)**。这些基线已证明RemoteApp token参数、browser fullscreen、RDP/VNC pointer resize/minimized restore与mark→reload→same-shell resume主链，但原E2E remote gateway只发token，Guacamole WebSocket从未真正进入CONNECTED，因此旧case只能检查VNC输入/clipboard控件存在，不能拿来宣称协议输出已经验收。
+
+为补该缺口，本轮只增强E2E gateway，不改产品remote-desktop协议。`test-remote-gateway-server.mjs`新增最小Guacamole WebSocket上游：验证真实token query、连接后发送标准`sync`使`guacamole-common-js`进入CONNECTED、echo内部ping保持tunnel健康，并提供一个仅用于“远端向浏览器发送plain-text clipboard stream”的控制入口；测试对host→remote输出直接监听浏览器自己的WebSocket frame，不读取fixture内部消息oracle。第一次实现错误地要求Nexus proxy→上游也携带浏览器侧`guacamole` subprotocol，实际backend透明proxy上游不会重发该subprotocol，导致RDP/VNC显示`socket hang up`；改为按真实上游token query验连接后，同一UI文件 **3/3 passed (11.8s)**。最终case要求RDP/VNC都先显示CONNECTED，再验证host clipboard产生Guacamole clipboard/blob帧、fixture下发remote clipboard后`navigator.clipboard`收到精确文本；VNC还把`VNC`逐字符转换为keysym并验证每个key down/up。RDP RemoteApp/fullscreen/Escape/resize/minimize/restore及VNC pointer window语义原断言均保留。
+
+`mobile/touch-workflows.spec.ts`原有direct/touchpad手势矩阵与IME composition case继续复用；本轮把真实RDP mode case增加`/rdp-session`请求计数：首次打开为1，切Touchpad后仍为1；显式关闭重开才变2，切Direct仍为2；再次显式关闭重开才变3，直接证明mode切换不重连且选择跨重开持久。最终M16 mobile touch closing run三条 **3/3 passed (12.7s)**。现有touch matrix同时覆盖direct tap/long-press/right-click/drag与touchpad move/tap/right-click/two-finger scroll，IME case确认composition期间保留输入并在compositionend后清空。
+
+`suspend-resume-ui.spec.ts`继续使用真实SSH而不是伪造列表：主session先进入`folder-seed`并mark suspend；另建第二个真实marked→WebSocket close的session作为删除对象。仍有活跃Workspace时从真实mobile command bar打开Suspended Sessions modal，验证dialog完全落在viewport且document无横溢出；随后reload将主session交给backend hanging lifecycle。embedded Panel中先做no-result search，再按真实id定位主/删除对象；主session inline rename必须由API读回`E2E Renamed Suspended Shell`。Export先用浏览器真实network abort制造失败，实际反馈为Axios`Network Error`，随后API确认entry仍在；解除abort后真实download filename符合backend`ssh_log_*.log`并读取到`suspend`前终端内容。删除对象第一次Remove→Cancel后entry仍在，第二次Confirm后API与row都消失；最后主session Resume后必须回到原shell并继续显示`folder-seed`。增强case最终 **1/1 passed (13.9s)**。调试中一度把modal入口检查放在reload之后，此时按产品设计已无active session、mobile Command Bar不会渲染，故入口locator超时；把几何检查移回有active session的真实可达时机后通过，此前超时不计产品失败。Export失败最初断言fallback长文案也过窄，实际`apiErrorMessage`正确返回`Network Error`，修正断言后完整链通过。
+
+最终M16 closing run发生在上述fixture/locator修正之后：Remote Desktop UI **3/3 passed (11.4s)**，mobile touch/IME/mode **3/3 passed (12.7s)**，mobile suspend lifecycle **1/1 passed (13.8s)**，SSH suspend protocol **1/1 passed (4.4s)**，HTTP RemoteApp **1/1 passed (3.7s)**，合计 **9/9**。随后静态门槛重新通过：`git diff --check`、`format:check`、test-policy（65 E2E specs / 28 functional screenshots）、groups（63 specs / 8 groups）；frontend architecture 254 source files、i18n 1694 keys / 3 locales / 81 fragments、`vue-tsc --noEmit`与Vite build（2663 modules）成功；backend architecture 218 files及`tsc` build成功。用户要求保留的`/tmp/nexus-pw-libs`、`/tmp/nexus-pw-fonts.conf`、`/tmp/nexus-e2e-env.sh`与`/tmp/nexus-e2e-tools`继续保留。
+
+M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscreen/minimize/restore、RDP/VNC双向clipboard、VNC text-send、touch mode不重连持久、touch/IME，以及Suspend mark→reload→same-shell resume、search/rename/export失败保留/真实下载、active remove确认均有当前工作树直接证据；clipboard权限失败、disconnected entry remove、429 polling backoff/成功恢复由当前owner源码补审确认，未另造产品test hook。**V ✅** — P8恢复的RDP/VNC统一window/header/canvas/footer与mobile两行footer未在本轮改产品；真实pointer resize/minimized restore继续通过，mobile Suspended modal实际viewport/document几何通过，Panel窄容器规则与legacy源码一致。M17仍负责最终产品SHA下的相关canonical截图统一刷新。**A ✅** — Guacamole client/session仍单一归属`features/remote-desktop`，ssh-suspend list/polling/action仍单一归属`features/ssh-suspend`，Workspace只路由入口与resume组合；本轮没有修改产品源，只增强E2E gateway与现有E2E case，不新增global event bus、第二remote owner或测试专用应用接口。故M16自身本地闭环，仅待M17最终产品SHA/canonical统一复核。
+
+### C.13 新环境 Luna max 小功能交接试验（2026-09-05，小切片本地通过）
+
+本轮用户要求重新同步远端，并分别验证“新模型仅读plan能拆任务/写prompt/写验收卡”及“Luna max按任务包实现一个小功能”。同步结果见§0.2，未提交或推送。模型runner已实际可用，不继承C.5历史阻塞结论。
+
+- 目标：M01.03 普通密码登录失败提示→正确密码重试的小切片；继承M01.01，排除2FA/CAPTCHA/passkey全矩阵、真实软键盘以及整个M01模块关闭。仅有实际差异证据才改当前auth展示owner；不为证明模型能编码而制造改动。
+- Planning v1：`/root/fresh_luna_planner_v1`，`gpt-5.6-luna`/`max`/无历史上下文。未取得完整交付前由主代理中止，不算通过，也不判定产品失败。主代理独立审计期间发现计划接续顺序、runner及环境描述过期，先修正文档再启动fresh-reader v2。
+- Planning v2：`/root/fresh_luna_planner_v2`，同模型与推理等级，`fork_turns=none`；报告 `/tmp/nexus-fresh-luna-v2.md`。能正确继承已完成项、保护dirty、发现既有`ui/session-lifecycle.spec.ts`失败登录case并生成可读的prompt/验收卡；但将320/375px推到后续任务，本次V只要求可读可点，未形成旧样式对照，且实际运行命令只放在卡片未内嵌prompt。**主代理不通过该执行包**，未交实现，未把它算产品失败。
+- 根据v2实际反馈已在M01正式契约明确：三个viewport同切片、普通密码的安全前提、401→同页修正→200完整流程、服务器错误文案保留、旧源码/computed style与几何对照、M01.01继承不禁止修复具体回归、测试复用与输出路径、跨owner升级格式；§5.1.1补充禁止通过拆分排除必需验收，并要求完整prompt内嵌命令。
+- Planning v3：`/root/fresh_luna_planner_v3`，`gpt-5.6-luna`/`max`/`fork_turns=none`，只读更新后的plan与仓库，不读取v2报告；已交付 `/tmp/nexus-fresh-luna-v3.md` 与纯prompt `/tmp/nexus-fresh-luna-v3-prompt.txt`。主代理逐项核查继承状态、owner/dirty边界、401→同页重试→200、三个viewport、旧样式/computed style、实际命令/产物及停止条件，**选中执行包planning验收通过**，无需口头补充产品细节。
+- Execution：`/root/luna_m0103a_execution`，`gpt-5.6-luna`/`max`/`fork_turns=none`，独占浏览器与测试服务，已交付 `/tmp/nexus-m0103a-execution-report.md`；主代理未代做实现，已独立读diff、三个after图及全部before/after metrics，**M01.03-a本地F/V/A通过**。该结论包含下述纠错，不是首次无指导通过。
+- Execution首轮未通过：只做预检与`--list`（2 cases），因把通用`GPT-5`系统身份/子代理无模型CLI误解为runner失败而停止，没有产品修改或浏览器证据。主代理已有实际`spawn_agent(model=gpt-5.6-luna, reasoning_effort=max, fork_turns=none)`成功返回的canonical；已将调度凭据与执行身份分离写入§5.2注意事项11及§5.4，不要求子代理自行证明底层型号或再启动模型。修正后的完整任务包为`/tmp/nexus-m0103a-execution-prompt-v4.txt`，交同一Luna继续；该轮不是产品失败，也不算execution通过。
+- 独立机械审计：`/root/trial_validation_audit`（Sol）确认附录A的98项与旧Git Vue集合精确相等、附录B为28项、模块18个且7个本地闭环，26个相对Markdown链接可解析；报告 `/tmp/nexus-trial-plan-audit.md`。预检已有auth spec可发现2个case，未将`--list`计为浏览器通过。
+- 已修订正式规则：恢复§5.5优先级，去除重复开发已闭环模块的旧顺序；dirty保护清单仅是快照、执行前重新核查；格式化严格限定本任务允许文件；临时环境先探测、不source失效文件；历史runner阻塞与当前可用状态分开。
+- 实际修复：仅`features/auth/views/LoginView.vue`错误块恢复旧`-mt-2 mb-2`，保留`role=alert`和全部认证逻辑；旧同版Tailwind层叠支持这两类实际生效。三个viewport的before margin均为`0px 0px 20px`，after均为`-8px 0px 8px`，字号14px/行高20px/字重400/错误色`rgb(220,53,69)`保持。V证据为旧源码推导+当前真实图，非旧新像素一致；完整login表单/全局header不在此次视觉关闭范围。
+- 持久E2E：扩展既有`ui/session-lifecycle.spec.ts`为三个viewport失败→同页仅改密码重试，保留logout/保护路由。两次UI POST为401→200，两次auth/status为401→200，Dashboard/user正确；真实英文label确认、CAPTCHA/passkey关闭、Remember Me可操作、目标文字/bbox不裁切，并在主代理要求后补error margin的实际断言，避免只有metrics没有回归检查。
+- 实际定向命令（cwd=`test/e2e`）：`npx playwright test tests/ui/session-lifecycle.spec.ts --project=ui --output=/tmp/nexus-m0103a-session-final-20260905`，exit0，**4/4 passed (12.4s)**；`npx playwright test tests/auth/setup-login.spec.ts --project=auth --output=/tmp/nexus-m0103a-auth-final-20260905`，exit0，**2/2 passed (7.1s)**。before和after每个viewport各1/1，产物在`/tmp/nexus-m0103a-{before,after}-{1280x800,320x667,375x812}`；最终三份图/metrics/flow在session-final各case目录。成功run按现配置无trace，但真实截图/metrics/响应结果齐备。
+- 执行偏差与规则提炼：首次locator/wait路径错误由Luna修复；主代理提醒旧样式对照与补持久视觉断言后继续完成。一次误用root npm wrapper未正确转发参数，额外跑了全UI **38/38 passed (1.9m)**，不计本切片必需证据；后改为直接Playwright明确spec/output。§5.6/5.7因此明确完整命令、限制调查/测试范围、视觉回归断言、进度节点、轻量取证和失败分类。并非无人监督或首次即可靠，后续Luna max主代理必须执行相同独立验收职责。
+- 静态：Luna交付frontend build（包含architecture/i18n/vue-tsc/Vite）、test-policy、groups（63 specs/8 groups）、git diff --check均exit0；其format:check当时仅plan格式失败，主代理随后委派`/root/luna_doc_final_check`（Luna low）限定plan格式化及检查通过。主代理SHA256对比确认27个非plan既有dirty文件全部未变；本轮仅新增允许的两个auth相关改动，不覆盖其他模块。
+- 通用主代理冷读模拟：`/root/luna_lead_protocol_review`（Luna max，无历史）从§5.6/5.7选择非M01的M07候选，只做planning。首轮发现台账/资源记录缺口，且low承担实现、V缺旧属性、fixture不支持误作不适用；已写回正式规则并重审报告`/tmp/nexus-luna-lead-protocol-review.md`。修订后能按规则分发、区分剩余取证与计划缺口；这是协议模拟，不是M07实现通过。
+- 本试验适用用户结果仅M01.03-a，局部闭环1/1；不能推断全项目或Luna团队已完成90%以上。§5.7给出可复制Luna max主代理提示词、仅Luna各等级分工、冻结分母的统计方法及剩余风险交接。下一步由新主代理按协议选择其余未闭环结果；M01.03仍部分完成，模块计数保持7/18，M17最终canonical仍待完成。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
