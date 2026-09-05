@@ -156,7 +156,7 @@
 | M00.01 | ✅ 已完成〔C.1/P1〕 | 恢复全局 FontAwesome、header/nav/logo、背景/边框/输入焦点禁用态、基础页面几何和 terminal fallback；保留 app bootstrap                      |
 | M00.02 | ✅ 已完成〔C.1/P2〕 | 恢复 alert/confirm/toast 位置、尺寸、图标、时序和 overlay；feedback 状态留在 shared owner                                                  |
 | M00.03 | ◐ 部分完成          | 复核 tokens/default theme、CSS 加载、图片 intrinsic size、favicon/PWA 与旧基线；附录 D 非 Vue 表逐项给最终结论，不能仅沿用初始“应修复”文字 |
-| M00.04 | ⏳ 待验收           | 320px/375px/桌面检查 header、输入、菜单、dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus恢复；不统一覆盖各业务 modal 尺寸       |
+| M00.04 | ◐ 部分完成〔C.15〕 | 320/375/桌面 header/nav 内滚动、active indicator 与右侧 actions 已按旧UI恢复；输入、菜单、dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus恢复仍待逐项差异验收 |
 
 **验收/架构**：公共原语仍无产品状态；共用改动验证所有受影响模块，不只打开单个弹窗。复用 `ui/protected-navigation.spec.ts`、`ui/dashboard-workflows.spec.ts`、`mobile/dashboard-mobile.spec.ts` 和自然 dialog/feedback 场景；截图归 `dashboard-home.png` 等现有检查点。
 
@@ -1079,6 +1079,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M05.04-d` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/ip-whitelist-settings.spec.ts`与`ui/ip-blacklist-settings.spec.ts`；真实白名单多行保存/清空/reload、黑名单启停/阈值校验/真实失败登录封禁/确认删除 **2/2**，桌面与320px截图/metrics、architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04d-run-20260905/final2`，主代理提交`9b885ad3`。M05仍需备份/独立导入导出及移动专项。
 - `M05.04-e` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/backup-ui.spec.ts`与`http/backup.spec.ts`；真实加密备份下载/文件选择器导入、恢复/认证保持、错误密码 **2/2**，桌面与320/375px截图/metrics无横溢出；发现并修复新架构`AppHeader.vue`窄屏全局溢出（待M00单独归档），证据`/tmp/nexus-m05-04e-run-20260905/final10`，主代理提交`9ad434fe`。M05仍需移动专项、passkey登录与连接导出。
 - `M05 UI diff-audit` → `/root/luna_m05_captcha`（Luna max）：对照旧`IpWhitelistSettings.vue`确认当前`IpAccessPanel.vue`白名单 textarea 缺失 `font-mono`，在新 security owner 内最小补齐；主代理提交`5580189b`。其余未闭环项继续按C.15产品优先处理。
+- `M00.04-a` → `/root/luna_m07_delivery`（Luna max）：对照旧`8ceb5840` App.vue/header，修复新架构`AppHeader.vue`窄屏 primary-nav shrink/auto-scroll 与 active underline 裁切；320/375/1280 header 及既有页面邻接差异验收通过，主代理提交`a96c7545`。M00仍需输入、dialog/footer、嵌套overlay与focus恢复差异。
 - `M08.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/reconnect-ui.spec.ts`；真实三SSH session新增/切换且shell marker保留、tab滚动/长按context、Close Other Tabs、关闭至移动空Workspace **1/1**，reconnect suite **2/2**，suspend/resume邻接 **1/1**，412×915截图/metrics与test-policy/Prettier/diff通过，证据`/tmp/nexus-m08-03-final-20260905-004`，主代理提交`6b590cad`。M08仍需resize/layout锁定、焦点/sidebar滚动及叠层验收。
 - `M09.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/quick-command-management.spec.ts`并复跑`quick-command-tags-variables`、`command-history-management`；真实命令CRUD/search/execute/edit/delete、tag变量替换/rename、History copy/rerun/delete **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m09-03-final-20260905-007`，主代理提交`12330364`。M09仍需多session执行、命令栏键盘与失败反馈。
 - `M10.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/terminal-ui.spec.ts`并复跑`terminal-tools-ui`；真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、shell命令/cwd持久 **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m10-03-final-20260905-004`，主代理提交`4f97e7be`。M10仍需复制选择、搜索、修饰键/IME、虚拟键盘及移动专项。
