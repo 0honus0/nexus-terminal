@@ -235,6 +235,7 @@
 
       <div class="editor-actions">
         <select
+          data-testid="file-editor-encoding"
           :value="selectedEncoding"
           class="encoding-select"
           :title="t('fileManager.changeEncodingTooltip')"
@@ -244,6 +245,7 @@
           <option v-for="option in encodingOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
         </select>
         <select
+          data-testid="file-editor-line-ending"
           :value="currentLineEnding"
           class="encoding-select line-ending-select"
           :title="t('fileEditor.lineEnding')"

@@ -194,8 +194,8 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'utf16-crlf.txt').dblclick();
     const editor = editorView(page);
     await expect(editor).toBeVisible();
-    const encoding = editor.getByTitle('Encoding', { exact: true });
-    const lineEnding = editor.getByTitle('Line ending', { exact: true });
+    const encoding = editor.getByTestId('file-editor-encoding');
+    const lineEnding = editor.getByTestId('file-editor-line-ending');
     const viewLines = editor.locator('.monaco-editor .view-lines');
 
     await expect.poll(async () => viewLines.innerText()).toContain('ENCODING_E2E');
@@ -216,7 +216,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await row(page, 'utf16-crlf.txt').dblclick();
     const reopened = editorView(page);
     await expect(reopened).toBeVisible();
-    await expect(reopened.getByTitle('Line ending', { exact: true })).toHaveValue('lf');
+    await expect(reopened.getByTestId('file-editor-line-ending')).toHaveValue('lf');
     await expect.poll(async () => reopened.locator('.monaco-editor .view-lines').innerText()).toContain('SECOND_LINE');
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
