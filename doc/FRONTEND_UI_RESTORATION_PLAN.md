@@ -267,7 +267,7 @@
 | ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M08.01 | ✅ 已完成〔C.1/P4〕 | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建               |
 | M08.02 | ◐ 部分完成          | P4 16行源码审计全部有记录；mobile单pane、100dvh、非收缩工具栏、隐藏desktop sidebars与旧设计对应，浏览器只覆盖具体流程                            |
-| M08.03 | ⏳ 待验收           | 多session新增/切换/关闭/恢复、tab横滚/长按context、resize/layout锁定/焦点顺序、sidebar滚动、空状态/断连；同一session数据不因presentation切换重建 |
+| M08.03 | ◐ 部分完成〔C.14-h〕 | 真实三session新增/切换/终端状态保留、移动tab横滚/长按context、Close Other/关闭至空壳已通过；恢复/断连邻接通过，resize/layout锁定/焦点/sidebar滚动仍待验收 |
 | M08.04 | ⏳ 待验收           | modal/editor/preview/progress/remote叠层、窗口高度变化和虚拟键盘下不遮关键操作；桌面配置器在mobile无入口的事实保留为不适用证据                   |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
@@ -1076,6 +1076,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M05.04-b` → `/root/luna_m05_captcha`（Luna max）：`CaptchaPanel.vue`与既有`captcha-settings.spec.ts`完成真实hCaptcha/reCAPTCHA保存、切换、reload、secret不回显及禁用恢复`none` **1/1**；报告`/tmp/nexus-m05-04b-report.md`，主代理提交`7f9e103e`。M05仍需IP策略、备份及独立导入导出。
 - `M05.04-c` → `/root/luna_m05_captcha`（Luna max）：扩展既有`change-password.spec.ts`与`http/auth-2fa.spec.ts`；虚拟Authenticator真实passkey注册/命名/reload/删除 **1/1**，2FA API+Security UI **2/2**，桌面截图/metrics与architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04c-run-20260905`，主代理提交`40c8f468`。IP策略、备份及passkey登录/移动专项仍待验收。
 - `M05.04-d` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/ip-whitelist-settings.spec.ts`与`ui/ip-blacklist-settings.spec.ts`；真实白名单多行保存/清空/reload、黑名单启停/阈值校验/真实失败登录封禁/确认删除 **2/2**，桌面与320px截图/metrics、architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04d-run-20260905/final2`，主代理提交`9b885ad3`。M05仍需备份/独立导入导出及移动专项。
+- `M08.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/reconnect-ui.spec.ts`；真实三SSH session新增/切换且shell marker保留、tab滚动/长按context、Close Other Tabs、关闭至移动空Workspace **1/1**，reconnect suite **2/2**，suspend/resume邻接 **1/1**，412×915截图/metrics与test-policy/Prettier/diff通过，证据`/tmp/nexus-m08-03-final-20260905-004`，主代理提交`6b590cad`。M08仍需resize/layout锁定、焦点/sidebar滚动及叠层验收。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
