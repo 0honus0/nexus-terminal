@@ -418,17 +418,38 @@
     overflow: hidden;
   }
   :deep(.splitpanes__splitter) {
-    background: var(--border-color);
     position: relative;
+    z-index: 5;
+    box-sizing: border-box;
+    background: transparent !important;
+    background-image: none !important;
+  }
+  :deep(.splitpanes__splitter::before) {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--border-color);
+    transition: background-color 0.1s ease-in-out;
+  }
+  :deep(.splitpanes__splitter:hover::before) {
+    background: var(--primary-light-color, var(--primary-color));
+  }
+  :deep(.splitpanes__splitter::after) {
+    display: none !important;
   }
   .workspace-split--locked :deep(.splitpanes__splitter) {
     pointer-events: none;
     cursor: default;
   }
+  .workspace-split--locked :deep(.splitpanes__splitter::before) {
+    background: var(--border-color);
+  }
   :deep(.splitpanes--vertical > .splitpanes__splitter) {
-    width: 4px;
+    width: 1px !important;
   }
   :deep(.splitpanes--horizontal > .splitpanes__splitter) {
-    height: 4px;
+    height: 1px !important;
   }
 </style>
