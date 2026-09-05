@@ -92,8 +92,8 @@
       width.value = Math.min(416, availableWidth());
       height.value = Math.min(320, availableHeight());
       position.value = {
-        x: Math.max(8, window.innerWidth - width.value - 48),
-        y: Math.max(8, window.innerHeight - height.value - 24),
+        x: 16,
+        y: Math.max(8, window.innerHeight - height.value - 16),
       };
     }
     clampWindow();
