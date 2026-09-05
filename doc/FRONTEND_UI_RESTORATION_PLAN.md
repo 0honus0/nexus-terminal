@@ -304,7 +304,7 @@
 | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M11.01 | ✅ 已完成〔C.1/P6〕  | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
 | M11.02 | ◐ 部分完成           | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
-| M11.03 | ◐ 部分完成〔C.14-c/e/g/j〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；权限/下载失败/archive及移动专项仍待验收 |
+| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；旧版目录置顶行为已恢复，权限/下载失败/archive及移动专项仍待验收 |
 | M11.04 | ⏳ 待验收            | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
@@ -1074,6 +1074,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M11.03-c` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`；真实桌面拖放`move-source.txt`到`folder-seed`、任务完成后刷新并验证源目录消失/目标目录出现 **1/1**，1280×720 modal/list 无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03c/`，主代理提交`f5749f8e`。M11仍需权限/下载/剪贴板/多选/上传/archive及移动端边界。
 - `M11.03-d` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`；真实桌面两文件多选Copy→Paste与两文件Cut→Paste、目标刷新及源删除 **1/1**，1280×720 modal/list 无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03d/`，主代理提交`dbc7855c`。M11仍需权限/下载/upload/archive、失败边界及移动专项。
 - `M11.03-e` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`ssh/file-upload.spec.ts`；真实`/folder-seed`文件选择器上传、可见Queued→Running→Completed、Refresh后显示及精确字节下载 **1/1**，1280×720 modal/list/progress无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03e/`，主代理提交`5a591d13`。M11仍需权限/下载失败/archive及移动专项。
+- `M11 UI diff-audit` → `/root/luna_m11_filesystem`（Luna max）：对照旧`FileManager.vue:600-604`确认非类型排序目录始终置顶；在新`useFilesystemBrowser.ts`补齐目录优先比较，升/降序组内排序保持，主代理提交`64e26705`。其余文件操作/移动差异继续收口。
 - `M05.04-b` → `/root/luna_m05_captcha`（Luna max）：`CaptchaPanel.vue`与既有`captcha-settings.spec.ts`完成真实hCaptcha/reCAPTCHA保存、切换、reload、secret不回显及禁用恢复`none` **1/1**；报告`/tmp/nexus-m05-04b-report.md`，主代理提交`7f9e103e`。M05仍需IP策略、备份及独立导入导出。
 - `M05.04-c` → `/root/luna_m05_captcha`（Luna max）：扩展既有`change-password.spec.ts`与`http/auth-2fa.spec.ts`；虚拟Authenticator真实passkey注册/命名/reload/删除 **1/1**，2FA API+Security UI **2/2**，桌面截图/metrics与architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04c-run-20260905`，主代理提交`40c8f468`。IP策略、备份及passkey登录/移动专项仍待验收。
 - `M05.04-d` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/ip-whitelist-settings.spec.ts`与`ui/ip-blacklist-settings.spec.ts`；真实白名单多行保存/清空/reload、黑名单启停/阈值校验/真实失败登录封禁/确认删除 **2/2**，桌面与320px截图/metrics、architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04d-run-20260905/final2`，主代理提交`9b885ad3`。M05仍需备份/独立导入导出及移动专项。
