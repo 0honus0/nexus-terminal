@@ -70,11 +70,7 @@ const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator
 const pdfCurrentPage = (dialog: Locator): Locator =>
   dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
-const pdfZoomLabel = (dialog: Locator): Locator =>
-  dialog
-    .locator('.pdf-toolbar')
-    .getByText(/^\d+%$/)
-    .first();
+const pdfZoomLabel = (dialog: Locator): Locator => dialog.getByTestId('pdf-zoom-label');
 const previewHorizontalScrollbar = (dialog: Locator): Locator =>
   dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
 const spreadsheetScroller = (dialog: Locator): Locator =>

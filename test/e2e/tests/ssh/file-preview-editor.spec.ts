@@ -42,11 +42,7 @@ const waitForScrollToSettle = async (scroller: Locator): Promise<void> => {
 };
 const visiblePdfPageCount = (dialog: Locator): Locator => dialog.locator('[data-testid="pdf-page-count"]:visible');
 const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
-const pdfZoomLabel = (dialog: Locator): Locator =>
-  dialog
-    .locator('.pdf-toolbar')
-    .getByText(/^\d+%$/)
-    .first();
+const pdfZoomLabel = (dialog: Locator): Locator => dialog.getByTestId('pdf-zoom-label');
 const previewHorizontalScrollbar = (dialog: Locator): Locator =>
   dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
 const spreadsheetScroller = (dialog: Locator): Locator =>
@@ -272,7 +268,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(previewSearchCount(dialog, '1/2')).toHaveText('1/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await expect(dialog.locator('mark[data-preview-search-active]')).toHaveText('target');
-    await previewSearchControls(dialog).getByRole('button', { name: '↓', exact: true }).click();
+    await dialog.getByTestId('preview-search-next').click();
     await expect(previewSearchCount(dialog, '2/2')).toHaveText('2/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('3');
     await dialog.getByTitle('Close search', { exact: true }).click();
@@ -539,7 +535,7 @@ test('preview close button preserves cached tabs when popup file editing is disa
     await row(page, 'preview.pdf').dblclick();
     const pdfDialog = documentPopup(page);
     await expect(pdfDialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await pdfDialog.getByTitle('Next page', { exact: true }).click();
+    await pdfDialog.getByTestId('pdf-next-page').click();
     await expect(pdfCurrentPage(pdfDialog)).toHaveValue('2');
     await hidePreview(page, 'preview.pdf');
 
@@ -584,7 +580,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
     await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-    await dialog.getByTitle('Next page', { exact: true }).click();
+    await dialog.getByTestId('pdf-next-page').click();
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
     await hidePreview(page, filename);
   });
