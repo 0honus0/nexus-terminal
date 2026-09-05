@@ -3,7 +3,7 @@
   import Guacamole from 'guacamole-common-js';
   import type { Client, Event as GuacamoleEvent, Keyboard, Mouse, Status } from 'guacamole-common-js';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseInput, BaseSpinner, OverlayPanel } from '@/foundation/ui';
+  import { OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
@@ -41,6 +41,16 @@
   const mobileKeyboardInput = ref<HTMLTextAreaElement | null>(null);
   const state = ref<RemoteDesktopState>('idle');
   const stateLabel = computed(() => t(`remoteDesktopModal.status.${state.value}`));
+  const windowTitle = computed(() =>
+    props.connection?.type === 'VNC' ? t('vncModal.title') : t('remoteDesktopModal.title'),
+  );
+  const connectionLabel = computed(() => props.connection?.name || t('remoteDesktopModal.titlePlaceholder'));
+  const stateBadgeClass = computed(() => {
+    if (state.value === 'connected') return 'bg-green-200 text-green-800';
+    if (state.value === 'connecting') return 'bg-yellow-200 text-yellow-800';
+    if (state.value === 'error') return 'bg-red-200 text-red-800';
+    return 'bg-gray-200 text-gray-800';
+  });
   const message = ref('');
   const fullscreen = ref(false);
   const minimized = ref(false);
@@ -445,13 +455,13 @@
       ref="restoreButton"
       type="button"
       :data-testid="connection?.type === 'VNC' ? 'vnc-window-restore' : 'rdp-window-restore'"
-      class="fixed z-[100] grid h-12 w-12 cursor-grab place-items-center rounded-full bg-primary text-white shadow-lg active:cursor-grabbing"
+      class="fixed z-[100] flex h-[50px] w-[50px] cursor-grab items-center justify-center rounded-full bg-primary text-white shadow-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 active:cursor-grabbing"
       :style="{ left: `${restorePosition.x}px`, top: `${restorePosition.y}px` }"
       :title="t('remoteDesktopModal.restoreWindow')"
       @pointerdown="restoreDrag.startDragging"
       @click="handleRestoreClick"
     >
-      <i class="fas fa-window-restore" aria-hidden="true"></i>
+      <i class="fas fa-window-restore fa-lg" aria-hidden="true"></i>
     </button>
   </Teleport>
 
@@ -468,69 +478,69 @@
       :data-testid="connection?.type === 'VNC' ? 'vnc-panel' : 'remote-desktop-panel'"
       role="dialog"
       aria-modal="true"
-      :aria-label="connection?.name || t('remoteDesktopModal.title')"
+      :aria-label="connection?.name || windowTitle"
       :style="modalPanelStyle"
-      class="relative flex min-h-0 max-w-full flex-col overflow-hidden bg-black text-foreground"
+      class="remote-desktop-panel pointer-events-auto relative flex min-h-0 max-w-full flex-col overflow-hidden text-foreground"
       :class="
-        fullscreen ? 'h-screen w-screen rounded-none border-0 shadow-none' : 'rounded-lg border border-border shadow-xl'
+        fullscreen
+          ? 'remote-desktop-panel-fullscreen rounded-none border-0 bg-black shadow-none'
+          : 'rounded-lg border border-border bg-background shadow-xl'
       "
     >
       <header
         v-if="!fullscreen"
         :data-testid="connection?.type === 'VNC' ? 'vnc-window-header' : 'rdp-window-header'"
-        class="flex flex-wrap items-center justify-between gap-2 bg-header px-3 py-2 text-foreground"
+        class="flex shrink-0 items-center justify-between border-b border-border p-3"
       >
-        <span class="min-w-0 truncate">
-          {{ connection?.name || t('remoteDesktopModal.title') }} · {{ connection?.type }} · {{ message }}
-        </span>
-        <div class="flex flex-wrap items-center gap-1">
-          <template v-if="device.hasTouch.value">
-            <span class="px-1 text-xs text-text-secondary">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
-            <BaseButton
-              size="sm"
-              :variant="touchMode === 'direct' ? 'primary' : 'ghost'"
-              :aria-pressed="touchMode === 'direct'"
-              :title="t('remoteDesktopModal.touchHintDirect')"
-              @click="setTouchMode('direct')"
-            >
-              {{ t('remoteDesktopModal.touchModeDirect') }}
-            </BaseButton>
-            <BaseButton
-              size="sm"
-              :variant="touchMode === 'touchpad' ? 'primary' : 'ghost'"
-              :aria-pressed="touchMode === 'touchpad'"
-              :title="t('remoteDesktopModal.touchHintTouchpad')"
-              @click="setTouchMode('touchpad')"
-            >
-              {{ t('remoteDesktopModal.touchModeTouchpad') }}
-            </BaseButton>
-          </template>
-          <BaseButton size="sm" :disabled="state === 'connecting'" @click="connect">{{
-            t('common.reconnect')
-          }}</BaseButton>
-          <BaseButton data-testid="rdp-browser-fullscreen" size="sm" @click="toggleFullscreen">
-            {{ fullscreen ? t('common.exitFullscreen') : t('common.fullscreen') }}
-          </BaseButton>
-          <BaseButton
+        <h3 class="min-w-0 truncate text-base font-semibold">
+          <i
+            :class="connection?.type === 'VNC' ? 'fas fa-plug' : 'fas fa-desktop'"
+            class="mr-2 text-text-secondary"
+            aria-hidden="true"
+          ></i>
+          {{ windowTitle }} - {{ connectionLabel }}
+        </h3>
+        <div class="ml-2 flex shrink-0 items-center space-x-1">
+          <span class="rounded px-2 py-0.5 text-xs" :class="stateBadgeClass">{{ stateLabel }}</span>
+          <button
+            :data-testid="connection?.type === 'VNC' ? 'vnc-browser-fullscreen' : 'rdp-browser-fullscreen'"
+            type="button"
+            class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+            :title="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+            :aria-label="fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
+            @click="toggleFullscreen"
+          >
+            <i :class="fullscreen ? 'fas fa-compress fa-sm' : 'fas fa-expand fa-sm'" aria-hidden="true"></i>
+          </button>
+          <button
             :data-testid="connection?.type === 'VNC' ? 'vnc-window-minimize' : 'rdp-window-minimize'"
-            size="sm"
-            variant="ghost"
+            type="button"
+            class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
             :title="t('common.minimize')"
+            :aria-label="t('common.minimize')"
             @click="minimize"
           >
-            <i class="fas fa-window-minimize" aria-hidden="true"></i>
-          </BaseButton>
-          <BaseButton
+            <i class="fas fa-window-minimize fa-sm" aria-hidden="true"></i>
+          </button>
+          <button
             :data-testid="connection?.type === 'VNC' ? 'vnc-window-close' : 'rdp-window-close'"
-            size="sm"
+            type="button"
+            class="rounded p-1 text-text-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+            :title="t('common.close')"
+            :aria-label="t('common.close')"
             @click="closeModal"
-            >{{ t('common.close') }}</BaseButton
           >
+            <i class="fas fa-times fa-lg" aria-hidden="true"></i>
+          </button>
         </div>
       </header>
 
-      <div class="relative min-h-0 flex-1 overflow-hidden" :class="fullscreen ? 'h-full' : ''">
-        <div ref="display" class="h-full w-full overflow-hidden"></div>
+      <div class="relative min-h-0 flex-1 overflow-hidden bg-black" :class="fullscreen ? 'h-full' : ''">
+        <div
+          ref="display"
+          :data-testid="connection?.type === 'VNC' ? 'vnc-display-container' : 'rdp-display-container'"
+          class="remote-display-container h-full w-full overflow-hidden"
+        ></div>
         <textarea
           v-if="device.hasTouch.value"
           ref="mobileKeyboardInput"
@@ -546,71 +556,138 @@
           @compositionend="endMobileComposition"
           @input="clearMobileInput"
         ></textarea>
-        <div v-if="state === 'connecting'" class="absolute inset-0 z-10 grid place-items-center bg-black/60">
-          <BaseSpinner />
-        </div>
-        <div v-if="state === 'error'" class="absolute inset-0 z-10 grid place-items-center bg-black/75 p-4 text-white">
-          <div class="max-w-lg text-center">
+        <div
+          v-if="state === 'connecting' || state === 'error'"
+          class="absolute inset-0 z-10 flex items-center justify-center bg-black/75 p-4 text-white"
+        >
+          <div class="text-center">
+            <i v-if="state === 'connecting'" class="fas fa-spinner fa-spin fa-2x mb-3" aria-hidden="true"></i>
+            <i v-else class="fas fa-exclamation-triangle fa-2x mb-3 text-red-400" aria-hidden="true"></i>
             <p class="text-sm">{{ message }}</p>
-            <BaseButton class="mt-4" size="sm" @click="connect">{{ t('common.retry') }}</BaseButton>
+            <button
+              v-if="state === 'error'"
+              type="button"
+              class="mt-4 rounded bg-primary px-3 py-1 text-xs text-white hover:bg-primary-dark"
+              @click="connect"
+            >
+              {{ t('common.retry') }}
+            </button>
           </div>
         </div>
-      </div>
-
-      <div
-        v-if="!fullscreen && connection?.type === 'VNC'"
-        class="flex shrink-0 items-center gap-2 border-t border-border bg-header px-3 py-2"
-      >
-        <BaseInput
-          v-model="vncText"
-          class="min-w-0 flex-1"
-          :placeholder="t('vncModal.textInputPlaceholder')"
-          @focus="vncTextFocused = true"
-          @blur="releaseVncTextFocus"
-          @keyup.enter.prevent="sendVncText"
-        />
-        <BaseButton
-          size="sm"
-          :disabled="state !== 'connected' || !vncText.trim()"
-          :title="t('vncModal.sendButtonTitle')"
-          @mousedown.prevent
-          @click="sendVncText"
-        >
-          {{ t('common.send') }}
-        </BaseButton>
       </div>
 
       <footer
         v-if="!fullscreen"
         :data-testid="connection?.type === 'VNC' ? 'vnc-window-footer' : 'rdp-window-footer'"
-        class="flex shrink-0 flex-wrap items-center justify-between gap-2 bg-header px-3 py-1 text-xs text-text-secondary"
+        class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-header p-2 text-xs text-text-secondary"
       >
-        <span>{{ stateLabel }}</span>
-        <div class="flex items-center gap-2">
-          <label class="flex items-center gap-1">
-            <span>{{ t('common.width') }}</span>
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div v-if="device.hasTouch.value" class="flex min-w-0 flex-col gap-1">
+            <div class="flex items-center gap-1.5">
+              <span class="shrink-0 text-[11px] text-text-muted">{{ t('remoteDesktopModal.touchModeLabel') }}</span>
+              <div
+                class="inline-flex overflow-hidden rounded border border-border"
+                role="group"
+                :aria-label="t('remoteDesktopModal.touchModeLabel')"
+              >
+                <button
+                  type="button"
+                  class="px-2 py-1 text-[11px] transition-colors"
+                  :class="
+                    touchMode === 'direct' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-hover'
+                  "
+                  :aria-pressed="touchMode === 'direct'"
+                  :title="t('remoteDesktopModal.touchHintDirect')"
+                  @click="setTouchMode('direct')"
+                >
+                  <i class="fas fa-hand-pointer mr-1" aria-hidden="true"></i
+                  >{{ t('remoteDesktopModal.touchModeDirect') }}
+                </button>
+                <button
+                  type="button"
+                  class="border-l border-border px-2 py-1 text-[11px] transition-colors"
+                  :class="
+                    touchMode === 'touchpad' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-hover'
+                  "
+                  :aria-pressed="touchMode === 'touchpad'"
+                  :title="t('remoteDesktopModal.touchHintTouchpad')"
+                  @click="setTouchMode('touchpad')"
+                >
+                  <i class="fas fa-arrows-up-down-left-right mr-1" aria-hidden="true"></i
+                  >{{ t('remoteDesktopModal.touchModeTouchpad') }}
+                </button>
+              </div>
+            </div>
+            <span class="text-[10px] leading-tight text-text-muted">
+              {{
+                t(
+                  touchMode === 'direct'
+                    ? 'remoteDesktopModal.touchHintDirect'
+                    : 'remoteDesktopModal.touchHintTouchpad',
+                )
+              }}
+            </span>
+          </div>
+
+          <div v-if="connection?.type === 'VNC'" class="flex min-w-[12rem] flex-1 items-center space-x-2">
             <input
-              v-model.number="modalWidth"
-              type="number"
-              :min="minPanelWidth()"
-              :max="maxPanelWidth()"
-              step="10"
-              class="w-20 rounded border border-border bg-input px-1 py-0.5 text-foreground"
-              @change="commitSize"
+              v-model="vncText"
+              type="text"
+              :placeholder="t('vncModal.textInputPlaceholder')"
+              class="min-w-0 flex-1 rounded border border-border bg-input px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              @focus="vncTextFocused = true"
+              @blur="releaseVncTextFocus"
+              @keydown.enter.prevent="sendVncText"
             />
+            <button
+              type="button"
+              class="whitespace-nowrap rounded bg-primary px-3 py-1 text-xs text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="state !== 'connected' || !vncText.trim()"
+              :title="t('vncModal.sendButtonTitle')"
+              @mousedown.prevent
+              @click="sendVncText"
+            >
+              {{ t('common.send') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="ml-auto flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <label :for="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'" class="text-xs">
+            {{ t('common.width') }}:
           </label>
-          <label class="flex items-center gap-1">
-            <span>{{ t('common.height') }}</span>
-            <input
-              v-model.number="modalHeight"
-              type="number"
-              :min="minPanelHeight()"
-              :max="maxPanelHeight()"
-              step="10"
-              class="w-20 rounded border border-border bg-input px-1 py-0.5 text-foreground"
-              @change="commitSize"
-            />
+          <input
+            :id="connection?.type === 'VNC' ? 'vnc-modal-width' : 'rdp-modal-width'"
+            v-model.number="modalWidth"
+            type="number"
+            :min="minPanelWidth()"
+            :max="maxPanelWidth()"
+            step="10"
+            class="w-16 rounded border border-border bg-input px-1 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            @change="commitSize"
+          />
+          <label :for="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'" class="text-xs">
+            {{ t('common.height') }}:
           </label>
+          <input
+            :id="connection?.type === 'VNC' ? 'vnc-modal-height' : 'rdp-modal-height'"
+            v-model.number="modalHeight"
+            type="number"
+            :min="minPanelHeight()"
+            :max="maxPanelHeight()"
+            step="10"
+            class="w-16 rounded border border-border bg-input px-1 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            @change="commitSize"
+          />
+          <button
+            type="button"
+            class="rounded-md bg-button px-4 py-2 text-button-text shadow-sm transition duration-150 ease-in-out hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="state === 'connecting'"
+            :title="t('remoteDesktopModal.reconnectTooltip')"
+            @click="connect"
+          >
+            {{ t('common.reconnect') }}
+          </button>
         </div>
       </footer>
 
@@ -618,10 +695,39 @@
         v-if="!fullscreen && !device.isMobile.value"
         :data-testid="connection?.type === 'VNC' ? 'vnc-window-resize' : 'rdp-window-resize'"
         type="button"
-        class="absolute bottom-0 right-0 z-20 h-4 w-4 cursor-nwse-resize bg-transparent"
+        class="absolute bottom-0 right-0 z-20 h-4 w-4 cursor-nwse-resize bg-transparent hover:bg-primary-dark/30"
         :title="t('remoteDesktopModal.resize')"
         @pointerdown.stop="resize.startResize"
       ></button>
     </div>
   </OverlayPanel>
 </template>
+
+<style scoped>
+  .remote-desktop-panel:fullscreen,
+  .remote-desktop-panel-fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #000;
+    box-shadow: none !important;
+  }
+
+  .remote-display-container {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .remote-desktop-panel-fullscreen .remote-display-container {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .remote-display-container :deep(canvas) {
+    z-index: 999;
+  }
+</style>

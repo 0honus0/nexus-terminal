@@ -83,6 +83,10 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await expect(manager).toBeVisible();
     const hanging = manager.locator('li').filter({ hasText: 'E2E SSH' }).filter({ hasText: 'Active' }).first();
     await expect(hanging).toBeVisible({ timeout: 20_000 });
+    await expect(manager.locator('i.fa-search')).toBeVisible();
+    await expect(hanging.locator('i.fa-play')).toBeVisible();
+    await expect(hanging.locator('i.fa-trash-alt')).toBeVisible();
+    await expect(hanging.locator('i.fa-download')).toBeVisible();
     await hanging.getByRole('button', { name: 'Resume', exact: true }).click();
 
     await expect(

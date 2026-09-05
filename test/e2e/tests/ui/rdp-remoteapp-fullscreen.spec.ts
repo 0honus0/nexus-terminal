@@ -123,6 +123,10 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
 
       const modal = page.getByTestId('remote-desktop-modal');
       await expect(modal).toBeVisible();
+      await expect(modal.locator('i.fa-desktop')).toBeVisible();
+      await expect(modal.locator('i.fa-expand')).toBeVisible();
+      await expect(modal.locator('i.fa-window-minimize')).toBeVisible();
+      await expect(modal.locator('i.fa-times')).toBeVisible();
       await expect(page.getByTestId('progress-display-modal')).toHaveCount(0);
     });
 
@@ -356,6 +360,10 @@ test('VNC pointer resize and restore-button dragging share the same window seman
   const connectionId = await createRemoteConnection(context.request, 'VNC', POINTER_VNC_NAME, '192.0.2.92', 5901);
   try {
     await openRemoteConnection(page, POINTER_VNC_NAME, 'vnc-modal');
+    const vncModal = page.getByTestId('vnc-modal');
+    await expect(vncModal.locator('i.fa-plug')).toBeVisible();
+    await expect(vncModal.getByPlaceholder('Enter text here to send to VNC')).toBeVisible();
+    await expect(vncModal.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await exercisePointerWindow(page, {
       panel: 'vnc-panel',
       resize: 'vnc-window-resize',
