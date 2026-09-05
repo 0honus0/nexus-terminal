@@ -23,6 +23,7 @@ const backendEnv: Record<string, string> = {
   REMOTE_GATEWAY_SHARED_SECRET: 'e2e-remote-gateway-shared-secret-do-not-use-outside-tests',
   DEPLOYMENT_MODE: 'local',
   REMOTE_GATEWAY_API_BASE_LOCAL: 'http://127.0.0.1:29090',
+  REMOTE_GATEWAY_WS_URL_LOCAL: 'ws://127.0.0.1:29090',
 };
 
 export default defineConfig({

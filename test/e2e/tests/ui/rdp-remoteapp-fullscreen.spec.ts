@@ -17,6 +17,13 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
   page,
   context,
 }) => {
+  const remoteFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') remoteFrames.push(event.payload);
+    });
+  });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
   await cleanupConnection(context.request);
@@ -128,6 +135,30 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(modal.locator('i.fa-window-minimize')).toBeVisible();
       await expect(modal.locator('i.fa-times')).toBeVisible();
       await expect(page.getByTestId('progress-display-modal')).toHaveCount(0);
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+    });
+
+    await step('RDP clipboard synchronizes plain text in both directions without replacing the session', async () => {
+      const hostText = 'NEXUS_RDP_HOST_CLIPBOARD_E2E';
+      await page.evaluate((text) => navigator.clipboard.writeText(text), hostText);
+      const displayElement = page.getByTestId('rdp-display-container').locator('[tabindex="0"]').first();
+      await expect(displayElement).toBeAttached({ timeout: 15_000 });
+      await displayElement.dispatchEvent('focus');
+      const hostBase64 = Buffer.from(hostText, 'utf8').toString('base64');
+      await expect
+        .poll(() => remoteFrames.some((frame) => frame.includes('9.clipboard') || frame.includes(hostBase64)))
+        .toBeTruthy();
+      await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
+
+      const remoteText = 'NEXUS_RDP_REMOTE_CLIPBOARD_E2E';
+      const remoteClipboard = await context.request.post('http://127.0.0.1:29090/e2e/guacamole/clipboard', {
+        data: { text: remoteText },
+      });
+      expect(remoteClipboard.ok()).toBeTruthy();
+      await expect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 15_000 })
+        .toBe(remoteText);
+      await expect(page.getByTestId('remote-desktop-modal')).toContainText('Connected');
     });
 
     await step('browser fullscreen is borderless, hides Nexus chrome, and Escape restores the window', async () => {
@@ -343,6 +374,13 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
 });
 
 test('VNC pointer resize and restore-button dragging share the same window semantics', async ({ page, context }) => {
+  const remoteFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') remoteFrames.push(event.payload);
+    });
+  });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
   await loginAsInitialAdmin(context.request);
   await page.setViewportSize({ width: 1600, height: 1100 });
   expect(
@@ -361,9 +399,35 @@ test('VNC pointer resize and restore-button dragging share the same window seman
   try {
     await openRemoteConnection(page, POINTER_VNC_NAME, 'vnc-modal');
     const vncModal = page.getByTestId('vnc-modal');
+    await expect(vncModal).toContainText('Connected', { timeout: 15_000 });
     await expect(vncModal.locator('i.fa-plug')).toBeVisible();
-    await expect(vncModal.getByPlaceholder('Enter text here to send to VNC')).toBeVisible();
-    await expect(vncModal.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    const vncText = vncModal.getByPlaceholder('Enter text here to send to VNC');
+    const send = vncModal.getByRole('button', { name: 'Send', exact: true });
+    await expect(vncText).toBeVisible();
+    await expect(send).toBeDisabled();
+    await vncText.fill('VNC');
+    await expect(send).toBeEnabled();
+    await send.click();
+    for (const keysym of [86, 78, 67]) {
+      await expect.poll(() => remoteFrames.some((frame) => frame.includes(`3.key,2.${keysym},1.1;`))).toBeTruthy();
+      await expect.poll(() => remoteFrames.some((frame) => frame.includes(`3.key,2.${keysym},1.0;`))).toBeTruthy();
+    }
+
+    const hostText = 'NEXUS_VNC_HOST_CLIPBOARD_E2E';
+    await page.evaluate((text) => navigator.clipboard.writeText(text), hostText);
+    const displayElement = page.getByTestId('vnc-display-container').locator('[tabindex="0"]').first();
+    await expect(displayElement).toBeAttached();
+    await displayElement.dispatchEvent('focus');
+    const hostBase64 = Buffer.from(hostText, 'utf8').toString('base64');
+    await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
+
+    const remoteText = 'NEXUS_VNC_REMOTE_CLIPBOARD_E2E';
+    const remoteClipboard = await context.request.post('http://127.0.0.1:29090/e2e/guacamole/clipboard', {
+      data: { text: remoteText },
+    });
+    expect(remoteClipboard.ok()).toBeTruthy();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 15_000 }).toBe(remoteText);
+    await expect(vncModal).toContainText('Connected');
     await exercisePointerWindow(page, {
       panel: 'vnc-panel',
       resize: 'vnc-window-resize',

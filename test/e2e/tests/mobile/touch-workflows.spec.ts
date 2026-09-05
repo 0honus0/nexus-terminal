@@ -269,6 +269,10 @@ test('mobile keyboard sink preserves IME composition before clearing input', asy
 
 test('mobile RDP touch mode toggle persists without reconnecting the session', async ({ page, context }) => {
   const connectionName = 'E2E Mobile RDP Touch Modes';
+  let sessionCreateRequests = 0;
+  page.on('request', (request) => {
+    if (/\/api\/v1\/connections\/\d+\/rdp-session(?:\?|$)/.test(request.url())) sessionCreateRequests += 1;
+  });
 
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
@@ -304,6 +308,7 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
   try {
     await page.goto('/login');
     await openConnection();
+    await expect.poll(() => sessionCreateRequests).toBe(1);
 
     const directMode = page.getByRole('button', { name: 'Direct', exact: true });
     const touchpadMode = page.getByRole('button', { name: 'Touchpad', exact: true });
@@ -317,16 +322,20 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
     await expect(directMode).toHaveAttribute('aria-pressed', 'false');
     await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
+    expect(sessionCreateRequests).toBe(1);
 
     await page.getByTestId('rdp-window-close').click();
     await expect(page.getByTestId('remote-desktop-modal')).toBeHidden();
     await openConnection();
+    await expect.poll(() => sessionCreateRequests).toBe(2);
 
     await expect(page.getByRole('button', { name: 'Touchpad', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Direct', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(sessionCreateRequests).toBe(2);
     await page.getByTestId('rdp-window-close').click();
     await openConnection();
+    await expect.poll(() => sessionCreateRequests).toBe(3);
     await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);

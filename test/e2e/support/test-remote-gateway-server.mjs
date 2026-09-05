@@ -1,8 +1,17 @@
 import http from 'node:http';
+import { createRequire } from 'node:module';
+
+const requireFromBackend = createRequire(new URL('../../../packages/backend/package.json', import.meta.url));
+const { WebSocketServer, WebSocket } = requireFromBackend('ws');
 
 const host = '127.0.0.1';
 const port = 29090;
 const expectedSecret = 'e2e-remote-gateway-shared-secret-do-not-use-outside-tests';
+const guacamoleClients = new Set();
+let remoteClipboardStreamId = 100;
+
+const guacInstruction = (...elements) =>
+  `${elements.map((value) => `${String(value).length}.${String(value)}`).join(',')};`;
 
 const readJson = async (req) => {
   const chunks = [];
@@ -57,6 +66,20 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true });
       return;
     }
+    if (req.method === 'POST' && req.url === '/e2e/guacamole/clipboard') {
+      const payload = await readJson(req);
+      const text = typeof payload.text === 'string' ? payload.text : '';
+      const streamId = remoteClipboardStreamId++;
+      const data = Buffer.from(text, 'utf8').toString('base64');
+      for (const socket of guacamoleClients) {
+        if (socket.readyState !== WebSocket.OPEN) continue;
+        socket.send(guacInstruction('clipboard', streamId, 'text/plain'));
+        socket.send(guacInstruction('blob', streamId, data));
+        socket.send(guacInstruction('end', streamId));
+      }
+      sendJson(res, 200, { ok: true, streamId, clientCount: guacamoleClients.size });
+      return;
+    }
     if (req.method === 'POST' && req.url === '/api/remote-desktop/token') {
       if (req.headers['x-nexus-gateway-secret'] !== expectedSecret) {
         sendJson(res, 401, { error: 'invalid test gateway secret' });
@@ -77,10 +100,43 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+const guacamoleServer = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  const requestUrl = new URL(req.url || '/', `http://${host}:${port}`);
+  if (requestUrl.searchParams.get('token') !== 'e2e-remote-desktop-token') {
+    socket.destroy();
+    return;
+  }
+  guacamoleServer.handleUpgrade(req, socket, head, (client) => guacamoleServer.emit('connection', client, req));
+});
+
+guacamoleServer.on('connection', (socket) => {
+  guacamoleClients.add(socket);
+
+  // The first protocol update moves guacamole-common-js from WAITING to CONNECTED.
+  socket.send(guacInstruction('sync', Date.now()));
+
+  socket.on('message', (payload, isBinary) => {
+    if (isBinary) return;
+    const message = payload.toString();
+
+    // WebSocketTunnel uses the empty internal opcode for connection-stability
+    // pings. Echoing these keeps the browser tunnel healthy during UI tests.
+    if (message.includes('4.ping')) socket.send(message);
+  });
+  socket.on('close', () => guacamoleClients.delete(socket));
+  socket.on('error', () => guacamoleClients.delete(socket));
+});
+
 server.listen(port, host, () => {
   console.log(`[E2E remote gateway] listening on http://${host}:${port}`);
 });
 
-const shutdown = () => server.close(() => process.exit(0));
+const shutdown = () => {
+  for (const socket of guacamoleClients) socket.close();
+  guacamoleServer.close();
+  server.close(() => process.exit(0));
+};
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
