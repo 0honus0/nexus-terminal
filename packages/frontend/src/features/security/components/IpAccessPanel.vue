@@ -131,6 +131,7 @@
               v-model="policy.whitelist"
               data-testid="ip-whitelist-input"
               rows="4"
+              class="font-mono"
               :disabled="loading"
             />
             <p class="mt-1 text-xs text-text-secondary">{{ t('settings.ipWhitelist.hint') }}</p>
