@@ -1,13 +1,11 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { SearchAddon } from '@xterm/addon-search';
   import { SerializeAddon } from '@xterm/addon-serialize';
   import { WebLinksAddon } from '@xterm/addon-web-links';
-  import { BaseButton, BaseInput } from '@/foundation/ui';
-  import { focusRegistry } from '@/shared/focus/public';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { writeClipboardText } from '@/foundation/browser';
   import { createWheelScaleResolver } from '@/foundation/interaction';
@@ -42,7 +40,6 @@
   const terminalState = props.state ?? createTerminalSessionState();
   const wrapper = ref<HTMLElement | null>(null);
   const root = ref<HTMLElement | null>(null);
-  const searchPanel = ref<HTMLElement | null>(null);
   const searchOpen = terminalState.searchOpen;
   const searchTerm = terminalState.searchTerm;
   const renderedFontSize = ref(props.fontSize);
@@ -92,8 +89,6 @@
       html,
     ].join('');
   });
-  let unregisterFocus: (() => void) | undefined;
-
   let lastColumns = 0;
   let lastRows = 0;
   const fitAndResize = () => {
@@ -104,10 +99,8 @@
     lastRows = terminal.rows;
     void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
   };
-  const focusSearch = () => void nextTick(() => searchPanel.value?.querySelector<HTMLInputElement>('input')?.focus());
   const openSearch = () => {
     searchOpen.value = true;
-    focusSearch();
   };
   const closeSearch = () => {
     searchOpen.value = false;
@@ -547,16 +540,11 @@
     if (!value) searchAddon.clearDecorations();
     else searchAddon.findNext(value, { incremental: true });
   });
+  watch(searchOpen, (open) => {
+    if (!open) searchAddon?.clearDecorations();
+  });
 
   onMounted(() => {
-    unregisterFocus = focusRegistry.register(
-      'terminalSearch',
-      () => {
-        openSearch();
-        return true;
-      },
-      () => Boolean(wrapper.value?.getClientRects().length),
-    );
     terminal = new Terminal({
       convertEol: true,
       scrollOnUserInput: true,
@@ -656,7 +644,6 @@
 
   onBeforeUnmount(() => {
     if (terminal && serializeAddon) terminalState.replaceSnapshot(serializeTerminalSnapshot(terminal, serializeAddon));
-    unregisterFocus?.();
     if (root.value) {
       root.value.removeEventListener('wheel', handleWheelScale, true);
       root.value.removeEventListener('touchstart', handleTouchStart);
@@ -718,7 +705,7 @@
     <div
       ref="root"
       data-testid="terminal-inner"
-      class="relative z-10 h-full min-h-0 w-full"
+      class="terminal-inner-container relative z-10 h-full min-h-0 w-full"
       :class="{ 'terminal-transparent': hasVisualBackground }"
       role="application"
       :aria-label="t('terminal.ariaLabel')"
@@ -762,35 +749,14 @@
       <button type="button" @click="pasteMobileClipboard">{{ t('terminal.mobile.paste') }}</button>
       <button type="button" @click="selectAllMobile">{{ t('terminal.mobile.selectAll') }}</button>
     </div>
-    <div
-      v-if="searchOpen"
-      ref="searchPanel"
-      class="absolute right-2 top-2 z-20 flex w-[min(28rem,calc(100%-1rem))] items-center gap-1 rounded border border-border bg-background/95 p-1 shadow-lg"
-    >
-      <BaseInput
-        v-model="searchTerm"
-        size="sm"
-        :placeholder="t('terminal.search.placeholder')"
-        @keyup.enter="findNext"
-        @keyup.esc="closeSearch"
-      />
-      <BaseButton size="sm" :title="t('terminal.search.previous')" @click="findPrevious">↑</BaseButton>
-      <BaseButton size="sm" :title="t('terminal.search.next')" @click="findNext">↓</BaseButton>
-      <BaseButton size="sm" variant="ghost" :title="t('terminal.search.close')" @click="closeSearch">×</BaseButton>
-    </div>
-    <BaseButton
-      v-else
-      class="absolute right-2 top-2 z-20 opacity-60 hover:opacity-100"
-      size="sm"
-      variant="ghost"
-      :title="t('terminal.search.open')"
-      @click="openSearch"
-      >⌕</BaseButton
-    >
   </div>
 </template>
 
 <style scoped>
+  .terminal-inner-container {
+    box-sizing: border-box;
+    padding: 4px 5px 3px;
+  }
   .terminal-background-image,
   .terminal-background-overlay,
   .terminal-custom-html {
@@ -871,7 +837,8 @@
     position: absolute;
     z-index: 30;
     display: flex;
-    min-width: 210px;
+    align-items: center;
+    min-width: 180px;
     overflow: hidden;
     border: 1px solid var(--border-color);
     border-radius: 0.65rem;
@@ -881,20 +848,28 @@
   }
 
   .mobile-terminal-clipboard-menu button {
-    min-height: 44px;
     flex: 1 1 0;
+    min-width: 0;
+    padding: 0.65rem 0.75rem;
     border: 0;
     border-right: 1px solid var(--border-color);
     background: transparent;
     color: var(--text-color);
-    padding: 0.65rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .mobile-terminal-clipboard-menu button:last-child {
     border-right: 0;
   }
 
+  .mobile-terminal-clipboard-menu button:active {
+    background: var(--link-active-bg-color);
+    color: var(--link-active-color);
+  }
+
   .mobile-terminal-clipboard-menu button:disabled {
-    opacity: 0.45;
+    opacity: 0.4;
   }
 </style>

@@ -34,6 +34,8 @@
     clear?: () => void;
     serialize?: () => string;
     openSearch?: () => void;
+    findNext?: () => void;
+    findPrevious?: () => void;
   }
   interface EditorApi {
     open?: (path: string) => Promise<unknown> | unknown;
@@ -100,6 +102,8 @@
     sendFiles: [entries: RemoteFileEntry[]];
     command: [command: string, allSessions: boolean];
     clearTerminal: [];
+    findTerminalNext: [];
+    findTerminalPrevious: [];
     terminalApi: [api: TerminalApi | null];
     editorApi: [api: EditorApi | null];
     previewApi: [api: PreviewApi | null];
@@ -214,6 +218,8 @@
         @send-files="emit('sendFiles', $event)"
         @command="(command, all) => emit('command', command, all)"
         @clear-terminal="emit('clearTerminal')"
+        @find-terminal-next="emit('findTerminalNext')"
+        @find-terminal-previous="emit('findTerminalPrevious')"
         @terminal-api="emit('terminalApi', $event)"
         @editor-api="emit('editorApi', $event)"
         @preview-api="emit('previewApi', $event)"
@@ -272,10 +278,15 @@
       :show-file-manager-button="popupFileManager"
       :show-editor-button="popupDocuments"
       :ready="session.hasConnected.value"
+      :terminal-search-open="session.terminalState.searchOpen.value"
+      :terminal-search-term="session.terminalState.searchTerm.value"
       @update:model-value="session.commandDraft.value = $event"
+      @update:terminal-search-open="session.terminalState.searchOpen.value = $event"
+      @update:terminal-search-term="session.terminalState.searchTerm.value = $event"
       @open-file-manager="emit('openFileManager')"
       @open-editor="emit('openEditor')"
-      @open-search="terminalRef?.openSearch?.()"
+      @find-search-next="emit('findTerminalNext')"
+      @find-search-previous="emit('findTerminalPrevious')"
       @send="(command, all) => emit('command', command, all)"
       @clear="emit('clearTerminal')"
       @interaction="emit('interaction')"

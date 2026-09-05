@@ -66,15 +66,14 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     await commandInput.press('Enter');
     await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
 
-    await terminal.getByTitle('Search terminal').click();
-    const searchInput = terminal.getByPlaceholder('Search terminal...');
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill(marker);
-    await terminal.getByTitle('Find next').click();
-    await terminal.getByTitle('Find previous').click();
-    await terminal.getByTitle('Close search').click();
-    await expect(searchInput).toBeHidden();
+    await commandBar.getByTitle('Open terminal search').click();
+    await expect(commandInput).toHaveAttribute('placeholder', 'Search in terminal...');
+    await commandInput.fill(marker);
+    await commandBar.getByTitle('Find next').click();
+    await commandBar.getByTitle('Find previous').click();
+    await commandBar.getByTitle('Close terminal search').click();
     await expect(commandInput).toHaveAttribute('placeholder', 'Enter command and press Enter to send...');
+    await expect(commandInput).toHaveValue('');
   });
 
   await step('Clear Terminal removes previously rendered output from the viewport', async () => {

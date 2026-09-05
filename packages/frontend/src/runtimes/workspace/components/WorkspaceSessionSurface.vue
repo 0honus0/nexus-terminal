@@ -45,6 +45,8 @@
     paste?: () => Promise<void>;
     selectAll?: () => void;
     openSearch?: () => void;
+    findNext?: () => void;
+    findPrevious?: () => void;
     scrollToBottom?: () => void;
   }
   interface EditorApi {
@@ -767,6 +769,8 @@
         @send-files="beginSendFiles"
         @command="(command, all) => emit('command', command, all)"
         @clear-terminal="terminalApi?.clear?.()"
+        @find-terminal-next="terminalApi?.findNext?.()"
+        @find-terminal-previous="terminalApi?.findPrevious?.()"
         @terminal-api="terminalApi = $event"
         @editor-api="editorApi = $event"
         @preview-api="previewApi = $event"
@@ -849,6 +853,8 @@
         @send-files="beginSendFiles"
         @command="(command, all) => emit('command', command, all)"
         @clear-terminal="terminalApi?.clear?.()"
+        @find-terminal-next="terminalApi?.findNext?.()"
+        @find-terminal-previous="terminalApi?.findPrevious?.()"
         @terminal-api="terminalApi = $event"
         @editor-api="editorApi = $event"
         @preview-api="previewApi = $event"
@@ -938,6 +944,8 @@
         @send-files="beginSendFiles"
         @command="(command, all) => emit('command', command, all)"
         @clear-terminal="terminalApi?.clear?.()"
+        @find-terminal-next="terminalApi?.findNext?.()"
+        @find-terminal-previous="terminalApi?.findPrevious?.()"
         @terminal-api="terminalApi = $event"
         @editor-api="editorApi = $event"
         @preview-api="previewApi = $event"
@@ -1003,7 +1011,11 @@
       :command-input-sync-target="commandInputSyncTarget"
       :quick-commands-grouped="showQuickCommandTags"
       :command-ready="session.hasConnected.value"
+      :terminal-search-open="session.terminalState.searchOpen.value"
+      :terminal-search-term="session.terminalState.searchTerm.value"
       @update:pane="mobilePane = $event"
+      @update:terminal-search-open="session.terminalState.searchOpen.value = $event"
+      @update:terminal-search-term="session.terminalState.searchTerm.value = $event"
       @update:command-draft="session.commandDraft.value = $event"
       @open-file-manager="fileManagerPopupVisible = true"
       @open-editor="

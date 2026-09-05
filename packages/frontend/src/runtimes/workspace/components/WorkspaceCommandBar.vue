@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { focusRegistry } from '@/shared/focus/public';
   import { useQuickCommandsStore } from '@/features/quick-commands/public';
@@ -15,6 +15,8 @@
       showEditorButton?: boolean;
       ready?: boolean;
       modelValue?: string;
+      terminalSearchOpen?: boolean;
+      terminalSearchTerm?: string;
       terminalCtrlActive?: boolean;
       terminalAltActive?: boolean;
       mobile?: boolean;
@@ -24,16 +26,21 @@
       quickCommandsGrouped: true,
       showFileManagerButton: false,
       ready: true,
+      terminalSearchOpen: false,
+      terminalSearchTerm: '',
       mobile: false,
     },
   );
   const emit = defineEmits<{
     'update:modelValue': [value: string];
+    'update:terminalSearchOpen': [open: boolean];
+    'update:terminalSearchTerm': [term: string];
     send: [command: string, allSessions: boolean];
     clear: [];
     openFileManager: [];
     openEditor: [];
-    openSearch: [];
+    findSearchNext: [];
+    findSearchPrevious: [];
     interaction: [];
     terminalInput: [data: string];
   }>();
@@ -44,9 +51,18 @@
   // cannot read the previous prop before Vue has rendered the v-model update back
   // down from the session-owned commandDraft.
   const command = ref(props.modelValue ?? '');
-  const commandInput = ref<{ focus?: () => void } | null>(null);
+  const commandInput = ref<HTMLInputElement | null>(null);
   const root = ref<HTMLFormElement | null>(null);
-  let unregisterFocus: (() => void) | undefined;
+  let unregisterCommandFocus: (() => void) | undefined;
+  let unregisterSearchFocus: (() => void) | undefined;
+
+  const activeInput = computed({
+    get: () => (props.terminalSearchOpen ? props.terminalSearchTerm : command.value),
+    set: (value: string) => {
+      if (props.terminalSearchOpen) emit('update:terminalSearchTerm', value);
+      else command.value = value;
+    },
+  });
 
   const resetTargetSelection = () => {
     if (props.commandInputSyncTarget === 'quickCommands') quickCommands.resetSelection();
@@ -56,8 +72,18 @@
     if (props.commandInputSyncTarget === 'quickCommands') quickCommands.setSearch(value);
     else if (props.commandInputSyncTarget === 'commandHistory') commandHistory.setSearch(value);
   };
+  const setTerminalSearchOpen = (open: boolean) => {
+    emit('update:terminalSearchOpen', open);
+    if (!open) emit('update:terminalSearchTerm', '');
+    void nextTick(() => commandInput.value?.focus());
+  };
+  const toggleTerminalSearch = () => setTerminalSearchOpen(!props.terminalSearchOpen);
+  const submit = () => {
+    if (props.terminalSearchOpen) emit('findSearchNext');
+    else send();
+  };
   const send = (allSessions = false, value = command.value) => {
-    if (!props.ready || (allSessions && !value)) return;
+    if (props.terminalSearchOpen || !props.ready || (allSessions && !value)) return;
     emit('send', value, allSessions);
     command.value = '';
     resetTargetSelection();
@@ -85,7 +111,43 @@
     emit('terminalInput', input);
     return true;
   };
+  const handleSearchKeydown = (event: KeyboardEvent): boolean => {
+    if (!props.terminalSearchOpen) return false;
+    if (event.ctrlKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      commandInput.value?.focus();
+      return true;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setTerminalSearchOpen(false);
+      return true;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (event.shiftKey) emit('findSearchPrevious');
+      else emit('findSearchNext');
+      return true;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      emit('findSearchPrevious');
+      return true;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      emit('findSearchNext');
+      return true;
+    }
+    return false;
+  };
   const handleKeydown = (event: KeyboardEvent) => {
+    if (handleSearchKeydown(event)) return;
+    if (event.ctrlKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      setTerminalSearchOpen(true);
+      return;
+    }
     if (!event.isComposing && captureStickyTerminalInput(event.key)) {
       event.preventDefault();
       return;
@@ -115,7 +177,7 @@
     if (!['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape'].includes(event.key)) resetTargetSelection();
   };
   const handleBeforeInput = (event: InputEvent) => {
-    if (event.isComposing || event.inputType !== 'insertText' || !event.data) return;
+    if (props.terminalSearchOpen || event.isComposing || event.inputType !== 'insertText' || !event.data) return;
     if (!captureStickyTerminalInput(event.data)) return;
     event.preventDefault();
   };
@@ -139,17 +201,37 @@
       syncSearch(command.value);
     },
   );
+  watch(
+    () => props.terminalSearchOpen,
+    (open) => {
+      if (open) void nextTick(() => commandInput.value?.focus());
+    },
+  );
   onMounted(() => {
-    unregisterFocus = focusRegistry.register(
+    const visible = () => Boolean(root.value?.getClientRects().length);
+    unregisterCommandFocus = focusRegistry.register(
       'commandInput',
       () => {
-        commandInput.value?.focus?.();
+        if (props.terminalSearchOpen) setTerminalSearchOpen(false);
+        else commandInput.value?.focus();
         return true;
       },
-      () => Boolean(root.value?.getClientRects().length),
+      visible,
+    );
+    unregisterSearchFocus = focusRegistry.register(
+      'terminalSearch',
+      () => {
+        if (!props.terminalSearchOpen) setTerminalSearchOpen(true);
+        else commandInput.value?.focus();
+        return true;
+      },
+      visible,
     );
   });
-  onBeforeUnmount(() => unregisterFocus?.());
+  onBeforeUnmount(() => {
+    unregisterCommandFocus?.();
+    unregisterSearchFocus?.();
+  });
 </script>
 <template>
   <form
@@ -157,20 +239,20 @@
     data-testid="command-input-bar"
     class="command-bar-root flex w-full items-center overflow-hidden bg-background"
     :class="mobile ? 'h-auto min-h-[2.35rem]' : 'h-full min-h-0'"
-    @submit.prevent="send()"
+    @submit.prevent="submit"
   >
     <div class="flex w-full min-w-0 flex-1 items-center gap-[0.3rem] bg-transparent px-2 py-[0.04rem]">
       <input
         ref="commandInput"
-        v-model="command"
+        v-model="activeInput"
         data-testid="command-input"
-        data-focus-id="commandInput"
+        :data-focus-id="terminalSearchOpen ? 'terminalSearch' : 'commandInput'"
         type="text"
-        :placeholder="t('commandInputBar.placeholder')"
-        :disabled="!ready"
-        :aria-disabled="!ready"
+        :placeholder="t(terminalSearchOpen ? 'commandInputBar.searchPlaceholder' : 'commandInputBar.placeholder')"
+        :disabled="!ready && !terminalSearchOpen"
+        :aria-disabled="!ready && !terminalSearchOpen"
         class="h-[1.85rem] min-h-[1.85rem] min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition-all duration-300 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
-        :class="mobile ? 'w-[7.25rem] flex-[0_0_7.25rem] px-2' : ''"
+        :class="[mobile ? 'w-[7.25rem] flex-[0_0_7.25rem] px-2' : '', terminalSearchOpen ? 'border-primary/70' : '']"
         @keydown="handleKeydown"
         @beforeinput="handleBeforeInput"
         @blur="resetTargetSelection"
@@ -190,12 +272,32 @@
           v-if="!mobile"
           type="button"
           class="command-bar-button"
-          :title="t('commandInputBar.openSearch')"
-          :aria-label="t('commandInputBar.openSearch')"
-          @click="emit('openSearch')"
+          :title="t(terminalSearchOpen ? 'commandInputBar.closeSearch' : 'commandInputBar.openSearch')"
+          :aria-label="t(terminalSearchOpen ? 'commandInputBar.closeSearch' : 'commandInputBar.openSearch')"
+          @click="toggleTerminalSearch"
         >
-          <i class="fas fa-search" aria-hidden="true"></i>
+          <i :class="terminalSearchOpen ? 'fas fa-times' : 'fas fa-search'" aria-hidden="true"></i>
         </button>
+        <template v-if="terminalSearchOpen && !mobile">
+          <button
+            type="button"
+            class="command-bar-button"
+            :title="t('commandInputBar.findPrevious')"
+            :aria-label="t('commandInputBar.findPrevious')"
+            @click="emit('findSearchPrevious')"
+          >
+            <i class="fas fa-arrow-up" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="command-bar-button"
+            :title="t('commandInputBar.findNext')"
+            :aria-label="t('commandInputBar.findNext')"
+            @click="emit('findSearchNext')"
+          >
+            <i class="fas fa-arrow-down" aria-hidden="true"></i>
+          </button>
+        </template>
         <button
           v-if="showFileManagerButton"
           data-testid="open-file-manager-button"
@@ -218,6 +320,7 @@
           <i class="fas fa-edit" aria-hidden="true"></i>
         </button>
         <button
+          v-if="!terminalSearchOpen"
           type="button"
           class="command-bar-button"
           :disabled="!ready || !command"

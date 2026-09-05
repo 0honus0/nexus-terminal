@@ -14,6 +14,8 @@
     paste?: () => Promise<void>;
     selectAll?: () => void;
     openSearch?: () => void;
+    findNext?: () => void;
+    findPrevious?: () => void;
     clear?: () => void;
   }
 
@@ -33,6 +35,8 @@
     commandInputSyncTarget?: Preferences['commandInputSyncTarget'];
     quickCommandsGrouped?: boolean;
     commandReady?: boolean;
+    terminalSearchOpen?: boolean;
+    terminalSearchTerm?: string;
     ctrlActive?: boolean;
     altActive?: boolean;
   }>();
@@ -40,6 +44,8 @@
   const emit = defineEmits<{
     'update:pane': [pane: WorkspacePaneName];
     'update:commandDraft': [value: string];
+    'update:terminalSearchOpen': [open: boolean];
+    'update:terminalSearchTerm': [term: string];
     openFileManager: [];
     openEditor: [];
     command: [command: string, allSessions: boolean];
@@ -96,10 +102,16 @@
       :show-file-manager-button="true"
       :show-editor-button="true"
       :ready="commandReady"
+      :terminal-search-open="terminalSearchOpen"
+      :terminal-search-term="terminalSearchTerm"
       :mobile="true"
       :terminal-ctrl-active="ctrlActive"
       :terminal-alt-active="altActive"
       @update:model-value="emit('update:commandDraft', $event)"
+      @update:terminal-search-open="emit('update:terminalSearchOpen', $event)"
+      @update:terminal-search-term="emit('update:terminalSearchTerm', $event)"
+      @find-search-next="terminalApi?.findNext?.()"
+      @find-search-previous="terminalApi?.findPrevious?.()"
       @open-file-manager="emit('openFileManager')"
       @open-editor="emit('openEditor')"
       @send="(command, all) => emit('command', command, all)"
