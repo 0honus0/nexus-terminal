@@ -78,36 +78,52 @@
   const { t } = useI18n();
 </script>
 <template>
-  <form data-testid="proxy-form" class="space-y-4" @submit.prevent="submit">
-    <div class="grid gap-4 md:grid-cols-2">
+  <div data-testid="proxy-form" class="p-2">
+    <h3 class="mb-6 text-center text-lg font-semibold">
+      {{ proxy ? t('proxies.form.titleEdit') : t('proxies.form.title') }}
+    </h3>
+    <form class="space-y-4" @submit.prevent="submit">
       <BaseFormField :label="t('proxies.form.name')"
-        ><BaseInput id="proxy-name" v-model="form.name" required /></BaseFormField
-      ><BaseFormField :label="t('proxies.form.type')"
+        ><BaseInput id="proxy-name" v-model="form.name" required
+      /></BaseFormField>
+      <BaseFormField :label="t('proxies.form.type')"
         ><BaseSelect id="proxy-type" v-model="form.type"
           ><option value="SOCKS5">SOCKS5</option>
           <option value="HTTP">HTTP</option></BaseSelect
         ></BaseFormField
-      ><BaseFormField :label="t('proxies.form.host')"
-        ><BaseInput id="proxy-host" v-model="form.host" required /></BaseFormField
-      ><BaseFormField :label="t('proxies.form.port')"
-        ><BaseInput id="proxy-port" v-model="form.port" type="number" min="1" max="65535" required /></BaseFormField
-      ><BaseFormField :label="t('proxies.form.username')"
-        ><BaseInput id="proxy-username" v-model="form.username" /></BaseFormField
-      ><BaseFormField :label="t('proxies.form.password')"
-        ><BaseInput id="proxy-password" v-model="form.password" type="password"
+      >
+      <BaseFormField :label="t('proxies.form.host')"
+        ><BaseInput id="proxy-host" v-model="form.host" required
       /></BaseFormField>
-    </div>
-    <label v-if="proxy" class="flex items-center gap-2 text-sm"
-      ><BaseCheckbox v-model="form.clearPassword" data-testid="proxy-clear-password" />{{
-        t('proxies.form.clearStoredPassword')
-      }}</label
-    >
-    <p v-if="error" class="text-sm text-error">{{ error }}</p>
-    <div class="flex gap-2">
-      <BaseButton data-testid="proxy-submit" type="submit" variant="primary" :loading="loading">{{
-        t('common.save')
-      }}</BaseButton
-      ><BaseButton @click="emit('cancel')">{{ t('common.cancel') }}</BaseButton>
-    </div>
-  </form>
+      <BaseFormField :label="t('proxies.form.port')"
+        ><BaseInput id="proxy-port" v-model="form.port" type="number" min="1" max="65535" required
+      /></BaseFormField>
+      <BaseFormField :label="`${t('proxies.form.username')} (${t('proxies.form.optional')})`"
+        ><BaseInput id="proxy-username" v-model="form.username"
+      /></BaseFormField>
+      <BaseFormField :label="`${t('proxies.form.password')} (${t('proxies.form.optional')})`"
+        ><BaseInput id="proxy-password" v-model="form.password" type="password" autocomplete="new-password" />
+        <p v-if="proxy" class="mt-1 text-xs text-text-secondary">{{ t('proxies.form.passwordUpdateNote') }}</p>
+        <label v-if="proxy" class="mt-2 flex cursor-pointer select-none items-center gap-2 text-sm text-text-secondary"
+          ><BaseCheckbox v-model="form.clearPassword" data-testid="proxy-clear-password" />{{
+            t('proxies.form.clearStoredPassword')
+          }}</label
+        ></BaseFormField
+      >
+      <p
+        v-if="error"
+        class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
+      >
+        {{ error }}
+      </p>
+      <div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
+        <BaseButton data-testid="proxy-submit" type="submit" variant="primary" :loading="loading">{{
+          t('common.save')
+        }}</BaseButton
+        ><BaseButton type="button" :disabled="loading" @click="emit('cancel')">{{
+          t('proxies.form.cancel')
+        }}</BaseButton>
+      </div>
+    </form>
+  </div>
 </template>

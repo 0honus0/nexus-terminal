@@ -48,7 +48,9 @@
 </script>
 
 <template>
-  <div class="flex min-h-[calc(100dvh-3.5rem)] items-center justify-center bg-background p-4">
+  <div
+    class="flex min-h-screen items-center justify-center bg-background bg-[radial-gradient(var(--border-color)_1px,transparent_1px)] bg-[size:16px_16px] p-4"
+  >
     <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/40 bg-background shadow-2xl">
       <section
         class="hidden w-2/5 flex-col items-center justify-center bg-gradient-to-br from-primary to-link p-10 text-white md:flex"

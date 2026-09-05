@@ -1,15 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import {
-    BaseButton,
-    BaseCheckbox,
-    BaseFormField,
-    BaseInput,
-    BaseModal,
-    BaseSelect,
-    BaseTextarea,
-  } from '@/foundation/ui';
+  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect, BaseTextarea } from '@/foundation/ui';
   import { apiErrorMessage } from '@/client/http';
   import { notificationsApi } from '../api/notificationsApi';
   import type {
@@ -205,140 +197,175 @@
   };
 </script>
 <template>
-  <BaseModal
-    :visible="visible"
-    :title="t(setting ? 'settings.notifications.form.editTitle' : 'settings.notifications.form.addTitle')"
-    panel-class="w-[min(760px,94vw)]"
-    @close="emit('close')"
-    ><form class="space-y-5" @submit.prevent="submit">
-      <div class="grid gap-4 md:grid-cols-2">
-        <BaseFormField :label="t('settings.notifications.form.name')" for-id="setting-name">
-          <BaseInput id="setting-name" v-model="form.name" required />
-        </BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
-          <BaseSelect id="setting-channel-type" v-model="form.channelType" :disabled="Boolean(setting)">
-            <option value="webhook">{{ t('settings.notifications.channels.webhook') }}</option>
-            <option value="email">{{ t('settings.notifications.channels.email') }}</option>
-            <option value="telegram">{{ t('settings.notifications.channels.telegram') }}</option>
-          </BaseSelect>
-          <p v-if="setting" class="mt-1 text-xs text-text-secondary">
-            {{ t('settings.notifications.form.channelTypeEditNote') }}
-          </p>
-        </BaseFormField>
-      </div>
-      <template v-if="form.channelType === 'webhook'"
-        ><BaseFormField label="URL" for-id="webhook-url"
-          ><BaseInput id="webhook-url" v-model="form.url" type="url" required /></BaseFormField
-        ><BaseFormField :label="t('settings.notifications.form.webhookMethod')"
+  <form v-if="visible" class="space-y-6 text-foreground" @submit.prevent="submit">
+    <h3 class="mb-4 border-b border-border pb-2 text-lg font-semibold">
+      {{ t(setting ? 'settings.notifications.form.editTitle' : 'settings.notifications.form.addTitle') }}
+    </h3>
+
+    <div class="space-y-4">
+      <BaseFormField :label="t('settings.notifications.form.name')" for-id="setting-name"
+        ><BaseInput id="setting-name" v-model="form.name" required
+      /></BaseFormField>
+      <label class="flex items-center"
+        ><BaseCheckbox id="setting-enabled" v-model="form.enabled" class="mr-2" /><span
+          class="text-sm text-foreground"
+          >{{ t('common.enabled') }}</span
+        ></label
+      >
+      <BaseFormField :label="t('settings.notifications.form.channelType')" for-id="setting-channel-type">
+        <BaseSelect id="setting-channel-type" v-model="form.channelType" :disabled="Boolean(setting)"
+          ><option value="webhook">{{ t('settings.notifications.types.webhook') }}</option>
+          <option value="email">{{ t('settings.notifications.types.email') }}</option>
+          <option value="telegram">{{ t('settings.notifications.types.telegram') }}</option></BaseSelect
+        >
+        <p v-if="setting" class="mt-1 text-xs text-text-secondary">
+          {{ t('settings.notifications.form.channelTypeEditNote') }}
+        </p>
+      </BaseFormField>
+    </div>
+
+    <section class="mt-4 space-y-4 rounded-md border border-border bg-header/30 p-4">
+      <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+        {{ t(`settings.notifications.types.${form.channelType}`) }} {{ t('common.settings') }}
+      </h4>
+      <template v-if="form.channelType === 'webhook'">
+        <BaseFormField label="URL" for-id="webhook-url"
+          ><BaseInput id="webhook-url" v-model="form.url" type="url" required
+        /></BaseFormField>
+        <BaseFormField :label="t('settings.notifications.form.webhookMethod')"
           ><BaseSelect id="webhook-method" v-model="form.method"
             ><option>POST</option>
             <option>GET</option>
             <option>PUT</option></BaseSelect
           ></BaseFormField
-        ><BaseFormField :label="t('settings.notifications.form.webhookHeaders')" for-id="webhook-headers">
-          <BaseTextarea id="webhook-headers" v-model="form.webhookHeaders" rows="4" class="font-mono" />
-          <p v-if="headerValidation.error" class="mt-1 text-xs text-error">{{ headerValidation.error }}</p>
-        </BaseFormField>
-        <BaseFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="webhook-body">
-          <BaseTextarea
+        >
+        <BaseFormField :label="t('settings.notifications.form.webhookHeaders')" for-id="webhook-headers"
+          ><BaseTextarea id="webhook-headers" v-model="form.webhookHeaders" rows="3" class="font-mono text-sm" />
+          <p v-if="headerValidation.error" class="mt-1 text-xs text-error">
+            {{ headerValidation.error }}
+          </p></BaseFormField
+        >
+        <BaseFormField :label="t('settings.notifications.form.webhookBodyTemplate')" for-id="webhook-body"
+          ><BaseTextarea
             id="webhook-body"
             v-model="form.webhookBodyTemplate"
-            rows="5"
+            rows="3"
+            class="font-mono text-sm"
             :placeholder="t('settings.notifications.form.webhookBodyPlaceholder')"
           />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.templateHelp') }} {event}, {timestamp}, {details}
           </p></BaseFormField
-        ></template
-      ><template v-else-if="form.channelType === 'email'"
-        ><BaseFormField :label="t('settings.notifications.form.emailTo')"
+        >
+      </template>
+      <template v-else-if="form.channelType === 'email'">
+        <BaseFormField :label="t('settings.notifications.form.emailTo')"
           ><BaseInput v-model="form.to" type="email" multiple required />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.emailToHelp') }}
           </p></BaseFormField
         >
-        <div class="grid gap-4 md:grid-cols-2">
-          <BaseFormField :label="t('settings.notifications.form.smtpHost')"
-            ><BaseInput v-model="form.smtpHost" required /></BaseFormField
-          ><BaseFormField :label="t('settings.notifications.form.smtpPort')"
-            ><BaseInput v-model="form.smtpPort" type="number" min="1" max="65535" required
-          /></BaseFormField>
-        </div>
-        <BaseFormField :label="t('settings.notifications.form.emailBodyTemplate')">
-          <BaseTextarea
+        <BaseFormField :label="t('settings.notifications.form.emailBodyTemplate')"
+          ><BaseTextarea
             v-model="form.emailBodyTemplate"
-            rows="4"
+            rows="3"
             :placeholder="t('settings.notifications.form.emailBodyPlaceholder')"
           />
           <p class="mt-1 text-xs text-text-secondary">
             {{ t('settings.notifications.form.templateHelp') }} {event}, {timestamp}, {details}
-          </p>
-        </BaseFormField>
-        <div class="grid gap-4 md:grid-cols-2">
-          <BaseFormField :label="t('settings.notifications.form.smtpUser')"
-            ><BaseInput v-model="form.smtpUser" /></BaseFormField
-          ><BaseFormField :label="t('settings.notifications.form.smtpPass')"
-            ><BaseInput v-model="form.smtpPass" type="password"
-          /></BaseFormField>
-        </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <BaseFormField :label="t('settings.notifications.form.smtpFrom')"
-            ><BaseInput v-model="form.from" type="email" required />
-            <p class="mt-1 text-xs text-text-secondary">
-              {{ t('settings.notifications.form.smtpFromHelp') }}
-            </p></BaseFormField
+          </p></BaseFormField
+        >
+        <BaseFormField :label="t('settings.notifications.form.smtpHost')"
+          ><BaseInput v-model="form.smtpHost" required
+        /></BaseFormField>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <BaseFormField :label="t('settings.notifications.form.smtpPort')"
+            ><BaseInput v-model="form.smtpPort" type="number" min="1" max="65535" required /></BaseFormField
+          ><label class="flex items-end pb-2 text-sm"
+            ><BaseCheckbox v-model="form.smtpSecure" class="mr-2" />{{
+              t('settings.notifications.form.smtpSecure')
+            }}</label
           >
-          <label class="flex items-center gap-2 self-end pb-2 text-sm">
-            <BaseCheckbox v-model="form.smtpSecure" />{{ t('settings.notifications.form.smtpSecure') }}
-          </label>
-        </div></template
-      ><template v-else
-        ><BaseFormField :label="t('settings.notifications.form.telegramToken')">
-          <BaseInput v-model="form.botToken" type="password" :required="!setting" autocomplete="new-password" />
-          <p class="mt-1 text-xs text-text-secondary">{{ t('settings.notifications.form.telegramTokenHelp') }}</p>
-        </BaseFormField>
-        ><BaseFormField :label="t('settings.notifications.form.telegramChatId')"
-          ><BaseInput v-model="form.chatId" required /></BaseFormField
-        ><BaseFormField :label="t('settings.notifications.form.telegramMessageTemplate')">
-          <BaseTextarea
-            v-model="form.messageTemplate"
-            rows="4"
-            :placeholder="t('settings.notifications.form.telegramMessagePlaceholder')"
-          />
+        </div>
+        <BaseFormField :label="t('settings.notifications.form.smtpUser')"
+          ><BaseInput v-model="form.smtpUser"
+        /></BaseFormField>
+        <BaseFormField :label="t('settings.notifications.form.smtpPass')"
+          ><BaseInput v-model="form.smtpPass" type="password"
+        /></BaseFormField>
+        <BaseFormField :label="t('settings.notifications.form.smtpFrom')"
+          ><BaseInput v-model="form.from" type="email" required />
           <p class="mt-1 text-xs text-text-secondary">
-            {{ t('settings.notifications.form.templateHelp') }} {event}, {timestamp}, {details}
-          </p> </BaseFormField
-        ><BaseFormField :label="t('settings.notifications.form.telegramCustomDomain')"
-          ><BaseInput v-model="form.customDomain" type="url" /></BaseFormField
-      ></template>
-      <div>
-        <p class="mb-2 text-sm font-medium">{{ t('settings.notifications.form.enabledEvents') }}</p>
-        <div class="grid max-h-52 gap-2 overflow-auto rounded border border-border p-3 md:grid-cols-2">
-          <label v-for="event in events" :key="event" class="flex items-center gap-2 text-sm"
-            ><BaseCheckbox
-              :model-value="form.enabledEvents.includes(event)"
-              @update:model-value="toggleEvent(event)"
-            />{{ t(`settings.notifications.events.${event}`) }}</label
-          >
-        </div>
-      </div>
-      <label class="flex items-center gap-2"
-        ><BaseCheckbox id="setting-enabled" v-model="form.enabled" />{{ t('common.enabled') }}</label
-      >
-      <p v-if="testing.message" :class="testing.success ? 'text-success' : 'text-error'" class="text-sm">
-        {{ testing.message }}
-      </p>
-      <div class="flex justify-end gap-2">
+            {{ t('settings.notifications.form.smtpFromHelp') }}
+          </p></BaseFormField
+        >
+      </template>
+      <template v-else>
+        <BaseFormField :label="t('settings.notifications.form.telegramToken')"
+          ><BaseInput v-model="form.botToken" type="password" :required="!setting" autocomplete="new-password" />
+          <p class="mt-1 text-xs text-text-secondary">
+            {{ t('settings.notifications.form.telegramTokenHelp') }}
+          </p></BaseFormField
+        >
+        <BaseFormField :label="t('settings.notifications.form.telegramChatId')"
+          ><BaseInput v-model="form.chatId" required
+        /></BaseFormField>
+        <BaseFormField :label="t('settings.notifications.form.telegramCustomDomain')"
+          ><BaseInput v-model="form.customDomain" type="url"
+        /></BaseFormField>
+        <BaseFormField :label="t('settings.notifications.form.telegramMessageTemplate')"
+          ><BaseTextarea
+            v-model="form.messageTemplate"
+            rows="3"
+            :placeholder="t('settings.notifications.form.telegramMessagePlaceholder')"
+        /></BaseFormField>
+      </template>
+
+      <div class="border-t border-border/50 pt-4 text-center">
         <BaseButton
+          v-if="setting || canTest"
           data-testid="notification-test"
           type="button"
-          :disabled="!canTest"
+          size="sm"
+          :disabled="!canTest && !setting"
           :loading="testing.active"
           @click="testChannel"
           >{{ t('settings.notifications.form.testButton') }}</BaseButton
-        ><BaseButton type="button" @click="emit('close')">{{ t('common.cancel') }}</BaseButton
-        ><BaseButton variant="primary" type="submit">{{ t('common.save') }}</BaseButton>
+        >
+        <small v-else class="mt-2 block text-xs text-text-secondary">{{
+          t('settings.notifications.form.fillRequiredToTest')
+        }}</small>
+        <small
+          v-if="testing.message"
+          :class="['mt-2 block text-xs', testing.success ? 'text-success' : 'text-error']"
+          >{{ testing.message }}</small
+        >
       </div>
-    </form></BaseModal
-  >
+    </section>
+
+    <div>
+      <label class="mb-2 block text-sm font-medium text-text-secondary">{{
+        t('settings.notifications.form.enabledEvents')
+      }}</label>
+      <div class="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <label
+          v-for="event in events"
+          :key="event"
+          class="flex cursor-pointer select-none items-center text-sm text-foreground"
+          ><BaseCheckbox
+            :model-value="form.enabledEvents.includes(event)"
+            class="mr-2"
+            @update:model-value="toggleEvent(event)"
+          />{{ t(`settings.notifications.events.${event}`) }}</label
+        >
+      </div>
+    </div>
+
+    <div class="mt-6 flex justify-end space-x-3 border-t border-border pt-5">
+      <BaseButton type="button" @click="emit('close')">{{ t('common.cancel') }}</BaseButton
+      ><BaseButton type="submit" variant="primary" :disabled="Boolean(headerValidation.error) || testing.active">{{
+        t('common.save')
+      }}</BaseButton>
+    </div>
+  </form>
 </template>
