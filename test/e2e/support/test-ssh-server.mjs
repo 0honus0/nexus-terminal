@@ -1,6 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, existsSync } from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -112,6 +112,15 @@ function remapArchiveExecWorkingDirectory(command) {
     /^cd\s+'([^']*)'(?=\s*(?:\|\||&&))/,
     (_match, remoteDirectory) => `cd ${JSON.stringify(resolveRemotePath(remoteDirectory))}`,
   );
+}
+
+function remapTransferExecPaths(command) {
+  if (!/(?:^|[\s/])(scp|rsync)(?:[\s']|$)/.test(command)) return command;
+  return command.replace(/'((?:\/)[^']*)'/g, (match, remotePath) => {
+    if (remotePath.startsWith(rootDir) || existsSync(remotePath)) return match;
+    const mapped = resolveRemotePath(remotePath);
+    return existsSync(mapped) ? JSON.stringify(mapped) : match;
+  });
 }
 
 function attrsFromStats(stats) {
@@ -856,7 +865,7 @@ function runRemoteCommand(command, stream) {
     return;
   }
 
-  const executableCommand = remapArchiveExecWorkingDirectory(command);
+  const executableCommand = remapTransferExecPaths(remapArchiveExecWorkingDirectory(command));
   const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
   const normalizedArchivePreflight = String(command)
     .trim()

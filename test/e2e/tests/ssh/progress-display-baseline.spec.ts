@@ -164,10 +164,24 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
   const sourceConnectionId = await ensureTestSshConnection(context.request);
-  const targetName = `E2E Send Target ${crypto.randomUUID().slice(0, 8)}`;
-  const targetResponse = await context.request.post('/api/v1/connections', {
+  const validTargetName = `E2E Send OK ${crypto.randomUUID().slice(0, 8)}`;
+  const failedTargetName = `E2E Send Fail ${crypto.randomUUID().slice(0, 8)}`;
+  const validTargetResponse = await context.request.post('/api/v1/connections', {
     data: {
-      name: targetName,
+      name: validTargetName,
+      type: 'SSH',
+      host: E2E_SSH.host,
+      port: E2E_SSH.port,
+      username: E2E_SSH.username,
+      authMethod: 'password',
+      password: E2E_SSH.password,
+    },
+  });
+  expect(validTargetResponse.status()).toBe(201);
+  const validTargetConnectionId = ((await validTargetResponse.json()) as { connection: { id: number } }).connection.id;
+  const failedTargetResponse = await context.request.post('/api/v1/connections', {
+    data: {
+      name: failedTargetName,
       type: 'SSH',
       host: E2E_SSH.host,
       port: 1,
@@ -176,8 +190,9 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
       password: E2E_SSH.password,
     },
   });
-  expect(targetResponse.status()).toBe(201);
-  const targetConnectionId = ((await targetResponse.json()) as { connection: { id: number } }).connection.id;
+  expect(failedTargetResponse.status()).toBe(201);
+  const failedTargetConnectionId = ((await failedTargetResponse.json()) as { connection: { id: number } }).connection
+    .id;
 
   try {
     await connectTestSshFromConnectionsPage(page, sourceConnectionId);
@@ -198,12 +213,20 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         await expect(targetPath).toHaveValue('');
         await expect(sendButton).toBeDisabled();
 
-        const targetRow = modal.locator('li').filter({ hasText: targetName });
-        await expect(targetRow).toBeVisible();
-        await expect(targetRow.locator('i.fa-server')).toBeVisible();
-        await targetRow.click();
-        await targetPath.fill('/server-transfer-e2e');
-        await modal.getByLabel('Transfer Method', { exact: true }).selectOption('scp');
+        await modal.getByPlaceholder('Search connections...').fill('E2E Send');
+        const validTargetRow = modal.locator('li').filter({ hasText: validTargetName });
+        const failedTargetRow = modal.locator('li').filter({ hasText: failedTargetName });
+        await expect(validTargetRow).toBeVisible();
+        await expect(failedTargetRow).toBeVisible();
+        await expect(validTargetRow.locator('i.fa-server')).toBeVisible();
+        await validTargetRow.click();
+        const visibleGroupCheckbox = modal.locator('input[id^="send-files-group-"]').first();
+        await expect(visibleGroupCheckbox).toHaveJSProperty('indeterminate', true);
+        await visibleGroupCheckbox.click();
+        await expect(validTargetRow.locator('input[type="checkbox"]')).toBeChecked();
+        await expect(failedTargetRow.locator('input[type="checkbox"]')).toBeChecked();
+        await targetPath.fill('server-transfer-e2e');
+        await modal.getByLabel('Transfer Method', { exact: true }).selectOption('rsync');
         await expect(sendButton).toBeEnabled();
         await sendButton.click();
         await expect(modal).toBeHidden();
@@ -217,23 +240,26 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
     );
 
     await slowStep(
-      'the central display exposes the real server task, subtask method/error and final remove action',
+      'the central display exposes a real partial multi-target task, method/error details and final remove action',
       async () => {
         const display = page.getByTestId('progress-display-modal');
         await expect(display).toBeVisible({ timeout: 10_000 });
         await expect(display.getByText('Cross-server transfer tasks', { exact: true })).toBeVisible();
 
-        const taskCard = display.locator('article').filter({ hasText: '/server-transfer-e2e' });
+        const taskCard = display.locator('article').filter({ hasText: 'server-transfer-e2e' });
         await expect(taskCard).toBeVisible({ timeout: 10_000 });
-        await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> /server-transfer-e2e)');
+        await expect(taskCard).toContainText('Task: E2E SSH (seed.txt -> server-transfer-e2e)');
         await expect(taskCard).toContainText('Created at:');
 
         const subTasks = taskCard.locator('details');
         await expect(subTasks).toBeVisible();
         await subTasks.locator('summary').click();
         await expect(subTasks).toContainText('Source File: seed.txt');
-        await expect(subTasks).toContainText(`Target Connection: ${targetName}`);
-        await expect(subTasks).toContainText('Method: scp', { timeout: 20_000 });
+        await expect(subTasks).toContainText(`Target Connection: ${validTargetName}`);
+        await expect(subTasks).toContainText(`Target Connection: ${failedTargetName}`);
+        await expect(subTasks).toContainText('Method: rsync', { timeout: 20_000 });
+        await expect(taskCard.getByText('Partially Completed', { exact: true })).toBeVisible({ timeout: 20_000 });
+        await expect(subTasks.getByText('Completed', { exact: true })).toBeVisible({ timeout: 20_000 });
         await expect(subTasks.getByText('Failed', { exact: true })).toBeVisible({ timeout: 20_000 });
         await expect(subTasks).toContainText('Error:');
 
@@ -241,6 +267,14 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         await expect(taskCard).toHaveCount(0);
       },
     );
+
+    await step('the successful target contains the transferred file while the source remains intact', async () => {
+      await reopenConnectedFileManager(page);
+      await refreshFileManager(page);
+      await expect(row(page, 'server-transfer-e2e')).toBeVisible({ timeout: 20_000 });
+      await goIntoFolder(page, 'server-transfer-e2e');
+      await expect(row(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
+    });
   } finally {
     const tasksResponse = await context.request.get('/api/v1/transfers/status');
     if (tasksResponse.ok()) {
@@ -251,12 +285,13 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
       for (const task of tasks) {
         if (
           task.payload?.sourceConnectionId === sourceConnectionId &&
-          task.payload.connectionIds?.includes(targetConnectionId)
+          task.payload.connectionIds?.some((id) => [validTargetConnectionId, failedTargetConnectionId].includes(id))
         ) {
           await context.request.delete(`/api/v1/transfers/${encodeURIComponent(task.taskId)}`);
         }
       }
     }
-    await context.request.delete(`/api/v1/connections/${targetConnectionId}`);
+    await context.request.delete(`/api/v1/connections/${validTargetConnectionId}`);
+    await context.request.delete(`/api/v1/connections/${failedTargetConnectionId}`);
   }
 });

@@ -665,6 +665,68 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expectBoxInsideViewport(popupBox!, viewport!);
         await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
+        const resizeHandle = popup.getByTestId('transfer-progress-resize');
+        const resizeBox = await resizeHandle.boundingBox();
+        expect(resizeBox).toBeTruthy();
+        const resizeStart = { x: resizeBox!.x + resizeBox!.width / 2, y: resizeBox!.y + resizeBox!.height / 2 };
+        await resizeHandle.dispatchEvent('pointerdown', {
+          pointerId: 71,
+          isPrimary: true,
+          clientX: resizeStart.x,
+          clientY: resizeStart.y,
+          button: 0,
+          bubbles: true,
+        });
+        await page.evaluate(
+          ({ x, y }) =>
+            window.dispatchEvent(
+              new PointerEvent('pointermove', {
+                pointerId: 71,
+                isPrimary: true,
+                clientX: x,
+                clientY: y,
+                bubbles: true,
+              }),
+            ),
+          { x: resizeStart.x - 48, y: resizeStart.y - 56 },
+        );
+        await page.evaluate(() =>
+          window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 71, isPrimary: true, bubbles: true })),
+        );
+        const resizedBox = await popup.boundingBox();
+        expect(resizedBox).toBeTruthy();
+        expectBoxInsideViewport(resizedBox!, viewport!);
+        expect(resizedBox!.width).toBeLessThan(popupBox!.width);
+        expect(resizedBox!.height).toBeLessThan(popupBox!.height);
+
+        const header = popup.locator('.transfer-progress-header');
+        const headerBox = await header.boundingBox();
+        expect(headerBox).toBeTruthy();
+        const dragStart = { x: headerBox!.x + 18, y: headerBox!.y + 18 };
+        await header.dispatchEvent('pointerdown', {
+          pointerId: 72,
+          isPrimary: true,
+          clientX: dragStart.x,
+          clientY: dragStart.y,
+          button: 0,
+          bubbles: true,
+        });
+        await page.evaluate(() =>
+          window.dispatchEvent(
+            new PointerEvent('pointermove', { pointerId: 72, isPrimary: true, clientX: 0, clientY: 0, bubbles: true }),
+          ),
+        );
+        await page.evaluate(() =>
+          window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 72, isPrimary: true, bubbles: true })),
+        );
+        const draggedBox = await popup.boundingBox();
+        expect(draggedBox).toBeTruthy();
+        expectBoxInsideViewport(draggedBox!, viewport!);
+        expect(draggedBox!.x).toBeGreaterThanOrEqual(7);
+        expect(draggedBox!.x).toBeLessThanOrEqual(9);
+        expect(draggedBox!.y).toBeGreaterThanOrEqual(7);
+        expect(draggedBox!.y).toBeLessThanOrEqual(9);
+
         await closeConnectedFileManager(page);
         await popup.getByTestId('transfer-progress-hide').click();
         await expect(popup).toBeHidden();
