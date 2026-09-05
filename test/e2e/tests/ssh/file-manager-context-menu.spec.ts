@@ -51,8 +51,18 @@ async function confirmAction(
           : /Change Permissions for /;
   const modal = page.getByRole('dialog', { name: title });
   await expect(modal).toBeVisible();
-  await modal.getByLabel('Value', { exact: true }).fill(value);
-  await modal.getByRole('button', { name: 'Confirm', exact: true }).click();
+  const inputLabel =
+    actionType === 'file'
+      ? 'File name:'
+      : actionType === 'mkdir'
+        ? 'Folder name:'
+        : actionType === 'rename'
+          ? 'New name:'
+          : 'New permissions (octal):';
+  const confirmLabel =
+    actionType === 'file' || actionType === 'mkdir' ? 'Create' : actionType === 'rename' ? 'Rename' : 'Set Permissions';
+  await modal.getByLabel(inputLabel, { exact: true }).fill(value);
+  await modal.getByRole('button', { name: confirmLabel, exact: true }).click();
 }
 
 async function confirmDelete(page: Page): Promise<void> {
@@ -322,7 +332,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await rightClickRow(page, 'renamed-by-menu.txt');
     await clickMenuItem(page, 'Change Permissions');
     const modal = page.getByRole('dialog', { name: /Change Permissions for / });
-    await expect(modal.getByLabel('Value', { exact: true })).toHaveValue('600');
+    await expect(modal.getByLabel('New permissions (octal):', { exact: true })).toHaveValue('600');
     await page.keyboard.press('Escape');
   });
 

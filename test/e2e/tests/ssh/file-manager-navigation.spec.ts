@@ -21,6 +21,16 @@ const manager = (page: Page): Locator => page.getByTestId('file-manager-modal');
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const pathInput = (page: Page): Locator => manager(page).getByTestId('file-manager-path-input');
 
+async function openSearchInput(page: Page): Promise<Locator> {
+  const fileManager = manager(page);
+  const input = fileManager.getByTestId('file-manager-search-input');
+  if (!(await input.isVisible())) {
+    await fileManager.getByTestId('file-manager-search-toggle').click();
+  }
+  await expect(input).toBeVisible();
+  return input;
+}
+
 async function cleanupFavorite(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/favorite-paths');
   if (!response.ok()) return;
@@ -55,8 +65,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
   await step('Search filters the visible remote file list and Escape restores it', async () => {
     const fileManager = manager(page);
-    const search = fileManager.getByTestId('file-manager-search-input');
-    await expect(search).toBeVisible();
+    const search = await openSearchInput(page);
     await search.fill('plain');
     await expect(row(page, 'plainfile')).toBeVisible();
     await expect(row(page, 'seed.txt')).toHaveCount(0);
@@ -77,7 +86,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]')).toHaveCount(0);
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested-renamed.txt"]')).toBeVisible();
 
-    const reopenedAfterRename = fileManager.getByTestId('file-manager-search-input');
+    const reopenedAfterRename = await openSearchInput(page);
     await reopenedAfterRename.fill('definitely-no-e2e-match');
     await expect(fileManager.getByText('No search results found', { exact: true })).toBeVisible();
 
@@ -93,9 +102,10 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(preview).toBeHidden();
     await expect(fileManager).toBeVisible();
 
-    const reopenedSearch = fileManager.getByTestId('file-manager-search-input');
+    const reopenedSearch = await openSearchInput(page);
     await reopenedSearch.press('Escape');
-    await expect(reopenedSearch).toHaveValue('');
+    await expect(fileManager.getByTestId('file-manager-search-input')).toHaveCount(0);
+    await expect(fileManager.getByTestId('file-manager-search-toggle')).toBeVisible();
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
@@ -151,7 +161,7 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
     let favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
     await expect(favoriteItem).toBeVisible();
-    await favorites.getByRole('button', { name: 'Close', exact: true }).click();
+    await manager(page).getByRole('button', { name: 'Favorite Paths', exact: true }).click();
     await expect(favorites).toBeHidden();
 
     await navigateViaPathInput(page, '/');

@@ -1079,49 +1079,65 @@
       @resolve="transfers.resolveConflict"
     />
 
-    <BaseModal
+    <OverlayPanel
       data-testid="file-manager-modal"
       :visible="fileManagerPopupVisible"
-      :title="t('fileManager.modalTitle')"
-      panel-class="h-[min(900px,94vh)] w-[min(1200px,96vw)]"
-      content-class="!overflow-visible"
+      keep-mounted
+      teleport
+      panel-class="max-w-4xl h-[85vh] flex flex-col overflow-hidden"
+      role="dialog"
+      :aria-modal="true"
+      :aria-label="t('fileManager.modalTitle')"
       @close="fileManagerPopupVisible = false"
     >
-      <template #header-actions>
-        <BaseButton
+      <div class="flex shrink-0 items-center justify-between border-b border-border bg-header p-3">
+        <h2 class="text-lg font-semibold text-foreground">
+          {{ t('fileManager.modalTitle') }} ({{ editorScopeLabel }})
+        </h2>
+        <button
           data-testid="file-manager-modal-close"
-          size="sm"
-          variant="ghost"
+          type="button"
+          class="text-text-secondary transition-colors hover:text-foreground"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
           @click="fileManagerPopupVisible = false"
-          >×</BaseButton
         >
-      </template>
-      <FileManager
-        class="h-full min-h-0"
-        :channel="session.adapters.filesystem"
-        :download="session.adapters.download"
-        :terminal-directory="session.adapters.terminalDirectory"
-        :confirm-delete="fileManagerConfirmDelete"
-        :row-scale="fileManagerRowScale"
-        :column-widths="fileManagerColumnWidths"
-        :clipboard-count="clipboardCount"
-        :state="session.filesystemState"
-        @open-file="(entry) => openFile(entry.path)"
-        @open-as-text="(entry) => openFileAsText(entry.path)"
-        @upload="chooseUpload"
-        @upload-files="uploadFilesAt"
-        @copy-to-clipboard="emit('fileClipboardSet', 'copy', $event)"
-        @cut-to-clipboard="emit('fileClipboardSet', 'cut', $event)"
-        @paste="emit('fileClipboardPaste', $event)"
-        @move-to="moveWithinSession"
-        @compress="beginCompress"
-        @compress-preset="beginCompressPreset"
-        @decompress="beginDecompress"
-        @send-files="beginSendFiles"
-        @row-scale="emit('fileManagerRowScale', $event)"
-        @column-widths="emit('fileManagerColumnWidths', $event)"
-      />
-    </BaseModal>
+          <i class="fas fa-times text-xl" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="min-h-0 flex-grow overflow-hidden">
+        <FileManager
+          class="h-full min-h-0"
+          :channel="session.adapters.filesystem"
+          :download="session.adapters.download"
+          :terminal-directory="session.adapters.terminalDirectory"
+          :confirm-delete="fileManagerConfirmDelete"
+          :row-scale="fileManagerRowScale"
+          :column-widths="fileManagerColumnWidths"
+          :clipboard-count="clipboardCount"
+          :state="session.filesystemState"
+          :show-editor-button="showPopupFileEditor"
+          @open-file="(entry) => openFile(entry.path)"
+          @open-as-text="(entry) => openFileAsText(entry.path)"
+          @open-editor="
+            documentMode = 'editor';
+            documentPopupVisible = true;
+          "
+          @upload="chooseUpload"
+          @upload-files="uploadFilesAt"
+          @copy-to-clipboard="emit('fileClipboardSet', 'copy', $event)"
+          @cut-to-clipboard="emit('fileClipboardSet', 'cut', $event)"
+          @paste="emit('fileClipboardPaste', $event)"
+          @move-to="moveWithinSession"
+          @compress="beginCompress"
+          @compress-preset="beginCompressPreset"
+          @decompress="beginDecompress"
+          @send-files="beginSendFiles"
+          @row-scale="emit('fileManagerRowScale', $event)"
+          @column-widths="emit('fileManagerColumnWidths', $event)"
+        />
+      </div>
+    </OverlayPanel>
 
     <OverlayPanel
       data-testid="document-popup"

@@ -7,12 +7,13 @@
       x: number;
       y: number;
       width?: number;
+      autoWidth?: boolean;
       margin?: number;
       zIndex?: number;
       panelTestId?: string;
       blockingLayer?: boolean;
     }>(),
-    { width: 220, margin: 8, zIndex: 80, blockingLayer: true },
+    { width: 220, autoWidth: false, margin: 8, zIndex: 80, blockingLayer: true },
   );
   const emit = defineEmits<{ close: [] }>();
   const root = ref<HTMLElement | null>(null);
@@ -66,8 +67,9 @@
       <div
         ref="root"
         :data-testid="props.panelTestId"
-        class="pointer-events-auto fixed max-h-[calc(100dvh-1rem)] overflow-y-auto rounded border border-border bg-background p-1 text-sm text-foreground shadow-xl"
-        :style="{ left: `${left}px`, top: `${top}px`, width: `${width}px` }"
+        class="pointer-events-auto fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100dvw-1rem)] overflow-y-auto rounded border border-border bg-background p-1 text-sm text-foreground shadow-xl"
+        :class="props.autoWidth ? 'min-w-[150px]' : ''"
+        :style="{ left: `${left}px`, top: `${top}px`, width: props.autoWidth ? 'max-content' : `${width}px` }"
         role="menu"
         @pointerdown.stop
         @click.stop

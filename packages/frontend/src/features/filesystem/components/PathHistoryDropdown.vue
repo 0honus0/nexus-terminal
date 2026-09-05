@@ -1,9 +1,10 @@
 <script setup lang="ts">
+  import { nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton } from '@/foundation/ui';
+  import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
   import type { PathHistoryEntry } from '../model/catalog';
 
-  defineProps<{
+  const props = defineProps<{
     visible: boolean;
     loading: boolean;
     items: PathHistoryEntry[];
@@ -17,53 +18,70 @@
   }>();
 
   const { t } = useI18n();
+  const device = useDeviceCapabilities();
+  const itemRefs = ref<HTMLElement[]>([]);
+
+  watch(
+    () => [props.visible, props.selectedIndex] as const,
+    async ([visible, selectedIndex]) => {
+      if (!visible || selectedIndex < 0) return;
+      await nextTick();
+      itemRefs.value[selectedIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
+  );
 </script>
 
 <template>
   <div
     v-if="visible"
-    class="absolute inset-x-0 top-full z-40 mt-1 max-h-60 overflow-auto rounded border border-border bg-background p-1 shadow-xl"
+    class="absolute inset-x-0 top-full z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border/50 bg-background text-sm shadow-lg"
     @mousedown.prevent
   >
-    <p v-if="loading" class="p-2 text-center text-xs text-text-secondary">
+    <div v-if="loading && !items.length" class="p-3 text-center text-text-secondary">
+      <i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>
       {{ t('pathHistory.loading') }}
-    </p>
-    <p v-else-if="!items.length" class="p-2 text-center text-xs text-text-secondary">
+    </div>
+    <div v-else-if="!items.length" class="p-3 text-center text-text-secondary">
+      <i class="fas fa-history mr-2" aria-hidden="true"></i>
       {{ t('pathHistory.empty') }}
-    </p>
-    <div
-      v-for="(item, index) in items"
-      v-else
-      :key="item.id"
-      class="flex items-center gap-1 rounded px-2 py-1"
-      :class="index === selectedIndex ? 'bg-primary/15' : 'hover:bg-header'"
-    >
-      <button
-        type="button"
-        class="min-w-0 flex-1 truncate text-left font-mono text-sm"
+    </div>
+    <ul v-else class="m-0 list-none p-1">
+      <li
+        v-for="(item, index) in items"
+        :key="item.id"
+        :ref="(element) => element && (itemRefs[index] = element as HTMLElement)"
+        class="group flex cursor-pointer items-center justify-between rounded-md px-3 py-1 transition-colors duration-150 hover:bg-primary/10"
+        :class="index === selectedIndex ? 'bg-primary/20 font-medium' : ''"
         :title="item.path"
         @click="emit('select', item.path)"
       >
-        {{ item.path }}
-      </button>
-      <BaseButton
-        size="sm"
-        variant="ghost"
-        class="shrink-0"
-        :title="t('pathHistory.copy')"
-        :aria-label="t('pathHistory.copy')"
-        @click="emit('copy', item.path)"
-        >⧉</BaseButton
-      >
-      <BaseButton
-        size="sm"
-        variant="ghost"
-        class="shrink-0"
-        :title="t('pathHistory.delete')"
-        :aria-label="t('pathHistory.delete')"
-        @click="emit('remove', item.id)"
-        >×</BaseButton
-      >
-    </div>
+        <span class="mr-2 min-w-0 flex-grow truncate font-mono text-sm text-foreground">{{ item.path }}</span>
+        <div
+          class="flex shrink-0 items-center transition-opacity duration-150"
+          :class="
+            device.hasTouch.value ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+          "
+        >
+          <button
+            type="button"
+            class="rounded p-1.5 text-text-secondary transition-colors duration-150 hover:bg-black/10 hover:text-primary"
+            :title="t('pathHistory.copy')"
+            :aria-label="t('pathHistory.copy')"
+            @click.stop="emit('copy', item.path)"
+          >
+            <i class="fas fa-copy text-xs" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="ml-1 rounded p-1.5 text-text-secondary transition-colors duration-150 hover:bg-black/10 hover:text-error"
+            :title="t('pathHistory.delete')"
+            :aria-label="t('pathHistory.delete')"
+            @click.stop="emit('remove', item.id)"
+          >
+            <i class="fas fa-times text-xs" aria-hidden="true"></i>
+          </button>
+        </div>
+      </li>
+    </ul>
   </div>
 </template>

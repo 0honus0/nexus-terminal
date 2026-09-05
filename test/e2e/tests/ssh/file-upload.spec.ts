@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test, type BrowserContext, type Page } from '../../support/fixtures';
+import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
@@ -105,6 +105,16 @@ function uploadProgressTask(page: Page, name?: string) {
   return name ? tasks.filter({ hasText: name }).first() : tasks.first();
 }
 
+async function openFileManagerSearch(page: Page): Promise<Locator> {
+  const fileManager = page.getByTestId('file-manager-modal');
+  const input = fileManager.getByTestId('file-manager-search-input');
+  if (!(await input.isVisible())) {
+    await fileManager.getByTestId('file-manager-search-toggle').click();
+  }
+  await expect(input).toBeVisible();
+  return input;
+}
+
 test('file browsing and recursive search remain responsive while upload writes are delayed', async ({
   page,
   context,
@@ -132,7 +142,7 @@ test('file browsing and recursive search remain responsive while upload writes a
 
   await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
     const fileManagerModal = page.getByTestId('file-manager-modal');
-    const search = fileManagerModal.getByTestId('file-manager-search-input');
+    const search = await openFileManagerSearch(page);
     await search.fill('nested');
     await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
       timeout: 10_000,
