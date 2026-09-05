@@ -307,8 +307,11 @@
   );
   const previewPopupStyle = computed(() =>
     props.mobile
-      ? { width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh', borderRadius: '0' }
+      ? { width: '100%', height: '94dvh', maxWidth: '1400px', maxHeight: '94dvh' }
       : { width: 'min(1400px, calc(100vw - 3rem))', height: '94dvh', maxWidth: '1400px', maxHeight: '94dvh' },
+  );
+  const documentPopupOverlayClass = computed(() =>
+    props.mobile && documentMode.value === 'editor' ? '!p-0' : props.mobile ? 'workspace-mobile-preview-overlay' : '',
   );
   const documentPopupPanelClass = computed(() =>
     documentMode.value === 'editor'
@@ -1151,7 +1154,7 @@
       :restore-focus="true"
       :panel-class="documentPopupPanelClass"
       :panel-style="documentMode === 'preview' ? previewPopupStyle : editorPopupStyle"
-      :overlay-class="mobile ? '!p-0' : ''"
+      :overlay-class="documentPopupOverlayClass"
       role="dialog"
       :aria-modal="true"
       :aria-label="documentMode === 'preview' ? t('fileManager.preview.openFiles') : t('settings.popupEditor.title')"
@@ -1411,3 +1414,12 @@
     </BaseModal>
   </div>
 </template>
+
+<style scoped>
+  :global(.workspace-mobile-preview-overlay) {
+    padding-top: max(0.75rem, env(safe-area-inset-top)) !important;
+    padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
+    padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
+  }
+</style>
