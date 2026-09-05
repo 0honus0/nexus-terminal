@@ -26,6 +26,7 @@
   }>();
   const root = ref<HTMLElement | null>(null);
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  const focusEditor = (): void => editor?.focus();
   let wheelHandler: ((event: WheelEvent) => void) | undefined;
   let suppress = false;
   let suppressScroll = false;
@@ -110,6 +111,20 @@
     wheelHandler = undefined;
     editor?.dispose();
   });
-  defineExpose({ focus: () => editor?.focus() });
+  defineExpose({ focus: focusEditor });
 </script>
-<template><div ref="root" class="h-full min-h-[12rem] w-full"></div></template>
+
+<template>
+  <div ref="root" data-testid="monaco-editor" class="monaco-editor-container" @click="focusEditor"></div>
+</template>
+
+<style scoped>
+  .monaco-editor-container {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    text-align: left;
+  }
+</style>

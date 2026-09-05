@@ -299,5 +299,25 @@
 </script>
 
 <template>
-  <div ref="root" class="codemirror-mobile-editor-container h-full min-h-[12rem] overflow-hidden"></div>
+  <div ref="root" class="codemirror-mobile-editor-container"></div>
 </template>
+
+<style scoped>
+  .codemirror-mobile-editor-container {
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    overflow: auto;
+    text-align: left;
+  }
+
+  .codemirror-mobile-editor-container :deep(.cm-gutters) {
+    border-right: 1px solid var(--border-color, #cccccc) !important;
+    background-color: #1e1e1e !important;
+    color: #858585 !important;
+  }
+
+  .codemirror-mobile-editor-container :deep(.cm-selectionBackground) {
+    background-color: #5264ac !important;
+  }
+</style>
